@@ -9,6 +9,15 @@ from contextlib import asynccontextmanager
 from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
 
 
+def transfer_subject(prefix: str, operation: str, transfer_id: str = "") -> str:
+    owner, separator, _ = transfer_id.partition(":")
+    if separator:
+        if len(owner) != 32 or any(c not in "0123456789abcdef" for c in owner):
+            raise ValueError("Invalid transfer owner")
+        return f"{prefix}.{owner}.{operation}"
+    return f"{prefix}.{operation}"
+
+
 class Transfer:
     def __init__(self, call, prefix, id, chunk_bytes):
         self.call, self.prefix, self.id, self.chunk_bytes = (
@@ -22,7 +31,7 @@ class Transfer:
     async def write(self, data: bytes) -> None:
         for offset in range(0, len(data), self.chunk_bytes):
             await self.call(
-                f"{self.prefix}.write",
+                transfer_subject(self.prefix, "write", self.id),
                 pb.WriteRequest(
                     id=self.id,
                     sequence=self.write_sequence,
@@ -34,13 +43,15 @@ class Transfer:
 
     async def start(self) -> None:
         await self.call(
-            f"{self.prefix}.start", pb.StartRequest(id=self.id), pb.StartResponse
+            transfer_subject(self.prefix, "start", self.id),
+            pb.StartRequest(id=self.id),
+            pb.StartResponse,
         )
 
     async def fragments(self):
         while True:
             result = await self.call(
-                f"{self.prefix}.read",
+                transfer_subject(self.prefix, "read", self.id),
                 pb.ReadRequest(id=self.id, sequence=self.read_sequence),
                 pb.ReadResponse,
             )
@@ -80,7 +91,9 @@ async def open_transfer(transport, prefix: str, operation: str, metadata: bytes 
     finally:
         try:
             await transport.call(
-                f"{prefix}.close", pb.CloseRequest(id=opened.id), pb.CloseResponse
+                transfer_subject(prefix, "close", opened.id),
+                pb.CloseRequest(id=opened.id),
+                pb.CloseResponse,
             )
         except Exception:  # cleanup cannot replace the original operation error
             logging.getLogger(__name__).warning(

@@ -190,7 +190,7 @@ See the document-checkpoint ADR and remote-agent invocation RFC for those bounda
   rdflib eagerly. RDF callback subscriptions and schema helpers are not exposed.
 - Events use SDK `Event(event_type, payload)` values instead of core ontology
   instances. Vector methods accept lists of floats. Raw cache/vector operations
-  do not synthesize core ontology events.
+  produce mutation audit events at the owner, matching in-engine callers.
 - KV lock contexts, local model objects and framework-specific
   helpers have no equivalent here. Unsupported operations are not silently run
   locally. Use `engine.rpc` for administrative or lower-level contract operations.
@@ -392,12 +392,21 @@ inference cannot be forcibly interrupted: the adapter waits for its worker threa
 before releasing the claim. Completed side effects cannot be undone. Graph
 interrupt/resume is not yet part of this protocol.
 
-The host admits at most 32 active runs per module. Prompts/results/events are
-bounded to 64 KiB per value, 1024 events, and a 384 KiB run record. Events are polled
-in pages of 64 with sequence cursors; overflow stops execution rather than silently
-losing events. Records are retained until explicitly cleaned by an operator; no
+The host admits at most 32 active runs per module. Prompts remain bounded to
+64 KiB. Events and results are stored separately as immutable 8 KiB fragments;
+there is no 64 KiB output limit or 1024-event cap. The run record holds committed
+sequence counters and stays small. Status returns up to 64 event references;
+the SDK retrieves and reconstructs their exact text, including UTF-8 boundaries.
+The new wire format is explicitly negotiated (`output_format=2`); upgrade SDK
+providers and consumers together. Older consumers fail with `UPGRADE_REQUIRED`
+instead of receiving empty events. Existing inline records can still be read.
+
+Records/fragments are retained until explicitly cleaned by an operator; no
 automatic retention policy is installed, because deleting deduplication records
-changes retry safety. Reserve the `agent_runs_*` and `agent_claims_*` collections.
+changes retry safety. Reserve `agent_runs_*`, `agent_claims_*`, and `agent_events_*`.
+Interrupted writes can leave unpublished fragments, which must be cleaned with
+their invocation after reconciliation. Status membership views cache for at most
+one second; routing failures invalidate the caller cache without replaying calls.
 
 Providers authenticate incoming issued tokens through discovery's authorize_agent
 RPC using their own issued token and lease. Signing keys stay in the engine.
@@ -516,3 +525,26 @@ Transfers cannot resume after an owner restart and uncertain operations are neve
 replayed automatically. Original low-level unary endpoints, discovery records,
 checkpoints and durable agent invocation records retain their own size limits;
 chunking here covers object content and model inference payloads.
+
+
+## Multiple engine owners and configuration checks
+
+Stateless model/discovery requests and transfer opens use queue groups, so one
+owner handles each request. Transfer IDs route subsequent packets to that owner;
+legacy model stream requests are answered only by their encoded owner. Replicas
+must share compatible model catalogs, service configuration and persistent stores.
+This does not provide automatic domain placement, migration or inference failover.
+
+NATS mode rejects an explicit non-NATS bus adapter or a bus URL different from
+`nats.nats_url`. Omit the bus block to use NATS defaults, or configure
+`services.bus.bus_adapter.adapter: nats_jetstream` with the matching URL.
+`services.bus.emit_message_events` is preserved for engine bus facades. SDK native
+bus operations still use the broker directly; they do not pass through BusService.
+Mixed local/remote cache tiers are rejected: define the complete topology at its
+owner rather than advertising tier indices that have no endpoint. Projects without
+`nats` retain their existing adapter choices and wiring.
+
+Heartbeats retry transient failures with capped exponential backoff and jitter.
+Authentication/configuration errors remain fatal and visible. Unexpected renewal
+or endpoint-binding failures receive at most three consecutive attempts. Failed
+endpoint rebinds clean up partial subscriptions and retain the previous bindings.

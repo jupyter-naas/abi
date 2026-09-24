@@ -48,10 +48,20 @@ def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa:
             dependencies = ModuleDependencies(services=("document",))
             agents = tuple(
                 AgentDescriptor(name, capabilities=("agent.invoke.v1",))
-                for name in ("Simple", "Intent")
+                for name in ("Simple", "Intent", "Large")
             )
 
             async def on_initialized(self):
+                class LargeHandler:
+                    async def invoke(self, prompt, context):
+                        return "large-result-" * 12000
+
+                    async def stream_invoke(self, prompt, context):
+                        yield {"event": "call_model", "data": "history-" * 20000}
+                        yield {"event": "message", "data": "large-result-" * 12000}
+
+                self.expose_agent("Large", LargeHandler())
+
                 kwargs = {
                     "description": "Test agent",
                     "chat_model": FakeListChatModel(responses=["network answer"]),
@@ -93,6 +103,13 @@ def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa:
                     ]
                     assert {"event": "message", "data": "network answer"} in events
                     assert events[-1] == {"event": "done", "data": "[DONE]"}
+                large = await module.get_agent("Large")
+                assert await large.invoke("hi", timeout=20) == "large-result-" * 12000
+                large_events = [
+                    event async for event in large.stream_invoke("hi", timeout=20)
+                ]
+                assert large_events[0]["data"] == "history-" * 20000
+                assert large_events[1]["data"] == "large-result-" * 12000
                 proxy = await module.get_agent("Simple")
 
                 class State(TypedDict):

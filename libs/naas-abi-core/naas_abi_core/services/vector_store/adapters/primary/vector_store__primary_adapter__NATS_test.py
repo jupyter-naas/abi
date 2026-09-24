@@ -101,7 +101,9 @@ class _StubAdapter(IVectorStorePort):
     ) -> list[SearchResult]:
         results = []
         for doc in self.vectors.get(collection_name, {}).values():
-            if filter and any(doc.metadata.get(key) != value for key, value in filter.items()):
+            if filter and any(
+                doc.metadata.get(key) != value for key, value in filter.items()
+            ):
                 continue
             results.append(
                 SearchResult(
@@ -502,8 +504,12 @@ def test_successful_delete_vectors_returns_no_error():
     stub.store_vectors(
         "docs",
         [
-            VectorDocument(id="doc-1", vector=np.array([1.0, 2.0], dtype=np.float32), metadata={}),
-            VectorDocument(id="doc-2", vector=np.array([3.0, 4.0], dtype=np.float32), metadata={}),
+            VectorDocument(
+                id="doc-1", vector=np.array([1.0, 2.0], dtype=np.float32), metadata={}
+            ),
+            VectorDocument(
+                id="doc-2", vector=np.array([3.0, 4.0], dtype=np.float32), metadata={}
+            ),
         ],
     )
     adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
@@ -529,13 +535,19 @@ def test_count_vectors_round_trips_count():
     stub.store_vectors(
         "docs",
         [
-            VectorDocument(id="doc-1", vector=np.array([1.0, 2.0], dtype=np.float32), metadata={}),
-            VectorDocument(id="doc-2", vector=np.array([3.0, 4.0], dtype=np.float32), metadata={}),
+            VectorDocument(
+                id="doc-1", vector=np.array([1.0, 2.0], dtype=np.float32), metadata={}
+            ),
+            VectorDocument(
+                id="doc-2", vector=np.array([3.0, 4.0], dtype=np.float32), metadata={}
+            ),
         ],
     )
     adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
     request = _FakeRequest(
-        data=vector_store_pb2.CountVectorsRequest(collection_name="docs").SerializeToString(),
+        data=vector_store_pb2.CountVectorsRequest(
+            collection_name="docs"
+        ).SerializeToString(),
         headers={AUTH_HEADER: _valid_token()},
         subject="abi.svc.vector_store.v1.count_vectors",
     )
@@ -598,3 +610,35 @@ def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():
 def test_stop_without_start_is_a_noop():
     adapter = VectorStorePrimaryAdapterNATS(_StubAdapter(), SECRET)
     asyncio.run(adapter.stop())  # must not raise
+
+
+def test_owner_emits_audit_for_remote_vector_mutations():
+    from unittest.mock import Mock
+
+    from naas_abi_core.services.vector_store.ontologies.modules.VectorStoreEventOntology import (
+        CollectionDeleted,
+        CollectionEnsured,
+        DocumentsDeleted,
+    )
+
+    events = []
+    primary = VectorStorePrimaryAdapterNATS(
+        Mock(), SECRET, event_publisher=events.append
+    )
+    primary._call_create_collection(
+        vector_store_pb2.CreateCollectionRequest(collection_name="test", dimension=3)
+    )
+    primary._call_delete_vectors(
+        vector_store_pb2.DeleteVectorsRequest(
+            collection_name="test", vector_ids=["one"]
+        )
+    )
+    primary._call_delete_collection(
+        vector_store_pb2.DeleteCollectionRequest(collection_name="test")
+    )
+    assert [type(e) for e in events] == [
+        CollectionEnsured,
+        DocumentsDeleted,
+        CollectionDeleted,
+    ]
+    assert events[1].document_count == 1

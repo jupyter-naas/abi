@@ -53,6 +53,7 @@ def test_domains_receive_only_network_dependencies_and_no_local_model_objects(tm
         # Proxies for service-level endpoints must not emit the owner's events twice.
         assert not dependencies.object_storage.services_wired
         assert not dependencies.kv.services_wired
+        assert not dependencies.cache.services_wired
     finally:
         wiring.close()
     assert not wiring.clients
@@ -72,7 +73,7 @@ def test_dependency_failure_has_no_local_fallback():
     wiring = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
     dependencies = wiring.build(IEngine.Services(object_storage=owner))
     try:
-        dependencies.object_storage.adapter._call = MagicMock(
+        dependencies.object_storage.adapter._open_transfer = MagicMock(
             side_effect=ConnectionError("unavailable")
         )
         with pytest.raises(ConnectionError):

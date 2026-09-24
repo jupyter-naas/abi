@@ -124,3 +124,7 @@ a timeout can hide a completed operation. Reconcile its outcome before retrying.
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
 The latter uses a local `nats-server` executable without Docker.
+
+NATS primaries emit mutation audit events through an injected owner-side event
+publisher. Remote VectorStoreService facades must remain unwired for events to
+avoid duplicating them. Failures in audit publication do not fail persistence.

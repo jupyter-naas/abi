@@ -201,3 +201,61 @@ def test_zero_deadline_leaves_execution_under_caller_control():
         )
 
     asyncio.run(scenario())
+
+
+def test_large_events_and_long_runs_preserve_output_in_bounded_documents():
+    from naas_abi_sdk.agent_host import _hash
+
+    async def scenario():
+        docs, handler = Documents(), Handler()
+        owner = host(docs, handler)
+        key = _hash("agent", "id")
+        await owner._submit("agent", key, "caller", request())
+        run = owner.runs[key]
+        large = "\N{SNOWMAN}" * 50000
+        await owner._event(run, {"event": "call_model", "data": large})
+        for _ in range(1025):
+            await owner._event(run, {"event": "step", "data": "ok"})
+        first = await owner._view(run.data)
+        assert first.last_sequence == 1026
+        assert first.events[0].parts > 1
+        data = bytearray()
+        for part in range(first.events[0].parts):
+            data.extend(
+                (await docs.get(owner.events_collection, f"{key}:1:{part}")).data[
+                    "data"
+                ]
+            )
+        assert data.decode() == large
+        assert not run.data["events"]
+        assert all(
+            len(doc.data["data"]) <= 8192
+            for doc in docs.values.values()
+            if "data" in doc.data
+        )
+        await owner._view(run.data, 64)
+        owner.session.client.get_module.assert_awaited_once()
+        handler.finish.set()
+        await run.task
+        assert run.data["status"] == "SUCCEEDED"
+
+    asyncio.run(scenario())
+
+
+def test_failed_rebind_rolls_back_partial_subscriptions():
+    async def scenario():
+        owner = host(Documents(), Handler())
+        previous, partial = AsyncMock(), AsyncMock()
+        owner.subscriptions = [previous]
+        nc = AsyncMock()
+        nc.subscribe.side_effect = [partial, ConnectionError("subscription failed")]
+        owner.session.client.transport = SimpleNamespace(
+            connect=AsyncMock(return_value=nc)
+        )
+        with pytest.raises(ConnectionError):
+            await owner._bind()
+        assert owner.subscriptions == [previous]
+        partial.unsubscribe.assert_awaited_once()
+        previous.drain.assert_not_awaited()
+
+    asyncio.run(scenario())

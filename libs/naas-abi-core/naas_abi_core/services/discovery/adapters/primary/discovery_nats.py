@@ -41,6 +41,7 @@ class DiscoveryNATS:
                 self.subscriptions.append(
                     await nc.subscribe(
                         f"abi.discovery.{self.project}.v1.{operation}",
+                        queue=f"abi.discovery.{self.project}.owners",
                         cb=partial(self._handle, operation),
                     )
                 )

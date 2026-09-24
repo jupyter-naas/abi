@@ -99,6 +99,7 @@ class TransferHost:
         ):
             raise ValueError("Invalid transfer capacity")
         self.prefix, self.secret, self.handler = prefix, secret, handler
+        self.owner = uuid4().hex
         self.operations, self.chunk_bytes = set(operations), chunk_bytes
         self.idle_seconds, self.max_sessions = idle_seconds, max_sessions
         self.max_upload_bytes, self.total_seconds = max_upload_bytes, total_seconds
@@ -119,6 +120,14 @@ class TransferHost:
                 self.subscriptions.append(
                     await nc.subscribe(
                         f"{self.prefix}.{operation}",
+                        queue=f"{self.prefix}.owners" if operation == "open" else "",
+                        cb=partial(self._dispatch, operation),
+                    )
+                )
+            for operation in OPERATIONS.keys() - {"open"}:
+                self.subscriptions.append(
+                    await nc.subscribe(
+                        f"{self.prefix}.{self.owner}.{operation}",
                         cb=partial(self._dispatch, operation),
                     )
                 )
@@ -163,6 +172,14 @@ class TransferHost:
             self.sessions.pop(key, None)
 
     async def _dispatch(self, operation, msg):
+        if operation != "open":
+            try:
+                transfer_id = OPERATIONS[operation][0].FromString(msg.data).id
+            except DecodeError:
+                transfer_id = ""
+            # Compatibility subjects fan out; only the encoded owner may reply.
+            if ":" in transfer_id and transfer_id.split(":", 1)[0] != self.owner:
+                return
         if len(self.tasks) >= self.max_sessions * 4:
             response = OPERATIONS[operation][1]()
             response.error.code, response.error.message = (
@@ -251,7 +268,7 @@ class TransferHost:
             size = min(request.chunk_bytes or self.chunk_bytes, self.chunk_bytes)
             if size < 1024:
                 raise ValueError("Chunk size is too small")
-            key = uuid4().hex
+            key = f"{self.owner}:{uuid4().hex}"
             self.sessions[key] = TransferSession(
                 caller, request.operation, request.metadata, size, touched=now
             )
@@ -302,6 +319,29 @@ class TransferHost:
                 return pb.StartResponse()
             if not session.task or request.sequence != session.read_sequence:
                 raise TransferError("CONFLICT", "Invalid read state or sequence")
+            if session.queue.empty() and not session.task.done():
+                # Event-driven long poll, bounded below the caller's RPC deadline.
+                budget = min(
+                    0.5, self.idle_seconds / 2, request.context.timeout_ms / 2000
+                )
+                if budget > 0:
+                    waiting = asyncio.create_task(session.queue.get())
+                    try:
+                        await asyncio.wait(
+                            (waiting, session.task),
+                            timeout=budget,
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        if waiting.done():
+                            data, end = waiting.result()
+                            response = pb.ReadResponse(
+                                data=data, frame_end=end, sequence=session.read_sequence
+                            )
+                            session.read_sequence += 1
+                            return response
+                    finally:
+                        waiting.cancel()
+                        await asyncio.gather(waiting, return_exceptions=True)
             if session.queue.empty():
                 if session.task.done():
                     if session.error:

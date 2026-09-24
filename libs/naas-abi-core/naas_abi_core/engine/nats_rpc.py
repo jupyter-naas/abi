@@ -96,9 +96,10 @@ class NatsRPCClient:
         self._nc: NATSClient | None = None
         self._token: str | None = None
         self._token_expires_at: datetime | None = None
-        # Guards connect/reconnect + token bookkeeping on the persistent
-        # loop, mirroring NATSJetStreamAdapter.__publish_lock.
+        # Protect loop lifecycle and token bookkeeping, never network waits.
+        # Connection initialization is serialized separately on the owning loop.
         self._call_lock = RLock()
+        self._connect_lock: asyncio.Lock | None = None
 
     def __enter__(self) -> Self:
         return self
@@ -152,8 +153,9 @@ class NatsRPCClient:
         return self._loop
 
     def _run_coro(self, coro, timeout: float | None = None):
-        loop = self._ensure_loop()
-        future = asyncio.run_coroutine_threadsafe(coro, loop)
+        with self._call_lock:
+            loop = self._ensure_loop()
+            future = asyncio.run_coroutine_threadsafe(coro, loop)
         try:
             return future.result(
                 timeout=timeout if timeout is not None else self._timeout_seconds + 1.0
@@ -168,24 +170,26 @@ class NatsRPCClient:
         thread = self._loop_thread
         self._loop = None
         self._loop_thread = None
+        self._connect_lock = None
         if loop is not None:
             loop.call_soon_threadsafe(loop.stop)
         if thread is not None:
             thread.join(timeout=5.0)
 
     async def _ensure_connection_async(self) -> NATSClient:
-        if self._nc is not None and not self._nc.is_closed:
-            return self._nc
-        nc = NATSClient()
-        self._nc = nc
-        try:
-            # Do not queue an RPC during reconnect to execute after its deadline.
-            await nc.connect(self._nats_url, pending_size=0)
-        except BaseException:
-            await nc.close()
-            self._nc = None
-            raise
-        return nc
+        if self._connect_lock is None:
+            self._connect_lock = asyncio.Lock()
+        async with self._connect_lock:
+            if self._nc is not None and not self._nc.is_closed:
+                return self._nc
+            nc = NATSClient()
+            try:
+                await nc.connect(self._nats_url, pending_size=0)
+            except BaseException:
+                await nc.close()
+                raise
+            self._nc = nc
+            return nc
 
     def _close_connection(self) -> None:
         nc = self._nc
@@ -231,12 +235,12 @@ class NatsRPCClient:
         payload = request.SerializeToString()
         with self._call_lock:
             headers = {self._auth_header: self._current_token()}
-            msg = self._run_coro(
-                asyncio.wait_for(
-                    self._do_request_async(subject, payload, headers),
-                    timeout=self._timeout_seconds,
-                )
+        msg = self._run_coro(
+            asyncio.wait_for(
+                self._do_request_async(subject, payload, headers),
+                timeout=self._timeout_seconds,
             )
+        )
 
         reply_headers = msg.headers or {}
         if ERROR_HEADER in reply_headers or ERROR_CODE_HEADER in reply_headers:
