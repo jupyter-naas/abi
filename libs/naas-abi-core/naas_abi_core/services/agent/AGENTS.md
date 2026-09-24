@@ -106,6 +106,12 @@ state from `call_tools` (inside the call's arguments).
 
 Agents can also be built from records: see `services/agent_composer`.
 
+Routing in nested trees: the active agent's name is shared by the whole tree,
+but each graph holds only its direct children. `current_active_agent` enters
+the child whose subtree holds the active agent (`_route_to`), and that child's
+graph routes further; an active agent outside the tree hands the turn back to
+the current agent instead of targeting a missing node.
+
 ## Subdirectories
 
 | Path | Contents |

@@ -1208,11 +1208,20 @@ class Agent(Expose):
                 and isinstance(last_human_message.content, str)
                 else ""
             )
-            active_agent = pd.find(
-                self._agents,
-                lambda a: Agent.validate_name(a.name) == active_name,
-            )
-            retain = True
+            # The active agent may sit below a direct child (nested
+            # supervisors): enter the child whose subtree holds it, and let
+            # that child's graph route the rest of the way.
+            entry, active_agent = self._route_to(active_name)
+            if entry is None:
+                # Not in this agent's tree: going to that name would target a
+                # node this graph does not have and end the turn empty.
+                logger.warning(
+                    f"Active agent '{active_name}' is not in the tree of "
+                    f"'{self._name}'; '{self._name}' takes the turn."
+                )
+                self._state.set_current_active_agent(self._name)
+                active_agent = None
+            retain = entry is not None
             retain_fn = (
                 getattr(type(active_agent), "retains_active_turn", None)
                 if active_agent is not None
@@ -1228,14 +1237,15 @@ class Agent(Expose):
                         exc_info=True,
                     )
                     retain = True
-            if retain:
+            if retain and entry is not None:
                 logger.debug(f"⏩ Continuing conversation with: '{active_name}'")
                 # self._notify_agent_routing(active_name)
-                return Command(goto=active_name)
-            logger.debug(
-                f"↩️  Releasing sticky agent '{active_name}' back to '{self._name}'"
-            )
-            self._state.set_current_active_agent(self._name)
+                return Command(goto=Agent.validate_name(entry.name))
+            if entry is not None:
+                logger.debug(
+                    f"↩️  Releasing sticky agent '{active_name}' back to '{self._name}'"
+                )
+                self._state.set_current_active_agent(self._name)
 
         # self._state.set_current_active_agent(self.name)
         logger.debug(f"💬 Starting chatting with: '{self._name}'")
@@ -1294,6 +1304,19 @@ SUBAGENT SYSTEM PROMPT:
             goto="continue_conversation",
             update={"system_prompt": updated_system_prompt},
         )
+
+    def _route_to(self, agent_name: str) -> tuple[Agent | None, Agent | None]:
+        """``(direct child to enter, agent)`` for ``agent_name`` in this tree.
+
+        Returns ``(None, None)`` when no descendant has that name.
+        """
+        for child in self._agents:
+            if Agent.validate_name(child.name) == agent_name:
+                return child, child
+            _, found = child._route_to(agent_name)
+            if found is not None:
+                return child, found
+        return None, None
 
     def continue_conversation(self, state: ABIAgentState) -> Command:
         return Command(goto="call_model")
