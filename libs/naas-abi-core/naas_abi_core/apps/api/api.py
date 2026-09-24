@@ -12,19 +12,15 @@ import html
 import os
 import subprocess
 from importlib.resources import files
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
-from fastapi.openapi.models import OAuthFlowPassword
-from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse, HTMLResponse
 
 # Authentication
-from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.security.oauth2 import OAuth2
+from fastapi.security import HTTPBearer
 from fastapi.security.utils import get_authorization_scheme_param
 from fastapi.staticfiles import StaticFiles
 
@@ -147,18 +143,10 @@ def branding_asset(name: str):
     return FileResponse(path)
 
 
-# Custom OAuth2 class that accepts query parameter
-class OAuth2QueryBearer(OAuth2):
-    def __init__(
-        self,
-        tokenUrl: str,
-        scheme_name: str | None = None,
-        auto_error: bool = True,
-    ):
-        flows = OAuthFlowsModel(password=OAuthFlowPassword(tokenUrl=tokenUrl))
-        super().__init__(flows=flows, scheme_name=scheme_name, auto_error=auto_error)
-
-    async def __call__(self, request: Request) -> str | None:
+# Bearer scheme that also accepts the API key as a ``?token=`` query parameter.
+# The key is configured out of band (``ABI_API_KEY``); no route ever issues it.
+class QueryOrHeaderBearer(HTTPBearer):
+    async def __call__(self, request: Request) -> str | None:  # type: ignore[override]
         authorization = request.headers.get("Authorization")
         # Check header first
         if authorization:
@@ -181,12 +169,11 @@ class OAuth2QueryBearer(OAuth2):
         return None
 
 
-# Replace the existing oauth2_scheme with:
-oauth2_scheme = OAuth2QueryBearer(tokenUrl="token")
+api_key_scheme = QueryOrHeaderBearer(scheme_name="ABI API key")
 
 
 # Update the token validation dependency
-async def is_token_valid(token: str = Depends(oauth2_scheme)):
+async def is_token_valid(token: str = Depends(api_key_scheme)):
     from naas_abi_core.apps.api.abi_api_key_auth import is_abi_api_token_valid
 
     if not is_abi_api_token_valid(token):
@@ -196,17 +183,6 @@ async def is_token_valid(token: str = Depends(oauth2_scheme)):
             headers={"WWW-Authenticate": "Bearer"},
         )
     return True
-
-
-@app.post("/token", include_in_schema=False)
-async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
-    if form_data.password != "abi":
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-
-    return {
-        "access_token": os.environ.get("ABI_API_KEY", "abi"),
-        "token_type": "bearer",
-    }
 
 
 # Create Agents API Router

@@ -892,7 +892,7 @@ RECENT_DUMP_LINES = 30
 # (dotenv) — pre-populating those skips the random-password path.
 DEFAULT_ADMIN_EMAIL = "admin@example.com"
 DEFAULT_ADMIN_PASSWORD = "admin"  # nosec B105 - dev-only, fixed local creds
-DEFAULT_API_KEY = "abi"  # nosec B105 - local-dev only, matches /token default
+DEFAULT_API_KEY = "abi"  # nosec B105 - local-dev only ABI_API_KEY value
 
 
 def _ensure_default_admin_env() -> tuple[str, str]:

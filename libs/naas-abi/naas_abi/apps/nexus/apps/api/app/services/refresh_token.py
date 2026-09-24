@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key, settings
 from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from sqlalchemy import text
@@ -30,7 +30,7 @@ def hash_token(token: str) -> str:
 def hash_otp_code(code: str) -> str:
     """HMAC-SHA256 OTP codes with the server secret (low-entropy keyspace)."""
     return hmac.new(
-        settings.secret_key.encode("utf-8"),
+        current_secret_key().encode("utf-8"),
         code.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()

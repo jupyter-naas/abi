@@ -6,6 +6,7 @@ import sys
 from functools import lru_cache
 from typing import Any, Literal
 
+from naas_abi.apps.nexus.apps.api.app.core.secret_key import INSECURE_SECRET_KEYS
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,16 +18,7 @@ ABI_DOCUMENTS_TEMPLATE_NAMESPACE = "abi"
 ABI_SHEETS_TEMPLATE_NAMESPACE = "abi"
 
 # Known-insecure secret keys that must be rejected
-_INSECURE_SECRETS = frozenset(
-    {
-        "",
-        "change-me-in-production",
-        "change-me-in-production-use-a-long-random-string",
-        "secret",
-        "password",
-        "changeme",
-    }
-)
+_INSECURE_SECRETS = INSECURE_SECRET_KEYS
 
 
 class TenantConfig(BaseModel):
@@ -632,6 +624,15 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+
+def current_secret_key() -> str:
+    """The signing/encryption key, read at call time.
+
+    ``naas_abi`` replaces ``settings`` after this module is imported, so a
+    module-level ``from ... import settings`` can hold a stale object.
+    """
+    return settings.secret_key
 
 
 def validate_settings_on_startup() -> None:

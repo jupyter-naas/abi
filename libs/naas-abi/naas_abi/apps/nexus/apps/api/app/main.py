@@ -204,6 +204,31 @@ async def _prefetch_agent_class_registry() -> None:
         _log.exception("Background agent registry pre-fetch failed (non-fatal)")
 
 
+async def _reencrypt_secrets_under_default_keys() -> None:
+    """Move workspace secrets encrypted under a published default key to the real key."""
+    from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.core.secret_key import (
+        INSECURE_SECRET_KEYS,
+        is_insecure_secret_key,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.secrets.adapters.secondary.postgres import (
+        SecretsSecondaryAdapterPostgres,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.secrets.service import SecretsService
+
+    if is_insecure_secret_key(current_secret_key()):
+        return
+    async with AsyncSessionLocal() as db:
+        service = SecretsService(adapter=SecretsSecondaryAdapterPostgres(db=db))
+        rewritten = await service.reencrypt_from_keys(sorted(INSECURE_SECRET_KEYS))
+    if rewritten:
+        logging.getLogger(__name__).warning(
+            "Re-encrypted %d workspace secret(s) that were stored under a default key.",
+            rewritten,
+        )
+
+
 async def _startup(app: FastAPI) -> None:
     """Application startup handler."""
     configure_logging()
@@ -225,6 +250,8 @@ async def _startup(app: FastAPI) -> None:
         print(f"✗ Database initialization failed: {e}")
         print("  API will not start without database connection.")
         raise
+
+    await _reencrypt_secrets_under_default_keys()
 
     # Apply config-driven user/org/workspace seeds from config.yaml.
     from naas_abi.apps.nexus.apps.api.app.core.org_seed import apply_configuration_seeds

@@ -116,28 +116,26 @@ def test_branding_route_serves_only_configured_files(tmp_path):
         api_module._branding_files.update(original)
 
 
-def test_api_authentication():
-    """Test authentication endpoints of the API."""
-    try:
-        from naas_abi_core.apps.api.api import app
+def test_api_has_no_token_endpoint():
+    """The API key is never handed out over HTTP: there is no /token route."""
+    from naas_abi_core.apps.api.api import app
 
-        client = TestClient(app)
+    client = TestClient(app)
 
-        # Test token endpoint with valid credentials
-        response = client.post("/token", data={"username": "user", "password": "abi"})
-        assert response.status_code == 200
-        data = response.json()
-        assert data["access_token"] == "abi"
-        assert data["token_type"] == "bearer"
-        print("✅ API authentication with valid credentials works")
+    response = client.post("/token", data={"username": "user", "password": "abi"})
+    assert response.status_code in (404, 405)
+    assert "access_token" not in response.text
+    assert not any(getattr(route, "path", None) == "/token" for route in app.routes)
 
-        # Test token endpoint with invalid credentials
-        response = client.post("/token", data={"username": "user", "password": "wrong"})
-        assert response.status_code == 400
-        print("✅ API properly rejects invalid credentials")
 
-    except Exception as e:  # noqa: BLE001
-        pytest.fail(f"Failed to test API authentication: {e}")
+def test_api_security_scheme_is_plain_bearer():
+    """Swagger must ask for the API key, not point at a password-flow token URL."""
+    from naas_abi_core.apps.api.api import api_key_scheme
+
+    model = api_key_scheme.model.model_dump(mode="json", by_alias=True)
+    assert model["type"] == "http"
+    assert model["scheme"].lower() == "bearer"
+    assert "flows" not in model
 
 
 def test_api_agent_routes():
