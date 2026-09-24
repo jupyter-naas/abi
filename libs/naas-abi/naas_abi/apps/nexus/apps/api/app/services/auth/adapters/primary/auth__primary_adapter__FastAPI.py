@@ -51,11 +51,13 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
     InvalidMagicLinkError,
     InvalidOtpError,
     InvalidResetTokenError,
+    SignupDisabledError,
     UserNotFoundError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
-    check_rate_limit,
+    ensure_under_limit,
     get_rate_limit_identifier,
+    record_attempt,
 )
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions as StorageExceptions
@@ -117,10 +119,29 @@ def _get_email_service(request: Request) -> EmailService | None:
 _DEFAULT_PASSWORD_DETAIL = "This password is a published default and cannot be used."
 
 
+def _limit_keys(request: Request, account: str | None) -> list[tuple[str, int]]:
+    """(identifier, limit) pairs: the client IP, plus the account when known."""
+    keys = [(get_rate_limit_identifier(request), settings.rate_limit_ip_attempts)]
+    if account:
+        keys.append((f"email:{account.strip().lower()}", settings.rate_limit_login_attempts))
+    return keys
+
+
+async def _refuse_if_limited(request: Request, endpoint: str, account: str | None = None) -> None:
+    for identifier, limit in _limit_keys(request, account):
+        await ensure_under_limit(identifier, endpoint, limit)
+
+
+async def _count_attempt(request: Request, endpoint: str, account: str | None = None) -> None:
+    for identifier, _limit in _limit_keys(request, account):
+        await record_attempt(identifier, endpoint)
+
+
 @router.get("/config", response_model=dict[str, bool | int])
 async def get_auth_config() -> dict[str, bool | int]:
     return {
         "password_auth_enabled": settings.auth_password_enabled,
+        "signup_enabled": settings.auth_password_enabled and settings.auth_signup_enabled,
         "otp_auth_enabled": True,
         "otp_code_length": settings.otp_code_length,
     }
@@ -138,8 +159,8 @@ async def register(
             detail="Password authentication is disabled. Use magic link sign-in.",
         )
 
-    identifier = get_rate_limit_identifier(request)
-    await check_rate_limit(identifier, "/api/auth/register")
+    await _refuse_if_limited(request, "/api/auth/register")
+    await _count_attempt(request, "/api/auth/register")
 
     try:
         user, tokens = await auth_service.register_user(
@@ -155,6 +176,11 @@ async def register(
         ) from exc
     except DefaultPasswordNotAllowedError as exc:
         raise HTTPException(status_code=400, detail=_DEFAULT_PASSWORD_DETAIL) from exc
+    except SignupDisabledError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is disabled. Ask an administrator for an invitation.",
+        ) from exc
 
     await log_register(user.id, request)
     return AuthResponse(
@@ -177,8 +203,7 @@ async def login(
             detail="Password authentication is disabled. Use magic link sign-in.",
         )
 
-    identifier = get_rate_limit_identifier(request)
-    await check_rate_limit(identifier, "/api/auth/login")
+    await _refuse_if_limited(request, "/api/auth/login", credentials.email)
 
     try:
         user, tokens = await auth_service.login_user(
@@ -188,6 +213,7 @@ async def login(
             ip_address=request.client.host if request.client else None,
         )
     except InvalidCredentialsError as exc:
+        await _count_attempt(request, "/api/auth/login", credentials.email)
         await log_login(
             exc.user_id,
             success=False,
@@ -210,6 +236,7 @@ async def login(
 
 @router.post("/token", response_model=Token)
 async def login_for_access_token(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     auth_service: AuthService = Depends(get_auth_service),
 ) -> Token:
@@ -220,12 +247,14 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    await _refuse_if_limited(request, "/api/auth/token", form_data.username)
     try:
         access_token = await auth_service.create_oauth_access_token(
             email=form_data.username,
             password=form_data.password,
         )
     except InvalidCredentialsError as exc:
+        await _count_attempt(request, "/api/auth/token", form_data.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -334,7 +363,8 @@ async def change_password(
 
 @router.post("/forgot-password")
 async def forgot_password(
-    request: ForgotPasswordRequest,
+    request: Request,
+    payload: ForgotPasswordRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ) -> dict:
     if not settings.auth_password_enabled:
@@ -343,7 +373,9 @@ async def forgot_password(
             detail="Password authentication is disabled.",
         )
 
-    await auth_service.forgot_password(request.email)
+    await _refuse_if_limited(request, "/api/auth/forgot-password")
+    await _count_attempt(request, "/api/auth/forgot-password")
+    await auth_service.forgot_password(payload.email)
 
     return {
         "status": "success",
@@ -353,7 +385,8 @@ async def forgot_password(
 
 @router.post("/reset-password")
 async def reset_password(
-    request: ResetPasswordRequest,
+    request: Request,
+    payload: ResetPasswordRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ) -> dict:
     if not settings.auth_password_enabled:
@@ -362,8 +395,10 @@ async def reset_password(
             detail="Password authentication is disabled.",
         )
 
+    await _refuse_if_limited(request, "/api/auth/reset-password")
+    await _count_attempt(request, "/api/auth/reset-password")
     try:
-        await auth_service.reset_password(token=request.token, new_password=request.new_password)
+        await auth_service.reset_password(token=payload.token, new_password=payload.new_password)
     except InvalidResetTokenError as exc:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token") from exc
     except ExpiredResetTokenError as exc:
@@ -386,8 +421,10 @@ async def request_magic_link(
     auth_service: AuthService = Depends(get_auth_service),
     email_service: EmailService | None = Depends(_get_email_service),
 ) -> dict:
-    identifier = get_rate_limit_identifier(request)
-    await check_rate_limit(identifier, "/api/auth/magic-link/request")
+    # Every request counts: each one mints a code, so an attacker must not be
+    # able to farm fresh codes for one account.
+    await _refuse_if_limited(request, "/api/auth/magic-link/request", payload.email)
+    await _count_attempt(request, "/api/auth/magic-link/request", payload.email)
 
     challenge = await auth_service.request_magic_link(payload.email)
     if challenge is not None:
@@ -418,6 +455,8 @@ async def verify_magic_link(
     payload: MagicLinkVerifyRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ) -> AuthResponse:
+    await _refuse_if_limited(request, "/api/auth/magic-link/verify")
+    await _count_attempt(request, "/api/auth/magic-link/verify")
     try:
         user, tokens = await auth_service.verify_magic_link(
             token=payload.token,
@@ -448,10 +487,8 @@ async def verify_otp(
     payload: OtpVerifyRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ) -> AuthResponse:
-    identifier = get_rate_limit_identifier(request)
-    await check_rate_limit(identifier, "/api/auth/otp/verify")
-    # Also bound guesses per email so a distributed attacker cannot spray codes.
-    await check_rate_limit(f"email:{payload.email.lower()}", "/api/auth/otp/verify")
+    # Bounded per IP and per email so a distributed attacker cannot spray codes.
+    await _refuse_if_limited(request, "/api/auth/otp/verify", payload.email)
 
     try:
         user, tokens = await auth_service.verify_otp(
@@ -461,6 +498,7 @@ async def verify_otp(
             ip_address=request.client.host if request.client else None,
         )
     except InvalidOtpError as exc:
+        await _count_attempt(request, "/api/auth/otp/verify", payload.email)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired sign-in code",

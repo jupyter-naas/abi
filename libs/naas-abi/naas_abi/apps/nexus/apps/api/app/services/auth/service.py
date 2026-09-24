@@ -124,6 +124,12 @@ class ExpiredOtpError(ValueError):
 
 
 @dataclass
+class SignupDisabledError(PermissionError):
+    def __str__(self) -> str:
+        return "signup_disabled"
+
+
+@dataclass
 class DefaultPasswordNotAllowedError(ValueError):
     def __str__(self) -> str:
         return "default_password_not_allowed"
@@ -187,6 +193,8 @@ class AuthService:
         if not settings.auth_password_enabled:
             raise PasswordAuthenticationDisabledError()
 
+        if not settings.auth_signup_enabled:
+            raise SignupDisabledError()
         _reject_default_password(password)
         normalized_email = email.lower()
         if await self.adapter.user_exists_with_email(normalized_email):
@@ -623,10 +631,12 @@ class AuthService:
                 break
 
         if matched is None:
-            latest = active[0]
-            attempts = await self.adapter.increment_magic_link_otp_attempts(latest.id)
-            if attempts >= settings.otp_max_attempts:
-                await self.adapter.mark_magic_link_token_used(latest.id)
+            # Charge every active code: otherwise requesting a fresh code would
+            # hand an attacker a new guess budget against the older ones.
+            for magic_token in active:
+                attempts = await self.adapter.increment_magic_link_otp_attempts(magic_token.id)
+                if attempts >= settings.otp_max_attempts:
+                    await self.adapter.mark_magic_link_token_used(magic_token.id)
             await self.adapter.commit()
             raise InvalidOtpError()
 

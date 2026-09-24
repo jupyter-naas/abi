@@ -143,6 +143,18 @@ def branding_asset(name: str):
     return FileResponse(path)
 
 
+# Proxies whose X-Forwarded-For uvicorn believes: loopback plus private networks
+# (Caddy / docker bridge). A client reaching the API directly cannot pick the IP
+# that rate limits and audit logs key on. Override with FORWARDED_ALLOW_IPS.
+_DEFAULT_TRUSTED_PROXIES = (
+    "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
+)
+
+
+def trusted_proxy_ips() -> str:
+    return os.environ.get("FORWARDED_ALLOW_IPS") or _DEFAULT_TRUSTED_PROXIES
+
+
 # Bearer scheme that also accepts the API key as a ``?token=`` query parameter.
 # The key is configured out of band (``ABI_API_KEY``); no route ever issues it.
 class QueryOrHeaderBearer(HTTPBearer):
@@ -384,7 +396,7 @@ def api():
         "port": port,
         "reload": reload_enabled,
         "proxy_headers": True,
-        "forwarded_allow_ips": "*",
+        "forwarded_allow_ips": trusted_proxy_ips(),
         "log_level": "debug" if reload_enabled else "info",
     }
 

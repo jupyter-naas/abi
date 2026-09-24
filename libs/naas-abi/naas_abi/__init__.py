@@ -417,6 +417,7 @@ class NexusConfig(BaseModel):
 
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
+    auth_signup_enabled: bool = False
     pages_sso_secret: str = ""
     pages_sso_expire_seconds: int = 300
     magic_link_allow_signup: bool = False
@@ -469,6 +470,7 @@ class NexusConfig(BaseModel):
 
     rate_limit_enabled: bool = True
     rate_limit_login_attempts: int = 5
+    rate_limit_ip_attempts: int = 20
     rate_limit_window_seconds: int = 300
 
     enable_security_headers: bool = True

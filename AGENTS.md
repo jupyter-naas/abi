@@ -227,6 +227,8 @@ grep NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD .env
 
 Password login is enabled via `auth_password_enabled: true` in `config.local.yaml`. Set it to `false` to switch back to magic link.
 
+Self-registration is off (`auth_signup_enabled: false`): add people by invitation or through `users:` in the config. Sign-in endpoints are rate limited in every environment (5 failures per account and 20 attempts per IP per 5 minutes); `rate_limit_enabled: false` turns this off for local debugging.
+
 **How the password is set:** `abi new project`, `abi dev up` and `abi deploy local` generate it into `.env`. On first boot the seeder creates the account with that value; if the key is missing it generates one and writes it back. Published defaults (`admin`, `Admin1234!`) are never accepted: login refuses them, and on boot the seeder replaces them with a generated password written to `.env`.
 
 If you see "Incorrect email or password", read the current value from `.env` (it may have just been rotated), or wipe and reseed when there is no data to keep:

@@ -503,6 +503,9 @@ class Settings(BaseSettings):
     # Authentication
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
+    # Self-service sign-up via /api/auth/register. Off: accounts come from
+    # invitations or the config seed.
+    auth_signup_enabled: bool = False
     magic_link_allow_signup: bool = False
     access_token_expire_minutes: int = 30  # 30 minutes (short-lived)
     refresh_token_expire_days: int = 30  # 30 days (long-lived)
@@ -580,14 +583,12 @@ class Settings(BaseSettings):
 
     # Rate Limiting
     rate_limit_enabled: bool = True
-    rate_limit_login_attempts: int = 5  # Max login attempts per window
+    rate_limit_login_attempts: int = 5  # Max failed attempts per account per window
+    rate_limit_ip_attempts: int = 20  # Max attempts per client IP per window
     rate_limit_window_seconds: int = 300  # 5-minute window
 
     def model_post_init(self, __context: Any) -> None:
         """Adjust settings based on environment after initialization (pydantic v2 hook)."""
-        # Disable rate limiting in development to avoid blocking during hot reload
-        if self.environment == "development" or self.nexus_env == "local":
-            self.rate_limit_enabled = False
         # Make Ollama autostart opt-in and local-only
         # - Enable by setting ENABLE_OLLAMA_AUTOSTART=true
         # - Force OFF unless environment is development or nexus_env is local
