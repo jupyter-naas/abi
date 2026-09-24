@@ -113,3 +113,11 @@ bringing service coverage to 117 endpoints across 14 services, plus the bus.
 use, tool execution, streaming tool arguments, structured output, the core
 registry bridge, invalid tokens, caller-bound stream handles, expiry, cleanup,
 deadlines and sanitized provider errors over a real local NATS broker.
+
+`core_agent_consumer.py` closes the process-isolation check for existing agents:
+the demo launches it in its own interpreter while engine_host exposes the models.
+Both Agent and IntentAgent invoke and stream through ChatModelProxy. The provider
+returns its actual PID in the answer, and the consumer asserts it differs from
+its own PID. `remote_model_agents` in the report records both PIDs and results.
+This consumer intentionally has core installed for the existing agent classes;
+it has no local engine or provider model. The core-free workers remain separate.

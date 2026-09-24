@@ -162,7 +162,21 @@ def main():
                     timeout=60,
                     check=True,
                 )
+                agent_report = root / "model-agents.json"
+                subprocess.run(
+                    [sys.executable, "-I", str(HERE / "core_agent_consumer.py")],
+                    cwd=root,
+                    env=dict(
+                        worker_env,
+                        DEMO_REPORT=str(agent_report),
+                        DEMO_MODEL_PROVIDER_PID=str(engine.pid),
+                    ),
+                    timeout=60,
+                    check=True,
+                )
                 report = json.loads(report_path.read_text())
+                report["remote_model_agents"] = json.loads(agent_report.read_text())
+                assert report["remote_model_agents"]["agent_pid"] != engine.pid
                 report["remote_models"] = json.loads(model_report.read_text())
                 report["ergonomic_module"] = json.loads(ergonomic_path.read_text())
                 report["discovery"] = json.loads((root / "discovery.json").read_text())
