@@ -229,3 +229,12 @@ def test_nexus_settings_explicit_yaml_secret_key_wins_over_env(
     settings = Settings(**nexus_settings_kwargs(NexusConfig(secret_key="y" * 64)))
 
     assert settings.secret_key == "y" * 64
+
+
+def test_rate_limiting_stays_on_in_local_development() -> None:
+    """Brute-force protection must not depend on setting ENVIRONMENT/NEXUS_ENV."""
+    from naas_abi.apps.nexus.apps.api.app.core.config import Settings
+
+    settings = Settings(environment="development", nexus_env="local")
+
+    assert settings.rate_limit_enabled is True

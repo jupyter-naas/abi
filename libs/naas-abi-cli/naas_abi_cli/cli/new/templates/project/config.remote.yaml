@@ -40,6 +40,9 @@ modules:
         # Enable password login by default so first sign-in works without an SMTP
         # setup (magic-link email). Configure SMTP + set this false to require it.
         auth_password_enabled: true
+        # Self-registration is off: accounts come from invitations or `users:`
+        # below. Set true to let anyone reaching the login page create an account.
+        auth_signup_enabled: false
 
   # OpenRouter — the only AI provider enabled by default. One gateway key
   # serves both the default chat model (Gemma 4 26B-A4B) and the default

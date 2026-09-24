@@ -341,3 +341,16 @@ def test_api_cors_configuration():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
+
+
+def test_forwarded_headers_are_trusted_only_from_private_proxies(monkeypatch):
+    """A client reaching the API directly must not choose its own IP via X-Forwarded-For."""
+    from naas_abi_core.apps.api.api import trusted_proxy_ips
+
+    monkeypatch.delenv("FORWARDED_ALLOW_IPS", raising=False)
+    default = trusted_proxy_ips()
+    assert "*" not in default
+    assert "127.0.0.1" in default and "172.16.0.0/12" in default
+
+    monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.1.2.3")
+    assert trusted_proxy_ips() == "10.1.2.3"
