@@ -54,9 +54,8 @@ uv run pytest libs/naas-abi-core/naas_abi_core/apps/api/api_test.py -v
 After `abi dev up` (API port from `abi dev ports`):
 
 ```bash
-# Auth
-curl -s -X POST "http://127.0.0.1:<api-port>/token" \
-  -d "username=user&password=abi"
+# Auth: there is no token endpoint. Send the configured ABI_API_KEY as
+# `Authorization: Bearer <key>` (or `?token=<key>`), as in the examples below.
 
 # OpenAPI: agent paths stay; process paths appear only when live
 curl -s "http://127.0.0.1:<api-port>/openapi.json" | python -c \

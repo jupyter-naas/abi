@@ -120,3 +120,29 @@ async def test_resolve_secret_returns_none_when_missing() -> None:
         key="MISSING",
     )
     assert value is None
+
+
+@pytest.mark.asyncio
+async def test_reencrypt_rewrites_only_rows_under_an_old_key() -> None:
+    now = datetime.now()
+    legacy = _secret(now)
+    legacy.encrypted_value = "legacy"
+    current = _secret(now)
+    current.id, current.encrypted_value = "sec-2", "current"
+    adapter = SimpleNamespace(
+        list_all=AsyncMock(return_value=[legacy, current]),
+        save=AsyncMock(),
+        commit=AsyncMock(),
+    )
+    service = SecretsService(adapter=adapter)
+    reencrypt = {"legacy": "rotated", "current": None}
+
+    count = await service.reencrypt_from_keys(
+        ["change-me-in-production"],
+        reencrypt=lambda value, old_keys: reencrypt[value],
+    )
+
+    assert count == 1
+    assert legacy.encrypted_value == "rotated"
+    adapter.save.assert_awaited_once_with(legacy)
+    adapter.commit.assert_awaited_once()

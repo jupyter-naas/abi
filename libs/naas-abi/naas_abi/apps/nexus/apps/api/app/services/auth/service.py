@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import bcrypt
 from jose import JWTError, jwt
-from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key, settings
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
     AuthPersistencePort,
@@ -142,13 +142,13 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> t
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
     to_encode.update({"exp": expire, "jti": jti})
-    token = jwt.encode(to_encode, settings.secret_key, algorithm="HS256")
+    token = jwt.encode(to_encode, current_secret_key(), algorithm="HS256")
     return token, jti
 
 
 def decode_token(token: str) -> dict | None:
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        payload = jwt.decode(token, current_secret_key(), algorithms=["HS256"])
         return payload
     except JWTError:
         return None

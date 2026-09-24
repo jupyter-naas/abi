@@ -194,3 +194,38 @@ def test_boot_keeps_a_configured_and_registered_slides_model(
     module.on_initialized()
 
     assert resolve_slides_llm_model("gpt-4.1-mini") == "anthropic/claude-sonnet-5"
+
+
+def test_nexus_settings_take_secret_key_and_environment_from_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unset yaml fields must not shadow SECRET_KEY / ENVIRONMENT from the env.
+
+    Passing NexusConfig's defaults as init kwargs used to beat the env, so every
+    deployment signed JWTs with the public default key.
+    """
+    from naas_abi import nexus_settings_kwargs
+    from naas_abi.apps.nexus.apps.api.app.core.config import Settings
+
+    monkeypatch.setenv("SECRET_KEY", "k" * 64)
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("NEXUS_ENV", "production")
+
+    settings = Settings(**nexus_settings_kwargs(NexusConfig()))
+
+    assert settings.secret_key == "k" * 64
+    assert settings.environment == "production"
+    assert settings.rate_limit_enabled is True
+
+
+def test_nexus_settings_explicit_yaml_secret_key_wins_over_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from naas_abi import nexus_settings_kwargs
+    from naas_abi.apps.nexus.apps.api.app.core.config import Settings
+
+    monkeypatch.setenv("SECRET_KEY", "k" * 64)
+
+    settings = Settings(**nexus_settings_kwargs(NexusConfig(secret_key="y" * 64)))
+
+    assert settings.secret_key == "y" * 64
