@@ -48,7 +48,7 @@ class IToolRegistry:
     availability(ref, config=None) -> ToolAvailability    # missing required config
     check_access(ref, context, action) -> ToolDefinition  # ToolAccessDeniedError
     resolve(ref, context, config=None, action=EXECUTE) -> object   # executable tool
-    search_tools(query, context=None, limit=5, min_score=None) -> list[ToolSearchResult]
+    search_tools(query, context=None, limit=5, min_score=None, where=None) -> list[ToolSearchResult]
     sync_index() -> int                                   # definitions (re-)embedded
 
 class IToolIndexPort:      prepare(model_key), fingerprints(ids), upsert(entries), delete(ids), search(vector, limit), size()
@@ -73,7 +73,8 @@ Exceptions (all `ToolRegistryError`): `InvalidToolReferenceError`,
 - **Search** embeds the query, over-fetches from the index (widening until
   the limit is met or a short page shows the index is exhausted; it does not
   trust `size()`), drops hits the
-  caller may not discover and stale ids, and returns `limit` results sorted by
+  caller may not discover, stale ids and those rejected by the optional `where`
+  filter (e.g. an agent's allow list), and returns `limit` results sorted by
   cosine similarity. It never builds or grants a tool. No default score
   threshold: real-model margins are too narrow for one.
 - **Indexing** is lazy (first search or `sync_index()`), so boot never

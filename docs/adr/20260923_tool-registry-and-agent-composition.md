@@ -93,6 +93,8 @@ definitions by cosine similarity.
   and returns `limit` results. There is no default score threshold: against
   `nomic-embed-text`, correct top hits scored 0.43 to 0.67 and the runner-up
   was sometimes within 0.01, so a fixed cut-off would drop right answers.
+- An optional `where` filter (an agent's allow-list, for instance) is applied
+  inside that widening loop, so filtered-out hits never starve the limit.
 - Discovery is separate from activation: search never builds, runs or grants
   a tool.
 
@@ -113,6 +115,12 @@ instances too). Both paths share one implementation.
   sub-agents wired as handoffs sharing one `AgentSharedState` whose
   supervisor is the composed agent, as for Python-defined supervisors.
   Existing instances are duplicated onto that state, never mutated.
+- Record trees can nest (`lead -> manager -> worker`). The active agent's name
+  is shared by the whole tree while each graph only holds its direct
+  children, so `Agent.current_active_agent` now enters the child whose
+  subtree holds the active agent, and an active agent outside the tree hands
+  the turn back instead of targeting a missing node. This also covers nested
+  Python-defined supervisors.
 - Validation reports every problem found in one `AgentCompositionError`
   (unknown or denied tools, missing configuration or secrets, inline
   credentials, unknown models and records). Cycles raise

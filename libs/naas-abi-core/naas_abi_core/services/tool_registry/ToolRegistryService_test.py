@@ -407,6 +407,37 @@ class TestSearch:
             service.publish(module, tools)
         assert len(service.search_tools("github repository", limit=4)) == 4
 
+    def test_a_filter_is_applied_before_the_limit(self, embedder, index):
+        service = ToolRegistryService(embedder=embedder, index=index)
+        service.publish(
+            "acme.blocked",
+            [
+                _tool(
+                    "acme.blocked",
+                    f"create_issue_{i}",
+                    "Create a new issue in a GitHub repository.",
+                )
+                for i in range(16)
+            ],
+        )
+        service.publish(
+            "acme.allowed",
+            [
+                _tool(
+                    "acme.allowed",
+                    "report_problem",
+                    "Report an issue in the calendar event.",
+                )
+            ],
+        )
+
+        results = service.search_tools(
+            "open a ticket",
+            limit=1,
+            where=lambda definition: definition.namespace == "acme.allowed",
+        )
+        assert [r.tool_id for r in results] == ["acme.allowed/report_problem@1"]
+
     def test_limit_must_be_positive(self, registry):
         with pytest.raises(ValueError):
             registry.search_tools("anything", limit=0)
