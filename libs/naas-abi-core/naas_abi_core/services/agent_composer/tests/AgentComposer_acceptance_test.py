@@ -256,3 +256,38 @@ def test_a_composed_agent_discovers_enables_and_uses_a_tool(composer, models, re
     assert "create_ticket" not in seeker_llm.recorder.bound[1]
     assert "create_ticket" in seeker_llm.recorder.bound[2]
     assert tickets == [{"title": "Crash on save", "token": "tracker-secret"}]
+
+
+def test_a_nested_record_tree_keeps_routing_on_the_next_turn(composer, models, records):
+    """lead -> manager -> worker: the follow-up turn must reach the worker
+    through the manager, since the lead's graph only holds its own children."""
+    lead_model, lead_llm = _scripted(
+        "lead-model", [tool_call("transfer_to_manager", {}, "h1")]
+    )
+    manager_model, _ = _scripted(
+        "manager-model", [tool_call("transfer_to_worker", {}, "h2")]
+    )
+    worker_model, _ = _scripted(
+        "worker-model",
+        [AIMessage(content="first answer"), AIMessage(content="follow-up answer")],
+    )
+    models.register("lead-model", lead_model)
+    models.register("manager-model", manager_model)
+    models.register("worker-model", worker_model)
+    records.mkdir()
+    (records / "lead.yaml").write_text(
+        "name: lead\nprompt: You lead.\nmodel: lead-model\nsub_agents: [manager]\n"
+    )
+    (records / "manager.yaml").write_text(
+        "name: manager\nprompt: You manage.\nmodel: manager-model\n"
+        "sub_agents: [worker]\n"
+    )
+    (records / "worker.yaml").write_text(
+        "name: worker\nprompt: You do the work.\nmodel: worker-model\n"
+    )
+
+    lead = composer.compose("lead")
+    assert lead.invoke("do the task") == "first answer"
+    assert lead.invoke("and a follow-up") == "follow-up answer"
+    # The lead did not have to route the follow-up again.
+    assert len(lead_llm.recorder.bound) == 1
