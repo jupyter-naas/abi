@@ -71,6 +71,7 @@ class ModelRegistryNATS:
         ):
             raise ValueError("Model deadlines must be finite and positive")
         self.registry, self.secret = registry, secret
+        self.owner = uuid4().hex
         self.stream_ttl, self.deadline = stream_ttl, deadline
         self.subscriptions: list[Any] = []
         self.tasks: set[asyncio.Task] = set()
@@ -95,6 +96,9 @@ class ModelRegistryNATS:
                 self.subscriptions.append(
                     await nc.subscribe(
                         f"abi.svc.model_registry.v1.{operation}",
+                        queue="abi.model_registry.owners"
+                        if operation not in {"stream_next", "stream_close"}
+                        else "",
                         cb=partial(self._dispatch, operation),
                     )
                 )
@@ -128,6 +132,13 @@ class ModelRegistryNATS:
                     await self._close(stream_id)
 
     async def _dispatch(self, operation, msg):
+        if operation in {"stream_next", "stream_close"}:
+            try:
+                stream_id = OPERATIONS[operation][0].FromString(msg.data).stream_id
+            except DecodeError:
+                stream_id = ""
+            if ":" in stream_id and stream_id.split(":", 1)[0] != self.owner:
+                return
         if len(self.tasks) >= 64:
             response = OPERATIONS[operation][1]()
             response.error.code = "RESOURCE_EXHAUSTED"
@@ -409,8 +420,20 @@ class ModelRegistryNATS:
             stream.reading = True
             stream.touched = asyncio.get_running_loop().time()
             try:
-                while stream.queue.empty() and not stream.task.done():
-                    await asyncio.sleep(0.01)
+                if stream.queue.empty() and not stream.task.done():
+                    waiting = asyncio.create_task(stream.queue.get())
+                    try:
+                        await asyncio.wait(
+                            (waiting, stream.task), return_when=asyncio.FIRST_COMPLETED
+                        )
+                        if waiting.done():
+                            chunk = waiting.result()
+                            sequence = stream.sequence
+                            stream.sequence += 1
+                            return pb.StreamNextResponse(chunk=chunk, sequence=sequence)
+                    finally:
+                        waiting.cancel()
+                        await asyncio.gather(waiting, return_exceptions=True)
                 if stream.queue.empty():
                     if stream.error:
                         raise stream.error
@@ -454,7 +477,7 @@ class ModelRegistryNATS:
                 if not isinstance(message, AIMessage):
                     raise TypeError("Provider returned a non-AI message")
                 return pb.ChatResponse(message=encode_message(message))
-            stream_id = uuid4().hex
+            stream_id = f"{self.owner}:{uuid4().hex}"
             stream = _Stream(caller, touched=asyncio.get_running_loop().time())
             self.streams[stream_id] = stream
             stream.task = asyncio.create_task(

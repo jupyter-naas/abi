@@ -120,7 +120,11 @@ try:
     event_counts = Counter()
 
     async def observe(msg):
-        seen.add(msg.subject)
+        subject = msg.subject
+        if ".transfer." in subject and len(subject.split(".")) == 7:
+            parts = subject.split(".")
+            subject = ".".join(parts[:5] + parts[6:])
+        seen.add(subject)
         if msg.subject == "abi.svc.event.v1.append":
             event_counts[AppendRequest.FromString(msg.data).event_type] += 1
 

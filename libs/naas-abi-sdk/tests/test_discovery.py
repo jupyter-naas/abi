@@ -109,3 +109,36 @@ def test_endpoint_rebinding_must_succeed_before_ready_renewal():
         assert session.current_status == "READY"
 
     asyncio.run(scenario())
+
+
+def test_heartbeat_backoff_recovers_transient_errors_but_stops_on_bad_credentials(
+    monkeypatch,
+):
+    async def scenario():
+        delays = []
+        sleep = asyncio.sleep
+
+        async def fast_sleep(delay):
+            delays.append(delay)
+            await sleep(0)
+
+        monkeypatch.setattr("naas_abi_sdk.discovery.asyncio.sleep", fast_sleep)
+        session = DiscoverySession(
+            DiscoveryClient(AsyncMock()),
+            pb.ModuleDescriptor(module_id="a", contract_major=1),
+        )
+        session.renew = AsyncMock(
+            side_effect=[
+                RPCError("UNAVAILABLE", "down"),
+                None,
+                RPCError("UNAUTHENTICATED", "bad token"),
+            ]
+        )
+        with pytest.raises(RPCError, match="UNAUTHENTICATED"):
+            await session._heartbeat()
+        assert session.renew.await_count == 3
+        assert delays[1] > delays[0]
+        assert delays[2] < delays[1]
+        assert session.status == "UNAVAILABLE"
+
+    asyncio.run(scenario())

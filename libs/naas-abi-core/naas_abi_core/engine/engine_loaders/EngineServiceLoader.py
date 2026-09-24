@@ -63,7 +63,10 @@ class EngineServiceLoader:
             NATSJetStreamAdapter,
         )
 
-        return BusService(NATSJetStreamAdapter(self.__configuration.nats.nats_url))
+        return BusService(
+            NATSJetStreamAdapter(self.__configuration.nats.nats_url),
+            emit_message_events=self.__configuration.services.bus.emit_message_events,
+        )
 
     def load_services(
         self, module_dependencies: dict[str, ModuleDependencies]

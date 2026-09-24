@@ -97,3 +97,7 @@ Tests: `uv run pytest examples/standalone_module/model_integration_test.py -q`
 from repository root, with native `nats-server`. Run `make demo-sdk` for the
 separate-process, wheel-installed model example. Defaults and limitations are
 in `docs/adr/20260924_remote-model-registry.md`.
+
+Independent requests use a queue group; stream/transfer IDs encode an owner.
+Never randomly distribute reads of an existing stream across replicas. See
+`20260924_nats-review-reliability.md` for routing and output persistence decisions.

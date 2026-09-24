@@ -13,7 +13,7 @@ package. The JetStream adapter stores an opaque protobuf snapshot using CAS.
 NATS primary authenticates issued service tokens; mutations bind to verified
 caller identity plus a lease token. Stage 1 does not authorize logical module IDs.
 `discovery_factory.py` composes the service. Engine exposure is explicit opt-in;
-one configured owner per project is supported. No silent in-memory fallback.
+replicas use a project queue group and share the same JetStream CAS snapshot. No silent in-memory fallback.
 
 ## Tests
 Use `uv run pytest .../services/discovery --import-mode=importlib`. Unit tests inject

@@ -408,3 +408,51 @@ def test_streaming_configuration_is_optional_and_validated():
             NATSConfiguration(jwt_secret="test", object_storage_streaming=values)
     with pytest.raises(ValidationError):
         NATSConfiguration(jwt_secret="test", models={"generation_timeout_seconds": -1})
+
+
+def test_nats_configuration_rejects_conflicting_bus_and_cache_topologies():
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        EngineConfiguration,
+    )
+    from pydantic import ValidationError
+
+    base = {
+        "api": {},
+        "global_config": {"ai_mode": "local"},
+        "modules": [],
+        "nats": {"jwt_secret": "test"},
+    }
+    assert EngineConfiguration(**base, services={}).nats is not None
+    with pytest.raises(ValidationError, match="requires services.bus"):
+        EngineConfiguration(
+            **base,
+            services={"bus": {"bus_adapter": {"adapter": "rabbitmq", "config": {}}}},
+        )
+    with pytest.raises(ValidationError, match="URLs must match"):
+        EngineConfiguration(
+            **base,
+            services={
+                "bus": {
+                    "bus_adapter": {
+                        "adapter": "nats_jetstream",
+                        "config": {"nats_url": "nats://other:4222"},
+                    }
+                }
+            },
+        )
+    with pytest.raises(ValidationError, match="cannot mix local and remote"):
+        EngineConfiguration(
+            **base,
+            services={
+                "cache": {
+                    "adapters": [
+                        {
+                            "tier": "hot",
+                            "adapter": "nats_rpc",
+                            "config": {"jwt_secret": "test"},
+                        },
+                        {"tier": "cold", "adapter": "fs", "config": {}},
+                    ]
+                }
+            },
+        )

@@ -78,17 +78,45 @@ class InvocationHandle:
         self.agent, self.invocation_id = agent, invocation_id
         self.owner_instance_id = ""
         self._last_status: InvocationStatus | None = None
+        self._result_cache: str | None = None
+
+    async def _output(self, sequence: int, parts: int) -> str:
+        content = bytearray()
+        for part in range(parts):
+            response = await self.agent._rpc(
+                "event",
+                pb.EventRequest(
+                    invocation_id=self.invocation_id, sequence=sequence, part=part
+                ),
+                pb.EventResponse,
+                self.owner_instance_id,
+            )
+            content.extend(response.data)
+        return content.decode()
+
+    async def _decode(self, value: pb.Invocation) -> InvocationStatus:
+        self.owner_instance_id = value.owner_instance_id
+        for event in value.events:
+            if event.parts:
+                event.data = await self._output(event.sequence, event.parts)
+        if value.result_parts:
+            if self._result_cache is None:
+                self._result_cache = await self._output(0, value.result_parts)
+            value.result = self._result_cache
+        return _status(value)
 
     async def status(self, *, after_sequence: int = 0) -> InvocationStatus:
         response = await self.agent._rpc(
             "status",
             pb.StatusRequest(
-                invocation_id=self.invocation_id, after_sequence=after_sequence
+                invocation_id=self.invocation_id,
+                after_sequence=after_sequence,
+                output_format=2,
             ),
             pb.StatusResponse,
             self.owner_instance_id,
         )
-        status = _status(response.invocation)
+        status = await self._decode(response.invocation)
         self.owner_instance_id = status.owner_instance_id
         self._last_status = status
         return status
@@ -96,11 +124,11 @@ class InvocationHandle:
     async def cancel(self) -> InvocationStatus:
         response = await self.agent._rpc(
             "cancel",
-            pb.CancelRequest(invocation_id=self.invocation_id),
+            pb.CancelRequest(invocation_id=self.invocation_id, output_format=2),
             pb.CancelResponse,
             self.owner_instance_id,
         )
-        return _status(response.invocation)
+        return await self._decode(response.invocation)
 
     async def events(
         self, *, after_sequence: int = 0, timeout: float | None = None
@@ -162,13 +190,17 @@ class AgentProxy:
         self.module, self.descriptor = module, descriptor
         self.name, self.description = descriptor.name, descriptor.description
         self.state = state or AgentState()
+        self._instances = (0.0, ())
 
     async def _rpc(self, operation: str, request, response_type, owner: str = ""):
-        instances = await (
-            self.module.ready_instances()
-            if operation == "submit"
-            else self.module.instances()
-        )
+        now = asyncio.get_running_loop().time()
+        if operation == "submit":
+            instances = await self.module.ready_instances()
+        elif now < self._instances[0]:
+            instances = self._instances[1]
+        else:
+            instances = await self.module.instances()
+            self._instances = (now + 1.0, instances)
         eligible = [
             i
             for i in instances
@@ -182,13 +214,17 @@ class AgentProxy:
         if not eligible:
             raise RPCError("AGENT_UNAVAILABLE", self.name)
         target = next((i for i in eligible if i.instance_id == owner), eligible[0])
-        return await self.module.client.transport.call(
-            agent_subject(
-                self.module.client.project, target.instance_id, self.name, operation
-            ),
-            request,
-            response_type,
-        )
+        try:
+            return await self.module.client.transport.call(
+                agent_subject(
+                    self.module.client.project, target.instance_id, self.name, operation
+                ),
+                request,
+                response_type,
+            )
+        except (NATSError, asyncio.TimeoutError, OSError, RPCError):
+            self._instances = (0.0, ())
+            raise
 
     def invocation(self, invocation_id: str) -> InvocationHandle:
         return InvocationHandle(self, invocation_id)
@@ -213,6 +249,7 @@ class AgentProxy:
                     prompt=prompt,
                     mode="stream" if stream else "invoke",
                     deadline_seconds=deadline_seconds or 0,
+                    output_format=2,
                 ),
                 pb.SubmitResponse,
             )

@@ -202,9 +202,7 @@ def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():
             raise RuntimeError("some sensitive internal detail")
 
     adapter = CachePrimaryAdapterNATS(_BoomAdapter(), SECRET)
-    request = _FakeRequest(
-        data=_get_request(), headers={AUTH_HEADER: _valid_token()}
-    )
+    request = _FakeRequest(data=_get_request(), headers={AUTH_HEADER: _valid_token()})
 
     asyncio.run(adapter._handle_get(request))
 
@@ -385,3 +383,26 @@ def test_data_type_round_trips_through_pb_for_every_value(data_type):
     response.ParseFromString(request.responses[0])
     assert not response.HasField("error")
     assert response.value.data_type == _EXPECTED_PB_DATA_TYPE[data_type]
+
+
+def test_owner_emits_mutation_events_once_and_only_when_written():
+    from naas_abi_core.services.cache.ontologies.modules.CacheEventOntology import (
+        CacheDeleted,
+        CacheSet,
+    )
+
+    events = []
+    primary = CachePrimaryAdapterNATS(
+        _StubAdapter(), SECRET, event_publisher=events.append, tier_name="hot"
+    )
+    req = cache_pb2.SetIfAbsentRequest(
+        key="key",
+        value=cache_pb2.CachedData(
+            key="key", data="value", data_type=cache_pb2.DATA_TYPE_TEXT
+        ),
+    )
+    assert primary._call_set_if_absent(req).value
+    assert not primary._call_set_if_absent(req).value
+    primary._call_delete(cache_pb2.DeleteRequest(key="key"))
+    assert [type(event) for event in events] == [CacheSet, CacheDeleted]
+    assert all(event.tier == "hot" for event in events)

@@ -236,3 +236,65 @@ def test_transfer_limits_reject_before_backend_mutation(broker, tmp_path):  # no
             await nc.close()
 
     asyncio.run(scenario())
+
+
+def test_two_engine_owners_execute_once_and_route_transfer_sessions(broker, tmp_path):  # noqa: F811
+    async def scenario():
+        calls = []
+
+        class CountingModel(FakeListChatModel):
+            async def _agenerate(self, messages, **kwargs):
+                calls.append("invoke")
+                return ChatResult(
+                    generations=[ChatGeneration(message=AIMessage(content="answer"))]
+                )
+
+            async def _astream(self, messages, **kwargs):
+                calls.append("stream")
+                await asyncio.sleep(0.05)
+                yield ChatGenerationChunk(message=AIMessageChunk(content="answer"))
+
+        nc = await nats.connect(broker[0])
+        registry = ModelRegistryService()
+        registry.register(
+            "count",
+            ChatModel(
+                model_id="count",
+                provider="test",
+                model=CountingModel(responses=["unused"]),
+            ),
+        )
+        models = [ModelRegistryNATS(registry, SECRET) for _ in range(2)]
+        storage = [
+            ObjectStoragePrimaryAdapterNATS(
+                ObjectStorageSecondaryAdapterFS(str(tmp_path)), SECRET
+            )
+            for _ in range(2)
+        ]
+        try:
+            for primary in models + storage:
+                await primary.start(nc)
+            async with ABIClient(
+                broker[0], issue_service_token("two-owners", SECRET)
+            ) as client:
+                proxy = (
+                    await ModelFacade(client.model_registry).get_chat_model("count")
+                ).model
+                assert (await proxy.ainvoke("hi")).content == "answer"
+                assert (
+                    "".join([c.content async for c in proxy.astream("hi")]) == "answer"
+                )
+                objects = ObjectFacade(client.object_storage)
+                value = b"many packets" * 65536
+                for _ in range(4):
+                    await objects.put_object("files", "shared", value)
+                    assert await objects.get_object("files", "shared") == value
+                assert calls == ["invoke", "stream"]
+                assert all(not p.transfer.sessions for p in models)
+                assert all(not p._transfer.sessions for p in storage)
+        finally:
+            for primary in models + storage:
+                await primary.stop()
+            await nc.close()
+
+    asyncio.run(scenario())

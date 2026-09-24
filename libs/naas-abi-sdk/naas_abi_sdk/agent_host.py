@@ -70,13 +70,20 @@ class AgentHost:
             f"agent_runs_{suffix}",
             f"agent_claims_{suffix}",
         )
+        self.events_collection = f"agent_events_{suffix}"
+        self._membership = (0.0, set())
+        self._membership_lock = asyncio.Lock()
         self.runs: dict[str, _Run] = {}
         self.subscriptions = []
         self.accept_lock = asyncio.Lock()
         self.closing = False
 
     async def start(self) -> None:
-        for name in (self.runs_collection, self.locks_collection):
+        for name in (
+            self.runs_collection,
+            self.locks_collection,
+            self.events_collection,
+        ):
             await self.documents.ensure_collection(CollectionSpec(name=name))
         async with self.session._lock:
             self.session.on_registered = self._bind
@@ -84,11 +91,11 @@ class AgentHost:
 
     async def _bind(self) -> None:
         nc = await self.session.client.transport.connect()
-        old, self.subscriptions = self.subscriptions, []
+        pending = []
         try:
             for name in self.handlers:
-                for operation in ("submit", "status", "cancel"):
-                    self.subscriptions.append(
+                for operation in ("submit", "status", "cancel", "event"):
+                    pending.append(
                         await nc.subscribe(
                             agent_subject(
                                 self.session.client.project,
@@ -100,9 +107,14 @@ class AgentHost:
                         )
                     )
             await nc.flush()
-        finally:
-            for sub in old:
-                await sub.drain()
+        except BaseException:
+            for sub in pending:
+                await sub.unsubscribe()
+            raise
+        old, self.subscriptions = self.subscriptions, pending
+        self._membership = (0.0, set())
+        for sub in old:
+            await sub.drain()
 
     async def _authorize(self, name: str, token: str, new_invocation: bool) -> str:
         response = await self.session.client._call(
@@ -133,6 +145,11 @@ class AgentHost:
                 (msg.headers or {}).get("Nats-Auth-Token", ""),
                 operation == "submit",
             )
+            if operation != "event" and req.output_format != 2:
+                raise _error(
+                    "UPGRADE_REQUIRED",
+                    "Agent output requires an SDK supporting output_format=2",
+                )
             key = _hash(name, req.invocation_id)
             if operation == "submit":
                 doc = await self._submit(name, key, caller, req)
@@ -142,6 +159,21 @@ class AgentHost:
                     raise _error(
                         "PERMISSION_DENIED", "Invocation belongs to another caller"
                     )
+                if operation == "event":
+                    last = doc.data.get(
+                        "last_sequence", len(doc.data.get("events", []))
+                    )
+                    if req.sequence > last or (
+                        req.sequence == 0 and doc.data["status"] != "SUCCEEDED"
+                    ):
+                        raise _error("NOT_FOUND", "Output is not committed")
+                    fragment = await self.documents.get(
+                        self.events_collection, f"{key}:{req.sequence}:{req.part}"
+                    )
+                    await msg.respond(
+                        pb.EventResponse(data=fragment.data["data"]).SerializeToString()
+                    )
+                    return
                 if operation == "cancel" and doc.data["status"] not in TERMINAL:
                     run = self.runs.get(key)
                     if run is None:
@@ -185,14 +217,35 @@ class AgentHost:
             await msg.respond(payload)
 
     async def _view(self, data: dict, after: int = 0) -> pb.Invocation:
-        instances = await self.session.client.get_module(
-            self.session.descriptor.module_id, self.session.descriptor.contract_major
-        )
-        events = [
-            pb.AgentEvent(sequence=i + 1, event=e["event"], data=e["data"])
-            for i, e in enumerate(data["events"])
-            if i + 1 > after
-        ][:64]
+        now = asyncio.get_running_loop().time()
+        async with self._membership_lock:
+            if now >= self._membership[0]:
+                instances = await self.session.client.get_module(
+                    self.session.descriptor.module_id,
+                    self.session.descriptor.contract_major,
+                )
+                self._membership = (now + 1.0, {i.instance_id for i in instances})
+        events = []
+        last = data.get("last_sequence", len(data.get("events", [])))
+        if data.get("output_format") == 2:
+            key = _hash(data["agent_name"], data["invocation_id"])
+            for sequence in range(after + 1, min(last, after + 64) + 1):
+                manifest = await self.documents.get(
+                    self.events_collection, f"{key}:{sequence}"
+                )
+                events.append(
+                    pb.AgentEvent(
+                        sequence=sequence,
+                        event=manifest.data["event"],
+                        parts=manifest.data["parts"],
+                    )
+                )
+        else:
+            events = [
+                pb.AgentEvent(sequence=i + 1, event=e["event"], data=e["data"])
+                for i, e in enumerate(data["events"])
+                if i + 1 > after
+            ][:64]
         state = (
             "FINALIZING"
             if data["status"] in TERMINAL
@@ -207,9 +260,10 @@ class AgentHost:
             error_code=data.get("error_code", ""),
             error_message=data.get("error_message", ""),
             owner_instance_id=data["owner"],
-            owner_available=any(i.instance_id == data["owner"] for i in instances),
+            owner_available=data["owner"] in self._membership[1],
             events=events,
-            last_sequence=len(data["events"]),
+            last_sequence=last,
+            result_parts=data.get("result_parts", 0),
         )
 
     async def _submit(self, name: str, key: str, caller: str, req):
@@ -253,6 +307,9 @@ class AgentHost:
                 "owner": self.session.instance_id,
                 "status": "ACCEPTED",
                 "events": [],
+                "output_format": 2,
+                "last_sequence": 0,
+                "result_parts": 0,
                 "result": "",
                 "error_code": "",
                 "error_message": "",
@@ -337,6 +394,19 @@ class AgentHost:
             )
             run.data, run.version = candidate, doc.version
 
+    async def _store_output(self, run: _Run, sequence: int, text: str) -> int:
+        payload = text.encode()
+        size = 8192
+        parts = max(1, (len(payload) + size - 1) // size)
+        for part in range(parts):
+            await self.documents.put(
+                self.events_collection,
+                f"{run.key}:{sequence}:{part}",
+                {"data": payload[part * size : (part + 1) * size]},
+                if_version=0,
+            )
+        return parts
+
     async def _event(self, run: _Run, event: dict) -> None:
         if run.context.cancelled.is_set():
             raise asyncio.CancelledError()
@@ -344,14 +414,18 @@ class AgentHost:
             set(event) != {"event", "data"}
             or not all(isinstance(v, str) for v in event.values())
             or len(event["event"]) > 64
-            or len(event["data"].encode()) > 64 * 1024
-            or len(run.data["events"]) >= 1024
         ):
-            raise _error(
-                "OUTPUT_LIMIT",
-                "Events must contain bounded event/data strings (maximum 1024 events)",
-            )
-        await self._save(run, events=run.data["events"] + [event])
+            raise _error("INVALID_STREAM", "Events must contain event/data strings")
+        sequence = run.data["last_sequence"] + 1
+        parts = await self._store_output(run, sequence, event["data"])
+        await self.documents.put(
+            self.events_collection,
+            f"{run.key}:{sequence}",
+            {"event": event["event"], "parts": parts},
+            if_version=0,
+        )
+        # Publish the cursor only after every immutable fragment has committed.
+        await self._save(run, last_sequence=sequence)
 
     async def _execute(self, name: str, req, run: _Run) -> None:
         completed = False
@@ -378,13 +452,12 @@ class AgentHost:
                     await self._event(run, {"event": "done", "data": "[DONE]"})
             else:
                 result = await handler.invoke(req.prompt, run.context)
-                if not isinstance(result, str) or len(result.encode()) > 64 * 1024:
-                    raise _error(
-                        "OUTPUT_LIMIT", "Agent result must be text of at most 64 KiB"
-                    )
+                if not isinstance(result, str):
+                    raise _error("OUTPUT_LIMIT", "Agent result must be text")
                 await self._event(run, {"event": "message", "data": result})
                 await self._event(run, {"event": "done", "data": "[DONE]"})
-            await self._save(run, status="SUCCEEDED", result=result)
+            parts = await self._store_output(run, 0, result)
+            await self._save(run, status="SUCCEEDED", result_parts=parts)
             completed = True
         except asyncio.CancelledError:
             await self._save(

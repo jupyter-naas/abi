@@ -121,3 +121,7 @@ services transitively. In NATS mode those dependencies are network facades.
 Every configured local tier also serves `abi.svc.cache.v1.tier.<index>.*`; cold's
 original endpoint remains compatible. `DescribeRequest`/`DescribeResponse` add
 tier discovery without changing existing request shapes.
+
+NATS mode rejects mixed local/remote tier configurations. Mutation audit events
+are emitted by each owning primary, including for SDK callers; remote facades
+must not emit a second copy. Endpoint helpers take an injected event publisher.

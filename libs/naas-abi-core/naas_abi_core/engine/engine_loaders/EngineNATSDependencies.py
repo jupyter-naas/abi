@@ -114,7 +114,9 @@ class EngineNATSDependencies:
                 self.clients.append(owners.bus.adapter)
             bus_adapter = NATSJetStreamAdapter(self.config.nats_url)
             self.clients.append(bus_adapter)
-            values["bus"] = BusService(bus_adapter)
+            values["bus"] = BusService(
+                bus_adapter, emit_message_events=owners.bus.emit_message_events
+            )
         if owners.object_storage_available():
             values["object_storage"] = ObjectStorageService(
                 self._adapter(
@@ -223,8 +225,8 @@ class EngineNATSDependencies:
             dependencies.triple_store.set_services(
                 IEngine.Services(bus=values.get("bus"))
             )
-        # These two primaries expose raw adapters, so the client facade owns events.
-        for key in ("cache", "vector_store"):
+        # Mutation audit events belong to domain owners. Bus has no RPC owner.
+        for key in ("bus",):
             if key in values:
                 values[key].set_services(IEngine.Services(events=values.get("events")))
         self.services = dependencies

@@ -133,3 +133,45 @@ def test_registry_auth_expiry_restart_and_sdk_dependency_runner(broker):  # noqa
             await nc.close()
 
     asyncio.run(scenario())
+
+
+def test_two_registry_owners_do_not_duplicate_mutations(broker):  # noqa: F811
+    from unittest.mock import AsyncMock
+    from uuid import uuid4
+
+    from naas_abi_sdk.transport import Transport
+
+    async def scenario():
+        nc = await nats.connect(broker[0])
+        primaries = [await start_discovery(nc, SECRET) for _ in range(2)]
+        for primary in primaries:
+            primary.service.register = AsyncMock(wraps=primary.service.register)
+        transport = Transport(broker[0], issue_service_token("test", SECRET))
+        try:
+            for _ in range(4):
+                await transport.call(
+                    "abi.discovery.default.v1.register",
+                    pb.RegisterRequest(
+                        descriptor=pb.ModuleDescriptor(
+                            module_id="replicated", contract_major=1
+                        ),
+                        instance_id=str(uuid4()),
+                        lease_token=uuid4().hex,
+                    ),
+                    pb.RegisterResponse,
+                )
+            await nc.flush()
+            assert sum(p.service.register.await_count for p in primaries) == 4
+            result = await transport.call(
+                "abi.discovery.default.v1.get_module",
+                pb.GetModuleRequest(module_id="replicated", contract_major=1),
+                pb.GetModuleResponse,
+            )
+            assert len(result.instances) == 4
+        finally:
+            await transport.close()
+            for primary in primaries:
+                await primary.stop()
+            await nc.close()
+
+    asyncio.run(scenario())

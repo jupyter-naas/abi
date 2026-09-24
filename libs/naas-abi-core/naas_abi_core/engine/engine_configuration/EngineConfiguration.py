@@ -397,6 +397,24 @@ class EngineConfiguration(BaseModel):
     @model_validator(mode="after")
     def validate_modules(self) -> Self:
         self.ensure_default_modules()
+        if self.nats is not None:
+            bus = self.services.bus.bus_adapter
+            if "bus" in self.services.model_fields_set:
+                if bus.adapter != "nats_jetstream":
+                    raise ValueError(
+                        "NATS mode requires services.bus.bus_adapter.adapter=nats_jetstream; remove the explicit bus block to use NATS defaults"
+                    )
+                if (bus.config or {}).get(
+                    "nats_url", "nats://127.0.0.1:4222"
+                ) != self.nats.nats_url:
+                    raise ValueError("Bus and engine NATS URLs must match")
+            remote = [
+                entry.adapter == "nats_rpc" for entry in self.services.cache.adapters
+            ]
+            if any(remote) and not all(remote):
+                raise ValueError(
+                    "NATS mode cannot mix local and remote cache tiers; configure the full tier topology on its owning engine"
+                )
         return self
 
     @staticmethod

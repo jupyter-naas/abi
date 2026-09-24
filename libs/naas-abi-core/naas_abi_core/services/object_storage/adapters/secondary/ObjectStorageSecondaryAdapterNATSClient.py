@@ -46,6 +46,7 @@ from naas_abi_core.services.object_storage.ObjectStoragePort import (
     ObjectMetaData,
 )
 from naas_abi_proto.transfer.v1 import transfer_pb2 as transfer_pb
+from naas_abi_sdk.transfer import transfer_subject
 
 
 def _pb_to_metadata(pb: object_storage_pb2.ObjectMetaData) -> ObjectMetaData:
@@ -107,8 +108,13 @@ class ObjectStorageSecondaryAdapterNATSClient(NatsRPCClient, IObjectStorageAdapt
     # ------------------------------------------------------------------
 
     def _transfer_call(self, operation, request, response_type):
+        request.context.CopyFrom(self._context())
         response = self._call(
-            f"{SUBJECT_PREFIX}.transfer.{operation}", request, response_type
+            transfer_subject(
+                f"{SUBJECT_PREFIX}.transfer", operation, getattr(request, "id", "")
+            ),
+            request,
+            response_type,
         )
         if response.HasField("error"):
             _raise_for_error(response.error)

@@ -29,3 +29,8 @@ sequence-checked handles; never retry inference or cursor reads automatically.
 bounded reads; model proxies assemble logical protobuf frames. Preserve owner-loop
 execution, sequence checks, caller binding and no automatic replay. Per-exchange
 RPC timeouts must not impose a total model-generation deadline.
+
+Agent output format 2 stores immutable document fragments and manifests before
+publishing the run sequence cursor. Never truncate events or retry uncertain
+writes. Preserve caller authorization on fragment reads and output-format
+negotiation. Membership caches are bounded to one second, not a lease interval.

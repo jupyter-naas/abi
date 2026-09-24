@@ -244,35 +244,54 @@ class DiscoverySession:
             self.status = result.instance.status
 
     async def _heartbeat(self) -> None:
+        failures = 0
+        unexpected = 0
         while True:
-            await asyncio.sleep(
-                min(5, self.lease_seconds / 4) * random.uniform(0.9, 1.1)
-            )
+            delay = min(5, self.lease_seconds / 4) * min(8, 2 ** min(failures, 3))
+            await asyncio.sleep(min(30, delay) * random.uniform(0.9, 1.1))
             try:
-                await self.renew()
+                try:
+                    await self.renew()
+                except RPCError as exc:
+                    if exc.code != "LEASE_EXPIRED":
+                        raise
+                    self.status = "UNAVAILABLE"
+                    async with self._lock:
+                        self.instance_id, self.lease_token = str(uuid4()), uuid4().hex
+                        await self.register()
+                failures = unexpected = 0
             except RPCError as exc:
-                if exc.code == "LEASE_EXPIRED":
-                    self.status = "UNAVAILABLE"
-                    try:
-                        async with self._lock:
-                            self.instance_id, self.lease_token = (
-                                str(uuid4()),
-                                uuid4().hex,
-                            )
-                            await self.register()
-                    except (RPCError, NATSError, asyncio.TimeoutError, OSError):
-                        logging.getLogger(__name__).warning(
-                            "Discovery re-registration failed", exc_info=True
-                        )
-                elif exc.code in ("UNAVAILABLE", "REGISTRY_BUSY"):
-                    self.status = "UNAVAILABLE"
-                else:
+                self.status = "UNAVAILABLE"
+                if exc.code not in {
+                    "LEASE_EXPIRED",
+                    "UNAVAILABLE",
+                    "REGISTRY_BUSY",
+                    "INTERNAL",
+                    "RESOURCE_EXHAUSTED",
+                }:
+                    logging.getLogger(__name__).error(
+                        "Discovery renewal cannot recover from %s", exc.code
+                    )
                     raise
+                failures += 1
+                logging.getLogger(__name__).warning(
+                    "Discovery renewal will retry: %s", exc.code
+                )
             except (NATSError, asyncio.TimeoutError, OSError):
                 self.status = "UNAVAILABLE"
+                failures += 1
                 logging.getLogger(__name__).warning(
-                    "Discovery renewal unavailable", exc_info=True
+                    "Discovery renewal unavailable; retrying", exc_info=True
                 )
+            except Exception:
+                self.status = "UNAVAILABLE"
+                failures += 1
+                unexpected += 1
+                logging.getLogger(__name__).exception(
+                    "Discovery endpoint binding or renewal failed"
+                )
+                if unexpected >= 3:
+                    raise
 
     async def close(self) -> None:
         self.status = "STOPPED"
