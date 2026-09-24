@@ -16,6 +16,7 @@ from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_transfer import TransferHost
 from naas_abi_core.models.Model import ChatModel, EmbeddingModel
 from naas_abi_core.services.model_registry.ModelRegistryPort import (
     DefaultModelNotResolvedError,
@@ -60,9 +61,14 @@ class ModelRegistryNATS:
         secret: str,
         *,
         stream_ttl: float = 30,
-        deadline: float = 120,
+        deadline: float | None = None,
+        transfer_options: dict | None = None,
     ):
-        if any(not math.isfinite(v) or v <= 0 for v in (stream_ttl, deadline)):
+        if any(
+            not math.isfinite(v) or v <= 0
+            for v in (stream_ttl, deadline)
+            if v is not None
+        ):
             raise ValueError("Model deadlines must be finite and positive")
         self.registry, self.secret = registry, secret
         self.stream_ttl, self.deadline = stream_ttl, deadline
@@ -71,6 +77,15 @@ class ModelRegistryNATS:
         self.streams: dict[str, _Stream] = {}
         self.max_payload = 512 * 1024
         self._active = 0
+        self.transfer = TransferHost(
+            "abi.svc.model_registry.v1.transfer",
+            secret,
+            self._transfer_frames,
+            operations=("chat", "stream", "embed"),
+            total_seconds=deadline,
+            error_mapper=self._transfer_error,
+            **(transfer_options or {}),
+        )
         self._reaper: asyncio.Task | None = None
 
     async def start(self, nc) -> None:
@@ -85,11 +100,13 @@ class ModelRegistryNATS:
                 )
             await nc.flush()
             self._reaper = asyncio.create_task(self._expire())
+            await self.transfer.start(nc)
         except BaseException:
             await self.stop()
             raise
 
     async def stop(self) -> None:
+        await self.transfer.stop()
         for sub in self.subscriptions:
             await sub.unsubscribe()
         self.subscriptions.clear()
@@ -138,7 +155,10 @@ class ModelRegistryNATS:
             if len(msg.data) > self.max_payload:
                 raise ValueError("Model request exceeds 512 KiB limit")
             request = request_type.FromString(msg.data)
-            timeout = min(self.deadline, max(0.001, request.context.timeout_ms / 1000))
+            timeout = min(
+                self.deadline or float("inf"),
+                max(0.001, request.context.timeout_ms / 1000),
+            )
             response = await asyncio.wait_for(
                 self._execute(operation, request, caller), timeout
             )
@@ -262,12 +282,8 @@ class ModelRegistryNATS:
         )
 
     async def _chat(self, request):
-        if (
-            request.ref.kind != "chat"
-            or not request.messages
-            or len(request.messages) > 1024
-        ):
-            raise ValueError("Chat requires a chat reference and 1..1024 messages")
+        if request.ref.kind != "chat" or not request.messages:
+            raise ValueError("Chat requires a chat reference and messages")
         messages = [decode_message(message) for message in request.messages]
         options = decode_json(request.options_json, {})
         tool_options = decode_json(request.tool_options_json, {})
@@ -297,8 +313,8 @@ class ModelRegistryNATS:
         model = wrapper.model
         if request.tools_json:
             tools = [decode_json(tool) for tool in request.tools_json]
-            if len(tools) > 128 or any(not isinstance(tool, dict) for tool in tools):
-                raise ValueError("Tools must be JSON definitions (maximum 128)")
+            if any(not isinstance(tool, dict) for tool in tools):
+                raise ValueError("Tools must be JSON definitions")
             model = model.bind_tools(tools, **tool_options)
         elif tool_options:
             raise ValueError("Tool options require tool definitions")
@@ -317,7 +333,10 @@ class ModelRegistryNATS:
                         raise ValueError("Model chunk exceeds payload limit")
                     await stream.queue.put(encoded)
 
-            await asyncio.wait_for(consume(), self.deadline)
+            if self.deadline is None:
+                await consume()
+            else:
+                await asyncio.wait_for(consume(), self.deadline)
         except Exception as exc:  # noqa: BLE001 - deliver stream failure to caller
             stream.error = exc
         finally:
@@ -328,6 +347,40 @@ class ModelRegistryNATS:
         if stream:
             stream.task.cancel()
             await asyncio.gather(stream.task, return_exceptions=True)
+
+    @staticmethod
+    def _transfer_error(exc):
+        if isinstance(
+            exc,
+            (
+                ModelNotFoundError,
+                ProviderNotConfiguredError,
+                DefaultModelNotResolvedError,
+            ),
+        ):
+            return "MODEL_NOT_FOUND", "Model or default is not configured"
+        if isinstance(exc, (ValueError, TypeError, DecodeError)):
+            return "INVALID_ARGUMENT", "Invalid model request or provider options"
+        if isinstance(exc, NotImplementedError):
+            return "NOT_SUPPORTED", "Provider does not support this operation"
+        return "MODEL_ERROR", "Remote model inference failed"
+
+    async def _transfer_frames(self, operation, metadata, source):
+        request_type = pb.EmbedRequest if operation == "embed" else pb.ChatRequest
+        request = request_type.FromString(await asyncio.to_thread(source.read))
+        if operation != "stream":
+            response = await self._execute(operation, request, "")
+            yield response.SerializeToString()
+            return
+        model, messages, options = await self._chat(request)
+        iterator = model.astream(messages, **options)
+        try:
+            async for chunk in iterator:
+                if not isinstance(chunk, AIMessageChunk):
+                    raise TypeError("Provider returned a non-AI chunk")
+                yield encode_message(chunk).SerializeToString()
+        finally:
+            await iterator.aclose()
 
     async def _execute(self, operation, request, caller):
         if operation == "list_models":

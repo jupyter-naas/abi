@@ -18,20 +18,21 @@ from that exact header -- both sides read ``AUTH_HEADER`` from
 this file never has to import from the primary adapter's module (or vice
 versa) just to agree on a header name.
 
-``get_object_stream``/``put_object_stream`` are explicitly out of scope for
-this v1 contract (see the ``.proto`` file's header comment): there is no
-NATS subject for either, so both raise ``NotImplementedError`` here rather
-than silently buffering a stream into memory.
+Object bytes and streams use caller-bound chunked transfers. Uploads are staged
+on temporary disk before the storage operation starts.
 """
 
 from __future__ import annotations
 
+import io
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC
 from queue import Queue
 from typing import BinaryIO
 
+from naas_abi_core import logger
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.object_storage.v1 import object_storage_pb2
@@ -44,6 +45,7 @@ from naas_abi_core.services.object_storage.ObjectStoragePort import (
     IObjectStorageAdapter,
     ObjectMetaData,
 )
+from naas_abi_proto.transfer.v1 import transfer_pb2 as transfer_pb
 
 
 def _pb_to_metadata(pb: object_storage_pb2.ObjectMetaData) -> ObjectMetaData:
@@ -104,44 +106,83 @@ class ObjectStorageSecondaryAdapterNATSClient(NatsRPCClient, IObjectStorageAdapt
     # IObjectStorageAdapter.
     # ------------------------------------------------------------------
 
-    def get_object(self, prefix: str, key: str) -> bytes:
-        request = object_storage_pb2.GetObjectRequest(
-            context=self._context(), prefix=prefix, key=key
-        )
+    def _transfer_call(self, operation, request, response_type):
         response = self._call(
-            f"{SUBJECT_PREFIX}.get_object",
-            request,
-            object_storage_pb2.GetObjectResponse,
+            f"{SUBJECT_PREFIX}.transfer.{operation}", request, response_type
         )
         if response.HasField("error"):
             _raise_for_error(response.error)
-        return response.content
+        return response
+
+    def _open_transfer(self, operation, prefix, key):
+        nc = self._run_coro(self._ensure_connection_async())
+        size = min(64 * 1024, nc.max_payload // 2)
+        return self._transfer_call(
+            "open",
+            transfer_pb.OpenRequest(
+                operation=operation,
+                metadata=object_storage_pb2.GetObjectRequest(
+                    prefix=prefix, key=key
+                ).SerializeToString(),
+                chunk_bytes=size,
+            ),
+            transfer_pb.OpenResponse,
+        )
+
+    def _close_transfer(self, transfer_id: str) -> None:
+        try:
+            self._transfer_call(
+                "close",
+                transfer_pb.CloseRequest(id=transfer_id),
+                transfer_pb.CloseResponse,
+            )
+        except Exception as exc:  # noqa: BLE001 - cleanup must preserve the operation error
+            # Idle expiry cleans up when the final exchange cannot reach the owner.
+            logger.warning("Transfer cleanup failed: {}", type(exc).__name__)
+
+    def get_object(self, prefix: str, key: str) -> bytes:
+        with self.get_object_stream(prefix, key) as stream:
+            return stream.read()
 
     @contextmanager
     def get_object_stream(self, prefix: str, key: str) -> Iterator[BinaryIO]:
-        raise NotImplementedError(
-            "ObjectStorageSecondaryAdapterNATSClient does not support streaming reads: "
-            "get_object_stream is out of scope for the v1 object_storage NATS RPC contract."
-        )
-        yield  # pragma: no cover - unreachable, keeps this a generator matching the port
+        opened = self._open_transfer("get", prefix, key)
+        try:
+            self._transfer_call(
+                "start",
+                transfer_pb.StartRequest(id=opened.id),
+                transfer_pb.StartResponse,
+            )
+            with io.BufferedReader(_RemoteReader(self, opened.id)) as stream:
+                yield stream
+        finally:
+            self._close_transfer(opened.id)
 
     def put_object(self, prefix: str, key: str, content: bytes) -> None:
-        request = object_storage_pb2.PutObjectRequest(
-            context=self._context(), prefix=prefix, key=key, content=content
-        )
-        response = self._call(
-            f"{SUBJECT_PREFIX}.put_object",
-            request,
-            object_storage_pb2.PutObjectResponse,
-        )
-        if response.HasField("error"):
-            _raise_for_error(response.error)
+        self.put_object_stream(prefix, key, io.BytesIO(content))
 
     def put_object_stream(self, prefix: str, key: str, stream: BinaryIO) -> None:
-        raise NotImplementedError(
-            "ObjectStorageSecondaryAdapterNATSClient does not support streaming writes: "
-            "put_object_stream is out of scope for the v1 object_storage NATS RPC contract."
-        )
+        opened = self._open_transfer("put", prefix, key)
+        try:
+            sequence = 0
+            while chunk := stream.read(opened.chunk_bytes):
+                self._transfer_call(
+                    "write",
+                    transfer_pb.WriteRequest(
+                        id=opened.id, sequence=sequence, data=chunk
+                    ),
+                    transfer_pb.WriteResponse,
+                )
+                sequence += 1
+            self._transfer_call(
+                "start",
+                transfer_pb.StartRequest(id=opened.id),
+                transfer_pb.StartResponse,
+            )
+            reader = _RemoteReader(self, opened.id)
+            reader.read()
+        finally:
+            self._close_transfer(opened.id)
 
     def delete_object(self, prefix: str, key: str) -> None:
         request = object_storage_pb2.DeleteObjectRequest(
@@ -203,3 +244,38 @@ class ObjectStorageSecondaryAdapterNATSClient(NatsRPCClient, IObjectStorageAdapt
         if response.HasField("error"):
             _raise_for_error(response.error)
         return _pb_to_metadata(response.metadata)
+
+
+class _RemoteReader(io.RawIOBase):
+    def __init__(self, client, id):
+        super().__init__()
+        self.client, self.id = client, id
+        self.sequence = 0
+        self.buffer = bytearray()
+        self.done = False
+
+    def readable(self):
+        return True
+
+    def readinto(self, target):
+        if self.closed:
+            raise ValueError("Stream is closed")
+        while not self.buffer and not self.done:
+            response = self.client._transfer_call(
+                "read",
+                transfer_pb.ReadRequest(id=self.id, sequence=self.sequence),
+                transfer_pb.ReadResponse,
+            )
+            if response.sequence != self.sequence:
+                raise ValueError("Transfer sequence mismatch")
+            if response.done:
+                self.done = True
+            elif response.pending:
+                time.sleep(0.02)
+            else:
+                self.sequence += 1
+                self.buffer.extend(response.data)
+        count = min(len(target), len(self.buffer))
+        target[:count] = self.buffer[:count]
+        del self.buffer[:count]
+        return count

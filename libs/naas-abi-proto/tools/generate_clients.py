@@ -17,7 +17,7 @@ initializers = []
 catalog = {}
 for file in sorted(PROTO.glob("*/v1/*.proto")):
     domain = file.stem
-    if domain in ("common", "discovery", "agent"):
+    if domain in ("common", "discovery", "agent", "transfer"):
         continue
     cls = "".join(p.title() for p in domain.split("_")) + "Client"
     methods = re.findall(r"message (\w+)Request \{", file.read_text())
@@ -55,10 +55,16 @@ class {cls}:
         return CacheClient(self._transport, subject_prefix=f"abi.svc.cache.v1.tier.{index}")
 '''
     if domain == "document":
-        text = text.replace("def __init__(self, transport: Transport) -> None:", "def __init__(self, transport: Transport, namespace: str | None = None) -> None:")
-        text = text.replace("        self._transport = transport", "        self._transport = transport\n        self._namespace = namespace")
+        text = text.replace(
+            "def __init__(self, transport: Transport) -> None:",
+            "def __init__(self, transport: Transport, namespace: str | None = None) -> None:",
+        )
+        text = text.replace(
+            "        self._transport = transport",
+            "        self._transport = transport\n        self._namespace = namespace",
+        )
         text = text.replace(", request, pb.", ", self._scoped(request), pb.")
-        text += '''
+        text += """
     @property
     def namespace(self) -> str | None:
         return self._namespace
@@ -79,7 +85,7 @@ class {cls}:
         cloned.CopyFrom(request)
         cloned.namespace = self._namespace
         return cloned
-'''
+"""
     (SDK / f"{domain}.py").write_text(text)
     imports.append(f"from naas_abi_sdk.{domain} import {cls}")
     initializers.append(f"        self.{domain} = {cls}(self._transport)")

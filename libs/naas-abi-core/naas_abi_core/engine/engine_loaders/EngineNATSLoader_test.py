@@ -388,3 +388,23 @@ def test_expose_model_registry_owner(monkeypatch):
     assert len(started) == 1
     assert isinstance(started[0], ModelRegistryNATS)
     assert started[0].registry is services.model_registry
+
+
+def test_streaming_configuration_is_optional_and_validated():
+    from pydantic import ValidationError
+
+    config = NATSConfiguration(jwt_secret="test")
+    assert config.models.generation_timeout_seconds is None
+    assert config.models.streaming.max_upload_bytes is None
+    assert config.object_storage_streaming.chunk_bytes == 65536
+    for values in (
+        {"idle_seconds": 0},
+        {"idle_seconds": float("nan")},
+        {"max_sessions": 0},
+        {"max_upload_bytes": 0},
+        {"chunk_bytes": 1},
+    ):
+        with pytest.raises(ValidationError):
+            NATSConfiguration(jwt_secret="test", object_storage_streaming=values)
+    with pytest.raises(ValidationError):
+        NATSConfiguration(jwt_secret="test", models={"generation_timeout_seconds": -1})

@@ -103,11 +103,15 @@ class InvocationHandle:
         return _status(response.invocation)
 
     async def events(
-        self, *, after_sequence: int = 0, timeout: float = 120
+        self, *, after_sequence: int = 0, timeout: float | None = None
     ) -> AsyncIterator[dict[str, Any]]:
-        if not math.isfinite(timeout) or timeout <= 0:
+        if timeout is not None and (not math.isfinite(timeout) or timeout <= 0):
             raise ValueError("timeout must be finite and positive")
-        deadline = asyncio.get_running_loop().time() + timeout
+        deadline = (
+            asyncio.get_running_loop().time() + timeout
+            if timeout is not None
+            else float("inf")
+        )
         cursor = after_sequence
         while True:
             remaining = deadline - asyncio.get_running_loop().time()
@@ -146,7 +150,7 @@ class InvocationHandle:
                 min(0.1, max(0, deadline - asyncio.get_running_loop().time()))
             )
 
-    async def result(self, *, timeout: float = 120) -> str:
+    async def result(self, *, timeout: float | None = None) -> str:
         async for _ in self.events(timeout=timeout):
             pass
         assert self._last_status is not None
@@ -195,7 +199,7 @@ class AgentProxy:
         *,
         invocation_id: str | None = None,
         stream: bool = False,
-        deadline_seconds: int = 120,
+        deadline_seconds: int | None = None,
     ) -> InvocationHandle:
         if not isinstance(prompt, str):
             raise TypeError("prompt must be text")
@@ -208,7 +212,7 @@ class AgentProxy:
                     thread_id=self.state.thread_id,
                     prompt=prompt,
                     mode="stream" if stream else "invoke",
-                    deadline_seconds=deadline_seconds,
+                    deadline_seconds=deadline_seconds or 0,
                 ),
                 pb.SubmitResponse,
             )
@@ -222,25 +226,39 @@ class AgentProxy:
         return handle
 
     async def invoke(
-        self, prompt: str, *, invocation_id: str | None = None, timeout: float = 120
+        self,
+        prompt: str,
+        *,
+        invocation_id: str | None = None,
+        timeout: float | None = None,
     ) -> str:
-        if not math.isfinite(timeout) or not 1 <= timeout <= 3600:
+        if timeout is not None and (
+            not math.isfinite(timeout) or not 1 <= timeout <= 3600
+        ):
             raise ValueError("timeout must be 1..3600 seconds")
         handle = await self.submit(
-            prompt, invocation_id=invocation_id, deadline_seconds=math.ceil(timeout)
+            prompt,
+            invocation_id=invocation_id,
+            deadline_seconds=math.ceil(timeout) if timeout is not None else None,
         )
         return await handle.result(timeout=timeout)
 
     async def stream_invoke(
-        self, prompt: str, *, invocation_id: str | None = None, timeout: float = 120
+        self,
+        prompt: str,
+        *,
+        invocation_id: str | None = None,
+        timeout: float | None = None,
     ) -> AsyncIterator[dict[str, str]]:
-        if not math.isfinite(timeout) or not 1 <= timeout <= 3600:
+        if timeout is not None and (
+            not math.isfinite(timeout) or not 1 <= timeout <= 3600
+        ):
             raise ValueError("timeout must be 1..3600 seconds")
         handle = await self.submit(
             prompt,
             invocation_id=invocation_id,
             stream=True,
-            deadline_seconds=math.ceil(timeout),
+            deadline_seconds=math.ceil(timeout) if timeout is not None else None,
         )
         async for event in handle.events(timeout=timeout):
             yield {"event": event["event"], "data": event["data"]}

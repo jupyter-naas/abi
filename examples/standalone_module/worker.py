@@ -691,7 +691,6 @@ async def main():
         packages=sorted(d.metadata["Name"] for d in importlib.metadata.distributions()),
         core_installed=False,
         unsupported=[
-            "object_storage streaming",
             "publishing models from SDK provider modules",
             "ontology/agent execution (no v1 RPC contract)",
         ],

@@ -59,8 +59,9 @@ this does not make server execution cancellable. Errors raise `RPCError` with
 transport exceptions and malformed protobuf errors propagate. The payload ceiling
 is 8 MiB, or the broker's lower limit, including request headers.
 
-The existing v1 contract has deliberate limits: no object streaming, process-local
-model objects, ontology execution, or arbitrary remote callbacks. Agent invocation
+The unary v1 contract does not serialize process-local model objects, ontology
+execution, or arbitrary remote callbacks. Object and model facades use the
+chunked transfer contract described below. Agent invocation
 uses the separate contract described below. Cache v1 addresses
 the engine's cold adapter by default; `cache.tier(index)` selects an explicit tier. Decorators remain local. Event v1 is the durable
 log port; live messages use the bus. The engine's triple-store service rejects
@@ -190,7 +191,7 @@ See the document-checkpoint ADR and remote-agent invocation RFC for those bounda
 - Events use SDK `Event(event_type, payload)` values instead of core ontology
   instances. Vector methods accept lists of floats. Raw cache/vector operations
   do not synthesize core ontology events.
-- Object streaming, KV lock contexts, local model objects and framework-specific
+- KV lock contexts, local model objects and framework-specific
   helpers have no equivalent here. Unsupported operations are not silently run
   locally. Use `engine.rpc` for administrative or lower-level contract operations.
 - `current_module()` finds the current instance only. `engine.modules` resolves
@@ -383,7 +384,8 @@ stopped before an operator removes a claim. Do not use the discovery lease to
 unlock execution. This is intentionally conservative and is not exactly-once tool
 side effects or a fenced failover scheduler.
 
-The default execution deadline is 120 seconds (allowed 1..3600). Wait timeouts and
+Execution has no total deadline by default; an explicit deadline allows 1..3600
+seconds. Wait timeouts and
 abandoning a stream do not cancel remote execution. Cancellation marks CANCELLING;
 CANCELLED/TIMED_OUT is persisted only after execution stops. Synchronous core
 inference cannot be forcibly interrupted: the adapter waits for its worker thread
@@ -431,7 +433,8 @@ class ABIModule(BaseModule):
         return vector
 ```
 
-Configure `run_module(..., timeout=120)` for inference. Explicit model lookups use
+The module `timeout` controls each transport exchange, not total inference time.
+Explicit model lookups use
 `await registry.get_chat_model(canonical_id, provider=None)` or
 `get_embedding_model(...)`; `get`, `list_models`, and `list_canonical_ids` are
 also available. Like core, lookups return a wrapper whose `.model` is the usable
@@ -449,8 +452,11 @@ cannot be sent. The proxy is not a provider-specific model subclass.
 Sync `invoke`, `stream`, `embed_query` and `embed_documents` are supported from
 worker threads while the module's event loop remains running. On that loop, use
 async methods; otherwise a sync call would deadlock. No inference call is replayed
-automatically. Streams are ephemeral, have bounded buffers and expire after
-30 seconds idle or 120 seconds generation time; each payload is at most 512 KiB.
+automatically. Transfers are ephemeral and have bounded packet queues. SDK model
+inputs, results and streamed chunks are fragmented across broker-sized packets;
+there is no 512 KiB logical-message ceiling or default total generation deadline.
+Polling keeps an active generation alive even before its first token. Transfers
+expire after 60 seconds without client activity by default.
 Closing a stream requests cancellation, which cannot guarantee that provider
 billing or synchronous work stops. Registry/model ownership stays with the
 configured engine; publishing models from SDK provider modules is future work.
@@ -458,3 +464,55 @@ configured engine; publishing models from SDK provider modules is future work.
 Runnable example: `examples/standalone_module/model_module.py`. `make demo-sdk`
 launches it in a separate environment containing LangChain, SDK and proto, with
 no ABI core installed. The base worker still verifies its four-package install.
+
+
+## Object streams and transfer configuration
+
+Object `get_object` and `put_object` use chunked transfers too. `get_object` still
+returns all bytes in memory, matching the local API. For bounded reads:
+
+```python
+storage = module.engine.services.object_storage
+with open("report.bin", "rb") as source:
+    await storage.put_object_stream("reports", "report.bin", source)
+async with storage.get_object_stream("reports", "report.bin") as source:
+    async for chunk in source:
+        await consume(chunk)  # or await source.read(65536)
+```
+
+Upgrade the engine and SDK together for these new transfer endpoints. Existing
+configurations need no new fields. Without a `nats` block, services remain local.
+Optional engine settings (shown with defaults):
+
+```yaml
+nats:
+  nats_url: "nats://127.0.0.1:4222"
+  jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+  object_storage_streaming:
+    chunk_bytes: 65536
+    idle_seconds: 60
+    max_sessions: 32
+    max_upload_bytes: null
+  models:
+    generation_timeout_seconds: null
+    streaming:
+      chunk_bytes: 65536
+      idle_seconds: 60
+      max_sessions: 32
+      max_upload_bytes: null
+```
+
+Chunk size is reduced for the broker's advertised packet limit. Uploads spool to
+temporary disk and execute only after upload completion. Set `max_upload_bytes`
+if an explicit deployment cap is needed. Each domain limits active sessions and
+buffers two output packets per session. Model providers and callers still hold
+logical messages in memory; provider context windows still apply. Slow consumers
+must read within the configured idle period. An optional generation deadline
+covers execution, including output backpressure, after upload completion.
+
+Cancellation closes streams and cleans temporary files; abandoned sessions expire.
+Synchronous backend work must finish before its resources can be safely closed.
+Transfers cannot resume after an owner restart and uncertain operations are never
+replayed automatically. Original low-level unary endpoints, discovery records,
+checkpoints and durable agent invocation records retain their own size limits;
+chunking here covers object content and model inference payloads.

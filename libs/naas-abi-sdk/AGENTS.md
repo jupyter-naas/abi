@@ -24,3 +24,8 @@ from package __init__ or the base service catalog. Registry facades lazy-load
 proxies on model lookup. ModelConnection keeps NATS I/O on the resolving loop;
 sync callers must use another thread. Stream IDs are caller-bound, ephemeral,
 sequence-checked handles; never retry inference or cursor reads automatically.
+
+`transfer.py` owns shared chunk framing and session cleanup. Object facades stream
+bounded reads; model proxies assemble logical protobuf frames. Preserve owner-loop
+execution, sequence checks, caller binding and no automatic replay. Per-exchange
+RPC timeouts must not impose a total model-generation deadline.

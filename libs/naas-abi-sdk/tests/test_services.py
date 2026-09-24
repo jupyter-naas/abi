@@ -1,6 +1,8 @@
 import asyncio
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
+from types import SimpleNamespace
+from naas_abi_proto.transfer.v1 import transfer_pb2 as transfer
 
 import pytest
 from naas_abi_proto.dataset.v1 import dataset_pb2 as dataset
@@ -22,17 +24,31 @@ from naas_abi_sdk.transport import RPCError
 
 def test_object_methods_hide_requests_and_responses_and_preserve_domain_error():
     client = AsyncMock()
-    client.get_object.return_value = objects.GetObjectResponse(content=b"hello")
-    client.put_object.return_value = objects.PutObjectResponse()
     client.list_objects.return_value = objects.ListObjectsResponse(
         keys=objects.Keys(keys=["a", "b"])
     )
+    client._transport.connect.return_value = SimpleNamespace(max_payload=8192)
+    state = {}
+
+    async def call(subject, request, response_type):
+        if subject.endswith(".open"):
+            metadata = objects.GetObjectRequest.FromString(request.metadata)
+            if metadata.key == "missing":
+                raise RPCError("OBJECT_NOT_FOUND", "missing")
+            state.update(operation=request.operation, key=metadata.key)
+            return transfer.OpenResponse(id="one", chunk_bytes=4096)
+        if subject.endswith(".read"):
+            if state["operation"] == "put" or request.sequence:
+                return transfer.ReadResponse(done=True, sequence=request.sequence)
+            return transfer.ReadResponse(data=b"hello", frame_end=True)
+        return response_type()
+
+    client._transport.call.side_effect = call
     service = ObjectStorageService(client)
     assert asyncio.run(service.get_object("prefix", "key")) == b"hello"
-    assert client.get_object.call_args.args[0].key == "key"
+    assert state["key"] == "key"
     assert asyncio.run(service.put_object("prefix", "key", b"hello")) is None
     assert asyncio.run(service.list_objects()) == ["a", "b"]
-    client.get_object.side_effect = RPCError("OBJECT_NOT_FOUND", "missing")
     with pytest.raises(ObjectNotFound):
         asyncio.run(service.get_object("prefix", "missing"))
 

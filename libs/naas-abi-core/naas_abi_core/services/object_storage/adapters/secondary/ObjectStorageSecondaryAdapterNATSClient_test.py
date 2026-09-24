@@ -61,24 +61,52 @@ def test_context_manager_calls_close():
 
 
 # ---------------------------------------------------------------------------
-# Streaming methods are explicitly unsupported over this v1 RPC contract.
+# Streaming cleanup remains deterministic when consumers stop early.
 # ---------------------------------------------------------------------------
 
 
-def test_get_object_stream_raises_not_implemented():
-    client = ObjectStorageSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api"
+def test_get_object_stream_closes_after_partial_read(monkeypatch):
+    from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
+
+    client = ObjectStorageSecondaryAdapterNATSClient("nats://unused", JWT_SECRET, "api")
+    monkeypatch.setattr(
+        client,
+        "_open_transfer",
+        lambda *args: pb.OpenResponse(id="one", chunk_bytes=4096),
     )
-    with pytest.raises(NotImplementedError), client.get_object_stream("prefix", "key"):
-        pass  # pragma: no cover - never reached
+    calls = []
+
+    def call(operation, request, response_type):
+        calls.append(operation)
+        if operation == "read":
+            return pb.ReadResponse(data=b"hello", frame_end=True)
+        return response_type()
+
+    monkeypatch.setattr(client, "_transfer_call", call)
+    with client.get_object_stream("prefix", "key") as stream:
+        assert stream.read(1) == b"h"
+    assert calls == ["start", "read", "close"]
 
 
-def test_put_object_stream_raises_not_implemented():
-    client = ObjectStorageSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api"
+def test_incomplete_upload_closes_without_start(monkeypatch):
+    from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
+
+    client = ObjectStorageSecondaryAdapterNATSClient("nats://unused", JWT_SECRET, "api")
+    monkeypatch.setattr(
+        client,
+        "_open_transfer",
+        lambda *args: pb.OpenResponse(id="one", chunk_bytes=4096),
     )
-    with pytest.raises(NotImplementedError):
-        client.put_object_stream("prefix", "key", io.BytesIO(b"x"))
+    calls = []
+    monkeypatch.setattr(client, "_transfer_call", lambda op, *args: calls.append(op))
+
+    class Broken(io.BytesIO):
+        def read(self, size=-1):
+            raise OSError("source failed")
+
+    with pytest.raises(OSError, match="source failed"):
+        client.put_object_stream("prefix", "key", Broken())
+    assert calls == ["close"]
 
 
 # ---------------------------------------------------------------------------

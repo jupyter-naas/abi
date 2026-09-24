@@ -21,6 +21,7 @@ from naas_abi_sdk.model_codec import (
     encode_json,
     encode_message,
 )
+from naas_abi_sdk.transfer import model_frames
 
 
 class ModelConnection:
@@ -52,6 +53,35 @@ class ModelConnection:
         return await asyncio.wrap_future(
             asyncio.run_coroutine_threadsafe(coroutine, self.loop)
         )
+
+    async def on_loop(self, awaitable):
+        async def run():
+            return await awaitable
+
+        if asyncio.get_running_loop() is self.loop:
+            return await awaitable
+        if not self.loop.is_running():
+            raise RuntimeError("The model's SDK loop is no longer running")
+        return await asyncio.wrap_future(
+            asyncio.run_coroutine_threadsafe(run(), self.loop)
+        )
+
+    async def frames(self, operation, request):
+        iterator = model_frames(self.client, operation, request)
+        try:
+            while True:
+                try:
+                    yield await self.on_loop(iterator.__anext__())
+                except StopAsyncIteration:
+                    break
+        finally:
+            await self.on_loop(iterator.aclose())
+
+    async def result(self, operation, request, response_type):
+        results = [frame async for frame in self.frames(operation, request)]
+        if len(results) != 1:
+            raise ValueError("Expected one model response")
+        return response_type.FromString(results[0])
 
 
 class ChatModelProxy(BaseChatModel):
@@ -107,8 +137,8 @@ class ChatModelProxy(BaseChatModel):
     async def _agenerate(
         self, messages: list[BaseMessage], stop=None, run_manager=None, **kwargs
     ) -> ChatResult:
-        result = await self._connection.call(
-            "chat", self._request(messages, stop, kwargs)
+        result = await self._connection.result(
+            "chat", self._request(messages, stop, kwargs), pb.ChatResponse
         )
         message = decode_message(result.message)
         if not isinstance(message, AIMessage):
@@ -121,42 +151,20 @@ class ChatModelProxy(BaseChatModel):
     async def _astream(
         self, messages, stop=None, run_manager=None, **kwargs
     ) -> AsyncIterator[ChatGenerationChunk]:
-        opened = await self._connection.call(
-            "stream_open",
-            pb.StreamOpenRequest(chat=self._request(messages, stop, kwargs)),
+        iterator = self._connection.frames(
+            "stream", self._request(messages, stop, kwargs)
         )
-        sequence = 0
         try:
-            while True:
-                response = await self._connection.call(
-                    "stream_next",
-                    pb.StreamNextRequest(stream_id=opened.stream_id, sequence=sequence),
-                )
-                if response.sequence != sequence:
-                    raise ValueError("Remote stream sequence mismatch")
-                if response.done:
-                    break
-                message = decode_message(response.chunk)
+            async for frame in iterator:
+                message = decode_message(pb.ChatMessage.FromString(frame))
                 if not isinstance(message, AIMessageChunk):
                     raise TypeError("Remote model returned a non-AI chunk")
                 chunk = ChatGenerationChunk(message=message)
                 if run_manager:
                     await run_manager.on_llm_new_token(chunk.text, chunk=chunk)
                 yield chunk
-                sequence += 1
         finally:
-            try:
-                await self._connection.call(
-                    "stream_close", pb.StreamCloseRequest(stream_id=opened.stream_id)
-                )
-            except Exception:
-                # Cleanup must not hide the original inference error. The owner
-                # also expires abandoned streams independently of the client.
-                import logging
-
-                logging.getLogger(__name__).warning(
-                    "Could not close remote model stream", exc_info=True
-                )
+            await iterator.aclose()
 
     def _stream(
         self, messages, stop=None, run_manager=None, **kwargs
@@ -185,14 +193,16 @@ class EmbeddingModelProxy(Embeddings):
     async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
-        result = await self._connection.call(
-            "embed", pb.EmbedRequest(ref=self._ref, texts=texts)
+        result = await self._connection.result(
+            "embed", pb.EmbedRequest(ref=self._ref, texts=texts), pb.EmbedResponse
         )
         return [list(vector.values) for vector in result.vectors]
 
     async def aembed_query(self, text: str) -> list[float]:
-        result = await self._connection.call(
-            "embed", pb.EmbedRequest(ref=self._ref, texts=[text], query=True)
+        result = await self._connection.result(
+            "embed",
+            pb.EmbedRequest(ref=self._ref, texts=[text], query=True),
+            pb.EmbedResponse,
         )
         return list(result.vectors[0].values)
 

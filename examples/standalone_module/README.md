@@ -35,8 +35,8 @@ not the signing key. Only test data is used. Coding environments and source cont
 use the engine's in-memory adapters; email uses its filesystem adapter. The runner
 independently checks that email persisted. No external email is sent.
 
-Limitations are explicit: object streaming, model objects and ontology execution
-have no remote contract. Discovery and agent invocation are exercised separately
+Limitations are explicit: publishing models from SDK provider modules and ontology
+execution have no remote contract. Discovery and agent invocation are exercised separately
 from the service-endpoint coverage worker. The triple-store
 `handle_view_event` endpoint is exercised and its expected `NOT_SUPPORTED` reply
 is recorded separately; it is an internal adapter callback, not an engine operation.
@@ -121,3 +121,10 @@ returns its actual PID in the answer, and the consumer asserts it differs from
 its own PID. `remote_model_agents` in the report records both PIDs and results.
 This consumer intentionally has core installed for the existing agent classes;
 it has no local engine or provider model. The core-free workers remain separate.
+
+
+The ergonomic worker also uploads and streams back a file larger than 8 MiB.
+`transfer_integration_test.py` uses a native broker limited to 32 KiB per packet:
+it verifies 2 MiB object transfers, large model histories/results/tool arguments,
+slow first tokens, caller isolation, sequence validation and abandoned-session cleanup.
+Run with `uv run --no-sync pytest examples/standalone_module/transfer_integration_test.py`.
