@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.40.2 (2026-09-24)
+
+### Bug Fixes
+
+- **auth**: Lock registration, guard Ollama routes, enforce sign-in rate limits
+  ([`df2a296`](https://github.com/jupyter-naas/abi/commit/df2a296a88ca4d3da6a1846cc175b76d46525edb))
+
+
 ## v2.40.1 (2026-09-24)
 
 ### Bug Fixes
