@@ -59,7 +59,8 @@ personnel:ActOfCertification a owl:Class ;
     [ a owl:Restriction ; owl:onProperty personnel:hasAwardedCertification ; owl:someValuesFrom personnel:Certification ] ,
     [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom personnel:CertificationCandidateRole ] ,
     [ a owl:Restriction ; owl:onProperty personnel:demonstratesSkill ; owl:someValuesFrom personnel:Skill ] ,
-    [ a owl:Restriction ; owl:onProperty personnel:developsLanguageCapability ; owl:someValuesFrom personnel:LanguageCapability ] ;
+    [ a owl:Restriction ; owl:onProperty personnel:developsLanguageCapability ; owl:someValuesFrom personnel:LanguageCapability ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:hasSourceDocument ; owl:someValuesFrom personnel:ProfileDocument ] ;
   rdfs:label "Act of Certification"@en ;
   skos:definition "A Planned Act in which a certifying organization attests that a person has demonstrated a competence, met a professional standard or holds a licence to practise, realizing a certification candidate role and concretizing the certification it awards."@en ;
   skos:example "Alice Dupont being certified as a Certified Information Systems Auditor by ISACA in 2019."@en ;

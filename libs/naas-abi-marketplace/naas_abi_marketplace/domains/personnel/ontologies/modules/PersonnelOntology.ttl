@@ -474,6 +474,27 @@ personnel:isSourceOf a owl:ObjectProperty ;
   rdfs:domain personnel:ProfileDocument ;
   rdfs:range  abi:GenericallyDependentContinuant .
 
+# WHAT ↔ HOW WE KNOW - a planned act, of whatever kind, informed by the profile
+# document it was read from. personnel:isSourcedFrom carries this for a
+# generically dependent continuant (a Mission, a Certification); this is the
+# same idea for the act itself, so every act that registers something from a
+# profile document can say so, and the document is never left unconnected to
+# the acts it substantiates.
+personnel:hasSourceDocument a owl:ObjectProperty ;
+  rdfs:subPropertyOf cco:ont00001808 ;
+  owl:inverseOf personnel:isSourceDocumentOf ;
+  rdfs:label "has source document"@en ;
+  skos:definition "Relates a planned act to the profile document it was read from and registered against."@en ;
+  rdfs:domain cco:ont00000228 ;
+  rdfs:range  personnel:ProfileDocument .
+
+personnel:isSourceDocumentOf a owl:ObjectProperty ;
+  owl:inverseOf personnel:hasSourceDocument ;
+  rdfs:label "is source document of"@en ;
+  skos:definition "Relates a profile document to a planned act that was read from it and registered against it."@en ;
+  rdfs:domain personnel:ProfileDocument ;
+  rdfs:range  cco:ont00000228 .
+
 #################################################################
 #    Data Properties
 #################################################################
@@ -788,7 +809,8 @@ personnel:EmploymentRecord a owl:Class ;
 
 personnel:JobDescription a owl:Class ;
     rdfs:subClassOf abi:DocumentContentEntity ,
-      [ a owl:Restriction ; owl:onProperty abi:genericallyDependsOn ; owl:someValuesFrom abi:Organization ] ;
+      [ a owl:Restriction ; owl:onProperty abi:genericallyDependsOn ; owl:someValuesFrom abi:Organization ] ,
+      [ a owl:Restriction ; owl:onProperty abi:participatesIn ; owl:someValuesFrom personnel:ActOfWorking ] ;
     rdfs:label "Job Description"@en ;
     skos:definition "A document content entity that states the duties, responsibilities and requirements of a job position."@en ;
     skos:example "The published job description for 'Senior Data Engineer, EMEA'."@en .
@@ -796,7 +818,8 @@ personnel:JobDescription a owl:Class ;
 personnel:JobPosition a owl:Class ;
     rdfs:subClassOf abi:GenericallyDependentContinuant ,
       [ a owl:Restriction ; owl:onProperty abi:genericallyDependsOn ; owl:someValuesFrom abi:Organization ] ,
-      [ a owl:Restriction ; owl:onProperty abi:isConcretizedBy ; owl:allValuesFrom personnel:EmployeeRole ] ;
+      [ a owl:Restriction ; owl:onProperty abi:isConcretizedBy ; owl:allValuesFrom personnel:EmployeeRole ] ,
+      [ a owl:Restriction ; owl:onProperty abi:participatesIn ; owl:someValuesFrom personnel:ActOfWorking ] ;
     rdfs:label "Job Position"@en ;
     skos:definition "An information content entity, defined by an organization as part of its structure, that specifies a role to be borne by whoever fills it. Fundable and referable independently of any occupant, and possibly vacant."@en ;
     skos:example "Requisition R-2291, 'Senior Data Engineer, EMEA', currently vacant."@en ;
@@ -839,7 +862,8 @@ personnel:Certification a owl:Class ;
 personnel:Recommendation a owl:Class ;
     rdfs:subClassOf abi:DocumentContentEntity ,
       [ a owl:Restriction ; owl:onProperty personnel:isRecommendationOf ; owl:someValuesFrom abi:Person ] ,
-      [ a owl:Restriction ; owl:onProperty personnel:hasRecommendationAuthor ; owl:someValuesFrom abi:Person ] ;
+      [ a owl:Restriction ; owl:onProperty personnel:hasRecommendationAuthor ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty abi:participatesIn ; owl:someValuesFrom personnel:ActOfPersonnelProfiling ] ;
     rdfs:label "Recommendation"@en ;
     skos:definition "A document content entity in which one person states, in their own words, what it was like to work with another and what that person is good at."@en ;
     skos:example "'Alice rebuilt our close process in one quarter' - written by her former CFO, 2024-11-02."@en ;
@@ -848,7 +872,8 @@ personnel:Recommendation a owl:Class ;
 personnel:Portrait a owl:Class ;
     rdfs:subClassOf cco:ont00002004 ,
       abi:GenericallyDependentContinuant ,
-      [ a owl:Restriction ; owl:onProperty personnel:isPortraitOf ; owl:someValuesFrom abi:Person ] ;
+      [ a owl:Restriction ; owl:onProperty personnel:isPortraitOf ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty abi:participatesIn ; owl:someValuesFrom personnel:ActOfPersonnelProfiling ] ;
     rdfs:label "Portrait"@en ;
     skos:definition "An image that depicts a person, published to identify them. Subclass of CCO Image."@en ;
     skos:example "The photograph published on a person's directory page."@en ;
@@ -857,7 +882,8 @@ personnel:Portrait a owl:Class ;
 personnel:ProfileSummary a owl:Class ;
     rdfs:subClassOf abi:DocumentContentEntity ,
       [ a owl:Restriction ; owl:onProperty personnel:isProfileSummaryOf ; owl:someValuesFrom abi:Person ] ,
-      [ a owl:Restriction ; owl:onProperty personnel:isSourcedFrom ; owl:someValuesFrom personnel:ProfileDocument ] ;
+      [ a owl:Restriction ; owl:onProperty personnel:isSourcedFrom ; owl:someValuesFrom personnel:ProfileDocument ] ,
+      [ a owl:Restriction ; owl:onProperty abi:participatesIn ; owl:someValuesFrom personnel:ActOfPersonnelProfiling ] ;
     rdfs:label "Profile Summary"@en ;
     skos:definition "A document content entity that states how a person is presented in general: the one-line headline, the paragraph about them, an attributed quote, and the years of experience claimed for them."@en ;
     skos:example "The headline and 'About' paragraph on a person's published directory page."@en ;
@@ -902,7 +928,8 @@ personnel:StudentRole a owl:Class ;
 personnel:EmploymentStatus a owl:Class ;
     rdfs:subClassOf abi:Quality ,
       [ a owl:Restriction ; owl:onProperty personnel:isEmploymentStatusOf ; owl:someValuesFrom abi:Person ] ,
-      [ a owl:Restriction ; owl:onProperty abi:concretizes ; owl:someValuesFrom personnel:EmploymentRecord ] ;
+      [ a owl:Restriction ; owl:onProperty abi:concretizes ; owl:someValuesFrom personnel:EmploymentRecord ] ,
+      [ a owl:Restriction ; owl:onProperty abi:participatesIn ; owl:someValuesFrom personnel:ActOfWorking ] ;
     rdfs:label "Employment Status"@en ;
     skos:definition "A quality that inheres in a person and holds the state of their employment relationship at a point in time."@en ;
     skos:example "'on-leave' for a person on parental leave."@en .
@@ -927,7 +954,8 @@ personnel:LanguageCapability a owl:Class ;
 
 personnel:Interest a owl:Class ;
     rdfs:subClassOf abi:Quality ,
-      [ a owl:Restriction ; owl:onProperty personnel:isInterestOf ; owl:someValuesFrom abi:Person ] ;
+      [ a owl:Restriction ; owl:onProperty personnel:isInterestOf ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty abi:participatesIn ; owl:someValuesFrom personnel:ActOfPersonnelProfiling ] ;
     rdfs:label "Interest"@en ;
     skos:definition "A quality that inheres in a person and holds what they follow, care about or give their attention to outside the duties of any one job."@en ;
     skos:example "Ocean conservation; the alumni association of a school they attended."@en ;
@@ -935,7 +963,8 @@ personnel:Interest a owl:Class ;
 
 personnel:Grade a owl:Class ;
     rdfs:subClassOf abi:Quality ,
-      [ a owl:Restriction ; owl:onProperty personnel:isGradeOf ; owl:someValuesFrom abi:Person ] ;
+      [ a owl:Restriction ; owl:onProperty personnel:isGradeOf ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty abi:participatesIn ; owl:someValuesFrom personnel:ActOfWorking ] ;
     rdfs:label "Grade"@en ;
     skos:definition "A quality that inheres in a person and holds the seniority level the employing organization recognises for them."@en ;
     skos:example "'Partner' for a person admitted to the partnership."@en ;

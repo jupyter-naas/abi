@@ -321,6 +321,7 @@ class ActOfStudying(RDFEntity):
         "developsSkill": "http://ontology.naas.ai/personnel/developsSkill",
         "for_educational_organization": "http://ontology.naas.ai/personnel/forEducationalOrganization",
         "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
+        "hasSourceDocument": "http://ontology.naas.ai/personnel/hasSourceDocument",
         "has_degree": "http://ontology.naas.ai/personnel/hasDegree",
         "has_enrollment": "http://ontology.naas.ai/personnel/hasEnrollment",
         "is_act_of_studying_of": "http://ontology.naas.ai/personnel/isActOfStudyingOf",
@@ -334,6 +335,7 @@ class ActOfStudying(RDFEntity):
         "developsSkill",
         "for_educational_organization",
         "hasParticipant",
+        "hasSourceDocument",
         "has_degree",
         "has_enrollment",
         "is_act_of_studying_of",
@@ -358,6 +360,7 @@ class ActOfStudying(RDFEntity):
     developsSkill: Annotated[URIRef | str, Field()] | None = None
     for_educational_organization: Annotated[list[Organization | URIRef | str], Field(description="Relates an act of studying to the educational organization that participates as the training provider.")] | None = None
     hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = None
+    hasSourceDocument: Annotated[URIRef | str, Field()] | None = None
     has_degree: Annotated[URIRef | str, Field(description="Relates an act of studying to the academic degree it concretizes.")] | None = None
     has_enrollment: Annotated[URIRef | str, Field(description="Relates an act of studying to the enrollment record it concretizes.")] | None = None
     is_act_of_studying_of: Annotated[list[Person | URIRef | str], Field(description="Relates an act of studying to the person acquiring the curriculum.")] | None = None

@@ -327,6 +327,7 @@ class ActOfWorking(RDFEntity):
         "developsSkill": "http://ontology.naas.ai/personnel/developsSkill",
         "for_organization": "http://ontology.naas.ai/personnel/forOrganization",
         "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
+        "hasSourceDocument": "http://ontology.naas.ai/personnel/hasSourceDocument",
         "has_contract": "http://ontology.naas.ai/personnel/hasContract",
         "is_act_of_working_of": "http://ontology.naas.ai/personnel/isActOfWorkingOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
@@ -339,6 +340,7 @@ class ActOfWorking(RDFEntity):
         "developsSkill",
         "for_organization",
         "hasParticipant",
+        "hasSourceDocument",
         "has_contract",
         "is_act_of_working_of",
         "occupiesTemporalRegion",
@@ -362,6 +364,7 @@ class ActOfWorking(RDFEntity):
     developsSkill: Annotated[URIRef | str, Field()] | None = None
     for_organization: Annotated[list[Organization | URIRef | str], Field(description="Relates an act of working to the organization that participates as employer.")] | None = None
     hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = None
+    hasSourceDocument: Annotated[URIRef | str, Field()] | None = None
     has_contract: Annotated[URIRef | str, Field(description="Relates an act of working to the employment contract it concretizes.")] | None = None
     is_act_of_working_of: Annotated[list[Person | URIRef | str], Field(description="Relates an act of working to the person performing the work.")] | None = None
     occupiesTemporalRegion: Annotated[list[TemporalRegion | URIRef | str], Field()] | None = None

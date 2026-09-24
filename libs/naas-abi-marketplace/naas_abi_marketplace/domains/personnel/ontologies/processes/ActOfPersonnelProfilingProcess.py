@@ -310,9 +310,7 @@ class ActOfPersonnelProfiling(RDFEntity):
     Orchestration only. Episode triples are written by the working and studying pipelines; summary, certifications and social proof by the person profile pipeline.
     """
 
-    _class_uri: ClassVar[str] = (
-        "http://ontology.naas.ai/personnel/ActOfPersonnelProfiling"
-    )
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/ActOfPersonnelProfiling"
     _name: ClassVar[str] = "Act of Personnel Profiling"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
@@ -341,9 +339,7 @@ class ActOfPersonnelProfiling(RDFEntity):
 
     # Object properties
     from_profile_document: Annotated[URIRef | str, Field(description="Relates an act of personnel profiling to the profile document that was read as its source.")] | None = None
-    hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = (
-        None
-    )
+    hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = None
     is_act_of_personnel_profiling_of: Annotated[list[Person | URIRef | str], Field(description="Relates an act of personnel profiling to the person who is its subject.")] | None = None
 
 

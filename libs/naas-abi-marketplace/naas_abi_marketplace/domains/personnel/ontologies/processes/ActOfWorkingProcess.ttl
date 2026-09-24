@@ -54,7 +54,8 @@ personnel:ActOfWorking a owl:Class ;
     [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom personnel:EmployeeRole ] ,
     [ a owl:Restriction ; owl:onProperty personnel:developsSkill ; owl:someValuesFrom personnel:Skill ] ,
     [ a owl:Restriction ; owl:onProperty personnel:developsLanguageCapability ; owl:someValuesFrom personnel:LanguageCapability ] ,
-    [ a owl:Restriction ; owl:onProperty personnel:hasContract ; owl:someValuesFrom personnel:EmploymentContract ] ;
+    [ a owl:Restriction ; owl:onProperty personnel:hasContract ; owl:someValuesFrom personnel:EmploymentContract ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:hasSourceDocument ; owl:someValuesFrom personnel:ProfileDocument ] ;
   rdfs:label "Act of Working"@en ;
   skos:definition "A Planned Act, and an Act of Employment, in which a person performs work for an organization in an office building over a temporal region, realizing an employee role, developing skills and language capabilities, under an employment contract."@en ;
   skos:example "Alice Dupont working as Head of Product for Demo, worldwide, since April 2023."@en .

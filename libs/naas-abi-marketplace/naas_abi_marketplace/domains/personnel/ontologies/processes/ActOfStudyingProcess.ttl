@@ -55,7 +55,8 @@ personnel:ActOfStudying a owl:Class ;
     [ a owl:Restriction ; owl:onProperty personnel:hasDegree ; owl:someValuesFrom personnel:AcademicDegree ] ,
     [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom personnel:StudentRole ] ,
     [ a owl:Restriction ; owl:onProperty personnel:developsSkill ; owl:someValuesFrom personnel:Skill ] ,
-    [ a owl:Restriction ; owl:onProperty personnel:developsLanguageCapability ; owl:someValuesFrom personnel:LanguageCapability ] ;
+    [ a owl:Restriction ; owl:onProperty personnel:developsLanguageCapability ; owl:someValuesFrom personnel:LanguageCapability ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:hasSourceDocument ; owl:someValuesFrom personnel:ProfileDocument ] ;
   rdfs:label "Act of Studying"@en ;
   skos:definition "A Planned Act, and an Act of Educational Training Acquisition, in which a person acquires knowledge of a curriculum from an educational organization in an educational facility over a temporal region, realizing a student role, developing skills and language capabilities, under an enrollment record and academic degree."@en ;
   skos:example "Alice Dupont studying for a Master's Degree in Corporate Finance at KEDGE Business School in Bordeaux from 2012 to 2016."@en .

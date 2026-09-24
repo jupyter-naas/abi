@@ -24,6 +24,9 @@ from naas_abi.ontologies.modules.ABIOntology import (
     Quality,
     Role,
 )
+from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfPersonnelProfilingProcess import (
+    ActOfPersonnelProfiling,
+)
 from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfStudyingProcess import (
     ActOfStudying,
 )
@@ -378,6 +381,7 @@ class JobPosition(GenericallyDependentContinuant, RDFEntity):
         "job_family": "http://ontology.naas.ai/personnel/job_family",
         "job_title": "http://ontology.naas.ai/personnel/job_title",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "participatesIn": "http://ontology.naas.ai/abi/participatesIn",
     }
     _object_properties: ClassVar[set[str]] = {
         "genericallyDependsOn",
@@ -386,6 +390,7 @@ class JobPosition(GenericallyDependentContinuant, RDFEntity):
         "isConcretizedBy",
         "is_concretized_by",
         "is_job_position_of",
+        "participatesIn",
     }
 
     # Data properties
@@ -402,6 +407,7 @@ class JobPosition(GenericallyDependentContinuant, RDFEntity):
     isConcretizedBy: Annotated[list[EmployeeRole | URIRef | str], Field()] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
     is_job_position_of: Annotated[list[EmployeeRole | URIRef | str], Field(description="Relates a job position to the employee role that concretizes it, when the position is occupied.")] | None = None
+    participatesIn: Annotated[list[ActOfWorking | URIRef | str], Field()] | None = None
 
 
 class EmploymentContract(GenericallyDependentContinuant, RDFEntity):
@@ -579,6 +585,7 @@ class Portrait(GenericallyDependentContinuant, RDFEntity):
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
         "is_portrait_of": "http://ontology.naas.ai/personnel/isPortraitOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "participatesIn": "http://ontology.naas.ai/abi/participatesIn",
         "portrait_path": "http://ontology.naas.ai/personnel/portrait_path",
         "portrait_url": "http://ontology.naas.ai/personnel/portrait_url",
     }
@@ -586,6 +593,7 @@ class Portrait(GenericallyDependentContinuant, RDFEntity):
         "generically_depends_on",
         "is_concretized_by",
         "is_portrait_of",
+        "participatesIn",
     }
 
     # Data properties
@@ -599,6 +607,7 @@ class Portrait(GenericallyDependentContinuant, RDFEntity):
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
     is_portrait_of: Annotated[list[Person | URIRef | str], Field(description="Relates a portrait image to the person it depicts.")] | None = None
+    participatesIn: Annotated[list[ActOfPersonnelProfiling | URIRef | str], Field()] | None = None
 
 
 class EmployeeRole(Role, RDFEntity):
@@ -697,6 +706,7 @@ class EmploymentStatus(Quality, RDFEntity):
         "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
         "is_employment_status_of": "http://ontology.naas.ai/personnel/isEmploymentStatusOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "participatesIn": "http://ontology.naas.ai/abi/participatesIn",
         "participates_in": "http://ontology.naas.ai/abi/participatesIn",
         "status_value": "http://ontology.naas.ai/personnel/status_value",
     }
@@ -704,6 +714,7 @@ class EmploymentStatus(Quality, RDFEntity):
         "concretizes",
         "inheres_in",
         "is_employment_status_of",
+        "participatesIn",
         "participates_in",
     }
 
@@ -717,6 +728,7 @@ class EmploymentStatus(Quality, RDFEntity):
     concretizes: Annotated[list[EmploymentRecord | URIRef | str], Field()] | None = None
     inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
     is_employment_status_of: Annotated[list[Person | URIRef | str], Field(description="Relates an employment status quality to the person in whom it inheres.")] | None = None
+    participatesIn: Annotated[list[ActOfWorking | URIRef | str], Field()] | None = None
     participates_in: Annotated[list[Process | URIRef | str], Field(description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way")] | None = None
 
 
@@ -825,6 +837,7 @@ class Interest(Quality, RDFEntity):
         "interest_name": "http://ontology.naas.ai/personnel/interest_name",
         "is_interest_of": "http://ontology.naas.ai/personnel/isInterestOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "participatesIn": "http://ontology.naas.ai/abi/participatesIn",
         "participates_in": "http://ontology.naas.ai/abi/participatesIn",
     }
     _object_properties: ClassVar[set[str]] = {
@@ -832,6 +845,7 @@ class Interest(Quality, RDFEntity):
         "has_interest_target",
         "inheres_in",
         "is_interest_of",
+        "participatesIn",
         "participates_in",
     }
 
@@ -848,6 +862,7 @@ class Interest(Quality, RDFEntity):
     has_interest_target: Annotated[URIRef | str, Field(description="Relates an interest to the entity it is an interest in. Deliberately unrestricted in range: an interest can be in an organization, a person, a place or a subject that has no individual in this graph, in which case only personnel:interest_name is asserted.")] | None = None
     inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
     is_interest_of: Annotated[list[Person | URIRef | str], Field(description="Relates an interest to the person in whom it inheres.")] | None = None
+    participatesIn: Annotated[list[ActOfPersonnelProfiling | URIRef | str], Field()] | None = None
     participates_in: Annotated[list[Process | URIRef | str], Field(description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way")] | None = None
 
 
@@ -866,12 +881,14 @@ class Grade(Quality, RDFEntity):
         "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
         "is_grade_of": "http://ontology.naas.ai/personnel/isGradeOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "participatesIn": "http://ontology.naas.ai/abi/participatesIn",
         "participates_in": "http://ontology.naas.ai/abi/participatesIn",
     }
     _object_properties: ClassVar[set[str]] = {
         "concretizes",
         "inheres_in",
         "is_grade_of",
+        "participatesIn",
         "participates_in",
     }
 
@@ -885,6 +902,7 @@ class Grade(Quality, RDFEntity):
     concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
     inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
     is_grade_of: Annotated[list[Person | URIRef | str], Field(description="Relates a grade quality to the person in whom it inheres.")] | None = None
+    participatesIn: Annotated[list[ActOfWorking | URIRef | str], Field()] | None = None
     participates_in: Annotated[list[Process | URIRef | str], Field(description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way")] | None = None
 
 
@@ -976,6 +994,7 @@ class JobDescription(DocumentContentEntity, RDFEntity):
         "is_job_description_of": "http://ontology.naas.ai/personnel/isJobDescriptionOf",
         "is_job_description_of_contract": "http://ontology.naas.ai/personnel/isJobDescriptionOfContract",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "participatesIn": "http://ontology.naas.ai/abi/participatesIn",
     }
     _object_properties: ClassVar[set[str]] = {
         "genericallyDependsOn",
@@ -983,6 +1002,7 @@ class JobDescription(DocumentContentEntity, RDFEntity):
         "is_concretized_by",
         "is_job_description_of",
         "is_job_description_of_contract",
+        "participatesIn",
     }
 
     # Data properties
@@ -996,6 +1016,7 @@ class JobDescription(DocumentContentEntity, RDFEntity):
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
     is_job_description_of: Annotated[list[JobPosition | URIRef | str], Field(description="Relates a job description document to the job position it describes.")] | None = None
     is_job_description_of_contract: Annotated[list[EmploymentContract | URIRef | str], Field(description="Relates a job description to an employment contract that is about it.")] | None = None
+    participatesIn: Annotated[list[ActOfWorking | URIRef | str], Field()] | None = None
 
 
 class Recommendation(DocumentContentEntity, RDFEntity):
@@ -1013,6 +1034,7 @@ class Recommendation(DocumentContentEntity, RDFEntity):
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
         "is_recommendation_of": "http://ontology.naas.ai/personnel/isRecommendationOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "participatesIn": "http://ontology.naas.ai/abi/participatesIn",
         "recommendation_content": "http://ontology.naas.ai/personnel/recommendation_content",
         "recommendation_date": "http://ontology.naas.ai/personnel/recommendation_date",
         "relationship_label": "http://ontology.naas.ai/personnel/relationship_label",
@@ -1022,6 +1044,7 @@ class Recommendation(DocumentContentEntity, RDFEntity):
         "has_recommendation_author",
         "is_concretized_by",
         "is_recommendation_of",
+        "participatesIn",
     }
 
     # Data properties
@@ -1037,6 +1060,7 @@ class Recommendation(DocumentContentEntity, RDFEntity):
     has_recommendation_author: Annotated[list[Person | URIRef | str], Field(description="Relates a recommendation to the person who wrote it. Distinct from the person it is about: a recommendation always has two people.")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
     is_recommendation_of: Annotated[list[Person | URIRef | str], Field(description="Relates a recommendation to the person it is about.")] | None = None
+    participatesIn: Annotated[list[ActOfPersonnelProfiling | URIRef | str], Field()] | None = None
 
 
 class ProfileSummary(DocumentContentEntity, RDFEntity):
@@ -1055,6 +1079,7 @@ class ProfileSummary(DocumentContentEntity, RDFEntity):
         "is_profile_summary_of": "http://ontology.naas.ai/personnel/isProfileSummaryOf",
         "is_sourced_from": "http://ontology.naas.ai/personnel/isSourcedFrom",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "participatesIn": "http://ontology.naas.ai/abi/participatesIn",
         "quote_content": "http://ontology.naas.ai/personnel/quote_content",
         "summary_content": "http://ontology.naas.ai/personnel/summary_content",
         "years_of_experience": "http://ontology.naas.ai/personnel/years_of_experience",
@@ -1064,6 +1089,7 @@ class ProfileSummary(DocumentContentEntity, RDFEntity):
         "is_concretized_by",
         "is_profile_summary_of",
         "is_sourced_from",
+        "participatesIn",
     }
 
     # Data properties
@@ -1080,6 +1106,7 @@ class ProfileSummary(DocumentContentEntity, RDFEntity):
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
     is_profile_summary_of: Annotated[list[Person | URIRef | str], Field(description="Relates a profile summary to the person it is about.")] | None = None
     is_sourced_from: Annotated[list[ProfileDocument | URIRef | str], Field(description="Relates an information content entity to the profile document it was read from.")] | None = None
+    participatesIn: Annotated[list[ActOfPersonnelProfiling | URIRef | str], Field()] | None = None
 
 
 class ProfileDocument(DocumentContentEntity, RDFEntity):
@@ -1096,6 +1123,7 @@ class ProfileDocument(DocumentContentEntity, RDFEntity):
         "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
         "is_profile_document_of": "http://ontology.naas.ai/personnel/isProfileDocumentOf",
+        "is_source_document_of": "http://ontology.naas.ai/personnel/isSourceDocumentOf",
         "is_source_of": "http://ontology.naas.ai/personnel/isSourceOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "source_url": "http://ontology.naas.ai/personnel/source_url",
@@ -1105,6 +1133,7 @@ class ProfileDocument(DocumentContentEntity, RDFEntity):
         "generically_depends_on",
         "is_concretized_by",
         "is_profile_document_of",
+        "is_source_document_of",
         "is_source_of",
     }
 
@@ -1119,6 +1148,7 @@ class ProfileDocument(DocumentContentEntity, RDFEntity):
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
     is_profile_document_of: Annotated[list[Person | URIRef | str], Field(description="Relates a profile document to the person it is about and on which it generically depends.")] | None = None
+    is_source_document_of: Annotated[URIRef | str, Field(description="Relates a profile document to a planned act that was read from it and registered against it.")] | None = None
     is_source_of: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="Relates a profile document to an information content entity read from it.")] | None = None
 
 

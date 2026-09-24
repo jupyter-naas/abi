@@ -325,6 +325,7 @@ class ActOfCertification(RDFEntity):
         "developsLanguageCapability": "http://ontology.naas.ai/personnel/developsLanguageCapability",
         "for_certifying_organization": "http://ontology.naas.ai/personnel/forCertifyingOrganization",
         "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
+        "hasSourceDocument": "http://ontology.naas.ai/personnel/hasSourceDocument",
         "has_awarded_certification": "http://ontology.naas.ai/personnel/hasAwardedCertification",
         "is_act_of_certification_of": "http://ontology.naas.ai/personnel/isActOfCertificationOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
@@ -337,6 +338,7 @@ class ActOfCertification(RDFEntity):
         "developsLanguageCapability",
         "for_certifying_organization",
         "hasParticipant",
+        "hasSourceDocument",
         "has_awarded_certification",
         "is_act_of_certification_of",
         "occupiesTemporalRegion",
@@ -360,6 +362,7 @@ class ActOfCertification(RDFEntity):
     developsLanguageCapability: Annotated[URIRef | str, Field()] | None = None
     for_certifying_organization: Annotated[list[Organization | URIRef | str], Field(description="Relates an act of certification to the organization that participates as the certifying body.")] | None = None
     hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = None
+    hasSourceDocument: Annotated[URIRef | str, Field()] | None = None
     has_awarded_certification: Annotated[URIRef | str, Field(description="Relates an act of certification to the certification it concretizes.")] | None = None
     is_act_of_certification_of: Annotated[list[Person | URIRef | str], Field(description="Relates an act of certification to the person being certified.")] | None = None
     occupiesTemporalRegion: Annotated[list[TemporalRegion | URIRef | str], Field()] | None = None

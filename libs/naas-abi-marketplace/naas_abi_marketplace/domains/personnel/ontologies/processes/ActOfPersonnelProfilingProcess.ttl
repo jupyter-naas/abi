@@ -74,7 +74,7 @@ personnel:isActOfPersonnelProfilingOf a owl:ObjectProperty ;
   rdfs:range abi:Person .
 
 personnel:fromProfileDocument a owl:ObjectProperty ;
-  rdfs:subPropertyOf cco:ont00001808 ;
+  rdfs:subPropertyOf cco:ont00001808 , personnel:hasSourceDocument ;
   owl:inverseOf personnel:isProfileDocumentForProfiling ;
   rdfs:label "from profile document"@en ;
   skos:definition "Relates an act of personnel profiling to the profile document that was read as its source."@en ;
