@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { HardDrive, Loader2 } from 'lucide-react';
+import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 
 export default function DrivesSettingsPage() {
@@ -10,8 +11,9 @@ export default function DrivesSettingsPage() {
   const fetchWorkspaces = useWorkspaceStore((state) => state.fetchWorkspaces);
 
   const workspace = workspaces.find((w) => w.id === currentWorkspaceId) || null;
-  const role = workspace?.currentUserRole;
-  const canEdit = role === 'owner' || role === 'admin';
+  // Drives reach beyond this workspace (the system drive is the whole object
+  // store), so only a platform superadmin can change them.
+  const canEdit = useAuthStore((state) => Boolean(state.user?.is_superadmin));
 
   const [savingPlatform, setSavingPlatform] = useState(false);
   const [savingSystem, setSavingSystem] = useState(false);
@@ -41,7 +43,7 @@ export default function DrivesSettingsPage() {
       });
       if (!response.ok) {
         if (response.status === 403) {
-          setError('Only workspace admins can change drive settings.');
+          setError('Only a platform superadmin can change drive settings.');
         } else {
           setError(`Failed to update setting (HTTP ${response.status}).`);
         }
@@ -69,7 +71,7 @@ export default function DrivesSettingsPage() {
       });
       if (!response.ok) {
         if (response.status === 403) {
-          setError('Only workspace admins can change drive settings.');
+          setError('Only a platform superadmin can change drive settings.');
         } else {
           setError(`Failed to update setting (HTTP ${response.status}).`);
         }
@@ -144,7 +146,7 @@ export default function DrivesSettingsPage() {
 
       {!canEdit && (
         <p className="text-xs text-muted-foreground">
-          Only workspace owners and admins can change drive settings.
+          Only a platform superadmin can change drive settings.
         </p>
       )}
 
