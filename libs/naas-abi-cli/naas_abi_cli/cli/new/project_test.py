@@ -220,3 +220,18 @@ def test_cd_target_is_quoted_when_the_path_has_spaces(tmp_path, monkeypatch) -> 
 
     assert project._cd_argument(str(tmp_path / "my demo")) == "'my demo'"
 
+
+
+def test_new_project_generates_the_admin_password_in_env(tmp_path, monkeypatch) -> None:
+    result = _invoke_new_project(tmp_path, monkeypatch)
+
+    env = (tmp_path / "demo" / ".env").read_text(encoding="utf-8")
+    password = next(
+        line.split("=", 1)[1]
+        for line in env.splitlines()
+        if line.startswith("NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=")
+    )
+    assert len(password) >= 24
+    assert password not in ("admin", "Admin1234!")
+    assert "admin@example.com" in result.output
+    assert "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD" in result.output

@@ -41,6 +41,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
     AuthService,
     CurrentPasswordInvalidError,
+    DefaultPasswordNotAllowedError,
     EmailAlreadyRegisteredError,
     EmailAlreadyTakenError,
     ExpiredMagicLinkError,
@@ -113,6 +114,9 @@ def _get_email_service(request: Request) -> EmailService | None:
         return None
 
 
+_DEFAULT_PASSWORD_DETAIL = "This password is a published default and cannot be used."
+
+
 @router.get("/config", response_model=dict[str, bool | int])
 async def get_auth_config() -> dict[str, bool | int]:
     return {
@@ -149,6 +153,8 @@ async def register(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
         ) from exc
+    except DefaultPasswordNotAllowedError as exc:
+        raise HTTPException(status_code=400, detail=_DEFAULT_PASSWORD_DETAIL) from exc
 
     await log_register(user.id, request)
     return AuthResponse(
@@ -316,6 +322,8 @@ async def change_password(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Current password is incorrect",
         ) from exc
+    except DefaultPasswordNotAllowedError as exc:
+        raise HTTPException(status_code=400, detail=_DEFAULT_PASSWORD_DETAIL) from exc
 
     await log_password_change(current_user.id, request)
     return {
@@ -360,6 +368,8 @@ async def reset_password(
         raise HTTPException(status_code=400, detail="Invalid or expired reset token") from exc
     except ExpiredResetTokenError as exc:
         raise HTTPException(status_code=400, detail="Reset token has expired") from exc
+    except DefaultPasswordNotAllowedError as exc:
+        raise HTTPException(status_code=400, detail=_DEFAULT_PASSWORD_DETAIL) from exc
     except UserNotFoundError as exc:
         raise HTTPException(status_code=404, detail="User not found") from exc
 

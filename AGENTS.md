@@ -219,34 +219,20 @@ def unsupported_method(self, arg: str) -> None:
 
 After `abi stack start`, the web UI is at `http://localhost:3042`.
 
-Default admin credentials:
+There is no default password. The only seeded account is `admin@example.com`; its password is generated per project and stored in `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`:
 
-| Email | Password |
-|---|---|
-| `admin@example.com` | `Admin1234!` |
+```bash
+grep NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD .env
+```
 
 Password login is enabled via `auth_password_enabled: true` in `config.local.yaml`. Set it to `false` to switch back to magic link.
 
-**How the password is set:** On first boot, the seeder looks for `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` in `.env`. If found, it uses that value. If missing, it generates a random password and writes it back to `.env`. The `.env` in this repo ships with `Admin1234!` pre-set, so all teammates get the same password as long as they don't delete that line.
+**How the password is set:** `abi new project`, `abi dev up` and `abi deploy local` generate it into `.env`. On first boot the seeder creates the account with that value; if the key is missing it generates one and writes it back. Published defaults (`admin`, `Admin1234!`) are never accepted: login refuses them, and on boot the seeder replaces them with a generated password written to `.env`.
 
-If you see "Incorrect email or password":
-
-**Option A (no data to keep):** Wipe and reseed.
+If you see "Incorrect email or password", read the current value from `.env` (it may have just been rotated), or wipe and reseed when there is no data to keep:
 ```bash
 docker volume rm abi_postgres_data
 abi stack start
-```
-
-**Option B (keep existing data):** The user already exists with a mismatched hash. Add the missing key to `.env` then force-update the hash:
-```bash
-# 1. Add to .env if missing:
-echo "NEXUS_USER_ADMIN_EXAMPLE_COM_EMAIL=admin@example.com" >> .env
-echo "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=Admin1234!" >> .env
-
-# 2. Reset the hash in Postgres directly:
-HASH=$(docker exec abi-abi-1 python3 -c "import bcrypt; print(bcrypt.hashpw(b'Admin1234!', bcrypt.gensalt()).decode())")
-docker exec abi-postgres-1 psql -U abi -d nexus -c "UPDATE users SET hashed_password='$HASH' WHERE email='admin@example.com';"
-docker compose restart abi
 ```
 
 ## Stack Management
@@ -392,4 +378,4 @@ Non-obvious gotchas discovered during setup:
 - **For capable cloud models:** set `global_config.ai_mode: "cloud"`, uncomment a cloud provider module in `config.yaml`, replace `SECRET_REF` with a real Jinja secret, and add its key via environment secrets or `.env`.
 - **First API boot is slow (~2-3 min):** the worker loads every module/ontology and runs Nexus SQLite migrations before serving. Watch `abi dev logs api`; it is ready when `/docs` returns 200 (`GET http://localhost:<api-port>/docs`).
 - **Ports are offset per worktree** (see `abi dev ports`), so they are not the config defaults. `abi dev` injects `OXIGRAPH_URL` into each service; the `config.yaml` default `:7878` is not the live port. To run a test that builds its own engine against the live triple store, pass `OXIGRAPH_URL=http://127.0.0.1:<oxigraph-port>`.
-- **Login:** `admin@example.com` / `admin` (the `abi dev` default; the Docker stack uses `Admin1234!`). Web UI is the `nexus-web` port.
+- **Login:** `admin@example.com` with the password generated into `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` (printed by `abi dev up`). There is no default password. Web UI is the `nexus-web` port.
