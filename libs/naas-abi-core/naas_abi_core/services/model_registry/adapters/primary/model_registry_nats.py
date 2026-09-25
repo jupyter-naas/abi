@@ -102,6 +102,13 @@ class ModelRegistryNATS:
                         cb=partial(self._dispatch, operation),
                     )
                 )
+            for operation in ("stream_next", "stream_close"):
+                self.subscriptions.append(
+                    await nc.subscribe(
+                        f"abi.svc.model_registry.v1.{self.owner}.{operation}",
+                        cb=partial(self._dispatch, operation),
+                    )
+                )
             await nc.flush()
             self._reaper = asyncio.create_task(self._expire())
             await self.transfer.start(nc)

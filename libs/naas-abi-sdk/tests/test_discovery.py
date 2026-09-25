@@ -142,3 +142,45 @@ def test_heartbeat_backoff_recovers_transient_errors_but_stops_on_bad_credential
         assert session.status == "UNAVAILABLE"
 
     asyncio.run(scenario())
+
+
+def test_retry_schedule_recovers_before_lease_expiry(monkeypatch):
+    from types import SimpleNamespace
+
+    async def scenario():
+        now = [0.0]
+        sleep = asyncio.sleep
+        monkeypatch.setattr(
+            "naas_abi_sdk.discovery.time", SimpleNamespace(monotonic=lambda: now[0])
+        )
+        monkeypatch.setattr("naas_abi_sdk.discovery.random.uniform", lambda *_: 1.1)
+
+        async def advance(delay):
+            now[0] += delay
+            await sleep(0)
+
+        monkeypatch.setattr("naas_abi_sdk.discovery.asyncio.sleep", advance)
+        session = DiscoverySession(
+            DiscoveryClient(AsyncMock()),
+            pb.ModuleDescriptor(module_id="a", contract_major=1),
+        )
+        session.confirmed_until = 20
+        original_id = session.instance_id
+        attempts = []
+
+        async def renew():
+            attempts.append(now[0])
+            if len(attempts) < 3:
+                raise RPCError("UNAVAILABLE", "temporary outage")
+            assert now[0] < 20
+            raise asyncio.CancelledError()
+
+        session.renew = renew
+        with pytest.raises(asyncio.CancelledError):
+            await session._heartbeat()
+        assert len(attempts) == 3
+        assert session.instance_id == original_id
+        now[0] = 30
+        assert 0.05 <= session._heartbeat_delay(100) <= 10
+
+    asyncio.run(scenario())

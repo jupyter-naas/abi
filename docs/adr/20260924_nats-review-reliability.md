@@ -58,3 +58,15 @@ and provider context windows continue to apply.
 Validation includes concurrent calls on one client, shared first connection,
 two engine owners on one broker, duplicate-free discovery mutations, large agent
 output and more than 1024 events, audit emission and configuration rejection.
+
+## Follow-up: 2026-09-25
+
+Heartbeat delays are capped after jitter to half the remaining confirmed lease,
+with a 50 ms minimum retry interval. Once expired, the cap uses half the nominal
+lease so recovery attempts do not spin. This reduces avoidable incarnation churn;
+it cannot guarantee renewal during an outage or a request exceeding the lease.
+
+Updated generated model clients address legacy stream reads/closes to the owner
+encoded in the stream ID. Generic subjects remain as compatibility endpoints for
+older clients. The separate CI job runs core regressions and native-broker tests,
+including discovery, large transfers, agents, models and checkpoint resumption.

@@ -4,6 +4,8 @@ on:
     paths:
       - 'libs/naas-abi-proto/**'
       - 'libs/naas-abi-sdk/**'
+      - 'libs/naas-abi-core/**'
+      - 'examples/standalone_module/**'
       - '.github/workflows/standalone_sdk.yml'
   workflow_dispatch:
 jobs:
@@ -31,3 +33,43 @@ jobs:
         run: |
           uv build --project libs/naas-abi-proto --wheel
           uv build --project libs/naas-abi-sdk --wheel
+
+  nats-integration:
+    name: Core and real NATS integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+      - name: Install pinned native NATS server
+        run: |
+          curl --fail --location --retry 3 -o /tmp/nats-server.tar.gz https://github.com/nats-io/nats-server/releases/download/v2.11.8/nats-server-v2.11.8-linux-amd64.tar.gz
+          echo "397a6deffb5533e160de0cca322bc3dcaec7fb7282d66a3dfa87a9c183152ad1  /tmp/nats-server.tar.gz" | sha256sum --check
+          tar -xzf /tmp/nats-server.tar.gz -C /tmp
+          sudo install /tmp/nats-server-v2.11.8-linux-amd64/nats-server /usr/local/bin/nats-server
+          nats-server --version
+      - name: Install engine test dependencies
+        run: uv sync --project libs/naas-abi-core --all-extras --python 3.12
+      - name: Core concurrency, configuration and adapter regressions
+        run: |
+          uv run --project libs/naas-abi-core --no-sync pytest --import-mode=importlib -q \
+            libs/naas-abi-core/naas_abi_core/engine/nats_rpc_test.py \
+            libs/naas-abi-core/naas_abi_core/engine/engine_loaders/EngineNATSLoader_test.py \
+            libs/naas-abi-core/naas_abi_core/engine/engine_loaders/EngineNATSDependencies_test.py \
+            libs/naas-abi-core/naas_abi_core/engine/engine_loaders/EngineServiceLoader_test.py \
+            libs/naas-abi-core/naas_abi_core/services/discovery/adapters \
+            libs/naas-abi-core/naas_abi_core/services/model_registry/adapters \
+            libs/naas-abi-core/naas_abi_core/services/cache/adapters/primary/cache__primary_adapter__NATS_test.py \
+            libs/naas-abi-core/naas_abi_core/services/vector_store/adapters/primary/vector_store__primary_adapter__NATS_test.py
+      - name: Real broker transfers, agents, models and discovery
+        run: |
+          command -v nats-server
+          uv run --project libs/naas-abi-core --no-sync pytest --import-mode=importlib -q \
+            libs/naas-abi-core/naas_abi_core/engine/nats_rpc_integration_test.py \
+            libs/naas-abi-core/naas_abi_core/services/discovery/discovery_integration_test.py \
+            examples/standalone_module/transfer_integration_test.py \
+            examples/standalone_module/model_integration_test.py \
+            examples/standalone_module/agent_integration_test.py \
+            examples/standalone_module/checkpoint_integration_test.py

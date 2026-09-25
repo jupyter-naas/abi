@@ -37,6 +37,16 @@ class {cls}:
     async def {method}(self, request: pb.{name}Request) -> pb.{name}Response:
         return await self._transport.call("abi.svc.{domain}.v1.{method}", request, pb.{name}Response)
 """
+    if domain == "model_registry":
+        text = text.replace(
+            "from naas_abi_sdk.transport import Transport",
+            "from naas_abi_sdk.transport import Transport\nfrom naas_abi_sdk.transfer import transfer_subject",
+        )
+        for operation in ("stream_next", "stream_close"):
+            text = text.replace(
+                f'"abi.svc.model_registry.v1.{operation}"',
+                f'transfer_subject("abi.svc.model_registry.v1", "{operation}", request.stream_id)',
+            )
     if domain == "cache":
         text = text.replace(
             "def __init__(self, transport: Transport) -> None:",
