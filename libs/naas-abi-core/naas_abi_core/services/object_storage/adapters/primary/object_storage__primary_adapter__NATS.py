@@ -19,6 +19,7 @@ The unary v1 endpoints remain available for existing clients.
 
 from __future__ import annotations
 
+import io
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -204,7 +205,10 @@ class ObjectStoragePrimaryAdapterNATS:
         request = object_storage_pb2.GetObjectRequest.FromString(metadata)
         if operation == "put":
             await stream_thread(
-                self._adapter.put_object_stream, request.prefix, request.key, source
+                self._adapter.put_object_stream,
+                request.prefix,
+                request.key,
+                source if source is not None else io.BytesIO(),
             )
             return
         context = self._adapter.get_object_stream(request.prefix, request.key)
@@ -343,6 +347,14 @@ class ObjectStoragePrimaryAdapterNATS:
     def _call_put_object(
         self, req: object_storage_pb2.PutObjectRequest
     ) -> object_storage_pb2.PutObjectResponse:
+        limit = self._transfer.max_upload_bytes
+        if limit is not None and len(req.content) > limit:
+            return object_storage_pb2.PutObjectResponse(
+                error=common_pb2.CallError(
+                    code="PAYLOAD_TOO_LARGE",
+                    message="Configured total upload limit exceeded",
+                )
+            )
         self._adapter.put_object(req.prefix, req.key, req.content)
         return object_storage_pb2.PutObjectResponse()
 

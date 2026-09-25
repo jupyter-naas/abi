@@ -259,3 +259,45 @@ def test_failed_rebind_rolls_back_partial_subscriptions():
         previous.drain.assert_not_awaited()
 
     asyncio.run(scenario())
+
+
+def test_no_deadline_agent_times_out_after_inactivity_and_releases_slot():
+    async def scenario():
+        docs, handler = Documents(), Handler()
+        owner = host(docs, handler)
+        owner.idle_timeout_seconds = 0.02
+        req = request()
+        req.deadline_seconds = 0
+        await owner._submit("agent", "key", "caller", req)
+        task = owner.runs["key"].task
+        await asyncio.wait_for(task, 1)
+        assert not owner.runs
+        assert (await docs.get(owner.runs_collection, "key")).data[
+            "status"
+        ] == "TIMED_OUT"
+        assert not any(c == owner.locks_collection for c, _ in docs.values)
+
+    asyncio.run(scenario())
+
+
+def test_active_stream_outlives_inactivity_budget():
+    class StreamingHandler:
+        async def stream_invoke(self, prompt, context):
+            for _ in range(8):
+                await asyncio.sleep(0.01)
+                yield {"event": "message", "data": "token"}
+            yield {"event": "done", "data": "[DONE]"}
+
+    async def scenario():
+        docs = Documents()
+        owner = host(docs, StreamingHandler())
+        owner.idle_timeout_seconds = 0.05
+        req = request()
+        req.mode, req.deadline_seconds = "stream", 0
+        await owner._submit("agent", "key", "caller", req)
+        await asyncio.wait_for(owner.runs["key"].task, 1)
+        assert (await docs.get(owner.runs_collection, "key")).data[
+            "status"
+        ] == "SUCCEEDED"
+
+    asyncio.run(scenario())

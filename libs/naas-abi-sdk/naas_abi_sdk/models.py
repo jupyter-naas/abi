@@ -43,17 +43,6 @@ class ModelConnection:
             )
         return asyncio.run_coroutine_threadsafe(coroutine, self.loop).result()
 
-    async def call(self, operation, request):
-        coroutine = getattr(self.client, operation)(request)
-        if asyncio.get_running_loop() is self.loop:
-            return await coroutine
-        if not self.loop.is_running():
-            coroutine.close()
-            raise RuntimeError("The model's SDK loop is no longer running")
-        return await asyncio.wrap_future(
-            asyncio.run_coroutine_threadsafe(coroutine, self.loop)
-        )
-
     async def on_loop(self, awaitable):
         async def run():
             return await awaitable
@@ -68,14 +57,28 @@ class ModelConnection:
 
     async def frames(self, operation, request):
         iterator = model_frames(self.client, operation, request)
+        pending = None
+
+        async def advance():
+            nonlocal pending
+            pending = asyncio.create_task(iterator.__anext__())
+            return await pending
+
+        async def close():
+            # Cancellation of the concurrent Future does not mean the SDK task
+            # has finished its asynchronous generator cleanup.
+            if pending is not None and pending is not asyncio.current_task():
+                await asyncio.gather(pending, return_exceptions=True)
+            await iterator.aclose()
+
         try:
             while True:
                 try:
-                    yield await self.on_loop(iterator.__anext__())
+                    yield await self.on_loop(advance())
                 except StopAsyncIteration:
                     break
         finally:
-            await self.on_loop(iterator.aclose())
+            await self.on_loop(close())
 
     async def result(self, operation, request, response_type):
         results = [frame async for frame in self.frames(operation, request)]

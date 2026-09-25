@@ -120,3 +120,67 @@ def test_proxy_tools_sync_bridge_stream_cleanup_and_no_retries(monkeypatch):
         client.chat.assert_awaited_once()
 
     asyncio.run(scenario())
+
+
+def test_cross_loop_cancellation_waits_for_generator_cleanup(monkeypatch):
+    import threading
+
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=loop.run_forever)
+    thread.start()
+    entered, cleaned = threading.Event(), threading.Event()
+
+    async def frames(*args):
+        try:
+            entered.set()
+            await asyncio.Event().wait()
+            yield b"unused"
+        finally:
+            await asyncio.sleep(0.02)
+            cleaned.set()
+
+    monkeypatch.setattr("naas_abi_sdk.models.model_frames", frames)
+
+    async def scenario():
+        connection = ModelConnection(SimpleNamespace())
+        connection.loop = loop
+
+        async def consume():
+            async for _ in connection.frames("stream", pb.ChatRequest()):
+                pass
+
+        task = asyncio.create_task(consume())
+        assert await asyncio.to_thread(entered.wait, 1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, 1)
+        assert cleaned.is_set()
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(2)
+        loop.close()
+
+
+def test_model_iterator_can_be_closed_by_a_different_task(monkeypatch):
+    closed = []
+
+    async def frames(*args):
+        try:
+            yield b"first"
+            yield b"second"
+        finally:
+            closed.append(True)
+
+    monkeypatch.setattr("naas_abi_sdk.models.model_frames", frames)
+
+    async def scenario():
+        connection = ModelConnection(SimpleNamespace())
+        iterator = connection.frames("stream", pb.ChatRequest())
+        assert await iterator.__anext__() == b"first"
+        await asyncio.wait_for(asyncio.create_task(iterator.aclose()), 1)
+        assert closed == [True]
+
+    asyncio.run(scenario())

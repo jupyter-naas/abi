@@ -56,6 +56,8 @@ jobs:
         run: |
           uv run --project libs/naas-abi-core --no-sync pytest --import-mode=importlib -q \
             libs/naas-abi-core/naas_abi_core/engine/nats_rpc_test.py \
+            libs/naas-abi-core/naas_abi_core/engine/nats_transfer_test.py \
+            libs/naas-abi-core/naas_abi_core/services/object_storage/adapters/primary/object_storage__primary_adapter__NATS_test.py \
             libs/naas-abi-core/naas_abi_core/engine/engine_loaders/EngineNATSLoader_test.py \
             libs/naas-abi-core/naas_abi_core/engine/engine_loaders/EngineNATSDependencies_test.py \
             libs/naas-abi-core/naas_abi_core/engine/engine_loaders/EngineServiceLoader_test.py \

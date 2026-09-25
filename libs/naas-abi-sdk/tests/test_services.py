@@ -1,8 +1,7 @@
 import asyncio
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock
 from types import SimpleNamespace
-from naas_abi_proto.transfer.v1 import transfer_pb2 as transfer
+from unittest.mock import AsyncMock
 
 import pytest
 from naas_abi_proto.dataset.v1 import dataset_pb2 as dataset
@@ -10,6 +9,7 @@ from naas_abi_proto.document.v1 import document_pb2 as documents
 from naas_abi_proto.document.values import encode_data
 from naas_abi_proto.object_storage.v1 import object_storage_pb2 as objects
 from naas_abi_proto.source_control.v1 import source_control_pb2 as source
+from naas_abi_proto.transfer.v1 import transfer_pb2 as transfer
 
 from naas_abi_sdk.services import (
     DatasetService,
@@ -197,3 +197,16 @@ def test_rdf_graph_and_query_values():
     request = client.insert.call_args.args[0]
     assert request.graph_name == "urn:graph"
     assert len(rdf.Graph().parse(data=request.triples_nt, format="nt")) == 1
+
+
+def test_transfer_timeout_never_falls_back_to_unary_write():
+    from io import BytesIO
+
+    client = AsyncMock()
+    client._transport.connect.return_value = SimpleNamespace(max_payload=65536)
+    client._transport.call.side_effect = TimeoutError("uncertain open")
+    service = ObjectStorageService(client)
+    with pytest.raises(TimeoutError):
+        asyncio.run(service.put_object_stream("prefix", "key", BytesIO(b"hello")))
+    client.put_object.assert_not_awaited()
+    assert client._transport.call.await_count == 1

@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import re
 from dataclasses import dataclass, field
 from functools import partial
@@ -44,6 +45,8 @@ class _Run:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     task: asyncio.Task | None = None
     deadline: asyncio.Task | None = None
+    watchdog: asyncio.Task | None = None
+    progress_at: float = 0
     cancel_reason: str = ""
     started: asyncio.Event = field(default_factory=asyncio.Event)
 
@@ -63,7 +66,17 @@ class AgentHost:
     has stopped. Membership expiry is deliberately not execution ownership transfer.
     """
 
-    def __init__(self, session, documents, handlers: dict[str, AgentHandler]):
+    def __init__(
+        self,
+        session,
+        documents,
+        handlers: dict[str, AgentHandler],
+        *,
+        idle_timeout_seconds: float = 300.0,
+    ):
+        if not math.isfinite(idle_timeout_seconds) or idle_timeout_seconds <= 0:
+            raise ValueError("Agent inactivity timeout must be positive and finite")
+        self.idle_timeout_seconds = idle_timeout_seconds
         self.session, self.documents, self.handlers = session, documents, handlers
         suffix = _hash(session.client.project)[:16]
         self.runs_collection, self.locks_collection = (
@@ -362,9 +375,12 @@ class AgentHost:
                 caller,
             )
             run = _Run(key, data, doc.version, context, lock_key, claim.version)
+            run.progress_at = asyncio.get_running_loop().time()
             self.runs[key] = run
             run.task = asyncio.create_task(self._execute(name, req, run))
             run.task.add_done_callback(self._observe_task)
+            run.watchdog = asyncio.create_task(self._watch_progress(run))
+            run.watchdog.add_done_callback(self._observe_task)
             if req.deadline_seconds:
                 run.deadline = asyncio.create_task(
                     self._deadline(run, req.deadline_seconds)
@@ -405,6 +421,7 @@ class AgentHost:
                 {"data": payload[part * size : (part + 1) * size]},
                 if_version=0,
             )
+            run.progress_at = asyncio.get_running_loop().time()
         return parts
 
     async def _event(self, run: _Run, event: dict) -> None:
@@ -426,6 +443,7 @@ class AgentHost:
         )
         # Publish the cursor only after every immutable fragment has committed.
         await self._save(run, last_sequence=sequence)
+        run.progress_at = asyncio.get_running_loop().time()
 
     async def _execute(self, name: str, req, run: _Run) -> None:
         completed = False
@@ -477,6 +495,8 @@ class AgentHost:
             )
             completed = True
         finally:
+            if run.watchdog and run.watchdog is not asyncio.current_task():
+                run.watchdog.cancel()
             if run.deadline and run.deadline is not asyncio.current_task():
                 run.deadline.cancel()
             if completed:
@@ -500,6 +520,16 @@ class AgentHost:
             await self._save(run, status="CANCELLING")
             if run.data["status"] not in TERMINAL:
                 run.task.cancel()
+
+    async def _watch_progress(self, run: _Run) -> None:
+        while True:
+            remaining = self.idle_timeout_seconds - (
+                asyncio.get_running_loop().time() - run.progress_at
+            )
+            if remaining <= 0:
+                await self._cancel(run, "TIMED_OUT")
+                return
+            await asyncio.sleep(remaining)
 
     async def _deadline(self, run: _Run, seconds: int) -> None:
         await asyncio.sleep(seconds)

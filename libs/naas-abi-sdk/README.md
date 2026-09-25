@@ -385,7 +385,11 @@ unlock execution. This is intentionally conservative and is not exactly-once too
 side effects or a fenced failover scheduler.
 
 Execution has no total deadline by default; an explicit deadline allows 1..3600
-seconds. Wait timeouts and
+seconds. The provider also enforces a 300-second inactivity timeout, reset after
+each persisted stream event. Configure it with
+`run_module(..., agent_idle_timeout_seconds=600)` (positive and finite).
+Non-streaming invocation must finish within that inactivity budget. Active streams
+have no total-duration limit. Wait timeouts and
 abandoning a stream do not cancel remote execution. Cancellation marks CANCELLING;
 CANCELLED/TIMED_OUT is persisted only after execution stops. Synchronous core
 inference cannot be forcibly interrupted: the adapter waits for its worker thread
@@ -477,7 +481,8 @@ no ABI core installed. The base worker still verifies its four-package install.
 
 ## Object streams and transfer configuration
 
-Object `get_object` and `put_object` use chunked transfers too. `get_object` still
+Object `get_object` uses chunked transfers; small byte `put_object` calls use one
+unary RPC, while larger or streamed uploads use transfers. `get_object` still
 returns all bytes in memory, matching the local API. For bounded reads:
 
 ```python
@@ -489,7 +494,11 @@ async with storage.get_object_stream("reports", "report.bin") as source:
         await consume(chunk)  # or await source.read(65536)
 ```
 
-Upgrade the engine and SDK together for these new transfer endpoints. Existing
+For older object-storage owners, clients fall back to bounded unary operations
+only when transfer-open reports no responders. Large objects still require an
+updated owner; timeouts never trigger fallback or replay. Modern GET streams
+fetch their first bounded fragment before entering the caller context, surfacing
+missing objects early. Model transfers require updated owners. Existing
 configurations need no new fields. Without a `nats` block, services remain local.
 Optional engine settings (shown with defaults):
 
@@ -508,19 +517,28 @@ nats:
       chunk_bytes: 65536
       idle_seconds: 60
       max_sessions: 32
-      max_upload_bytes: null
+      max_upload_bytes: 16777216  # 16 MiB per model request
+      max_buffered_upload_bytes: 67108864  # 64 MiB across retained model uploads
 ```
 
 Chunk size is reduced for the broker's advertised packet limit. Uploads spool to
 temporary disk and execute only after upload completion. Set `max_upload_bytes`
-if an explicit deployment cap is needed. Each domain limits active sessions and
+for object uploads if a deployment cap is needed. Model upload budgets are finite
+and configurable, enforced before accepting each chunk. They bound serialized
+input, not total generation duration or output length. Decoded protobuf and
+provider objects require additional memory. Each domain limits active sessions and
 buffers two output packets per session. Model providers and callers still hold
 logical messages in memory; provider context windows still apply. Slow consumers
 must read within the configured idle period. An optional generation deadline
 covers execution, including output backpressure, after upload completion.
 
 Cancellation closes streams and cleans temporary files; abandoned sessions expire.
-Synchronous backend work must finish before its resources can be safely closed.
+Cleanup removes sessions immediately and retires them independently. Close and
+host shutdown wait at most one second for cleanup. Synchronous backend work must
+finish before its resources can be safely closed; deferred resources retain their
+upload budget. At most `max_sessions` deferred cleanups are allowed before new
+sessions are rejected. Backend socket timeouts remain necessary: Python cannot
+kill a blocked thread, and interpreter exit can still wait for worker threads.
 Transfers cannot resume after an owner restart and uncertain operations are never
 replayed automatically. Original low-level unary endpoints, discovery records,
 checkpoints and durable agent invocation records retain their own size limits;
