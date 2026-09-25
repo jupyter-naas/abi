@@ -66,6 +66,9 @@ def test_without_remote_view_local_wiring_is_unchanged():
 
 
 def test_dependency_failure_has_no_local_fallback():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
     import pytest
 
     local_backend = MagicMock()
@@ -73,11 +76,17 @@ def test_dependency_failure_has_no_local_fallback():
     wiring = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
     dependencies = wiring.build(IEngine.Services(object_storage=owner))
     try:
-        dependencies.object_storage.adapter._open_transfer = MagicMock(
-            side_effect=ConnectionError("unavailable")
+        adapter = dependencies.object_storage.adapter
+        adapter._ensure_connection_async = AsyncMock(
+            return_value=SimpleNamespace(max_payload=1024 * 1024)
         )
-        with pytest.raises(ConnectionError):
-            dependencies.object_storage.put_object("prefix", "key", b"value")
+        adapter._call = MagicMock(side_effect=ConnectionError("unavailable"))
+        adapter._open_transfer = MagicMock(side_effect=ConnectionError("unavailable"))
+        for content in (b"value", b"x" * (64 * 1024 + 1)):
+            with pytest.raises(ConnectionError):
+                dependencies.object_storage.put_object("prefix", "key", content)
+        adapter._call.assert_called_once()
+        adapter._open_transfer.assert_called_once()
         local_backend.put_object.assert_not_called()
     finally:
         wiring.close()
