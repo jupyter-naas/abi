@@ -1,0 +1,67 @@
+syntax = "proto3";
+package abi.document.v1;
+import "naas_abi_proto/common/v1/common.proto";
+
+// Namespace is explicit under the existing deployment-wide trusted-caller model.
+// It is not an authorization claim. Server validation remains authoritative.
+message Value {
+  oneof kind {
+    bool null_value = 1;
+    string string_value = 2;
+    sint64 int_value = 3;
+    double float_value = 4;
+    bool bool_value = 5;
+    bytes bytes_value = 6;
+    string datetime_value = 7;
+    Values list_value = 8;
+    Data object_value = 9;
+  }
+}
+message Values { repeated Value items = 1; }
+message Data { map<string, Value> fields = 1; }
+message FieldSpec { string name = 1; string type = 2; bool indexed = 3; bool unique = 4; }
+message UniqueGroup { repeated string fields = 1; }
+message CollectionSpec { string name = 1; repeated FieldSpec fields = 2; repeated UniqueGroup unique_together = 3; }
+message Document { string id = 1; Data data = 2; string created_at = 3; string updated_at = 4; int64 version = 5; }
+message Predicate { string field = 1; string operator = 2; Value value = 3; }
+message OrderBy { string field = 1; string direction = 2; }
+
+message EnsureCollectionRequest {
+  abi.common.v1.CallContext context = 1; string namespace = 2; CollectionSpec spec = 3;
+}
+message EnsureCollectionResponse { abi.common.v1.CallError error = 1;  }
+
+message DropCollectionRequest {
+  abi.common.v1.CallContext context = 1; string namespace = 2; string collection = 3;
+}
+message DropCollectionResponse { abi.common.v1.CallError error = 1;  }
+
+message CollectionsRequest {
+  abi.common.v1.CallContext context = 1; string namespace = 2; 
+}
+message CollectionsResponse { abi.common.v1.CallError error = 1; repeated string collections = 2; }
+
+message PutRequest {
+  abi.common.v1.CallContext context = 1; string namespace = 2; string collection = 3; string id = 4; Data data = 5; optional int64 if_version = 6;
+}
+message PutResponse { abi.common.v1.CallError error = 1; Document document = 2; }
+
+message GetRequest {
+  abi.common.v1.CallContext context = 1; string namespace = 2; string collection = 3; string id = 4;
+}
+message GetResponse { abi.common.v1.CallError error = 1; Document document = 2; }
+
+message DeleteRequest {
+  abi.common.v1.CallContext context = 1; string namespace = 2; string collection = 3; string id = 4; optional int64 if_version = 5;
+}
+message DeleteResponse { abi.common.v1.CallError error = 1;  }
+
+message FindRequest {
+  abi.common.v1.CallContext context = 1; string namespace = 2; string collection = 3; repeated Predicate where = 4; OrderBy order_by = 5; optional int32 limit = 6; optional string cursor = 7;
+}
+message FindResponse { abi.common.v1.CallError error = 1; repeated Document items = 2; optional string cursor = 3; }
+
+message CountRequest {
+  abi.common.v1.CallContext context = 1; string namespace = 2; string collection = 3; repeated Predicate where = 4;
+}
+message CountResponse { abi.common.v1.CallError error = 1; int64 count = 2; }

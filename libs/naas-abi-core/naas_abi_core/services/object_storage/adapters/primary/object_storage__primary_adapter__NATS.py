@@ -13,14 +13,13 @@ incoming request must carry a valid token in the ``Nats-Auth-Token`` header
 that's a neutral module neither adapter owns, so this file and the client's
 don't depend on each other; see that module's docstring for why).
 
-``get_object_stream``/``put_object_stream`` are explicitly out of scope for
-this v1 contract (see the ``.proto`` file's header comment): they have no
-endpoint here at all, so a call to either simply cannot reach this adapter.
+Streaming uses the shared transfer/v1 contract under this domain's subjects.
+The unary v1 endpoints remain available for existing clients.
 """
 
 from __future__ import annotations
 
-import asyncio
+import io
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -32,7 +31,9 @@ from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
+from naas_abi_core.engine.nats_transfer import TransferHost, stream_thread
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.object_storage.v1 import object_storage_pb2
 from naas_abi_core.services.object_storage.adapters.object_storage_nats_contract import (
@@ -116,9 +117,20 @@ class ObjectStoragePrimaryAdapterNATS:
         self,
         adapter: IObjectStorageAdapter | IObjectStorageDomain,
         jwt_secret: str,
+        *,
+        transfer_options: dict | None = None,
     ) -> None:
         self._adapter = adapter
         self._jwt_secret = jwt_secret
+        self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
+        self._transfer = TransferHost(
+            f"{SUBJECT_PREFIX}.transfer",
+            jwt_secret,
+            self._transfer_frames,
+            operations=("get", "put"),
+            error_mapper=self._transfer_error,
+            **(transfer_options or {}),
+        )
         self._service: Service | None = None
 
     async def start(self, nc: nats.NATS) -> None:
@@ -168,13 +180,52 @@ class ObjectStoragePrimaryAdapterNATS:
             handler=self._handle_get_object_metadata,
         )
         self._service = service
+        await self._transfer.start(nc)
 
     async def stop(self) -> None:
         """Deregister the service, draining its subscriptions."""
+        await self._transfer.stop()
         service = self._service
         self._service = None
-        if service is not None:
-            await service.stop()
+        try:
+            if service is not None:
+                await service.stop()
+        finally:
+            self._dispatch.close()
+
+    @staticmethod
+    def _transfer_error(exc):
+        if isinstance(exc, Exceptions.ObjectNotFound):
+            return "OBJECT_NOT_FOUND", "Object not found"
+        if isinstance(exc, Exceptions.ObjectAlreadyExists):
+            return "OBJECT_ALREADY_EXISTS", "Object already exists"
+        return None
+
+    async def _transfer_frames(self, operation, metadata, source):
+        request = object_storage_pb2.GetObjectRequest.FromString(metadata)
+        if operation == "put":
+            await stream_thread(
+                self._adapter.put_object_stream,
+                request.prefix,
+                request.key,
+                source if source is not None else io.BytesIO(),
+            )
+            return
+        context = self._adapter.get_object_stream(request.prefix, request.key)
+        opened = []
+
+        def enter():
+            stream = context.__enter__()
+            opened.append(stream)
+            return stream
+
+        try:
+            stream = await stream_thread(enter)
+            while data := await stream_thread(stream.read, self._transfer.chunk_bytes):
+                yield data
+        finally:
+            if opened:
+                await stream_thread(context.__exit__, None, None, None)
 
     # ------------------------------------------------------------------
     # Shared request handling: auth, decode, dispatch, encode.
@@ -216,7 +267,7 @@ class ObjectStoragePrimaryAdapterNATS:
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await asyncio.to_thread(call, parsed_request)
+            response = await self._dispatch.call(call, parsed_request)
         except Exceptions.ObjectNotFound as exc:
             await self._respond_error(
                 request, response_cls, "OBJECT_NOT_FOUND", str(exc), retryable=False
@@ -296,6 +347,14 @@ class ObjectStoragePrimaryAdapterNATS:
     def _call_put_object(
         self, req: object_storage_pb2.PutObjectRequest
     ) -> object_storage_pb2.PutObjectResponse:
+        limit = self._transfer.max_upload_bytes
+        if limit is not None and len(req.content) > limit:
+            return object_storage_pb2.PutObjectResponse(
+                error=common_pb2.CallError(
+                    code="PAYLOAD_TOO_LARGE",
+                    message="Configured total upload limit exceeded",
+                )
+            )
         self._adapter.put_object(req.prefix, req.key, req.content)
         return object_storage_pb2.PutObjectResponse()
 

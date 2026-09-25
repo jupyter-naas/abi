@@ -1,4 +1,3 @@
-
 from naas_abi_core import logger
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
@@ -9,6 +8,7 @@ from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogSe
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.dataset.DatasetService import DatasetService
+from naas_abi_core.services.document.DocumentService import DocumentService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
@@ -56,6 +56,18 @@ class EngineServiceLoader:
                     frontier.append(dep)
         return service_type in reachable
 
+    def _load_bus(self) -> BusService:
+        if self.__configuration.nats is None:
+            return self.__configuration.services.bus.load()
+        from naas_abi_core.services.bus.adapters.secondary.NATSJetStreamAdapter import (
+            NATSJetStreamAdapter,
+        )
+
+        return BusService(
+            NATSJetStreamAdapter(self.__configuration.nats.nats_url),
+            emit_message_events=self.__configuration.services.bus.emit_message_events,
+        )
+
     def load_services(
         self, module_dependencies: dict[str, ModuleDependencies]
     ) -> IEngine.Services:
@@ -64,10 +76,19 @@ class EngineServiceLoader:
         for module_dependency in module_dependencies.values():
             services_to_load.extend(module_dependency.services)
 
+        if CacheService in services_to_load:
+            for entry in self.__configuration.services.cache.adapters:
+                if entry.adapter == "object_storage":
+                    services_to_load.append(ObjectStorageService)
+                elif entry.adapter == "keyvalue":
+                    services_to_load.append(KeyValueService)
         services_to_load = list(set(services_to_load))
         logger.debug(f"Services to load: {services_to_load}")
 
         services = IEngine.Services(
+            document=self.__configuration.services.document.load()
+            if self._should_load_service(DocumentService, services_to_load)
+            else None,
             object_storage=self.__configuration.services.object_storage.load()
             if self._should_load_service(ObjectStorageService, services_to_load)
             else None,
@@ -83,7 +104,7 @@ class EngineServiceLoader:
             secret=self.__configuration.services.secret.load()
             if self._should_load_service(Secret, services_to_load)
             else None,
-            bus=self.__configuration.services.bus.load()
+            bus=self._load_bus()
             if self._should_load_service(BusService, services_to_load)
             else None,
             kv=self.__configuration.services.kv.load()
@@ -110,5 +131,6 @@ class EngineServiceLoader:
             coding_environment=self.__configuration.services.coding_environment.load(),
             source_control=self.__configuration.services.source_control.load(),
         )
-        services.wire_services()
+        if self.__configuration.nats is None:
+            services.wire_services()
         return services

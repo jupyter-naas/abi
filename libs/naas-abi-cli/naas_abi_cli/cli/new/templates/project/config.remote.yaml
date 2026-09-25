@@ -80,6 +80,11 @@ default_agent: "{{ project_name_snake }} {{ project_name_pascal }}Agent"
 
 {% raw %}
 services:
+  document:
+    document_adapter:
+      adapter: "postgresql"
+      config:
+        dsn: "postgresql://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@{{ secret.POSTGRES_HOST }}:{{ secret.POSTGRES_PORT }}/{{ secret.POSTGRES_DB }}"
   # Default models for the in-memory model registry, both served by the
   # naas_abi_marketplace.ai.openrouter module: Gemma 4 26B-A4B for chat and
   # text-embedding-3-small for embeddings — a cheap pairing that still supports

@@ -36,6 +36,9 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_DatasetServic
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
     DeployConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_DocumentService import (
+    DocumentServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_EmailService import (
     EmailAdapterConfiguration,
     EmailAdapterSMTPConfiguration,
@@ -85,6 +88,9 @@ from rich.prompt import Prompt
 
 
 class ServicesConfiguration(BaseModel):
+    document: DocumentServiceConfiguration = Field(
+        default_factory=DocumentServiceConfiguration
+    )
     object_storage: ObjectStorageServiceConfiguration = (
         ObjectStorageServiceConfiguration(
             object_storage_adapter=ObjectStorageAdapterConfiguration(
@@ -224,17 +230,43 @@ class ApiConfiguration(BaseModel):
     port: int = 9879
 
 
+class DiscoveryConfiguration(BaseModel):
+    project: str = Field(default="default", pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    lease_seconds: float = Field(default=20, ge=1, le=300, allow_inf_nan=False)
+
+
+class NATSStreamingConfiguration(BaseModel):
+    chunk_bytes: int = Field(default=64 * 1024, ge=1024, le=4 * 1024 * 1024)
+    idle_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
+    max_sessions: int = Field(default=32, ge=1, le=1024)
+    max_upload_bytes: int | None = Field(default=None, gt=0)
+
+
+class NATSModelStreamingConfiguration(NATSStreamingConfiguration):
+    max_upload_bytes: int = Field(default=16 * 1024 * 1024, gt=0)
+    max_buffered_upload_bytes: int = Field(default=64 * 1024 * 1024, gt=0)
+
+
+class NATSModelConfiguration(BaseModel):
+    generation_timeout_seconds: float | None = Field(
+        default=None, gt=0, allow_inf_nan=False
+    )
+    streaming: NATSModelStreamingConfiguration = Field(
+        default_factory=NATSModelStreamingConfiguration
+    )
+
+
 class NATSConfiguration(BaseModel):
     """Cross-cutting NATS exposure config -- not a domain service, so it lives
     at the top level next to ``api``/``deploy``/``global_config``, not nested
     under ``services:``.
 
-    Its mere presence (non-null) is what triggers exposure: at engine load
-    time, every loaded service that has a NATS primary adapter available gets
-    one started automatically, wrapping the same instance every in-process
-    caller already uses -- see ``EngineNATSLoader``. No per-service opt-in
-    flag; add a service to the exposed set by giving it a primary adapter,
-    not by touching this config.
+    A non-null block enables network domain boundaries. Loaded local owners
+    expose endpoints; engine modules and every owner's injected dependencies
+    use NATS-backed facades, even when owners share a process. The bus uses
+    this broker in NATS mode. Without this block, wiring remains in-process.
+    Process-local model registration is available only to modules, never as
+    an injected cross-domain dependency. See the network-boundaries ADR.
 
     See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
     ("Decisions locked in" -- Stage 1's JWT is deliberately minimal).
@@ -246,6 +278,11 @@ class NATSConfiguration(BaseModel):
 
     nats_url: str = "nats://127.0.0.1:4222"
     jwt_secret: str
+    discovery: DiscoveryConfiguration | None = None
+    object_storage_streaming: NATSStreamingConfiguration = Field(
+        default_factory=NATSStreamingConfiguration
+    )
+    models: NATSModelConfiguration = Field(default_factory=NATSModelConfiguration)
 
 
 class OpencodeProviderConfiguration(BaseModel):
@@ -365,6 +402,24 @@ class EngineConfiguration(BaseModel):
     @model_validator(mode="after")
     def validate_modules(self) -> Self:
         self.ensure_default_modules()
+        if self.nats is not None:
+            bus = self.services.bus.bus_adapter
+            if "bus" in self.services.model_fields_set:
+                if bus.adapter != "nats_jetstream":
+                    raise ValueError(
+                        "NATS mode requires services.bus.bus_adapter.adapter=nats_jetstream; remove the explicit bus block to use NATS defaults"
+                    )
+                if (bus.config or {}).get(
+                    "nats_url", "nats://127.0.0.1:4222"
+                ) != self.nats.nats_url:
+                    raise ValueError("Bus and engine NATS URLs must match")
+            remote = [
+                entry.adapter == "nats_rpc" for entry in self.services.cache.adapters
+            ]
+            if any(remote) and not all(remote):
+                raise ValueError(
+                    "NATS mode cannot mix local and remote cache tiers; configure the full tier topology on its owning engine"
+                )
         return self
 
     @staticmethod
@@ -455,7 +510,9 @@ class EngineConfiguration(BaseModel):
         # the dotenv path here, which is bootstrap config and cannot itself depend
         # on a secret, so empty-rendered secrets are harmless.
         env = cls._build_jinja_env(base_dir)
-        raw_data = yaml.safe_load(StringIO(cls._render_yaml_template(env, yaml_content)))
+        raw_data = yaml.safe_load(
+            StringIO(cls._render_yaml_template(env, yaml_content))
+        )
         if not isinstance(raw_data, dict):
             return None
 

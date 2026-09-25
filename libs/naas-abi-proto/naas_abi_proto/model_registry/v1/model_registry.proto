@@ -1,0 +1,58 @@
+syntax = "proto3";
+package abi.model_registry.v1;
+import "naas_abi_proto/common/v1/common.proto";
+
+// JSON fields use UTF-8, finite JSON numbers and no Python object serialization.
+// Message data follows LangChain v1 message dictionaries (including tool chunks).
+// Runtime validation is authoritative; Protovalidate tooling is not yet enabled.
+message ModelRef { string canonical_id = 1; string provider = 2; string kind = 3; string model_id = 4; }
+message ModelDescriptor {
+  ModelRef ref = 1;
+  string model_id = 2;
+  string name = 3;
+  string description = 4;
+  bytes metadata_json = 5;
+}
+message ChatMessage { string type = 1; bytes data_json = 2; }
+message ListModelsRequest { abi.common.v1.CallContext context = 1; }
+message ListModelsResponse {
+  repeated ModelDescriptor models = 1;
+  string default_chat_model_id = 2;
+  string default_embedding_model_id = 3;
+  abi.common.v1.CallError error = 15;
+}
+message ResolveRequest { abi.common.v1.CallContext context = 1; ModelRef ref = 2; }
+message ResolveResponse { ModelDescriptor model = 1; abi.common.v1.CallError error = 15; }
+message ChatRequest {
+  abi.common.v1.CallContext context = 1;
+  ModelRef ref = 2;
+  repeated ChatMessage messages = 3;
+  repeated string stop = 4;
+  bytes options_json = 5;
+  repeated bytes tools_json = 6;
+  bytes tool_options_json = 7;
+}
+message ChatResponse { ChatMessage message = 1; abi.common.v1.CallError error = 15; }
+message StreamOpenRequest { abi.common.v1.CallContext context = 1; ChatRequest chat = 2; }
+message StreamOpenResponse { string stream_id = 1; abi.common.v1.CallError error = 15; }
+message StreamNextRequest {
+  abi.common.v1.CallContext context = 1;
+  string stream_id = 2;
+  uint64 sequence = 3;
+}
+message StreamNextResponse {
+  ChatMessage chunk = 1;
+  bool done = 2;
+  uint64 sequence = 3;
+  abi.common.v1.CallError error = 15;
+}
+message StreamCloseRequest { abi.common.v1.CallContext context = 1; string stream_id = 2; }
+message StreamCloseResponse { abi.common.v1.CallError error = 15; }
+message EmbedRequest {
+  abi.common.v1.CallContext context = 1;
+  ModelRef ref = 2;
+  repeated string texts = 3;
+  bool query = 4;
+}
+message Vector { repeated double values = 1; }
+message EmbedResponse { repeated Vector vectors = 1; abi.common.v1.CallError error = 15; }

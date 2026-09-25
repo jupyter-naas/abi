@@ -2,6 +2,37 @@
 
 <!-- version list -->
 
+## v2.38.0 (2026-09-22)
+
+### Bug Fixes
+
+- **core**: Address document service review feedback
+  ([`adc548c`](https://github.com/jupyter-naas/abi/commit/adc548cf122052e64ea79c3427a1e0d450e3093f))
+
+- **core**: Address document store code review findings
+  ([`840f142`](https://github.com/jupyter-naas/abi/commit/840f142b6eea3f1eebac5d1a4666e241b4347603))
+
+- **core**: Align document numeric comparisons and bound optional indexes
+  ([`92121af`](https://github.com/jupyter-naas/abi/commit/92121af7f013ad15a8b9870dbe20ce3ef1099978))
+
+- **core**: Close 4 remaining document store review findings
+  ([`6c5fc28`](https://github.com/jupyter-naas/abi/commit/6c5fc28e32d192403981b84362ac05b7b0a950d4))
+
+- **core**: Harden document query and storage boundaries
+  ([`c35bca5`](https://github.com/jupyter-naas/abi/commit/c35bca523909428ef28dfb045b8fbddabdb46e92))
+
+- **core**: Keep expanded JSONB floats portable
+  ([`9e3a409`](https://github.com/jupyter-naas/abi/commit/9e3a409e1df327afae62c45a67cbe25b55ad14a5))
+
+- **core**: Surface malformed document SQL as DocumentAdapterError and split adapter factories
+  ([`afb901a`](https://github.com/jupyter-naas/abi/commit/afb901a0fe9ef2d6999dcff0c738c0de30229532))
+
+### Features
+
+- **core**: Add portable document store service
+  ([`db7df35`](https://github.com/jupyter-naas/abi/commit/db7df354346a5bf1ebeba60ba4f33651cad09c9d))
+
+
 ## v2.37.0 (2026-09-17)
 
 ### Features

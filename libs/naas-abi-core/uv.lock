@@ -2267,7 +2267,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi-core"
-version = "2.37.0"
+version = "2.38.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -2314,10 +2314,11 @@ all = [
     { name = "dagster-webserver" },
     { name = "langchain-openai" },
     { name = "msal" },
+    { name = "naas-abi-proto" },
+    { name = "naas-abi-sdk", extra = ["models"] },
     { name = "nats-py" },
     { name = "paramiko" },
     { name = "pika" },
-    { name = "protobuf" },
     { name = "pyjwt" },
     { name = "qdrant-client" },
     { name = "redis" },
@@ -2337,8 +2338,9 @@ microsoft = [
     { name = "msal" },
 ]
 nats = [
+    { name = "naas-abi-proto" },
+    { name = "naas-abi-sdk", extra = ["models"] },
     { name = "nats-py" },
-    { name = "protobuf" },
     { name = "pyjwt" },
 ]
 openrouter = [
@@ -2404,6 +2406,8 @@ requires-dist = [
     { name = "naas-abi-core", extras = ["redis"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["sqlite-vec"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["ssh"], marker = "extra == 'all'" },
+    { name = "naas-abi-proto", marker = "extra == 'nats'", editable = "../naas-abi-proto" },
+    { name = "naas-abi-sdk", extras = ["models"], marker = "extra == 'nats'", editable = "../naas-abi-sdk" },
     { name = "nats-py", marker = "extra == 'nats'", specifier = ">=2.16.0" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "pandas-stubs", specifier = ">=2.3.2.250926" },
@@ -2411,7 +2415,6 @@ requires-dist = [
     { name = "pika", marker = "extra == 'rabbitmq'" },
     { name = "pillow", specifier = ">=12.0.0" },
     { name = "pip", specifier = ">=25.1.1" },
-    { name = "protobuf", marker = "extra == 'nats'", specifier = ">=6.33.5" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.0.0" },
     { name = "pydantic", specifier = ">=2.11.5" },
     { name = "pydash", specifier = ">=8.0.5" },
@@ -2443,6 +2446,54 @@ dev = [
     { name = "python-semantic-release", specifier = ">=9.21.0" },
     { name = "testcontainers", specifier = ">=4.13.2" },
     { name = "types-protobuf" },
+]
+
+[[package]]
+name = "naas-abi-proto"
+version = "0.1.0"
+source = { editable = "../naas-abi-proto" }
+dependencies = [
+    { name = "protobuf" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "protobuf", specifier = ">=6.33.5,<7" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff" },
+]
+
+[[package]]
+name = "naas-abi-sdk"
+version = "0.1.0"
+source = { editable = "../naas-abi-sdk" }
+dependencies = [
+    { name = "naas-abi-proto" },
+    { name = "nats-py" },
+]
+
+[package.optional-dependencies]
+models = [
+    { name = "langchain-core" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "langchain-core", marker = "extra == 'agents'", specifier = ">=1,<2" },
+    { name = "langchain-core", marker = "extra == 'models'", specifier = ">=0.3.78,<2" },
+    { name = "langgraph-checkpoint", marker = "extra == 'langgraph'", specifier = ">=3.0.1,<4" },
+    { name = "naas-abi-proto", editable = "../naas-abi-proto" },
+    { name = "nats-py", specifier = ">=2.16.0,<3" },
+    { name = "rdflib", marker = "extra == 'rdf'", specifier = ">=7,<8" },
+]
+provides-extras = ["models", "agents", "rdf", "langgraph"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff" },
 ]
 
 [[package]]

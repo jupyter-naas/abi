@@ -1,0 +1,32 @@
+[project]
+name = "naas-abi-sdk"
+version = "0.1.0"
+description = "Standalone ABI sdk package"
+requires-python = ">=3.10"
+dependencies = ["naas-abi-proto>=0.1.0,<0.2", "nats-py>=2.16.0,<3"]
+readme = "README.md"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff"]
+
+[tool.uv.sources]
+naas-abi-proto = {path = "../naas-abi-proto", editable = true}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+extend-exclude = ["**/*_pb2.py", "**/*_pb2.pyi"]
+
+[project.scripts]
+naas-abi-module = "naas_abi_sdk.module_runner:main"
+
+[project.optional-dependencies]
+models = ["langchain-core>=0.3.78,<2"]
+agents = ["langchain-core>=1,<2"]
+rdf = ["rdflib>=7,<8"]
+langgraph = ["langgraph-checkpoint>=3.0.1,<4"]

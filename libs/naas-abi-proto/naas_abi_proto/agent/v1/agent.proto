@@ -1,0 +1,39 @@
+syntax = "proto3";
+package abi.agent.v1;
+import "naas_abi_proto/common/v1/common.proto";
+message AgentEvent { uint64 sequence = 1; string event = 2; string data = 3; uint32 parts = 4; }
+message Invocation {
+  string invocation_id = 1;
+  string thread_id = 2;
+  string status = 3;
+  string result = 4;
+  string error_code = 5;
+  string error_message = 6;
+  string owner_instance_id = 7;
+  bool owner_available = 8;
+  repeated AgentEvent events = 9;
+  uint64 last_sequence = 10;
+  uint32 result_parts = 11;
+}
+message SubmitRequest {
+  abi.common.v1.CallContext context = 1;
+  string invocation_id = 2;
+  string thread_id = 3;
+  string prompt = 4;
+  string mode = 5;
+  uint32 deadline_seconds = 6; // Zero means no total execution deadline.
+  uint32 output_format = 7; // 2: immutable paged output fragments.
+}
+message SubmitResponse { abi.common.v1.CallError error = 1; Invocation invocation = 2; }
+message StatusRequest { abi.common.v1.CallContext context = 1; string invocation_id = 2; uint64 after_sequence = 3; uint32 output_format = 4; }
+message StatusResponse { abi.common.v1.CallError error = 1; Invocation invocation = 2; }
+message CancelRequest { abi.common.v1.CallContext context = 1; string invocation_id = 2; uint32 output_format = 3; }
+message CancelResponse { abi.common.v1.CallError error = 1; Invocation invocation = 2; }
+// Immutable event/result fragments. Sequence zero addresses the final result.
+message EventRequest {
+  abi.common.v1.CallContext context = 1;
+  string invocation_id = 2;
+  uint64 sequence = 3;
+  uint32 part = 4;
+}
+message EventResponse { abi.common.v1.CallError error = 1; bytes data = 2; }

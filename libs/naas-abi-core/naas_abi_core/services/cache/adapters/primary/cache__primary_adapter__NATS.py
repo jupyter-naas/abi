@@ -31,7 +31,6 @@ depend on each other; see that module's docstring for why).
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -43,6 +42,7 @@ from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
 from naas_abi_core.proto.cache.v1 import cache_pb2
 from naas_abi_core.proto.common.v1 import common_pb2
@@ -58,6 +58,11 @@ from naas_abi_core.services.cache.CachePort import (
     CacheNotFoundError,
     DataType,
     ICacheAdapter,
+)
+from naas_abi_core.services.cache.ontologies.modules.CacheEventOntology import (
+    CacheDeleted,
+    CacheError,
+    CacheSet,
 )
 from nats.micro.request import Request
 from nats.micro.service import Service
@@ -114,10 +119,59 @@ class CachePrimaryAdapterNATS:
     never as a crashed handler or a raw NATS-level error.
     """
 
-    def __init__(self, adapter: ICacheAdapter, jwt_secret: str) -> None:
+    def __init__(
+        self,
+        adapter: ICacheAdapter,
+        jwt_secret: str,
+        *,
+        subject_prefix: str = SUBJECT_PREFIX,
+        tiers: tuple[str, ...] = (),
+        event_publisher: Callable[[object], None] | None = None,
+        tier_name: str = "cold",
+    ) -> None:
+        self._subject_prefix = subject_prefix
+        self._tiers = tiers
+        self._event_publisher = event_publisher
+        self._tier_name = tier_name
         self._adapter = adapter
         self._jwt_secret = jwt_secret
+        self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: Service | None = None
+
+    def _emit_set(self, key: str, value: CachedData) -> None:
+        self._emit(
+            CacheSet(
+                key=key,
+                tier=self._tier_name,
+                data_type=value.data_type.value,
+                size_bytes=len(value.data),
+            )
+        )
+
+    def _invoke(self, call, request):
+        try:
+            return call(request)
+        except CacheNotFoundError:
+            raise
+        except Exception as exc:
+            operation = call.__name__.removeprefix("_call_")
+            if operation in {"set", "set_if_absent", "delete"}:
+                self._emit(
+                    CacheError(
+                        key=request.key,
+                        tier=self._tier_name,
+                        operation=operation,
+                        message=str(exc),
+                    )
+                )
+            raise
+
+    def _emit(self, event: object) -> None:
+        if self._event_publisher is not None:
+            try:
+                self._event_publisher(event)
+            except Exception as exc:  # noqa: BLE001 - audit is fail-open
+                logger.warning("NATS mutation audit failed: {}", type(exc).__name__)
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``cache`` NATS service on ``nc``.
@@ -137,28 +191,33 @@ class CachePrimaryAdapterNATS:
         )
         await service.add_endpoint(
             name="get",
-            subject=f"{SUBJECT_PREFIX}.get",
+            subject=f"{self._subject_prefix}.get",
             handler=self._handle_get,
         )
         await service.add_endpoint(
             name="set",
-            subject=f"{SUBJECT_PREFIX}.set",
+            subject=f"{self._subject_prefix}.set",
             handler=self._handle_set,
         )
         await service.add_endpoint(
             name="set_if_absent",
-            subject=f"{SUBJECT_PREFIX}.set_if_absent",
+            subject=f"{self._subject_prefix}.set_if_absent",
             handler=self._handle_set_if_absent,
         )
         await service.add_endpoint(
             name="delete",
-            subject=f"{SUBJECT_PREFIX}.delete",
+            subject=f"{self._subject_prefix}.delete",
             handler=self._handle_delete,
         )
         await service.add_endpoint(
             name="exists",
-            subject=f"{SUBJECT_PREFIX}.exists",
+            subject=f"{self._subject_prefix}.exists",
             handler=self._handle_exists,
+        )
+        await service.add_endpoint(
+            name="describe",
+            subject=f"{self._subject_prefix}.describe",
+            handler=self._handle_describe,
         )
         self._service = service
 
@@ -166,8 +225,11 @@ class CachePrimaryAdapterNATS:
         """Deregister the service, draining its subscriptions."""
         service = self._service
         self._service = None
-        if service is not None:
-            await service.stop()
+        try:
+            if service is not None:
+                await service.stop()
+        finally:
+            self._dispatch.close()
 
     # ------------------------------------------------------------------
     # Shared request handling: auth, decode, dispatch, encode.
@@ -209,7 +271,9 @@ class CachePrimaryAdapterNATS:
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await asyncio.to_thread(call, parsed_request)
+            response = await self._dispatch.call(
+                lambda req: self._invoke(call, req), parsed_request
+            )
         except CacheNotFoundError as exc:
             await self._respond_error(
                 request, response_cls, "CACHE_NOT_FOUND", str(exc), retryable=False
@@ -282,6 +346,7 @@ class CachePrimaryAdapterNATS:
 
     def _call_set(self, req: cache_pb2.SetRequest) -> cache_pb2.SetResponse:
         self._adapter.set(req.key, _pb_to_cached_data(req.value))
+        self._emit_set(req.key, _pb_to_cached_data(req.value))
         return cache_pb2.SetResponse()
 
     async def _handle_set_if_absent(self, request: Request) -> None:
@@ -296,6 +361,8 @@ class CachePrimaryAdapterNATS:
         self, req: cache_pb2.SetIfAbsentRequest
     ) -> cache_pb2.SetIfAbsentResponse:
         wrote = self._adapter.set_if_absent(req.key, _pb_to_cached_data(req.value))
+        if wrote:
+            self._emit_set(req.key, _pb_to_cached_data(req.value))
         return cache_pb2.SetIfAbsentResponse(value=wrote)
 
     async def _handle_delete(self, request: Request) -> None:
@@ -308,6 +375,7 @@ class CachePrimaryAdapterNATS:
 
     def _call_delete(self, req: cache_pb2.DeleteRequest) -> cache_pb2.DeleteResponse:
         self._adapter.delete(req.key)
+        self._emit(CacheDeleted(key=req.key, tier=self._tier_name))
         return cache_pb2.DeleteResponse()
 
     async def _handle_exists(self, request: Request) -> None:
@@ -321,3 +389,11 @@ class CachePrimaryAdapterNATS:
     def _call_exists(self, req: cache_pb2.ExistsRequest) -> cache_pb2.ExistsResponse:
         exists = self._adapter.exists(req.key)
         return cache_pb2.ExistsResponse(value=exists)
+
+    async def _handle_describe(self, request: Request) -> None:
+        await self._handle(
+            request,
+            cache_pb2.DescribeRequest,
+            cache_pb2.DescribeResponse,
+            lambda _: cache_pb2.DescribeResponse(tiers=self._tiers),
+        )

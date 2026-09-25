@@ -108,3 +108,20 @@ a timeout can hide a completed operation. Reconcile its outcome before retrying.
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
 The latter uses a local `nats-server` executable without Docker.
+
+The engine exposes its cold-tier adapter under the cache v1 subject when NATS is
+configured. A cold tier already backed by a NATS client is not re-exposed. The SDK uses an authenticated `describe` endpoint on the canonical cache
+subject to discover tier order. Cache decorators remain process-local.
+
+`adapter: keyvalue` is a lazy adapter to the engine KV domain, with `cache_prefix`
+configuration matching object-storage cache configuration. It uses KV atomic
+set-if-not-exists and maps missing keys to CacheNotFoundError. This is distinct
+from the cache's direct Redis adapter. The loader includes required KV/storage
+services transitively. In NATS mode those dependencies are network facades.
+Every configured local tier also serves `abi.svc.cache.v1.tier.<index>.*`; cold's
+original endpoint remains compatible. `DescribeRequest`/`DescribeResponse` add
+tier discovery without changing existing request shapes.
+
+NATS mode rejects mixed local/remote tier configurations. Mutation audit events
+are emitted by each owning primary, including for SDK callers; remote facades
+must not emit a second copy. Endpoint helpers take an injected event publisher.

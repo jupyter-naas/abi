@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-marketplace"
-version = "3.51.0"
+version = "3.52.0"
 authors = [{ name = "Grace Lambert", email = "maxime@naas.ai" },{ name = "Alice Dupont", email = "florent@naas.ai" }, { name = "Emma Petit", email = "jeremy@naas.ai" }]
 description = "Add your description here"
 readme = "README.md"
@@ -19,6 +19,7 @@ Homepage = "https://github.com/jupyter-naas/abi"
 Repository = "https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-marketplace"
 
 [tool.uv.sources]
+naas-abi-proto = {path = "../naas-abi-proto", editable = true}
 naas-abi-core = { path = "../naas-abi-core", editable = true }
 
 [tool.mypy]

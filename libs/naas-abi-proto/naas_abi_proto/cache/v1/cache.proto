@@ -1,0 +1,109 @@
+// NATS-RPC contract for the cache kernel domain.
+// Mirrors naas_abi_core/services/cache/CachePort.py::ICacheAdapter 1:1 -- the
+// raw 5-method adapter surface each cache tier wraps, not the multi-tier
+// CacheService/SingleTierCacheService orchestration built on top of it. See
+// docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+//
+// Scope of this v1 contract, deliberately: tiering (hot/cold) and event
+// publishing (CacheSet/CacheDeleted/CacheError) are entirely client-side
+// concerns that live in SingleTierCacheService/CacheService, run wherever a
+// tier's config is loaded -- including on the machine holding the NATS
+// client adapter for this contract -- and never touch ICacheAdapter itself.
+// There is nothing tier- or event-aware to put on the wire; this contract
+// only needs to mirror the raw adapter's 5 methods.
+//
+// Subjects (see "Protobuf contract shapes" in the RFC):
+//   abi.svc.cache.v1.get
+//   abi.svc.cache.v1.set
+//   abi.svc.cache.v1.set_if_absent
+//   abi.svc.cache.v1.delete
+//   abi.svc.cache.v1.exists
+syntax = "proto3";
+
+package abi.cache.v1;
+
+import "naas_abi_proto/common/v1/common.proto";
+
+// Mirrors naas_abi_core.services.cache.CachePort.DataType 1:1.
+enum DataType {
+  DATA_TYPE_UNSPECIFIED = 0;
+  DATA_TYPE_TEXT = 1;
+  DATA_TYPE_JSON = 2;
+  DATA_TYPE_BINARY = 3;
+  DATA_TYPE_PICKLE = 4;
+}
+
+// Mirrors naas_abi_core.services.cache.CachePort.CachedData 1:1.
+//
+// `data` is always a plain string by the time it reaches ICacheAdapter --
+// binary/pickle payloads are base64-encoded into a str by CacheService
+// before ever calling the adapter (see CacheService.set_binary/set_pickle)
+// -- so this is a proto `string`, never `bytes`/`Struct`/`Any`. `created_at`
+// stays a plain `string` too: the Python field is typed `str` (an
+// ISO-8601-formatted value), not `datetime`, so it is never converted to
+// `google.protobuf.Timestamp`.
+message CachedData {
+  string key = 1;
+  string data = 2;
+  DataType data_type = 3;
+  string created_at = 4;
+}
+
+message GetRequest {
+  abi.common.v1.CallContext context = 1;
+  string key = 2;
+}
+message GetResponse {
+  oneof result {
+    CachedData value = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+message SetRequest {
+  abi.common.v1.CallContext context = 1;
+  string key = 2;
+  CachedData value = 3;
+}
+message SetResponse {
+  // Empty on success -- the error, if any, is the whole signal.
+  optional abi.common.v1.CallError error = 1;
+}
+
+message SetIfAbsentRequest {
+  abi.common.v1.CallContext context = 1;
+  string key = 2;
+  CachedData value = 3;
+}
+message SetIfAbsentResponse {
+  oneof result {
+    bool value = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+message DeleteRequest {
+  abi.common.v1.CallContext context = 1;
+  string key = 2;
+}
+message DeleteResponse {
+  optional abi.common.v1.CallError error = 1;
+}
+
+message ExistsRequest {
+  abi.common.v1.CallContext context = 1;
+  string key = 2;
+}
+message ExistsResponse {
+  oneof result {
+    bool value = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// Ordered tier metadata for SDK service facades. No cached values are exposed.
+message DescribeRequest { abi.common.v1.CallContext context = 1; }
+message DescribeResponse {
+  optional abi.common.v1.CallError error = 1;
+  repeated string tiers = 2;
+}

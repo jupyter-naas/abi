@@ -2650,7 +2650,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-cli"
-version = "2.24.1"
+version = "2.25.0"
 source = { editable = "." }
 dependencies = [
     { name = "naas-abi" },
@@ -2683,7 +2683,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "2.37.0"
+version = "2.38.0"
 source = { editable = "../naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -2764,6 +2764,8 @@ requires-dist = [
     { name = "naas-abi-core", extras = ["redis"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["sqlite-vec"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["ssh"], marker = "extra == 'all'" },
+    { name = "naas-abi-proto", marker = "extra == 'nats'", editable = "../naas-abi-proto" },
+    { name = "naas-abi-sdk", extras = ["models"], marker = "extra == 'nats'", editable = "../naas-abi-sdk" },
     { name = "nats-py", marker = "extra == 'nats'", specifier = ">=2.16.0" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "pandas-stubs", specifier = ">=2.3.2.250926" },
@@ -2771,7 +2773,6 @@ requires-dist = [
     { name = "pika", marker = "extra == 'rabbitmq'" },
     { name = "pillow", specifier = ">=12.0.0" },
     { name = "pip", specifier = ">=25.1.1" },
-    { name = "protobuf", marker = "extra == 'nats'", specifier = ">=6.33.5" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.0.0" },
     { name = "pydantic", specifier = ">=2.11.5" },
     { name = "pydash", specifier = ">=8.0.5" },
@@ -2807,7 +2808,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "3.51.0"
+version = "3.52.0"
 source = { editable = "../naas-abi-marketplace" }
 dependencies = [
     { name = "ijson" },

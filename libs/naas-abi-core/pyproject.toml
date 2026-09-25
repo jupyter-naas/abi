@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-core"
-version = "2.37.0"
+version = "2.38.0"
 description = "Abi framework allowing you to build your AI system."
 authors = [{ name = "Grace Lambert", email = "maxime@naas.ai" },{ name = "Alice Dupont", email = "florent@naas.ai" }, { name = "Emma Petit", email = "jeremy@naas.ai" }]
 requires-python = ">=3.11,<4"
@@ -92,7 +92,8 @@ rabbitmq = [
 nats = [
     "nats-py>=2.16.0",
     "pyjwt>=2.11.0",
-    "protobuf>=6.33.5",
+    "naas-abi-proto>=0.1.0,<0.2",
+    "naas-abi-sdk[models]>=0.1.0,<0.2",
 ]
 microsoft = [
     "msal>=1.37.0",
@@ -172,3 +173,7 @@ ignore_errors = true
 markers = [
     "integration: marks tests as integration tests (may require external services)",
 ]
+
+[tool.uv.sources]
+naas-abi-sdk = {path = "../naas-abi-sdk", editable = true}
+naas-abi-proto = {path = "../naas-abi-proto", editable = true}

@@ -80,3 +80,24 @@ Covers registration, provider pinning, fallback, off-catalog routing, defaults, 
 - **Catalog** model (preferred for stable IDs): call `register(canonical_id, model)` at module load.
 - **Off-catalog** model (provider knows how to build it on demand): call `register_chat_provider(provider, factory)` (or `register_embedding_provider`). The factory receives the canonical/model ID string and returns the live instance.
 - Always call `validate_defaults()` at startup if you set defaults via `InMemory(default_chat_model=..., default_embedding_model=...)`.
+
+## Remote registry and inference
+
+`adapters/primary/model_registry_nats.py` wraps the owning IModelRegistry and
+executes LangChain inference. `adapters/secondary/model_registry_client.py`
+implements registry lookup over NATS, restores core model wrappers, and forwards
+only bootstrap registration/validation to its local owner. `list_registered_models`
+returns `(canonical_id, model)` entries for complete catalog publication.
+EngineNATSLoader exposes the primary; EngineNATSDependencies injects the client.
+Never expose that client as a primary or route registration through inference RPCs.
+
+Contracts: `naas-abi-proto/naas_abi_proto/model_registry/v1/model_registry.proto`.
+SDK optional model codec/proxies stay core-free; core's NATS extra installs them.
+Tests: `uv run pytest examples/standalone_module/model_integration_test.py -q`
+from repository root, with native `nats-server`. Run `make demo-sdk` for the
+separate-process, wheel-installed model example. Defaults and limitations are
+in `docs/adr/20260924_remote-model-registry.md`.
+
+Independent requests use a queue group; stream/transfer IDs encode an owner.
+Never randomly distribute reads of an existing stream across replicas. See
+`20260924_nats-review-reliability.md` for routing and output persistence decisions.
