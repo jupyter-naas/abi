@@ -1,0 +1,421 @@
+# Static security gates: secrets, dependencies, SAST, IaC, containers, CI config.
+#
+# Every scanner writes SARIF, which is uploaded to the Security tab (code
+# scanning) and then passed to `scripts/security/sarif_gate.py`. The gate fails
+# only on findings that are NOT in `.github/security/baselines/<tool>.json`, so
+# existing debt is tracked while any new hole blocks the build.
+# See docs/adr/20260925_security-ci-pipeline.md.
+#
+# Runs on the org's self-hosted runner. Rollout: while this is being proven it
+# only triggers on the `ci/security-pipeline` branch. To enable it for
+# everyone, replace the `on:` block with the commented one below.
+#
+# on:
+#   pull_request:
+#     branches: [main]
+#   push:
+#     branches: [main]
+#   schedule:
+#     - cron: "23 2 * * *"   # daily: new CVEs land against unchanged code
+#   workflow_dispatch:
+#
+# SECURITY: before adding `pull_request`, make sure fork PRs cannot reach the
+# self-hosted runner (every job below keeps a same-repository guard; also set
+# "Require approval for all outside collaborators" in Actions settings).
+
+name: Security
+
+on:
+  push:
+    branches: [ci/security-pipeline]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BASELINES: .github/security/baselines
+  UV_NO_PROGRESS: "1"
+
+jobs:
+  # Every job carries the same `if:` guard so fork PRs never run on the
+  # self-hosted runner once `pull_request` is enabled.
+  gate-selftest:
+    name: Gate self-test
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - name: Unit-test the SARIF gate
+        run: uvx --with pytest pytest scripts/security/sarif_gate_test.py -q -o addopts="" -c /dev/null --rootdir .
+
+  secrets:
+    name: Secrets (gitleaks + trufflehog)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - name: Install gitleaks and trufflehog
+        run: |
+          scripts/security/install_tool.sh gitleaks \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+          scripts/security/install_tool.sh trufflehog \
+            https://github.com/trufflesecurity/trufflehog/releases/download/v3.97.9/trufflehog_3.97.9_linux_amd64.tar.gz \
+            40377e6572495412fb9ba0bc21c9401f73b72f1d2afd11b9931bc4a5ed622866
+      - name: gitleaks (full history, redacted)
+        run: gitleaks git --redact --no-banner --exit-code 0 --report-format sarif --report-path gitleaks.sarif .
+      - name: Upload gitleaks SARIF
+        if: always() && hashFiles('gitleaks.sarif') != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: gitleaks.sarif
+          category: gitleaks
+      - name: Gate gitleaks
+        run: uv run --no-project scripts/security/sarif_gate.py gitleaks.sarif --tool gitleaks --min-severity low --baseline "$BASELINES/gitleaks.json"
+      - name: trufflehog (verified live credentials only)
+        # A *verified* secret is live and must be rotated, never baselined.
+        # Output stays off the (public) log: only the count is printed.
+        run: |
+          set +e
+          trufflehog git file://. --results=verified --json --no-update > trufflehog.json 2>/dev/null
+          set -e
+          count=$(grep -c '"Verified":true' trufflehog.json || true)
+          echo "trufflehog: $count verified live credential(s) in history"
+          if [ "$count" -gt 0 ]; then
+            echo "::error title=Live credential in git history::$count verified secret(s). Rotate them now; run trufflehog locally for locations."
+            exit 1
+          fi
+
+  dependencies:
+    name: Dependencies (osv-scanner)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - name: Install osv-scanner
+        run: |
+          scripts/security/install_tool.sh osv-scanner \
+            https://github.com/google/osv-scanner/releases/download/v2.6.0/osv-scanner_linux_amd64 \
+            ca69b3d3cd08f889a49dc0a383122f71cc528b83803671df5fd874d97485b108
+      - name: Scan every lockfile (uv.lock, pnpm-lock.yaml, package-lock.json)
+        run: |
+          set +e
+          osv-scanner scan source --recursive --format sarif --output-file osv.sarif .
+          rc=$?
+          set -e
+          # 0 = clean, 1 = vulnerabilities found (the gate decides), else a real error.
+          [ "$rc" -le 1 ] || exit "$rc"
+      - name: Upload osv-scanner SARIF
+        if: always() && hashFiles('osv.sarif') != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: osv.sarif
+          category: osv-scanner
+      - name: Gate osv-scanner
+        run: uv run --no-project scripts/security/sarif_gate.py osv.sarif --tool osv-scanner --min-severity high --baseline "$BASELINES/osv-scanner.json"
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript, actions]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+          config: |
+            paths-ignore:
+              - "**/node_modules/**"
+              - "**/.venv/**"
+              - "docs/site/**"
+      - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          category: /language:${{ matrix.language }}
+          output: codeql-results
+      - name: Gate CodeQL
+        run: uv run --no-project scripts/security/sarif_gate.py codeql-results/*.sarif --tool "codeql-${{ matrix.language }}" --min-severity high --baseline "$BASELINES/codeql-${{ matrix.language }}.json"
+
+  semgrep:
+    name: Semgrep
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - name: Semgrep (community rules, no account)
+        run: |
+          uvx semgrep@1.178.0 scan --metrics off --quiet --sarif --output semgrep.sarif \
+            --config p/security-audit \
+            --config p/owasp-top-ten \
+            --config p/python \
+            --config p/typescript \
+            --config p/react \
+            --config p/nextjs \
+            --config p/jwt \
+            --config p/secrets \
+            --config p/sql-injection \
+            --config p/command-injection \
+            --config p/dockerfile \
+            --config p/github-actions \
+            --config .github/security/semgrep \
+            .
+      - name: Upload Semgrep SARIF
+        if: always() && hashFiles('semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+      - name: Gate Semgrep
+        run: uv run --no-project scripts/security/sarif_gate.py semgrep.sarif --tool semgrep --min-severity high --baseline "$BASELINES/semgrep.json"
+
+  bandit:
+    name: Bandit (all packages, all severities)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - name: Bandit
+        # `make check` runs bandit at medium+ on core only; this covers
+        # marketplace too and records low findings in the Security tab.
+        run: uvx --from 'bandit[sarif,toml]==1.9.4' bandit -c bandit.yaml -r libs --format sarif --output bandit.sarif --exit-zero --quiet
+      - name: Upload Bandit SARIF
+        if: always() && hashFiles('bandit.sarif') != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: bandit.sarif
+          category: bandit
+      - name: Gate Bandit
+        run: uv run --no-project scripts/security/sarif_gate.py bandit.sarif --tool bandit --min-severity high --baseline "$BASELINES/bandit.json"
+
+  iac:
+    name: IaC & repo (trivy fs + hadolint)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.74.0
+          cache: true
+      - name: Install hadolint
+        run: |
+          scripts/security/install_tool.sh hadolint \
+            https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-linux-x86_64 \
+            c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507
+      - name: trivy fs (lockfile CVEs, Dockerfile/compose misconfig, secrets)
+        run: trivy fs --quiet --scanners vuln,misconfig,secret --skip-dirs '**/node_modules' --format sarif --output trivy-fs.sarif .
+      - name: hadolint (Dockerfiles)
+        run: |
+          git ls-files -z '*Dockerfile*' ':!:libs/naas-abi-cli/naas_abi_cli/cli/new/templates/**' \
+            | xargs -0 hadolint --no-fail --format sarif > hadolint.sarif
+      - name: Upload trivy fs SARIF
+        if: always() && hashFiles('trivy-fs.sarif') != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+      - name: Upload hadolint SARIF
+        if: always() && hashFiles('hadolint.sarif') != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: hadolint.sarif
+          category: hadolint
+      - name: Gate trivy fs
+        run: uv run --no-project scripts/security/sarif_gate.py trivy-fs.sarif --tool trivy-fs --min-severity high --baseline "$BASELINES/trivy-fs.json"
+      - name: Gate hadolint
+        run: uv run --no-project scripts/security/sarif_gate.py hadolint.sarif --tool hadolint --min-severity high --baseline "$BASELINES/hadolint.json"
+
+  containers:
+    name: Container image (${{ matrix.image.name }})
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: abi
+            context: .
+            dockerfile: docker/images/Dockerfile.linux.x86_64
+          - name: nexus-web
+            context: libs/naas-abi/naas_abi/apps/nexus
+            dockerfile: libs/naas-abi/naas_abi/apps/nexus/Dockerfile.release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.74.0
+          cache: true
+      - name: Build image
+        env:
+          IMAGE: security-scan/${{ matrix.image.name }}:${{ github.sha }}
+          CONTEXT: ${{ matrix.image.context }}
+          DOCKERFILE: ${{ matrix.image.dockerfile }}
+        run: DOCKER_BUILDKIT=1 docker build --platform linux/amd64 -t "$IMAGE" -f "$DOCKERFILE" "$CONTEXT"
+      - name: trivy image (fixable HIGH/CRITICAL)
+        env:
+          IMAGE: security-scan/${{ matrix.image.name }}:${{ github.sha }}
+        run: |
+          trivy image --quiet --scanners vuln,secret --ignore-unfixed --severity HIGH,CRITICAL \
+            --format sarif --output image.sarif "$IMAGE"
+          trivy image --quiet --format cyclonedx --output sbom.cdx.json "$IMAGE"
+      - name: Upload image SARIF
+        if: always() && hashFiles('image.sarif') != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: image.sarif
+          category: trivy-image-${{ matrix.image.name }}
+      - name: Upload SBOM
+        if: always() && hashFiles('sbom.cdx.json') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom-${{ matrix.image.name }}
+          path: sbom.cdx.json
+          retention-days: 30
+      - name: Gate image
+        run: uv run --no-project scripts/security/sarif_gate.py image.sarif --tool "trivy-image-${{ matrix.image.name }}" --min-severity high --baseline "$BASELINES/trivy-image-${{ matrix.image.name }}.json"
+      - name: Remove image
+        if: always()
+        env:
+          IMAGE: security-scan/${{ matrix.image.name }}:${{ github.sha }}
+        run: docker image rm -f "$IMAGE" || true
+
+  workflows:
+    name: CI config (zizmor + actionlint)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - name: zizmor (GitHub Actions security)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uvx zizmor@1.30.1 --format sarif .github/workflows > zizmor.sarif || true
+      - name: Upload zizmor SARIF
+        if: always() && hashFiles('zizmor.sarif') != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: zizmor.sarif
+          category: zizmor
+      - name: Gate zizmor
+        run: uv run --no-project scripts/security/sarif_gate.py zizmor.sarif --tool zizmor --min-severity high --baseline "$BASELINES/zizmor.json"
+      - name: actionlint (report only)
+        run: |
+          scripts/security/install_tool.sh actionlint \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          "${RUNNER_TEMP}/security-bin/actionlint" -shellcheck= || echo "::warning::actionlint reported issues (not blocking)"
+
+  scorecard:
+    name: OpenSSF Scorecard
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: scorecard.sarif
+          results_format: sarif
+          # Publishing to the public Scorecard API requires the default branch.
+          publish_results: false
+      - name: Upload Scorecard SARIF
+        if: always() && hashFiles('scorecard.sarif') != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: scorecard.sarif
+          category: scorecard
