@@ -16,7 +16,7 @@ from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
-from naas_abi_core.engine.nats_transfer import TransferHost
+from naas_abi_core.engine.nats_transfer import TransferHost, stream_thread
 from naas_abi_core.models.Model import ChatModel, EmbeddingModel
 from naas_abi_core.services.model_registry.ModelRegistryPort import (
     DefaultModelNotResolvedError,
@@ -78,6 +78,16 @@ class ModelRegistryNATS:
         self.streams: dict[str, _Stream] = {}
         self.max_payload = 512 * 1024
         self._active = 0
+        options = {
+            "max_upload_bytes": 16 * 1024 * 1024,
+            "max_buffered_upload_bytes": 64 * 1024 * 1024,
+            **(transfer_options or {}),
+        }
+        if (
+            options["max_upload_bytes"] is None
+            or options["max_buffered_upload_bytes"] is None
+        ):
+            raise ValueError("Model upload budgets must be finite")
         self.transfer = TransferHost(
             "abi.svc.model_registry.v1.transfer",
             secret,
@@ -85,7 +95,7 @@ class ModelRegistryNATS:
             operations=("chat", "stream", "embed"),
             total_seconds=deadline,
             error_mapper=self._transfer_error,
-            **(transfer_options or {}),
+            **options,
         )
         self._reaper: asyncio.Task | None = None
 
@@ -381,11 +391,14 @@ class ModelRegistryNATS:
             return "INVALID_ARGUMENT", "Invalid model request or provider options"
         if isinstance(exc, NotImplementedError):
             return "NOT_SUPPORTED", "Provider does not support this operation"
+        logger.opt(exception=exc).error("Model transfer failed")
         return "MODEL_ERROR", "Remote model inference failed"
 
     async def _transfer_frames(self, operation, metadata, source):
         request_type = pb.EmbedRequest if operation == "embed" else pb.ChatRequest
-        request = request_type.FromString(await asyncio.to_thread(source.read))
+        request = request_type.FromString(
+            await stream_thread(source.read) if source else b""
+        )
         if operation != "stream":
             response = await self._execute(operation, request, "")
             yield response.SerializeToString()

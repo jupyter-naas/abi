@@ -395,7 +395,12 @@ def test_streaming_configuration_is_optional_and_validated():
 
     config = NATSConfiguration(jwt_secret="test")
     assert config.models.generation_timeout_seconds is None
-    assert config.models.streaming.max_upload_bytes is None
+    assert config.models.streaming.max_upload_bytes == 16 * 1024 * 1024
+    assert config.models.streaming.max_buffered_upload_bytes == 64 * 1024 * 1024
+    with pytest.raises(ValidationError):
+        NATSConfiguration(
+            jwt_secret="test", models={"streaming": {"max_upload_bytes": None}}
+        )
     assert config.object_storage_streaming.chunk_bytes == 65536
     for values in (
         {"idle_seconds": 0},

@@ -43,7 +43,7 @@ class TransferSession:
     operation: str
     metadata: bytes
     chunk_bytes: int
-    source: Any = field(default_factory=tempfile.TemporaryFile)
+    source: Any = None
     queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=2))
     task: Any = None
     error: Any = None
@@ -84,6 +84,8 @@ class TransferHost:
         max_sessions=32,
         max_upload_bytes=None,
         total_seconds=None,
+        max_buffered_upload_bytes=None,
+        close_timeout_seconds=1.0,
         error_mapper=None,
     ):
         if not math.isfinite(idle_seconds) or idle_seconds <= 0:
@@ -96,8 +98,15 @@ class TransferHost:
             chunk_bytes < 1024
             or max_sessions < 1
             or (max_upload_bytes is not None and max_upload_bytes < 1)
+            or (max_buffered_upload_bytes is not None and max_buffered_upload_bytes < 1)
         ):
             raise ValueError("Invalid transfer capacity")
+        if close_timeout_seconds <= 0 or not math.isfinite(close_timeout_seconds):
+            raise ValueError("Close timeout must be positive and finite")
+        self.close_timeout_seconds = close_timeout_seconds
+        self.max_buffered_upload_bytes = max_buffered_upload_bytes
+        self.buffered_upload_bytes = 0
+        self.retiring: set[asyncio.Task] = set()
         self.prefix, self.secret, self.handler = prefix, secret, handler
         self.owner = uuid4().hex
         self.operations, self.chunk_bytes = set(operations), chunk_bytes
@@ -146,8 +155,11 @@ class TransferHost:
             await asyncio.gather(self.reaper, return_exceptions=True)
         for task in self.tasks:
             task.cancel()
-        await asyncio.gather(*self.tasks, return_exceptions=True)
-        await asyncio.gather(*(self._close(key) for key in list(self.sessions)))
+        for key in list(self.sessions):
+            self._begin_close(key)
+        pending = self.tasks | self.retiring
+        if pending:
+            await asyncio.wait(pending, timeout=self.close_timeout_seconds)
 
     async def _expire(self):
         while True:
@@ -158,18 +170,43 @@ class TransferHost:
                 for key, value in self.sessions.items()
                 if not value.lock.locked() and now - value.touched > self.idle_seconds
             ]
-            await asyncio.gather(*(self._close(key) for key in expired))
+            for key in expired:
+                self._begin_close(key)
+
+    def _begin_close(self, key):
+        session = self.sessions.pop(key, None)
+        if session is None:
+            return None
+        task = asyncio.create_task(self._retire(session))
+        self.retiring.add(task)
+        task.add_done_callback(self.retiring.discard)
+        task.add_done_callback(self._observe_cleanup)
+        return task
+
+    @staticmethod
+    def _observe_cleanup(task):
+        if not task.cancelled() and task.exception():
+            logger.opt(exception=task.exception()).error("Transfer cleanup failed")
+
+    async def _retire(self, session):
+        # Keep the file alive until every synchronous user has stopped. A blocked
+        # backend must not hold the expiry loop or the public session slot.
+        async with session.lock:
+            try:
+                if session.task:
+                    session.task.cancel()
+                    await asyncio.gather(session.task, return_exceptions=True)
+            finally:
+                if session.source is not None:
+                    session.source.close()
+                self.buffered_upload_bytes -= session.uploaded
 
     async def _close(self, key):
-        session = self.sessions.get(key)
-        if session is None:
-            return
-        async with session.lock:
-            if session.task:
-                session.task.cancel()
-                await asyncio.gather(session.task, return_exceptions=True)
-            session.source.close()
-            self.sessions.pop(key, None)
+        task = self._begin_close(key)
+        if task:
+            done, _ = await asyncio.wait({task}, timeout=self.close_timeout_seconds)
+            if not done:
+                logger.warning("Transfer cleanup deferred until backend returns")
 
     async def _dispatch(self, operation, msg):
         if operation != "open":
@@ -211,6 +248,7 @@ class TransferHost:
                 return mapped
         if isinstance(exc, (ValueError, TypeError, DecodeError)):
             return "INVALID_ARGUMENT", "Invalid transfer or operation payload"
+        logger.opt(exception=exc).error("Unexpected transfer failure")
         return "INTERNAL", "Streaming operation failed"
 
     async def _handle(self, operation, msg):
@@ -251,7 +289,8 @@ class TransferHost:
             else:
                 await asyncio.wait_for(consume(), self.total_seconds)
         except Exception as exc:  # noqa: BLE001 - delivered on the next read
-            session.error = exc
+            # Record failures even if the caller has abandoned the transfer.
+            session.error = TransferError(*self._error(exc))
 
     async def _execute(self, operation, request, caller):
         now = asyncio.get_running_loop().time()
@@ -261,7 +300,10 @@ class TransferHost:
                 or len(request.metadata) > 16 * 1024
             ):
                 raise ValueError("Unsupported operation or oversized metadata")
-            if len(self.sessions) >= self.max_sessions:
+            if (
+                len(self.sessions) >= self.max_sessions
+                or len(self.retiring) >= self.max_sessions
+            ):
                 raise TransferError(
                     "RESOURCE_EXHAUSTED", "Transfer session capacity reached"
                 )
@@ -305,8 +347,20 @@ class TransferHost:
                     raise TransferError(
                         "PAYLOAD_TOO_LARGE", "Configured total upload limit exceeded"
                     )
-                await stream_thread(session.source.write, request.data)
+                if (
+                    self.max_buffered_upload_bytes is not None
+                    and self.buffered_upload_bytes + len(request.data)
+                    > self.max_buffered_upload_bytes
+                ):
+                    raise TransferError(
+                        "RESOURCE_EXHAUSTED", "Total upload budget exhausted"
+                    )
+                if session.source is None:
+                    session.source = tempfile.TemporaryFile()
+                # Reserve before yielding, including while a write is in flight.
+                self.buffered_upload_bytes += len(request.data)
                 session.uploaded += len(request.data)
+                await stream_thread(session.source.write, request.data)
                 session.upload_sequence += 1
                 return pb.WriteResponse()
             if operation == "start":
@@ -314,7 +368,8 @@ class TransferHost:
                     raise TransferError(
                         "CONFLICT", "Transfer already started; do not replay"
                     )
-                session.source.seek(0)
+                if session.source is not None:
+                    session.source.seek(0)
                 session.task = asyncio.create_task(self._produce(session))
                 return pb.StartResponse()
             if not session.task or request.sequence != session.read_sequence:

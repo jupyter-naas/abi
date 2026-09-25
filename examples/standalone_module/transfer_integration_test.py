@@ -223,6 +223,10 @@ def test_transfer_limits_reject_before_backend_mutation(broker, tmp_path):  # no
                 storage = ObjectFacade(client.object_storage)
                 with pytest.raises(RPCError, match="PAYLOAD_TOO_LARGE"):
                     await storage.put_object("files", "existing", b"too large")
+                with pytest.raises(RPCError, match="PAYLOAD_TOO_LARGE"):
+                    await storage.put_object_stream(
+                        "files", "existing", io.BytesIO(b"too large")
+                    )
                 assert owner.get_object("files", "existing") == b"original"
                 assert not primary._transfer.sessions
                 prefix = "abi.svc.object_storage.v1.transfer"
@@ -332,6 +336,62 @@ def test_two_engine_owners_execute_once_and_route_transfer_sessions(broker, tmp_
         finally:
             for primary in models + storage:
                 await primary.stop()
+            await nc.close()
+
+    asyncio.run(scenario())
+
+
+def test_object_entry_errors_and_legacy_owner_fallback(broker, tmp_path):  # noqa: F811
+    from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
+    from naas_abi_sdk.services.errors import ObjectNotFound
+
+    async def scenario():
+        owner = ObjectStorageSecondaryAdapterFS(str(tmp_path))
+        nc = await nats.connect(broker[0])
+        primary = ObjectStoragePrimaryAdapterNATS(owner, SECRET)
+        await primary.start(nc)
+        sync_client = ObjectStorageSecondaryAdapterNATSClient(broker[0], SECRET, "sync")
+
+        def missing_sync():
+            with (
+                pytest.raises(Exceptions.ObjectNotFound),
+                sync_client.get_object_stream("files", "missing"),
+            ):
+                pytest.fail("Missing object entered the context body")
+
+        try:
+            async with ABIClient(
+                broker[0], issue_service_token("sdk", SECRET)
+            ) as client:
+                storage = ObjectFacade(client.object_storage)
+                with pytest.raises(ObjectNotFound):
+                    async with storage.get_object_stream("files", "missing"):
+                        pytest.fail("Missing object entered the context body")
+                await asyncio.to_thread(missing_sync)
+                # Model an older owner that only publishes unary endpoints.
+                await primary._transfer.stop()
+                await nc.flush()
+                await storage.put_object("files", "small", b"small")
+                assert await storage.get_object("files", "small") == b"small"
+                await storage.put_object_stream(
+                    "files", "stream", io.BytesIO(b"stream")
+                )
+                assert (
+                    await asyncio.to_thread(sync_client.get_object, "files", "stream")
+                    == b"stream"
+                )
+                await asyncio.to_thread(
+                    sync_client.put_object_stream, "files", "sync", io.BytesIO(b"sync")
+                )
+                assert await storage.get_object("files", "sync") == b"sync"
+                with pytest.raises(ValueError, match="upgrade required"):
+                    await storage.put_object_stream(
+                        "files", "too-large", io.BytesIO(b"x" * 65536)
+                    )
+                assert "too-large" not in owner.list_objects("files")
+        finally:
+            await asyncio.to_thread(sync_client.close)
+            await primary.stop()
             await nc.close()
 
     asyncio.run(scenario())

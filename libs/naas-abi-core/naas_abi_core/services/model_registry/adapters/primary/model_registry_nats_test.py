@@ -68,3 +68,13 @@ def test_provider_errors_are_sanitized_and_mapped():
             assert "private provider details" not in response.error.message
 
     asyncio.run(scenario())
+
+
+def test_model_upload_budgets_apply_without_engine_configuration():
+    import pytest
+
+    primary = ModelRegistryNATS(Mock(), "test")
+    assert primary.transfer.max_upload_bytes == 16 * 1024 * 1024
+    assert primary.transfer.max_buffered_upload_bytes == 64 * 1024 * 1024
+    with pytest.raises(ValueError, match="finite"):
+        ModelRegistryNATS(Mock(), "test", transfer_options={"max_upload_bytes": None})

@@ -13,7 +13,6 @@ from contextlib import contextmanager
 from queue import Queue
 from typing import BinaryIO
 
-import pytest
 from naas_abi_core.engine.nats_auth import issue_service_token
 from naas_abi_core.proto.object_storage.v1 import object_storage_pb2
 from naas_abi_core.services.object_storage.adapters.primary.object_storage__primary_adapter__NATS import (
@@ -97,7 +96,9 @@ def _valid_token() -> str:
 
 
 def _get_object_request(prefix: str = "p", key: str = "k") -> bytes:
-    return object_storage_pb2.GetObjectRequest(prefix=prefix, key=key).SerializeToString()
+    return object_storage_pb2.GetObjectRequest(
+        prefix=prefix, key=key
+    ).SerializeToString()
 
 
 # ---------------------------------------------------------------------------
@@ -262,13 +263,10 @@ def test_stop_without_start_is_a_noop():
     asyncio.run(adapter.stop())  # must not raise
 
 
-@pytest.mark.parametrize("method_name", ["get_object_stream", "put_object_stream"])
-def test_stub_adapter_streaming_methods_are_not_wired_to_any_endpoint(method_name):
-    # Defence-in-depth check on the test double itself: the primary adapter
-    # never registers an endpoint for either streaming method (see the
-    # module docstring), so there is no handler exercising them at all.
+def test_streaming_methods_are_exposed_via_transfer_contract():
     adapter = ObjectStoragePrimaryAdapterNATS(_StubAdapter(), SECRET)
-    assert not hasattr(adapter, f"_handle_{method_name}")
+    assert adapter._transfer.operations == {"get", "put"}
+    assert adapter._transfer.handler == adapter._transfer_frames
 
 
 def test_domain_call_runs_off_the_event_loop_so_the_loop_stays_responsive():

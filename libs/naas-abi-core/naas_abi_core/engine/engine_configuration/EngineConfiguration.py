@@ -242,12 +242,17 @@ class NATSStreamingConfiguration(BaseModel):
     max_upload_bytes: int | None = Field(default=None, gt=0)
 
 
+class NATSModelStreamingConfiguration(NATSStreamingConfiguration):
+    max_upload_bytes: int = Field(default=16 * 1024 * 1024, gt=0)
+    max_buffered_upload_bytes: int = Field(default=64 * 1024 * 1024, gt=0)
+
+
 class NATSModelConfiguration(BaseModel):
     generation_timeout_seconds: float | None = Field(
         default=None, gt=0, allow_inf_nan=False
     )
-    streaming: NATSStreamingConfiguration = Field(
-        default_factory=NATSStreamingConfiguration
+    streaming: NATSModelStreamingConfiguration = Field(
+        default_factory=NATSModelStreamingConfiguration
     )
 
 

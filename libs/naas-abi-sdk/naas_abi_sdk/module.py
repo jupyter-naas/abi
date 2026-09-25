@@ -252,6 +252,7 @@ async def run_module(
     token,
     configuration: ModuleConfiguration | None = None,
     timeout: float = 10.0,
+    agent_idle_timeout_seconds: float = 300.0,
     discovery: DiscoveryConfiguration | None = None,
     **connection_options,
 ) -> Any:
@@ -303,6 +304,7 @@ async def run_module(
                     registration,
                     module.engine.services.document,
                     module._agent_handlers,
+                    idle_timeout_seconds=agent_idle_timeout_seconds,
                 )
                 await agent_host.start()
             if registration:

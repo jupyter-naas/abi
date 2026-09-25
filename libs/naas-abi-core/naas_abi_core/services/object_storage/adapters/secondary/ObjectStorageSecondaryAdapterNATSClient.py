@@ -46,7 +46,8 @@ from naas_abi_core.services.object_storage.ObjectStoragePort import (
     ObjectMetaData,
 )
 from naas_abi_proto.transfer.v1 import transfer_pb2 as transfer_pb
-from naas_abi_sdk.transfer import transfer_subject
+from naas_abi_sdk.transfer import read_legacy_upload, transfer_subject
+from nats.errors import NoRespondersError
 
 
 def _pb_to_metadata(pb: object_storage_pb2.ObjectMetaData) -> ObjectMetaData:
@@ -152,7 +153,22 @@ class ObjectStorageSecondaryAdapterNATSClient(NatsRPCClient, IObjectStorageAdapt
 
     @contextmanager
     def get_object_stream(self, prefix: str, key: str) -> Iterator[BinaryIO]:
-        opened = self._open_transfer("get", prefix, key)
+        try:
+            opened = self._open_transfer("get", prefix, key)
+        except NoRespondersError:
+            request = object_storage_pb2.GetObjectRequest(
+                context=self._context(), prefix=prefix, key=key
+            )
+            response = self._call(
+                f"{SUBJECT_PREFIX}.get_object",
+                request,
+                object_storage_pb2.GetObjectResponse,
+            )
+            if response.HasField("error"):
+                _raise_for_error(response.error)
+            with io.BytesIO(response.content) as stream:
+                yield stream
+            return
         try:
             self._transfer_call(
                 "start",
@@ -160,15 +176,41 @@ class ObjectStorageSecondaryAdapterNATSClient(NatsRPCClient, IObjectStorageAdapt
                 transfer_pb.StartResponse,
             )
             with io.BufferedReader(_RemoteReader(self, opened.id)) as stream:
+                stream.peek(
+                    1
+                )  # Surface open/read errors before entering the caller body.
                 yield stream
         finally:
             self._close_transfer(opened.id)
 
     def put_object(self, prefix: str, key: str, content: bytes) -> None:
-        self.put_object_stream(prefix, key, io.BytesIO(content))
+        nc = self._run_coro(self._ensure_connection_async())
+        if len(content) <= min(64 * 1024, nc.max_payload // 2):
+            self._put_unary(prefix, key, content)
+        else:
+            self.put_object_stream(prefix, key, io.BytesIO(content))
+
+    def _put_unary(self, prefix, key, content):
+        request = object_storage_pb2.PutObjectRequest(
+            context=self._context(), prefix=prefix, key=key, content=content
+        )
+        response = self._call(
+            f"{SUBJECT_PREFIX}.put_object",
+            request,
+            object_storage_pb2.PutObjectResponse,
+        )
+        if response.HasField("error"):
+            _raise_for_error(response.error)
 
     def put_object_stream(self, prefix: str, key: str, stream: BinaryIO) -> None:
-        opened = self._open_transfer("put", prefix, key)
+        try:
+            opened = self._open_transfer("put", prefix, key)
+        except NoRespondersError:
+            nc = self._run_coro(self._ensure_connection_async())
+            limit = min(nc.max_payload, 8 * 1024 * 1024)
+            content = read_legacy_upload(stream, limit)
+            self._put_unary(prefix, key, content)
+            return
         try:
             sequence = 0
             while chunk := stream.read(opened.chunk_bytes):

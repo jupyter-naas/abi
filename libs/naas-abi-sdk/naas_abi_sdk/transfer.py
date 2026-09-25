@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from typing import BinaryIO
 
 from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
 
@@ -16,6 +17,20 @@ def transfer_subject(prefix: str, operation: str, transfer_id: str = "") -> str:
             raise ValueError("Invalid transfer owner")
         return f"{prefix}.{owner}.{operation}"
     return f"{prefix}.{operation}"
+
+
+def read_legacy_upload(stream: BinaryIO, limit: int) -> bytes:
+    """Bound compatibility buffering, including streams that return short reads."""
+    content = bytearray()
+    while True:
+        chunk = stream.read(min(64 * 1024, limit + 1 - len(content)))
+        if not chunk:
+            return bytes(content)
+        content.extend(chunk)
+        if len(content) > limit:
+            raise ValueError(
+                "Owner upgrade required for streamed uploads above the unary limit"
+            )
 
 
 class Transfer:
@@ -116,6 +131,14 @@ class AsyncObjectReader:
         self.iterator = transfer.fragments().__aiter__()
         self.buffer = bytearray()
         self.done = False
+
+    async def prime(self) -> None:
+        # Fetch one bounded fragment before exposing the stream to the caller.
+        try:
+            data, _ = await self.iterator.__anext__()
+            self.buffer.extend(data)
+        except StopAsyncIteration:
+            self.done = True
 
     async def read(self, size: int = -1) -> bytes:
         while not self.done and (size < 0 or len(self.buffer) < size):
