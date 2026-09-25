@@ -1,0 +1,72 @@
+# Project-specific Semgrep rules, loaded by `.github/workflows/security.yml`
+# next to the community rulesets. Add a rule here whenever a review or audit
+# finds a bug class that the generic rules miss, so it can never come back.
+rules:
+  - id: abi-cors-wildcard-with-credentials
+    message: >-
+      CORS allows every origin while sending credentials. Any site can then
+      make authenticated requests on behalf of a logged-in user. List the
+      allowed origins explicitly.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-942: Permissive Cross-domain Policy with Untrusted Domains"
+    pattern-either:
+      - pattern: $APP.add_middleware(CORSMiddleware, ..., allow_origins=["*"], ..., allow_credentials=True, ...)
+      - pattern: $APP.add_middleware(CORSMiddleware, ..., allow_credentials=True, ..., allow_origins=["*"], ...)
+      - pattern: $APP.add_middleware(CORSMiddleware, ..., allow_origin_regex=".*", ..., allow_credentials=True, ...)
+
+  - id: abi-jwt-decode-without-verification
+    message: >-
+      JWT decoded without verifying its signature or expiry. Anyone can forge
+      this token. Only disable verification to read claims of a token you
+      verify elsewhere, and say so in a comment with a nosemgrep marker.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-347: Improper Verification of Cryptographic Signature"
+    pattern-either:
+      - pattern: 'jwt.decode(..., options={..., "verify_signature": False, ...}, ...)'
+      - pattern: 'jwt.decode(..., options={..., "verify_exp": False, ...}, ...)'
+      - pattern: jwt.decode(..., verify=False, ...)
+
+  - id: abi-pickle-deserialization
+    message: >-
+      pickle deserialization runs arbitrary code if the bytes are
+      attacker-controlled (Bandit's B301 is skipped repo-wide in bandit.yaml).
+      Prefer JSON; if pickle is required, document why the input is trusted.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+    pattern-either:
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)
+      - pattern: cloudpickle.loads(...)
+      - pattern: dill.loads(...)
+
+  - id: abi-rate-limit-disabled-in-code
+    message: >-
+      Rate limiting switched off in code. Sign-in endpoints rely on it
+      against credential stuffing and OTP brute force; disable it through
+      configuration for local debugging instead.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      category: security
+      cwe: "CWE-307: Improper Restriction of Excessive Authentication Attempts"
+    patterns:
+      - pattern-either:
+          - pattern: $X.rate_limit_enabled = False
+          - pattern: rate_limit_enabled = False
+      - pattern-not-inside: |
+          def $TEST(...):
+            ...
+    paths:
+      exclude:
+        - "*_test.py"
+        - "test_*.py"
+        - "**/tests/**"
