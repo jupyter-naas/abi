@@ -243,12 +243,19 @@ class DiscoverySession:
             self.confirmed_until = started + result.lease_seconds
             self.status = result.instance.status
 
+    def _heartbeat_delay(self, failures: int) -> float:
+        delay = min(30, min(5, self.lease_seconds / 4) * 2 ** min(failures, 3))
+        delay *= random.uniform(0.9, 1.1)
+        remaining = self.confirmed_until - time.monotonic()
+        # Apply the cap after jitter. Expired leases still back off, without spinning.
+        budget = remaining / 2 if remaining > 0 else self.lease_seconds / 2
+        return min(delay, max(0.05, budget))
+
     async def _heartbeat(self) -> None:
         failures = 0
         unexpected = 0
         while True:
-            delay = min(5, self.lease_seconds / 4) * min(8, 2 ** min(failures, 3))
-            await asyncio.sleep(min(30, delay) * random.uniform(0.9, 1.1))
+            await asyncio.sleep(self._heartbeat_delay(failures))
             try:
                 try:
                     await self.renew()

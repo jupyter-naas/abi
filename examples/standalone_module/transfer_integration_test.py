@@ -289,7 +289,44 @@ def test_two_engine_owners_execute_once_and_route_transfer_sessions(broker, tmp_
                 for _ in range(4):
                     await objects.put_object("files", "shared", value)
                     assert await objects.get_object("files", "shared") == value
-                assert calls == ["invoke", "stream"]
+                from naas_abi_proto.model_registry.v1 import (
+                    model_registry_pb2 as model_pb,
+                )
+                from naas_abi_sdk.model_codec import encode_message
+
+                subjects = []
+
+                async def observe(msg):
+                    subjects.append(msg.subject)
+
+                subscription = await nc.subscribe(
+                    "abi.svc.model_registry.v1.>", cb=observe
+                )
+                await nc.flush()
+                opened = await client.model_registry.stream_open(
+                    model_pb.StreamOpenRequest(
+                        chat=model_pb.ChatRequest(
+                            ref=model_pb.ModelRef(
+                                canonical_id="count", provider="test", kind="chat"
+                            ),
+                            messages=[encode_message(HumanMessage(content="hi"))],
+                        ),
+                    )
+                )
+                response = await client.model_registry.stream_next(
+                    model_pb.StreamNextRequest(stream_id=opened.stream_id)
+                )
+                assert response.HasField("chunk")
+                await client.model_registry.stream_close(
+                    model_pb.StreamCloseRequest(stream_id=opened.stream_id)
+                )
+                await nc.flush()
+                owner = opened.stream_id.split(":")[0]
+                assert f"abi.svc.model_registry.v1.{owner}.stream_next" in subjects
+                assert "abi.svc.model_registry.v1.stream_next" not in subjects
+                assert f"abi.svc.model_registry.v1.{owner}.stream_close" in subjects
+                await subscription.unsubscribe()
+                assert calls == ["invoke", "stream", "stream"]
                 assert all(not p.transfer.sessions for p in models)
                 assert all(not p._transfer.sessions for p in storage)
         finally:

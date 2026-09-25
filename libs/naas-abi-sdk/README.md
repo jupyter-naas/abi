@@ -544,7 +544,9 @@ Mixed local/remote cache tiers are rejected: define the complete topology at its
 owner rather than advertising tier indices that have no endpoint. Projects without
 `nats` retain their existing adapter choices and wiring.
 
-Heartbeats retry transient failures with capped exponential backoff and jitter.
+Heartbeats retry transient failures with exponential backoff and jitter, capped
+after jitter at half the remaining confirmed lease (50 ms minimum retry interval).
+Expired leases use half the nominal lease as the cap.
 Authentication/configuration errors remain fatal and visible. Unexpected renewal
 or endpoint-binding failures receive at most three consecutive attempts. Failed
 endpoint rebinds clean up partial subscriptions and retain the previous bindings.
