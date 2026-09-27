@@ -2864,6 +2864,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         clone._event_queue = queue
         clone._checkpointer = self._checkpointer
         clone._original_agents = duplicated_children
+        clone._original_tools = list(self._original_tools)
         clone._native_tools = list(getattr(self, "_native_tools", None) or [])
 
         clone._chat_model = self._chat_model

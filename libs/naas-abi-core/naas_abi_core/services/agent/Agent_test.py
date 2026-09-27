@@ -104,6 +104,24 @@ def test_agent_duplication(model):
     assert id(duplicated_agent.agents[0]) != id(first_agent.agents[0])
 
 
+def test_agent_duplicate_twice(model):
+    from naas_abi_core.services.agent.Agent import Agent, AgentConfiguration
+
+    agent = Agent(
+        name="Twice Agent",
+        description="nested duplicate",
+        chat_model=model,
+        tools=[],
+        agents=[],
+        configuration=AgentConfiguration(system_prompt=""),
+    )
+    first_shell = agent.duplicate()
+    assert hasattr(first_shell, "_original_tools")
+    second_shell = first_shell.duplicate()
+    assert id(second_shell) != id(first_shell)
+    assert hasattr(second_shell, "_original_tools")
+
+
 def test_agent_stream_invoke(model):
     from naas_abi_core.services.agent.Agent import Agent, AgentConfiguration
 
