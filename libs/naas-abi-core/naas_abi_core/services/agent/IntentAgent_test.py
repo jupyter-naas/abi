@@ -225,9 +225,11 @@ def test_duplicate_preserves_subclass():
         nonlocal init_called
         init_called = True
 
-    with patch.object(_Subclass, "__init__", _fail_init):
-        with patch.object(_Subclass, "build_graph"):
-            out = IntentAgent.duplicate(agent)
+    with (
+        patch.object(_Subclass, "__init__", _fail_init),
+        patch.object(_Subclass, "build_graph"),
+    ):
+        out = IntentAgent.duplicate(agent)
 
     assert not init_called
     assert isinstance(out, _Subclass)

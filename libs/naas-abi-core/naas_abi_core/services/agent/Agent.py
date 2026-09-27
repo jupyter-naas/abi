@@ -2804,13 +2804,13 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             # If thread_id is not a valid integer, generate a new UUID
             self._state.set_thread_id(str(uuid.uuid4()))
 
-    def _tools_for_duplicate(self, clone: Agent) -> list[Union[Tool, BaseTool, Agent]]:
+    def _tools_for_duplicate(self, clone: Agent) -> list[Tool | BaseTool | Agent]:
         """Rebuild the tool list the same way ``__init__`` does, without re-init."""
         from naas_abi_core.services.agent.tools.default_tools import default_tools
 
-        tools: list[Union[Tool, BaseTool, Agent]] = list(self._original_tools)
+        tools: list[Tool | BaseTool | Agent] = list(self._original_tools)
         if clone._enable_default_tools:
-            tools = list(tools) + default_tools(clone)
+            tools.extend(default_tools(clone))
 
         has_supervisor = (
             clone._state.supervisor_agent is not None
@@ -2881,7 +2881,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
         tools = self._tools_for_duplicate(clone)
         structured_tools, runtime_agents = clone.prepare_tools(
-            cast(list[Union[Tool, BaseTool, Agent]], tools),
+            cast(list[Tool | BaseTool | Agent], tools),
             duplicated_children,
         )
         clone._tools = tools

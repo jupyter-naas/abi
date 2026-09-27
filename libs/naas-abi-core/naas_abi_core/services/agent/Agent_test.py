@@ -162,8 +162,8 @@ def test_agent_stream_invoke_isolation(model):
 
 def test_agent_duplicate_reuses_intent_mapper(model, monkeypatch):
     from naas_abi_core.services.agent import IntentAgent as intent_agent_module
-    from naas_abi_core.services.agent.IntentAgent import IntentAgent
     from naas_abi_core.services.agent.Agent import AgentConfiguration, AgentSharedState
+    from naas_abi_core.services.agent.IntentAgent import IntentAgent
 
     class _StubIntentMapper:
         def __init__(self, *args, **kwargs):

@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from queue import Queue
-from typing import Any, Union
+from typing import Any, Union, cast
 
 import pydash as pd
 import spacy
@@ -837,10 +837,11 @@ If you endup with a single intent which is of type TOOL, you must call this tool
             return Command(update={"system_prompt": updated_system_prompt})
 
     def _populate_duplicate_shell(self, clone: Agent) -> None:
-        clone._enable_default_intents = self._enable_default_intents
-        clone._intents = self._intents
-        clone._embedding_model = self._embedding_model
-        clone._intent_mapper = self._intent_mapper
-        clone._threshold = self._threshold
-        clone._threshold_neighbor = self._threshold_neighbor
-        clone._direct_intent_score = self._direct_intent_score
+        intent_clone = cast("IntentAgent", clone)
+        intent_clone._enable_default_intents = self._enable_default_intents
+        intent_clone._intents = self._intents
+        intent_clone._embedding_model = self._embedding_model
+        intent_clone._intent_mapper = self._intent_mapper
+        intent_clone._threshold = self._threshold
+        intent_clone._threshold_neighbor = self._threshold_neighbor
+        intent_clone._direct_intent_score = self._direct_intent_score

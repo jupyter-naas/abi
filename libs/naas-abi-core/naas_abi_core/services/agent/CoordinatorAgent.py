@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from queue import Queue
-from typing import Literal, Union
+from typing import Literal, Union, cast
 
 import pydash as pd
 from langchain_core.embeddings import Embeddings
@@ -593,8 +593,9 @@ class CoordinatorAgent(IntentAgent):
 
     def _populate_duplicate_shell(self, clone: Agent) -> None:
         super()._populate_duplicate_shell(clone)
-        clone.allow_tool_intents = self.allow_tool_intents
-        clone.borderline_behavior = self.borderline_behavior
-        clone.borderline_floor = self.borderline_floor
-        clone.refusal_message_template = self.refusal_message_template
-        clone.suggestion_message_template = self.suggestion_message_template
+        coordinator_clone = cast("CoordinatorAgent", clone)
+        coordinator_clone.allow_tool_intents = self.allow_tool_intents
+        coordinator_clone.borderline_behavior = self.borderline_behavior
+        coordinator_clone.borderline_floor = self.borderline_floor
+        coordinator_clone.refusal_message_template = self.refusal_message_template
+        coordinator_clone.suggestion_message_template = self.suggestion_message_template
