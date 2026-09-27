@@ -160,6 +160,35 @@ def test_agent_stream_invoke_isolation(model):
     assert "ANSWER_A" in content_a, f"Expected ANSWER_A but got: {content_a}"
 
 
+def test_agent_duplicate_reuses_intent_mapper(model, monkeypatch):
+    from naas_abi_core.services.agent import IntentAgent as intent_agent_module
+    from naas_abi_core.services.agent.IntentAgent import IntentAgent
+    from naas_abi_core.services.agent.Agent import AgentConfiguration, AgentSharedState
+
+    class _StubIntentMapper:
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
+
+    monkeypatch.setattr(intent_agent_module, "IntentMapper", _StubIntentMapper)
+
+    agent = IntentAgent(
+        name="IntentDup",
+        description="intent duplicate shell",
+        chat_model=model,
+        tools=[],
+        agents=[],
+        configuration=AgentConfiguration(system_prompt=""),
+    )
+    mapper_id = id(agent._intent_mapper)
+
+    dup = agent.duplicate(
+        agent_shared_state=AgentSharedState(thread_id="dup-thread")
+    )
+    assert id(dup._intent_mapper) == mapper_id
+    assert dup.state.thread_id == "dup-thread"
+    assert id(dup) != id(agent)
+
+
 def test_agent_completion_fresh_state_per_request(model):
     from naas_abi_core.services.agent.Agent import (
         Agent,

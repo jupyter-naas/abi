@@ -2804,6 +2804,101 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             # If thread_id is not a valid integer, generate a new UUID
             self._state.set_thread_id(str(uuid.uuid4()))
 
+    def _tools_for_duplicate(self, clone: Agent) -> list[Union[Tool, BaseTool, Agent]]:
+        """Rebuild the tool list the same way ``__init__`` does, without re-init."""
+        from naas_abi_core.services.agent.tools.default_tools import default_tools
+
+        tools: list[Union[Tool, BaseTool, Agent]] = list(self._original_tools)
+        if clone._enable_default_tools:
+            tools = list(tools) + default_tools(clone)
+
+        has_supervisor = (
+            clone._state.supervisor_agent is not None
+            and clone._state.supervisor_agent.strip() != ""
+            and clone._state.supervisor_agent != clone._name
+        )
+        if has_supervisor:
+
+            @tool(return_direct=True)
+            def request_help(reason: str):
+                """
+                Request help from the supervisor agent when you (the LLM) are uncertain about the next step or do not have the required capability to fulfill the user's request.
+
+                Use this tool if:
+                - You are unsure how to proceed.
+                - You lack the necessary knowledge or ability to complete the task.
+                - The user's request is outside your capabilities or unclear.
+
+                Args:
+                    reason (str): A brief explanation of why you are requesting help (e.g., "I am uncertain about the next step", "I do not have the required capability", "The user's request is unclear").
+
+                The supervisor agent will review your reason and provide assistance or take over the conversation.
+                """
+                logger.debug(
+                    f"'{clone.name}' is requesting help from the supervisor agent"
+                )
+                return f"Requesting help from the supervisor agent because {reason}."
+
+            tools.append(request_help)
+
+        return tools
+
+    def _populate_duplicate_shell(self, clone: Agent) -> None:
+        """Copy subclass-specific fields onto a shell duplicate before ``build_graph``."""
+
+    def _duplicate_shell(
+        self,
+        queue: Queue,
+        shared_state: AgentSharedState,
+        duplicated_children: list[Agent],
+    ) -> Agent:
+        """Fast per-request clone: reuse wired tools/models, only rebuild graphs."""
+        clone = object.__new__(type(self))
+
+        clone._name = self._name
+        clone._description = self._description
+        clone._markdown_pretty_display = self._markdown_pretty_display
+        clone._enable_default_tools = self._enable_default_tools
+        clone._configuration = self._configuration
+        clone._state = shared_state
+        clone._event_queue = queue
+        clone._checkpointer = self._checkpointer
+        clone._original_agents = duplicated_children
+        clone._native_tools = list(getattr(self, "_native_tools", None) or [])
+
+        clone._chat_model = self._chat_model
+        clone._chat_model_with_tools = self._chat_model_with_tools
+        clone._chat_model_without_workspace_tools = (
+            self._chat_model_without_workspace_tools
+        )
+        clone._chat_model_output_version = getattr(self, "_chat_model_output_version", None)
+
+        clone._on_tool_usage = self._configuration.on_tool_usage
+        clone._on_tool_response = self._configuration.on_tool_response
+        clone._on_ai_message = self._configuration.on_ai_message
+        clone._on_call_model = self._configuration.on_agent_calling
+        clone._on_agent_routing = self._configuration.on_agent_routing
+
+        tools = self._tools_for_duplicate(clone)
+        structured_tools, runtime_agents = clone.prepare_tools(
+            cast(list[Union[Tool, BaseTool, Agent]], tools),
+            duplicated_children,
+        )
+        clone._tools = tools
+        clone._structured_tools = structured_tools
+        clone._agents = runtime_agents
+        clone._tools_by_name = {tool.name: tool for tool in structured_tools}
+
+        if getattr(clone, "sequential_supervisor", False):
+            for sub_agent in clone._agents:
+                if sub_agent.name != clone._name:
+                    sub_agent._returns_to_supervisor = clone._name
+
+        self._populate_duplicate_shell(clone)
+        clone._sync_event_queue_with_subagents()
+        clone.build_graph()
+        return clone
+
     def duplicate(
         self,
         queue: Queue | None = None,
@@ -2823,27 +2918,12 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         if queue is None:
             queue = Queue()
 
-        # We duplicated each agent and add them as tools.
-        # This will be recursively done for each sub agents.
-        agents: list[Agent] = [
+        duplicated_children: list[Agent] = [
             agent.duplicate(queue, shared_state) for agent in self._original_agents
         ]
 
-        new_agent = self.__class__(
-            name=self._name,
-            description=self._description,
-            chat_model=self._chat_model,
-            tools=self._original_tools,
-            agents=agents,
-            memory=self._checkpointer,
-            state=shared_state,  # Create new state instance
-            configuration=self._configuration,
-            event_queue=queue,
-            enable_default_tools=self._enable_default_tools,
-            markdown_pretty_display=self._markdown_pretty_display,
-        )
-        # Per-request copies must keep the agent's own step budget (a class
-        # attribute on the subclass the copy does not inherit from).
+        new_agent = self._duplicate_shell(queue, shared_state, duplicated_children)
+
         own_limit = getattr(self, "recursion_limit", None)
         if isinstance(own_limit, int) and own_limit > 0:
             new_agent.recursion_limit = own_limit
