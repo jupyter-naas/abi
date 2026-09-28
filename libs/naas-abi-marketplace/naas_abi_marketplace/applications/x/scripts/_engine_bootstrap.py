@@ -30,7 +30,7 @@ def preload_dotenv_for_config(config_path: Path) -> None:
     """Mirror bootstrap dotenv into ``os.environ`` so Jinja ``secret.*`` resolves."""
     base_dir = str(config_path.parent)
     content = config_path.read_text(encoding="utf-8")
-    adapter = EngineConfiguration._load_bootstrap_dotenv_adapter_from_yaml_content(  # noqa: SLF001
+    adapter = EngineConfiguration._load_bootstrap_dotenv_adapter_from_yaml_content(
         content, base_dir=base_dir
     )
     if adapter is not None:
