@@ -24,6 +24,7 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
 )
 
 _RESULT_TOTAL_COLUMN = "_result_total"
+_USER_RN_COLUMN = "_user_rn"
 
 _HANDLE = re.compile(r"^[A-Za-z0-9_]{1,64}$")
 
@@ -108,6 +109,55 @@ def _search_total_from_rows(rows: list[dict[str, Any]]) -> int:
     return int(rows[0].get(_RESULT_TOTAL_COLUMN) or 0)
 
 
+def _deduped_users_select_cte(*, joined_sql: str) -> str:
+    """One row per ``lower(username)``; post totals summed across ``author_id`` dupes."""
+    return f"""
+joined AS (
+{joined_sql}
+),
+user_totals AS (
+  SELECT
+    lower(username) AS user_key,
+    SUM(matched_count) AS matched_count,
+    SUM(referenced_count) AS referenced_count,
+    MIN(first_post_at) AS first_post_at,
+    MAX(last_post_at) AS last_post_at
+  FROM joined
+  WHERE length(username) > 0
+  GROUP BY user_key
+),
+picked AS (
+  SELECT
+    j.*,
+    ROW_NUMBER() OVER (
+      PARTITION BY lower(j.username)
+      ORDER BY j.matched_count + j.referenced_count DESC,
+               j.seen_at DESC NULLS LAST,
+               j.author_id
+    ) AS {_USER_RN_COLUMN}
+  FROM joined j
+  WHERE length(j.username) > 0
+),
+deduped AS (
+  SELECT
+    p.* EXCLUDE (
+      matched_count,
+      referenced_count,
+      first_post_at,
+      last_post_at,
+      {_USER_RN_COLUMN}
+    ),
+    t.matched_count,
+    t.referenced_count,
+    t.first_post_at,
+    t.last_post_at
+  FROM picked p
+  INNER JOIN user_totals t ON lower(p.username) = t.user_key
+  WHERE p.{_USER_RN_COLUMN} = 1
+)
+"""
+
+
 def _search_users_via_stats(
     dataset,
     query: str,
@@ -117,15 +167,19 @@ def _search_users_via_stats(
 ) -> tuple[int, list[dict[str, Any]]]:
     author_dedup = authors_deduped_cte()
     and_clause = _user_needle_and_clause(query)
-    result = dataset.query(
-        f"WITH {author_dedup}, filtered AS ("
+    joined = (
         f"  SELECT a.*, "
         f"  s.matched_count, s.referenced_count, "
-        f"  s.first_post_at, s.last_post_at, "
-        f"  COUNT(*) OVER () AS {_RESULT_TOTAL_COLUMN} "
+        f"  s.first_post_at, s.last_post_at "
         f"  FROM authors_deduped a "
         f"  INNER JOIN {AUTHOR_STATS_V1} s ON a.author_id = s.author_id "
         f"  WHERE 1=1{and_clause}"
+    )
+    dedupe = _deduped_users_select_cte(joined_sql=joined)
+    result = dataset.query(
+        f"WITH {author_dedup}, {dedupe}, filtered AS ("
+        f"  SELECT *, COUNT(*) OVER () AS {_RESULT_TOTAL_COLUMN} "
+        f"  FROM deduped"
         f") "
         f"SELECT * FROM filtered "
         f"ORDER BY matched_count + referenced_count DESC, username "
@@ -145,6 +199,14 @@ def _search_users_via_canonical(
 ) -> tuple[int, list[dict[str, Any]]]:
     cte = canonical_cte(use_matched_index=matched_index_ready(dataset))
     and_clause = _user_needle_and_clause(query)
+    joined = (
+        f"  SELECT a.*, awp.matched_count, awp.referenced_count, "
+        f"  awp.first_post_at, awp.last_post_at "
+        f"  FROM authors_deduped a "
+        f"  INNER JOIN authors_with_posts awp ON a.author_id = awp.author_id "
+        f"  WHERE 1=1{and_clause}"
+    )
+    dedupe = _deduped_users_select_cte(joined_sql=joined)
     result = dataset.query(
         f"WITH {cte}, authors_with_posts AS ("
         f"  SELECT author_id, "
@@ -153,13 +215,9 @@ def _search_users_via_canonical(
         f"  MIN(created_at) AS first_post_at, "
         f"  MAX(created_at) AS last_post_at "
         f"  FROM canonical_enriched GROUP BY author_id"
-        f"), filtered AS ("
-        f"  SELECT a.*, awp.matched_count, awp.referenced_count, "
-        f"  awp.first_post_at, awp.last_post_at, "
-        f"  COUNT(*) OVER () AS {_RESULT_TOTAL_COLUMN} "
-        f"  FROM authors_deduped a "
-        f"  INNER JOIN authors_with_posts awp ON a.author_id = awp.author_id "
-        f"  WHERE 1=1{and_clause}"
+        f"), {dedupe}, filtered AS ("
+        f"  SELECT *, COUNT(*) OVER () AS {_RESULT_TOTAL_COLUMN} "
+        f"  FROM deduped"
         f") "
         f"SELECT * FROM filtered "
         f"ORDER BY matched_count + referenced_count DESC, username "

@@ -1041,17 +1041,28 @@ class SnapshotContext:
             )
         banded = self._banded_facet_values(query_string, column)
         totals: dict[str, int] = {}
+        display_for: dict[str, str] = {}
+        max_piece: dict[str, int] = {}
         for index in indices:
             for value, count in banded.get(index, {}).items():
                 # Keyed on the displayed form, so whitespace variants of the
                 # same value land in one entry rather than several identical
-                # checkboxes.
-                display = value.strip()
-                totals[display] = totals.get(display, 0) + count
+                # checkboxes. Usernames also fold case (X handles are
+                # case-insensitive; ingest can carry several ``author_id`` rows).
+                raw = value.strip()
+                key = raw.lower() if column == "username" else raw
+                totals[key] = totals.get(key, 0) + count
+                if column == "username" and count >= max_piece.get(key, -1):
+                    max_piece[key] = count
+                    display_for[key] = raw
         # Ties broken by value so the published order is stable across runs;
         # SPARQL's ORDER BY DESC(?n) alone left them at the engine's mercy.
         ranked = sorted(totals.items(), key=lambda kv: (-kv[1], kv[0]))
-        return [{"value": value, "count": count} for value, count in ranked[:limit]]
+        out: list[dict[str, Any]] = []
+        for key, count in ranked[:limit]:
+            shown = display_for.get(key, key) if column == "username" else key
+            out.append({"value": shown, "count": count})
+        return out
 
     def _banded_facet_values(
         self, query_string: str, column: str
@@ -1461,7 +1472,8 @@ class SnapshotContext:
         sparql = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX x:   <{self.namespace}>
-        SELECT ?username (COUNT(DISTINCT ?tweet) AS ?n) (MAX(?created) AS ?last)
+        SELECT ?usernameKey (SAMPLE(?username) AS ?username)
+               (COUNT(DISTINCT ?tweet) AS ?n) (MAX(?created) AS ?last)
                (MIN(?created) AS ?first) (SAMPLE(?location) AS ?loc)
                (SAMPLE(?verifiedType) AS ?vt)
         WHERE {{
@@ -1473,8 +1485,9 @@ class SnapshotContext:
             OPTIONAL {{ ?author x:user_location ?location . }}
             OPTIONAL {{ ?author x:verified_type ?verifiedType . }}
           }}
+          BIND(LCASE(STR(?username)) AS ?usernameKey)
         }}
-        GROUP BY ?username
+        GROUP BY ?usernameKey
         ORDER BY DESC(?n)
         """
         authors: list[dict[str, Any]] = []

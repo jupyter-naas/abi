@@ -244,6 +244,106 @@ def test_search_users_counts_one_row_per_author_id(dataset) -> None:
     assert len(users) == 1
 
 
+def test_search_users_dedupes_username_across_author_ids(dataset) -> None:
+    """Same handle with two X ``author_id`` values appears once; totals summed."""
+    ensure_x_datasets(dataset)
+    now = datetime.now(UTC)
+    upsert_table(
+        dataset,
+        POSTS_V1,
+        [
+            {
+                "tweet_id": "30",
+                "kind": "matched",
+                "query_slug": "q",
+                "created_at": now,
+                "created_month": "2026-09",
+                "author_id": "a1",
+                "text": "one",
+                "full_text": "one",
+                "lang": "en",
+                "conversation_id": "",
+                "like_count": 0,
+                "retweet_count": 0,
+                "reply_count": 0,
+                "media_urls": "",
+            },
+            {
+                "tweet_id": "31",
+                "kind": "matched",
+                "query_slug": "q",
+                "created_at": now,
+                "created_month": "2026-09",
+                "author_id": "a2",
+                "text": "two",
+                "full_text": "two",
+                "lang": "en",
+                "conversation_id": "",
+                "like_count": 0,
+                "retweet_count": 0,
+                "reply_count": 0,
+                "media_urls": "",
+            },
+        ],
+    )
+    author_row = {
+        "display_name": "Dup",
+        "description": "",
+        "location": "",
+        "verified_type": "",
+        "verified": False,
+        "protected": False,
+        "is_identity_verified": False,
+        "user_url": "",
+        "profile_image_url": "",
+        "profile_banner_url": "",
+        "user_created_at": "",
+        "most_recent_tweet_id": "",
+        "followers_count": 0,
+        "following_count": 0,
+        "tweet_count": 0,
+        "listed_count": 0,
+        "user_like_count": 0,
+        "media_count": 0,
+    }
+    upsert_table(
+        dataset,
+        AUTHORS_V1,
+        [
+            {**author_row, "author_id": "a1", "username": "NewsHub", "seen_at": now},
+            {**author_row, "author_id": "a2", "username": "newshub", "seen_at": now},
+        ],
+    )
+    upsert_table(
+        dataset,
+        AUTHOR_STATS_V1,
+        [
+            {
+                "author_id": "a1",
+                "matched_count": 2,
+                "referenced_count": 0,
+                "first_post_at": now,
+                "last_post_at": now,
+                "updated_at": now,
+            },
+            {
+                "author_id": "a2",
+                "matched_count": 3,
+                "referenced_count": 1,
+                "first_post_at": now,
+                "last_post_at": now,
+                "updated_at": now,
+            },
+        ],
+    )
+    total, users = ds_api.search_users(dataset, "", limit=10)
+    assert total == 1
+    assert len(users) == 1
+    assert users[0]["username"] in ("NewsHub", "newshub")
+    assert users[0]["matched_count"] == 5
+    assert users[0]["referenced_count"] == 1
+
+
 def test_search_users_uses_author_stats_when_present(dataset) -> None:
     ensure_x_datasets(dataset)
     now = datetime.now(UTC)
