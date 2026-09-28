@@ -207,12 +207,18 @@ export function AppView({ page }: Props) {
   // Links out of this page keep the state the target page honours: switching
   // Posts subpages carries the filters over. The Users link means "go to the
   // search", so it keeps the needle but not the author currently open.
-  const hrefOf = (target: PageKey) =>
-    hrefFor(target, {
-      q: needle,
+  // Search Users and Search Tweets each have their own query; switching between
+  // them starts with an empty search box.
+  const hrefOf = (target: PageKey) => {
+    const keepSearchNeedle =
+      (page === "users" && target === "users") ||
+      (page === "tweets" && target === "tweets");
+    return hrefFor(target, {
+      q: keepSearchNeedle ? needle : undefined,
       scenario: scenarioId,
       query: querySlug,
     });
+  };
 
   const builtLabel = useMemo(() => {
     if (!data?.updatedAt) return null;

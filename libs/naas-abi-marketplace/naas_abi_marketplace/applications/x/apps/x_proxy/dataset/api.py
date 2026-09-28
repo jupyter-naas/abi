@@ -109,51 +109,36 @@ def _search_total_from_rows(rows: list[dict[str, Any]]) -> int:
     return int(rows[0].get(_RESULT_TOTAL_COLUMN) or 0)
 
 
+def _username_dedupe_rank_order(*, prefix: str = "j") -> str:
+    """Pick one ``author_id`` per handle; matches ``user_posts`` resolution."""
+    p = prefix
+    return (
+        f"{p}.seen_at DESC NULLS LAST, "
+        f"{p}.matched_count + {p}.referenced_count DESC, "
+        f"{p}.author_id"
+    )
+
+
 def _deduped_users_select_cte(*, joined_sql: str) -> str:
-    """One row per ``lower(username)``; post totals summed across ``author_id`` dupes."""
+    """One row per ``lower(username)``; stats from the chosen ``author_id`` only."""
+    rank = _username_dedupe_rank_order(prefix="j")
     return f"""
 joined AS (
 {joined_sql}
 ),
-user_totals AS (
-  SELECT
-    lower(username) AS user_key,
-    SUM(matched_count) AS matched_count,
-    SUM(referenced_count) AS referenced_count,
-    MIN(first_post_at) AS first_post_at,
-    MAX(last_post_at) AS last_post_at
-  FROM joined
-  WHERE length(username) > 0
-  GROUP BY user_key
-),
-picked AS (
-  SELECT
-    j.*,
-    ROW_NUMBER() OVER (
-      PARTITION BY lower(j.username)
-      ORDER BY j.matched_count + j.referenced_count DESC,
-               j.seen_at DESC NULLS LAST,
-               j.author_id
-    ) AS {_USER_RN_COLUMN}
-  FROM joined j
-  WHERE length(j.username) > 0
-),
 deduped AS (
-  SELECT
-    p.* EXCLUDE (
-      matched_count,
-      referenced_count,
-      first_post_at,
-      last_post_at,
-      {_USER_RN_COLUMN}
-    ),
-    t.matched_count,
-    t.referenced_count,
-    t.first_post_at,
-    t.last_post_at
-  FROM picked p
-  INNER JOIN user_totals t ON lower(p.username) = t.user_key
-  WHERE p.{_USER_RN_COLUMN} = 1
+  SELECT * EXCLUDE ({_USER_RN_COLUMN})
+  FROM (
+    SELECT
+      j.*,
+      ROW_NUMBER() OVER (
+        PARTITION BY lower(j.username)
+        ORDER BY {rank}
+      ) AS {_USER_RN_COLUMN}
+    FROM joined j
+    WHERE length(j.username) > 0
+  ) ranked
+  WHERE {_USER_RN_COLUMN} = 1
 )
 """
 
@@ -336,7 +321,10 @@ def user_posts(
         f"FROM authors_deduped a "
         f"LEFT JOIN {AUTHOR_STATS_V1} s ON a.author_id = s.author_id "
         f"WHERE lower(a.username) = '{escaped}' "
-        f"ORDER BY a.seen_at DESC NULLS LAST LIMIT 1",  # nosec B608
+        f"ORDER BY a.seen_at DESC NULLS LAST, "
+        f"COALESCE(s.matched_count, 0) + COALESCE(s.referenced_count, 0) DESC, "
+        f"a.author_id "
+        f"LIMIT 1",  # nosec B608
         namespace=X_DATASET_NAMESPACE,
     )
     if not author.rows:
