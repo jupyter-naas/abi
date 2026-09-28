@@ -592,3 +592,177 @@ def test_user_posts_ignores_stale_duplicate_author_id_for_same_handle(dataset) -
     assert profile["author_id"] == "current"
     assert total == 1
     assert len(posts) == 1
+
+
+def _post(tweet_id: str, kind: str, author_id: str, created_at, **extra) -> dict:
+    text = extra.pop("text", f"post {tweet_id}")
+    return {
+        "tweet_id": tweet_id,
+        "kind": kind,
+        "query_slug": extra.pop("query_slug", "q"),
+        "created_at": created_at,
+        "created_month": created_at.strftime("%Y-%m"),
+        "author_id": author_id,
+        "text": text,
+        "full_text": text,
+        "lang": "en",
+        "conversation_id": "",
+        "like_count": 0,
+        "retweet_count": 0,
+        "reply_count": 0,
+        "media_urls": extra.pop("media_urls", ""),
+    }
+
+
+def _author(author_id: str, username: str, seen_at, **extra) -> dict:
+    return {
+        "author_id": author_id,
+        "username": username,
+        "display_name": extra.get("display_name", username.title()),
+        "description": "",
+        "location": extra.get("location", ""),
+        "verified_type": "",
+        "verified": False,
+        "protected": False,
+        "is_identity_verified": False,
+        "user_url": "",
+        "profile_image_url": "",
+        "profile_banner_url": "",
+        "user_created_at": "",
+        "most_recent_tweet_id": "",
+        "followers_count": 0,
+        "following_count": 0,
+        "tweet_count": 0,
+        "listed_count": 0,
+        "user_like_count": 0,
+        "media_count": 0,
+        "seen_at": seen_at,
+    }
+
+
+def test_ensure_x_datasets_checks_the_catalog_once_per_dataset(dataset) -> None:
+    ensure_x_datasets(dataset)
+    calls = {"n": 0}
+    original = dataset.create
+
+    def counting_create(spec):
+        calls["n"] += 1
+        return original(spec)
+
+    dataset.create = counting_create
+    ensure_x_datasets(dataset)
+    ds_api.search_users(dataset, "")
+    assert calls["n"] == 0
+
+
+def test_post_by_id_prefers_the_matched_row_and_carries_its_author(dataset) -> None:
+    now = datetime.now(UTC)
+    upsert_table(
+        dataset,
+        POSTS_V1,
+        [
+            _post("7", "referenced", "a1", now, text="as context"),
+            _post("7", "matched", "a1", now, text="as match", query_slug="ai"),
+        ],
+    )
+    upsert_table(dataset, AUTHORS_V1, [_author("a1", "alice", now, location="Paris")])
+    post = ds_api.post_by_id(dataset, "7")
+    assert post is not None
+    assert post["kind"] == "matched"
+    assert post["query_slug"] == "ai"
+    assert post["username"] == "alice"
+    assert post["location"] == "Paris"
+    assert ds_api.post_by_id(dataset, "8") is None
+
+
+def test_search_tweets_matches_author_handle_and_pages_newest_first(dataset) -> None:
+    now = datetime.now(UTC)
+    upsert_table(
+        dataset,
+        POSTS_V1,
+        [
+            _post("1", "matched", "a1", now - timedelta(hours=2), text="hello"),
+            _post("2", "matched", "a1", now - timedelta(hours=1), text="world"),
+            _post("3", "matched", "a2", now, text="unrelated"),
+            # Referenced twin of a matched tweet: never a separate hit.
+            _post("2", "referenced", "a1", now - timedelta(hours=1), text="world"),
+        ],
+    )
+    upsert_table(
+        dataset,
+        AUTHORS_V1,
+        [_author("a1", "grok", now), _author("a2", "bob", now)],
+    )
+    total, rows = ds_api.search_tweets(dataset, "@GROK", limit=1)
+    assert total == 2
+    assert [row["tweet_id"] for row in rows] == ["2"]
+    assert rows[0]["kind"] == "matched"
+    assert rows[0]["username"] == "grok"
+    total, rows = ds_api.search_tweets(dataset, "grok", offset=1, limit=1)
+    assert (total, [row["tweet_id"] for row in rows]) == (2, ["1"])
+    # Past the last page the total is still reported.
+    total, rows = ds_api.search_tweets(dataset, "grok", offset=5, limit=1)
+    assert (total, rows) == (2, [])
+
+
+def test_search_users_pages_busiest_first_with_profile_and_stats(dataset) -> None:
+    now = datetime.now(UTC)
+    upsert_table(
+        dataset,
+        AUTHORS_V1,
+        [
+            _author("a1", "quiet", now, location="Lyon"),
+            _author("a2", "busy", now, location="Lyon"),
+        ],
+    )
+    upsert_table(
+        dataset,
+        AUTHOR_STATS_V1,
+        [
+            {
+                "author_id": "a1",
+                "matched_count": 1,
+                "referenced_count": 0,
+                "first_post_at": now,
+                "last_post_at": now,
+                "updated_at": now,
+            },
+            {
+                "author_id": "a2",
+                "matched_count": 5,
+                "referenced_count": 2,
+                "first_post_at": now,
+                "last_post_at": now,
+                "updated_at": now,
+            },
+        ],
+    )
+    total, users = ds_api.search_users(dataset, "lyon", limit=1)
+    assert total == 2
+    assert [user["username"] for user in users] == ["busy"]
+    assert users[0]["referenced_count"] == 2
+    assert users[0]["display_name"] == "Busy"
+    total, users = ds_api.search_users(dataset, "lyon", offset=1, limit=1)
+    assert (total, [user["username"] for user in users]) == (2, ["quiet"])
+
+
+def test_user_posts_kind_filter_applies_after_match_wins(dataset) -> None:
+    now = datetime.now(UTC)
+    upsert_table(
+        dataset,
+        POSTS_V1,
+        [
+            _post("1", "matched", "a1", now),
+            _post("1", "referenced", "a1", now),
+            _post("2", "referenced", "a1", now - timedelta(hours=1)),
+        ],
+    )
+    upsert_table(dataset, AUTHORS_V1, [_author("a1", "alice", now)])
+    _, total, posts = ds_api.user_posts(dataset, "alice", kind="referenced")
+    assert total == 1
+    assert [post["tweet_id"] for post in posts] == ["2"]
+    _, total, posts = ds_api.user_posts(dataset, "ALICE")
+    assert total == 2
+    assert [post["tweet_id"] for post in posts] == ["1", "2"]
+    assert posts[0]["kind"] == "matched"
+    assert ds_api.user_posts(dataset, "nobody") == (None, 0, [])

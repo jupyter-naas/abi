@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import weakref
 from typing import Any
 
 from naas_abi_core.services.dataset.DatasetPort import (
@@ -101,7 +103,25 @@ def x_dataset_read_enabled(module) -> bool:
         return False
 
 
+# Datasets already ensured in this process. ``create`` opens a fresh DuckLake
+# connection per table (LOAD + ATTACH the catalog), so running the full check on
+# every read cost ~2 s per HTTP request.
+_ensured: weakref.WeakSet[Any] = weakref.WeakSet()
+_ensure_lock = threading.Lock()
+
+
 def ensure_x_datasets(dataset: IDatasetPort) -> None:
+    """Create / migrate the X tables once per dataset instance and process."""
+    if dataset in _ensured:
+        return
+    with _ensure_lock:
+        if dataset in _ensured:
+            return
+        _ensure_x_datasets(dataset)
+        _ensured.add(dataset)
+
+
+def _ensure_x_datasets(dataset: IDatasetPort) -> None:
     specs = (
         DatasetSpec(
             name=POSTS_V1,

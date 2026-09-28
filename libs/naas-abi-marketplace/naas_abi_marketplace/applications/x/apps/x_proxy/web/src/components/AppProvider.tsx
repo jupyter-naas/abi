@@ -6,9 +6,15 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import { loadSnapshots, emptySnapshots } from "@/lib/loadSnapshots";
+import {
+  emptySnapshots,
+  loadDashboards,
+  loadGlobals,
+  loadGraphTotals,
+} from "@/lib/loadSnapshots";
 import {
   addFolder,
   folders,
@@ -37,7 +43,7 @@ const EMPTY_FAVORITES: ScopedFavorites = { users: [], posts: [] };
 import { readSessionTimezone, writeSessionTimezone } from "@/lib/session";
 import { landingPages, sectionLandingPage, sectionOf } from "@/lib/appConfig";
 import type { SectionKey } from "@/lib/appConfig";
-import type { PageKey, Snapshots } from "@/lib/types";
+import type { GraphTotals, PageKey, Snapshots } from "@/lib/types";
 
 /**
  * State that outlives a page change.
@@ -49,8 +55,13 @@ import type { PageKey, Snapshots } from "@/lib/types";
  * sidebar survive moving between pages.
  */
 type AppState = {
+  /** Set once the globals are in; `graph`, `count` and `search` fill in later. */
   data: Snapshots | null;
   error: string | null;
+  /** Whether `data.count` / `data.search` hold the published dashboards. */
+  dashboardsReady: boolean;
+  /** Loads the dashboards once - called by the pages that chart them. */
+  ensureDashboards: () => void;
   scenarioId: string;
   setScenarioId: (id: string) => void;
   querySlug: string;
@@ -94,7 +105,13 @@ type AppState = {
 const AppStateContext = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [data, setData] = useState<Snapshots | null>(null);
+  const [globals, setGlobals] = useState<Snapshots | null>(null);
+  const [graph, setGraph] = useState<GraphTotals | null>(null);
+  const [dashboards, setDashboards] = useState<Pick<
+    Snapshots,
+    "count" | "search"
+  > | null>(null);
+  const dashboardsRequested = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [scenarioId, setScenarioId] = useState("");
   const [querySlug, setQuerySlug] = useState("");
@@ -110,15 +127,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setFavorites({ users: readFavorites("users"), posts: readFavorites("posts") });
   }, []);
 
+  // Only the globals gate the first paint. The graph totals are one count line,
+  // and the dashboards belong to two pages: neither is worth a blank screen.
   useEffect(() => {
     let cancelled = false;
-    const lightweight = /\/(?:posts\/post|users\/search)\/?$/.test(
-      window.location.pathname,
-    );
-    loadSnapshots({ lightweight })
+    loadGlobals()
       .then((snap) => {
         if (cancelled) return;
-        setData(snap);
+        setGlobals(snap);
         // A page opened from a link may already have applied its own filters
         // from the URL, so these only fill in what is still unset.
         setScenarioId((prev) => prev || snap.scenarios[0]?.id || "");
@@ -131,16 +147,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        setData(emptySnapshots());
+        setGlobals(emptySnapshots());
         setTimezoneState("UTC");
         setError(
           `Snapshots unavailable (${err.message}). Showing empty data — run the X app build to publish JSON under x/apps/x_proxy/.`,
         );
       });
+    loadGraphTotals().then((totals) => {
+      if (!cancelled) setGraph(totals);
+    });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const ensureDashboards = useCallback(() => {
+    if (dashboardsRequested.current) return;
+    dashboardsRequested.current = true;
+    loadDashboards()
+      .then(setDashboards)
+      .catch((err: Error) => {
+        const empty = emptySnapshots();
+        setDashboards({ count: empty.count, search: empty.search });
+        setError(`Dashboards unavailable (${err.message}).`);
+      });
+  }, []);
+
+  const data = useMemo<Snapshots | null>(
+    () => (globals ? { ...globals, graph, ...(dashboards || {}) } : null),
+    [globals, graph, dashboards],
+  );
+  const dashboardsReady = dashboards !== null;
 
   const setTimezone = useCallback((id: string) => {
     setTimezoneState(id);
@@ -232,6 +269,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     () => ({
       data,
       error,
+      dashboardsReady,
+      ensureDashboards,
       scenarioId,
       setScenarioId,
       querySlug,
@@ -253,6 +292,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [
       data,
       error,
+      dashboardsReady,
+      ensureDashboards,
       scenarioId,
       querySlug,
       timezone,

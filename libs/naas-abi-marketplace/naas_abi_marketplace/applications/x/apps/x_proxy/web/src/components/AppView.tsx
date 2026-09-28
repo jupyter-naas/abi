@@ -50,6 +50,8 @@ export function AppView({ page }: Props) {
   const {
     data,
     error,
+    dashboardsReady,
+    ensureDashboards,
     scenarioId,
     setScenarioId,
     querySlug,
@@ -83,6 +85,13 @@ export function AppView({ page }: Props) {
     setOrigin(params.from);
     setExpanded(params.expand);
   }, []);
+
+  // Only the Count / Search Recent Tweets pages chart the published dashboards,
+  // so only they pay for downloading them.
+  const needsDashboards = page === "count" || page === "search";
+  useEffect(() => {
+    if (needsDashboards) ensureDashboards();
+  }, [needsDashboards, ensureDashboards]);
 
   // Coming back to a section lands on the page last visited in it.
   useEffect(() => {
@@ -310,14 +319,17 @@ export function AppView({ page }: Props) {
     >
       {snapshotWarning}
       <div className="page-wrap">
-        {page === "count" ? (
+        {needsDashboards && !dashboardsReady ? (
+          <LoadingScreen label="Loading dashboards" />
+        ) : null}
+        {page === "count" && dashboardsReady ? (
           <CountPage
             data={data.count}
             querySlug={querySlug}
             scenarioId={scenarioId}
           />
         ) : null}
-        {page === "search" ? (
+        {page === "search" && dashboardsReady ? (
           <SearchPage
             data={data.search}
             querySlug={querySlug}
