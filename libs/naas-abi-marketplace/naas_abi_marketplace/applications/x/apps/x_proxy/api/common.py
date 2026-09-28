@@ -624,9 +624,9 @@ class SnapshotContext:
             and slug is not None
             and hasattr(cache, "count_endpoint_timeseries")
         ):
-            buckets = cache.count_endpoint_timeseries(slug)
-            if buckets:
-                return buckets
+            projection_buckets = cache.count_endpoint_timeseries(slug)
+            if projection_buckets:
+                return projection_buckets
             logger.info(
                 f"X app: projection has no count buckets for {query_string!r} "
                 f"(slug {slug!r}); using SPARQL"
