@@ -35,7 +35,6 @@ def test_cache_clears_when_generation_changes() -> None:
 
 def test_cached_search_reuses_body_and_supports_304() -> None:
     SEARCH_RESPONSE_CACHE._entries.clear()
-    SEARCH_RESPONSE_CACHE._generation = None
     calls = {"n": 0}
 
     def compute() -> bytes:

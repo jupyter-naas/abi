@@ -5,10 +5,15 @@ middleware has to serve a directory tree rather than a single index - these
 tests pin that down against a fake object storage holding a published export.
 """
 
+from typing import cast
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
     DEFAULT_APP_PREFIX,
 )
@@ -287,7 +292,7 @@ def test_dataset_post_is_cached_and_revalidates_with_304(tmp_path, monkeypatch) 
     app = FastAPI()
     app.add_middleware(
         routes.XCountAppMiddleware,
-        object_storage_service=_published(),
+        object_storage_service=cast(ObjectStorageService, _published()),
         dataset=dataset,
     )
     client = TestClient(app)
