@@ -74,9 +74,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--skip-count-envelopes",
         action="store_true",
+        help="Do not walk x/count_recent_tweets (search_recent_tweets only).",
+    )
+    parser.add_argument(
+        "--count-envelopes-only",
+        action="store_true",
         help=(
-            "Do not walk x/count_recent_tweets (only search_recent_tweets). "
-            "By default both prefixes are synced so count_buckets_v1 is populated."
+            "Walk only x/count_recent_tweets (fills count_buckets_v1; no search replay)."
         ),
     )
     return parser.parse_args(argv)
@@ -84,6 +88,10 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
+    if args.count_envelopes_only and args.skip_count_envelopes:
+        raise SystemExit(
+            "Use either --count-envelopes-only or --skip-count-envelopes, not both."
+        )
     from naas_abi_marketplace.applications.x import ABIModule
 
     engine = load_engine(args.config)
@@ -114,11 +122,14 @@ def main(argv: list[str] | None = None) -> int:
             if line.strip()
         ]
     else:
-        paths = walk(object_storage, ENVELOPE_PREFIX, suffix=".json")
-        if not args.skip_count_envelopes:
-            paths.extend(
-                walk(object_storage, COUNT_ENVELOPE_PREFIX, suffix=".json")
-            )
+        if args.count_envelopes_only:
+            paths = walk(object_storage, COUNT_ENVELOPE_PREFIX, suffix=".json")
+        else:
+            paths = walk(object_storage, ENVELOPE_PREFIX, suffix=".json")
+            if not args.skip_count_envelopes:
+                paths.extend(
+                    walk(object_storage, COUNT_ENVELOPE_PREFIX, suffix=".json")
+                )
         paths = sorted(set(paths))
 
     if args.limit:

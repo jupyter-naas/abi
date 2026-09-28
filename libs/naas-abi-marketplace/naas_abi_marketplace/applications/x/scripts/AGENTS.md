@@ -50,7 +50,14 @@ docker exec -w /app axi-ai-abi-1 env LOG_LEVEL=INFO uv run python \
 
 If secrets still fail, verify `/app/.env` contains keys referenced in config (e.g. `AWS_ACCESS_KEY_ID` when Bedrock is enabled).
 
-**Pending ingest on prod:** build `/tmp/x_pending.txt` once (audit JSON), then backfill with `--paths-file` only — avoid re-running the full audit before every backfill.
+**Count buckets only** (no search envelope replay):
+
+```bash
+docker exec -w /app axi-ai-abi-1 env LOG_LEVEL=INFO uv run python \
+  src/signals/x/scripts/backfill_x_datasets.py --count-envelopes-only --batch-size 32
+```
+
+**Pending ingest on prod:** build `/tmp/x_pending.txt` once (audit JSON), then backfill with `--paths-file` only — avoid re-running the full audit before every backfill. (Audit is search-prefix only; use `--count-envelopes-only` for count lag.)
 
 ## Do not
 
