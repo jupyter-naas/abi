@@ -10,6 +10,9 @@ from naas_abi_core.engine.Engine import Engine
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
 )
+from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
+    DotenvSecretSecondaryAdaptor,
+)
 
 
 def resolve_config_path(explicit: Path | None) -> Path | None:
@@ -33,7 +36,7 @@ def preload_dotenv_for_config(config_path: Path) -> None:
     adapter = EngineConfiguration._load_bootstrap_dotenv_adapter_from_yaml_content(
         content, base_dir=base_dir
     )
-    if adapter is not None:
+    if isinstance(adapter, DotenvSecretSecondaryAdaptor):
         env_path = Path(adapter.path)
         if not env_path.is_absolute():
             env_path = Path(base_dir) / env_path

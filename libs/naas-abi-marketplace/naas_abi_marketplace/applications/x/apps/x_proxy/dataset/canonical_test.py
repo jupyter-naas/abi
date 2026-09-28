@@ -244,6 +244,81 @@ def test_search_users_counts_one_row_per_author_id(dataset) -> None:
     assert len(users) == 1
 
 
+def test_search_users_uses_author_stats_when_present(dataset) -> None:
+    ensure_x_datasets(dataset)
+    now = datetime.now(UTC)
+    upsert_table(
+        dataset,
+        POSTS_V1,
+        [
+            {
+                "tweet_id": "20",
+                "kind": "matched",
+                "query_slug": "q",
+                "created_at": now,
+                "created_month": "2026-09",
+                "author_id": "a1",
+                "text": "t",
+                "full_text": "t",
+                "lang": "en",
+                "conversation_id": "",
+                "like_count": 0,
+                "retweet_count": 0,
+                "reply_count": 0,
+                "media_urls": "",
+            }
+        ],
+    )
+    upsert_table(
+        dataset,
+        AUTHORS_V1,
+        [
+            {
+                "author_id": "a1",
+                "username": "alice",
+                "display_name": "Alice",
+                "description": "drones",
+                "location": "Paris",
+                "verified_type": "",
+                "verified": False,
+                "protected": False,
+                "is_identity_verified": False,
+                "user_url": "",
+                "profile_image_url": "",
+                "profile_banner_url": "",
+                "user_created_at": "",
+                "most_recent_tweet_id": "",
+                "followers_count": 0,
+                "following_count": 0,
+                "tweet_count": 0,
+                "listed_count": 0,
+                "user_like_count": 0,
+                "media_count": 0,
+                "seen_at": now,
+            }
+        ],
+    )
+    upsert_table(
+        dataset,
+        AUTHOR_STATS_V1,
+        [
+            {
+                "author_id": "a1",
+                "matched_count": 3,
+                "referenced_count": 1,
+                "first_post_at": now,
+                "last_post_at": now,
+                "updated_at": now,
+            }
+        ],
+    )
+    total, users = ds_api.search_users(dataset, "paris", limit=10)
+    assert total == 1
+    assert users[0]["username"] == "alice"
+    assert users[0]["matched_count"] == 3
+    assert "_result_total" not in users[0]
+
+
 def test_user_posts_uses_cached_author_stats_total(dataset) -> None:
     ensure_x_datasets(dataset)
     now = datetime.now(UTC)

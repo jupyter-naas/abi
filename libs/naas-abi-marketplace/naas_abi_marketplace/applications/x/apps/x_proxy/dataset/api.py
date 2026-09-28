@@ -33,27 +33,41 @@ def _escape(value: str) -> str:
 
 
 def _tweet_needle_filter(needle: str) -> str:
-    n = _escape(needle.strip().lower().lstrip("@"))
-    if not n:
+    clause = _tweet_needle_and_clause(needle)
+    if not clause:
         return ""
-    return (
-        f" WHERE lower(full_text) LIKE '%{n}%' "
-        f"OR lower(text) LIKE '%{n}%' "
-        f"OR lower(username) LIKE '%{n}%' "
-        f"OR lower(location) LIKE '%{n}%' "
-        f"OR lower(tweet_id) LIKE '%{n}%'"
-    )
+    return clause.replace(" AND ", " WHERE ", 1)
 
 
 def _user_needle_filter(needle: str) -> str:
+    clause = _user_needle_and_clause(needle)
+    if not clause:
+        return ""
+    return clause.replace(" AND ", " WHERE ", 1)
+
+
+def _user_needle_and_clause(needle: str, *, alias: str = "a") -> str:
     n = _escape(needle.strip().lower().lstrip("@"))
     if not n:
         return ""
     return (
-        f" WHERE lower(username) LIKE '%{n}%' "
-        f"OR lower(display_name) LIKE '%{n}%' "
-        f"OR lower(description) LIKE '%{n}%' "
-        f"OR lower(location) LIKE '%{n}%'"
+        f" AND (lower({alias}.username) LIKE '%{n}%' "
+        f"OR lower({alias}.display_name) LIKE '%{n}%' "
+        f"OR lower({alias}.description) LIKE '%{n}%' "
+        f"OR lower({alias}.location) LIKE '%{n}%')"
+    )
+
+
+def _tweet_needle_and_clause(needle: str) -> str:
+    n = _escape(needle.strip().lower().lstrip("@"))
+    if not n:
+        return ""
+    return (
+        f" AND (lower(full_text) LIKE '%{n}%' "
+        f"OR lower(text) LIKE '%{n}%' "
+        f"OR lower(username) LIKE '%{n}%' "
+        f"OR lower(location) LIKE '%{n}%' "
+        f"OR lower(tweet_id) LIKE '%{n}%')"
     )
 
 
@@ -78,6 +92,84 @@ def graph_totals(dataset) -> dict[str, int]:
     }
 
 
+def _author_stats_search_ready(dataset) -> bool:
+    """True when sync has populated ``author_stats_v1`` (maintained on ingest)."""
+    ensure_x_datasets(dataset)
+    probe = dataset.query(
+        f"SELECT 1 AS ok FROM {AUTHOR_STATS_V1} LIMIT 1",
+        namespace=X_DATASET_NAMESPACE,
+    )
+    return bool(probe.rows)
+
+
+def _search_total_from_rows(rows: list[dict[str, Any]]) -> int:
+    if not rows:
+        return 0
+    return int(rows[0].get(_RESULT_TOTAL_COLUMN) or 0)
+
+
+def _search_users_via_stats(
+    dataset,
+    query: str,
+    *,
+    offset: int,
+    limit: int,
+) -> tuple[int, list[dict[str, Any]]]:
+    author_dedup = authors_deduped_cte()
+    and_clause = _user_needle_and_clause(query)
+    result = dataset.query(
+        f"WITH {author_dedup}, filtered AS ("
+        f"  SELECT a.*, "
+        f"  s.matched_count, s.referenced_count, "
+        f"  s.first_post_at, s.last_post_at, "
+        f"  COUNT(*) OVER () AS {_RESULT_TOTAL_COLUMN} "
+        f"  FROM authors_deduped a "
+        f"  INNER JOIN {AUTHOR_STATS_V1} s ON a.author_id = s.author_id "
+        f"  WHERE 1=1{and_clause}"
+        f") "
+        f"SELECT * FROM filtered "
+        f"ORDER BY matched_count + referenced_count DESC, username "
+        f"LIMIT {int(limit)} OFFSET {int(offset)}",
+        namespace=X_DATASET_NAMESPACE,
+    )
+    rows = list(result.rows)
+    return _search_total_from_rows(rows), _post_rows_without_internal(rows)
+
+
+def _search_users_via_canonical(
+    dataset,
+    query: str,
+    *,
+    offset: int,
+    limit: int,
+) -> tuple[int, list[dict[str, Any]]]:
+    cte = canonical_cte(use_matched_index=matched_index_ready(dataset))
+    and_clause = _user_needle_and_clause(query)
+    result = dataset.query(
+        f"WITH {cte}, authors_with_posts AS ("
+        f"  SELECT author_id, "
+        f"  SUM(CASE WHEN kind = 'matched' THEN 1 ELSE 0 END) AS matched_count, "
+        f"  SUM(CASE WHEN kind = 'referenced' THEN 1 ELSE 0 END) AS referenced_count, "
+        f"  MIN(created_at) AS first_post_at, "
+        f"  MAX(created_at) AS last_post_at "
+        f"  FROM canonical_enriched GROUP BY author_id"
+        f"), filtered AS ("
+        f"  SELECT a.*, awp.matched_count, awp.referenced_count, "
+        f"  awp.first_post_at, awp.last_post_at, "
+        f"  COUNT(*) OVER () AS {_RESULT_TOTAL_COLUMN} "
+        f"  FROM authors_deduped a "
+        f"  INNER JOIN authors_with_posts awp ON a.author_id = awp.author_id "
+        f"  WHERE 1=1{and_clause}"
+        f") "
+        f"SELECT * FROM filtered "
+        f"ORDER BY matched_count + referenced_count DESC, username "
+        f"LIMIT {int(limit)} OFFSET {int(offset)}",
+        namespace=X_DATASET_NAMESPACE,
+    )
+    rows = list(result.rows)
+    return _search_total_from_rows(rows), _post_rows_without_internal(rows)
+
+
 def search_users(
     dataset,
     query: str,
@@ -87,41 +179,13 @@ def search_users(
 ) -> tuple[int, list[dict[str, Any]]]:
     """Authors with at least one canonical ingested post."""
     ensure_x_datasets(dataset)
-    cte = canonical_cte(use_matched_index=matched_index_ready(dataset))
-    where = _user_needle_filter(query)
-    if where:
-        where = where.replace(" WHERE ", " AND ", 1)
-    count = dataset.query(
-        f"WITH {cte}, authors_with_posts AS ("
-        f"  SELECT author_id, COUNT(*) AS post_rows, "
-        f"  MIN(created_at) AS first_post_at, MAX(created_at) AS last_post_at "
-        f"  FROM canonical_enriched GROUP BY author_id"
-        f") "
-        f"SELECT COUNT(*) AS n FROM authors_deduped a "
-        f"INNER JOIN authors_with_posts awp ON a.author_id = awp.author_id "
-        f"WHERE 1=1{where}",
-        namespace=X_DATASET_NAMESPACE,
+    if _author_stats_search_ready(dataset):
+        return _search_users_via_stats(
+            dataset, query, offset=int(offset), limit=int(limit)
+        )
+    return _search_users_via_canonical(
+        dataset, query, offset=int(offset), limit=int(limit)
     )
-    total = int(count.rows[0]["n"]) if count.rows else 0
-    result = dataset.query(
-        f"WITH {cte}, authors_with_posts AS ("
-        f"  SELECT author_id, "
-        f"  SUM(CASE WHEN kind = 'matched' THEN 1 ELSE 0 END) AS matched_count, "
-        f"  SUM(CASE WHEN kind = 'referenced' THEN 1 ELSE 0 END) AS referenced_count, "
-        f"  MIN(created_at) AS first_post_at, "
-        f"  MAX(created_at) AS last_post_at "
-        f"  FROM canonical_enriched GROUP BY author_id"
-        f") "
-        f"SELECT a.*, awp.matched_count, awp.referenced_count, "
-        f"awp.first_post_at, awp.last_post_at "
-        f"FROM authors_deduped a "
-        f"INNER JOIN authors_with_posts awp ON a.author_id = awp.author_id "
-        f"WHERE 1=1{where} "
-        f"ORDER BY awp.matched_count + awp.referenced_count DESC, a.username "
-        f"LIMIT {int(limit)} OFFSET {int(offset)}",
-        namespace=X_DATASET_NAMESPACE,
-    )
-    return total, list(result.rows)
 
 
 def _total_from_stats(
@@ -286,19 +350,20 @@ def search_tweets(
 ) -> tuple[int, list[dict[str, Any]]]:
     ensure_x_datasets(dataset)
     cte = canonical_cte(use_matched_index=matched_index_ready(dataset))
-    where = _tweet_needle_filter(query)
-    count = dataset.query(
-        f"WITH {cte} SELECT COUNT(*) AS n FROM canonical_enriched{where}",
-        namespace=X_DATASET_NAMESPACE,
-    )
-    total = int(count.rows[0]["n"]) if count.rows else 0
+    and_clause = _tweet_needle_and_clause(query)
     result = dataset.query(
-        f"WITH {cte} SELECT * FROM canonical_enriched{where} "
+        f"WITH {cte}, filtered AS ("
+        f"  SELECT e.*, COUNT(*) OVER () AS {_RESULT_TOTAL_COLUMN} "
+        f"  FROM canonical_enriched e "
+        f"  WHERE 1=1{and_clause}"
+        f") "
+        f"SELECT * FROM filtered "
         f"ORDER BY created_at DESC "
         f"LIMIT {int(limit)} OFFSET {int(offset)}",
         namespace=X_DATASET_NAMESPACE,
     )
-    return total, list(result.rows)
+    rows = list(result.rows)
+    return _search_total_from_rows(rows), _post_rows_without_internal(rows)
 
 
 def post_by_id(dataset, tweet_id: str) -> dict[str, Any] | None:
