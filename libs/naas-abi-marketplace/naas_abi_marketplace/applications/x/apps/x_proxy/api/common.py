@@ -624,7 +624,13 @@ class SnapshotContext:
             and slug is not None
             and hasattr(cache, "count_endpoint_timeseries")
         ):
-            return cache.count_endpoint_timeseries(slug)
+            buckets = cache.count_endpoint_timeseries(slug)
+            if buckets:
+                return buckets
+            logger.info(
+                f"X app: projection has no count buckets for {query_string!r} "
+                f"(slug {slug!r}); using SPARQL"
+            )
         escaped = _escape_sparql_string(query_string)
         sparql = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>

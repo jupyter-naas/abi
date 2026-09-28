@@ -589,6 +589,29 @@ def test_timeseries_excludes_the_in_progress_partial_slot():
     assert starts == ["2026-07-07T14:00:00+00:00"]
 
 
+class _EmptyProjectionCountBuckets:
+    """Dataset reader stub: posts exist but count_buckets_v1 was never backfilled."""
+
+    def known_query_slugs(self) -> set[str]:
+        return {slugify(_QUERY)}
+
+    def count_endpoint_timeseries(self, query_slug: str) -> list[dict]:
+        return []
+
+
+def test_timeseries_falls_back_to_graph_when_projection_count_buckets_empty():
+    store = _FakeTripleStore()
+    _seed_count_buckets(store)
+    ctx = SnapshotContext(
+        None,
+        store,
+        queries=[],
+        cache=_EmptyProjectionCountBuckets(),  # type: ignore[arg-type]
+    )
+    starts = [b["start"] for b in ctx.timeseries(_QUERY)]
+    assert starts == ["2026-07-07T14:00:00+00:00"]
+
+
 def test_partial_bucket_returns_the_in_progress_slot():
     store = _FakeTripleStore()
     _seed_count_buckets(store)

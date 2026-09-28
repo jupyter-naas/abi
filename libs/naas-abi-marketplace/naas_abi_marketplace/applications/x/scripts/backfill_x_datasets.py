@@ -10,6 +10,7 @@ from pathlib import Path
 
 from naas_abi_core.utils.Logger import logger
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelope_paths import (
+    COUNT_ENVELOPE_PREFIX,
     ENVELOPE_PREFIX,
 )
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.storage_walk import walk
@@ -66,6 +67,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Re-ingest envelopes even when already recorded in envelopes_v1.",
     )
+    parser.add_argument(
+        "--skip-count-envelopes",
+        action="store_true",
+        help=(
+            "Do not walk x/count_recent_tweets (only search_recent_tweets). "
+            "By default both prefixes are synced so count_buckets_v1 is populated."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -103,7 +112,11 @@ def main(argv: list[str] | None = None) -> int:
         ]
     else:
         paths = walk(object_storage, ENVELOPE_PREFIX, suffix=".json")
-        paths.sort()
+        if not args.skip_count_envelopes:
+            paths.extend(
+                walk(object_storage, COUNT_ENVELOPE_PREFIX, suffix=".json")
+            )
+        paths = sorted(set(paths))
 
     if args.limit:
         paths = paths[: args.limit]
