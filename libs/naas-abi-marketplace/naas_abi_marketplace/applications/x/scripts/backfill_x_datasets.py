@@ -17,6 +17,7 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.storage_walk impor
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.sync import (
     sync_envelope_paths,
 )
+from naas_abi_marketplace.applications.x.scripts._engine_bootstrap import load_engine
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -24,8 +25,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--config",
         type=Path,
-        default=Path("config.local.yaml"),
-        help="ABI YAML config (loads Engine before sync).",
+        default=None,
+        help=(
+            "ABI YAML config (default: config.{ENV}.yaml or config.yaml). "
+            "On production EC2 use config.local.yaml or omit --config when ENV=local."
+        ),
     )
     parser.add_argument(
         "--batch-size",
@@ -80,10 +84,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    from naas_abi_core.engine.Engine import Engine
     from naas_abi_marketplace.applications.x import ABIModule
 
-    engine = Engine(configuration=args.config.read_text(encoding="utf-8"))
+    engine = load_engine(args.config)
     engine.load()
     module = ABIModule.get_instance()
     object_storage = module.engine.services.object_storage

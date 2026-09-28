@@ -24,15 +24,13 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelope_paths imp
 )
 
 
-def _services_from_config(config_path: Path):
-    src_root = Path(__file__).resolve().parents[3]
-    if str(src_root) not in sys.path:
-        sys.path.insert(0, str(src_root))
-
-    from naas_abi_core.engine.Engine import Engine
+def _services_from_config(config_path: Path | None):
     from naas_abi_marketplace.applications.x import ABIModule
+    from naas_abi_marketplace.applications.x.scripts._engine_bootstrap import (
+        load_engine,
+    )
 
-    engine = Engine(configuration=config_path.read_text(encoding="utf-8"))
+    engine = load_engine(config_path)
     engine.load()
     module = ABIModule.get_instance()
     if not module.engine.services.dataset_available():
@@ -52,8 +50,11 @@ def main() -> None:
     parser.add_argument(
         "--config",
         type=Path,
-        default=Path("config.local.yaml"),
-        help="ABI config file.",
+        default=None,
+        help=(
+            "ABI config file (default: config.{ENV}.yaml). "
+            "On production EC2 use config.local.yaml or omit when ENV=local."
+        ),
     )
     parser.add_argument(
         "--envelope-prefix",
@@ -72,11 +73,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    config_path = args.config.resolve()
-    if not config_path.is_file():
-        raise SystemExit(f"Config not found: {config_path}")
+    if args.config is not None and not args.config.is_file():
+        raise SystemExit(f"Config not found: {args.config.resolve()}")
 
-    object_storage, dataset = _services_from_config(config_path)
+    object_storage, dataset = _services_from_config(args.config)
     report = envelope_bookkeeping_diff(
         object_storage,
         dataset,

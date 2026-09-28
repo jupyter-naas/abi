@@ -37,6 +37,19 @@ docker compose exec -T abi env LOG_LEVEL=INFO uv run python \
 
 Host `uv run` fails if config uses Docker service names (`fuseki`, `minio`, `postgres`).
 
+**Production EC2 (`axi-ai-abi-1`):** the running stack uses `config.local.yaml` and secrets in `/app/.env`. Do not pass bare `config.yaml` from a one-off `docker exec` unless `.env` is loaded — scripts preload dotenv automatically when you use the default config pick:
+
+```bash
+docker exec -w /app axi-ai-abi-1 env LOG_LEVEL=INFO uv run python \
+  src/signals/x/scripts/backfill_x_datasets.py --batch-size 32
+
+docker exec -w /app axi-ai-abi-1 env LOG_LEVEL=INFO uv run python \
+  src/signals/x/scripts/backfill_x_datasets.py --config config.local.yaml \
+  --batch-size 32
+```
+
+If secrets still fail, verify `/app/.env` contains keys referenced in config (e.g. `AWS_ACCESS_KEY_ID` when Bedrock is enabled).
+
 **Pending ingest on prod:** build `/tmp/x_pending.txt` once (audit JSON), then backfill with `--paths-file` only — avoid re-running the full audit before every backfill.
 
 ## Do not
