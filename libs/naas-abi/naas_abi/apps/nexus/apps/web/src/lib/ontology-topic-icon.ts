@@ -60,9 +60,21 @@ function normalize(value: string) {
   return value.replace(/([A-Z])([A-Z][a-z])/g, '$1 $2').replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ');
 }
+// Every row of the ontology column, dictionary and graph explorer resolves its
+// icon on each render, and names, parents and module names repeat heavily.
+// Running ~45 regexes per lookup made opening the Ontology section block the
+// dock click for hundreds of ms, so memoize the pure string -> icon mapping.
+const MATCH_CACHE_LIMIT = 5000;
+const matchCache = new Map<string, OntologyTopicIconName | null>();
+
 function match(value: string): OntologyTopicIconName | undefined {
+  const cached = matchCache.get(value);
+  if (cached !== undefined) return cached ?? undefined;
   const text = normalize(value);
-  return TOPICS.find(([pattern]) => pattern.test(text))?.[1];
+  const icon = TOPICS.find(([pattern]) => pattern.test(text))?.[1] ?? null;
+  if (matchCache.size >= MATCH_CACHE_LIMIT) matchCache.clear();
+  matchCache.set(value, icon);
+  return icon ?? undefined;
 }
 
 /** Resolve the visible label first, then local context; never classify from an absolute path. */

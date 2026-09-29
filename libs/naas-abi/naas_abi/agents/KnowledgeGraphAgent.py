@@ -32,7 +32,7 @@ API:
 - {_API}/services/graph/discovery_triples_export.py: triples export for discovery selections.
 - {_API}/services/view/service.py and {_API}/api/endpoints/view.py: saved graph views (/api/view).
 Engine: naas_abi_core/services/triple_store/ (TripleStoreService, TripleStorePorts, adaptors for Fuseki, Oxigraph, filesystem).
-Agent: naas_abi/agents/KnowledgeGraphAgent.py and naas_abi/agents/tools/graph_tools.py."""
+Agent: naas_abi/agents/KnowledgeGraphAgent.py and naas_abi/tools/graph_tools.py."""
 
 GRAPH_CAPABILITIES = """- Pick one or more knowledge graphs of the workspace and see them as a network (NodeGraph), a table (Explore), or a list of individuals.
 - Search individuals, inspect one (class, data properties, relations), follow relations.
@@ -111,8 +111,8 @@ class KnowledgeGraphAgent(IntentAgent):
 
     @staticmethod
     def get_tools() -> list:
-        from naas_abi.agents.tools.graph_tools import graph_tools
-        from naas_abi.agents.tools.nexus_source_tools import nexus_source_tools
+        from naas_abi.tools.graph_tools import graph_tools
+        from naas_abi.tools.nexus_source_tools import nexus_source_tools
 
         return graph_tools() + nexus_source_tools()
 

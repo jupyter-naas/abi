@@ -50,28 +50,92 @@ def test_api_basic_endpoints():
         pytest.fail(f"Failed to test API basic endpoints: {e}")
 
 
-def test_api_authentication():
-    """Test authentication endpoints of the API."""
+def test_landing_page_uses_configured_title_and_description():
+    """The landing page must render api.title and api.description, not engine copy."""
+    from naas_abi_core.apps.api.api import DESCRIPTION, TITLE, app
+
+    body = TestClient(app).get("/").text
+
+    assert f"<title>{TITLE}</title>" in body
+    assert f"<h1>Welcome to {TITLE}!</h1>" in body
+    assert DESCRIPTION in body
+    assert "ABI's capabilities" not in body or "ABI's capabilities" in DESCRIPTION
+
+
+def test_render_landing_html_escapes_config_values():
+    from naas_abi_core.apps.api.api import render_landing_html
+
+    body = render_landing_html(
+        title="<b>X</b> API",
+        description='Say "hi" & <script>',
+        logo="/static/logo.png",
+        favicon='https://example.com/f.ico?a=1&b="2"',
+    )
+
+    assert "<b>X</b>" not in body
+    assert "&lt;b&gt;X&lt;/b&gt; API" in body
+    assert "&lt;script&gt;" in body
+    assert 'href="https://example.com/f.ico?a=1&amp;b=&quot;2&quot;"' in body
+
+
+def test_resolve_branding_asset(tmp_path):
+    from naas_abi_core.apps.api.api import resolve_branding_asset
+
+    # Remote URL: passed through, nothing to serve locally.
+    url = "https://example.com/brand/favicon.ico"
+    assert resolve_branding_asset(url) == (url, None)
+
+    # Existing file: served from /branding/<basename>.
+    logo = tmp_path / "acme-logo.png"
+    logo.write_bytes(b"png")
+    assert resolve_branding_asset(str(logo)) == (
+        "/branding/acme-logo.png",
+        str(logo.resolve()),
+    )
+
+    # Missing file: falls back to the bundled asset with the same basename.
+    assert resolve_branding_asset("assets/logo.png") == ("/static/logo.png", None)
+
+
+def test_branding_route_serves_only_configured_files(tmp_path):
+    from naas_abi_core.apps.api import api as api_module
+
+    client = TestClient(api_module.app)
+    assert client.get("/branding/nothing.png").status_code == 404
+
+    logo = tmp_path / "logo.png"
+    logo.write_bytes(b"\x89PNG")
+    original = dict(api_module._branding_files)
+    api_module._branding_files["logo.png"] = str(logo)
     try:
-        from naas_abi_core.apps.api.api import app
-
-        client = TestClient(app)
-
-        # Test token endpoint with valid credentials
-        response = client.post("/token", data={"username": "user", "password": "abi"})
+        response = client.get("/branding/logo.png")
         assert response.status_code == 200
-        data = response.json()
-        assert data["access_token"] == "abi"
-        assert data["token_type"] == "bearer"
-        print("✅ API authentication with valid credentials works")
+        assert response.content == b"\x89PNG"
+    finally:
+        api_module._branding_files.clear()
+        api_module._branding_files.update(original)
 
-        # Test token endpoint with invalid credentials
-        response = client.post("/token", data={"username": "user", "password": "wrong"})
-        assert response.status_code == 400
-        print("✅ API properly rejects invalid credentials")
 
-    except Exception as e:  # noqa: BLE001
-        pytest.fail(f"Failed to test API authentication: {e}")
+def test_api_has_no_token_endpoint():
+    """The API key is never handed out over HTTP: there is no /token route."""
+    from naas_abi_core.apps.api.api import app
+
+    client = TestClient(app)
+
+    response = client.post("/token", data={"username": "user", "password": "abi"})
+    assert response.status_code in (404, 405)
+    assert "access_token" not in response.text
+    assert not any(getattr(route, "path", None) == "/token" for route in app.routes)
+
+
+def test_api_security_scheme_is_plain_bearer():
+    """Swagger must ask for the API key, not point at a password-flow token URL."""
+    from naas_abi_core.apps.api.api import api_key_scheme
+
+    model = api_key_scheme.model.model_dump(mode="json", by_alias=True)
+    assert model["type"] == "http"
+    assert model["scheme"].lower() == "bearer"
+    assert "flows" not in model
 
 
 def test_api_agent_routes():
@@ -261,9 +325,7 @@ def test_api_cors_configuration():
 
         # Check for CORS headers
         headers = response.headers
-        cors_headers = [
-            h for h in headers if h.lower().startswith("access-control")
-        ]
+        cors_headers = [h for h in headers if h.lower().startswith("access-control")]
 
         if cors_headers:
             print(f"✅ CORS headers found: {cors_headers}")
@@ -279,3 +341,16 @@ def test_api_cors_configuration():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
+
+
+def test_forwarded_headers_are_trusted_only_from_private_proxies(monkeypatch):
+    """A client reaching the API directly must not choose its own IP via X-Forwarded-For."""
+    from naas_abi_core.apps.api.api import trusted_proxy_ips
+
+    monkeypatch.delenv("FORWARDED_ALLOW_IPS", raising=False)
+    default = trusted_proxy_ips()
+    assert "*" not in default
+    assert "127.0.0.1" in default and "172.16.0.0/12" in default
+
+    monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.1.2.3")
+    assert trusted_proxy_ips() == "10.1.2.3"

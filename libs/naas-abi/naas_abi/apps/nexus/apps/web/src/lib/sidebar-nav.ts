@@ -10,6 +10,7 @@ export const DEFAULT_NAV_ORDER = [
   'datasets',
   'slides',
   'documents',
+  'sheets',
   'code',
   'marketplace',
 ] as const;

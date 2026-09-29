@@ -26,7 +26,7 @@ API:
 - {_API}/services/datasets/sql_safe.py (and sql_safe_test.py): assert_read_only_sql, clamp_limit, preview_sql.
 - {_API}/services/datasets/datasets__schema.py: dataset dataclasses and errors.
 Engine: naas_abi_core/services/dataset/ (DatasetPort, DatasetService, DuckLake adapter; see its AGENTS.md).
-Agent: naas_abi/agents/DatasetsAgent.py and naas_abi/agents/tools/datasets_tools.py."""
+Agent: naas_abi/agents/DatasetsAgent.py and naas_abi/tools/datasets_tools.py."""
 
 DATASETS_CAPABILITIES = """- Browse structured datasets by namespace: columns and types, partitions, primary key, snapshot, storage location.
 - Preview rows and run read-only SQL (SELECT) over a namespace; results are row-capped and time-limited. Writes and DDL are rejected.
@@ -96,8 +96,8 @@ class DatasetsAgent(IntentAgent):
 
     @staticmethod
     def get_tools() -> list:
-        from naas_abi.agents.tools.datasets_tools import datasets_tools
-        from naas_abi.agents.tools.nexus_source_tools import nexus_source_tools
+        from naas_abi.tools.datasets_tools import datasets_tools
+        from naas_abi.tools.nexus_source_tools import nexus_source_tools
 
         return datasets_tools() + nexus_source_tools()
 

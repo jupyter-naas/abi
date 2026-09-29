@@ -389,3 +389,130 @@ async def test_verify_otp_rejects_wrong_code_and_increments(monkeypatch) -> None
 
     adapter.increment_magic_link_otp_attempts.assert_awaited_once_with("ml-1")
     adapter.mark_magic_link_token_used.assert_not_awaited()
+
+
+def _user_with_password(password: str) -> AuthUserRecord:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import get_password_hash
+
+    return AuthUserRecord(
+        id="user-1",
+        email="admin@example.com",
+        name="Admin",
+        hashed_password=get_password_hash(password),
+        created_at=datetime.utcnow(),
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("password", ["Admin1234!", "admin"])
+async def test_login_refuses_a_default_password_even_when_it_matches(
+    monkeypatch, password: str
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
+        InvalidCredentialsError,
+    )
+
+    monkeypatch.setattr(settings, "auth_password_enabled", True)
+    adapter = AsyncMock()
+    adapter.get_user_by_email.return_value = _user_with_password(password)
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(InvalidCredentialsError):
+        await service.login_user("admin@example.com", password, None, None)
+    with pytest.raises(InvalidCredentialsError):
+        await service.create_oauth_access_token("admin@example.com", password)
+
+
+@pytest.mark.asyncio
+async def test_register_rejects_a_default_password(monkeypatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
+        DefaultPasswordNotAllowedError,
+    )
+
+    monkeypatch.setattr(settings, "auth_password_enabled", True)
+    monkeypatch.setattr(settings, "auth_signup_enabled", True)
+    adapter = AsyncMock()
+    adapter.user_exists_with_email.return_value = False
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(DefaultPasswordNotAllowedError):
+        await service.register_user("new@example.com", "Admin1234!", "New", None, None)
+    adapter.create_user_with_default_workspace.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_change_and_reset_reject_a_default_password(monkeypatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.port import PasswordResetTokenRecord
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
+        DefaultPasswordNotAllowedError,
+    )
+
+    monkeypatch.setattr(settings, "auth_password_enabled", True)
+    adapter = AsyncMock()
+    adapter.get_user_by_id.return_value = _user_with_password("a-real-current-password")
+    adapter.get_password_reset_token.return_value = PasswordResetTokenRecord(
+        id="reset-1",
+        user_id="user-1",
+        token="hashed",
+        expires_at=datetime(2999, 1, 1),
+        used=False,
+        created_at=datetime.utcnow(),
+    )
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(DefaultPasswordNotAllowedError):
+        await service.change_password("user-1", "a-real-current-password", "admin", None, None)
+    with pytest.raises(DefaultPasswordNotAllowedError):
+        await service.reset_password("raw-token", "Admin1234!")
+    adapter.update_user_password.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_register_is_refused_when_signup_is_disabled(monkeypatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import SignupDisabledError
+
+    monkeypatch.setattr(settings, "auth_password_enabled", True)
+    monkeypatch.setattr(settings, "auth_signup_enabled", False)
+    adapter = AsyncMock()
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(SignupDisabledError):
+        await service.register_user("new@example.com", "a-long-password", "New", None, None)
+    adapter.create_user_with_default_workspace.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_a_wrong_code_counts_against_every_active_code(monkeypatch) -> None:
+    """Requesting fresh codes must not reset the guess budget of older ones."""
+    monkeypatch.setattr(settings, "otp_max_attempts", 5)
+    adapter = AsyncMock()
+    adapter.get_user_by_email.return_value = AuthUserRecord(
+        id="user-1",
+        email="user@example.com",
+        name="User",
+        hashed_password="hashed",
+        created_at=datetime.utcnow(),
+    )
+    adapter.list_unused_magic_links_for_user.return_value = [
+        MagicLinkTokenRecord(
+            id=f"ml-{i}",
+            user_id="user-1",
+            token=f"hash-{i}",
+            expires_at=datetime.utcnow().replace(year=2099),
+            used=False,
+            created_at=datetime.utcnow(),
+            otp_code_hash=hash_otp_code(f"11111{i}"),
+            otp_attempts=0,
+        )
+        for i in range(3)
+    ]
+    adapter.increment_magic_link_otp_attempts.return_value = 1
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(InvalidOtpError):
+        await service.verify_otp(
+            email="user@example.com", code="000000", user_agent=None, ip_address=None
+        )
+
+    charged = {call.args[0] for call in adapter.increment_magic_link_otp_attempts.await_args_list}
+    assert charged == {"ml-0", "ml-1", "ml-2"}

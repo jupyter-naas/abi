@@ -25,17 +25,15 @@ export function TopNav() {
   const { nav, actions } = useTopNavContent();
   const [mounted, setMounted] = useState(false);
 
-  const {
-    sidebarCollapsed,
-    toggleSidebar,
-    contextPanelOpen,
-    toggleContextPanel,
-    activePanelSection,
-    setActivePanelSection,
-    lastActivePanelSection,
-    sectionPanelWidth,
-    currentWorkspaceId,
-  } = useWorkspaceStore();
+  const sidebarCollapsed = useWorkspaceStore((s) => s.sidebarCollapsed);
+  const toggleSidebar = useWorkspaceStore((s) => s.toggleSidebar);
+  const contextPanelOpen = useWorkspaceStore((s) => s.contextPanelOpen);
+  const toggleContextPanel = useWorkspaceStore((s) => s.toggleContextPanel);
+  const activePanelSection = useWorkspaceStore((s) => s.activePanelSection);
+  const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
+  const lastActivePanelSection = useWorkspaceStore((s) => s.lastActivePanelSection);
+  const sectionPanelWidth = useWorkspaceStore((s) => s.sectionPanelWidth);
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
 
   useEffect(() => {
     setMounted(true);

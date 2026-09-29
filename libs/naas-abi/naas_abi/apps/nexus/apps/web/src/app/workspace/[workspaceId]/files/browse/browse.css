@@ -447,9 +447,197 @@
 }
 
 .files-browse-preview-markdown {
-  padding: 16px 20px 24px;
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 20px 24px 32px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--foreground-hex);
+}
+
+.files-browse-preview-markdown > :first-child {
+  margin-top: 0;
+}
+
+.files-browse-preview-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.files-browse-preview-markdown h1,
+.files-browse-preview-markdown h2,
+.files-browse-preview-markdown h3,
+.files-browse-preview-markdown h4 {
+  margin: 1.4em 0 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--foreground-hex);
+}
+
+.files-browse-preview-markdown h1 {
+  font-size: 1.5rem;
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid var(--border-hex);
+}
+
+.files-browse-preview-markdown h2 {
+  font-size: 1.25rem;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border-hex);
+}
+
+.files-browse-preview-markdown h3 {
+  font-size: 1.1rem;
+}
+
+.files-browse-preview-markdown h4 {
+  font-size: 1rem;
+}
+
+.files-browse-preview-markdown p {
+  margin: 0.75em 0;
+}
+
+.files-browse-preview-markdown ul,
+.files-browse-preview-markdown ol {
+  margin: 0.75em 0;
+  padding-left: 1.4em;
+}
+
+.files-browse-preview-markdown li {
+  margin: 0.25em 0;
+}
+
+.files-browse-preview-markdown li > ul,
+.files-browse-preview-markdown li > ol {
+  margin: 0.2em 0;
+}
+
+.files-browse-preview-markdown a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.files-browse-preview-markdown blockquote {
+  margin: 0.9em 0;
+  padding: 0.15em 0 0.15em 0.9em;
+  border-left: 3px solid var(--border-hex);
+  color: var(--muted-foreground-hex);
+}
+
+.files-browse-preview-markdown hr {
+  margin: 1.4em 0;
+  border: 0;
+  border-top: 1px solid var(--border-hex);
+}
+
+.files-browse-preview-markdown code {
+  padding: 0.12em 0.35em;
+  border-radius: 3px;
+  background: var(--muted-bg-hex);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88em;
+}
+
+.files-browse-preview-markdown pre {
+  margin: 0.9em 0;
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 4px);
+  background: var(--muted-bg-hex);
+}
+
+.files-browse-preview-markdown pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.files-browse-preview-markdown img {
+  max-width: 100%;
+  height: auto;
+}
+
+.files-browse-preview-markdown table {
+  width: 100%;
+  margin: 1em 0;
+  border-collapse: collapse;
   font-size: 13px;
-  line-height: 1.55;
+}
+
+.files-browse-preview-markdown th,
+.files-browse-preview-markdown td {
+  padding: 8px 10px;
+  border: 1px solid var(--border-hex);
+  text-align: left;
+  vertical-align: top;
+}
+
+.files-browse-preview-markdown th {
+  background: var(--muted-bg-hex);
+  font-weight: 600;
+}
+
+.files-browse-preview-markdown tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--muted-bg-hex) 45%, transparent);
+}
+
+.files-browse-preview-csv {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.files-browse-preview-csv-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.files-browse-preview-csv table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.files-browse-preview-csv th,
+.files-browse-preview-csv td {
+  max-width: 28rem;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border-hex);
+  border-right: 1px solid var(--border-hex);
+  text-align: left;
+  vertical-align: top;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.files-browse-preview-csv th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--muted-bg-hex);
+  font-weight: 600;
+  color: var(--foreground-hex);
+}
+
+.files-browse-preview-csv tbody tr:hover td {
+  background: color-mix(in srgb, var(--muted-bg-hex) 55%, transparent);
+}
+
+.files-browse-preview-csv-note {
+  margin: 0;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-hex);
+  background: var(--background-hex);
+  font-size: 11px;
+  color: var(--muted-foreground-hex);
 }
 
 .files-browse-drag-overlay {

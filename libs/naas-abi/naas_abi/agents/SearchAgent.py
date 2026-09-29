@@ -23,7 +23,7 @@ API:
 - {_API}/services/search/adapters/primary/search__primary_adapter__FastAPI.py: POST /api/search/ (workspace search), /web, /private, GET /suggestions.
 - {_API}/services/search/service.py (and service_test.py): SearchService.search (a stub: returns no results), web_search (Wikipedia, DuckDuckGo), private_search (source ontology), get_suggestions (Wikipedia opensearch).
 - {_API}/services/search/search__schema.py: request and result dataclasses.
-Agent: naas_abi/agents/SearchAgent.py and naas_abi/agents/tools/search_tools.py."""
+Agent: naas_abi/agents/SearchAgent.py and naas_abi/tools/search_tools.py."""
 
 SEARCH_CAPABILITIES = """- Search public sources (Wikipedia or DuckDuckGo) from the Search page, with suggestions as you type.
 - Search private sources: today that is the loaded ontologies (classes and properties by label).
@@ -84,8 +84,8 @@ class SearchAgent(IntentAgent):
 
     @staticmethod
     def get_tools() -> list:
-        from naas_abi.agents.tools.nexus_source_tools import nexus_source_tools
-        from naas_abi.agents.tools.search_tools import search_tools
+        from naas_abi.tools.nexus_source_tools import nexus_source_tools
+        from naas_abi.tools.search_tools import search_tools
 
         return search_tools() + nexus_source_tools()
 

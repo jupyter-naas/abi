@@ -50,6 +50,10 @@ const DocumentsSection = dynamic(
   () => import('./documents-section').then((m) => m.DocumentsSection),
   { ssr: false, loading: sectionLoading },
 );
+const SheetsSection = dynamic(() => import('./sheets-section').then((m) => m.SheetsSection), {
+  ssr: false,
+  loading: sectionLoading,
+});
 const MarketplaceSection = dynamic(
   () => import('./marketplace-section').then((m) => m.MarketplaceSection),
   { ssr: false, loading: sectionLoading },
@@ -85,6 +89,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
   const canGraph = useFeature('graph');
   const canSlides = useFeature('slides');
   const canDocuments = useFeature('documents');
+  const canSheets = useFeature('sheets');
 
   if (section === 'maps' && canMaps) return <MapsSection collapsed={false} detailOnly />;
   if (section === 'search' && canSearch) return <SearchSection collapsed={false} detailOnly />;
@@ -96,6 +101,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'code') return <CodeSection collapsed={false} detailOnly />;
   if (section === 'slides' && canSlides) return <SlidesSection collapsed={false} detailOnly />;
   if (section === 'documents' && canDocuments) return <DocumentsSection collapsed={false} detailOnly />;
+  if (section === 'sheets' && canSheets) return <SheetsSection collapsed={false} detailOnly />;
   if (section === 'apps' && canApps) return <AppsSection collapsed={false} detailOnly />;
   if (section === 'marketplace' && canMarketplace) return <MarketplaceSection collapsed={false} detailOnly />;
   if (section === 'infrastructure' && canSettings) return <InfrastructureSection />;

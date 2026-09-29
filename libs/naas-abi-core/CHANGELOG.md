@@ -2,6 +2,44 @@
 
 <!-- version list -->
 
+## v2.40.2 (2026-09-24)
+
+### Bug Fixes
+
+- **auth**: Lock registration, guard Ollama routes, enforce sign-in rate limits
+  ([`df2a296`](https://github.com/jupyter-naas/abi/commit/df2a296a88ca4d3da6a1846cc175b76d46525edb))
+
+
+## v2.40.1 (2026-09-24)
+
+### Bug Fixes
+
+- **api**: Remove the /token endpoint that issued ABI_API_KEY
+  ([`101085f`](https://github.com/jupyter-naas/abi/commit/101085f5dbcd209a7d8614b858f7a75fe9ff23cb))
+
+
+## v2.40.0 (2026-09-23)
+
+### Bug Fixes
+
+- **api**: Render configured description and branding assets on landing page
+  ([`c064c34`](https://github.com/jupyter-naas/abi/commit/c064c3402eb30d0951cf4763b3449aab30650f70))
+
+### Features
+
+- **api**: Configurable landing page theme colours
+  ([`94b58f7`](https://github.com/jupyter-naas/abi/commit/94b58f799bf900c4ff35077d0fbaa20b47b0438f))
+
+
+## v2.39.0 (2026-09-22)
+
+### Features
+
+- **nexus**: Native Sheets editor, formulas, resizing, and SheetsAgent
+  ([#1297](https://github.com/jupyter-naas/abi/pull/1297),
+  [`135967f`](https://github.com/jupyter-naas/abi/commit/135967f33be441c7afa9f4d82e7f1f40a4c7c465))
+
+
 ## v2.38.0 (2026-09-22)
 
 ### Bug Fixes

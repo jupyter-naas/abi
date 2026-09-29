@@ -3,6 +3,8 @@ const path = require('path');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Keep make check / production builds from overwriting a running dev server.
+  distDir: process.env.NODE_ENV === 'development' ? '.next-dev' : '.next',
   transpilePackages: ['@nexus/ui', '@embedpdf/snippet', 'three'],
   experimental: {
     optimizePackageImports: ['lucide-react'],
