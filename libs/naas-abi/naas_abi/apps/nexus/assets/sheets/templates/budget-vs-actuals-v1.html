@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="nexus-sheets-template" content="budget-vs-actuals-v1" />
+<title>Budget vs Actuals</title>
+<script type="application/vnd.nexus.sheet+json">
+{
+  "title": "Budget vs Actuals",
+  "sheets": [
+    {
+      "name": "Assumptions",
+      "rows": [
+        [
+          "Role",
+          "Category",
+          "Budget (EUR '000)",
+          "Actual (EUR '000)",
+          "Notes"
+        ],
+        [
+          "INPUT",
+          "Revenue",
+          720,
+          698.5,
+          "Edit yellow cells"
+        ],
+        [
+          "INPUT",
+          "COGS",
+          265,
+          271.2,
+          ""
+        ],
+        [
+          "INPUT",
+          "Salaries",
+          168,
+          171.4,
+          ""
+        ],
+        [
+          "INPUT",
+          "Marketing",
+          54,
+          61.2,
+          ""
+        ],
+        [
+          "INPUT",
+          "Facilities",
+          37.2,
+          36.8,
+          ""
+        ],
+        [
+          "INPUT",
+          "Software",
+          24.6,
+          25.9,
+          ""
+        ],
+        [
+          "INPUT",
+          "Eng headcount budget",
+          12,
+          "",
+          "Headcount tab"
+        ],
+        [
+          "INPUT",
+          "Eng headcount actual",
+          13,
+          "",
+          ""
+        ],
+        [
+          "INPUT",
+          "Eng payroll budget",
+          96,
+          "",
+          "EUR '000"
+        ],
+        [
+          "INPUT",
+          "Eng payroll actual",
+          104.5,
+          "",
+          ""
+        ],
+        [
+          "INPUT",
+          "Sales HC budget",
+          6,
+          "",
+          ""
+        ],
+        [
+          "INPUT",
+          "Sales HC actual",
+          6,
+          "",
+          ""
+        ],
+        [
+          "INPUT",
+          "Sales payroll budget",
+          48,
+          "",
+          ""
+        ],
+        [
+          "INPUT",
+          "Sales payroll actual",
+          49.2,
+          "",
+          ""
+        ],
+        [
+          "INPUT",
+          "CS HC budget",
+          4,
+          "",
+          ""
+        ],
+        [
+          "INPUT",
+          "CS HC actual",
+          3,
+          "",
+          ""
+        ],
+        [
+          "INPUT",
+          "CS payroll budget",
+          28,
+          "",
+          ""
+        ],
+        [
+          "INPUT",
+          "CS payroll actual",
+          22.5,
+          "",
+          ""
+        ],
+        [
+          "INPUT",
+          "GA HC budget",
+          3,
+          "",
+          ""
+        ],
+        [
+          "INPUT",
+          "GA HC actual",
+          3,
+          "",
+          ""
+        ],
+        [
+          "INPUT",
+          "GA payroll budget",
+          24,
+          "",
+          ""
+        ],
+        [
+          "INPUT",
+          "GA payroll actual",
+          24.6,
+          "",
+          ""
+        ],
+        [
+          "LABEL",
+          "Unit",
+          "EUR thousands",
+          "",
+          ""
+        ]
+      ]
+    },
+    {
+      "name": "Summary",
+      "rows": [
+        [
+          "Category",
+          "Budget (EUR '000)",
+          "Actual (EUR '000)",
+          "Variance",
+          "Variance %"
+        ],
+        [
+          "Revenue",
+          "=Assumptions!C2",
+          "=Assumptions!D2",
+          "=C2-B2",
+          "=D2/B2"
+        ],
+        [
+          "COGS",
+          "=Assumptions!C3",
+          "=Assumptions!D3",
+          "=C3-B3",
+          "=D3/B3"
+        ],
+        [
+          "Gross profit",
+          "=B2-B3",
+          "=C2-C3",
+          "=C4-B4",
+          "=D4/B4"
+        ],
+        [
+          "Salaries",
+          "=Headcount!D6",
+          "=Headcount!E6",
+          "=C5-B5",
+          "=D5/B5"
+        ],
+        [
+          "Marketing",
+          "=Assumptions!C5",
+          "=Assumptions!D5",
+          "=C6-B6",
+          "=D6/B6"
+        ],
+        [
+          "Facilities",
+          "=Assumptions!C6",
+          "=Assumptions!D6",
+          "=C7-B7",
+          "=D7/B7"
+        ],
+        [
+          "Software",
+          "=Assumptions!C7",
+          "=Assumptions!D7",
+          "=C8-B8",
+          "=D8/B8"
+        ],
+        [
+          "Total opex",
+          "=SUM(B5:B8)",
+          "=SUM(C5:C8)",
+          "=C9-B9",
+          "=D9/B9"
+        ],
+        [
+          "Operating income",
+          "=B4-B9",
+          "=C4-C9",
+          "=C10-B10",
+          "=D10/B10"
+        ]
+      ]
+    },
+    {
+      "name": "Headcount",
+      "rows": [
+        [
+          "Department",
+          "Budget HC",
+          "Actual HC",
+          "Budget payroll (EUR '000)",
+          "Actual payroll (EUR '000)",
+          "Payroll variance",
+          "Variance %"
+        ],
+        [
+          "Engineering",
+          "=Assumptions!C8",
+          "=Assumptions!C9",
+          "=Assumptions!C10",
+          "=Assumptions!C11",
+          "=E2-D2",
+          "=F2/D2"
+        ],
+        [
+          "Sales",
+          "=Assumptions!C12",
+          "=Assumptions!C13",
+          "=Assumptions!C14",
+          "=Assumptions!C15",
+          "=E3-D3",
+          "=F3/D3"
+        ],
+        [
+          "Customer success",
+          "=Assumptions!C16",
+          "=Assumptions!C17",
+          "=Assumptions!C18",
+          "=Assumptions!C19",
+          "=E4-D4",
+          "=F4/D4"
+        ],
+        [
+          "G&A",
+          "=Assumptions!C20",
+          "=Assumptions!C21",
+          "=Assumptions!C22",
+          "=Assumptions!C23",
+          "=E5-D5",
+          "=F5/D5"
+        ],
+        [
+          "Total",
+          "=SUM(B2:B5)",
+          "=SUM(C2:C5)",
+          "=SUM(D2:D5)",
+          "=SUM(E2:E5)",
+          "=E6-D6",
+          "=F6/D6"
+        ]
+      ]
+    },
+    {
+      "name": "Checks",
+      "rows": [
+        [
+          "Check",
+          "Left",
+          "Right",
+          "Diff",
+          "Status"
+        ],
+        [
+          "GP = Revenue - COGS (budget)",
+          "=Summary!B4",
+          "=Summary!B2-Summary!B3",
+          "=B2-C2",
+          "=IF(ABS(D2)<0.001,\"OK\",\"BREAK\")"
+        ],
+        [
+          "GP = Revenue - COGS (actual)",
+          "=Summary!C4",
+          "=Summary!C2-Summary!C3",
+          "=B3-C3",
+          "=IF(ABS(D3)<0.001,\"OK\",\"BREAK\")"
+        ],
+        [
+          "OI = GP - opex (actual)",
+          "=Summary!C10",
+          "=Summary!C4-Summary!C9",
+          "=B4-C4",
+          "=IF(ABS(D4)<0.001,\"OK\",\"BREAK\")"
+        ],
+        [
+          "Salaries actual = HC payroll total",
+          "=Summary!C5",
+          "=Headcount!E6",
+          "=B5-C5",
+          "=IF(ABS(D5)<0.001,\"OK\",\"BREAK\")"
+        ],
+        [
+          "Opex sum ties",
+          "=Summary!C9",
+          "=SUM(Summary!C5:C8)",
+          "=B6-C6",
+          "=IF(ABS(D6)<0.001,\"OK\",\"BREAK\")"
+        ],
+        [
+          "All checks OK count",
+          "=IF(E2=\"OK\",1,0)+IF(E3=\"OK\",1,0)+IF(E4=\"OK\",1,0)+IF(E5=\"OK\",1,0)+IF(E6=\"OK\",1,0)",
+          5,
+          "=B7-C7",
+          "=IF(ABS(D7)<0.001,\"OK\",\"BREAK\")"
+        ]
+      ]
+    }
+  ]
+}
+</script>
+<style>
+  :root {
+    --grid-bg: #f3f3f3;
+    --cell-bg: #ffffff;
+    --header-bg: #f8f9fa;
+    --border: #dadce0;
+    --ink: #202124;
+    --accent: #1a73e8;
+    --input: #0000ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; font-family: Arial, "Helvetica Neue", sans-serif; background: var(--grid-bg); color: var(--ink); }
+  .workbook { max-width: 1200px; margin: 0 auto; padding: 16px; }
+  .workbook-menubar {
+    display: flex; align-items: center; gap: 12px; padding: 8px 12px;
+    background: var(--cell-bg); border: 1px solid var(--border); border-radius: 8px 8px 0 0;
+  }
+  .workbook-menubar h1 { font-size: 14px; font-weight: 600; margin: 0; flex: 1; }
+  .workbook-menubar button {
+    border: 1px solid var(--border); background: var(--cell-bg); padding: 6px 10px;
+    border-radius: 4px; font-size: 12px; cursor: pointer;
+  }
+  .workbook-menubar button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .legend { font-size: 12px; color: #5f6368; padding: 8px 12px; background: #fff; border: 1px solid var(--border); border-top: none; }
+  table.sheet-grid {
+    width: 100%; border-collapse: collapse; background: var(--cell-bg);
+    border: 1px solid var(--border); border-top: none;
+  }
+  table.sheet-grid th, table.sheet-grid td {
+    border: 1px solid var(--border); padding: 6px 8px; min-width: 72px; font-size: 13px;
+  }
+  table.sheet-grid th { background: var(--header-bg); font-weight: 600; text-align: left; }
+  table.sheet-grid td.input { color: var(--input); background: #ffff99; }
+  table.sheet-grid td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+</style>
+</head>
+<body>
+<div class="workbook">
+  <div class="workbook-menubar">
+    <h1 id="workbook-title">Budget vs Actuals</h1>
+    <button type="button" id="sync-grid">Sync grid</button>
+    <button type="button" class="primary" id="export-xlsx-hint" title="Use Nexus Export or: python -m naas_abi.apps.nexus.sheets.cli">Export XLSX</button>
+  </div>
+  <div class="legend">Yellow / blue cells are inputs. Black cells are formulas. Amounts in EUR thousands unless noted. Checks tab must read OK.</div>
+  <table class="sheet-grid" id="sheet-grid" aria-label="Sheet1">
+    <tbody></tbody>
+  </table>
+</div>
+<script>
+(function () {
+  var JSON_TYPE = 'application/vnd.nexus.sheet+json';
+  var script = document.querySelector('script[type="' + JSON_TYPE + '"]');
+  if (!script) return;
+  var model = JSON.parse(script.textContent);
+  document.getElementById('workbook-title').textContent = model.title || 'Workbook';
+  var tbody = document.querySelector('#sheet-grid tbody');
+  var rows = (model.sheets && model.sheets[0] && model.sheets[0].rows) || [];
+  rows.forEach(function (row, ri) {
+    var tr = document.createElement('tr');
+    row.forEach(function (cell, ci) {
+      var el = document.createElement(ri === 0 ? 'th' : 'td');
+      el.textContent = cell == null ? '' : String(cell);
+      if (ri > 0) el.setAttribute('contenteditable', 'true');
+      if (ri > 0 && model.sheets[0].name === 'Assumptions' && ci > 1 && typeof cell === 'number') el.className = 'input';
+      tr.appendChild(el);
+    });
+    tbody.appendChild(tr);
+  });
+  document.getElementById('sync-grid').addEventListener('click', function () {
+    var out = [];
+    tbody.querySelectorAll('tr').forEach(function (tr) {
+      var row = [];
+      tr.querySelectorAll('th, td').forEach(function (cell) { row.push(cell.textContent.trim()); });
+      out.push(row);
+    });
+    if (model.sheets && model.sheets[0]) model.sheets[0].rows = out;
+    script.textContent = JSON.stringify(model, null, 2);
+  });
+})();
+</script>
+</body>
+</html>

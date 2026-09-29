@@ -18,7 +18,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
     PasswordResetTokenRecord,
 )
 from naas_abi.apps.nexus.apps.api.app.services.refresh_token import hash_token
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 AsyncSessionGetter = Callable[[], AsyncSession | None]
@@ -346,15 +346,16 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         return [self._to_magic_link_token_record(row) for row in result.scalars().all()]
 
     async def increment_magic_link_otp_attempts(self, token_id: str) -> int:
+        # One atomic statement: concurrent wrong guesses cannot read the same
+        # count and each write it back, which would let them slip past the cap.
         result = await self.db.execute(
-            select(MagicLinkTokenModel).where(MagicLinkTokenModel.id == token_id)
+            update(MagicLinkTokenModel)
+            .where(MagicLinkTokenModel.id == token_id)
+            .values(otp_attempts=func.coalesce(MagicLinkTokenModel.otp_attempts, 0) + 1)
+            .returning(MagicLinkTokenModel.otp_attempts)
         )
-        row = result.scalar_one_or_none()
-        if row is None:
-            return 0
-        row.otp_attempts = int(row.otp_attempts or 0) + 1
-        await self.db.flush()
-        return int(row.otp_attempts)
+        attempts = result.scalar_one_or_none()
+        return int(attempts) if attempts is not None else 0
 
     async def mark_magic_link_token_used(self, token_id: str) -> None:
         result = await self.db.execute(

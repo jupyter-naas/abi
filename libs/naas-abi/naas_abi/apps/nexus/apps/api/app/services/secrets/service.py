@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime
 from uuid import uuid4
 
@@ -26,6 +26,7 @@ from naas_abi.apps.nexus.apps.api.app.services.secrets.secrets__schema import (
 from naas_abi.apps.nexus.apps.api.app.services.secrets_crypto import (
     decrypt_secret_value,
     encrypt_secret_value,
+    reencrypt_secret_value,
     try_decrypt_secret_value,
 )
 
@@ -261,3 +262,26 @@ class SecretsService:
         if not row:
             return None
         return self.try_decrypt(row.encrypted_value)
+
+    async def reencrypt_from_keys(
+        self,
+        old_secret_keys: Iterable[str],
+        reencrypt: Callable[[str, list[str]], str | None] = reencrypt_secret_value,
+    ) -> int:
+        """Move every secret still encrypted under an old key to the current key.
+
+        System maintenance run at startup, not a user action: no request context.
+        Returns the number of rows rewritten.
+        """
+        old_keys = list(old_secret_keys)
+        rewritten = 0
+        for record in await self.adapter.list_all():
+            rotated = reencrypt(record.encrypted_value, old_keys)
+            if rotated is None:
+                continue
+            record.encrypted_value = rotated
+            await self.adapter.save(record)
+            rewritten += 1
+        if rewritten:
+            await self.adapter.commit()
+        return rewritten

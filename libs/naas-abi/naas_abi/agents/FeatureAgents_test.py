@@ -20,7 +20,7 @@ from naas_abi.agents.feature.competency import (
     grade,
 )
 from naas_abi.agents.feature.registry import FEATURE_AGENTS, FeatureAgentSpec
-from naas_abi.agents.tools.nexus_source_tools import PACKAGE_ROOT, resolve_source_path
+from naas_abi.tools.nexus_source_tools import PACKAGE_ROOT, resolve_source_path
 from naas_abi_core.utils.Expose import Expose
 
 GENERIC = [spec for spec in FEATURE_AGENTS if spec.name != "Slides"]
@@ -149,7 +149,7 @@ def test_abi_skips_a_supervisor_that_delegates_to_it(monkeypatch) -> None:
 def test_sandbox_tools_are_hidden_without_a_coding_workspace() -> None:
     """Abi listed "the workspace drive" with list_coding_dir (an error outside
     Code) and Files then invented the listing."""
-    from naas_abi.agents.tools.coding_tools import coding_tools
+    from naas_abi.tools.coding_tools import coding_tools
     from naas_abi_core.services.agent.Agent import Agent
 
     gated = {t.name for t in coding_tools() if Agent._requires_workspace(t)}
@@ -291,7 +291,7 @@ def test_agent_knows_its_roster_line(spec: FeatureAgentSpec) -> None:
 
 def test_app_builder_write_tools_match_the_web_list() -> None:
     """The editor refreshes after exactly these tools (isAppProjectWriteTool)."""
-    from naas_abi.agents.tools.app_builder_tools import (
+    from naas_abi.tools.app_builder_tools import (
         APP_PROJECT_WRITE_TOOLS,
         app_builder_tools,
     )

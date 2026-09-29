@@ -57,3 +57,14 @@ export function mergeAuthPersistedState<T extends PersistedAuthSnapshot>(
 
   return { ...current, ...stored } as T;
 }
+
+/** Refresh one minute before JWT expiry; the API remains the validation authority. */
+export function shouldRefreshAccessToken(token: string | null, now = Date.now()): boolean {
+  if (!token) return true;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof payload.exp !== 'number' || payload.exp * 1000 <= now + 60000;
+  } catch {
+    return true;
+  }
+}
