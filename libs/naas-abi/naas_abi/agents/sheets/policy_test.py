@@ -321,7 +321,7 @@ def test_write_gate_opens_when_no_search_tool_can_be_bound() -> None:
     tool bound the gate rejected every workbook write on a factual brief forever,
     and told the model to retry after a search it could not run.
     """
-    with _unimportable("naas_abi.agents.tools.web_tools"):
+    with _unimportable("naas_abi.tools.web_tools"):
         assert sheets_research_tools() == []
         bind_sheets_research_policy(
             "create a workbook about what's going on in iran now",

@@ -8,22 +8,19 @@ print(
     flush=True,
 )
 
+import html
 import os
 import subprocess
 from importlib.resources import files
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
-from fastapi.openapi.models import OAuthFlowPassword
-from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 # Authentication
-from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.security.oauth2 import OAuth2
+from fastapi.security import HTTPBearer
 from fastapi.security.utils import get_authorization_scheme_param
 from fastapi.staticfiles import StaticFiles
 
@@ -82,13 +79,33 @@ TITLE = api_runtime_configuration.title
 DESCRIPTION = api_runtime_configuration.description
 app = FastAPI(title=TITLE, docs_url=None, redoc_url=None)
 
-# Set logo path
-logo_path = api_runtime_configuration.logo_path
-logo_name = os.path.basename(logo_path)
 
-# Set favicon path
-favicon_path = api_runtime_configuration.favicon_path
-favicon_name = os.path.basename(favicon_path)
+def resolve_branding_asset(configured: str) -> tuple[str, str | None]:
+    """Turn a configured logo/favicon value into a browser-loadable URL.
+
+    Returns ``(url, local_file)``:
+
+    - ``http(s)://…`` is used as is; ``local_file`` is ``None``.
+    - A path to an existing file is served from ``/branding/<basename>``;
+      ``local_file`` is its absolute path.
+    - Anything else falls back to the bundled asset with the same basename
+      under ``/static/``; ``local_file`` is ``None``.
+    """
+    if configured.startswith(("http://", "https://")):
+        return configured, None
+    name = os.path.basename(configured)
+    if os.path.isfile(configured):
+        return f"/branding/{name}", os.path.abspath(configured)
+    return f"/static/{name}", None
+
+
+logo_url, _logo_file = resolve_branding_asset(api_runtime_configuration.logo_path)
+favicon_url, _favicon_file = resolve_branding_asset(
+    api_runtime_configuration.favicon_path
+)
+_branding_files: dict[str, str] = {
+    os.path.basename(path): path for path in (_logo_file, _favicon_file) if path
+}
 
 # Allow callers (e.g. `abi dev`) to inject additional origins at runtime so
 # the config file does not need to know about dynamically-allocated dev ports.
@@ -117,18 +134,31 @@ static_dir = os.path.join(os.path.dirname(str(files("naas_abi_core"))), "assets"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
-# Custom OAuth2 class that accepts query parameter
-class OAuth2QueryBearer(OAuth2):
-    def __init__(
-        self,
-        tokenUrl: str,
-        scheme_name: str | None = None,
-        auto_error: bool = True,
-    ):
-        flows = OAuthFlowsModel(password=OAuthFlowPassword(tokenUrl=tokenUrl))
-        super().__init__(flows=flows, scheme_name=scheme_name, auto_error=auto_error)
+@app.get("/branding/{name}", include_in_schema=False)
+def branding_asset(name: str):
+    """Serve the logo/favicon configured under ``api.logo_path`` / ``api.favicon_path``."""
+    path = _branding_files.get(name)
+    if path is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return FileResponse(path)
 
-    async def __call__(self, request: Request) -> str | None:
+
+# Proxies whose X-Forwarded-For uvicorn believes: loopback plus private networks
+# (Caddy / docker bridge). A client reaching the API directly cannot pick the IP
+# that rate limits and audit logs key on. Override with FORWARDED_ALLOW_IPS.
+_DEFAULT_TRUSTED_PROXIES = (
+    "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
+)
+
+
+def trusted_proxy_ips() -> str:
+    return os.environ.get("FORWARDED_ALLOW_IPS") or _DEFAULT_TRUSTED_PROXIES
+
+
+# Bearer scheme that also accepts the API key as a ``?token=`` query parameter.
+# The key is configured out of band (``ABI_API_KEY``); no route ever issues it.
+class QueryOrHeaderBearer(HTTPBearer):
+    async def __call__(self, request: Request) -> str | None:  # type: ignore[override]
         authorization = request.headers.get("Authorization")
         # Check header first
         if authorization:
@@ -151,12 +181,11 @@ class OAuth2QueryBearer(OAuth2):
         return None
 
 
-# Replace the existing oauth2_scheme with:
-oauth2_scheme = OAuth2QueryBearer(tokenUrl="token")
+api_key_scheme = QueryOrHeaderBearer(scheme_name="ABI API key")
 
 
 # Update the token validation dependency
-async def is_token_valid(token: str = Depends(oauth2_scheme)):
+async def is_token_valid(token: str = Depends(api_key_scheme)):
     from naas_abi_core.apps.api.abi_api_key_auth import is_abi_api_token_valid
 
     if not is_abi_api_token_valid(token):
@@ -166,17 +195,6 @@ async def is_token_valid(token: str = Depends(oauth2_scheme)):
             headers={"WWW-Authenticate": "Bearer"},
         )
     return True
-
-
-@app.post("/token", include_in_schema=False)
-async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
-    if form_data.password != "abi":
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-
-    return {
-        "access_token": os.environ.get("ABI_API_KEY", "abi"),
-        "token_type": "bearer",
-    }
 
 
 # Create Agents API Router
@@ -237,7 +255,7 @@ def custom_openapi():
         # tags=TAGS_METADATA,
     )
     openapi_schema["info"]["x-logo"] = {
-        "url": f"/static/{logo_name}",
+        "url": logo_url,
         "altText": "Logo",
     }
     app.openapi_schema = openapi_schema
@@ -252,7 +270,7 @@ def overridden_swagger():
     return get_swagger_ui_html(
         openapi_url="/openapi.json",
         title=TITLE,
-        swagger_favicon_url=f"/static/{favicon_name}",
+        swagger_favicon_url=favicon_url,
     )
 
 
@@ -261,13 +279,23 @@ def overridden_redoc():
     return get_redoc_html(
         openapi_url="/openapi.json",
         title=TITLE,
-        redoc_favicon_url=f"/static/{favicon_name}",
+        redoc_favicon_url=favicon_url,
+    )
+
+
+def render_landing_html(title: str, description: str, logo: str, favicon: str) -> str:
+    """Fill the landing template. Config values are escaped; URLs are attribute-escaped."""
+    return (
+        API_LANDING_HTML.replace("[TITLE]", html.escape(title))
+        .replace("[DESCRIPTION]", html.escape(description))
+        .replace("[LOGO_URL]", html.escape(logo, quote=True))
+        .replace("[FAVICON_URL]", html.escape(favicon, quote=True))
     )
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def root():
-    return API_LANDING_HTML.replace("[TITLE]", TITLE).replace("[LOGO_NAME]", logo_name)
+    return render_landing_html(TITLE, DESCRIPTION, logo_url, favicon_url)
 
 
 def _load_runtime_routes():
@@ -368,7 +396,7 @@ def api():
         "port": port,
         "reload": reload_enabled,
         "proxy_headers": True,
-        "forwarded_allow_ips": "*",
+        "forwarded_allow_ips": trusted_proxy_ips(),
         "log_level": "debug" if reload_enabled else "info",
     }
 

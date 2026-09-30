@@ -6,6 +6,7 @@ import sys
 from functools import lru_cache
 from typing import Any, Literal
 
+from naas_abi.apps.nexus.apps.api.app.core.secret_key import INSECURE_SECRET_KEYS
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,16 +18,7 @@ ABI_DOCUMENTS_TEMPLATE_NAMESPACE = "abi"
 ABI_SHEETS_TEMPLATE_NAMESPACE = "abi"
 
 # Known-insecure secret keys that must be rejected
-_INSECURE_SECRETS = frozenset(
-    {
-        "",
-        "change-me-in-production",
-        "change-me-in-production-use-a-long-random-string",
-        "secret",
-        "password",
-        "changeme",
-    }
-)
+_INSECURE_SECRETS = INSECURE_SECRET_KEYS
 
 
 class TenantConfig(BaseModel):
@@ -511,6 +503,9 @@ class Settings(BaseSettings):
     # Authentication
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
+    # Self-service sign-up via /api/auth/register. Off: accounts come from
+    # invitations or the config seed.
+    auth_signup_enabled: bool = False
     magic_link_allow_signup: bool = False
     access_token_expire_minutes: int = 30  # 30 minutes (short-lived)
     refresh_token_expire_days: int = 30  # 30 days (long-lived)
@@ -588,14 +583,12 @@ class Settings(BaseSettings):
 
     # Rate Limiting
     rate_limit_enabled: bool = True
-    rate_limit_login_attempts: int = 5  # Max login attempts per window
+    rate_limit_login_attempts: int = 5  # Max failed attempts per account per window
+    rate_limit_ip_attempts: int = 20  # Max attempts per client IP per window
     rate_limit_window_seconds: int = 300  # 5-minute window
 
     def model_post_init(self, __context: Any) -> None:
         """Adjust settings based on environment after initialization (pydantic v2 hook)."""
-        # Disable rate limiting in development to avoid blocking during hot reload
-        if self.environment == "development" or self.nexus_env == "local":
-            self.rate_limit_enabled = False
         # Make Ollama autostart opt-in and local-only
         # - Enable by setting ENABLE_OLLAMA_AUTOSTART=true
         # - Force OFF unless environment is development or nexus_env is local
@@ -632,6 +625,15 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+
+def current_secret_key() -> str:
+    """The signing/encryption key, read at call time.
+
+    ``naas_abi`` replaces ``settings`` after this module is imported, so a
+    module-level ``from ... import settings`` can hold a stale object.
+    """
+    return settings.secret_key
 
 
 def validate_settings_on_startup() -> None:

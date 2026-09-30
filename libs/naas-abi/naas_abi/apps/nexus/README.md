@@ -16,7 +16,7 @@ git clone https://github.com/jravenel/nexus.git && cd nexus
 make install && make db-up && make db-migrate && make up
 ```
 
-→ **http://localhost:3000/auth/login** · `admin@example.com` / `Admin1234!`
+→ **http://localhost:3000/auth/login** · `admin@example.com`, password from `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` in `.env`
 
 ## Features
 

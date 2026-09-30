@@ -48,6 +48,9 @@ modules:
         # generated on first boot and written to `.env` as
         # `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`.
         auth_password_enabled: true
+        # Self-registration is off: accounts come from invitations or `users:`
+        # below. Set true to let anyone reaching the login page create an account.
+        auth_signup_enabled: false
         magic_link_allow_signup: false
         tenant:
           tab_title: "ABI"

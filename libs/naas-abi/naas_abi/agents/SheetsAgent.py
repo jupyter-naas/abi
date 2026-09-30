@@ -182,7 +182,7 @@ Your step budget is finite ({SHEETS_RECURSION_LIMIT} graph steps). Plan, then wr
         """Workbook writes plus the search stack the research gate depends on."""
         tools: list = []
         try:
-            from naas_abi.agents.tools.sheets_tools import sheets_tools
+            from naas_abi.tools.sheets_tools import sheets_tools
 
             tools += sheets_tools()
         except Exception as exc:  # noqa: BLE001

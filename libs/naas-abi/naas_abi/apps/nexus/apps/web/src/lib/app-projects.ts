@@ -58,7 +58,7 @@ export type AppSubmitConfig = {
   default_module: string | null;
 };
 
-/** Must match APP_PROJECT_WRITE_TOOLS in naas_abi/agents/tools/app_builder_tools.py. */
+/** Must match APP_PROJECT_WRITE_TOOLS in naas_abi/tools/app_builder_tools.py. */
 export const APP_PROJECT_WRITE_TOOLS = [
   'create_app_project',
   'edit_module_app',

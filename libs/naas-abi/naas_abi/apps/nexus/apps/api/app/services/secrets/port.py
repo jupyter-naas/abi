@@ -19,6 +19,10 @@ class SecretRecord:
 
 class SecretsPersistencePort(ABC):
     @abstractmethod
+    async def list_all(self) -> list[SecretRecord]:
+        raise NotImplementedError
+
+    @abstractmethod
     async def list_by_workspace(self, workspace_id: str) -> list[SecretRecord]:
         raise NotImplementedError
 

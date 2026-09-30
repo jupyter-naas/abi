@@ -163,12 +163,12 @@ Respond only based on what your available agents and tools can actually deliver.
         )
         tools += sparql_query_tools_list
 
-        from naas_abi.agents.tools.nexus_admin_tools import nexus_admin_tools
+        from naas_abi.tools.nexus_admin_tools import nexus_admin_tools
 
         tools += nexus_admin_tools()
 
         try:
-            from naas_abi.agents.tools.coding_tools import coding_tools
+            from naas_abi.tools.coding_tools import coding_tools
 
             tools += coding_tools()
         except Exception as exc:  # noqa: BLE001

@@ -41,6 +41,8 @@ from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 
+from naas_abi_cli.cli.admin_credentials import ensure_admin_credentials, ensure_api_key
+
 DEV_DIR_NAME = ".abi/dev"
 INSTANCE_FILENAME = "instance.json"
 
@@ -329,9 +331,10 @@ def _launch_api(
     spec: ServiceSpec, ports: dict[str, int], log_level: str | None = None
 ) -> int:
     env = os.environ.copy()
-    # Local-dev default so Bearer auth works without a hand-authored .env.
+    # Generated per project so Bearer auth works without a hand-authored .env.
     # Never overwrites an explicit value from the parent environment.
-    env.setdefault("ABI_API_KEY", DEFAULT_API_KEY)
+    if not env.get("ABI_API_KEY"):
+        env["ABI_API_KEY"] = ensure_api_key(_project_root() / ".env")
     # Engine boot phases (services → modules → ontologies) are DEBUG-level;
     # without this the long silence after "naas_abi_core imported" is opaque.
     env["LOG_LEVEL"] = _resolve_log_level(log_level)
@@ -886,83 +889,25 @@ class _KeyboardReader:
 
 RECENT_DUMP_LINES = 30
 
-# Dev convenience: seeded admin credentials written to .env on first
-# `abi dev up`. The Nexus user seed reads
-# NEXUS_USER_<EMAIL_PREFIX>_{EMAIL,PASSWORD} from the secret adapter
-# (dotenv) — pre-populating those skips the random-password path.
-DEFAULT_ADMIN_EMAIL = "admin@example.com"
-DEFAULT_ADMIN_PASSWORD = "admin"  # nosec B105 - dev-only, fixed local creds
-DEFAULT_API_KEY = "abi"  # nosec B105 - local-dev only, matches /token default
-
-
 def _ensure_default_admin_env() -> tuple[str, str]:
-    """Write the dev admin credentials to `.env` if not already set.
+    """Return the seeded admin's ``(email, password)``, generating the password.
 
-    Returns `(email, password)` so callers can display them. The Nexus seed
-    will pick these up via the dotenv secret adapter on first boot.
+    The password is random per project and stored in `.env`, where the Nexus
+    seed picks it up through the dotenv secret adapter on first boot. A value
+    an older CLI wrote (``admin``) is replaced.
     """
-    email_prefix = re.sub(r"[^A-Z0-9]", "_", DEFAULT_ADMIN_EMAIL.upper())
-    email_key = f"NEXUS_USER_{email_prefix}_EMAIL"
-    pw_key = f"NEXUS_USER_{email_prefix}_PASSWORD"
-
-    env_path = _project_root() / ".env"
-    existing: dict[str, str] = {}
-    if env_path.exists():
-        for raw in env_path.read_text().splitlines():
-            line = raw.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, _, v = line.partition("=")
-            existing[k.strip()] = v.strip()
-
-    appended: list[str] = []
-    if email_key not in existing:
-        appended.append(f"{email_key}={DEFAULT_ADMIN_EMAIL}")
-    if pw_key not in existing:
-        appended.append(f"{pw_key}={DEFAULT_ADMIN_PASSWORD}")
-
-    if appended:
-        with env_path.open("a", encoding="utf-8") as fh:
-            if env_path.stat().st_size > 0 and not env_path.read_text().endswith("\n"):
-                fh.write("\n")
-            fh.write("\n# `abi dev` default admin credentials (local-only)\n")
-            for line in appended:
-                fh.write(line + "\n")
-
-    return (
-        existing.get(email_key, DEFAULT_ADMIN_EMAIL),
-        existing.get(pw_key, DEFAULT_ADMIN_PASSWORD),
-    )
+    return ensure_admin_credentials(_project_root() / ".env")
 
 
 def _ensure_default_api_key_env() -> str:
-    """Write ``ABI_API_KEY=abi`` to `.env` if missing (local-dev only).
+    """Ensure `.env` holds a generated ``ABI_API_KEY`` (never the old ``abi``).
 
     Also ``setdefault`` into the current process so spawned children inherit
-    the key via ``os.environ.copy()``. Does not overwrite an existing value
-    in `.env` or the process environment. Production / remote deploys must
-    set ``ABI_API_KEY`` explicitly; this helper is only called from
-    ``abi dev up``.
+    the key via ``os.environ.copy()``. An explicit value in the process
+    environment wins. Only called from ``abi dev up``.
     """
-    env_path = _project_root() / ".env"
-    existing: dict[str, str] = {}
-    if env_path.exists():
-        for raw in env_path.read_text().splitlines():
-            line = raw.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, _, v = line.partition("=")
-            existing[k.strip()] = v.strip()
-
-    if "ABI_API_KEY" not in existing:
-        with env_path.open("a", encoding="utf-8") as fh:
-            if env_path.stat().st_size > 0 and not env_path.read_text().endswith("\n"):
-                fh.write("\n")
-            fh.write("\n# `abi dev` default API key (local-only)\n")
-            fh.write(f"ABI_API_KEY={DEFAULT_API_KEY}\n")
-
-    resolved = existing.get("ABI_API_KEY", DEFAULT_API_KEY)
-    os.environ.setdefault("ABI_API_KEY", resolved)
+    key = ensure_api_key(_project_root() / ".env")
+    os.environ.setdefault("ABI_API_KEY", key)
     return os.environ["ABI_API_KEY"]
 
 
@@ -1660,7 +1605,7 @@ def dev_nuke(yes: bool, start: bool, reset_env: bool) -> None:
     env_path = root / ".env"
     if reset_env and env_path.exists():
         # Find any NEXUS_USER_*_{EMAIL,PASSWORD} lines and the comment we
-        # appended in `_ensure_default_admin_env`.
+        # appended by older `_ensure_default_admin_env` versions.
         kept: list[str] = []
         drop_marker = "# `abi dev` default admin credentials"
         dropping = False

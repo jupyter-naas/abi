@@ -62,7 +62,7 @@ def _apply_office_auto_title(request: ChatRequest) -> None:
     if isinstance(documents_ctx, dict):
         slug = str(documents_ctx.get("slug") or "").strip()
         if slug:
-            from naas_abi.agents.tools.documents_tools import maybe_auto_title_open_document
+            from naas_abi.tools.documents_tools import maybe_auto_title_open_document
             from naas_abi_core.services.agent.context import documents_active_title
 
             new_title = maybe_auto_title_open_document(brief, slug)
@@ -72,7 +72,7 @@ def _apply_office_auto_title(request: ChatRequest) -> None:
     if isinstance(slides_ctx, dict):
         slug = str(slides_ctx.get("slug") or "").strip()
         if slug:
-            from naas_abi.agents.tools.slides_tools import maybe_auto_title_open_deck
+            from naas_abi.tools.slides_tools import maybe_auto_title_open_deck
             from naas_abi_core.services.agent.context import slides_active_title
 
             new_title = maybe_auto_title_open_deck(brief, slug)

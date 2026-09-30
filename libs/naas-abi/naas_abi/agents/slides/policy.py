@@ -422,7 +422,7 @@ def attach_slides_research_note(tool: Any) -> Any:
     return tool
 
 
-_SEARCH_STACK = "naas_abi.agents.tools.web_tools"
+_SEARCH_STACK = "naas_abi.tools.web_tools"
 
 
 def slides_search_tool_bound() -> bool:

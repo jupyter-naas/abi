@@ -30,8 +30,8 @@ API:
 Engine:
 - naas_abi_core/services/source_control/ (SourceControlPorts, SourceControlService; Forgejo and local_git adapters under adapters/secondary/).
 - naas_abi_core/services/coding_environment/ (CodingEnvironmentPorts, CodingEnvironmentService; Coder and local_directory adapters under adapters/secondary/).
-Related: naas_abi/agents/CodingAgent.py (OpenCode Coding agent) and naas_abi/agents/tools/coding_tools.py (sandbox file and terminal tools).
-Agent: naas_abi/agents/CodeAgent.py and naas_abi/agents/tools/code_tools.py."""
+Related: naas_abi/agents/CodingAgent.py (OpenCode Coding agent) and naas_abi/tools/coding_tools.py (sandbox file and terminal tools).
+Agent: naas_abi/agents/CodeAgent.py and naas_abi/tools/code_tools.py."""
 
 CODE_CAPABILITIES = """- Browse repositories, files, commits, branches, pull requests, and CI runs (Actions); create a repo or a branch.
 - Open a coding workspace (Coder container with a code-server IDE and an exec sidecar) on a repo and branch; start, stop, see logs.
@@ -109,12 +109,12 @@ class CodeAgent(IntentAgent):
 
     @staticmethod
     def get_tools() -> list:
-        from naas_abi.agents.tools.code_tools import code_tools
-        from naas_abi.agents.tools.nexus_source_tools import nexus_source_tools
+        from naas_abi.tools.code_tools import code_tools
+        from naas_abi.tools.nexus_source_tools import nexus_source_tools
 
         tools: list = code_tools()
         try:
-            from naas_abi.agents.tools.coding_tools import coding_tools
+            from naas_abi.tools.coding_tools import coding_tools
 
             tools += coding_tools()
         except Exception as exc:  # noqa: BLE001

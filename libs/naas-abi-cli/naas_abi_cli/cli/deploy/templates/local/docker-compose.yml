@@ -189,7 +189,7 @@ services:
       ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.mcp.mcp_server"]
     environment:
       - ABI_API_BASE=http://abi:9879
-      - ABI_API_KEY=abi
+      - ABI_API_KEY=${ABI_API_KEY}
       - MCP_TRANSPORT=http
     ports:
       - 8000:8000
