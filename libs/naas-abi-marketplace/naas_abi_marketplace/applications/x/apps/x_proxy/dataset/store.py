@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import weakref
 from typing import Any
 
 from naas_abi_core.services.dataset.DatasetPort import (
@@ -46,8 +48,15 @@ def _author_stats_v1_spec() -> DatasetSpec:
     )
 
 
-def _has_dataset_spec_comment(dataset: IDatasetPort, spec: DatasetSpec) -> bool:
-    """True when DuckLake already stores a valid abi.dataset-spec COMMENT."""
+def _dataset_spec_comment(spec: DatasetSpec) -> str:
+    return _DATASET_SPEC_COMMENT_PREFIX + json.dumps(
+        spec.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _table_comment(dataset: IDatasetPort, spec: DatasetSpec) -> str:
     escaped_table = spec.name.replace("'", "''")
     result = dataset.query(
         "SELECT comment FROM duckdb_tables() "
@@ -57,21 +66,20 @@ def _has_dataset_spec_comment(dataset: IDatasetPort, spec: DatasetSpec) -> bool:
         namespace=spec.namespace,
     )
     if not result.rows:
-        return False
-    comment = str(result.rows[0].get("comment") or "")
-    return comment.startswith(_DATASET_SPEC_COMMENT_PREFIX)
+        return ""
+    return str(result.rows[0].get("comment") or "")
 
 
 def _refresh_dataset_table_comment(dataset: IDatasetPort, spec: DatasetSpec) -> None:
-    """Keep DuckLake table COMMENT in sync with code (writes validate against it)."""
-    if _has_dataset_spec_comment(dataset, spec):
+    """Keep DuckLake table COMMENT in sync with code (writes validate against it).
+
+    Missing comments are written (catalog import). Outdated comments are rewritten
+    so ALTER-added columns such as ``first_post_at`` are included in MERGE.
+    """
+    expected = _dataset_spec_comment(spec)
+    if _table_comment(dataset, spec) == expected:
         return
-    comment = _DATASET_SPEC_COMMENT_PREFIX + json.dumps(
-        spec.model_dump(mode="json"),
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    escaped = comment.replace("'", "''")
+    escaped = expected.replace("'", "''")
     dataset.query(
         f"COMMENT ON TABLE {spec.name} IS '{escaped}'",  # nosec B608
         namespace=spec.namespace,
@@ -101,7 +109,30 @@ def x_dataset_read_enabled(module) -> bool:
         return False
 
 
+# Datasets already ensured in this process. ``create`` opens a fresh DuckLake
+# connection per table (LOAD + ATTACH the catalog), so running the full check on
+# every read cost ~2 s per HTTP request.
+_ensured: weakref.WeakSet[Any] = weakref.WeakSet()
+_ensure_lock = threading.Lock()
+
+
 def ensure_x_datasets(dataset: IDatasetPort) -> None:
+    """Create / migrate the X tables once per dataset instance and process."""
+    if dataset in _ensured:
+        return
+    with _ensure_lock:
+        if dataset in _ensured:
+            return
+        _ensure_x_datasets(dataset)
+        _ensured.add(dataset)
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.author_stats import (
+            stamp_missing_first_post_at_from_posts,
+        )
+
+        stamp_missing_first_post_at_from_posts(dataset)
+
+
+def _ensure_x_datasets(dataset: IDatasetPort) -> None:
     specs = (
         DatasetSpec(
             name=POSTS_V1,
@@ -228,8 +259,8 @@ def ensure_x_datasets(dataset: IDatasetPort) -> None:
         try:
             dataset.create(spec)
         except DatasetAlreadyExistsError:
-            # Catalog import may register tables without COMMENT; refresh only if missing
-            # (COMMENT ON TABLE commits a catalog snapshot — avoid on every ingest).
+            # Catalog import may register tables without COMMENT; rewrite when the
+            # in-code spec changed (COMMENT ON TABLE snapshots — skip when equal).
             _refresh_dataset_table_comment(dataset, spec)
     from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.matched_tweets import (
         ensure_matched_tweet_ids_ready,
