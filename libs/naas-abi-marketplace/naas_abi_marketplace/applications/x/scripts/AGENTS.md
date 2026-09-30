@@ -8,6 +8,7 @@
 |------|--------|---------|
 | Check envelope lag before/after backfill | `audit_envelope_bookkeeping.py` | **No** |
 | Catch up `envelopes_v1` / posts from storage | `backfill_x_datasets.py` | **Yes** |
+| Fill null `author_stats_v1.first_post_at` from posts | `backfill_author_first_post_at.py` | **Yes** (`--dry-run` is read-only) |
 
 Steady-state ingest uses Dagster (`x_sensor_recent_tweets_put_search_recent_tweets` for new puts, `x_reprocess_recent_tweets_files_schedule_*` for catch-up including dataset-only when graph ⊃ dataset) and `sync_envelope_paths` inside orchestrations—not these CLIs.
 
@@ -21,6 +22,28 @@ Steady-state ingest uses Dagster (`x_sensor_recent_tweets_put_search_recent_twee
 - Logic: `naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelope_bookkeeping`.
 
 Use `apps/x_proxy/dataset/count_audit.py` or `dataset/api.graph_totals` for row-count sanity checks.
+
+## `backfill_author_first_post_at.py`
+
+One-shot: `MIN(created_at)` per `author_id` from canonical posts, written onto `author_stats_v1` rows where `first_post_at` is still null. Does not re-ingest envelopes. `--dry-run` prints `missing_before` only.
+
+```bash
+docker compose exec -T abi env LOG_LEVEL=INFO uv run python \
+  src/signals/x/scripts/backfill_author_first_post_at.py --config config.local.yaml --dry-run
+
+docker compose exec -T abi env LOG_LEVEL=INFO uv run python \
+  src/signals/x/scripts/backfill_author_first_post_at.py --config config.local.yaml
+```
+
+**Production EC2 (`axi-ai-abi-1`):**
+
+```bash
+docker exec -w /app axi-ai-abi-1 env LOG_LEVEL=INFO uv run python \
+  src/signals/x/scripts/backfill_author_first_post_at.py --dry-run
+
+docker exec -w /app axi-ai-abi-1 env LOG_LEVEL=INFO uv run python \
+  src/signals/x/scripts/backfill_author_first_post_at.py
+```
 
 ## Running locally
 
@@ -37,7 +60,27 @@ docker compose exec -T abi env LOG_LEVEL=INFO uv run python \
 
 Host `uv run` fails if config uses Docker service names (`fuseki`, `minio`, `postgres`).
 
-**Pending ingest on prod:** build `/tmp/x_pending.txt` once (audit JSON), then backfill with `--paths-file` only — avoid re-running the full audit before every backfill.
+**Production EC2 (`axi-ai-abi-1`):** the running stack uses `config.local.yaml` and secrets in `/app/.env`. Do not pass bare `config.yaml` from a one-off `docker exec` unless `.env` is loaded — scripts preload dotenv automatically when you use the default config pick:
+
+```bash
+docker exec -w /app axi-ai-abi-1 env LOG_LEVEL=INFO uv run python \
+  src/signals/x/scripts/backfill_x_datasets.py --batch-size 32
+
+docker exec -w /app axi-ai-abi-1 env LOG_LEVEL=INFO uv run python \
+  src/signals/x/scripts/backfill_x_datasets.py --config config.local.yaml \
+  --batch-size 32
+```
+
+If secrets still fail, verify `/app/.env` contains keys referenced in config (e.g. `AWS_ACCESS_KEY_ID` when Bedrock is enabled).
+
+**Count buckets only** (no search envelope replay):
+
+```bash
+docker exec -w /app axi-ai-abi-1 env LOG_LEVEL=INFO uv run python \
+  src/signals/x/scripts/backfill_x_datasets.py --count-envelopes-only --batch-size 32
+```
+
+**Pending ingest on prod:** build `/tmp/x_pending.txt` once (audit JSON), then backfill with `--paths-file` only — avoid re-running the full audit before every backfill. (Audit is search-prefix only; use `--count-envelopes-only` for count lag.)
 
 ## Do not
 

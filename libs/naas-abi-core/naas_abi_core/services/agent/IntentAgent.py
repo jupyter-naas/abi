@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from queue import Queue
-from typing import Any, Union
+from typing import Any, Union, cast
 
 import pydash as pd
 import spacy
@@ -836,57 +836,12 @@ If you endup with a single intent which is of type TOOL, you must call this tool
             logger.debug(f"Injected in system prompt: {updated_system_prompt}")
             return Command(update={"system_prompt": updated_system_prompt})
 
-    def duplicate(
-        self,
-        queue: Queue | None = None,
-        agent_shared_state: AgentSharedState | None = None,
-    ) -> "IntentAgent":
-        """Create a new instance of the agent with the same configuration.
-
-        This method creates a deep copy of the agent with the same configuration
-        but with its own independent state. This is useful when you need to run
-        multiple instances of the same agent concurrently.
-
-        Returns:
-            IntentAgent: A new IntentAgent instance with the same configuration
-        """
-        shared_state = agent_shared_state or AgentSharedState()
-
-        if queue is None:
-            queue = Queue()
-
-        # We duplicated each agent and add them as tools.
-        # This will be recursively done for each sub agents.
-        agents: list[IntentAgent | Agent] = [
-            agent.duplicate(queue, shared_state) for agent in self._original_agents
-        ]
-
-        # Must use self.__class__, not IntentAgent: subclasses override
-        # call_model / stream_invoke / build_graph. Hardcoding IntentAgent dropped
-        # those overrides on every Nexus per-request duplicate.
-        new_agent = self.__class__(
-            name=self._name,
-            description=self._description,
-            chat_model=self._chat_model,
-            tools=self._original_tools,
-            agents=agents,
-            intents=self._intents,
-            memory=self._checkpointer,
-            state=shared_state,  # Create new state instance
-            configuration=self._configuration,
-            event_queue=queue,
-            embedding_model=self._embedding_model,
-            threshold=self._threshold,
-            threshold_neighbor=self._threshold_neighbor,
-            direct_intent_score=self._direct_intent_score,
-            enable_default_intents=self._enable_default_intents,
-            enable_default_tools=self._enable_default_tools,
-            markdown_pretty_display=self._markdown_pretty_display,
-        )
-        # Per-request copies must keep the agent's own step budget (a class
-        # attribute on the subclass the copy does not inherit from).
-        own_limit = getattr(self, "recursion_limit", None)
-        if isinstance(own_limit, int) and own_limit > 0:
-            new_agent.recursion_limit = own_limit
-
-        return new_agent
+    def _populate_duplicate_shell(self, clone: Agent) -> None:
+        intent_clone = cast("IntentAgent", clone)
+        intent_clone._enable_default_intents = self._enable_default_intents
+        intent_clone._intents = self._intents
+        intent_clone._embedding_model = self._embedding_model
+        intent_clone._intent_mapper = self._intent_mapper
+        intent_clone._threshold = self._threshold
+        intent_clone._threshold_neighbor = self._threshold_neighbor
+        intent_clone._direct_intent_score = self._direct_intent_score

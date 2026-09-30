@@ -589,6 +589,126 @@ def test_timeseries_excludes_the_in_progress_partial_slot():
     assert starts == ["2026-07-07T14:00:00+00:00"]
 
 
+class _EmptyProjectionCountBuckets:
+    """Dataset reader stub: posts exist but count_buckets_v1 was never backfilled."""
+
+    def known_query_slugs(self) -> set[str]:
+        return {slugify(_QUERY)}
+
+    def count_endpoint_timeseries(self, query_slug: str) -> list[dict]:
+        return []
+
+
+def test_timeseries_falls_back_to_graph_when_projection_count_buckets_empty():
+    store = _FakeTripleStore()
+    _seed_count_buckets(store)
+    ctx = SnapshotContext(
+        None,
+        store,
+        queries=[],
+        cache=_EmptyProjectionCountBuckets(),  # type: ignore[arg-type]
+    )
+    starts = [b["start"] for b in ctx.timeseries(_QUERY)]
+    assert starts == ["2026-07-07T14:00:00+00:00"]
+
+
+class _ShortDuplicateProjectionCountBuckets:
+    """Non-empty count_buckets_v1: only the latest hour, duplicated + a partial."""
+
+    def known_query_slugs(self) -> set[str]:
+        return {slugify(_QUERY)}
+
+    def count_endpoint_timeseries(self, query_slug: str) -> list[dict]:
+        del query_slug
+        return [
+            {
+                "start": "2026-07-07T14:00:00+00:00",
+                "end": "2026-07-07T15:00:00+00:00",
+                "count": 280,
+            },
+            {
+                "start": "2026-07-07T14:00:00+00:00",
+                "end": "2026-07-07T15:00:00+00:00",
+                "count": 280,
+            },
+            {
+                "start": "2026-07-07T14:00:00+00:00",
+                "end": "2026-07-07T14:25:00+00:00",
+                "count": 90,
+            },
+        ]
+
+
+def _seed_two_complete_hours(store: "_FakeTripleStore") -> None:
+    """13:00 and 14:00 complete hours plus a 15:00 partial."""
+    _seed_count_buckets(store)
+    g = Graph()
+    rs = _X["TweetCountResultSet/rs-older"]
+    g.add((rs, RDF.type, _X.TweetCountResultSet))
+    g.add((rs, _X.query_string, Literal(_QUERY)))
+    start, end, count = (
+        "2026-07-07T13:00:00+00:00",
+        "2026-07-07T14:00:00+00:00",
+        40,
+    )
+    bucket = _X["TweetCountBucket/example_feed-2026-07-07T13:00:00+00:00"]
+    interval = _X["CountInterval/example_feed-2026-07-07T13:00:00+00:00"]
+    g.add((rs, _X.containsCountBucket, bucket))
+    g.add((bucket, _X.bucket_tweet_count, Literal(count)))
+    g.add((bucket, _X.hasCountInterval, interval))
+    g.add((interval, _X.bucket_start, Literal(start)))
+    g.add((interval, _X.bucket_end, Literal(end)))
+    store.insert_graph(g, _GRAPH)
+
+
+def test_timeseries_keeps_graph_history_when_projection_is_short():
+    store = _FakeTripleStore()
+    _seed_two_complete_hours(store)
+    ctx = SnapshotContext(
+        None,
+        store,
+        queries=[],
+        cache=_ShortDuplicateProjectionCountBuckets(),  # type: ignore[arg-type]
+    )
+    series = ctx.timeseries(_QUERY)
+    assert [b["start"] for b in series] == [
+        "2026-07-07T13:00:00+00:00",
+        "2026-07-07T14:00:00+00:00",
+    ]
+    by_start = {b["start"]: b["count"] for b in series}
+    assert by_start["2026-07-07T13:00:00+00:00"] == 40
+    assert by_start["2026-07-07T14:00:00+00:00"] == 280
+
+
+def test_aggregate_buckets_does_not_inflate_duplicate_hours_or_hh00_hh00():
+    ctx = SnapshotContext(None, _FakeTripleStore(), queries=[])  # type: ignore[arg-type]
+    points = ctx.aggregate_buckets(
+        [
+            {
+                "start": "2026-07-07T14:00:00+00:00",
+                "end": "2026-07-07T15:00:00+00:00",
+                "count": 280,
+            },
+            {
+                "start": "2026-07-07T14:00:00+00:00",
+                "end": "2026-07-07T15:00:00+00:00",
+                "count": 280,
+            },
+            {
+                "start": "2026-07-07T14:00:00+00:00",
+                "end": "2026-07-07T14:25:00+00:00",
+                "count": 90,
+            },
+        ],
+        "2026-07-07T13:00:00+00:00",
+        "2026-07-07T15:00:00+00:00",
+        daily=False,
+    )
+    assert len(points) == 1
+    assert points[0]["value"] == 280
+    assert points[0]["range_label"] == "Jul 7, 14:00 – 15:00"
+
+
 def test_partial_bucket_returns_the_in_progress_slot():
     store = _FakeTripleStore()
     _seed_count_buckets(store)

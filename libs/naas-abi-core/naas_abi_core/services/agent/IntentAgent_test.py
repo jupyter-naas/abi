@@ -179,12 +179,7 @@ def test_map_intents_degrades_when_embedding_provider_fails():
 
 
 def test_duplicate_preserves_subclass():
-    """Per-request Nexus duplicates must keep IntentAgent subclasses.
-
-    Agent.duplicate already uses self.__class__. IntentAgent.duplicate used to
-    hardcode IntentAgent(...), so overrides on call_model / stream_invoke /
-    build_graph were dropped for every chat turn.
-    """
+    """Per-request duplicates must stay on the runtime subclass without __init__."""
     from unittest.mock import MagicMock, patch
 
     from naas_abi_core.services.agent.Agent import AgentSharedState
@@ -196,9 +191,17 @@ def test_duplicate_preserves_subclass():
     agent._name = "Subclass"
     agent._description = "subclass agent"
     agent._chat_model = MagicMock()
+    agent._chat_model_with_tools = agent._chat_model
+    agent._chat_model_without_workspace_tools = agent._chat_model
     agent._original_tools = []
     agent._original_agents = []
+    agent._structured_tools = []
+    agent._agents = []
+    agent._tools_by_name = {}
+    agent._tools = []
+    agent._native_tools = []
     agent._intents = []
+    agent._intent_mapper = MagicMock()
     agent._checkpointer = MagicMock()
     agent._configuration = AgentConfiguration()
     agent._embedding_model = None
@@ -206,19 +209,28 @@ def test_duplicate_preserves_subclass():
     agent._threshold_neighbor = 0.05
     agent._direct_intent_score = 0.90
     agent._enable_default_intents = True
-    agent._enable_default_tools = True
+    agent._enable_default_tools = False
     agent._markdown_pretty_display = False
     agent._state = AgentSharedState(thread_id="1")
+    agent._event_queue = MagicMock()
+    agent._on_tool_usage = agent._configuration.on_tool_usage
+    agent._on_tool_response = agent._configuration.on_tool_response
+    agent._on_ai_message = agent._configuration.on_ai_message
+    agent._on_call_model = agent._configuration.on_agent_calling
+    agent._on_agent_routing = agent._configuration.on_agent_routing
 
-    created: dict[str, type] = {}
+    init_called = False
 
-    def _capture_init(self, *args, **kwargs):
-        created["cls"] = type(self)
-        self._name = kwargs.get("name", "Subclass")
-        self._agents = []
+    def _fail_init(self, *args, **kwargs):
+        nonlocal init_called
+        init_called = True
 
-    with patch.object(_Subclass, "__init__", _capture_init):
+    with (
+        patch.object(_Subclass, "__init__", _fail_init),
+        patch.object(_Subclass, "build_graph"),
+    ):
         out = IntentAgent.duplicate(agent)
 
-    assert created["cls"] is _Subclass
+    assert not init_called
     assert isinstance(out, _Subclass)
+    assert out._intent_mapper is agent._intent_mapper

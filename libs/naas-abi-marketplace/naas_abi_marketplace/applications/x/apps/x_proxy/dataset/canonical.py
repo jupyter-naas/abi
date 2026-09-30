@@ -91,7 +91,7 @@ canonical_enriched AS (
 )
 
 
-def _matched_ids_query(*, posts: str = POSTS_V1, use_index: bool) -> str:
+def matched_ids_query(*, posts: str = POSTS_V1, use_index: bool) -> str:
     if use_index:
         return (
             f"SELECT tweet_id FROM {MATCHED_TWEET_IDS_V1} "
@@ -119,7 +119,7 @@ def canonical_posts_cte(
     """Canonical posts CTE; optional ``author_id`` shrinks the filtered scan."""
     return CANONICAL_POSTS_CTE.format(
         posts=posts,
-        matched_ids_query=_matched_ids_query(posts=posts, use_index=use_matched_index),
+        matched_ids_query=matched_ids_query(posts=posts, use_index=use_matched_index),
         author_filter=_author_filter_sql(author_id),
     )
 
@@ -133,7 +133,7 @@ def canonical_cte(
     return CANONICAL_WITH_AUTHORS_CTE.format(
         posts=posts,
         authors=authors,
-        matched_ids_query=_matched_ids_query(posts=posts, use_index=use_matched_index),
+        matched_ids_query=matched_ids_query(posts=posts, use_index=use_matched_index),
         author_filter="",
     )
 
@@ -141,3 +141,38 @@ def canonical_cte(
 def authors_deduped_cte(*, authors: str = AUTHORS_V1) -> str:
     """One profile row per ``author_id`` (newest ``seen_at`` wins)."""
     return AUTHORS_DEDUPED_CTE.format(authors=authors)
+
+
+VALID_TWEET_ID_SQL = "tweet_id <> '' AND regexp_full_match(tweet_id, '^[0-9]+$')"
+
+# Same tie-break as ``CANONICAL_POSTS_CTE``: matched typing wins, then newest.
+CANONICAL_RANK_SQL = (
+    "ROW_NUMBER() OVER (PARTITION BY tweet_id ORDER BY "
+    "CASE WHEN kind = 'matched' THEN 0 ELSE 1 END, created_at DESC NULLS LAST)"
+)
+
+CANONICAL_KEY_COLUMNS = "tweet_id, kind, query_slug, created_at, author_id"
+
+
+def canonical_keys_sql(
+    *,
+    where: str = "",
+    posts: str = POSTS_V1,
+    use_matched_index: bool = False,
+) -> str:
+    """``SELECT`` of canonical row keys only - no text, no author join.
+
+    ``where`` (an ``" AND …"`` clause over ``posts`` columns) narrows the scan
+    *before* the per-tweet ranking, so a search ranks only the rows it can
+    return, and ranking carries five narrow columns instead of every post's
+    text. The referenced-vs-matched anti-join keeps "match wins globally" even
+    when ``where`` filtered the matched row out. Full rows for one page are
+    fetched afterwards by key.
+    """
+    matched_ids = matched_ids_query(posts=posts, use_index=use_matched_index)
+    return (
+        f"SELECT {CANONICAL_KEY_COLUMNS} FROM {posts} "
+        f"WHERE {VALID_TWEET_ID_SQL}{where} "
+        f"AND (kind = 'matched' OR tweet_id NOT IN ({matched_ids})) "
+        f"QUALIFY {CANONICAL_RANK_SQL} = 1"
+    )

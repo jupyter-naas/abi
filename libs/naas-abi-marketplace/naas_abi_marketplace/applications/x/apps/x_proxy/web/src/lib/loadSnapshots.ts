@@ -24,63 +24,15 @@ async function loadJson<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function loadSnapshots(
-  options: { lightweight?: boolean } = {},
-): Promise<Snapshots> {
-  const emptyCount = { kpis: [], barcharts: [], linecharts: [] };
-  const emptySearch = {
-    kpis: [],
-    barcharts: [],
-    linecharts: [],
-    tables: [],
-    facets: [],
-  };
-  if (options.lightweight) {
-    const [scenarios, queries, timezone, graph] = await Promise.all([
-      loadJson<{ updated_at?: string; scenarios?: Snapshots["scenarios"] }>(
-        "globals/scenarios.json",
-      ),
-      loadJson<{ updated_at?: string; queries?: Snapshots["queries"] }>(
-        "globals/queries.json",
-      ),
-      loadJson<{
-        updated_at?: string;
-        default?: string;
-        timezones?: Snapshots["timezones"];
-      }>("globals/timezone.json"),
-      loadJson<Partial<GraphTotals>>("globals/graph.json").catch(() => null),
-    ]);
-    return {
-      updatedAt: scenarios.updated_at || queries.updated_at || null,
-      graph: graph
-        ? {
-            posts: graph.posts || 0,
-            matched: graph.matched || 0,
-            referenced: graph.referenced || 0,
-          }
-        : null,
-      scenarios: scenarios.scenarios || [],
-      queries: queries.queries || [],
-      timezones: timezone.timezones || [],
-      defaultTimezone: timezone.default || "UTC",
-      count: emptyCount,
-      search: emptySearch,
-    };
-  }
-  const [
-    scenarios,
-    queries,
-    timezone,
-    cKpis,
-    cBars,
-    cLines,
-    sKpis,
-    sBars,
-    sLines,
-    sTables,
-    sFacets,
-    graph,
-  ] = await Promise.all([
+type Dashboards = Pick<Snapshots, "count" | "search">;
+
+/**
+ * What every page needs before it can paint: the filters and the timezone -
+ * three small files. Nothing else is waited for; the graph totals and the
+ * dashboards arrive on their own (`loadGraphTotals`, `loadDashboards`).
+ */
+export async function loadGlobals(): Promise<Snapshots> {
+  const [scenarios, queries, timezone] = await Promise.all([
     loadJson<{ updated_at?: string; scenarios?: Snapshots["scenarios"] }>(
       "globals/scenarios.json",
     ),
@@ -92,46 +44,67 @@ export async function loadSnapshots(
       default?: string;
       timezones?: Snapshots["timezones"];
     }>("globals/timezone.json"),
-    loadJson<{ kpis?: Snapshots["count"]["kpis"] }>("count_recent_tweets/kpis.json"),
-    loadJson<{ barcharts?: Snapshots["count"]["barcharts"] }>(
-      "count_recent_tweets/barcharts.json",
-    ),
-    loadJson<{ linecharts?: Snapshots["count"]["linecharts"] }>(
-      "count_recent_tweets/linecharts.json",
-    ),
-    loadJson<{ kpis?: Snapshots["search"]["kpis"] }>("search_recents_tweets/kpis.json"),
-    loadJson<{ barcharts?: Snapshots["search"]["barcharts"] }>(
-      "search_recents_tweets/barcharts.json",
-    ),
-    loadJson<{ linecharts?: Snapshots["search"]["linecharts"] }>(
-      "search_recents_tweets/linecharts.json",
-    ),
-    loadJson<{ tables?: Snapshots["search"]["tables"] }>(
-      "search_recents_tweets/tables.json",
-    ),
-    // Added after the other search-page files - an older publish simply has no
-    // facets, and the column filters then fall back to the loaded rows.
-    loadJson<{ facets?: Snapshots["search"]["facets"] }>(
-      "search_recents_tweets/facets.json",
-    ).catch(() => ({ facets: [] })),
-    // Added after the rest: an older publish simply has no totals, and the
-    // pages that quote them fall back to what they can count themselves.
-    loadJson<Partial<GraphTotals>>("globals/graph.json").catch(() => null),
   ]);
-
   return {
+    ...emptySnapshots(),
     updatedAt: scenarios.updated_at || queries.updated_at || null,
-    graph: graph
-      ? {
-          posts: graph.posts || 0,
-          matched: graph.matched || 0,
-          referenced: graph.referenced || 0,
-        }
-      : null,
     scenarios: scenarios.scenarios || [],
     queries: queries.queries || [],
     timezones: timezone.timezones || [],
     defaultTimezone: timezone.default || "UTC",
+  };
+}
+
+/**
+ * How many posts the graph holds. Only a count line quotes it, so nothing
+ * waits for it. Added after the rest: an older publish simply has no totals,
+ * and the pages that quote them fall back to what they can count themselves.
+ */
+export async function loadGraphTotals(): Promise<GraphTotals | null> {
+  const graph = await loadJson<Partial<GraphTotals>>("globals/graph.json").catch(
+    () => null,
+  );
+  return graph
+    ? {
+        posts: graph.posts || 0,
+        matched: graph.matched || 0,
+        referenced: graph.referenced || 0,
+      }
+    : null;
+}
+
+/** The Count / Search Recent Tweets charts and tables - only those pages ask. */
+export async function loadDashboards(): Promise<Dashboards> {
+  const [cKpis, cBars, cLines, sKpis, sBars, sLines, sTables, sFacets] =
+    await Promise.all([
+      loadJson<{ kpis?: Snapshots["count"]["kpis"] }>(
+        "count_recent_tweets/kpis.json",
+      ),
+      loadJson<{ barcharts?: Snapshots["count"]["barcharts"] }>(
+        "count_recent_tweets/barcharts.json",
+      ),
+      loadJson<{ linecharts?: Snapshots["count"]["linecharts"] }>(
+        "count_recent_tweets/linecharts.json",
+      ),
+      loadJson<{ kpis?: Snapshots["search"]["kpis"] }>(
+        "search_recents_tweets/kpis.json",
+      ),
+      loadJson<{ barcharts?: Snapshots["search"]["barcharts"] }>(
+        "search_recents_tweets/barcharts.json",
+      ),
+      loadJson<{ linecharts?: Snapshots["search"]["linecharts"] }>(
+        "search_recents_tweets/linecharts.json",
+      ),
+      loadJson<{ tables?: Snapshots["search"]["tables"] }>(
+        "search_recents_tweets/tables.json",
+      ),
+      // Added after the other search-page files - an older publish simply has no
+      // facets, and the column filters then fall back to the loaded rows.
+      loadJson<{ facets?: Snapshots["search"]["facets"] }>(
+        "search_recents_tweets/facets.json",
+      ).catch(() => ({ facets: [] })),
+    ]);
+  return {
     count: {
       kpis: cKpis.kpis || [],
       barcharts: cBars.barcharts || [],
