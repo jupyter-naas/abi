@@ -267,9 +267,7 @@ def _search_users_via_stats(
         limit=limit,
     )
     order = [str(key["author_id"]) for key in keys]
-    by_id = {
-        str(row["author_id"]): row for row in _authors_with_stats(dataset, order)
-    }
+    by_id = {str(row["author_id"]): row for row in _authors_with_stats(dataset, order)}
     return total, [dict(by_id[aid]) for aid in order if aid in by_id]
 
 
@@ -345,24 +343,22 @@ def _total_from_stats(
 
 
 def _stats_from_joined_author(row: dict[str, Any]) -> dict[str, Any] | None:
-    if row.get("stat_matched_count") is None and row.get("stat_referenced_count") is None:
+    if (
+        row.get("stat_matched_count") is None
+        and row.get("stat_referenced_count") is None
+    ):
         return None
     stats: dict[str, Any] = {
         "matched_count": int(row.get("stat_matched_count") or 0),
         "referenced_count": int(row.get("stat_referenced_count") or 0),
         "last_post_at": row.get("stat_last_post_at"),
+        "first_post_at": row.get("stat_first_post_at"),
     }
-    if row.get("stat_first_post_at") is not None:
-        stats["first_post_at"] = row.get("stat_first_post_at")
     return stats
 
 
 def _clean_author_row(row: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key: value
-        for key, value in row.items()
-        if not key.startswith("stat_")
-    }
+    return {key: value for key, value in row.items() if not key.startswith("stat_")}
 
 
 def _posts_with_profile_fields(
@@ -424,8 +420,10 @@ def _resolve_author(dataset, handle: str) -> dict[str, Any] | None:
     # least significant first.
     joined.sort(key=lambda row: str(row["author_id"]))
     joined.sort(
-        key=lambda row: int(row.get("stat_matched_count") or 0)
-        + int(row.get("stat_referenced_count") or 0),
+        key=lambda row: (
+            int(row.get("stat_matched_count") or 0)
+            + int(row.get("stat_referenced_count") or 0)
+        ),
         reverse=True,
     )
     joined.sort(key=lambda row: str(row.get("seen_at") or ""), reverse=True)
@@ -450,7 +448,7 @@ def user_posts(
     author_row = _clean_author_row(joined)
     author_id_raw = str(author_row.get("author_id") or "")
     stats = _stats_from_joined_author(joined)
-    if stats is None:
+    if stats is None or stats.get("first_post_at") is None:
         stats = profile_stats(dataset, author_id_raw)
     profile = merge_profile_with_stats(author_row, stats)
     # Kind is filtered after ranking: a referenced row loses to its matched twin.
@@ -501,7 +499,9 @@ def serialize_search_posts(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "verified_type": str(row.get("verified_type") or ""),
                 "referenced": row.get("kind") == "referenced",
                 "media_count": len(media),
-                "queries": [str(row.get("query_slug") or "")] if row.get("query_slug") else [],
+                "queries": [str(row.get("query_slug") or "")]
+                if row.get("query_slug")
+                else [],
             }
         )
     return out

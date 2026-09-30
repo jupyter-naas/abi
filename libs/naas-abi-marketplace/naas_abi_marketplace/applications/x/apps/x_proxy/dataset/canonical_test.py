@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from naas_abi_core.services.dataset.DatasetFactory import DatasetFactory
+from naas_abi_core.services.dataset.DatasetPort import (
+    ColumnSpec,
+    DatasetSchemaError,
+    DatasetSpec,
+)
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import api as ds_api
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
     AUTHOR_STATS_V1,
     AUTHORS_V1,
     POSTS_V1,
+    X_DATASET_NAMESPACE,
+    _author_stats_v1_spec,
+    _refresh_dataset_table_comment,
     ensure_x_datasets,
     upsert_table,
 )
@@ -501,6 +510,42 @@ def test_user_posts_uses_cached_author_stats_total(dataset) -> None:
     assert profile["first_post_at"] is not None
 
 
+def test_user_posts_backfills_null_first_post_at(dataset) -> None:
+    """Stats rows from before first_post_at existed still have last_post_at."""
+    ensure_x_datasets(dataset)
+    first = datetime(2026, 6, 1, 12, 0, tzinfo=UTC)
+    last = first + timedelta(days=20)
+    upsert_table(
+        dataset,
+        POSTS_V1,
+        [_post("10", "matched", "a1", first), _post("11", "matched", "a1", last)],
+    )
+    upsert_table(dataset, AUTHORS_V1, [_author("a1", "alice", last)])
+    upsert_table(
+        dataset,
+        AUTHOR_STATS_V1,
+        [
+            {
+                "author_id": "a1",
+                "matched_count": 2,
+                "referenced_count": 0,
+                "first_post_at": None,
+                "last_post_at": last,
+                "updated_at": last,
+            }
+        ],
+    )
+    profile, total, posts = ds_api.user_posts(dataset, "alice", limit=10)
+    assert profile is not None
+    assert total == 2
+    assert len(posts) == 2
+    assert profile["first_post_at"] is not None
+    first_at = profile["first_post_at"]
+    if hasattr(first_at, "isoformat"):
+        first_at = first_at.isoformat()
+    assert str(first_at).startswith("2026-06-01")
+
+
 def test_user_posts_ignores_stale_duplicate_author_id_for_same_handle(dataset) -> None:
     """Resolve handle to the newest ``author_id``; do not inflate totals."""
     ensure_x_datasets(dataset)
@@ -653,6 +698,58 @@ def test_ensure_x_datasets_checks_the_catalog_once_per_dataset(dataset) -> None:
     ensure_x_datasets(dataset)
     ds_api.search_users(dataset, "")
     assert calls["n"] == 0
+
+
+def test_ensure_x_datasets_rewrites_stale_author_stats_spec_comment(dataset) -> None:
+    """ALTER added first_post_at; a stale COMMENT left MERGE ignoring the column."""
+    ensure_x_datasets(dataset)
+    stale = DatasetSpec(
+        name=AUTHOR_STATS_V1,
+        namespace=X_DATASET_NAMESPACE,
+        columns=(
+            ColumnSpec(name="author_id", type="string"),
+            ColumnSpec(name="matched_count", type="integer"),
+            ColumnSpec(name="referenced_count", type="integer"),
+            ColumnSpec(name="last_post_at", type="timestamp"),
+            ColumnSpec(name="updated_at", type="timestamp"),
+        ),
+        primary_key=("author_id",),
+    )
+    stale_comment = "abi.dataset-spec:" + json.dumps(
+        stale.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    escaped = stale_comment.replace("'", "''")
+    dataset.query(
+        f"COMMENT ON TABLE {AUTHOR_STATS_V1} IS '{escaped}'",  # nosec B608
+        namespace=X_DATASET_NAMESPACE,
+    )
+    now = datetime.now(UTC)
+    stale_row = {
+        "author_id": "a1",
+        "matched_count": 1,
+        "referenced_count": 0,
+        "first_post_at": now,
+        "last_post_at": now,
+        "updated_at": now,
+    }
+    with pytest.raises(DatasetSchemaError, match="unknown columns"):
+        dataset.write(
+            AUTHOR_STATS_V1,
+            [stale_row],
+            namespace=X_DATASET_NAMESPACE,
+            mode="upsert",
+        )
+    dataset.flush(AUTHOR_STATS_V1, namespace=X_DATASET_NAMESPACE)
+    _refresh_dataset_table_comment(dataset, _author_stats_v1_spec())
+    written = upsert_table(dataset, AUTHOR_STATS_V1, [stale_row])
+    assert written == 1
+    stored = dataset.query(
+        f"SELECT first_post_at FROM {AUTHOR_STATS_V1} WHERE author_id = 'a1'",
+        namespace=X_DATASET_NAMESPACE,
+    )
+    assert stored.rows[0]["first_post_at"] is not None
 
 
 def test_post_by_id_prefers_the_matched_row_and_carries_its_author(dataset) -> None:
