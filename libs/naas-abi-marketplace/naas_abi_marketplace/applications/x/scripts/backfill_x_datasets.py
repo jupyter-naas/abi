@@ -10,12 +10,14 @@ from pathlib import Path
 
 from naas_abi_core.utils.Logger import logger
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelope_paths import (
+    COUNT_ENVELOPE_PREFIX,
     ENVELOPE_PREFIX,
 )
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.storage_walk import walk
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.sync import (
     sync_envelope_paths,
 )
+from naas_abi_marketplace.applications.x.scripts._engine_bootstrap import load_engine
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -23,8 +25,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--config",
         type=Path,
-        default=Path("config.local.yaml"),
-        help="ABI YAML config (loads Engine before sync).",
+        default=None,
+        help=(
+            "ABI YAML config (default: config.{ENV}.yaml or config.yaml). "
+            "On production EC2 use config.local.yaml or omit --config when ENV=local."
+        ),
     )
     parser.add_argument(
         "--batch-size",
@@ -66,15 +71,30 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Re-ingest envelopes even when already recorded in envelopes_v1.",
     )
+    parser.add_argument(
+        "--skip-count-envelopes",
+        action="store_true",
+        help="Do not walk x/count_recent_tweets (search_recent_tweets only).",
+    )
+    parser.add_argument(
+        "--count-envelopes-only",
+        action="store_true",
+        help=(
+            "Walk only x/count_recent_tweets (fills count_buckets_v1; no search replay)."
+        ),
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    from naas_abi_core.engine.Engine import Engine
+    if args.count_envelopes_only and args.skip_count_envelopes:
+        raise SystemExit(
+            "Use either --count-envelopes-only or --skip-count-envelopes, not both."
+        )
     from naas_abi_marketplace.applications.x import ABIModule
 
-    engine = Engine(configuration=args.config.read_text(encoding="utf-8"))
+    engine = load_engine(args.config)
     engine.load()
     module = ABIModule.get_instance()
     object_storage = module.engine.services.object_storage
@@ -102,8 +122,15 @@ def main(argv: list[str] | None = None) -> int:
             if line.strip()
         ]
     else:
-        paths = walk(object_storage, ENVELOPE_PREFIX, suffix=".json")
-        paths.sort()
+        if args.count_envelopes_only:
+            paths = walk(object_storage, COUNT_ENVELOPE_PREFIX, suffix=".json")
+        else:
+            paths = walk(object_storage, ENVELOPE_PREFIX, suffix=".json")
+            if not args.skip_count_envelopes:
+                paths.extend(
+                    walk(object_storage, COUNT_ENVELOPE_PREFIX, suffix=".json")
+                )
+        paths = sorted(set(paths))
 
     if args.limit:
         paths = paths[: args.limit]

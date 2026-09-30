@@ -83,7 +83,9 @@ def _load_envelope(
     return doc if isinstance(doc, dict) else None
 
 
-def _media_rows(doc: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _media_rows(
+    doc: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Return (media_v1 rows, post_media_v1 rows) with pending downloads."""
     results = doc.get("results") or {}
     if not isinstance(results, dict):
@@ -292,6 +294,9 @@ def sync_envelope_paths(
         }
     )
     if touched_author_ids:
+        # New authors (first row in authors_v1) get first_post_at from this ingest:
+        # MIN(created_at) on their posts. Existing authors keep counts/last_post
+        # in sync the same way; null first_post_at is filled from posts at ensure.
         recompute_author_stats(dataset, touched_author_ids)
     upsert_table(dataset, MEDIA_V1, batch_media)
     upsert_table(dataset, POST_MEDIA_V1, batch_post_media)

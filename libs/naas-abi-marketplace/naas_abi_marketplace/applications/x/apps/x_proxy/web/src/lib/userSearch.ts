@@ -30,6 +30,31 @@ export type UserFeed = {
 };
 
 const directPostPromises = new Map<string, Promise<TweetRow | null>>();
+const feedPagePromises = new Map<string, Promise<UserBundle | null>>();
+/** Session memo cap - a long browse should not hold every feed ever opened. */
+const MAX_MEMOIZED = 200;
+
+/**
+ * Shares one request per key between whoever asks - a hover prefetch and the
+ * click that follows it, or two views of the same post. A miss (`null`, which
+ * is also what a failed fetch resolves to) is forgotten, so it is retried.
+ */
+function memoized<T>(
+  memo: Map<string, Promise<T | null>>,
+  key: string,
+  load: () => Promise<T | null>,
+): Promise<T | null> {
+  let pending = memo.get(key);
+  if (!pending) {
+    if (memo.size >= MAX_MEMOIZED) memo.clear();
+    pending = load().then((value) => {
+      if (value == null) memo.delete(key);
+      return value;
+    });
+    memo.set(key, pending);
+  }
+  return pending;
+}
 
 function mapDatasetPost(row: Record<string, unknown>): TweetRow {
   const tweetId = String(row.tweet_id || "");
@@ -126,27 +151,52 @@ function mapDatasetProfile(row: Record<string, unknown>): UserProfile {
 }
 
 export function loadPostArtifact(tweetId: string): Promise<TweetRow | null> {
-  let pending = directPostPromises.get(tweetId);
-  if (!pending) {
-    pending = getJson<{ post?: Record<string, unknown> }>(
+  return memoized(directPostPromises, tweetId, () =>
+    getJson<{ post?: Record<string, unknown> }>(
       `dataset/posts/${encodeURIComponent(tweetId)}.json`,
     )
       .then((doc) =>
         doc?.post ? mapDatasetPost(doc.post as Record<string, unknown>) : null,
       )
-      .catch(() => null);
-    directPostPromises.set(tweetId, pending);
-  }
-  return pending;
+      .catch(() => null),
+  );
 }
 
 /** One page of an author's feed (newest first). */
-export async function loadUserFeedPage(
+export function loadUserFeedPage(
   username: string,
   page: number,
   perPage: number = USER_FEED_BATCH,
 ): Promise<UserBundle | null> {
   const key = username.toLowerCase().replace(/^@/, "");
+  return memoized(feedPagePromises, `${key}|${page}|${perPage}`, () =>
+    fetchUserFeedPage(key, page, perPage),
+  );
+}
+
+/**
+ * Starts loading what a result link opens, so the page is there - or on its
+ * way - by the time the click lands. Called on hover / focus / touch.
+ */
+export function prefetchUser(username: string): void {
+  void loadUserFeedPage(username, 0, USER_FEED_BATCH);
+}
+
+export function prefetchPost(tweetId: string): void {
+  void loadPostArtifact(tweetId);
+}
+
+/** Link props that start `prefetch` on hover, keyboard focus or touch. The
+ * loaders are memoized, so firing on each of them costs one request. */
+export function prefetchOn(prefetch: () => void) {
+  return { onMouseEnter: prefetch, onFocus: prefetch, onTouchStart: prefetch };
+}
+
+async function fetchUserFeedPage(
+  key: string,
+  page: number,
+  perPage: number,
+): Promise<UserBundle | null> {
   const params = new URLSearchParams({
     page: String(page),
     per_page: String(perPage),
