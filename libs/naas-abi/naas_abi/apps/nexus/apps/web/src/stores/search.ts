@@ -8,6 +8,13 @@ import { getApiUrl } from '@/lib/config';
 
 export type SourceCategory = 'public' | 'private' | 'custom';
 
+/**
+ * Engines the search page's Web scope queries: the ones `/api/search/web`
+ * implements. Private sources (conversations, files, graph, ontology) are
+ * searched by their own scopes on the search page, not through this store.
+ */
+export const WEB_ENGINE_IDS: readonly string[] = ['wikipedia', 'duckduckgo'];
+
 export interface SearchSource {
   id: string;
   name: string;
@@ -71,7 +78,7 @@ const defaultPublicSources: SearchSource[] = [
     name: 'Wikipedia',
     category: 'public',
     icon: 'BookOpen',
-    enabled: true,
+    enabled: false, // the query leaves Nexus: off until switched on
     description: 'Search Wikipedia articles (free API)',
   },
   {
@@ -79,7 +86,7 @@ const defaultPublicSources: SearchSource[] = [
     name: 'DuckDuckGo',
     category: 'public',
     icon: 'Search',
-    enabled: true,
+    enabled: false, // the query leaves Nexus: off until switched on
     description: 'DuckDuckGo instant answers (free API)',
   },
   {
@@ -167,11 +174,14 @@ export const useSearchStore = create<SearchState>()(
       setQuery: (query) => set({ query }),
 
       // Toggle source enabled/disabled
+      // Results depend on the engines: forget the last query so the next search reruns.
       toggleSource: (sourceId) =>
         set((state) => ({
           sources: state.sources.map((s) =>
             s.id === sourceId ? { ...s, enabled: !s.enabled } : s
           ),
+          query: '',
+          results: [],
         })),
 
       // Toggle category expansion in sidebar
@@ -222,7 +232,7 @@ export const useSearchStore = create<SearchState>()(
         get().addRecentSearch(query);
 
         try {
-          const enabledSources = get().sources.filter((s) => s.enabled);
+          const enabledSources = get().sources.filter((s) => s.enabled && WEB_ENGINE_IDS.includes(s.id));
           const results: SearchResult[] = [];
 
           // Search each enabled source
@@ -261,6 +271,15 @@ export const useSearchStore = create<SearchState>()(
     }),
     {
       name: 'nexus-search',
+      // v1: web engines start off (the Web scope sends the query outside Nexus).
+      version: 1,
+      migrate: (persisted, version) => {
+        const state = persisted as Partial<SearchState>;
+        if (version < 1 && Array.isArray(state.sources)) {
+          state.sources = state.sources.map((s) => (WEB_ENGINE_IDS.includes(s.id) ? { ...s, enabled: false } : s));
+        }
+        return state as SearchState;
+      },
       partialize: (state) => ({
         sources: state.sources,
         recentSearches: state.recentSearches,
@@ -354,6 +373,9 @@ export const selectPrivateSources = (state: SearchState) =>
 
 export const selectCustomSources = (state: SearchState) =>
   state.sources.filter((s) => s.category === 'custom');
+
+export const selectWebEngines = (state: SearchState) =>
+  state.sources.filter((s) => WEB_ENGINE_IDS.includes(s.id));
 
 export const selectEnabledSources = (state: SearchState) =>
   state.sources.filter((s) => s.enabled);
