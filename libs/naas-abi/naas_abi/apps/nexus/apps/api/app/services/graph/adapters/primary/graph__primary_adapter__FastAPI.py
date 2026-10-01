@@ -14,6 +14,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.content_disposition import content_disposition
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     require_superadmin,
 )
@@ -917,7 +918,7 @@ async def export_graph(
         io.BytesIO(content.encode("utf-8")),
         media_type=media_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": content_disposition("attachment", filename),
             "X-Triple-Count": str(triple_count),
             "X-Named-Individual-Count": str(named_individual_count),
             "Access-Control-Expose-Headers": "X-Triple-Count, X-Named-Individual-Count, Content-Disposition",
