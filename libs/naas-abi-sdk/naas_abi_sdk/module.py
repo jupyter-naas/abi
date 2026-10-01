@@ -19,6 +19,7 @@ from naas_abi_sdk.discovery import (
     ModulesProxy,
     module_descriptor,
 )
+from naas_abi_sdk.jobs import JobsMixin
 from naas_abi_sdk.services import service_proxy
 
 if TYPE_CHECKING:
@@ -144,7 +145,7 @@ class EngineProxy:
 Config = TypeVar("Config", bound=ModuleConfiguration)
 
 
-class BaseModule(Generic[Config]):
+class BaseModule(JobsMixin, Generic[Config]):
     """Subclass as ABIModule with Configuration, dependencies and lifecycle hooks.
 
     Hooks may be synchronous or async. Business operations use async typed SDK
@@ -280,6 +281,7 @@ async def run_module(
         module._discovery_session = registration
         work = None
         agent_host = None
+        job_host = None
         try:
             await _invoke(module.on_load)
             if registration:
@@ -307,6 +309,26 @@ async def run_module(
                     idle_timeout_seconds=agent_idle_timeout_seconds,
                 )
                 await agent_host.start()
+            if module.missing_job_handlers():
+                raise ValueError(
+                    "Every declared job must have a handler before module readiness"
+                )
+            if module._job_handlers:
+                if registration is None or "document" not in dependencies.services:
+                    raise ValueError(
+                        "Job hosting requires discovery and a document service dependency"
+                    )
+                from naas_abi_sdk.job_host import JobHost
+
+                job_host = JobHost(
+                    client._transport,
+                    module.engine.services.document,
+                    identity,
+                    discovery.project,
+                    {j.name: (j, module._job_handlers[j.name]) for j in module.jobs},
+                    instance_id=registration.instance_id,
+                )
+                await job_host.start()
             if registration:
                 registration.initialized = True
                 await registration.renew()
@@ -332,6 +354,8 @@ async def run_module(
                         logging.getLogger(__name__).warning(
                             "Could not mark module draining", exc_info=True
                         )
+                if job_host:
+                    await job_host.close()
                 if agent_host:
                     await agent_host.close()
                 await _invoke(module.on_unloaded)
