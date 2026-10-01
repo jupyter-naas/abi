@@ -181,11 +181,13 @@ export function trackEvent(
 
   // Fire-and-forget POST to the Nexus API (port 9879 in local dev), which
   // persists through ABI's object storage service. keepalive lets events
-  // sent during unload still ship.
+  // sent during unload still ship. Attach the session token when one is
+  // already hydrated; do not use authFetch — a 401 here must not log the
+  // user out.
   try {
     fetch(`${getApiUrl()}/api/analytics/events`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: eventHeaders(),
       body: JSON.stringify(event),
       keepalive: true,
     }).catch(() => {
@@ -193,6 +195,30 @@ export function trackEvent(
     });
   } catch {
     // ignore
+  }
+}
+
+function eventHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = sessionToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+function sessionToken(): string | undefined {
+  try {
+    const fromStore = useAuthStore.getState().token;
+    if (fromStore) return fromStore;
+  } catch {
+    // Store not ready — fall through to the persisted snapshot.
+  }
+  try {
+    const raw = localStorage.getItem('nexus-auth');
+    if (!raw) return undefined;
+    const token = JSON.parse(raw)?.state?.token;
+    return typeof token === 'string' && token ? token : undefined;
+  } catch {
+    return undefined;
   }
 }
 

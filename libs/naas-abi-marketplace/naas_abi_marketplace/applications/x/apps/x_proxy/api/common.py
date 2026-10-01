@@ -103,6 +103,89 @@ def is_all_time(scenario: dict[str, Any]) -> bool:
     return str(scenario.get("id") or "") == ALL_TIME_ID
 
 
+def _parse_count_instant(value: object) -> datetime | None:
+    """UTC datetime from a count-bucket ``start`` / ``end``, or ``None``."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text.rstrip("/").endswith("-partial"):
+        return None
+    text = text.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _is_complete_hour_bucket(bucket: dict[str, Any]) -> bool:
+    """True when *bucket* is a finished clock hour, not an in-progress slice."""
+    start = _parse_count_instant(bucket.get("start"))
+    if start is None:
+        return False
+    end_raw = bucket.get("end")
+    if end_raw is None:
+        return True
+    if str(end_raw).rstrip("/").endswith("-partial"):
+        return False
+    end = _parse_count_instant(end_raw)
+    if end is None:
+        return True
+    return (end - start) >= timedelta(minutes=59)
+
+
+def normalize_hourly_count_buckets(
+    buckets: Iterable[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Complete hours only, one row per clock hour, ``MAX(count)`` on duplicates.
+
+    ``count_buckets_v1`` stores ``(query_slug, bucket_start, bucket_end)`` so the
+    same hour can appear many times (re-ingested envelopes, sub-hour ends).
+    Summing those rows inflates Count page KPIs; the graph path already used
+    ``MAX(?count)`` per hour.
+    """
+    by_start: dict[str, dict[str, Any]] = {}
+    for bucket in buckets or []:
+        if not _is_complete_hour_bucket(bucket):
+            continue
+        start = _parse_count_instant(bucket.get("start"))
+        if start is None:
+            continue
+        hour = start.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+        key = hour.isoformat()
+        count = int(bucket.get("count") or 0)
+        previous = by_start.get(key)
+        if previous is None or count > int(previous["count"]):
+            by_start[key] = {
+                "start": key,
+                "end": (hour + timedelta(hours=1)).isoformat(),
+                "count": count,
+            }
+    return [by_start[key] for key in sorted(by_start)]
+
+
+def merge_count_timeseries(
+    graph_buckets: Iterable[dict[str, Any]] | None,
+    projection_buckets: Iterable[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Union of graph and projection hours; the graph wins on overlap.
+
+    A short ``count_buckets_v1`` backfill must not hide the longer count graph.
+    Projection-only hours (newer than Fuseki) are kept.
+    """
+    by_start = {
+        bucket["start"]: bucket
+        for bucket in normalize_hourly_count_buckets(projection_buckets)
+    }
+    by_start.update(
+        {
+            bucket["start"]: bucket
+            for bucket in normalize_hourly_count_buckets(graph_buckets)
+        }
+    )
+    return [by_start[key] for key in sorted(by_start)]
+
+
 def build_scenarios(
     now: datetime | None = None, *, data_start: datetime | None = None
 ) -> list[dict[str, str]]:
@@ -616,20 +699,13 @@ class SnapshotContext:
             ("timeseries", query_string), lambda: self._timeseries(query_string)
         )
 
-    def _timeseries(self, query_string: str) -> list[dict[str, Any]]:
-        cache = self.cache
-        slug = self._cache_slug(query_string)
-        if (
-            cache is not None
-            and slug is not None
-            and hasattr(cache, "count_endpoint_timeseries")
-        ):
-            return cache.count_endpoint_timeseries(slug)
+    def _timeseries_from_graph(self, query_string: str) -> list[dict[str, Any]]:
+        """Complete-hour buckets from the count graph, one row per ``bucket_start``."""
         escaped = _escape_sparql_string(query_string)
         sparql = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX x:   <{self.namespace}>
-        SELECT ?start ?end (MAX(?count) AS ?tweetCount)
+        SELECT ?start (MAX(?end) AS ?end) (MAX(?count) AS ?tweetCount)
         WHERE {{
           GRAPH <{self.graph_name}> {{
             ?resultSet rdf:type x:TweetCountResultSet ;
@@ -645,7 +721,7 @@ class SnapshotContext:
             FILTER(!STRENDS(STR(?interval), "-partial"))
           }}
         }}
-        GROUP BY ?start ?end
+        GROUP BY ?start
         ORDER BY ?start
         """
         buckets: list[dict[str, Any]] = []
@@ -664,6 +740,31 @@ class SnapshotContext:
                 }
             )
         return buckets
+
+    def _timeseries(self, query_string: str) -> list[dict[str, Any]]:
+        graph_buckets = self._timeseries_from_graph(query_string)
+        projection_buckets: list[dict[str, Any]] = []
+        cache = self.cache
+        slug = self._cache_slug(query_string)
+        if (
+            cache is not None
+            and slug is not None
+            and hasattr(cache, "count_endpoint_timeseries")
+        ):
+            try:
+                projection_buckets = list(cache.count_endpoint_timeseries(slug) or [])
+            except Exception as exc:  # noqa: BLE001 - projection is an optimisation
+                logger.warning(
+                    f"X app: count projection unreadable for {query_string!r} "
+                    f"({exc}); using SPARQL"
+                )
+                projection_buckets = []
+            if not projection_buckets:
+                logger.info(
+                    f"X app: projection has no count buckets for {query_string!r} "
+                    f"(slug {slug!r}); using SPARQL"
+                )
+        return merge_count_timeseries(graph_buckets, projection_buckets)
 
     def sum_counts_in_window(
         self, query_string: str, start_time: str, end_time: str
@@ -1035,17 +1136,28 @@ class SnapshotContext:
             )
         banded = self._banded_facet_values(query_string, column)
         totals: dict[str, int] = {}
+        display_for: dict[str, str] = {}
+        max_piece: dict[str, int] = {}
         for index in indices:
             for value, count in banded.get(index, {}).items():
                 # Keyed on the displayed form, so whitespace variants of the
                 # same value land in one entry rather than several identical
-                # checkboxes.
-                display = value.strip()
-                totals[display] = totals.get(display, 0) + count
+                # checkboxes. Usernames also fold case (X handles are
+                # case-insensitive; ingest can carry several ``author_id`` rows).
+                raw = value.strip()
+                key = raw.lower() if column == "username" else raw
+                totals[key] = totals.get(key, 0) + count
+                if column == "username" and count >= max_piece.get(key, -1):
+                    max_piece[key] = count
+                    display_for[key] = raw
         # Ties broken by value so the published order is stable across runs;
         # SPARQL's ORDER BY DESC(?n) alone left them at the engine's mercy.
         ranked = sorted(totals.items(), key=lambda kv: (-kv[1], kv[0]))
-        return [{"value": value, "count": count} for value, count in ranked[:limit]]
+        out: list[dict[str, Any]] = []
+        for key, count in ranked[:limit]:
+            shown = display_for.get(key, key) if column == "username" else key
+            out.append({"value": shown, "count": count})
+        return out
 
     def _banded_facet_values(
         self, query_string: str, column: str
@@ -1455,7 +1567,8 @@ class SnapshotContext:
         sparql = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX x:   <{self.namespace}>
-        SELECT ?username (COUNT(DISTINCT ?tweet) AS ?n) (MAX(?created) AS ?last)
+        SELECT ?usernameKey (SAMPLE(?username) AS ?username)
+               (COUNT(DISTINCT ?tweet) AS ?n) (MAX(?created) AS ?last)
                (MIN(?created) AS ?first) (SAMPLE(?location) AS ?loc)
                (SAMPLE(?verifiedType) AS ?vt)
         WHERE {{
@@ -1467,8 +1580,9 @@ class SnapshotContext:
             OPTIONAL {{ ?author x:user_location ?location . }}
             OPTIONAL {{ ?author x:verified_type ?verifiedType . }}
           }}
+          BIND(LCASE(STR(?username)) AS ?usernameKey)
         }}
-        GROUP BY ?username
+        GROUP BY ?usernameKey
         ORDER BY DESC(?n)
         """
         authors: list[dict[str, Any]] = []
@@ -1912,15 +2026,18 @@ class SnapshotContext:
                 continue
             if start_ms <= t < end_ms:
                 in_range.append(b)
+        in_range = normalize_hourly_count_buckets(in_range)
         if not daily:
             points: list[dict[str, Any]] = []
             for b in in_range:
                 start = datetime.fromisoformat(str(b["start"]))
-                end = None
+                end = start + timedelta(hours=1)
                 if b.get("end"):
-                    end = datetime.fromisoformat(str(b["end"]))
-                if end is None or end <= start:
-                    end = start + timedelta(hours=1)
+                    parsed_end = _parse_count_instant(b["end"])
+                    if parsed_end is not None and parsed_end - start >= timedelta(
+                        minutes=59
+                    ):
+                        end = parsed_end
                 label = (
                     start.strftime("%b ") + str(start.day) + start.strftime(", %H:00")
                 )
