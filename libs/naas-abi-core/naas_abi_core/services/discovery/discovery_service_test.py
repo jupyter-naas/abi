@@ -209,3 +209,60 @@ def test_agent_authorization_requires_provider_lease_and_readiness():
             await service.authorize_agent(auth, "provider-identity")
 
     asyncio.run(scenario())
+
+
+def _with_jobs(request, *jobs):
+    request.descriptor.jobs.extend(jobs)
+    return request
+
+
+def _job(name="ingest", kind="cron", spec="0 0 6 * * *", **fields):
+    return pb.JobDescriptor(
+        name=name,
+        contract_major=1,
+        triggers=[pb.JobTrigger(kind=kind, spec=spec)],
+        max_concurrency=fields.pop("max_concurrency", 1),
+        max_attempts=fields.pop("max_attempts", 1),
+        **fields,
+    )
+
+
+def test_job_descriptors_are_validated():
+    async def register(request):
+        service = DiscoveryService(
+            MemoryRegistry(), lease_seconds=20, clock=lambda: 0.0
+        )
+        await service.register(request, "owner")
+
+    asyncio.run(
+        register(
+            _with_jobs(registration("m", "i"), _job(), _job("summary", "every", "1h"))
+        )
+    )
+
+    invalid = [
+        _with_jobs(registration("m", "i"), _job(), _job()),  # duplicate
+        _with_jobs(registration("m", "i"), _job(name="bad name")),
+        _with_jobs(registration("m", "i"), _job(kind="weekly")),
+        _with_jobs(registration("m", "i"), _job(spec="")),
+        _with_jobs(registration("m", "i"), _job(max_concurrency=0)),
+        _with_jobs(registration("m", "i"), _job(max_attempts=0)),
+        _with_jobs(registration("m", "i"), *[_job(f"j{i}") for i in range(129)]),
+    ]
+    for request in invalid:
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+            asyncio.run(register(request))
+
+
+def test_replicas_must_declare_identical_jobs():
+    async def scenario():
+        service = DiscoveryService(
+            MemoryRegistry(), lease_seconds=20, clock=lambda: 0.0
+        )
+        await service.register(_with_jobs(registration("m", "i1"), _job()), "owner")
+        with pytest.raises(DiscoveryError, match="DESCRIPTOR_CONFLICT"):
+            await service.register(
+                _with_jobs(registration("m", "i2"), _job(spec="0 0 7 * * *")), "owner"
+            )
+
+    asyncio.run(scenario())

@@ -8,6 +8,22 @@ message AgentDescriptor {
   uint32 contract_major = 3;
   repeated string capabilities = 4;
 }
+// One way a job is started: kind "cron" (6-field cron, optional IANA time
+// zone), "every" (Go duration such as "1h") or "event" (NATS event subject).
+message JobTrigger {
+  string kind = 1;
+  string spec = 2;
+  string time_zone = 3;
+}
+message JobDescriptor {
+  string name = 1;
+  string description = 2;
+  uint32 contract_major = 3;
+  repeated JobTrigger triggers = 4;
+  uint32 max_concurrency = 5;
+  uint32 max_attempts = 6;
+  double timeout_seconds = 7;
+}
 message Dependency { string module_id = 1; uint32 contract_major = 2; }
 message ModuleDescriptor {
   string module_id = 1;
@@ -15,6 +31,7 @@ message ModuleDescriptor {
   uint32 contract_major = 3;
   repeated Dependency dependencies = 4;
   repeated AgentDescriptor agents = 5;
+  repeated JobDescriptor jobs = 6;
 }
 message Instance {
   ModuleDescriptor descriptor = 1;
