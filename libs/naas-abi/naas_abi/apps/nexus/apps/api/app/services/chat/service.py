@@ -617,6 +617,26 @@ class ChatService:
 
         return "\n\n".join(parts) if parts else None
 
+    async def build_remote_agent_preamble(
+        self,
+        prior_messages: list,
+        user_id: str | None,
+        workspace_id: str | None = None,
+        conversation_id: str | None = None,
+    ) -> str | None:
+        """Context prepended for agents published by remote modules (NATS).
+
+        Only the first-turn user profile: the skills catalog, open documents,
+        coding workspace and multi-agent notice describe Nexus tooling a remote
+        agent cannot use, and they crowd out its own system prompt.
+        """
+        if any(getattr(m, "role", None) == "assistant" for m in prior_messages):
+            return None
+        addendum = await self.build_user_context_addendum(
+            prior_messages, user_id, workspace_id, conversation_id
+        )
+        return addendum.strip() or None
+
     async def _build_skills_block(
         self, context: RequestContext | None, workspace_id: str | None
     ) -> str:
@@ -1450,6 +1470,10 @@ class ChatService:
         workspace_id: str | None = None,
     ) -> ResolvedProvider | None:
         incoming_llm = getattr(provider, "llm_model", None) if provider else None
+        # A remote agent is reached only through its agent row (sync + roster),
+        # never by naming its key in a client-supplied provider payload.
+        if provider and getattr(provider, "type", None) == "remote":
+            provider = None
         if provider and getattr(provider, "enabled", False):
             return ResolvedProvider(
                 id=provider.id,
@@ -1468,6 +1492,20 @@ class ChatService:
                 agent = await self.get_agent(context=context, agent_id=agent_id)
                 if agent and agent.provider:
                     workspace_id = agent.workspace_id
+                    if agent.provider == "remote" and agent.class_name:
+                        # Published by a remote module (NATS discovery): stream
+                        # through its agent proxy; class_name is the agent key.
+                        return ResolvedProvider(
+                            id=f"remote-{agent.id}",
+                            name=f"Remote ({agent.class_name.rpartition('/')[0]})",
+                            type="remote",
+                            enabled=True,
+                            endpoint=None,
+                            api_key=None,
+                            account_id=None,
+                            model=agent.class_name,
+                            llm_model=None,
+                        )
                     if agent.provider == "abi":
                         inprocess_agent_ref = (
                             agent.class_name or agent.name or agent.model_id or agent.id

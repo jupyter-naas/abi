@@ -29,6 +29,10 @@ from naas_abi.apps.nexus.apps.api.app.services.agents import (
     AgentService,
     AgentUpdateInput,
 )
+from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import (
+    REMOTE_PROVIDER,
+    RemoteAgent,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext, TokenData
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
@@ -536,6 +540,9 @@ def _resolve_agent_model_id(agent: AgentRecord, agent_cls: type | None = None) -
     explicit = (agent.model_id or "").strip()
     if explicit and explicit.lower() not in ("none", "null"):
         return explicit
+    if agent.provider == REMOTE_PROVIDER:
+        # Its module picks the model; the engine default would be a guess.
+        return None
 
     class_model = _class_declared_model_id(agent_cls)
     if class_model:
@@ -641,12 +648,35 @@ async def _dedupe_agents_by_class_name(
     return kept
 
 
+async def _discovered_remote_agents() -> list[RemoteAgent] | None:
+    """Agents published through NATS discovery; None when discovery cannot be read."""
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote import factory
+
+    try:
+        return await factory.get_remote_agent_directory().list_agents()
+    except Exception as exc:  # noqa: BLE001 - keep remote rows untouched on any error
+        logger.warning("Remote agent discovery unavailable, leaving remote agents as is: %s", exc)
+        return None
+
+
+def _remote_agent_enabled(
+    class_name: str,
+    available: Iterable[str],
+    seeded_class_names: set[str] | None,
+) -> bool:
+    """Remote agents: on while their module is READY; an ``agents:`` roster restricts."""
+    if class_name not in available:
+        return False
+    return seeded_class_names is None or class_name in seeded_class_names
+
+
 async def _reconcile_workspace_agents(
     agent_service: AgentService,
     current_user: User,
     workspace_id: str,
     agent_list: list[AgentRecord],
     class_name_to_agent_class: dict[str, type[Agent]],
+    remote_agents: list[RemoteAgent] | None = None,
 ) -> list[AgentRecord]:
     """Reconcile persisted agent records with the code class registry.
 
@@ -662,6 +692,11 @@ async def _reconcile_workspace_agents(
     * **Align** ``enabled`` to the workspace roster on every sync: the
       ``agents:`` seed when present, otherwise the engine default only, plus
       Abi and Axi when loaded (see ``_roster_alignment``).
+    * **Remote agents** (``remote_agents``, from NATS discovery) get rows with
+      ``provider="remote"`` and ``class_name="<module_id>/<Agent>"``. They are
+      enabled while their module is READY, restricted by an ``agents:`` roster,
+      and disabled, never deleted, while it is not. ``None`` means discovery
+      could not be read: remote rows are then left as they are.
 
     Returns the reconciled agent list (deleted records removed, created ones
     appended, backfilled ones refreshed).
@@ -676,7 +711,9 @@ async def _reconcile_workspace_agents(
     stale_agents = [
         agent
         for agent in agent_list
-        if agent.class_name and agent.class_name not in class_name_to_agent_class
+        if agent.class_name
+        and agent.provider != REMOTE_PROVIDER
+        and agent.class_name not in class_name_to_agent_class
     ]
     for agent in stale_agents:
         logger.debug("Removing stale agent (class no longer in registry): %s", agent.class_name)
@@ -686,14 +723,18 @@ async def _reconcile_workspace_agents(
         stale_ids = {agent.id for agent in stale_agents}
         agent_list = [agent for agent in agent_list if agent.id not in stale_ids]
 
+    remote_by_class_name = {agent.key: agent for agent in remote_agents or ()}
+    # Workspace refs ("module Agent") resolve against in-process and remote agents.
+    known_class_names = {**class_name_to_agent_class, **dict.fromkeys(remote_by_class_name)}
+
     seed = workspace_seed_for_slug(await _workspace_slug(workspace_id))
     seeded_class_names: set[str] | None = None
     if seed is not None and seed.agents is not None:
-        seeded_class_names = resolve_agent_refs(seed.agents, class_name_to_agent_class)
+        seeded_class_names = resolve_agent_refs(seed.agents, known_class_names)
 
     default_class_name: str | None = None
     if seed is not None and seed.default_agent:
-        default_class_name = resolve_agent_ref(seed.default_agent, class_name_to_agent_class)
+        default_class_name = resolve_agent_ref(seed.default_agent, known_class_names)
     if default_class_name is None:
         default_class_name = _get_engine_default_agent_class_name()
 
@@ -763,6 +804,34 @@ async def _reconcile_workspace_agents(
         agent_list.append(created_agent)
         existing_agents_by_class_name[class_name] = created_agent
 
+    for class_name, remote in remote_by_class_name.items():
+        if class_name in existing_agents_by_class_name:
+            continue
+        try:
+            created_agent = await agent_service.create_agent(
+                context=context,
+                data=AgentCreateInput(
+                    name=remote.name,
+                    description=remote.description,
+                    workspace_id=workspace_id,
+                    class_name=class_name,
+                    module_path=remote.module_id,
+                    provider=REMOTE_PROVIDER,
+                    enabled=_remote_agent_enabled(
+                        class_name, remote_by_class_name, seeded_class_names
+                    ),
+                ),
+            )
+        except IntegrityError:
+            logger.info(
+                "Remote agent sync race lost for workspace=%s class_name=%s; skipping",
+                workspace_id,
+                class_name,
+            )
+            continue
+        agent_list.append(created_agent)
+        existing_agents_by_class_name[class_name] = created_agent
+
     # Backfill module_path (persist) when missing on existing DB records.
     reconciled: list[AgentRecord] = []
     for agent in agent_list:
@@ -782,10 +851,18 @@ async def _reconcile_workspace_agents(
 
     aligned: list[AgentRecord] = []
     for agent in reconciled:
-        if not align_enabled_to_roster or not agent.class_name:
+        if agent.provider == REMOTE_PROVIDER and agent.class_name:
+            if remote_agents is None:
+                aligned.append(agent)
+                continue
+            should_enable = _remote_agent_enabled(
+                agent.class_name, remote_by_class_name, seeded_class_names
+            )
+        elif not align_enabled_to_roster or not agent.class_name:
             aligned.append(agent)
             continue
-        should_enable = agent.class_name in roster
+        else:
+            should_enable = agent.class_name in roster
         if agent.enabled == should_enable:
             aligned.append(agent)
             continue
@@ -892,6 +969,7 @@ async def sync_agents(
             workspace_id=workspace_id,
             agent_list=agent_list,
             class_name_to_agent_class=class_name_to_agent_class,
+            remote_agents=await _discovered_remote_agents(),
         )
 
     flags = await _caller_feature_flags(workspace_id, role)
