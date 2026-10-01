@@ -11,7 +11,9 @@ engine.load()
 
 all_definitions: list[Definitions] = []
 
-if engine.services.dataset_available():
+# In NATS mode with jobs enabled, the engine hosts dataset maintenance itself
+# (DatasetMaintenanceJobs); scheduling it here too would run it twice.
+if engine.services.dataset_available() and not engine.hosts_jobs:
     all_definitions.append(dataset_compaction_definitions(engine.services.dataset))
 
 for module in engine.modules.values():
