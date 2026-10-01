@@ -59,6 +59,16 @@ RESERVED_TOPIC_IDS = frozenset(
     }
 )
 
+# Scopes of the search page that are not topics and that a workspace admin can
+# switch off: the Nexus features, and each web engine as "web.<engine>".
+FEATURE_SCOPE_IDS = frozenset(RESERVED_TOPIC_IDS - {"all", "web"})
+WEB_ENGINE_SCOPE_IDS = frozenset({"web.wikipedia", "web.duckduckgo"})
+SWITCHABLE_SCOPE_IDS = FEATURE_SCOPE_IDS | WEB_ENGINE_SCOPE_IDS
+# Until an admin changes anything, search covers the topics, Apps, Chats,
+# Agents and the web engines; the other features start switched off.
+DEFAULT_ENABLED_FEATURE_IDS = frozenset({"apps", "chat", "agents"})
+DEFAULT_DISABLED_SCOPE_IDS = FEATURE_SCOPE_IDS - DEFAULT_ENABLED_FEATURE_IDS
+
 
 @dataclass(frozen=True)
 class RoleContract:
@@ -124,6 +134,9 @@ class SearchTopic:
     results_query: str
     header_query: str
     sections: tuple[TopicSection, ...] = ()
+    # Graphs the topic reads, within what the workspace may read. Empty: every
+    # graph the workspace can read (the default for every topic).
+    graphs: tuple[str, ...] = ()
     enabled: bool = True
     order: int = 100
     source: TopicSource = "custom"
@@ -131,6 +144,7 @@ class SearchTopic:
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["sections"] = [asdict(s) for s in self.sections]
+        data["graphs"] = list(self.graphs)
         return data
 
     @classmethod
@@ -155,6 +169,7 @@ class SearchTopic:
             results_query=str(data["results_query"]),
             header_query=str(data["header_query"]),
             sections=sections,
+            graphs=tuple(dict.fromkeys(str(g) for g in data.get("graphs") or [] if str(g).strip())),
             enabled=bool(data.get("enabled", True)),
             order=int(data.get("order", 100)),
             source=source or data.get("source") or "custom",

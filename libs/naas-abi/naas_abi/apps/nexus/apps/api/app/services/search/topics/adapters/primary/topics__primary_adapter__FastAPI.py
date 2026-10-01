@@ -30,6 +30,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import IGraphQue
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.adapters.secondary.postgres import (
     PostgresSearchTopicStore,
 )
+from naas_abi.apps.nexus.apps.api.app.services.search.topics.scope import topic_scope
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.service import SearchTopicService
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema import (
     ROLE_CONTRACTS,
@@ -65,6 +66,7 @@ class TopicIn(BaseModel):
     results_query: str
     header_query: str
     sections: list[TopicSectionIn] = Field(default_factory=list)
+    graphs: list[str] = Field(default_factory=list)
     enabled: bool = True
     order: int = 100
 
@@ -74,19 +76,30 @@ class PreviewIn(BaseModel):
     role: str
     query: str
     params: dict[str, Any] = Field(default_factory=dict)
+    graphs: list[str] = Field(default_factory=list)
 
 
-async def _scoped_store(user_id: str, workspace_id: str) -> IGraphQueryStore:
+async def _scoped_store(
+    user_id: str, workspace_id: str, graphs: tuple[str, ...] | list[str] = ()
+) -> IGraphQueryStore:
+    """The workspace's readable graphs, narrowed to ``graphs`` when a topic names some."""
     from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__dependencies import (  # noqa: E501
         workspace_graph_service,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.scoped_store import (
+        WorkspaceGraphStore,
     )
     from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
 
     graph = await workspace_graph_service(ServiceRegistry.instance().graph, user_id, workspace_id)
-    return GraphQueryTripleStoreAdapter(graph._get_triple_store())
+    assert graph.access_scope is not None
+    scope = topic_scope(graph.access_scope, graphs)
+    return GraphQueryTripleStoreAdapter(WorkspaceGraphStore(graph._get_catalog_store(), scope))
 
 
 def _http_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, HTTPException):  # workspace access checks already chose their status
+        return exc
     if isinstance(exc, SearchTopicValidationError):
         return HTTPException(status_code=422, detail={"errors": exc.errors})
     if isinstance(exc, SearchTopicNotFoundError):
@@ -123,7 +136,34 @@ async def list_topics(
     await require_workspace_access(current_user.id, workspace_id)
     role = await get_workspace_role(current_user.id, workspace_id)
     topics = await service.list_topics(workspace_id)
-    return {"topics": [t.to_dict() for t in topics], "can_edit": role in ("owner", "admin")}
+    return {
+        "topics": [t.to_dict() for t in topics],
+        "disabled_scopes": sorted(await service.disabled_scopes(workspace_id)),
+        "can_edit": role in ("owner", "admin"),
+    }
+
+
+class ScopeEnabledIn(BaseModel):
+    enabled: bool
+
+
+@router.put("/scopes/{scope_id}")
+async def set_scope_enabled(
+    scope_id: str,
+    body: ScopeEnabledIn,
+    workspace_id: str = Query(...),
+    current_user=Depends(get_current_user_required),
+    service: SearchTopicService = Depends(get_search_topic_service),
+) -> dict[str, Any]:
+    """Switch a Nexus feature or a web engine on or off in this workspace's search."""
+    await require_workspace_admin(current_user.id, workspace_id)
+    try:
+        disabled = await service.set_scope_enabled(
+            workspace_id, scope_id, body.enabled, user_id=current_user.id
+        )
+    except Exception as exc:
+        raise _http_error(exc) from exc
+    return {"disabled_scopes": sorted(disabled)}
 
 
 @router.post("/preview")
@@ -135,7 +175,7 @@ async def preview_query(
     await require_workspace_admin(current_user.id, body.workspace_id)
     if body.role not in ROLE_CONTRACTS:
         raise HTTPException(status_code=422, detail={"errors": [f"unknown role {body.role!r}"]})
-    store = await _scoped_store(current_user.id, body.workspace_id)
+    store = await _scoped_store(current_user.id, body.workspace_id, body.graphs)
     try:
         sparql, rows = await service.preview(body.query, body.role, body.params, store)
     except Exception as exc:
@@ -156,8 +196,9 @@ async def topic_results(
     current_user=Depends(get_current_user_required),
     service: SearchTopicService = Depends(get_search_topic_service),
 ) -> dict[str, Any]:
-    store = await _scoped_store(current_user.id, workspace_id)
     try:
+        topic = await service.get_topic(workspace_id, topic_id)
+        store = await _scoped_store(current_user.id, workspace_id, topic.graphs)
         results = await service.search(workspace_id, topic_id, q, store, limit=limit, offset=offset)
     except Exception as exc:
         raise _http_error(exc) from exc
@@ -172,8 +213,9 @@ async def topic_detail(
     current_user=Depends(get_current_user_required),
     service: SearchTopicService = Depends(get_search_topic_service),
 ) -> dict[str, Any]:
-    store = await _scoped_store(current_user.id, workspace_id)
     try:
+        topic = await service.get_topic(workspace_id, topic_id)
+        store = await _scoped_store(current_user.id, workspace_id, topic.graphs)
         detail = await service.detail(workspace_id, topic_id, uri, store)
     except Exception as exc:
         raise _http_error(exc) from exc

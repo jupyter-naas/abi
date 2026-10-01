@@ -5,15 +5,16 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { authFetch } from './auth';
 import { getApiUrl } from '@/lib/config';
+import { WEB_ENGINE_IDS } from '@/lib/search-scopes';
 
 export type SourceCategory = 'public' | 'private' | 'custom';
 
 /**
- * Engines the search page's Web scope queries: the ones `/api/search/web`
- * implements. Private sources (conversations, files, graph, ontology) are
- * searched by their own scopes on the search page, not through this store.
+ * The Web scope queries only the engines `/api/search/web` implements
+ * (`WEB_ENGINES`), and of those only the ones the workspace allows. Private
+ * sources (conversations, files, graph, ontology) have their own scopes.
  */
-export const WEB_ENGINE_IDS: readonly string[] = ['wikipedia', 'duckduckgo'];
+export { WEB_ENGINE_IDS };
 
 export interface SearchSource {
   id: string;
@@ -43,6 +44,9 @@ export interface SearchResult {
 export interface SearchState {
   // Available sources
   sources: SearchSource[];
+  /** Engines the current workspace allows (Settings → Search); null until known. */
+  allowedEngineIds: string[] | null;
+  setAllowedEngines: (ids: string[]) => void;
   
   // Search state
   query: string;
@@ -163,6 +167,11 @@ export const useSearchStore = create<SearchState>()(
     (set, get) => ({
       // Initial state
       sources: [...defaultPublicSources, ...defaultPrivateSources, ...defaultCustomSources],
+      allowedEngineIds: null,
+      // A workspace change can forbid an engine: forget the last query so it reruns without it.
+      setAllowedEngines: (ids) => set((state) => (
+        state.allowedEngineIds?.join() === ids.join() ? {} : { allowedEngineIds: ids, query: '', results: [] }
+      )),
       query: '',
       results: [],
       loading: false,
@@ -232,7 +241,8 @@ export const useSearchStore = create<SearchState>()(
         get().addRecentSearch(query);
 
         try {
-          const enabledSources = get().sources.filter((s) => s.enabled && WEB_ENGINE_IDS.includes(s.id));
+          const allowed = get().allowedEngineIds ?? WEB_ENGINE_IDS;
+          const enabledSources = get().sources.filter((s) => s.enabled && allowed.includes(s.id));
           const results: SearchResult[] = [];
 
           // Search each enabled source

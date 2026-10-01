@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-from naas_abi.apps.nexus.apps.api.app.models import SearchTopicModel
+from naas_abi.apps.nexus.apps.api.app.models import SearchSettingsModel, SearchTopicModel
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.port import SearchTopicStorePort
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema import SearchTopic
 from sqlalchemy import delete, select
@@ -50,3 +50,27 @@ class PostgresSearchTopicStore(SearchTopicStorePort):
             )
             await db.commit()
             return bool(getattr(result, "rowcount", 0))
+
+    async def get_disabled_scopes(self, workspace_id: str) -> set[str] | None:
+        async with AsyncSessionLocal() as db:
+            row = await db.get(SearchSettingsModel, workspace_id)
+            if row is None:
+                return None
+            return set(json.loads(str(row.settings)).get("disabled_scopes", []))
+
+    async def set_disabled_scopes(
+        self, workspace_id: str, scope_ids: set[str], *, user_id: str | None
+    ) -> None:
+        async with AsyncSessionLocal() as db:
+            row = await db.get(SearchSettingsModel, workspace_id)
+            settings = json.dumps({"disabled_scopes": sorted(scope_ids)})
+            if row is None:
+                db.add(
+                    SearchSettingsModel(
+                        workspace_id=workspace_id, settings=settings, updated_by=user_id
+                    )
+                )
+            else:
+                row.settings = settings  # type: ignore[assignment]
+                row.updated_by = user_id  # type: ignore[assignment]
+            await db.commit()

@@ -30,7 +30,13 @@ const ws = (workspaceId: string) => `workspace_id=${encodeURIComponent(workspace
 
 export const topicsApi = {
   list: (workspaceId: string) =>
-    request<{ topics: SearchTopic[]; can_edit: boolean }>(`?${ws(workspaceId)}`),
+    request<{ topics: SearchTopic[]; disabled_scopes?: string[]; can_edit: boolean }>(`?${ws(workspaceId)}`),
+  /** Switch a Nexus feature or a web engine ("web.<engine>") on or off for the workspace. */
+  setScopeEnabled: (workspaceId: string, scopeId: string, enabled: boolean) =>
+    request<{ disabled_scopes: string[] }>(`/scopes/${encodeURIComponent(scopeId)}?${ws(workspaceId)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    }),
   contract: () => request<Record<QueryRole, RoleContract>>('/contract'),
   results: (workspaceId: string, topicId: string, q: string, offset = 0, limit = 30) =>
     request<TopicResults>(
@@ -44,9 +50,9 @@ export const topicsApi = {
   },
   reset: (workspaceId: string, topicId: string) =>
     request<{ topic: SearchTopic | null }>(`/${encodeURIComponent(topicId)}?${ws(workspaceId)}`, { method: 'DELETE' }),
-  preview: (workspaceId: string, role: QueryRole, query: string, params: Record<string, string | number>) =>
+  preview: (workspaceId: string, role: QueryRole, query: string, params: Record<string, string | number>, graphs: string[] = []) =>
     request<PreviewResult>('/preview', {
       method: 'POST',
-      body: JSON.stringify({ workspace_id: workspaceId, role, query, params }),
+      body: JSON.stringify({ workspace_id: workspaceId, role, query, params, graphs }),
     }),
 };

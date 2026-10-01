@@ -69,6 +69,19 @@ export const FEATURE_SCOPES: readonly SearchScope[] = [
   { id: 'agents', kind: 'feature', feature: 'agents', label: 'Agents', icon: 'Bot', description: 'Agents available in the workspace' },
 ];
 
+/** Engines `/api/search/web` implements. Each can be switched off per workspace as "web.<id>". */
+export const WEB_ENGINES: readonly { id: string; label: string; icon: string; description: string }[] = [
+  { id: 'wikipedia', label: 'Wikipedia', icon: 'BookOpen', description: 'Wikipedia articles (free API)' },
+  { id: 'duckduckgo', label: 'DuckDuckGo', icon: 'Search', description: 'DuckDuckGo instant answers (free API)' },
+];
+export const WEB_ENGINE_IDS: readonly string[] = WEB_ENGINES.map(e => e.id);
+export const webEngineScopeId = (engineId: string) => `web.${engineId}`;
+
+/** Engines the workspace has not switched off. */
+export function allowedWebEngines(disabled: readonly string[]): string[] {
+  return WEB_ENGINE_IDS.filter(id => !disabled.includes(webEngineScopeId(id)));
+}
+
 export const WEB_SCOPE_DEF: SearchScope = {
   id: WEB_SCOPE, kind: 'web', label: 'Web', icon: 'Globe', offByDefault: true,
   description: 'Web engines and private sources — the query leaves Nexus',
@@ -81,12 +94,20 @@ export function topicScope(topic: SearchTopic): SearchScope {
   return { id: topic.id, kind: 'topic', label: topic.plural_label, icon: topic.icon, description: topic.description };
 }
 
-/** Every scope available here: features the workspace has, enabled topics, then Web. */
-export function availableScopes(topics: SearchTopic[], featureOn: (feature: FeatureKey) => boolean): SearchScope[] {
+/**
+ * Every scope available here: enabled topics, the features the workspace has
+ * and has not switched off in Settings → Search, then Web while one of its
+ * engines is still allowed.
+ */
+export function availableScopes(
+  topics: SearchTopic[],
+  featureOn: (feature: FeatureKey) => boolean,
+  disabled: readonly string[] = [],
+): SearchScope[] {
   return [
     ...topics.filter(t => t.enabled).map(topicScope),
-    ...FEATURE_SCOPES.filter(s => !s.feature || featureOn(s.feature)),
-    WEB_SCOPE_DEF,
+    ...FEATURE_SCOPES.filter(s => (!s.feature || featureOn(s.feature)) && !disabled.includes(s.id)),
+    ...(allowedWebEngines(disabled).length ? [WEB_SCOPE_DEF] : []),
   ];
 }
 

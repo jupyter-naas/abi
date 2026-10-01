@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  availableScopes, FEATURE_SCOPES, isScopeOn, matchScore, rankItems, RESERVED_SCOPE_IDS, scopeGroups, WEB_SCOPE_DEF,
+  allowedWebEngines, availableScopes, FEATURE_SCOPES, isScopeOn, matchScore, rankItems, RESERVED_SCOPE_IDS, scopeGroups, WEB_SCOPE_DEF,
 } from './search-scopes';
 import { blankTopic } from './search-topics';
 
@@ -42,4 +42,12 @@ test('ranking puts exact and prefix matches first and reports more', () => {
   const ranked = rankItems(items, 'data', item => [item], 2);
   assert.deepEqual(ranked.items, ['Data', 'Data platform']);
   assert.equal(ranked.hasMore, true);
+});
+
+test('features and engines switched off for the workspace are not offered', () => {
+  const ids = (disabled: string[]) => availableScopes([], () => true, disabled).map(s => s.id);
+  assert.ok(!ids(['files']).includes('files'));
+  assert.ok(ids(['web.wikipedia']).includes('web'));
+  assert.ok(!ids(['web.wikipedia', 'web.duckduckgo']).includes('web'));
+  assert.deepEqual(allowedWebEngines(['web.duckduckgo']), ['wikipedia']);
 });

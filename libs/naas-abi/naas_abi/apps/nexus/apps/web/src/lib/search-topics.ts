@@ -27,6 +27,8 @@ export interface SearchTopic {
   results_query: string;
   header_query: string;
   sections: TopicSection[];
+  /** Graphs read, within the workspace's. Empty: every graph the workspace can read. */
+  graphs: string[];
   enabled: boolean;
   order: number;
   source: TopicSource;
@@ -162,6 +164,7 @@ export function blankTopic(id: string): SearchTopic {
     enabled: true,
     order: 100,
     source: 'custom',
+    graphs: [],
     results_query: `PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT ?uri ?title
 WHERE {

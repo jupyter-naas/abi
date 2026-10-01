@@ -9,7 +9,7 @@ import { useSearchScopes } from '@/components/search/use-search-scopes';
 import { cn } from '@/lib/utils';
 import { scopeGroups, WEB_SCOPE } from '@/lib/search-scopes';
 import { readSearchRoute, resolveScope, searchHref } from '@/lib/search-topics';
-import { useSearchStore, WEB_ENGINE_IDS } from '@/stores/search';
+import { useSearchStore } from '@/stores/search';
 import { scopeRunKey, useSearchScopesStore } from '@/stores/search-scopes';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
@@ -26,9 +26,9 @@ export function SearchSection({ collapsed, detailOnly }: { collapsed: boolean; d
   const { currentWorkspaceId } = useWorkspaceStore();
   const pathname = usePathname();
   const route = readSearchRoute(useSearchParams());
-  const { scopes, isOn, setScopeOn, canEdit } = useSearchScopes(currentWorkspaceId);
+  const { scopes, isOn, setScopeOn, allowedEngines, canEdit } = useSearchScopes(currentWorkspaceId);
   const runs = useSearchScopesStore(s => s.runs);
-  const webEngines = useSearchStore(s => s.sources).filter(s => WEB_ENGINE_IDS.includes(s.id));
+  const webEngines = useSearchStore(s => s.sources).filter(s => allowedEngines.includes(s.id));
   const toggleSource = useSearchStore(s => s.toggleSource);
   const invalidate = useSearchScopesStore(s => s.invalidate);
 

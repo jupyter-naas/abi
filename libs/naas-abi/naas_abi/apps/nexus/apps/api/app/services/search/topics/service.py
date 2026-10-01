@@ -18,7 +18,9 @@ from naas_abi.apps.nexus.apps.api.app.services.search.topics.templating import (
     validate_topic,
 )
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema import (
+    DEFAULT_DISABLED_SCOPE_IDS,
     ROLE_CONTRACTS,
+    SWITCHABLE_SCOPE_IDS,
     SearchTopic,
     SearchTopicNotFoundError,
     SearchTopicValidationError,
@@ -94,6 +96,25 @@ class SearchTopicService:
         if not removed:
             raise SearchTopicNotFoundError(f"Unknown search topic: {topic_id}")
         return None
+
+    # -- feature and web-engine scopes ---------------------------------------
+
+    async def disabled_scopes(self, workspace_id: str) -> set[str]:
+        stored = await self._store.get_disabled_scopes(workspace_id)
+        if stored is None:
+            return set(DEFAULT_DISABLED_SCOPE_IDS)
+        return stored & SWITCHABLE_SCOPE_IDS
+
+    async def set_scope_enabled(
+        self, workspace_id: str, scope_id: str, enabled: bool, *, user_id: str | None
+    ) -> set[str]:
+        """Switch a feature or web engine on or off for the whole workspace."""
+        if scope_id not in SWITCHABLE_SCOPE_IDS:
+            raise SearchTopicNotFoundError(f"Unknown search scope: {scope_id}")
+        disabled = await self.disabled_scopes(workspace_id)
+        disabled = disabled - {scope_id} if enabled else disabled | {scope_id}
+        await self._store.set_disabled_scopes(workspace_id, disabled, user_id=user_id)
+        return disabled
 
     # -- execution ---------------------------------------------------------
 

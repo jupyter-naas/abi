@@ -166,7 +166,8 @@ export function WebSearchPanel({ query }: { query: string }) {
 
   const invalidate = useSearchScopesStore((s) => s.invalidate);
   // Only the engines /api/search/web implements; toggling one reruns the search.
-  const engines = sources.filter((s) => WEB_ENGINE_IDS.includes(s.id));
+  const allowedEngineIds = useSearchStore((s) => s.allowedEngineIds);
+  const engines = sources.filter((s) => (allowedEngineIds ?? WEB_ENGINE_IDS).includes(s.id));
   const enabledSources = engines.filter((s) => s.enabled);
   const groups: [string, SearchSource[]][] = [['Web engines', engines]];
   const sortedResults = [...results].sort((a, b) => (b.relevance || 0) - (a.relevance || 0));

@@ -21,3 +21,13 @@ class SearchTopicStorePort(ABC):
     @abstractmethod
     async def delete(self, workspace_id: str, topic_id: str) -> bool:
         """Remove a stored topic. Returns False when nothing was stored."""
+
+    @abstractmethod
+    async def get_disabled_scopes(self, workspace_id: str) -> set[str] | None:
+        """Feature and web-engine scopes switched off, or None if the workspace never saved any."""
+
+    @abstractmethod
+    async def set_disabled_scopes(
+        self, workspace_id: str, scope_ids: set[str], *, user_id: str | None
+    ) -> None:
+        """Replace the set of switched-off scopes."""

@@ -121,6 +121,11 @@ def validate_topic(topic: SearchTopic) -> None:
             sparql_iri(topic.class_iri)
         except GraphQuerySpecError:
             errors.append("class_iri is not a valid IRI")
+    for graph in topic.graphs:
+        try:
+            sparql_iri(graph)
+        except GraphQuerySpecError:
+            errors.append(f"graph {graph!r} is not a valid IRI")
     errors += validate_query(topic.results_query, "results", label="results query")
     errors += validate_query(topic.header_query, "header", label="header query")
     seen: set[str] = set()

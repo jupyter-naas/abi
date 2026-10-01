@@ -15,13 +15,10 @@ import { termViews } from '@/lib/ontology-navigation';
 import { rankItems, type ScopeHit, type ScopeResult, type SearchScope } from '@/lib/search-scopes';
 import { topicsApi } from '@/lib/search-topics-api';
 import { MAPS_DATASETS } from '@/app/workspace/[workspaceId]/maps/lib/datasets';
-import { useAgentsStore } from '@/stores/agents';
 import { useAppsStore } from '@/stores/apps';
-import { authFetch } from '@/stores/auth';
-import { useDatasetsStore } from '@/stores/datasets';
+import { authFetch, useAuthStore } from '@/stores/auth';
 import { useOntologyDictionaryStore } from '@/stores/ontology-dictionary';
 import { useSearchStore, WEB_ENGINE_IDS } from '@/stores/search';
-import { useWorkspaceStore } from '@/stores/workspace';
 
 export interface ProviderContext { workspaceId: string; limit: number }
 type Provider = (q: string, ctx: ProviderContext) => Promise<ScopeResult>;
@@ -69,7 +66,9 @@ const PROVIDERS: Record<string, Provider> = {
   apps: async (q, ctx) => {
     const store = useAppsStore.getState();
     if (store.workspaceId !== ctx.workspaceId || !store.apps.length) await store.fetchApps(ctx.workspaceId);
-    const ranked = rankItems(useAppsStore.getState().apps, q, a => [a.name, a.description, (a.keywords || []).join(' '), a.category], ctx.limit);
+    // The catalog lists every app with this workspace's enable state: search only the enabled ones.
+    const apps = useAppsStore.getState().apps.filter(a => a.enabled);
+    const ranked = rankItems(apps, q, a => [a.name, a.description, (a.keywords || []).join(' '), a.category], ctx.limit);
     return {
       hasMore: ranked.hasMore,
       hits: ranked.items.map(a => ({
@@ -84,16 +83,20 @@ const PROVIDERS: Record<string, Provider> = {
   },
 
   chat: async (q, ctx) => {
-    await cachedList(`chat:${ctx.workspaceId}`, () => useWorkspaceStore.getState().syncWorkspaceConversations(ctx.workspaceId));
-    const conversations = useWorkspaceStore.getState().conversations
-      .filter(c => c.workspaceId === ctx.workspaceId && !c.archived);
-    const ranked = rankItems(conversations, q, c => [c.title || 'Untitled chat'], ctx.limit);
+    // The API returns only the signed-in user's conversations in this workspace;
+    // the browser's conversation store is not a safe source (it may hold others).
+    const userId = useAuthStore.getState().user?.id ?? 'anonymous';
+    const conversations = await cachedList(`chat:${userId}:${ctx.workspaceId}`, () =>
+      getJson<{ id: string; title: string; archived?: boolean; updated_at?: string | null }[]>(
+        `/api/chat/conversations?workspace_id=${encodeURIComponent(ctx.workspaceId)}&limit=200`,
+      ));
+    const ranked = rankItems(conversations.filter(c => !c.archived), q, c => [c.title || 'Untitled chat'], ctx.limit);
     return {
       hasMore: ranked.hasMore,
       hits: ranked.items.map(c => ({
         id: c.id,
         title: c.title || 'Untitled chat',
-        subtitle: c.updatedAt ? `Updated ${new Date(c.updatedAt).toLocaleDateString()}` : null,
+        subtitle: c.updated_at ? `Updated ${new Date(c.updated_at).toLocaleDateString()}` : null,
         action: href(ws(ctx, `/chat/${encodeURIComponent(c.id)}`)),
       })),
     };
@@ -121,9 +124,11 @@ const PROVIDERS: Record<string, Provider> = {
   sheets: officeProvider('sheets'),
 
   datasets: async (q, ctx) => {
-    const store = useDatasetsStore.getState();
-    if (!store.datasets.length) await store.fetchDatasets(ctx.workspaceId);
-    const ranked = rankItems(useDatasetsStore.getState().datasets, q, d => [d.name, d.namespace, d.columns.map(c => c.name).join(' ')], ctx.limit);
+    const { datasets } = await cachedList(`datasets:${ctx.workspaceId}`, () =>
+      getJson<{ datasets: { name: string; namespace: string; columns: { name: string }[] }[] }>(
+        `/api/datasets/?workspace_id=${encodeURIComponent(ctx.workspaceId)}`,
+      ));
+    const ranked = rankItems(datasets, q, d => [d.name, d.namespace, d.columns.map(c => c.name).join(' ')], ctx.limit);
     return {
       hasMore: ranked.hasMore,
       hits: ranked.items.map(d => ({
@@ -182,15 +187,20 @@ const PROVIDERS: Record<string, Provider> = {
   },
 
   agents: async (q, ctx) => {
-    await useAgentsStore.getState().fetchAgents(ctx.workspaceId);
-    const ranked = rankItems(useAgentsStore.getState().agents.filter(a => a.enabled), q, a => [a.name, a.description], ctx.limit);
+    // The workspace's own roster (already filtered by its feature flags), enabled agents only.
+    // Not the agents store: it keeps one list across workspaces.
+    const agents = await cachedList(`agents:${ctx.workspaceId}`, () =>
+      getJson<{ id: string; name: string; description: string; enabled: boolean; logo_url: string | null }[]>(
+        `/api/agents/?workspace_id=${encodeURIComponent(ctx.workspaceId)}`,
+      ));
+    const ranked = rankItems(agents.filter(a => a.enabled), q, a => [a.name, a.description], ctx.limit);
     return {
       hasMore: ranked.hasMore,
       hits: ranked.items.map(a => ({
         id: a.id,
         title: a.name,
         snippet: a.description,
-        image: a.logoUrl,
+        image: a.logo_url,
         action: href(ws(ctx, `/settings/agents/${encodeURIComponent(a.id)}`)),
       })),
     };
@@ -215,7 +225,7 @@ async function topicProvider(scope: SearchScope, q: string, ctx: ProviderContext
 async function webProvider(q: string, ctx: ProviderContext): Promise<ScopeResult> {
   if (!q.trim()) return { hits: [], hasMore: false, note: 'Type to search the web.' };
   const store = useSearchStore.getState();
-  if (!store.sources.some(s => s.enabled && WEB_ENGINE_IDS.includes(s.id))) {
+  if (!store.sources.some(s => s.enabled && (store.allowedEngineIds ?? WEB_ENGINE_IDS).includes(s.id))) {
     return { hits: [], hasMore: false, note: 'No web engine is switched on.' };
   }
   if (store.query !== q) await store.search(q);

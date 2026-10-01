@@ -164,3 +164,57 @@ class TestExecution:
     async def test_unknown_individual(self, service: SearchTopicService, store) -> None:
         with pytest.raises(SearchTopicNotFoundError):
             await service.detail(WS, "person", "http://example.org/nobody", store)
+
+
+class TestGraphScope:
+    def test_no_graphs_means_every_workspace_graph(self) -> None:
+        from naas_abi.apps.nexus.apps.api.app.services.graph.access import GraphAccessScope
+        from naas_abi.apps.nexus.apps.api.app.services.search.topics.scope import topic_scope
+
+        scope = GraphAccessScope("w", frozenset({"urn:a", "urn:b"}), frozenset({"urn:a"}))
+        narrowed = topic_scope(scope, ())
+        assert narrowed.readable == {"urn:a", "urn:b"} and not narrowed.writable
+
+    def test_named_graphs_never_widen_access(self) -> None:
+        from naas_abi.apps.nexus.apps.api.app.services.graph.access import GraphAccessScope
+        from naas_abi.apps.nexus.apps.api.app.services.search.topics.scope import topic_scope
+
+        scope = GraphAccessScope("w", frozenset({"urn:a", "urn:b"}), frozenset())
+        assert topic_scope(scope, ("urn:b", "urn:secret")).readable == {"urn:b"}
+
+    def test_graphs_round_trip_and_are_validated(self) -> None:
+        topic = replace(BUILTIN_TOPICS["person"], graphs=("http://x/g",))
+        assert SearchTopic.from_dict(topic.to_dict()).graphs == ("http://x/g",)
+        with pytest.raises(SearchTopicValidationError):
+            validate_topic(replace(topic, graphs=("not an iri>",)))
+
+
+class TestScopeSwitches:
+    async def test_defaults_keep_apps_chats_agents_and_web(
+        self, service: SearchTopicService
+    ) -> None:
+        disabled = await service.disabled_scopes(WS)
+        assert not disabled & {"apps", "chat", "agents", "web.wikipedia", "web.duckduckgo"}
+        assert disabled == {
+            "files",
+            "documents",
+            "slides",
+            "sheets",
+            "datasets",
+            "ontology",
+            "graph",
+            "maps",
+        }
+
+    async def test_switch_off_and_on_per_workspace(self, service: SearchTopicService) -> None:
+        await service.set_scope_enabled(WS, "files", True, user_id="u")
+        await service.set_scope_enabled(WS, "web.wikipedia", False, user_id="u")
+        disabled = await service.disabled_scopes(WS)
+        assert "files" not in disabled and "web.wikipedia" in disabled
+        assert "files" in await service.disabled_scopes("other-ws")
+        await service.set_scope_enabled(WS, "apps", False, user_id="u")
+        assert "apps" in await service.disabled_scopes(WS)
+
+    async def test_topics_are_not_switched_here(self, service: SearchTopicService) -> None:
+        with pytest.raises(SearchTopicNotFoundError):
+            await service.set_scope_enabled(WS, "person", False, user_id="u")

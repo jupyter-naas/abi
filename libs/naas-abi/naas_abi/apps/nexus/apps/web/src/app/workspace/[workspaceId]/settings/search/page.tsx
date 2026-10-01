@@ -11,7 +11,7 @@
  */
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ChevronDown, ChevronUp, Loader2, Play, Plus, RotateCcw, Save, Search, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Play, Plus, RotateCcw, Save, Search, Trash2 } from 'lucide-react';
 import { TopicIcon, TOPIC_ICONS } from '@/components/search/topic-icon';
 import { useConfirm, usePrompt } from '@/components/ui/dialogs';
 import { cn } from '@/lib/utils';
@@ -20,7 +20,12 @@ import {
   type PreviewResult, type QueryRole, type RoleContract, type SearchTopic, type TopicSection,
 } from '@/lib/search-topics';
 import { TopicApiError, topicsApi } from '@/lib/search-topics-api';
+import { getApiUrl } from '@/lib/config';
+import { authFetch } from '@/stores/auth';
+import { isFeatureEnabled, type FeatureKey } from '@/lib/feature-access';
+import { FEATURE_SCOPES, WEB_ENGINES, webEngineScopeId } from '@/lib/search-scopes';
 import { useSearchTopicsStore } from '@/stores/search-topics';
+import { useWorkspaceStore } from '@/stores/workspace';
 
 const SOURCE_LABEL: Record<SearchTopic['source'], string> = { builtin: 'Built-in', override: 'Customized', custom: 'Custom' };
 
@@ -32,7 +37,11 @@ function SearchSettings() {
   const workspaceId = useParams().workspaceId as string;
   const router = useRouter();
   const selectedId = useSearchParams()?.get('topic');
-  const { topics, canEdit, loading, error, load, replace, remove } = useSearchTopicsStore();
+  const { topics, disabledScopes, setDisabledScopes, canEdit, loading, error, load, replace, remove } = useSearchTopicsStore();
+  const workspace = useWorkspaceStore(state => state.getCurrentWorkspace());
+  const featureOn = (feature?: FeatureKey) => !feature || isFeatureEnabled({
+    feature, role: workspace?.currentUserRole, workspaceFlags: workspace?.featureFlags,
+  });
   const [contract, setContract] = useState<Record<QueryRole, RoleContract> | null>(null);
   const prompt = usePrompt();
   // Topics created here and not saved yet exist only in the browser.
@@ -41,8 +50,31 @@ function SearchSettings() {
   useEffect(() => { if (workspaceId) void load(workspaceId, true); }, [workspaceId, load]);
   useEffect(() => { topicsApi.contract().then(setContract).catch(() => setContract(null)); }, []);
 
-  const selected = topics.find(t => t.id === selectedId) || topics[0] || null;
-  const select = (id: string) => router.replace(`/workspace/${encodeURIComponent(workspaceId)}/settings/search?topic=${encodeURIComponent(id)}`, { scroll: false });
+  const graphs = useWorkspaceGraphs(workspaceId);
+  const base = `/workspace/${encodeURIComponent(workspaceId)}/settings/search`;
+  const selected = selectedId ? topics.find(t => t.id === selectedId) || null : null;
+  const select = (id: string | null) => router.push(id ? `${base}?topic=${encodeURIComponent(id)}` : base, { scroll: false });
+
+  const [toggling, setToggling] = useState<string | null>(null);
+  const [tableError, setTableError] = useState<string | null>(null);
+  // Features and web engines: one switch each for the whole workspace.
+  const toggleScope = async (scopeId: string, enabled: boolean) => {
+    setToggling(scopeId); setTableError(null);
+    try {
+      setDisabledScopes((await topicsApi.setScopeEnabled(workspaceId, scopeId, enabled)).disabled_scopes);
+    } catch (e) {
+      setTableError(e instanceof Error ? e.message : 'Could not change the scope');
+    } finally { setToggling(null); }
+  };
+
+  const toggleEnabled = async (topic: SearchTopic) => {
+    setToggling(topic.id); setTableError(null);
+    try {
+      replace(await topicsApi.save(workspaceId, { ...topic, enabled: !topic.enabled }));
+    } catch (e) {
+      setTableError(e instanceof TopicApiError && e.errors.length ? e.errors.join('\n') : e instanceof Error ? e.message : 'Could not change the topic');
+    } finally { setToggling(null); }
+  };
 
   const createTopic = async () => {
     const id = await prompt.prompt({
@@ -59,15 +91,47 @@ function SearchSettings() {
     select(clean);
   };
 
+  if (selectedId) {
+    return (
+      <div className="space-y-6">
+        <button type="button" onClick={() => select(null)} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft size={14} /> All topics
+        </button>
+        {loading && !selected ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 size={14} className="animate-spin" /> Loading…</p>
+        ) : !selected ? (
+          <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">There is no topic “{selectedId}” in this workspace.</p>
+        ) : (
+          <TopicEditor
+            key={`${selected.id}:${selected.source}`}
+            workspaceId={workspaceId}
+            topic={selected}
+            topics={topics}
+            graphs={graphs}
+            contract={contract}
+            canEdit={canEdit}
+            isDraft={drafts.has(selected.id)}
+            onSaved={(saved) => { replace(saved); setDrafts(d => { const n = new Set(d); n.delete(saved.id); return n; }); }}
+            onReset={(restored) => { if (restored) replace(restored); else { remove(selected.id); select(null); } }}
+            onDiscardNew={() => { remove(selected.id); setDrafts(d => { const n = new Set(d); n.delete(selected.id); return n; }); select(null); }}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {prompt.dialog}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold">Search topics</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold">Search</h2>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">{topics.length + FEATURE_SCOPES.length + WEB_ENGINES.length}</span>
+          </div>
           <p className="text-sm text-muted-foreground">
-            Each topic is a tab of the search page. Its SPARQL queries run on the graphs this workspace can read;
-            their variables fill the results list, the detail header and the detail sections.
+            What the search page of this workspace can look into. A disabled entry disappears from search for every
+            member. Topics read every graph this workspace can read, unless a topic is limited to some of them.
           </p>
         </div>
         {canEdit && (
@@ -78,49 +142,147 @@ function SearchSettings() {
       </div>
 
       {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-500">{error}</div>}
+      {tableError && <div role="alert" className="whitespace-pre-line rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-500">{tableError}</div>}
       {!canEdit && !loading && <p className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">Only workspace owners and admins can change search topics.</p>}
 
-      <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
-        <ul className="space-y-1" aria-label="Topics">
-          {loading && !topics.length && <li className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 size={14} className="animate-spin" /> Loading…</li>}
-          {topics.map(t => (
-            <li key={t.id}>
-              <button
-                onClick={() => select(t.id)}
-                aria-current={selected?.id === t.id ? 'true' : undefined}
-                className={cn('flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted', selected?.id === t.id && 'bg-workspace-accent-10 text-workspace-accent')}
-              >
-                <TopicIcon name={t.icon} />
-                <span className={cn('flex-1 truncate', !t.enabled && 'text-muted-foreground line-through')}>{t.plural_label}</span>
-                <span className="text-[10px] text-muted-foreground">{SOURCE_LABEL[t.source]}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+      <div className="overflow-x-auto rounded-lg border">
+        <table className="w-full text-sm">
+          <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
+            <tr>
+              <th className="p-3 font-medium">Name</th>
+              <th className="p-3 font-medium">Group</th>
+              <th className="p-3 font-medium">Type</th>
+              <th className="p-3 text-right font-medium">Enabled</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && !topics.length && (
+              <tr><td colSpan={4} className="p-3 text-muted-foreground"><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
+            )}
+            {topics.map(t => (
+              <tr key={t.id} onClick={() => select(t.id)} className="cursor-pointer border-b transition-colors last:border-0 hover:bg-muted/30">
+                <td className="p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted"><TopicIcon name={t.icon} /></div>
+                    <div className="min-w-0">
+                      <div className={cn('font-medium', !t.enabled && 'text-muted-foreground')}>{t.plural_label}</div>
+                      <div className="font-mono text-xs text-muted-foreground">{t.id}</div>
+                    </div>
+                  </div>
+                </td>
+                <td className="p-3"><GroupBadge group="Custom" /></td>
+                <td className="p-3 text-muted-foreground">{drafts.has(t.id) ? 'Draft' : SOURCE_LABEL[t.source]}</td>
+                <td className="p-3 text-right" onClick={e => e.stopPropagation()}>
+                  <EnabledSwitch
+                    label={t.plural_label}
+                    on={t.enabled}
+                    busy={toggling === t.id}
+                    disabled={!canEdit || drafts.has(t.id)}
+                    onChange={() => void toggleEnabled(t)}
+                  />
+                </td>
+              </tr>
+            ))}
 
-        {selected && (
-          <TopicEditor
-            key={`${selected.id}:${selected.source}`}
-            workspaceId={workspaceId}
-            topic={selected}
-            topics={topics}
-            contract={contract}
-            canEdit={canEdit}
-            isDraft={drafts.has(selected.id)}
-            onSaved={(saved) => { replace(saved); setDrafts(d => { const n = new Set(d); n.delete(saved.id); return n; }); }}
-            onReset={(restored) => { if (restored) replace(restored); else { remove(selected.id); select(topics.find(t => t.id !== selected.id)?.id || ''); } }}
-            onDiscardNew={() => { remove(selected.id); setDrafts(d => { const n = new Set(d); n.delete(selected.id); return n; }); }}
-          />
-        )}
+            {FEATURE_SCOPES.map(scope => {
+              const available = featureOn(scope.feature);
+              const on = available && !disabledScopes.includes(scope.id);
+              return (
+                <ScopeRow key={scope.id} icon={scope.icon} name={scope.label} id={scope.id} group="Workspace" type="Nexus feature"
+                  description={available ? scope.description : `${scope.description} — the ${scope.label} feature is off in this workspace`}>
+                  <EnabledSwitch label={scope.label} on={on} busy={toggling === scope.id}
+                    disabled={!canEdit || !available} onChange={() => void toggleScope(scope.id, !on)} />
+                </ScopeRow>
+              );
+            })}
+
+            {WEB_ENGINES.map(engine => {
+              const id = webEngineScopeId(engine.id);
+              const on = !disabledScopes.includes(id);
+              return (
+                <ScopeRow key={id} icon={engine.icon} name={engine.label} id={id} group="Web" type="Web engine" description={`${engine.description} — the query leaves Nexus`}>
+                  <EnabledSwitch label={engine.label} on={on} busy={toggling === id}
+                    disabled={!canEdit} onChange={() => void toggleScope(id, !on)} />
+                </ScopeRow>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 }
 
-function TopicEditor({ workspaceId, topic, topics, contract, canEdit, isDraft, onSaved, onReset, onDiscardNew }: {
+function GroupBadge({ group }: { group: 'Custom' | 'Workspace' | 'Web' }) {
+  return <span className="bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{group}</span>;
+}
+
+/** A feature or web-engine row: nothing to edit but whether search may use it. */
+function ScopeRow({ icon, name, id, group, type, description, children }: {
+  icon: string; name: string; id: string; group: 'Workspace' | 'Web'; type: string; description: string; children: React.ReactNode;
+}) {
+  return (
+    <tr className="border-b last:border-0">
+      <td className="p-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted"><TopicIcon name={icon} /></div>
+          <div className="min-w-0">
+            <div className="font-medium">{name}</div>
+            <div className="truncate text-xs text-muted-foreground" title={description}>{description}</div>
+          </div>
+        </div>
+      </td>
+      <td className="p-3"><GroupBadge group={group} /></td>
+      <td className="p-3 text-muted-foreground">{type}</td>
+      <td className="p-3 text-right"><span className="sr-only">{id}</span>{children}</td>
+    </tr>
+  );
+}
+
+interface WorkspaceGraph { uri: string; label: string }
+
+/** Graphs this workspace can read (the graph picker's list). */
+function useWorkspaceGraphs(workspaceId: string): WorkspaceGraph[] | null {
+  const [graphs, setGraphs] = useState<WorkspaceGraph[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    authFetch(`${getApiUrl()}/api/graph/list?workspace_id=${encodeURIComponent(workspaceId)}`)
+      .then(r => (r.ok ? r.json() : []))
+      .then((packs: { graphs: { uri: string; label: string }[] }[]) => {
+        if (cancelled) return;
+        const seen = new Map<string, WorkspaceGraph>();
+        for (const pack of packs) for (const g of pack.graphs) if (!seen.has(g.uri)) seen.set(g.uri, { uri: g.uri, label: g.label || g.uri });
+        setGraphs([...seen.values()].sort((a, b) => a.label.localeCompare(b.label)));
+      })
+      .catch(() => { if (!cancelled) setGraphs([]); });
+    return () => { cancelled = true; };
+  }, [workspaceId]);
+  return graphs;
+}
+
+function EnabledSwitch({ label, on, busy, disabled, onChange }: { label: string; on: boolean; busy?: boolean; disabled?: boolean; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={`${label} enabled`}
+      disabled={disabled || busy}
+      onClick={onChange}
+      className={cn('relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-50',
+        on ? 'bg-workspace-accent' : 'bg-muted-foreground/30')}
+    >
+      <span className={cn('absolute h-4 w-4 rounded-full bg-white shadow transition-all', on ? 'left-[18px]' : 'left-0.5')} />
+      {busy && <Loader2 size={10} className="absolute left-1/2 -translate-x-1/2 animate-spin text-white" />}
+    </button>
+  );
+}
+
+function TopicEditor({ workspaceId, topic, topics, graphs, contract, canEdit, isDraft, onSaved, onReset, onDiscardNew }: {
   workspaceId: string;
   topic: SearchTopic;
   topics: SearchTopic[];
+  graphs: WorkspaceGraph[] | null;
   contract: Record<QueryRole, RoleContract> | null;
   canEdit: boolean;
   isDraft: boolean;
@@ -221,6 +383,41 @@ function TopicEditor({ workspaceId, topic, topics, contract, canEdit, isDraft, o
         </div>
       </fieldset>
 
+      <fieldset disabled={disabled} className="space-y-2">
+        <legend className="mb-1 text-xs font-medium text-muted-foreground">Graphs</legend>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="radio" checked={draft.graphs.length === 0} onChange={() => set('graphs', [])} />
+          All graphs this workspace can read <span className="text-xs text-muted-foreground">(default)</span>
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="radio" checked={draft.graphs.length > 0}
+            onChange={() => { if (!draft.graphs.length && graphs?.length) set('graphs', [graphs[0]!.uri]); }}
+            disabled={!graphs?.length} />
+          Only these graphs
+        </label>
+        {draft.graphs.length > 0 && (
+          <div className="ml-6 max-h-56 space-y-1 overflow-auto rounded-md border p-2">
+            {(graphs || []).map(g => (
+              <label key={g.uri} className="flex items-center gap-2 text-sm" title={g.uri}>
+                <input
+                  type="checkbox"
+                  checked={draft.graphs.includes(g.uri)}
+                  onChange={e => {
+                    const next = e.target.checked ? [...draft.graphs, g.uri] : draft.graphs.filter(u => u !== g.uri);
+                    if (next.length) set('graphs', next);
+                  }}
+                />
+                <span className="truncate">{g.label}</span>
+                <span className="truncate font-mono text-[10px] text-muted-foreground">{g.uri}</span>
+              </label>
+            ))}
+            {draft.graphs.filter(u => !graphs?.some(g => g.uri === u)).map(u => (
+              <p key={u} className="text-xs text-amber-600">{u} is not readable in this workspace: the topic skips it here.</p>
+            ))}
+          </div>
+        )}
+      </fieldset>
+
       <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
         <p className="mb-1 font-medium text-foreground">How queries are filled in</p>
         <p>
@@ -235,9 +432,9 @@ function TopicEditor({ workspaceId, topic, topics, contract, canEdit, isDraft, o
       </div>
 
       <QueryEditor role="results" label="Results query" contract={contract?.results} value={draft.results_query} disabled={disabled}
-        onChange={v => set('results_query', v)} workspaceId={workspaceId} testUri={testUri} onPickUri={setTestUri} canEdit={canEdit} />
+        onChange={v => set('results_query', v)} workspaceId={workspaceId} testUri={testUri} onPickUri={setTestUri} canEdit={canEdit} graphs={draft.graphs} />
       <QueryEditor role="header" label="Detail header query" contract={contract?.header} value={draft.header_query} disabled={disabled}
-        onChange={v => set('header_query', v)} workspaceId={workspaceId} testUri={testUri} canEdit={canEdit} />
+        onChange={v => set('header_query', v)} workspaceId={workspaceId} testUri={testUri} canEdit={canEdit} graphs={draft.graphs} />
 
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -267,7 +464,7 @@ function TopicEditor({ workspaceId, topic, topics, contract, canEdit, isDraft, o
               <Field label="Text when empty" wide><input className={input} value={section.empty_text} onChange={e => setSection(index, { empty_text: e.target.value })} /></Field>
             </fieldset>
             <QueryEditor role="section" label="Query" contract={contract?.section} value={section.query} disabled={disabled}
-              onChange={v => setSection(index, { query: v })} workspaceId={workspaceId} testUri={testUri} canEdit={canEdit} />
+              onChange={v => setSection(index, { query: v })} workspaceId={workspaceId} testUri={testUri} canEdit={canEdit} graphs={draft.graphs} />
           </div>
         ))}
       </div>
@@ -275,7 +472,7 @@ function TopicEditor({ workspaceId, topic, topics, contract, canEdit, isDraft, o
   );
 }
 
-function QueryEditor({ role, label, contract, value, onChange, disabled, workspaceId, testUri, onPickUri, canEdit }: {
+function QueryEditor({ role, label, contract, value, onChange, disabled, workspaceId, testUri, onPickUri, canEdit, graphs }: {
   role: QueryRole;
   label: string;
   contract?: RoleContract;
@@ -286,6 +483,7 @@ function QueryEditor({ role, label, contract, value, onChange, disabled, workspa
   testUri: string;
   onPickUri?: (uri: string) => void;
   canEdit: boolean;
+  graphs: string[];
 }) {
   const [testQ, setTestQ] = useState('');
   const [running, setRunning] = useState(false);
@@ -296,7 +494,7 @@ function QueryEditor({ role, label, contract, value, onChange, disabled, workspa
     setRunning(true); setError(null);
     try {
       const params: Record<string, string> = role === 'results' ? { q: testQ } : { uri: testUri.trim() };
-      setPreview(await topicsApi.preview(workspaceId, role, value, params));
+      setPreview(await topicsApi.preview(workspaceId, role, value, params, graphs));
     } catch (e) {
       setPreview(null);
       setError(e instanceof TopicApiError && e.errors.length ? e.errors.join('\n') : e instanceof Error ? e.message : 'Query failed');
