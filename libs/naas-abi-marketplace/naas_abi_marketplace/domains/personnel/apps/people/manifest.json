@@ -1,0 +1,30 @@
+{
+  "name": "People Search",
+  "description": "Configurable people directory: search by name, skill, place or school, then open a profile. Built from the personnel graph through the dataset service; retargeted with config.yaml.",
+  "category": "alpha",
+  "url": "html:web/index.html",
+  "icon_emoji": "🔎",
+  "version": "0.1.0",
+  "author": "naas.ai",
+  "license": "MIT",
+  "keywords": [
+    "people",
+    "directory",
+    "search",
+    "profile",
+    "personnel",
+    "hr",
+    "sparql",
+    "dataset",
+    "template"
+  ],
+  "dependencies": {
+    "personnel-people": "0.1.0"
+  },
+  "tier": "community",
+  "maintainer": "naas.ai",
+  "pricing": {
+    "type": "free",
+    "price": 0
+  }
+}

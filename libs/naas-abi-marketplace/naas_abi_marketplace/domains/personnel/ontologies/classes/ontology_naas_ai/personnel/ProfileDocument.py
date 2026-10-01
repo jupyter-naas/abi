@@ -1,4 +1,4 @@
-from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfWorkingProcess import (
+from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
     ProfileDocument as _ProfileDocument,
 )
 

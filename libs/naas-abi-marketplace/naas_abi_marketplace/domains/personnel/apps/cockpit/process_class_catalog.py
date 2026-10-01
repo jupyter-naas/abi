@@ -11,6 +11,7 @@ from rdflib.namespace import OWL, RDF, RDFS
 
 PERSONNEL_NS = "http://ontology.naas.ai/personnel/"
 ABI_NS = "http://ontology.naas.ai/abi/"
+CCO_NS = "https://www.commoncoreontologies.org/"
 
 PROCESS_SPECS: tuple[dict[str, str | Path | tuple[Path, ...]], ...] = (
     {
@@ -23,20 +24,42 @@ PROCESS_SPECS: tuple[dict[str, str | Path | tuple[Path, ...]], ...] = (
         "process_label": "Act of Studying",
         "process_class": f"{PERSONNEL_NS}ActOfStudying",
         "process_ontology": ONTOLOGIES_DIR / "processes" / "ActOfStudyingProcess.ttl",
-        # ProfileDocument and Skill are declared in the working slice.
-        "support_ontologies": (ONTOLOGIES_DIR / "processes" / "ActOfWorkingProcess.ttl",),
+        "support_ontologies": (),
+    },
+    {
+        "process_label": "Act of Certification",
+        "process_class": f"{PERSONNEL_NS}ActOfCertification",
+        "process_ontology": ONTOLOGIES_DIR / "processes" / "ActOfCertificationProcess.ttl",
+        "support_ontologies": (),
+    },
+    {
+        "process_label": "Act of Personnel Profiling",
+        "process_class": f"{PERSONNEL_NS}ActOfPersonnelProfiling",
+        "process_ontology": ONTOLOGIES_DIR / "processes" / "ActOfPersonnelProfilingProcess.ttl",
+        "support_ontologies": (),
     },
 )
 
 SHARED_ONTOLOGY = ONTOLOGIES_DIR / "modules" / "PersonnelOntology.ttl"
 
-EXCLUDED_CLASS_LABELS = frozenset({"Person", "Act of Working", "Act of Studying"})
+EXCLUDED_CLASS_LABELS = frozenset(
+    {
+        "Person",
+        "Act of Working",
+        "Act of Studying",
+        "Act of Certification",
+        "Act of Personnel Profiling",
+    }
+)
 
 # ABI classes referenced by personnel restrictions but not always labelled in slice TTLs.
 _ABI_CLASS_LABELS: dict[str, str] = {
     f"{ABI_NS}Person": "Person",
     f"{ABI_NS}Organization": "Organization",
     f"{ABI_NS}Site": "Site",
+    f"{CCO_NS}ont00000468": "Office Building",
+    f"{CCO_NS}ont00000270": "Educational Facility",
+    f"{CCO_NS}ont00000192": "Facility",
     f"{ABI_NS}TemporalRegion": "Temporal Region",
     f"{ABI_NS}TemporalInstant": "Temporal Instant",
 }
@@ -66,7 +89,7 @@ def _is_catalog_class(graph: Graph, class_uri: URIRef) -> bool:
 
 def _is_relevant_uri(class_uri: URIRef) -> bool:
     text = str(class_uri)
-    return text.startswith(PERSONNEL_NS) or text.startswith(ABI_NS)
+    return text.startswith(PERSONNEL_NS) or text.startswith(ABI_NS) or text in _ABI_CLASS_LABELS
 
 
 def _restriction_fillers(graph: Graph, class_uri: URIRef) -> set[URIRef]:

@@ -9,14 +9,12 @@ from naas_abi.ontologies.modules.ABIOntology import Site
 from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
     AcademicDegree,
     EnrollmentRecord,
+    ProfileDocument,
+    Skill,
     StudentRole,
 )
 from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfStudyingProcess import (
     ActOfStudying,
-)
-from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfWorkingProcess import (
-    ProfileDocument,
-    Skill,
 )
 from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline import (
     ActOfStudyingPipeline,

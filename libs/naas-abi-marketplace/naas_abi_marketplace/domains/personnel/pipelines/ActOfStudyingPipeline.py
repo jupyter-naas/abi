@@ -28,10 +28,14 @@ class ActOfStudyingPipelineConfiguration(PipelineConfiguration):
 class ActOfStudyingPipelineParameters(PipelineParameters):
     first_name: Annotated[str, Field(min_length=1)]
     last_name: Annotated[str, Field(min_length=1)]
-    organization: Annotated[str, Field(min_length=1)]
+    # A source may list a degree without naming the school that granted it.
+    organization: str | None = None
     program: Annotated[str, Field(min_length=1)]
-    site: Annotated[str, Field(min_length=1)]
-    start: date
+    # A degree is often listed with neither a campus nor a date. Both stay
+    # absent rather than being guessed: the education section reads the school,
+    # the degree and the field, none of which depend on them.
+    site: str | None = None
+    start: date | None = None
     end: date | None = None
     duration: str | None = None
     skills: list[str] = []
@@ -63,8 +67,12 @@ class ActOfStudyingPipeline(Pipeline):
         profile = None
         if parameters.source_url:
             profile = context.ensure_education_profile(person, parameters.source_url)
-        org = context.ensure_org(parameters.organization, educational=True)
-        site = context.ensure_site(parameters.site)
+        org = (
+            context.ensure_org(parameters.organization, educational=True)
+            if parameters.organization
+            else None
+        )
+        site = context.ensure_site(parameters.site) if parameters.site else None
         skill_nodes = [
             context.ensure_skill(name, person) for name in parameters.skills
         ]

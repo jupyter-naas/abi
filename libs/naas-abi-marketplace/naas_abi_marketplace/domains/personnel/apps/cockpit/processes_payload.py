@@ -17,12 +17,12 @@ _PROCESSES: list[dict] = [
         "title": "Act of Working",
         "subtitle": (
             "A CCO Planned Act of performing work for an organization: person, "
-            "organization, site, temporal region, role, mission, skills and contract "
+            "organization, office building, temporal region, role, mission, skills and contract "
             "decomposed across the seven BFO buckets."
         ),
         "definition": (
             "A Planned Act, and an Act of Employment, in which a person performs work "
-            "for an organization at a site over a temporal region, realizing an employee "
+            "for an organization in an office building over a temporal region, realizing an employee "
             "role, developing skills, under an employment contract."
         ),
         "example": (
@@ -52,8 +52,8 @@ _PROCESSES: list[dict] = [
             },
             "where": {
                 "bfo": "Site",
-                "label": "Site of execution",
-                "class": "abi:Site",
+                "label": "Office building of execution",
+                "class": "cco:OfficeBuilding",
             },
             "how_to_know": {
                 "bfo": "Generically dependent continuant",
@@ -87,8 +87,8 @@ _PROCESSES: list[dict] = [
                 "on": "Act of Working",
                 "property": "occurs in",
                 "property_iri": "abi:occursIn",
-                "someValuesFrom": "abi:Site",
-                "definition": "The act is executed at a site.",
+                "someValuesFrom": "cco:OfficeBuilding",
+                "definition": "The act is executed in an office building.",
                 "example": "World",
             },
             {
@@ -166,13 +166,13 @@ _PROCESSES: list[dict] = [
         "title": "Act of Studying",
         "subtitle": (
             "A CCO Planned Act of educational training acquisition: person, educational "
-            "organization, site, temporal region, student role, skills, enrollment record "
+            "organization, educational facility, temporal region, student role, skills, enrollment record "
             "and academic degree."
         ),
         "definition": (
             "A Planned Act, and an Act of Educational Training Acquisition, in which a "
-            "person acquires knowledge of a curriculum from an educational organization at "
-            "a site over a temporal region, realizing a student role, developing skills, "
+            "person acquires knowledge of a curriculum from an educational organization in "
+            "an educational facility over a temporal region, realizing a student role, developing skills, "
             "under an enrollment record and academic degree."
         ),
         "example": (
@@ -203,8 +203,8 @@ _PROCESSES: list[dict] = [
             },
             "where": {
                 "bfo": "Site",
-                "label": "Study site",
-                "class": "abi:Site",
+                "label": "Educational facility",
+                "class": "cco:EducationalFacility",
             },
             "how_to_know": {
                 "bfo": "Generically dependent continuant",
@@ -240,8 +240,8 @@ _PROCESSES: list[dict] = [
                 "on": "Act of Studying",
                 "property": "occurs in",
                 "property_iri": "abi:occursIn",
-                "someValuesFrom": "abi:Site",
-                "definition": "The act is executed at a site.",
+                "someValuesFrom": "cco:EducationalFacility",
+                "definition": "The act is executed in an educational facility.",
                 "example": "Bordeaux",
             },
             {

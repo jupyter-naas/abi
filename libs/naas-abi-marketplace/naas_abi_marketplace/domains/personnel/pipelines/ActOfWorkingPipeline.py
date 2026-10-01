@@ -30,12 +30,21 @@ class ActOfWorkingPipelineParameters(PipelineParameters):
     last_name: Annotated[str, Field(min_length=1)]
     organization: Annotated[str, Field(min_length=1)]
     title: Annotated[str, Field(min_length=1)]
-    site: Annotated[str, Field(min_length=1)]
-    start: date
+    # A profile that lists a role without saying where it was held states no
+    # place. Borrowing the person's current city would invent one.
+    site: str | None = None
+    # A published profile often names a role without saying when it began. The
+    # record is still true; it simply occupies no temporal region.
+    start: date | None = None
     end: date | None = None
     duration: str | None = None
     mission_label: Annotated[str, Field(min_length=1)]
     mission: Annotated[str, Field(min_length=1)]
+    # The client the work was performed for, when the person was staffed there by
+    # this organization (a consulting engagement) rather than working for it
+    # directly. Unset for a direct employment role.
+    client: str | None = None
+    mission_context: str | None = None
     contract_type: str | None = None
     skills: list[str] = []
     source_url: str | None = None
@@ -68,7 +77,8 @@ class ActOfWorkingPipeline(Pipeline):
         if parameters.source_url:
             profile = context.ensure_work_profile(person, parameters.source_url)
         org = context.ensure_org(parameters.organization)
-        site = context.ensure_site(parameters.site)
+        client = context.ensure_org(parameters.client) if parameters.client else None
+        site = context.ensure_site(parameters.site) if parameters.site else None
         skill_nodes = [
             context.ensure_skill(name, person) for name in parameters.skills
         ]
@@ -76,12 +86,14 @@ class ActOfWorkingPipeline(Pipeline):
         context.add_working(
             person=person,
             org=org,
+            client=client,
             site=site,
             skills=skill_nodes,
             profile=profile,
             title=parameters.title,
             mission_label=parameters.mission_label,
             mission_content=parameters.mission,
+            mission_context=parameters.mission_context,
             contract_type=parameters.contract_type,
             start=parameters.start,
             end=parameters.end,

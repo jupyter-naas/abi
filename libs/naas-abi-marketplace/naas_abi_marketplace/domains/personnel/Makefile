@@ -14,8 +14,8 @@ help:  ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 	  awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}'
 
-demo-graph:  ## build graphs/demo/personnel.ttl from demo source via pipelines
-	$(PYTHON) "$(MODULE_DIR)/apps/cockpit/scripts/demo_graph_builder.py"
+demo-graph:  ## build graphs/demo/personnel.ttl from demo JSON (mode=demo workflow)
+	$(PYTHON) -m naas_abi_marketplace.domains.personnel.workflows.DemoPersonGraphWorkflow --mode demo
 
 demo-data: demo-graph  ## graph TTL → apps/cockpit/data (reference) + ObjectStorage publish
 	$(PYTHON) "$(MODULE_DIR)/apps/cockpit/scripts/export_demo_apps_from_graph.py"
@@ -27,3 +27,20 @@ app-personnel-cockpit:  ## run the cockpit dev server on existing datasets (no r
 
 app-personnel-cockpit-demo: demo-data  ## build demo datasets (source JSON → graph → data), then serve
 	$(PYTHON) "$(MODULE_DIR)/$(COCKPIT_API)"
+
+# ── People Search (apps/people) ────────────────────────────────────────────
+# person + experience -> graph -> datasets -> app
+PEOPLE_API := apps/people/api/dev_server.py
+PEOPLE_EXPORT := naas_abi_marketplace.domains.personnel.apps.people.scripts.export_people_from_graph
+
+.PHONY: people-graph people-datasets people app-personnel-people
+
+people-graph: demo-graph  ## demo person JSON -> pipelines -> graphs/demo/personnel.ttl
+
+people-datasets: people-graph  ## graph -> SPARQL -> dataset service
+	$(PYTHON) -m $(PEOPLE_EXPORT) $(EXPORT_ARGS)
+
+people: people-datasets app-personnel-people  ## rebuild the datasets, then serve
+
+app-personnel-people:  ## serve People Search on the existing datasets (no rebuild)
+	$(PYTHON) "$(MODULE_DIR)/$(PEOPLE_API)"
