@@ -31,6 +31,24 @@ SERVICES_DEPENDENCIES: dict[type, list[type]] = {
     ObjectStorageService: [EventService],
 }
 
+# Services loaded on demand from module dependencies. In NATS mode they all load:
+# the engine hosts them for every process on the bus, including remote SDK modules
+# whose dependencies are declared at runtime, not in this engine's module list.
+ON_DEMAND_SERVICES: tuple[type, ...] = (
+    ActivityLogService,
+    BusService,
+    CacheService,
+    DatasetService,
+    DocumentService,
+    EmailService,
+    EventService,
+    KeyValueService,
+    ObjectStorageService,
+    Secret,
+    TripleStoreService,
+    VectorStoreService,
+)
+
 
 class EngineServiceLoader:
     __configuration: EngineConfiguration
@@ -75,6 +93,9 @@ class EngineServiceLoader:
 
         for module_dependency in module_dependencies.values():
             services_to_load.extend(module_dependency.services)
+
+        if self.__configuration.nats is not None:
+            services_to_load.extend(ON_DEMAND_SERVICES)
 
         if CacheService in services_to_load:
             for entry in self.__configuration.services.cache.adapters:
