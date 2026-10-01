@@ -126,6 +126,26 @@ personnel:isOrganizationOfWorking a owl:ObjectProperty ;
   rdfs:domain abi:Organization ;
   rdfs:range  personnel:ActOfWorking .
 
+# WHO x WHO - a consulting/staffing engagement has both an employer (forOrganization)
+# and a client the work is performed for. Optional and separate from forOrganization:
+# a direct employee's act of working states forOrganization only and leaves this unset.
+personnel:forClient a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf personnel:isClientOfWorking ;
+  rdfs:label "for client"@en ;
+  skos:definition "Relates an act of working to the client organization the work was performed for, when the worker was staffed there by their employer (forOrganization) rather than working for the client directly."@en ;
+  skos:example "Alexis Tourneux (employed by Forvis Mazars) working as Tech Lead for Allianz: forOrganization Forvis Mazars, forClient Allianz."@en ;
+  rdfs:domain personnel:ActOfWorking ;
+  rdfs:range  abi:Organization .
+
+personnel:isClientOfWorking a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf personnel:forClient ;
+  rdfs:label "is client of working"@en ;
+  skos:definition "Relates a client organization to an act of working performed for it by a worker staffed there by another organization."@en ;
+  rdfs:domain abi:Organization ;
+  rdfs:range  personnel:ActOfWorking .
+
 personnel:hasContract a owl:ObjectProperty ;
   rdfs:subPropertyOf abi:concretizes ;
   owl:inverseOf personnel:isContractOf ;
@@ -228,9 +248,15 @@ personnel:isOfficeBuildingOf a owl:ObjectProperty ;
 #    Data properties
 #################################################################
 
+personnel:mission_context a owl:DatatypeProperty ;
+  rdfs:label "mission context"@en ;
+  skos:definition "The situation a mission was undertaken in: what the organization needed and why, stated as prose before the mission's own objectives and activities. Optional: a source that states only what was done, not the situation it responded to, leaves this unset."@en ;
+  rdfs:domain personnel:Mission ;
+  rdfs:range  xsd:string .
+
 personnel:mission_content a owl:DatatypeProperty ;
   rdfs:label "mission content"@en ;
-  skos:definition "Full stated text of a mission, including the objectives and activities listed under its opening sentence. The opening sentence alone is carried by rdfs:label."@en ;
+  skos:definition "Full stated text of a mission: the objectives and activities listed under its opening sentence, one per line when the source enumerates them as discrete tasks. The opening sentence alone is carried by rdfs:label; the situation the mission responded to is carried by personnel:mission_context, not here."@en ;
   rdfs:domain personnel:Mission ;
   rdfs:range  xsd:string .
 

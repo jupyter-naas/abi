@@ -1,3 +1,4 @@
+# onto2py-source-sha256: 9306c0e9a95fcf49b2428d9deef73def8de08b586066fce679141ee74dba30cf
 from __future__ import annotations
 
 import contextlib
@@ -325,6 +326,7 @@ class ActOfWorking(RDFEntity):
         "creator": "http://purl.org/dc/terms/creator",
         "developsLanguageCapability": "http://ontology.naas.ai/personnel/developsLanguageCapability",
         "developsSkill": "http://ontology.naas.ai/personnel/developsSkill",
+        "for_client": "http://ontology.naas.ai/personnel/forClient",
         "for_organization": "http://ontology.naas.ai/personnel/forOrganization",
         "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
         "hasSourceDocument": "http://ontology.naas.ai/personnel/hasSourceDocument",
@@ -338,6 +340,7 @@ class ActOfWorking(RDFEntity):
     _object_properties: ClassVar[set[str]] = {
         "developsLanguageCapability",
         "developsSkill",
+        "for_client",
         "for_organization",
         "hasParticipant",
         "hasSourceDocument",
@@ -362,8 +365,11 @@ class ActOfWorking(RDFEntity):
     # Object properties
     developsLanguageCapability: Annotated[URIRef | str, Field()] | None = None
     developsSkill: Annotated[URIRef | str, Field()] | None = None
+    for_client: Annotated[list[Organization | URIRef | str], Field(description="Relates an act of working to the client organization the work was performed for, when the worker was staffed there by their employer (forOrganization) rather than working for the client directly.")] | None = None
     for_organization: Annotated[list[Organization | URIRef | str], Field(description="Relates an act of working to the organization that participates as employer.")] | None = None
-    hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = None
+    hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = (
+        None
+    )
     hasSourceDocument: Annotated[URIRef | str, Field()] | None = None
     has_contract: Annotated[URIRef | str, Field(description="Relates an act of working to the employment contract it concretizes.")] | None = None
     is_act_of_working_of: Annotated[list[Person | URIRef | str], Field(description="Relates an act of working to the person performing the work.")] | None = None
@@ -391,6 +397,7 @@ class Mission(GenericallyDependentContinuant, RDFEntity):
         "is_mission_of": "http://ontology.naas.ai/personnel/isMissionOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "mission_content": "http://ontology.naas.ai/personnel/mission_content",
+        "mission_context": "http://ontology.naas.ai/personnel/mission_context",
     }
     _object_properties: ClassVar[set[str]] = {
         "genericallyDependsOn",
@@ -403,7 +410,8 @@ class Mission(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    mission_content: Annotated[str, Field(description="Full stated text of a mission, including the objectives and activities listed under its opening sentence. The opening sentence alone is carried by rdfs:label.")] | None = None
+    mission_context: Annotated[str, Field(description="The situation a mission was undertaken in: what the organization needed and why, stated as prose before the mission's own objectives and activities. Optional: a source that states only what was done, not the situation it responded to, leaves this unset.")] | None = None
+    mission_content: Annotated[str, Field(description="Full stated text of a mission: the objectives and activities listed under its opening sentence, one per line when the source enumerates them as discrete tasks. The opening sentence alone is carried by rdfs:label; the situation the mission responded to is carried by personnel:mission_context, not here.")] | None = None
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
     created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
     creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None

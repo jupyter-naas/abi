@@ -404,11 +404,25 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
     else:
         portrait_prefix = _text(portrait_prefix, "data.portrait_prefix")
 
+    # A curated organization name -> logo asset path map, browser-ready (relative
+    # to web/, e.g. "assets/logos/allianz.svg"). Not derived from anything: an
+    # instance opts a name in by placing the file itself and adding the entry,
+    # the same curated-asset pattern as portraits. Absent entirely by default,
+    # same as offices.yaml starting empty; a name with no entry gets no logo.
+    organization_logos_raw = data.get("organization_logos")
+    organization_logos: dict[str, str] = {}
+    if organization_logos_raw not in (None, {}):
+        for key, value in _mapping(organization_logos_raw, "data.organization_logos").items():
+            organization_logos[str(key)] = _text(
+                value, f"data.organization_logos.{key}"
+            )
+
     return {
         "namespace": namespace,
         "tables": dict(tables),
         "graph": graph_out,
         "portrait_prefix": portrait_prefix,
+        "organization_logos": organization_logos,
     }
 
 

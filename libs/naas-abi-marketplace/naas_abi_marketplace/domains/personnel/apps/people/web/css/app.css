@@ -1136,6 +1136,47 @@ body.sparql-modal-open {
   font-weight: 600;
 }
 
+/* An avatar next to a title needs its own row; entry() only wraps title+meta
+   like this when one is given, so every other entry (education, certs, ...)
+   is unaffected. */
+.entry-head:has(> .avatar) {
+  align-items: flex-start;
+  flex-wrap: nowrap;
+}
+
+.entry-head-text {
+  min-width: 0;
+}
+
+.avatar-org {
+  background: var(--empty-surface);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+
+/* The client a mission was performed for, when staffed there by the employer
+   heading the group -- a consulting engagement, distinct from a direct role. */
+.role-client {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+
+.role-context {
+  color: var(--muted);
+}
+
+.tasks {
+  margin: 8px 0 0;
+  padding: 0 0 0 18px;
+}
+
+.tasks li + li {
+  margin-top: 4px;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

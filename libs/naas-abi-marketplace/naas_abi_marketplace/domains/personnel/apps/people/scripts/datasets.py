@@ -63,8 +63,14 @@ TABLES: dict[str, tuple[tuple[str, ...], tuple[tuple[str, str], ...]]] = {
             # several roles under one organization the way a CV does.
             ("group_seq", "integer"),
             ("organization", "string"),
+            # The client the work was performed for, when the employer (organization)
+            # staffed the person there. Unset for a direct employment role.
+            ("client", "string"),
             ("location", "string"),
             ("title", "string"),
+            # The situation the mission responded to, stated before its own
+            # objectives and activities (description). Optional.
+            ("context", "string"),
             ("description", "string"),
             ("start_date", "date"),
             ("end_date", "date"),

@@ -65,8 +65,24 @@ def _period(start: Any, end: Any, duration: Any = None) -> dict[str, Any]:
     }
 
 
-def _experience(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _organization_logo(label: str | None, logos: dict[str, str]) -> str | None:
+    """A curated local asset path for an organization, or None.
+
+    Logos are not fetched from anywhere at render time: an instance opts a name
+    in by adding it to ``data.organization_logos`` in its config.yaml, pointing
+    at a file it has placed itself, the same curated-asset pattern as portraits.
+    A name with no entry gets no logo; the page falls back to initials.
+    """
+    if not label:
+        return None
+    return logos.get(label)
+
+
+def _experience(
+    rows: list[dict[str, Any]], logos: dict[str, str] | None = None
+) -> list[dict[str, Any]]:
     """Roles grouped under their employer, in the order the exporter set."""
+    logos = logos or {}
     groups: list[dict[str, Any]] = []
     by_group: dict[Any, dict[str, Any]] = {}
     for row in rows:
@@ -75,6 +91,7 @@ def _experience(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if group is None:
             group = {
                 "organization": row.get("organization"),
+                "organization_logo": _organization_logo(row.get("organization"), logos),
                 "location": row.get("location"),
                 "roles": [],
             }
@@ -83,6 +100,12 @@ def _experience(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         group["roles"].append(
             {
                 "title": row.get("title"),
+                # The client the role was performed for, when staffed there by the
+                # organization heading this group (a consulting engagement).
+                # Absent for a direct employment role.
+                "client": row.get("client"),
+                "client_logo": _organization_logo(row.get("client"), logos),
+                "context": row.get("context"),
                 "description": row.get("description"),
                 **_period(
                     row.get("start_date"),
@@ -100,9 +123,12 @@ def _experience(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return groups
 
 
-def _section_items(logical: str, rows: list[dict[str, Any]]) -> list[Any]:
+def _section_items(
+    logical: str, rows: list[dict[str, Any]], config: dict[str, Any] | None = None
+) -> list[Any]:
     if logical == "experience":
-        return _experience(rows)
+        logos = ((config or {}).get("data") or {}).get("organization_logos") or {}
+        return _experience(rows, logos)
     if logical == "skills":
         return [row["skill_name"] for row in rows if row.get("skill_name")]
     if logical == "education":
@@ -249,7 +275,9 @@ def profile(
             else []
         )
         if section_id != "about":
-            items = _section_items(section_id, rows_by_table.get(section_id, []))
+            items = _section_items(
+                section_id, rows_by_table.get(section_id, []), config
+            )
         sections.append(
             {
                 "id": section_id,

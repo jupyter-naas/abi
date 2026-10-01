@@ -629,8 +629,14 @@ class PersonnelGraphContext:
         duration: str | None,
         remuneration_amount: float | None = None,
         remuneration_currency: str = "EUR",
+        client: Organization | None = None,
+        mission_context: str | None = None,
     ) -> tuple[str, str]:
-        key = slug(person.label or "", org.label or "", title)
+        # The client (when staffed there by an employer) is part of what makes an
+        # act of working distinct: the same title recurs across different client
+        # engagements at one employer, and without the client in the key those
+        # engagements collide onto the same node and silently merge their missions.
+        key = slug(person.label or "", org.label or "", client.label if client else "", title)
 
         temporal_uri = self.add_temporal_region(
             key=f"{key}-working",
@@ -644,6 +650,7 @@ class PersonnelGraphContext:
             _uri=individual_uri(str(PERSONNEL), "Mission", key),
             label=mission_label,
             mission_content=mission_content,
+            mission_context=mission_context,
             is_mission_carried_by=[person._uri],
             created=utc_now(),
             creator=self.creator,
@@ -728,6 +735,7 @@ class PersonnelGraphContext:
             occursIn=site._uri if site else None,
             occupiesTemporalRegion=[temporal_uri] if temporal_uri else None,
             for_organization=[org._uri],
+            for_client=[client._uri] if client else None,
             has_contract=contract_uri,
             is_act_of_working_of=[person._uri],
             realizes=role._uri,

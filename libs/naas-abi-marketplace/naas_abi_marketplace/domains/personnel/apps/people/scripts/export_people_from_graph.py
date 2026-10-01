@@ -232,6 +232,7 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
         group_index: dict[str, int] = {}
         for seq, item in enumerate(person_experience):
             organization = item.get("orgLabel") or ""
+            client = item.get("clientLabel")
             title = item.get("roleLabel") or item.get("jobTitle")
             description = item.get("missionContent") or item.get("missionLabel")
             group_index.setdefault(organization, len(group_index))
@@ -241,8 +242,10 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
                     "seq": seq,
                     "group_seq": group_index[organization],
                     "organization": organization or None,
+                    "client": client,
                     "location": item.get("siteLabel"),
                     "title": title,
+                    "context": item.get("missionContext"),
                     # A source that named the role but not what it involved
                     # leaves the mission equal to the title. Showing it twice
                     # would look like two facts where the source gave one.

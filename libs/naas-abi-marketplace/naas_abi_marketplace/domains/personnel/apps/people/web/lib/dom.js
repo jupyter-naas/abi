@@ -96,6 +96,23 @@ export function avatarHtml(person, size = "sm") {
 }
 
 /**
+ * An organization's logo, or its initials.
+ *
+ * Same fallback-underneath pattern as avatarHtml: a name with no curated logo
+ * (data.organization_logos in config.yaml) still reads as something, and a
+ * logo file that 404s degrades to the initials rather than a broken icon.
+ */
+export function orgAvatarHtml(name, logoPath, size = "sm") {
+  if (!name) return "";
+  const label = escapeHtml(name);
+  const fallback = escapeHtml(initials(name));
+  const image = logoPath
+    ? `<img src="${escapeHtml(logoPath)}" alt="" loading="lazy" />`
+    : "";
+  return `<span class="avatar avatar-${size} avatar-org" role="img" aria-label="${label}">${fallback}${image}</span>`;
+}
+
+/**
  * Country flags come from a CDN; without one the line simply has no flag.
  * Removal on error is handled once, in shell.js, rather than with an inline
  * handler that a content-security policy would block.

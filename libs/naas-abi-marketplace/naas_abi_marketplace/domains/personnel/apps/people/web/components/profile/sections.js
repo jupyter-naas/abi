@@ -6,16 +6,21 @@
  * renderer, and a renderer lives here.
  */
 
-import { escapeHtml, highlight, periodText } from "../../lib/dom.js";
+import { escapeHtml, highlight, orgAvatarHtml, periodText } from "../../lib/dom.js";
 
 const H = (value, tokens) => highlight(value ?? "", tokens);
 
-function entry({ title, meta, text, extra = "" }, tokens) {
+function entry({ title, meta, text, avatar = "", extra = "" }, tokens) {
+  // With no avatar, title and meta stay direct flex children (unchanged
+  // layout for every other section). An avatar needs its own row, so the two
+  // get wrapped together only then.
+  const titleMeta = `
+    <p class="entry-title">${H(title, tokens)}</p>
+    ${meta ? `<p class="entry-meta">${H(meta, tokens)}</p>` : ""}`;
   return `
     <div class="entry">
       <div class="entry-head">
-        <p class="entry-title">${H(title, tokens)}</p>
-        ${meta ? `<p class="entry-meta">${H(meta, tokens)}</p>` : ""}
+        ${avatar ? `${avatar}<div class="entry-head-text">${titleMeta}</div>` : titleMeta}
       </div>
       ${text ? `<p class="entry-text">${H(text, tokens)}</p>` : ""}
       ${extra}
@@ -26,19 +31,55 @@ function aboutSection(items, tokens) {
   return items.map((text) => `<p>${H(text, tokens)}</p>`).join("");
 }
 
+// A mission's tasks (role.description) are one per line when the source gave
+// them as discrete bullets; a source that gave one flowing sentence instead
+// still reads fine as a single-item list.
+function taskListHtml(description, tokens) {
+  const lines = String(description ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return "";
+  return `<ul class="tasks">${lines
+    .map((line) => `<li>${H(line, tokens)}</li>`)
+    .join("")}</ul>`;
+}
+
+// A client badge: who the role was performed for, when staffed there by the
+// employer heading the group (a consulting engagement). Absent for a direct
+// employment role, where the employer itself is the only party.
+function clientBadgeHtml(role, tokens) {
+  if (!role.client) return "";
+  return `
+    <p class="role-client">
+      ${orgAvatarHtml(role.client, role.client_logo, "sm")}
+      <span>${H(role.client, tokens)}</span>
+    </p>`;
+}
+
+function roleExtraHtml(role, tokens) {
+  return `
+    ${clientBadgeHtml(role, tokens)}
+    ${role.context ? `<p class="entry-text role-context">${H(role.context, tokens)}</p>` : ""}
+    ${taskListHtml(role.description, tokens)}`;
+}
+
 function experienceSection(items, tokens) {
   return items
     .map((group) => {
       const roles = group.roles || [];
       const single = roles.length === 1;
+      const groupAvatar = orgAvatarHtml(group.organization, group.organization_logo, "md");
       if (single) {
         const role = roles[0];
         return entry(
           {
             title: role.title,
             meta: [group.organization, group.location].filter(Boolean).join(" · "),
-            text: role.description,
-            extra: `<p class="role-meta">${escapeHtml(periodText(role))}</p>`,
+            avatar: groupAvatar,
+            extra: `
+              <p class="role-meta">${escapeHtml(periodText(role))}</p>
+              ${roleExtraHtml(role, tokens)}`,
           },
           tokens,
         );
@@ -49,7 +90,7 @@ function experienceSection(items, tokens) {
           <li class="role">
             <p class="role-title">${H(role.title, tokens)}</p>
             <p class="role-meta">${escapeHtml(periodText(role))}</p>
-            ${role.description ? `<p class="entry-text">${H(role.description, tokens)}</p>` : ""}
+            ${roleExtraHtml(role, tokens)}
           </li>`,
         )
         .join("");
@@ -57,6 +98,7 @@ function experienceSection(items, tokens) {
         {
           title: group.organization,
           meta: [group.location, periodText(group)].filter(Boolean).join(" · "),
+          avatar: groupAvatar,
           extra: `<ul class="roles">${rolesHtml}</ul>`,
         },
         tokens,

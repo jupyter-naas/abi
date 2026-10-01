@@ -170,6 +170,8 @@ def payload_to_profile_source_parameters(payload: dict) -> object:
                     duration=record.get("duration"),
                     mission_label=record["mission_label"],
                     mission=record["mission"],
+                    client=record.get("client"),
+                    mission_context=record.get("mission_context"),
                     contract_type=record.get("contract_type"),
                     skills=list(record.get("skills") or []),
                     source=record.get("source"),

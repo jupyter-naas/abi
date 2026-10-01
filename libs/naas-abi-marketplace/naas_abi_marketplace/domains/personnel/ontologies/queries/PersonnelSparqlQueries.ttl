@@ -294,19 +294,19 @@ intentMapping:findHeadcountByJobFamilyQuery a intentMapping:TemplatableSparqlQue
 
 intentMapping:findWorkingProcessesQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_working_experiences"@en ;
-    intentMapping:intentDescription "Return every act of working with the seven buckets it ties together: the person performing the work and the organization they work for (WHO), the site (WHERE), the temporal region and its bounding instants (WHEN), the employee role and the mission that role concretizes (WHY), the skills developed (HOW IT IS), and the contract and profile document it was sourced from (HOW WE KNOW). Backed by the ActOfWorkingProcess ontology." ;
+    intentMapping:intentDescription "Return every act of working with the seven buckets it ties together: the person performing the work, the organization they work for and, for a consulting engagement, the client they performed it for (WHO), the site (WHERE), the temporal region and its bounding instants (WHEN), the employee role and the mission that role concretizes (WHY), the skills developed (HOW IT IS), and the contract and profile document it was sourced from (HOW WE KNOW). Backed by the ActOfWorkingProcess ontology." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
         PREFIX personnel: <http://ontology.naas.ai/personnel/>
 
-        SELECT DISTINCT ?person ?personLabel ?working ?workingLabel ?org ?orgLabel ?site ?siteLabel
+        SELECT DISTINCT ?person ?personLabel ?working ?workingLabel ?org ?orgLabel ?client ?clientLabel ?site ?siteLabel
                         ?temporal ?temporalLabel ?temporalStart ?temporalEnd ?durationLabel
                         ?firstInstant ?firstInstantLabel ?lastInstant ?lastInstantLabel
                         ?contract ?contractLabel ?contractType
                         ?role ?roleLabel ?position ?positionLabel ?jobTitle
-                        ?mission ?missionLabel ?missionContent
+                        ?mission ?missionLabel ?missionContext ?missionContent
                         ?profile ?profileLabel ?sourceUrl
                         ?remuneration ?remunerationLabel ?remunerationAmount ?remunerationCurrency
         WHERE {
@@ -317,6 +317,7 @@ intentMapping:findWorkingProcessesQuery a intentMapping:TemplatableSparqlQuery ;
             ?working rdf:type personnel:ActOfWorking .
             OPTIONAL { ?working rdfs:label ?workingLabel . }
             OPTIONAL { ?working personnel:forOrganization ?org . ?org rdfs:label ?orgLabel . }
+            OPTIONAL { ?working personnel:forClient ?client . ?client rdfs:label ?clientLabel . }
             OPTIONAL { ?working abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
             OPTIONAL {
               ?working abi:occupiesTemporalRegion ?temporal .
@@ -353,6 +354,7 @@ intentMapping:findWorkingProcessesQuery a intentMapping:TemplatableSparqlQuery ;
               OPTIONAL {
                 ?role personnel:hasMission ?mission .
                 ?mission rdfs:label ?missionLabel .
+                OPTIONAL { ?mission personnel:mission_context ?missionContext . }
                 OPTIONAL { ?mission personnel:mission_content ?missionContent . }
                 OPTIONAL {
                   ?mission personnel:isSourcedFrom ?profile .

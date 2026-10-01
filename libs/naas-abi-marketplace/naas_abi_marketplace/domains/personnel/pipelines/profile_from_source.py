@@ -64,6 +64,11 @@ class WorkingRecordInput(BaseModel):
     duration: str | None = None
     mission_label: Annotated[str, Field(min_length=1)]
     mission: Annotated[str, Field(min_length=1)]
+    # The client the work was performed for, when organization staffed the person
+    # there (a consulting engagement) rather than the person working for
+    # organization directly. Unset for a direct employment role.
+    client: str | None = None
+    mission_context: str | None = None
     contract_type: str | None = None
     skills: list[str] = []
     source: str | None = None
@@ -181,6 +186,8 @@ def apply_profile_source_payload(
                 duration=record.duration,
                 mission_label=record.mission_label,
                 mission=record.mission,
+                client=record.client,
+                mission_context=record.mission_context,
                 contract_type=record.contract_type,
                 skills=record.skills,
                 source_url=record.source or default_profile_url,
