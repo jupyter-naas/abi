@@ -43,3 +43,15 @@ scenario against both runtimes: extend it before changing either agent. Host an
 agent with `expose_agent(name, agent.as_handler())` and checkpoint it with
 `document_memory(engine.services.document, agent_memory_id(module_id, name))`.
 v1 has no local sub-agents; remote agents (AgentProxy) are passed as tools.
+
+Jobs (`jobs.py`, `job_host.py`, ADR docs/adr/20261001_nats-jobs.md) replace Dagster
+schedules. Declare `JobDescriptor`s in `jobs` or use `@job` on async methods; bind
+others with `expose_job`. `JobsMixin` is shared with core modules (sync handlers
+allowed there): keep `jobs.py` importable without `nats` (stdlib and proto only),
+and keep the package `__init__` lazy for the same reason. Triggers are JetStream message schedules (`Cron`, `Every`,
+NATS >= 2.14) and core-NATS events (`OnEvent`, at-most-once bridge). Delivery is
+at-least-once: handlers must be idempotent. One durable pull consumer per job;
+`max_concurrency` is `max_ack_pending`, retries are `nak(delay)`. Run records live
+in the provider's document namespace (`job_runs_<hash(project)>`), written with CAS.
+Cancellation is cooperative (`ctx.cancelled`). tests/test_jobs_integration.py needs
+`nats-server` on PATH; run it after touching schedules, consumers or acks.

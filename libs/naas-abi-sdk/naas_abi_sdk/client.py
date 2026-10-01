@@ -55,6 +55,16 @@ class ABIClient:
     async def __aexit__(self, *exc) -> None:
         await self.close()
 
+    def get_job(self, module_id: str, name: str, *, project: str = "default"):
+        """A job of any module by name, engine modules included (not in discovery).
+
+        Nothing is checked until a trigger: an unknown job's runs stay QUEUED.
+        Prefer ``ModuleProxy.get_job`` for discovered modules.
+        """
+        from naas_abi_sdk.jobs import JobDescriptor, JobProxy
+
+        return JobProxy(self._transport, project, module_id, JobDescriptor(name))
+
     async def close(self) -> None:
         """Release this client's connection; never shut down a remote service."""
         await self._transport.close()

@@ -9,6 +9,7 @@ import random
 import re
 import time
 from dataclasses import dataclass
+from typing import Any
 from uuid import uuid4
 
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
@@ -34,6 +35,7 @@ class ModuleInstance:
     status: str
     expires_at: float
     agents: tuple[AgentDescriptor, ...]
+    jobs: tuple[Any, ...] = ()
 
 
 def _instance(value: pb.Instance) -> ModuleInstance:
@@ -51,7 +53,14 @@ def _instance(value: pb.Instance) -> ModuleInstance:
             )
             for a in d.agents
         ),
+        _jobs(d),
     )
+
+
+def _jobs(descriptor: pb.ModuleDescriptor) -> tuple[Any, ...]:
+    from naas_abi_sdk.jobs import JobDescriptor
+
+    return tuple(JobDescriptor.from_pb(j) for j in descriptor.jobs)
 
 
 @dataclass(frozen=True)
@@ -138,6 +147,18 @@ class ModuleProxy:
                 "AGENT_NOT_INVOKABLE", "Agent has no supported invocation handler"
             )
         return AgentProxy(self, descriptor)
+
+    async def get_job(self, name: str):
+        from naas_abi_sdk.jobs import JobProxy
+
+        descriptor = next(
+            (j for j in (await self.ready_instances())[0].jobs if j.name == name), None
+        )
+        if descriptor is None:
+            raise RPCError("JOB_NOT_FOUND", name)
+        return JobProxy(
+            self.client.transport, self.client.project, self.module_id, descriptor
+        )
 
     async def list_agents(self) -> tuple[AgentDescriptor, ...]:
         return (await self.ready_instances())[0].agents
@@ -339,4 +360,5 @@ def module_descriptor(
             )
             for a in module_type.agents
         ],
+        jobs=[j.to_pb() for j in getattr(module_type, "jobs", ())],
     )
