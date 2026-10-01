@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { getApiUrl } from '@/lib/config';
 import { cn } from '@/lib/utils';
 import { initials, safeImage } from '@/lib/search-topics';
 
@@ -12,7 +13,7 @@ export function TopicAvatar({ label, image, size = 40, className }: {
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
-  const src = failed ? null : safeImage(image);
+  const src = failed ? null : safeImage(image, getApiUrl());
   return (
     <div
       className={cn('relative flex flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-workspace-accent-10 font-semibold text-workspace-accent', className)}

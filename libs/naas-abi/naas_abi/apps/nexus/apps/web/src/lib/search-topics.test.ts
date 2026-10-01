@@ -30,6 +30,9 @@ test('only loadable images are rendered', () => {
   assert.equal(safeImage('assets/portraits/a.svg'), null);
   assert.equal(safeImage('javascript:alert(1)'), null);
   assert.equal(safeImage(null), null);
+  assert.equal(safeImage('/api/app/portraits/a.jpeg'), '/api/app/portraits/a.jpeg');
+  assert.equal(safeImage('/api/app/portraits/a.jpeg', 'https://api.localhost/'), 'https://api.localhost/api/app/portraits/a.jpeg');
+  assert.equal(safeImage('/static/a.png', 'https://api.localhost'), '/static/a.png');
 });
 
 test('periods and initials', () => {

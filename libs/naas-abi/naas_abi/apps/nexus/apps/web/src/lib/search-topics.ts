@@ -130,9 +130,14 @@ export function resolveScope(available: readonly { id: string }[], requested: st
   return requested && available.some(s => s.id === requested) ? requested : null;
 }
 
-/** Images are rendered only from addresses the browser can load safely. */
-export function safeImage(src: string | null | undefined): string | null {
+/**
+ * Images are rendered only from addresses the browser can load safely. A graph
+ * path under `/api/` names a route of the ABI API, which Nexus does not serve
+ * on its own origin: it is resolved against `apiBase` when one is given.
+ */
+export function safeImage(src: string | null | undefined, apiBase?: string): string | null {
   if (!src) return null;
+  if (apiBase && src.startsWith('/api/')) return apiBase.replace(/\/+$/, '') + src;
   return /^(https?:\/\/|\/)/i.test(src) || /^data:image\/(png|jpe?g|gif|webp|svg\+xml);/i.test(src) ? src : null;
 }
 
