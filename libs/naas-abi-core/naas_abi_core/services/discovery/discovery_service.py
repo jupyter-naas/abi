@@ -34,6 +34,28 @@ def _name(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,255}", value))
 
 
+JOB_TRIGGER_KINDS = ("cron", "every", "event")
+
+
+def _valid_job(job: pb.JobDescriptor) -> bool:
+    return (
+        _name(job.name)
+        and job.contract_major > 0
+        and len(job.description) <= 4096
+        and 0 < job.max_concurrency <= 64
+        and 0 < job.max_attempts <= 100
+        and job.timeout_seconds >= 0
+        and math.isfinite(job.timeout_seconds)
+        and len(job.triggers) <= 16
+        and all(
+            t.kind in JOB_TRIGGER_KINDS
+            and 0 < len(t.spec) <= 256
+            and len(t.time_zone) <= 64
+            for t in job.triggers
+        )
+    )
+
+
 class DiscoveryService:
     def __init__(
         self,
@@ -127,6 +149,16 @@ class DiscoveryService:
             "INVALID_ARGUMENT",
             "Invalid agent descriptor",
         )
+        _require(
+            len(d.jobs) <= 128 and len({x.name for x in d.jobs}) == len(d.jobs),
+            "INVALID_ARGUMENT",
+            "Too many or duplicate jobs",
+        )
+        _require(
+            all(_valid_job(x) for x in d.jobs),
+            "INVALID_ARGUMENT",
+            "Invalid job descriptor",
+        )
         graph = {}
         for record in state.records:
             other = record.instance.descriptor
@@ -135,9 +167,11 @@ class DiscoveryService:
                 d.contract_major,
             ):
                 _require(
-                    other.dependencies == d.dependencies and other.agents == d.agents,
+                    other.dependencies == d.dependencies
+                    and other.agents == d.agents
+                    and other.jobs == d.jobs,
                     "DESCRIPTOR_CONFLICT",
-                    "Replicas of a contract must declare identical dependencies and agents",
+                    "Replicas of a contract must declare identical dependencies, agents and jobs",
                 )
             graph[(other.module_id, other.contract_major)] = [
                 (x.module_id, x.contract_major) for x in other.dependencies

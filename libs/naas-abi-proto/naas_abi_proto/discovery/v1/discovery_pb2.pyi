@@ -19,6 +19,34 @@ class AgentDescriptor(_message.Message):
     capabilities: _containers.RepeatedScalarFieldContainer[str]
     def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., contract_major: _Optional[int] = ..., capabilities: _Optional[_Iterable[str]] = ...) -> None: ...
 
+class JobTrigger(_message.Message):
+    __slots__ = ("kind", "spec", "time_zone")
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    SPEC_FIELD_NUMBER: _ClassVar[int]
+    TIME_ZONE_FIELD_NUMBER: _ClassVar[int]
+    kind: str
+    spec: str
+    time_zone: str
+    def __init__(self, kind: _Optional[str] = ..., spec: _Optional[str] = ..., time_zone: _Optional[str] = ...) -> None: ...
+
+class JobDescriptor(_message.Message):
+    __slots__ = ("name", "description", "contract_major", "triggers", "max_concurrency", "max_attempts", "timeout_seconds")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    CONTRACT_MAJOR_FIELD_NUMBER: _ClassVar[int]
+    TRIGGERS_FIELD_NUMBER: _ClassVar[int]
+    MAX_CONCURRENCY_FIELD_NUMBER: _ClassVar[int]
+    MAX_ATTEMPTS_FIELD_NUMBER: _ClassVar[int]
+    TIMEOUT_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    description: str
+    contract_major: int
+    triggers: _containers.RepeatedCompositeFieldContainer[JobTrigger]
+    max_concurrency: int
+    max_attempts: int
+    timeout_seconds: float
+    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., contract_major: _Optional[int] = ..., triggers: _Optional[_Iterable[_Union[JobTrigger, _Mapping]]] = ..., max_concurrency: _Optional[int] = ..., max_attempts: _Optional[int] = ..., timeout_seconds: _Optional[float] = ...) -> None: ...
+
 class Dependency(_message.Message):
     __slots__ = ("module_id", "contract_major")
     MODULE_ID_FIELD_NUMBER: _ClassVar[int]
@@ -28,18 +56,20 @@ class Dependency(_message.Message):
     def __init__(self, module_id: _Optional[str] = ..., contract_major: _Optional[int] = ...) -> None: ...
 
 class ModuleDescriptor(_message.Message):
-    __slots__ = ("module_id", "package_version", "contract_major", "dependencies", "agents")
+    __slots__ = ("module_id", "package_version", "contract_major", "dependencies", "agents", "jobs")
     MODULE_ID_FIELD_NUMBER: _ClassVar[int]
     PACKAGE_VERSION_FIELD_NUMBER: _ClassVar[int]
     CONTRACT_MAJOR_FIELD_NUMBER: _ClassVar[int]
     DEPENDENCIES_FIELD_NUMBER: _ClassVar[int]
     AGENTS_FIELD_NUMBER: _ClassVar[int]
+    JOBS_FIELD_NUMBER: _ClassVar[int]
     module_id: str
     package_version: str
     contract_major: int
     dependencies: _containers.RepeatedCompositeFieldContainer[Dependency]
     agents: _containers.RepeatedCompositeFieldContainer[AgentDescriptor]
-    def __init__(self, module_id: _Optional[str] = ..., package_version: _Optional[str] = ..., contract_major: _Optional[int] = ..., dependencies: _Optional[_Iterable[_Union[Dependency, _Mapping]]] = ..., agents: _Optional[_Iterable[_Union[AgentDescriptor, _Mapping]]] = ...) -> None: ...
+    jobs: _containers.RepeatedCompositeFieldContainer[JobDescriptor]
+    def __init__(self, module_id: _Optional[str] = ..., package_version: _Optional[str] = ..., contract_major: _Optional[int] = ..., dependencies: _Optional[_Iterable[_Union[Dependency, _Mapping]]] = ..., agents: _Optional[_Iterable[_Union[AgentDescriptor, _Mapping]]] = ..., jobs: _Optional[_Iterable[_Union[JobDescriptor, _Mapping]]] = ...) -> None: ...
 
 class Instance(_message.Message):
     __slots__ = ("descriptor", "instance_id", "status", "expires_at")
