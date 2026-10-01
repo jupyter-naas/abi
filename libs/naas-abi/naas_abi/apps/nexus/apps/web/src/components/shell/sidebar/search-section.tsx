@@ -119,7 +119,7 @@ function rowClass(isActive: boolean) {
   );
 }
 
-/** Includes a scope in the "All" view. */
+/** Includes a scope in the "All" view. Square, like the search chips. */
 function ScopeSwitch({ label, on, onChange }: { label: string; on: boolean; onChange: () => void }) {
   return (
     <button
@@ -129,9 +129,9 @@ function ScopeSwitch({ label, on, onChange }: { label: string; on: boolean; onCh
       aria-label={`Search ${label}`}
       title={on ? `Searched in All — click to leave ${label} out` : `Left out of All — click to search ${label}`}
       onClick={onChange}
-      className={cn('relative h-4 w-7 flex-shrink-0 rounded-full transition-colors', on ? 'bg-workspace-accent' : 'bg-muted-foreground/30')}
+      className={cn('relative h-[14px] w-[25px] flex-shrink-0 rounded-none transition-colors', on ? 'bg-workspace-accent' : 'bg-muted-foreground/30')}
     >
-      <span className={cn('absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all', on ? 'left-3.5' : 'left-0.5')} />
+      <span className={cn('absolute top-[2px] h-[10px] w-[10px] rounded-none bg-white shadow transition-all', on ? 'left-[13px]' : 'left-[2px]')} />
     </button>
   );
 }

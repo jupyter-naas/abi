@@ -187,7 +187,7 @@ function LandingHero() {
           letterClassName="text-3xl font-bold text-white"
         />
       </WorkspaceMarkFrame>
-      <h1 className="text-3xl font-bold tracking-tight">{workspace?.name || 'Search'}</h1>
+      <h1 className="text-3xl font-semibold tracking-tight">{workspace?.name || 'Search'}</h1>
       <p className="text-sm text-muted-foreground">Search people, organizations, apps, files, chats, the ontology and more.</p>
     </div>
   );
