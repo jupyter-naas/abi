@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { LayoutGrid, Search, Settings2 } from 'lucide-react';
+import { LayoutGrid, Search } from 'lucide-react';
 import { ALL_VIEW_LIMIT } from '@/components/search/scope-views';
 import { TopicIcon } from '@/components/search/topic-icon';
 import { useSearchScopes } from '@/components/search/use-search-scopes';
@@ -19,14 +19,13 @@ import { getWorkspacePath } from './utils';
  * Search column: every scope the search can read — topics (People…), the
  * workspace features (Apps, Chats, Files, Ontology…) and Web — each with a
  * switch that includes it in the "All" view, and a link that opens it alone.
- * Counts are the current query's hits in the All view. Web's sources are
- * toggled here too once Web is on.
+ * Counts are the current query's hits in the All view.
  */
 export function SearchSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const { currentWorkspaceId } = useWorkspaceStore();
   const pathname = usePathname();
   const route = readSearchRoute(useSearchParams());
-  const { scopes, isOn, setScopeOn, allowedEngines, canEdit } = useSearchScopes(currentWorkspaceId);
+  const { scopes, isOn, setScopeOn, allowedEngines } = useSearchScopes(currentWorkspaceId);
   const runs = useSearchScopesStore(s => s.runs);
   const webEngines = useSearchStore(s => s.sources).filter(s => allowedEngines.includes(s.id));
   const toggleSource = useSearchStore(s => s.toggleSource);
@@ -109,12 +108,6 @@ export function SearchSection({ collapsed, detailOnly }: { collapsed: boolean; d
         );
       })}
 
-      {canEdit && currentWorkspaceId && (
-        <Link href={`/workspace/${encodeURIComponent(currentWorkspaceId)}/settings/search`}
-          className="mt-1 flex items-center gap-2 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-workspace-accent-10 hover:text-foreground">
-          <Settings2 size={12} /> Manage topics
-        </Link>
-      )}
     </CollapsibleSection>
   );
 }
