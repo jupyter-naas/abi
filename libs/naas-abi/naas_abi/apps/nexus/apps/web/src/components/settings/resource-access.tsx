@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { RefreshCw } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { invalidateGraphExplorer } from '@/stores/graph-explorer';
@@ -236,9 +235,6 @@ export function ResourceAccessEditor({
         }
         actions={
           <>
-            <Button variant="secondary" onClick={() => void load()} disabled={loading || saving} title="Reload assignments">
-              <RefreshCw size={14} /> Reload
-            </Button>
             <Button onClick={() => void save()} disabled={!dirty || saving || loading}>
               {saving ? 'Saving…' : 'Save changes'}
             </Button>

@@ -6,6 +6,7 @@ import { ExternalLink } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
 import { DOCKER_SERVICES, buildServiceUrl, resolveServiceHost } from '@/lib/docker-services';
 import { buttonVariants } from '@/components/ui/button';
+import { SettingsReloadButton } from '@/components/settings/settings-reload';
 
 export default function ServiceDetailPage() {
   const params = useParams();
@@ -74,15 +75,18 @@ export default function ServiceDetailPage() {
             {embeddable ? `, embedded from ${url}` : ''}
           </p>
         </div>
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={buttonVariants({ variant: 'secondary', size: 'sm' })}
-        >
-          <ExternalLink size={14} />
-          Open in new tab
-        </a>
+        <div className="flex shrink-0 items-center gap-2">
+          <SettingsReloadButton />
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonVariants({ variant: 'secondary' })}
+          >
+            <ExternalLink size={14} />
+            Open in new tab
+          </a>
+        </div>
       </header>
 
       <div className="flex-1 overflow-hidden">

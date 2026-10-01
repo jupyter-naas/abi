@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Building2, ChevronRight } from 'lucide-react';
@@ -14,6 +14,8 @@ import {
   type OrgSettingsNavItem,
 } from './lib/nav';
 import { parseOrgSettingsRoute } from './lib/org-settings-route';
+import { SettingsReloadProvider } from '@/components/settings/settings-reload';
+import { useOrganizationStore } from '@/stores/organization';
 import './org-settings-layout.css';
 
 function NavItem({
@@ -59,6 +61,7 @@ export default function OrganizationSettingsLayout({
   const router = useRouter();
   const params = useParams();
   const orgId = params.orgId as string;
+  const reloadOrganizations = useCallback(() => useOrganizationStore.getState().fetchOrganizations(), []);
   const sectionHrefs = useMemo(
     () => (orgId ? orgSettingsNav.map((item) => orgSettingsSectionPath(orgId, item.slug)) : []),
     [orgId]
@@ -197,7 +200,9 @@ export default function OrganizationSettingsLayout({
 
         {showMain && (
           <div className="org-settings-layout-main">
-            <div className="org-settings-layout-content">{children}</div>
+            <div className="org-settings-layout-content">
+              <SettingsReloadProvider onReload={reloadOrganizations}>{children}</SettingsReloadProvider>
+            </div>
           </div>
         )}
       </div>

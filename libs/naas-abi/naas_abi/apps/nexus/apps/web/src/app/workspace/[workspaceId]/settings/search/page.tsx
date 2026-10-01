@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox, radioClass } from '@/components/ui/checkbox';
 import { fieldClass } from '@/components/ui/input';
+import { SettingsReloadButton } from '@/components/settings/settings-reload';
 import {
   SettingsEmpty, SettingsFilterSelect, SettingsLoading, SettingsNotice, SettingsPageHeader, SettingsTableToolbar, countLabel, settingsTable,
 } from '@/components/settings/settings-ui';
@@ -104,9 +105,12 @@ function SearchSettings() {
   if (selectedId) {
     return (
       <div className="space-y-6">
-        <Button variant="secondary" onClick={() => select(null)}>
-          <ArrowLeft size={16} /> All topics
-        </Button>
+        <div className="flex items-center justify-between gap-2">
+          <Button variant="secondary" onClick={() => select(null)}>
+            <ArrowLeft size={16} /> All topics
+          </Button>
+          <SettingsReloadButton />
+        </div>
         {loading && !selected ? (
           <SettingsLoading />
         ) : !selected ? (

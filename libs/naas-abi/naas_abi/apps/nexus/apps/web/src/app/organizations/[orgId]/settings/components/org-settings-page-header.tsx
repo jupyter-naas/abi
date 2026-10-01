@@ -1,3 +1,4 @@
+import { SettingsReloadButton } from '@/components/settings/settings-reload';
 import './org-settings-components.css';
 
 type OrgSettingsPageHeaderProps = {
@@ -15,13 +16,7 @@ export function OrgSettingsPageHeader({
   actions,
 }: OrgSettingsPageHeaderProps) {
   return (
-    <div
-      className={
-        actions
-          ? 'org-settings-page-header org-settings-page-header-with-actions'
-          : 'org-settings-page-header'
-      }
-    >
+    <div className="org-settings-page-header org-settings-page-header-with-actions">
       <div className="org-settings-page-header-text">
         <div className="flex items-center gap-2">
           <h2 className="org-settings-page-header-title">{title}</h2>
@@ -33,7 +28,10 @@ export function OrgSettingsPageHeader({
         </div>
         <p className="org-settings-page-header-subtitle">{subtitle}</p>
       </div>
-      {actions}
+      <div className="flex shrink-0 items-center gap-2">
+        <SettingsReloadButton />
+        {actions}
+      </div>
     </div>
   );
 }

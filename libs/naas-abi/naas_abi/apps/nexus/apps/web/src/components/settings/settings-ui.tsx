@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Loader2, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SettingsReloadButton } from '@/components/settings/settings-reload';
 
 // Shared building blocks for every settings page, so headers, cards and states look the same.
 
@@ -37,8 +38,12 @@ export function SettingsPageHeader({
           {description ? <p className="mt-0.5 text-sm text-muted-foreground">{description}</p> : null}
         </div>
       </div>
-      {/* Never wraps below the title: actions (e.g. the add button) stay in the top-right corner. */}
-      {actions ? <div className="flex shrink-0 items-center justify-end gap-2">{actions}</div> : null}
+      {/* Never wraps below the title: actions (e.g. the add button) stay in the top-right corner,
+          with Reload just left of them. */}
+      <div className="flex shrink-0 items-center justify-end gap-2">
+        <SettingsReloadButton />
+        {actions}
+      </div>
     </div>
   );
 }
