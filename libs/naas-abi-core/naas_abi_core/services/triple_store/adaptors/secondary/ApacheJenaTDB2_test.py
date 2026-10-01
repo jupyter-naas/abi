@@ -123,6 +123,53 @@ def test_query_select_returns_rows():
     assert str(result[0].s) == "http://example.org/alice"
 
 
+def test_query_select_returns_rdflib_select_result():
+    """SELECT must honour the port's ``rdflib.query.Result`` contract.
+
+    The NATS primary adapter only serializes ``Result``/``Graph``/``bool``; a
+    bare iterator of rows made every SELECT over NATS fail with INTERNAL.
+    """
+    adapter = _build_adapter()
+
+    response = _ok_response()
+    response.headers = {"Content-Type": "application/sparql-results+json"}
+    response.text = (
+        '{"head":{"vars":["s","name"]},"results":{"bindings":['
+        '{"s":{"type":"uri","value":"http://example.org/alice"},'
+        '"name":{"type":"literal","value":"Alice","xml:lang":"en"}},'
+        '{"s":{"type":"uri","value":"http://example.org/bob"}}'
+        "]}}"
+    )
+    adapter._session.post.return_value = response
+
+    result = adapter.query("SELECT ?s ?name WHERE { ?s ?p ?name }")
+
+    assert isinstance(result, rdflib.query.Result)
+    assert result.type == "SELECT"
+    assert result.vars == [Variable("s"), Variable("name")]
+    rows = list(result)
+    assert rows[0].name == Literal("Alice", lang="en")
+    assert rows[1].s == URIRef("http://example.org/bob")
+    assert rows[1].name is None
+    # A Result is re-iterable, unlike the iterator it replaces.
+    assert len(list(result)) == 2
+
+
+def test_query_select_without_rows_keeps_vars():
+    adapter = _build_adapter()
+
+    response = _ok_response()
+    response.headers = {"Content-Type": "application/sparql-results+json"}
+    response.text = '{"head":{"vars":["g"]},"results":{"bindings":[]}}'
+    adapter._session.post.return_value = response
+
+    result = adapter.query("SELECT ?g WHERE { GRAPH ?g { ?s ?p ?o } }")
+
+    assert isinstance(result, rdflib.query.Result)
+    assert result.vars == [Variable("g")]
+    assert list(result) == []
+
+
 def test_query_construct_returns_graph():
     adapter = _build_adapter()
 

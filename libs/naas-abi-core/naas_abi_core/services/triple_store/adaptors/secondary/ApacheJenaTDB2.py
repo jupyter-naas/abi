@@ -118,7 +118,7 @@ Query behavior
 - Update queries (``INSERT``, ``DELETE``, ``WITH``, ``DROP``, etc.) are sent to
   ``/update``.
 - Results are mapped to RDFLib-compatible structures:
-  - JSON SPARQL results -> iterable of ``ResultRow`` (or ``ASK`` result)
+  - JSON SPARQL results -> ``rdflib.query.Result`` (``SELECT`` or ``ASK``)
   - RDF payloads (N-Triples/Turtle) -> ``rdflib.Graph``
 - ``list_graphs()`` lists IRI named graphs from the catalog
   (``GRAPH ?g { } FILTER(isIRI(?g))``) so a dangling null graph node in TDB2
@@ -669,13 +669,11 @@ class ApacheJenaTDB2(ITripleStorePort):
             ask_result.askAnswer = bool(result_data["boolean"])
             return ask_result
 
-        from rdflib.query import ResultRow
         from rdflib.term import BNode, Literal, URIRef, Variable
 
         vars = result_data.get("head", {}).get("vars", [])
         bindings = result_data.get("results", {}).get("bindings", [])
 
-        var_objects = [Variable(var) for var in vars]
         results = []
 
         for binding in bindings:
@@ -704,12 +702,14 @@ class ApacheJenaTDB2(ITripleStorePort):
                             value = Literal(value_str)
 
                     row_values[var_obj] = value
-                else:
-                    row_values[var_obj] = None  # type: ignore
 
-            results.append(ResultRow(row_values, var_objects))
+            # Unbound variables stay out of the binding; ResultRow reads them as None.
+            results.append(row_values)
 
-        return iter(results)  # type: ignore
+        select_result = rdflib.query.Result("SELECT")
+        select_result.vars = [Variable(var) for var in vars]
+        select_result.bindings = results
+        return select_result
 
     def query_view(self, view: str, query: str) -> Any:
         return self.query(query)
