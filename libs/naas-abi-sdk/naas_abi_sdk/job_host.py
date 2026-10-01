@@ -12,7 +12,7 @@ import contextlib
 import json
 import logging
 import re
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from naas_abi_sdk.jobs import (
@@ -40,7 +40,7 @@ MAX_SCHEDULED_TICK_TTL_SECONDS = 3600
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _seconds(go_duration: str) -> float:

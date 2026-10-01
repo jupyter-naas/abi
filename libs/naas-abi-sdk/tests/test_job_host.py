@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from naas_abi_sdk.job_host import JobHost
@@ -38,7 +38,7 @@ class Documents:
             raise VersionConflict("VERSION_CONFLICT", id)
         if if_version and (current is None or current.version != if_version):
             raise VersionConflict("VERSION_CONFLICT", id)
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         doc = Document(
             id=id,
             data=json.loads(json.dumps(data)),
