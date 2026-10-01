@@ -256,6 +256,23 @@ class NATSModelConfiguration(BaseModel):
     )
 
 
+class NATSJobsConfiguration(BaseModel):
+    """Engine-hosted module jobs (JetStream message schedules, NATS >= 2.14).
+
+    ``enabled: false`` keeps this process from hosting jobs, e.g. a one-off CLI
+    engine next to the API engine that hosts them.
+    ``interrupt_grace_seconds``: how long a timed-out or cancelled sync job may keep
+    running after ``ctx.cancelled`` is set before it is interrupted (``JobInterrupted``
+    raised in its thread). ``null`` never interrupts: the run then holds its slot
+    until the handler returns.
+    """
+
+    enabled: bool = True
+    interrupt_grace_seconds: float | None = Field(
+        default=5.0, ge=0, allow_inf_nan=False
+    )
+
+
 class NATSConfiguration(BaseModel):
     """Cross-cutting NATS exposure config -- not a domain service, so it lives
     at the top level next to ``api``/``deploy``/``global_config``, not nested
@@ -283,6 +300,7 @@ class NATSConfiguration(BaseModel):
         default_factory=NATSStreamingConfiguration
     )
     models: NATSModelConfiguration = Field(default_factory=NATSModelConfiguration)
+    jobs: NATSJobsConfiguration = Field(default_factory=NATSJobsConfiguration)
 
 
 class OpencodeProviderConfiguration(BaseModel):

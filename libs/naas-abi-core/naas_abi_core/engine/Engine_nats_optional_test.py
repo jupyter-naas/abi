@@ -70,10 +70,14 @@ def test_legacy_config_loads_and_shuts_down_without_nats(tmp_path, nats_config):
 
 def test_explicit_nats_config_still_exposes_services(monkeypatch):
     from naas_abi_core.engine.Engine import Engine
+    from naas_abi_core.engine.engine_loaders.EngineJobLoader import EngineJobLoader
     from naas_abi_core.engine.engine_loaders.EngineNATSLoader import EngineNATSLoader
 
     # This test stubs the endpoints, so do not initialize built-in modules that query them.
     monkeypatch.setattr(Engine, "on_initialized", lambda self: None)
+    # Nor host jobs on them; only check which owners would be hosted.
+    start_jobs = MagicMock()
+    monkeypatch.setattr(EngineJobLoader, "start", start_jobs)
     expose = MagicMock(return_value=[])
     close = MagicMock()
     monkeypatch.setattr(EngineNATSLoader, "expose_services", expose)
@@ -90,6 +94,7 @@ def test_explicit_nats_config_still_exposes_services(monkeypatch):
 
     engine.load()
     expose.assert_called_once()
+    assert "naas_abi_core.dataset" in start_jobs.call_args.args[0]
     owners = expose.call_args.args[0]
     assert owners is not engine.services
     assert owners.coding_environment.services is not owners

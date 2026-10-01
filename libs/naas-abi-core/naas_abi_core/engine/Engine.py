@@ -15,6 +15,7 @@ from naas_abi_core.engine.context import (
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
 )
+from naas_abi_core.engine.engine_loaders.EngineJobLoader import EngineJobLoader
 from naas_abi_core.engine.engine_loaders.EngineModuleLoader import EngineModuleLoader
 from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import (
     EngineOntologyLoader,
@@ -40,6 +41,8 @@ class Engine(IEngine):
     # block -- otherwise always []. Consumed by shutdown() below.
     __nats_primary_adapters: list[object]
     __nats_runtime_started: bool
+    # Hosts the modules' jobs (NATS mode only); stopped first in shutdown().
+    __job_loader: EngineJobLoader | None
 
     @property
     def configuration(self) -> EngineConfiguration:
@@ -70,6 +73,7 @@ class Engine(IEngine):
         self.__nats_dependencies = None
         self.__nats_primary_adapters = []
         self.__nats_runtime_started = False
+        self.__job_loader = None
 
     def load(self, module_names: list[str] | None = None):
         # Per-module CLI invocations (e.g. ``abi chat <module> <agent>``)
@@ -166,6 +170,33 @@ class Engine(IEngine):
         self.on_initialized()
         logger.debug("Engine initialized")
 
+        # Module jobs start last: their handlers may use anything initialized above.
+        self.__job_loader = EngineJobLoader(self.__configuration.nats)
+        self.__job_loader.start(
+            self.job_owners(), document_available=self.__services.document_available()
+        )
+
+    @property
+    def hosts_jobs(self) -> bool:
+        """Whether this engine hosts jobs (NATS mode with ``nats.jobs.enabled``)."""
+        nats = self.__configuration.nats
+        return nats is not None and nats.jobs.enabled
+
+    def job_owners(self) -> dict[str, object]:
+        """Modules plus kernel job owners (NATS mode only), keyed by owner id."""
+        owners: dict[str, object] = dict(self.__modules)
+        if (
+            self.__configuration.nats is not None
+            and self.__services.dataset_available()
+        ):
+            from naas_abi_core.services.dataset.DatasetMaintenanceJobs import (
+                DATASET_JOBS_OWNER,
+                DatasetMaintenanceJobs,
+            )
+
+            owners[DATASET_JOBS_OWNER] = DatasetMaintenanceJobs(self.services.dataset)
+        return owners
+
     def on_initialized(self):
         for module in self.__modules.values():
             module.on_initialized()
@@ -187,6 +218,10 @@ class Engine(IEngine):
         reaps naturally -- this only makes the *clean* shutdown path
         actually clean, it's not required for correctness.
         """
+        # Jobs first: running ones still save their run records over NATS.
+        job_loader, self.__job_loader = self.__job_loader, None
+        if job_loader is not None:
+            job_loader.stop()
         if not self.__nats_runtime_started:
             return
         self.__nats_runtime_started = False
