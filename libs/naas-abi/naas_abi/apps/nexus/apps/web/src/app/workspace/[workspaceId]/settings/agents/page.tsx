@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bot, User, Cpu, Plus, Pencil, Trash2, Brain, Sparkles, Zap, Target, Search, X, CheckCircle, XCircle, Server } from 'lucide-react';
+import { Bot, User, Cpu, Plus, Pencil, Trash2, Brain, Sparkles, Zap, Target, Search, CheckCircle, XCircle, Server } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getLogoUrl } from '@/lib/logo-url';
 import { useIntegrationsStore } from '@/stores/integrations';
@@ -9,6 +9,20 @@ import { useAgentsStore, type Agent } from '@/stores/agents';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useServersStore } from '@/stores/servers';
 import { useParams, useRouter } from 'next/navigation';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useConfirm } from '@/components/ui/dialogs';
+import { Input, Textarea } from '@/components/ui/input';
+import {
+  SettingsEmpty,
+  SettingsField,
+  SettingsLoading,
+  SettingsPageHeader,
+  SettingsSearch,
+  SettingsSection,
+  settingsTable,
+} from '@/components/settings/settings-ui';
 
 const iconMap = {
   bot: Bot,
@@ -57,6 +71,7 @@ export default function AgentsPage() {
   } = useAgentsStore();
   const { fetchServers } = useServersStore();
   const { models, fetchModels } = useModelsStore();
+  const { confirm: confirmDelete, dialog: confirmDialog } = useConfirm();
 
   // Fetch agents from database
   useEffect(() => {
@@ -126,10 +141,14 @@ export default function AgentsPage() {
     router.push(`/workspace/${workspaceId}/settings/agents/${agentId}`);
   };
 
-  const handleDeleteAgent = (id: string) => {
-    if (confirm('Are you sure you want to delete this agent?')) {
-      deleteAgent(id);
-    }
+  const handleDeleteAgent = async (id: string) => {
+    const ok = await confirmDelete({
+      title: 'Delete agent?',
+      description: 'Are you sure you want to delete this agent?',
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (ok) deleteAgent(id);
   };
 
   const getAssignedProvider = (providerId: string | null) => {
@@ -160,174 +179,125 @@ export default function AgentsPage() {
   };
 
   if (!mounted) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <p className="text-muted-foreground">Loading agents...</p>
-      </div>
-    );
+    return <SettingsLoading label="Loading agents…" />;
   }
+
+  const resetNewAgent = () => {
+    setShowAddForm(false);
+    setNewAgent({
+      name: '',
+      description: '',
+      icon: 'sparkles',
+      systemPrompt: 'You are a helpful AI assistant.',
+      providerId: null,
+    });
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">Agents</h2>
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-              {filteredAgents.length}
-            </span>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Manage AI agents and their configurations
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
+      <SettingsPageHeader
+        title={
+          <span className="flex items-center gap-2">
+            Agents
+            <Badge>{filteredAgents.length}</Badge>
+          </span>
+        }
+        description="Manage AI agents and their configurations"
+        actions={
+          <Button onClick={() => setShowAddForm(true)}>
             <Plus size={16} />
             Add Agent
-          </button>
-        </div>
-      </div>
+          </Button>
+        }
+      />
 
-      {/* Add Form */}
       {showAddForm && (
-        <div className="rounded-lg border bg-muted/30 p-4">
-          <h3 className="mb-4 font-medium">Add New Agent</h3>
+        <SettingsSection title="Add New Agent">
           <div className="grid gap-4">
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium">Name *</label>
-                <input
+              <SettingsField label="Name *">
+                <Input
                   type="text"
                   value={newAgent.name}
                   onChange={(e) => setNewAgent({ ...newAgent, name: e.target.value })}
                   placeholder="Agent name"
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                 />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Icon</label>
+              </SettingsField>
+              <SettingsField label="Icon">
                 <div className="flex gap-2">
                   {iconOptions.map((icon) => {
                     const IconComp = iconMap[icon];
                     return (
-                      <button
+                      <Button
                         key={icon}
+                        variant="secondary"
+                        size="icon"
                         onClick={() => setNewAgent({ ...newAgent, icon })}
                         className={cn(
-                          'rounded border p-2',
-                          newAgent.icon === icon
-                            ? 'border-primary bg-primary/10 text-primary'
-                            : 'hover:bg-muted'
+                          'h-9 w-9',
+                          newAgent.icon === icon && 'border-primary bg-primary/10 text-primary hover:bg-primary/10'
                         )}
                       >
                         <IconComp size={16} />
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
-              </div>
+              </SettingsField>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Description</label>
-              <input
+            <SettingsField label="Description">
+              <Input
                 type="text"
                 value={newAgent.description}
                 onChange={(e) => setNewAgent({ ...newAgent, description: e.target.value })}
                 placeholder="Brief description"
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
               />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">System Prompt</label>
-              <textarea
+            </SettingsField>
+            <SettingsField label="System Prompt">
+              <Textarea
                 value={newAgent.systemPrompt}
                 onChange={(e) => setNewAgent({ ...newAgent, systemPrompt: e.target.value })}
                 placeholder="You are a helpful AI assistant..."
                 rows={3}
-                className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                className="resize-none"
               />
-            </div>
+            </SettingsField>
             <div className="flex justify-end gap-2">
-              <button
-                onClick={() => {
-                  setShowAddForm(false);
-                  setNewAgent({
-                    name: '',
-                    description: '',
-                    icon: 'sparkles',
-                    systemPrompt: 'You are a helpful AI assistant.',
-                    providerId: null,
-                  });
-                }}
-                className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
-              >
+              <Button variant="secondary" onClick={resetNewAgent}>
                 Cancel
-              </button>
-              <button
-                onClick={handleAddAgent}
-                disabled={!newAgent.name.trim()}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              >
+              </Button>
+              <Button onClick={handleAddAgent} disabled={!newAgent.name.trim()}>
                 Add Agent
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
+        </SettingsSection>
       )}
 
-      {/* Agents List */}
       {displayAgents.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-          <Bot size={48} className="mb-4 text-muted-foreground/30" />
-          <h3 className="mb-2 font-medium">No agents configured</h3>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Create AI agents to get started
-          </p>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            <Plus size={16} />
-            Add Agent
-          </button>
-        </div>
+        <SettingsEmpty
+          icon={<Bot size={40} className="opacity-40" />}
+          title="No agents configured"
+          description="Create AI agents to get started"
+          action={
+            <Button onClick={() => setShowAddForm(true)}>
+              <Plus size={16} />
+              Add Agent
+            </Button>
+          }
+        />
       ) : (
-        <div>
-          {/* Search */}
-          {displayAgents.length > 0 && (
-            <div className="mb-4 relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search agents..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-lg border bg-background pl-10 pr-10 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <X size={16} />
-                </button>
-              )}
-            </div>
-          )}
+        <div className="space-y-4">
+          <SettingsSearch value={searchQuery} onChange={setSearchQuery} placeholder="Search agents..." />
 
-          <div className="rounded-lg border overflow-hidden">
-            <table className="w-full">
+          <div className={settingsTable.wrapper}>
+            <table className={settingsTable.table}>
               <thead>
-                <tr className="border-b bg-muted/50 text-left text-sm">
-                  <th className="p-3 font-medium">Agent</th>
-                  <th className="p-3 font-medium">Models</th>
-                  <th className="p-3 font-medium w-24">Enabled</th>
-                  <th className="p-3 font-medium w-32">Actions</th>
+                <tr className={settingsTable.headRow}>
+                  <th className={settingsTable.th}>Agent</th>
+                  <th className={settingsTable.th}>Models</th>
+                  <th className={cn(settingsTable.th, 'w-24')}>Enabled</th>
+                  <th className={cn(settingsTable.th, 'w-24')}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -338,130 +308,116 @@ export default function AgentsPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredAgents.map((agent) => {
-                    return (
-                      <tr
-                        key={agent.id}
-                        onClick={() => handleOpenAgentEditor(agent.id)}
-                        className="cursor-pointer border-b transition-colors hover:bg-muted/30"
-                      >
-                        <td className="p-3 align-top">
-                          <div className="flex items-center gap-3 min-h-[3.25rem]">
-                            <div className={cn(
-                              'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg overflow-hidden',
+                  filteredAgents.map((agent) => (
+                    <tr
+                      key={agent.id}
+                      onClick={() => handleOpenAgentEditor(agent.id)}
+                      className={cn(settingsTable.row, 'cursor-pointer')}
+                    >
+                      <td className={cn(settingsTable.td, 'align-top')}>
+                        <div className="flex min-h-[3.25rem] items-center gap-3">
+                          <div
+                            className={cn(
+                              'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden',
                               agent.logoUrl ? 'bg-transparent' : 'bg-muted'
-                            )}>
-                              <AgentAvatar agent={agent} />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="font-medium">{agent.name}</p>
-                              {agent.class_name ? (
-                                <p className="text-[10px] text-muted-foreground italic pb-0.5">
-                                  {agent.class_name.split('/')[0]}
-                                </p>
-                              ) : null}
-                              <p
-                                className="text-xs text-muted-foreground line-clamp-2 min-h-[2rem]"
-                                title={agent.description || undefined}
-                              >
-                                {agent.description || '\u00A0'}
-                              </p>
-                            </div>
+                            )}
+                          >
+                            <AgentAvatar agent={agent} />
                           </div>
-                        </td>
-                        <td className="p-3">
-                          {(() => {
-                            const modelIds = getModelIds(agent);
-                            if (modelIds.length === 0) {
-                              return (
-                                <div className="flex items-center gap-2">
-                                  <XCircle size={14} className="text-muted-foreground" />
-                                  <span className="text-sm text-muted-foreground">
-                                    {agent.provider === 'abi' ? 'Not exposed' : 'Not assigned'}
-                                  </span>
-                                </div>
-                              );
-                            }
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium">{agent.name}</p>
+                            {agent.class_name ? (
+                              <p className="pb-0.5 text-micro italic text-muted-foreground">
+                                {agent.class_name.split('/')[0]}
+                              </p>
+                            ) : null}
+                            <p
+                              className="line-clamp-2 min-h-[2rem] text-xs text-muted-foreground"
+                              title={agent.description || undefined}
+                            >
+                              {agent.description || '\u00A0'}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className={settingsTable.td}>
+                        {(() => {
+                          const modelIds = getModelIds(agent);
+                          if (modelIds.length === 0) {
                             return (
-                              <div className="flex flex-col gap-1">
-                                {modelIds.map((id) => {
-                                  const label = modelDisplayName(models, id) ?? id;
-                                  return (
-                                    <div key={id} className="flex items-center gap-2">
-                                      {agent.provider === 'abi' ? (
-                                        <Server size={14} className="shrink-0 text-muted-foreground" />
-                                      ) : (
-                                        <CheckCircle size={14} className="shrink-0 text-green-500" />
-                                      )}
-                                      <span
-                                        className={cn(
-                                          'text-sm',
-                                          agent.provider === 'abi' && 'text-muted-foreground italic'
-                                        )}
-                                        title={id}
-                                      >
-                                        {label}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
+                              <div className="flex items-center gap-2 text-muted-foreground">
+                                <XCircle size={14} />
+                                <span>{agent.provider === 'abi' ? 'Not exposed' : 'Not assigned'}</span>
                               </div>
                             );
-                          })()}
-                        </td>
-                        <td className="p-3">
-                          <button
+                          }
+                          return (
+                            <div className="flex flex-col gap-1">
+                              {modelIds.map((id) => {
+                                const label = modelDisplayName(models, id) ?? id;
+                                return (
+                                  <div key={id} className="flex items-center gap-2">
+                                    {agent.provider === 'abi' ? (
+                                      <Server size={14} className="shrink-0 text-muted-foreground" />
+                                    ) : (
+                                      <CheckCircle size={14} className="shrink-0 text-primary" />
+                                    )}
+                                    <span
+                                      className={cn(agent.provider === 'abi' && 'italic text-muted-foreground')}
+                                      title={id}
+                                    >
+                                      {label}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
+                      </td>
+                      <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={agent.enabled}
+                          onCheckedChange={() => toggleAgent(agent.id)}
+                          aria-label={agent.enabled ? 'Disable agent' : 'Enable agent'}
+                          title={agent.enabled ? 'Disable agent' : 'Enable agent'}
+                        />
+                      </td>
+                      <td className={settingsTable.td}>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={(e) => {
                               e.stopPropagation();
-                              toggleAgent(agent.id);
+                              handleOpenAgentEditor(agent.id);
                             }}
-                            className={cn(
-                              'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-                              agent.enabled ? 'bg-primary' : 'bg-muted'
-                            )}
-                            title={agent.enabled ? 'Disable agent' : 'Enable agent'}
+                            title="Edit"
                           >
-                            <span
-                              className={cn(
-                                'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-                                agent.enabled ? 'translate-x-5' : 'translate-x-0.5'
-                              )}
-                            />
-                          </button>
-                        </td>
-                        <td className="p-3">
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenAgentEditor(agent.id);
-                              }}
-                              className="rounded p-1.5 text-muted-foreground hover:bg-muted"
-                              title="Edit"
-                            >
-                              <Pencil size={14} />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteAgent(agent.id);
-                              }}
-                              className="rounded p-1.5 text-muted-foreground hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950"
-                              title="Delete"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
+                            <Pencil size={14} />
+                          </Button>
+                          <Button
+                            variant="destructive-ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteAgent(agent.id);
+                            }}
+                            title="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
           </div>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

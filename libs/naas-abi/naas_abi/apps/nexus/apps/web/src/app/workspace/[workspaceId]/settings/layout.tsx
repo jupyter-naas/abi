@@ -1,12 +1,18 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { useMemo } from 'react';
+import { useParams, usePathname } from 'next/navigation';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { Header } from '@/components/shell/header';
+import { SETTINGS_GROUPS } from '@/components/shell/settings-nav';
+import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 
 // Service embeds and architecture visualization use the full content area instead of
 // the centered card layout every other settings page uses.
 const FULL_PAGE_PATTERN = /\/settings\/(?:services\/[^/]+|infrastructure)$/;
+// Not pre-compiled in dev: the 3D architecture view pulls in three.js and takes far
+// longer to build than every other settings page combined.
+const NO_WARMUP_PATTERN = /\/settings\/infrastructure$/;
 
 export default function SettingsLayout({
   children,
@@ -18,6 +24,17 @@ export default function SettingsLayout({
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
   const pathname = usePathname();
   const isFullPage = FULL_PAGE_PATTERN.test(pathname ?? '');
+  const workspaceId = useParams()?.workspaceId as string | undefined;
+  const settingsHrefs = useMemo(
+    () =>
+      workspaceId
+        ? SETTINGS_GROUPS.flatMap((group) => group.items.map((item) => `/workspace/${workspaceId}${item.href}`)).filter(
+            (href) => !NO_WARMUP_PATTERN.test(href)
+          )
+        : [],
+    [workspaceId]
+  );
+  useDevRouteWarmup(settingsHrefs);
 
   return (
     <div className="flex h-full flex-col">

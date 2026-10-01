@@ -11,7 +11,7 @@
   align-items: flex-start;
   gap: var(--space-2);
   padding: var(--space-3);
-  border-radius: var(--org-border-radius, 0px);
+  border-radius: 0;
   background-color: color-mix(in srgb, var(--destructive-hex, #ef4444) 12%, transparent);
   color: var(--destructive-hex, #ef4444);
   font-size: var(--font-size-sm);

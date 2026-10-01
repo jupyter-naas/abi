@@ -23,6 +23,8 @@ import { useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { OrgSettingsSectionCard } from '../components/org-settings-section-card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useConfirm } from '@/components/ui/dialogs';
 import '../components/org-settings-components.css';
 import './users.css';
 
@@ -112,6 +114,7 @@ export default function OrgUsersPage() {
   const [inviteError, setInviteError] = useState('');
   const [inviteLoading, setInviteLoading] = useState(false);
   const [actionError, setActionError] = useState('');
+  const { confirm: confirmAction, dialog: confirmDialog } = useConfirm();
   const [workspaces, setWorkspaces] = useState<OrgWorkspace[]>([]);
   const [memberships, setMemberships] = useState<WorkspaceMembership[]>([]);
   const [workspacesLoading, setWorkspacesLoading] = useState(false);
@@ -230,7 +233,7 @@ export default function OrgUsersPage() {
 
   const handleRemove = async (userId: string) => {
     if (!orgId || !canManage) return;
-    if (!confirm('Remove this user from the organization?')) return;
+    if (!(await confirmAction({ title: 'Remove this user from the organization?', confirmLabel: 'Remove' }))) return;
 
     setActionError('');
     try {
@@ -273,9 +276,10 @@ export default function OrgUsersPage() {
         .map((id) => workspaceById[id]?.name || id)
         .join(', ');
       if (
-        !confirm(
-          `Remove this user from workspace${removed.length > 1 ? 's' : ''}: ${names}?`
-        )
+        !(await confirmAction({
+          title: `Remove this user from workspace${removed.length > 1 ? 's' : ''}: ${names}?`,
+          confirmLabel: 'Remove',
+        }))
       ) {
         return;
       }
@@ -338,11 +342,7 @@ export default function OrgUsersPage() {
                 return (
                   <li key={workspace.id}>
                     <label className="org-settings-users-workspace-option">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleDraftWorkspace(workspace.id)}
-                      />
+                      <Checkbox checked={checked} onCheckedChange={() => toggleDraftWorkspace(workspace.id)} />
                       <span>{workspace.name}</span>
                     </label>
                   </li>
@@ -612,6 +612,7 @@ export default function OrgUsersPage() {
           </div>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

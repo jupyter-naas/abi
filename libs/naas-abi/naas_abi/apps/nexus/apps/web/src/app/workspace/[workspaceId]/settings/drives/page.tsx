@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { HardDrive, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { SettingsEmpty, SettingsNotice, SettingsPageHeader, SettingsSection } from '@/components/settings/settings-ui';
 import { useWorkspaceStore } from '@/stores/workspace';
 
 export default function DrivesSettingsPage() {
@@ -18,11 +20,7 @@ export default function DrivesSettingsPage() {
   const [error, setError] = useState<string | null>(null);
 
   if (!workspace) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <p className="text-muted-foreground">No workspace selected</p>
-      </div>
-    );
+    return <SettingsEmpty title="No workspace selected" />;
   }
 
   const platformDriveEnabled = Boolean(workspace.platformDriveEnabled);
@@ -84,73 +82,58 @@ export default function DrivesSettingsPage() {
     }
   };
 
-  return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <header className="space-y-1">
-        <div className="flex items-center gap-2">
-          <HardDrive className="h-5 w-5 text-workspace-accent" />
-          <h1 className="text-xl font-semibold">Drives</h1>
+  const driveRow = (
+    title: string,
+    description: string,
+    checked: boolean,
+    saving: boolean,
+    onToggle: (next: boolean) => void
+  ) => (
+    <SettingsSection>
+      <label className="flex cursor-pointer items-start gap-3">
+        <Checkbox
+          checked={checked}
+          onCheckedChange={onToggle}
+          disabled={!canEdit || saving}
+          className="mt-0.5"
+        />
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium">{title}</p>
+            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Configure which file drives are available in this workspace.
-        </p>
-      </header>
+      </label>
+    </SettingsSection>
+  );
 
-      <section className="rounded-lg border bg-card p-4">
-        <label className="flex cursor-pointer items-start gap-3">
-          <input
-            type="checkbox"
-            checked={platformDriveEnabled}
-            onChange={(e) => handleTogglePlatform(e.target.checked)}
-            disabled={!canEdit || savingPlatform}
-            className="mt-1 h-4 w-4 rounded border-input"
-          />
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-medium">Platform drive</p>
-              {savingPlatform && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              When enabled, members of this workspace can read and write files in the
-              shared platform-drive tree. The platform drive is shared across every
-              workspace that enables it.
-            </p>
-          </div>
-        </label>
-      </section>
+  return (
+    <div className="space-y-6">
+      <SettingsPageHeader
+        title="Drives"
+        description="Configure which file drives are available in this workspace."
+      />
 
-      <section className="rounded-lg border bg-card p-4">
-        <label className="flex cursor-pointer items-start gap-3">
-          <input
-            type="checkbox"
-            checked={systemDriveEnabled}
-            onChange={(e) => handleToggleSystem(e.target.checked)}
-            disabled={!canEdit || savingSystem}
-            className="mt-1 h-4 w-4 rounded border-input"
-          />
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-medium">System drive</p>
-              {savingSystem && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              When enabled, workspace owners and admins can browse the full
-              object-storage tree. The system drive exposes all storage paths and
-              is restricted to admin roles regardless of this setting.
-            </p>
-          </div>
-        </label>
-      </section>
-
-      {!canEdit && (
-        <p className="text-xs text-muted-foreground">
-          Only workspace owners and admins can change drive settings.
-        </p>
+      {driveRow(
+        'Platform drive',
+        'When enabled, members of this workspace can read and write files in the shared platform-drive tree. The platform drive is shared across every workspace that enables it.',
+        platformDriveEnabled,
+        savingPlatform,
+        handleTogglePlatform
       )}
 
-      {error && (
-        <p className="text-xs text-destructive">{error}</p>
+      {driveRow(
+        'System drive',
+        'When enabled, workspace owners and admins can browse the full object-storage tree. The system drive exposes all storage paths and is restricted to admin roles regardless of this setting.',
+        systemDriveEnabled,
+        savingSystem,
+        handleToggleSystem
       )}
+
+      {!canEdit && <SettingsNotice>Only workspace owners and admins can change drive settings.</SettingsNotice>}
+
+      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
     </div>
   );
 }

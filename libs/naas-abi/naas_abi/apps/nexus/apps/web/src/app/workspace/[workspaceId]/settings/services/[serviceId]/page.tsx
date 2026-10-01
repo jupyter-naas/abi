@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { ExternalLink } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
 import { DOCKER_SERVICES, buildServiceUrl, resolveServiceHost } from '@/lib/docker-services';
+import { buttonVariants } from '@/components/ui/button';
 
 export default function ServiceDetailPage() {
   const params = useParams();
@@ -45,11 +46,11 @@ export default function ServiceDetailPage() {
   if (authState === 'denied') {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
-        <h1 className="text-xl font-semibold">Forbidden</h1>
+        <h2 className="text-lg font-semibold">Forbidden</h2>
         <p className="max-w-md text-sm text-muted-foreground">
           Platform superadmin role required. Set
-          <code className="mx-1 rounded bg-muted px-1 py-0.5">is_superadmin: true</code>
-          on the matching user in <code className="mx-1 rounded bg-muted px-1 py-0.5">config.local.yaml</code>
+          <code className="mx-1 bg-muted px-1 py-0.5">is_superadmin: true</code>
+          on the matching user in <code className="mx-1 bg-muted px-1 py-0.5">config.local.yaml</code>
           and restart the API to grant access.
         </p>
       </div>
@@ -65,9 +66,9 @@ export default function ServiceDetailPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-shrink-0 items-baseline justify-between gap-4 border-b px-6 py-4">
+      <header className="flex flex-shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold">{service.label}</h1>
+          <h2 className="text-lg font-semibold">{service.label}</h2>
           <p className="truncate text-xs text-muted-foreground">
             {service.description}
             {embeddable ? `, embedded from ${url}` : ''}
@@ -77,7 +78,7 @@ export default function ServiceDetailPage() {
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex flex-shrink-0 items-center gap-1.5 rounded border px-3 py-1 text-xs hover:bg-accent"
+          className={buttonVariants({ variant: 'secondary', size: 'sm' })}
         >
           <ExternalLink size={14} />
           Open in new tab
@@ -90,7 +91,7 @@ export default function ServiceDetailPage() {
             <p className="max-w-md text-sm text-muted-foreground">
               <span className="font-medium text-foreground">{service.label}</span> can&apos;t be
               embedded here, it refuses to load inside a frame (
-              <code className="rounded bg-muted px-1 py-0.5">X-Frame-Options: DENY</code>). Open
+              <code className=" bg-muted px-1 py-0.5">X-Frame-Options: DENY</code>). Open
               it in a new tab instead.
             </p>
           </div>

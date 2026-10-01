@@ -6,19 +6,30 @@ import {
   Plus,
   Trash2,
   RefreshCw,
-  Check,
-  X,
   Circle,
   Wifi,
   WifiOff,
   Loader2,
   ExternalLink,
-  Settings,
   Cloud,
   HardDrive,
   Pencil,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useConfirm } from '@/components/ui/dialogs';
+import { Input } from '@/components/ui/input';
+import {
+  SettingsEmpty,
+  SettingsField,
+  SettingsLoading,
+  SettingsNotice,
+  SettingsPageHeader,
+  SettingsSection,
+  settingsTable,
+} from '@/components/settings/settings-ui';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import {
   useServersStore,
@@ -38,9 +49,9 @@ const serverTypeOptions: { id: ServerTypeEnum; label: string; description: strin
 ];
 
 const statusColors: Record<ServerType['status'], string> = {
-  online: 'text-green-500',
-  offline: 'text-red-500',
-  checking: 'text-yellow-500',
+  online: 'text-primary',
+  offline: 'text-destructive',
+  checking: 'text-amber-600 dark:text-amber-400',
   unknown: 'text-muted-foreground',
 };
 
@@ -71,6 +82,8 @@ export function ServersPanel() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [checkingAll, setCheckingAll] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const { confirm: confirmDelete, dialog: confirmDialog } = useConfirm();
 
   // New server form
   const [newServer, setNewServer] = useState({
@@ -133,18 +146,22 @@ export function ServersPanel() {
       setShowAddForm(false);
     } catch (error) {
       console.error('Failed to add server:', error);
-      alert('Failed to add server. Please try again.');
+      setActionError('Failed to add server. Please try again.');
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this server?')) {
-      try {
-        await deleteServer(id);
-      } catch (error) {
-        console.error('Failed to delete server:', error);
-        alert('Failed to delete server. Please try again.');
-      }
+    const ok = await confirmDelete({
+      title: 'Delete server?',
+      description: 'Are you sure you want to delete this server?',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+    try {
+      await deleteServer(id);
+    } catch (error) {
+      console.error('Failed to delete server:', error);
+      setActionError('Failed to delete server. Please try again.');
     }
   };
 
@@ -177,7 +194,7 @@ export function ServersPanel() {
       setEditForm({ name: '', endpoint: '', description: '', apiKey: '', healthPath: '', modelsPath: '' });
     } catch (error) {
       console.error('Failed to update server:', error);
-      alert('Failed to update server. Please try again.');
+      setActionError('Failed to update server. Please try again.');
     }
   };
 
@@ -231,326 +248,263 @@ export function ServersPanel() {
     });
   };
 
-  if (!mounted || loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">Servers</h2>
-            <p className="text-sm text-muted-foreground">Loading...</p>
-          </div>
-        </div>
-      </div>
-    );
+  // Only block on the first load; later refetches keep showing the cached list.
+  if (!mounted || (loading && servers.length === 0)) {
+    return <SettingsLoading label="Loading servers…" />;
   }
+
+  const resetNewServer = () =>
+    setNewServer({ name: '', type: 'ollama', endpoint: '', description: '', apiKey: '', healthPath: '', modelsPath: '' });
+
+  const serverIcon = (type: ServerTypeEnum, size: number, className = 'text-muted-foreground') =>
+    type === 'ollama' || type === 'llamacpp' ? (
+      <HardDrive size={size} className={className} />
+    ) : (
+      <Cloud size={size} className={className} />
+    );
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">Servers</h2>
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-              {servers.length}
-            </span>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Configure inference servers for running AI models
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleCheckAll}
-            disabled={checkingAll || servers.length === 0}
-            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <RefreshCw size={16} className={cn(checkingAll && 'animate-spin')} />
-            Check All
-          </button>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            <Plus size={16} />
-            Add Server
-          </button>
-        </div>
-      </div>
+      <SettingsPageHeader
+        title={
+          <span className="flex items-center gap-2">
+            Servers
+            <Badge>{servers.length}</Badge>
+          </span>
+        }
+        description="Configure inference servers for running AI models"
+        actions={
+          <>
+            <Button variant="secondary" onClick={handleCheckAll} disabled={checkingAll || servers.length === 0}>
+              <RefreshCw size={16} className={cn(checkingAll && 'animate-spin')} />
+              Check All
+            </Button>
+            <Button onClick={() => setShowAddForm(true)}>
+              <Plus size={16} />
+              Add Server
+            </Button>
+          </>
+        }
+      />
 
-      {/* Add Form */}
+      {actionError && <SettingsNotice tone="error">{actionError}</SettingsNotice>}
+
       {showAddForm && (
-        <div className="rounded-lg border bg-muted/30 p-4">
-          <h3 className="mb-4 font-medium">Add New Server</h3>
+        <SettingsSection title="Add New Server">
           <div className="grid gap-4">
-            {/* Server Type */}
-            <div>
-              <label className="mb-2 block text-sm font-medium">Server Type</label>
+            <SettingsField label="Server Type">
               <div className="grid grid-cols-5 gap-2">
-                {serverTypeOptions.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => handleTypeChange(opt.id)}
-                    className={cn(
-                      'flex flex-col items-center gap-1 rounded-lg border p-3 text-center transition-all',
-                      newServer.type === opt.id
-                        ? 'border-primary bg-primary/10'
-                        : 'hover:bg-muted'
-                    )}
-                  >
-                    {opt.id === 'ollama' || opt.id === 'llamacpp' ? (
-                      <HardDrive size={20} className={newServer.type === opt.id ? 'text-primary' : 'text-muted-foreground'} />
-                    ) : (
-                      <Cloud size={20} className={newServer.type === opt.id ? 'text-primary' : 'text-muted-foreground'} />
-                    )}
-                    <span className={cn('text-xs font-medium', newServer.type === opt.id ? 'text-primary' : '')}>
-                      {opt.label}
-                    </span>
-                  </button>
-                ))}
+                {serverTypeOptions.map((opt) => {
+                  const active = newServer.type === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => handleTypeChange(opt.id)}
+                      className={cn(
+                        'flex flex-col items-center gap-1 border p-3 text-center transition-colors',
+                        active ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted'
+                      )}
+                    >
+                      {serverIcon(opt.id, 20, active ? 'text-primary' : 'text-muted-foreground')}
+                      <span className={cn('text-xs font-medium', active && 'text-primary')}>{opt.label}</span>
+                    </button>
+                  );
+                })}
               </div>
-            </div>
+            </SettingsField>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium">Name *</label>
-                <input
+              <SettingsField label="Name *">
+                <Input
                   type="text"
                   value={newServer.name}
                   onChange={(e) => setNewServer({ ...newServer, name: e.target.value })}
                   placeholder="e.g., Local Ollama"
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                 />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Endpoint *</label>
-                <input
+              </SettingsField>
+              <SettingsField label="Endpoint *">
+                <Input
                   type="text"
                   value={newServer.endpoint}
                   onChange={(e) => setNewServer({ ...newServer, endpoint: e.target.value })}
                   placeholder="http://localhost:11434"
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-primary/30"
+                  className="font-mono"
                 />
-              </div>
+              </SettingsField>
             </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium">Description</label>
-              <input
+            <SettingsField label="Description">
+              <Input
                 type="text"
                 value={newServer.description}
                 onChange={(e) => setNewServer({ ...newServer, description: e.target.value })}
                 placeholder="Optional description"
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
               />
-            </div>
+            </SettingsField>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium">API Key (optional)</label>
-              <input
+            <SettingsField label="API Key (optional)">
+              <Input
                 type="password"
                 value={newServer.apiKey}
                 onChange={(e) => setNewServer({ ...newServer, apiKey: e.target.value })}
                 placeholder="For authenticated servers"
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
               />
-            </div>
+            </SettingsField>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium">Health Check Path (optional)</label>
-                <input
+              <SettingsField label="Health Check Path (optional)">
+                <Input
                   type="text"
                   value={newServer.healthPath}
                   onChange={(e) => setNewServer({ ...newServer, healthPath: e.target.value })}
                   placeholder="e.g., /health"
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-primary/30"
+                  className="font-mono"
                 />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Models List Path (optional)</label>
-                <input
+              </SettingsField>
+              <SettingsField label="Models List Path (optional)">
+                <Input
                   type="text"
                   value={newServer.modelsPath}
                   onChange={(e) => setNewServer({ ...newServer, modelsPath: e.target.value })}
                   placeholder="e.g., /api/v1/models"
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-primary/30"
+                  className="font-mono"
                 />
-              </div>
+              </SettingsField>
             </div>
 
             <div className="flex justify-end gap-2">
-              <button
+              <Button
+                variant="secondary"
                 onClick={() => {
                   setShowAddForm(false);
-                  setNewServer({ name: '', type: 'ollama', endpoint: '', description: '', apiKey: '', healthPath: '', modelsPath: '' });
+                  resetNewServer();
                 }}
-                className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
               >
                 Cancel
-              </button>
-              <button
-                onClick={handleAdd}
-                disabled={!newServer.name.trim() || !newServer.endpoint.trim()}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              >
+              </Button>
+              <Button onClick={handleAdd} disabled={!newServer.name.trim() || !newServer.endpoint.trim()}>
                 Add Server
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
+        </SettingsSection>
       )}
 
-      {/* Servers List */}
       {servers.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-          <Server size={48} className="mb-4 text-muted-foreground/30" />
-          <h3 className="mb-2 font-medium">No servers configured</h3>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Add inference servers to run AI models locally or remotely
-          </p>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted"
-          >
-            <Plus size={16} />
-            Add Server
-          </button>
-        </div>
+        <SettingsEmpty
+          icon={<Server size={40} className="opacity-40" />}
+          title="No servers configured"
+          description="Add inference servers to run AI models locally or remotely"
+          action={
+            <Button onClick={() => setShowAddForm(true)}>
+              <Plus size={16} />
+              Add Server
+            </Button>
+          }
+        />
       ) : (
-        <div className="rounded-lg border overflow-hidden">
-          <table className="w-full">
+        <div className={settingsTable.wrapper}>
+          <table className={settingsTable.table}>
             <thead>
-              <tr className="border-b bg-muted/50 text-left text-sm">
-                <th className="p-4 font-medium">Server</th>
-                <th className="p-4 font-medium w-24">Type</th>
-                <th className="p-4 font-medium">Endpoint</th>
-                <th className="p-4 font-medium w-24">Status</th>
-                <th className="p-4 font-medium w-24">Enabled</th>
-                <th className="p-4 w-32"></th>
+              <tr className={settingsTable.headRow}>
+                <th className={settingsTable.th}>Server</th>
+                <th className={cn(settingsTable.th, 'w-24')}>Type</th>
+                <th className={settingsTable.th}>Endpoint</th>
+                <th className={cn(settingsTable.th, 'w-28')}>Status</th>
+                <th className={cn(settingsTable.th, 'w-24')}>Enabled</th>
+                <th className={cn(settingsTable.th, 'w-40')}>
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {servers.map((server) => (
-                <tr key={server.id} className="border-b last:border-0">
+                <tr key={server.id} className={settingsTable.row}>
                   {editingId === server.id ? (
-                    // Edit mode
-                    <>
-                      <td className="p-4" colSpan={6}>
-                        <div className="space-y-3">
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="mb-1 block text-xs font-medium">Name</label>
-                              <input
-                                type="text"
-                                value={editForm.name}
-                                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                                placeholder="Name"
-                                className="w-full rounded border bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary/30"
-                              />
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-xs font-medium">Endpoint</label>
-                              <input
-                                type="text"
-                                value={editForm.endpoint}
-                                onChange={(e) => setEditForm({ ...editForm, endpoint: e.target.value })}
-                                placeholder="Endpoint"
-                                className="w-full rounded border bg-background px-2 py-1.5 text-sm font-mono outline-none focus:ring-1 focus:ring-primary/30"
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-xs font-medium">Description</label>
-                            <input
+                    <td className={settingsTable.td} colSpan={6}>
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <SettingsField label="Name">
+                            <Input
                               type="text"
-                              value={editForm.description}
-                              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                              placeholder="Description (optional)"
-                              className="w-full rounded border bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary/30"
+                              value={editForm.name}
+                              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                              placeholder="Name"
                             />
-                          </div>
-                          <div className="grid grid-cols-3 gap-3">
-                            <div>
-                              <label className="mb-1 block text-xs font-medium">API Key</label>
-                              <input
-                                type="password"
-                                value={editForm.apiKey}
-                                onChange={(e) => setEditForm({ ...editForm, apiKey: e.target.value })}
-                                placeholder="Optional"
-                                className="w-full rounded border bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary/30"
-                              />
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-xs font-medium">Health Path</label>
-                              <input
-                                type="text"
-                                value={editForm.healthPath}
-                                onChange={(e) => setEditForm({ ...editForm, healthPath: e.target.value })}
-                                placeholder="e.g., /health"
-                                className="w-full rounded border bg-background px-2 py-1.5 text-sm font-mono outline-none focus:ring-1 focus:ring-primary/30"
-                              />
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-xs font-medium">Models Path</label>
-                              <input
-                                type="text"
-                                value={editForm.modelsPath}
-                                onChange={(e) => setEditForm({ ...editForm, modelsPath: e.target.value })}
-                                placeholder="e.g., /api/v1/models"
-                                className="w-full rounded border bg-background px-2 py-1.5 text-sm font-mono outline-none focus:ring-1 focus:ring-primary/30"
-                              />
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground">Enabled:</span>
-                              <button
-                                onClick={() => toggleServer(server.id)}
-                                className={cn(
-                                  'flex h-6 w-11 items-center rounded-full p-0.5 transition-colors',
-                                  server.enabled ? 'bg-primary' : 'bg-muted-foreground/30'
-                                )}
-                              >
-                                <div
-                                  className={cn(
-                                    'h-5 w-5 rounded-full bg-white shadow-sm transition-transform',
-                                    server.enabled && 'translate-x-5'
-                                  )}
-                                />
-                              </button>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={handleSaveEdit}
-                                disabled={!editForm.name.trim() || !editForm.endpoint.trim()}
-                                className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                              >
-                                Save
-                              </button>
-                              <button
-                                onClick={handleCancelEdit}
-                                className="rounded px-3 py-1.5 text-sm hover:bg-muted"
-                              >
-                                Cancel
-                              </button>
-                            </div>
+                          </SettingsField>
+                          <SettingsField label="Endpoint">
+                            <Input
+                              type="text"
+                              value={editForm.endpoint}
+                              onChange={(e) => setEditForm({ ...editForm, endpoint: e.target.value })}
+                              placeholder="Endpoint"
+                              className="font-mono"
+                            />
+                          </SettingsField>
+                        </div>
+                        <SettingsField label="Description">
+                          <Input
+                            type="text"
+                            value={editForm.description}
+                            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                            placeholder="Description (optional)"
+                          />
+                        </SettingsField>
+                        <div className="grid grid-cols-3 gap-3">
+                          <SettingsField label="API Key">
+                            <Input
+                              type="password"
+                              value={editForm.apiKey}
+                              onChange={(e) => setEditForm({ ...editForm, apiKey: e.target.value })}
+                              placeholder="Optional"
+                            />
+                          </SettingsField>
+                          <SettingsField label="Health Path">
+                            <Input
+                              type="text"
+                              value={editForm.healthPath}
+                              onChange={(e) => setEditForm({ ...editForm, healthPath: e.target.value })}
+                              placeholder="e.g., /health"
+                              className="font-mono"
+                            />
+                          </SettingsField>
+                          <SettingsField label="Models Path">
+                            <Input
+                              type="text"
+                              value={editForm.modelsPath}
+                              onChange={(e) => setEditForm({ ...editForm, modelsPath: e.target.value })}
+                              placeholder="e.g., /api/v1/models"
+                              className="font-mono"
+                            />
+                          </SettingsField>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <Checkbox
+                            checked={server.enabled}
+                            onCheckedChange={() => toggleServer(server.id)}
+                            label="Enabled"
+                          />
+                          <div className="flex items-center gap-2">
+                            <Button variant="secondary" onClick={handleCancelEdit}>
+                              Cancel
+                            </Button>
+                            <Button
+                              onClick={handleSaveEdit}
+                              disabled={!editForm.name.trim() || !editForm.endpoint.trim()}
+                            >
+                              Save
+                            </Button>
                           </div>
                         </div>
-                      </td>
-                    </>
+                      </div>
+                    </td>
                   ) : (
-                    // View mode
                     <>
-                      <td className="p-4">
+                      <td className={settingsTable.td}>
                         <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
-                            {server.type === 'ollama' || server.type === 'llamacpp' ? (
-                              <HardDrive size={18} className="text-muted-foreground" />
-                            ) : (
-                              <Cloud size={18} className="text-muted-foreground" />
-                            )}
+                          <div className="flex h-9 w-9 items-center justify-center bg-muted">
+                            {serverIcon(server.type, 18)}
                           </div>
                           <div>
                             <span className="font-medium">{server.name}</span>
@@ -560,82 +514,65 @@ export function ServersPanel() {
                           </div>
                         </div>
                       </td>
-                      <td className="p-4 text-sm text-muted-foreground">
+                      <td className={cn(settingsTable.td, 'text-muted-foreground')}>
                         {serverTypeLabels[server.type]}
                       </td>
-                      <td className="p-4">
-                        <code className="rounded bg-secondary px-2 py-1 text-xs font-mono">
-                          {server.endpoint}
-                        </code>
+                      <td className={settingsTable.td}>
+                        <code className="bg-muted px-2 py-1 font-mono text-xs">{server.endpoint}</code>
                       </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
+                      <td className={settingsTable.td}>
+                        <div className={cn('flex items-center gap-2', statusColors[server.status])}>
                           {server.status === 'checking' ? (
-                            <Loader2 size={14} className="animate-spin text-yellow-500" />
+                            <Loader2 size={14} className="animate-spin" />
                           ) : server.status === 'online' ? (
-                            <Wifi size={14} className="text-green-500" />
+                            <Wifi size={14} />
                           ) : server.status === 'offline' ? (
-                            <WifiOff size={14} className="text-red-500" />
+                            <WifiOff size={14} />
                           ) : (
-                            <Circle size={14} className="text-muted-foreground" />
+                            <Circle size={14} />
                           )}
-                          <span className={cn('text-xs', statusColors[server.status])}>
-                            {statusLabels[server.status]}
-                          </span>
+                          <span className="text-xs">{statusLabels[server.status]}</span>
                         </div>
                       </td>
-                      <td className="p-4">
-                        <button
-                          onClick={() => toggleServer(server.id)}
-                          className={cn(
-                            'flex h-6 w-11 items-center rounded-full p-0.5 transition-colors',
-                            server.enabled ? 'bg-primary' : 'bg-muted-foreground/30'
-                          )}
-                        >
-                          <div
-                            className={cn(
-                              'h-5 w-5 rounded-full bg-white shadow-sm transition-transform',
-                              server.enabled && 'translate-x-5'
-                            )}
-                          />
-                        </button>
+                      <td className={settingsTable.td}>
+                        <Checkbox
+                          checked={server.enabled}
+                          onCheckedChange={() => toggleServer(server.id)}
+                          aria-label={server.enabled ? 'Disable server' : 'Enable server'}
+                          title={server.enabled ? 'Disable server' : 'Enable server'}
+                        />
                       </td>
-                      <td className="p-4">
+                      <td className={settingsTable.td}>
                         <div className="flex items-center justify-end gap-1">
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => handleCheckOne(server.id)}
                             disabled={server.status === 'checking'}
-                            className="rounded p-1.5 hover:bg-muted disabled:opacity-50"
                             title="Check status"
                           >
-                            <RefreshCw
-                              size={14}
-                              className={cn(server.status === 'checking' && 'animate-spin')}
-                            />
-                          </button>
-                          <button
-                            onClick={() => handleEdit(server)}
-                            className="rounded p-1.5 hover:bg-muted"
-                            title="Edit"
-                          >
+                            <RefreshCw size={14} className={cn(server.status === 'checking' && 'animate-spin')} />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleEdit(server)} title="Edit">
                             <Pencil size={14} />
-                          </button>
+                          </Button>
                           <a
                             href={server.endpoint}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="rounded p-1.5 hover:bg-muted"
+                            className={buttonVariants({ variant: 'ghost', size: 'icon' })}
                             title="Open endpoint"
                           >
                             <ExternalLink size={14} />
                           </a>
-                          <button
-                            onClick={() => handleDelete(server.id)}
-                            className="rounded p-1.5 text-muted-foreground hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950"
+                          <Button
+                            variant="destructive-ghost"
+                            size="icon"
+                            onClick={() => void handleDelete(server.id)}
                             title="Delete"
                           >
                             <Trash2 size={14} />
-                          </button>
+                          </Button>
                         </div>
                       </td>
                     </>
@@ -647,19 +584,11 @@ export function ServersPanel() {
         </div>
       )}
 
-      {/* Info */}
-      <div className="rounded-lg border bg-muted/30 p-4">
-        <h3 className="mb-2 font-medium">Supported Server Types</h3>
+      <SettingsSection title="Supported Server Types">
         <div className="grid grid-cols-2 gap-3 text-sm">
           {serverTypeOptions.map((opt) => (
             <div key={opt.id} className="flex items-start gap-2">
-              <div className="mt-0.5 flex h-5 w-5 items-center justify-center rounded bg-muted">
-                {opt.id === 'ollama' || opt.id === 'llamacpp' ? (
-                  <HardDrive size={12} className="text-muted-foreground" />
-                ) : (
-                  <Cloud size={12} className="text-muted-foreground" />
-                )}
-              </div>
+              <div className="mt-0.5 flex h-5 w-5 items-center justify-center bg-muted">{serverIcon(opt.id, 12)}</div>
               <div>
                 <p className="font-medium">{opt.label}</p>
                 <p className="text-xs text-muted-foreground">{opt.description}</p>
@@ -667,7 +596,8 @@ export function ServersPanel() {
             </div>
           ))}
         </div>
-      </div>
+      </SettingsSection>
+      {confirmDialog}
     </div>
   );
 }

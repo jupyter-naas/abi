@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { OrgSettingsSectionCard } from '../components/org-settings-section-card';
+import { Checkbox } from '@/components/ui/checkbox';
 import '../components/org-settings-components.css';
 import './roles.css';
 
@@ -292,11 +293,10 @@ export default function OrgRolesPage() {
                     return (
                       <td key={`${role}-${feature}`}>
                         <label className="org-settings-roles-check">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={checked}
                             disabled={!canManage}
-                            onChange={() => toggleFeature(role, feature)}
+                            onCheckedChange={() => toggleFeature(role, feature)}
                             aria-label={`${ROLE_LABELS[role]} can access ${FEATURE_LABELS[feature] || feature}`}
                           />
                         </label>
