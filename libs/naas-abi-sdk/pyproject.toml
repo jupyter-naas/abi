@@ -30,3 +30,5 @@ models = ["langchain-core>=0.3.78,<2"]
 agents = ["langchain-core>=1,<2"]
 rdf = ["rdflib>=7,<8"]
 langgraph = ["langgraph-checkpoint>=3.0.1,<4"]
+# Agents written like naas_abi_core agents (naas_abi_sdk.agents).
+agent = ["langchain-core>=1,<2", "langgraph>=1,<2", "langgraph-checkpoint>=3.0.1,<4"]
