@@ -34,3 +34,12 @@ Agent output format 2 stores immutable document fragments and manifests before
 publishing the run sequence cursor. Never truncate events or retry uncertain
 writes. Preserve caller authorization on fragment reads and output-format
 negotiation. Membership caches are bounded to one second, not a lease interval.
+
+`agents/` (extra `[agent]`) is the core Agent/IntentAgent behaviour, async and
+core-free: same graph node names, prompts, callbacks, hooks and stream_invoke
+events. `_messages.py` and `intents.py` are copied from naas_abi_core on purpose;
+change them together. tests/agent_parity at the repository root runs every
+scenario against both runtimes: extend it before changing either agent. Host an
+agent with `expose_agent(name, agent.as_handler())` and checkpoint it with
+`document_memory(engine.services.document, agent_memory_id(module_id, name))`.
+v1 has no local sub-agents; remote agents (AgentProxy) are passed as tools.
