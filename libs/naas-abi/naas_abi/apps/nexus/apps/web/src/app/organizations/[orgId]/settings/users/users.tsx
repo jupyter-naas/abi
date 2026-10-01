@@ -25,6 +25,7 @@ import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { OrgSettingsSectionCard } from '../components/org-settings-section-card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
+import { SettingsFilterSelect, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
 import '../components/org-settings-components.css';
 import './users.css';
 
@@ -122,6 +123,9 @@ export default function OrgUsersPage() {
   const [draftWorkspaceIds, setDraftWorkspaceIds] = useState<string[]>([]);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [pickerPos, setPickerPos] = useState<PickerPosition | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [workspaceFilter, setWorkspaceFilter] = useState('all');
   const [mounted, setMounted] = useState(false);
   const assignTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>(
     {}
@@ -374,10 +378,25 @@ export default function OrgUsersPage() {
       document.body
     );
 
+  const userQuery = searchQuery.trim().toLowerCase();
+  const filteredMembers = members.filter((user) => {
+    if (roleFilter !== 'all' && user.role !== roleFilter) return false;
+    const assigned = membershipByUser[user.userId] || [];
+    if (workspaceFilter === 'none' && assigned.length > 0) return false;
+    if (workspaceFilter !== 'all' && workspaceFilter !== 'none' && !assigned.includes(workspaceFilter)) return false;
+    return (
+      !userQuery ||
+      (user.name || '').toLowerCase().includes(userQuery) ||
+      (user.email || '').toLowerCase().includes(userQuery)
+    );
+  });
+  const adminCount = members.filter((user) => user.role === 'owner' || user.role === 'admin').length;
+
   return (
     <div className="org-settings-users-page">
       <OrgSettingsPageHeader
         title="Users"
+        badge={`${members.length} ${members.length === 1 ? 'user' : 'users'}`}
         subtitle="Manage who has access to this organization and its workspaces"
         actions={
           canManage ? (
@@ -410,10 +429,41 @@ export default function OrgUsersPage() {
         </div>
       )}
 
+      {members.length > 0 && (
+        <SettingsTableToolbar
+          search={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search users by name or email..."
+          filters={
+            <>
+              <SettingsFilterSelect
+                label="Role"
+                value={roleFilter}
+                onChange={setRoleFilter}
+                options={[
+                  { value: 'all', label: 'All roles' },
+                  { value: 'owner', label: 'Owner' },
+                  { value: 'admin', label: 'Admin' },
+                  { value: 'member', label: 'Member' },
+                ]}
+              />
+              <SettingsFilterSelect
+                label="Workspace"
+                value={workspaceFilter}
+                onChange={setWorkspaceFilter}
+                options={[
+                  { value: 'all', label: 'All workspaces' },
+                  { value: 'none', label: 'No workspace' },
+                  ...workspaces.map((workspace) => ({ value: workspace.id, label: workspace.name })),
+                ]}
+              />
+            </>
+          }
+          meta={`${countLabel(filteredMembers.length, members.length, 'user')} · ${adminCount} owner${adminCount === 1 ? '' : 's'} or admin${adminCount === 1 ? '' : 's'}`}
+        />
+      )}
+
       <OrgSettingsSectionCard flush>
-        <p className="org-settings-users-list-label">
-          Organization Users{members.length > 0 ? ` (${members.length})` : ''}
-        </p>
         {membersLoading && members.length === 0 ? (
           <div className="org-settings-loading">Loading users...</div>
         ) : members.length === 0 ? (
@@ -429,13 +479,16 @@ export default function OrgUsersPage() {
             </p>
           </div>
         ) : (
-          <ul className="org-settings-users-list">
+          <ul className="org-settings-users-list org-settings-users-list-scroll">
             <li className="org-settings-users-header-row" aria-hidden="true">
               <span>User</span>
               <span>Workspaces</span>
               <span>Role</span>
             </li>
-            {members.map((user) => {
+            {filteredMembers.length === 0 && (
+              <li className="org-settings-users-no-match">No users match the current search and filters</li>
+            )}
+            {filteredMembers.map((user) => {
               const assignedIds = membershipByUser[user.userId] || [];
               const isPickerOpen = openPickerUserId === user.userId;
               const canRemove =

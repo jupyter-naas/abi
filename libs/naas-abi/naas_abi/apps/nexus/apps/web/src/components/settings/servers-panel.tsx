@@ -16,7 +16,6 @@ import {
   Pencil,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
@@ -27,7 +26,10 @@ import {
   SettingsLoading,
   SettingsNotice,
   SettingsPageHeader,
+  SettingsFilterSelect,
   SettingsSection,
+  SettingsTableToolbar,
+  countLabel,
   settingsTable,
 } from '@/components/settings/settings-ui';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
@@ -83,6 +85,10 @@ export function ServersPanel() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [checkingAll, setCheckingAll] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [healthFilter, setHealthFilter] = useState('all');
+  const [enabledFilter, setEnabledFilter] = useState('all');
   const { confirm: confirmDelete, dialog: confirmDialog } = useConfirm();
 
   // New server form
@@ -253,6 +259,22 @@ export function ServersPanel() {
     return <SettingsLoading label="Loading servers…" />;
   }
 
+  const query = searchQuery.trim().toLowerCase();
+  const filteredServers = servers.filter((server) => {
+    if (typeFilter !== 'all' && server.type !== typeFilter) return false;
+    if (healthFilter !== 'all' && server.status !== healthFilter) return false;
+    if (enabledFilter === 'enabled' && !server.enabled) return false;
+    if (enabledFilter === 'disabled' && server.enabled) return false;
+    return (
+      !query ||
+      server.name.toLowerCase().includes(query) ||
+      server.endpoint.toLowerCase().includes(query) ||
+      (server.description || '').toLowerCase().includes(query)
+    );
+  });
+  const onlineCount = servers.filter((server) => server.status === 'online').length;
+  const enabledCount = servers.filter((server) => server.enabled).length;
+
   const resetNewServer = () =>
     setNewServer({ name: '', type: 'ollama', endpoint: '', description: '', apiKey: '', healthPath: '', modelsPath: '' });
 
@@ -266,12 +288,8 @@ export function ServersPanel() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title={
-          <span className="flex items-center gap-2">
-            Servers
-            <Badge>{servers.length}</Badge>
-          </span>
-        }
+        title="Servers"
+        badge={`${enabledCount} enabled`}
         description="Configure inference servers for running AI models"
         actions={
           <>
@@ -395,15 +413,51 @@ export function ServersPanel() {
         <SettingsEmpty
           icon={<Server size={40} className="opacity-40" />}
           title="No servers configured"
-          description="Add inference servers to run AI models locally or remotely"
-          action={
-            <Button onClick={() => setShowAddForm(true)}>
-              <Plus size={16} />
-              Add Server
-            </Button>
-          }
+          description="Use Add Server at the top right to run AI models locally or remotely."
         />
       ) : (
+        <div className="space-y-4">
+        <SettingsTableToolbar
+          search={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search servers by name, endpoint or description..."
+          filters={
+            <>
+              <SettingsFilterSelect
+                label="Type"
+                value={typeFilter}
+                onChange={setTypeFilter}
+                options={[
+                  { value: 'all', label: 'All types' },
+                  ...serverTypeOptions.map((opt) => ({ value: opt.id, label: opt.label })),
+                ]}
+              />
+              <SettingsFilterSelect
+                label="Health"
+                value={healthFilter}
+                onChange={setHealthFilter}
+                options={[
+                  { value: 'all', label: 'All health' },
+                  ...(Object.keys(statusLabels) as ServerType['status'][]).map((status) => ({
+                    value: status,
+                    label: statusLabels[status],
+                  })),
+                ]}
+              />
+              <SettingsFilterSelect
+                label="Enabled"
+                value={enabledFilter}
+                onChange={setEnabledFilter}
+                options={[
+                  { value: 'all', label: 'Enabled & disabled' },
+                  { value: 'enabled', label: 'Enabled' },
+                  { value: 'disabled', label: 'Disabled' },
+                ]}
+              />
+            </>
+          }
+          meta={`${countLabel(filteredServers.length, servers.length, 'server')} · ${onlineCount} online · ${enabledCount} enabled`}
+        />
         <div className={settingsTable.wrapper}>
           <table className={settingsTable.table}>
             <thead>
@@ -419,7 +473,14 @@ export function ServersPanel() {
               </tr>
             </thead>
             <tbody>
-              {servers.map((server) => (
+              {filteredServers.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                    No servers match the current search and filters
+                  </td>
+                </tr>
+              )}
+              {filteredServers.map((server) => (
                 <tr key={server.id} className={settingsTable.row}>
                   {editingId === server.id ? (
                     <td className={settingsTable.td} colSpan={6}>
@@ -581,6 +642,7 @@ export function ServersPanel() {
               ))}
             </tbody>
           </table>
+        </div>
         </div>
       )}
 

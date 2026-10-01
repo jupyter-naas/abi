@@ -1,139 +1,266 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
-import { Checkbox } from '@/components/ui/checkbox';
-import { SettingsEmpty, SettingsNotice, SettingsPageHeader, SettingsSection } from '@/components/settings/settings-ui';
+import { CheckCircle, Folder, HardDrive, Loader2, Power, Server, type LucideIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { useConfirm } from '@/components/ui/dialogs';
+import {
+  SettingsEmpty,
+  SettingsFilterSelect,
+  SettingsNotice,
+  SettingsPageHeader,
+  SettingsTableToolbar,
+  countLabel,
+  settingsTable,
+} from '@/components/settings/settings-ui';
+import { useFilesStore } from '@/stores/files';
 import { useWorkspaceStore } from '@/stores/workspace';
 
+type DriveFlag = 'platform_drive_enabled' | 'system_drive_enabled';
+
+type DriveRow = {
+  id: string;
+  name: string;
+  icon: LucideIcon;
+  description: string;
+  access: string;
+  enabled: boolean;
+  /** Set for drives an admin can turn on. Drives are never turned off from here. */
+  flag?: DriveFlag;
+};
+
+/**
+ * The drives of this workspace, the same set the Files sidebar shows. Enabled drives
+ * cannot be disabled from here; owners and admins can turn on a drive that is off.
+ */
 export default function DrivesSettingsPage() {
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
   const fetchWorkspaces = useWorkspaceStore((state) => state.fetchWorkspaces);
-
   const workspace = workspaces.find((w) => w.id === currentWorkspaceId) || null;
-  const role = workspace?.currentUserRole;
-  const canEdit = role === 'owner' || role === 'admin';
+  const syncedFolders = useFilesStore((state) => state.syncedFolders);
+  const { confirm: confirmTurnOn, dialog: confirmDialog } = useConfirm();
 
-  const [savingPlatform, setSavingPlatform] = useState(false);
-  const [savingSystem, setSavingSystem] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [accessFilter, setAccessFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [turningOn, setTurningOn] = useState<DriveFlag | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (!workspace) {
     return <SettingsEmpty title="No workspace selected" />;
   }
 
-  const platformDriveEnabled = Boolean(workspace.platformDriveEnabled);
-  const systemDriveEnabled = Boolean(workspace.systemDriveEnabled);
+  const isWorkspaceAdmin = workspace.currentUserRole === 'owner' || workspace.currentUserRole === 'admin';
+  const platformOn = Boolean(workspace.platformDriveEnabled);
+  const systemOn = Boolean(workspace.systemDriveEnabled);
 
-  const handleTogglePlatform = async (next: boolean) => {
-    if (!canEdit || savingPlatform) return;
+  // Same rules as the Drives list in the Files sidebar, plus the drives an admin can still turn on.
+  const drives: DriveRow[] = [
+    {
+      id: 'my-drive',
+      name: 'My Drive',
+      icon: HardDrive,
+      description: 'Your personal files in this workspace.',
+      access: 'Only you',
+      enabled: true,
+    },
+    {
+      id: 'workspace',
+      name: 'Workspace Drive',
+      icon: HardDrive,
+      description: 'Files shared with every member of this workspace.',
+      access: 'All members',
+      enabled: true,
+    },
+    ...(platformOn || isWorkspaceAdmin
+      ? [
+          {
+            id: 'platform-drive',
+            name: 'Platform Drive',
+            icon: HardDrive,
+            description: 'Files shared across every workspace where the platform drive is enabled.',
+            access: 'All members',
+            enabled: platformOn,
+            flag: 'platform_drive_enabled' as const,
+          },
+        ]
+      : []),
+    ...(isWorkspaceAdmin
+      ? [
+          {
+            id: 'system-drive',
+            name: 'System Drive',
+            icon: Server,
+            description: 'Full object-storage tree, visible to workspace owners and admins.',
+            access: 'Owners & admins',
+            enabled: systemOn,
+            flag: 'system_drive_enabled' as const,
+          },
+        ]
+      : []),
+    ...syncedFolders.map((folder) => ({
+      id: folder.id,
+      name: folder.name,
+      icon: Folder,
+      description: `Synced folder · ${folder.localPath}`,
+      access: 'This browser',
+      enabled: true,
+    })),
+  ];
+  const enabledCount = drives.filter((drive) => drive.enabled).length;
+  const accessOptions = Array.from(new Set(drives.map((drive) => drive.access)));
+  const query = searchQuery.trim().toLowerCase();
+  const filteredDrives = drives.filter((drive) => {
+    if (accessFilter !== 'all' && drive.access !== accessFilter) return false;
+    if (statusFilter === 'enabled' && !drive.enabled) return false;
+    if (statusFilter === 'off' && drive.enabled) return false;
+    return !query || `${drive.name} ${drive.description}`.toLowerCase().includes(query);
+  });
+
+  const turnOn = async (drive: DriveRow) => {
+    if (!drive.flag || !isWorkspaceAdmin || turningOn) return;
+    const ok = await confirmTurnOn({
+      title: `Turn on ${drive.name}?`,
+      description: `${drive.description}\n\nOnce on, it cannot be turned off from Settings.`,
+      confirmLabel: 'Turn on',
+      destructive: false,
+    });
+    if (!ok) return;
     setError(null);
-    setSavingPlatform(true);
+    setTurningOn(drive.flag);
     try {
       const { authFetch } = await import('@/stores/auth');
       const response = await authFetch(`/api/workspaces/${workspace.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform_drive_enabled: next }),
+        body: JSON.stringify({ [drive.flag]: true }),
       });
       if (!response.ok) {
-        if (response.status === 403) {
-          setError('Only workspace admins can change drive settings.');
-        } else {
-          setError(`Failed to update setting (HTTP ${response.status}).`);
-        }
+        setError(
+          response.status === 403
+            ? 'Only workspace admins can turn on drives.'
+            : `Failed to turn on ${drive.name} (HTTP ${response.status}).`
+        );
         return;
       }
       await fetchWorkspaces();
     } catch (err) {
-      console.error('Failed to update platform drive setting:', err);
-      setError('Failed to update setting. Please try again.');
+      console.error(`Failed to turn on ${drive.name}:`, err);
+      setError(`Failed to turn on ${drive.name}. Please try again.`);
     } finally {
-      setSavingPlatform(false);
+      setTurningOn(null);
     }
   };
-
-  const handleToggleSystem = async (next: boolean) => {
-    if (!canEdit || savingSystem) return;
-    setError(null);
-    setSavingSystem(true);
-    try {
-      const { authFetch } = await import('@/stores/auth');
-      const response = await authFetch(`/api/workspaces/${workspace.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ system_drive_enabled: next }),
-      });
-      if (!response.ok) {
-        if (response.status === 403) {
-          setError('Only workspace admins can change drive settings.');
-        } else {
-          setError(`Failed to update setting (HTTP ${response.status}).`);
-        }
-        return;
-      }
-      await fetchWorkspaces();
-    } catch (err) {
-      console.error('Failed to update system drive setting:', err);
-      setError('Failed to update setting. Please try again.');
-    } finally {
-      setSavingSystem(false);
-    }
-  };
-
-  const driveRow = (
-    title: string,
-    description: string,
-    checked: boolean,
-    saving: boolean,
-    onToggle: (next: boolean) => void
-  ) => (
-    <SettingsSection>
-      <label className="flex cursor-pointer items-start gap-3">
-        <Checkbox
-          checked={checked}
-          onCheckedChange={onToggle}
-          disabled={!canEdit || saving}
-          className="mt-0.5"
-        />
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-medium">{title}</p>
-            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-        </div>
-      </label>
-    </SettingsSection>
-  );
 
   return (
     <div className="space-y-6">
       <SettingsPageHeader
         title="Drives"
-        description="Configure which file drives are available in this workspace."
+        badge={`${enabledCount} enabled`}
+        description={
+          isWorkspaceAdmin
+            ? 'File drives of this workspace. Enabled drives stay on; drives that are off can be turned on.'
+            : 'File drives enabled in this workspace.'
+        }
       />
 
-      {driveRow(
-        'Platform drive',
-        'When enabled, members of this workspace can read and write files in the shared platform-drive tree. The platform drive is shared across every workspace that enables it.',
-        platformDriveEnabled,
-        savingPlatform,
-        handleTogglePlatform
-      )}
-
-      {driveRow(
-        'System drive',
-        'When enabled, workspace owners and admins can browse the full object-storage tree. The system drive exposes all storage paths and is restricted to admin roles regardless of this setting.',
-        systemDriveEnabled,
-        savingSystem,
-        handleToggleSystem
-      )}
-
-      {!canEdit && <SettingsNotice>Only workspace owners and admins can change drive settings.</SettingsNotice>}
-
       {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
+
+      <div className="space-y-4">
+        <SettingsTableToolbar
+          search={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search drives..."
+          filters={
+            <>
+              <SettingsFilterSelect
+                label="Access"
+                value={accessFilter}
+                onChange={setAccessFilter}
+                options={[
+                  { value: 'all', label: 'All access' },
+                  ...accessOptions.map((access) => ({ value: access, label: access })),
+                ]}
+              />
+              <SettingsFilterSelect
+                label="Status"
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={[
+                  { value: 'all', label: 'All statuses' },
+                  { value: 'enabled', label: 'Enabled' },
+                  { value: 'off', label: 'Off' },
+                ]}
+              />
+            </>
+          }
+          meta={`${countLabel(filteredDrives.length, drives.length, 'drive')} · ${enabledCount} enabled`}
+        />
+        <div className={settingsTable.wrapper}>
+          <table className={settingsTable.table}>
+            <thead>
+              <tr className={settingsTable.headRow}>
+                <th className={settingsTable.th}>Drive</th>
+                <th className={cn(settingsTable.th, 'w-40')}>Access</th>
+                <th className={cn(settingsTable.th, 'w-32')}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredDrives.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="p-8 text-center text-muted-foreground">
+                    No drives match the current search and filters
+                  </td>
+                </tr>
+              )}
+              {filteredDrives.map((drive) => {
+                const Icon = drive.icon;
+                const busy = turningOn !== null && turningOn === drive.flag;
+                return (
+                  <tr key={drive.id} className={settingsTable.row}>
+                    <td className={settingsTable.td}>
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center bg-muted">
+                          <Icon size={16} className="text-muted-foreground" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className={cn('font-medium', !drive.enabled && 'text-muted-foreground')}>{drive.name}</p>
+                          <p className="text-xs text-muted-foreground">{drive.description}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className={settingsTable.td}>
+                      <Badge variant="outline">{drive.access}</Badge>
+                    </td>
+                    <td className={settingsTable.td}>
+                      {drive.enabled ? (
+                        <Badge variant="primary">
+                          <CheckCircle size={12} />
+                          Enabled
+                        </Badge>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => void turnOn(drive)}
+                          disabled={turningOn !== null}
+                        >
+                          {busy ? <Loader2 size={14} className="animate-spin" /> : <Power size={14} />}
+                          Turn on
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {confirmDialog}
     </div>
   );
 }

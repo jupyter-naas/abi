@@ -16,6 +16,9 @@ Page switches also felt slow. In `next dev` each settings route compiled on firs
 - Page structure comes from `components/settings/settings-ui.tsx`: `SettingsPageHeader`, `SettingsSection`, `SettingsField`, `SettingsSearch`, `SettingsNotice`, `SettingsEmpty`, `SettingsLoading` and the `settingsTable` class set.
 - Settings surfaces have **no border radius**. Primitives use `rounded-none`; settings CSS files set `border-radius: 0` instead of reading `--org-border-radius`.
 - Enable/disable controls are **checkboxes**, not sliders.
+- Every settings table follows one layout, top to bottom: `SettingsTableToolbar`: the table metadata on the left (counts from `countLabel`, e.g. "3 of 12 agents · 9 enabled"), then the search bar with the table's own `SettingsFilterSelect` filters on the same row, then the table. The table is its own scroll box (max 65vh) with a sticky header row.
+- The page title carries a badge with the number of enabled items (`SettingsPageHeader`/`OrgSettingsPageHeader` `badge`).
+- The action that adds an element lives only in the top-right corner of the page header; empty states point to it instead of repeating it.
 - Colours come from theme tokens only: `primary` for success/selected, `destructive` for errors and deletes, `muted` for neutral, amber for warnings.
 - Destructive actions confirm with `useConfirm()`; errors are shown inline with `SettingsNotice`. No `window.confirm` or `window.alert`.
 - Organization pages keep their semantic CSS for layout, but their shared button/input classes match the primitives (36px controls, same colours) and they use the shared `Checkbox`.

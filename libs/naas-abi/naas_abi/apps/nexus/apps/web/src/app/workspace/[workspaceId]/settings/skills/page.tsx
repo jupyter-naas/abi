@@ -13,8 +13,10 @@ import {
   SettingsField,
   SettingsNotice,
   SettingsPageHeader,
-  SettingsSearch,
+  SettingsFilterSelect,
   SettingsSection,
+  SettingsTableToolbar,
+  countLabel,
   settingsTable,
 } from '@/components/settings/settings-ui';
 import { useSkillsStore, type SkillScope } from '@/stores/skills';
@@ -36,6 +38,8 @@ export default function SkillsSettingsPage() {
   const currentUserId = useAuthStore((s) => s.user?.id);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [scopeFilter, setScopeFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [showAddForm, setShowAddForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -59,14 +63,19 @@ export default function SkillsSettingsPage() {
 
   const filteredSkills = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return skills;
-    return skills.filter(
-      (s) =>
+    return skills.filter((s) => {
+      if (scopeFilter !== 'all' && s.scope !== scopeFilter) return false;
+      if (statusFilter === 'enabled' && !s.enabled) return false;
+      if (statusFilter === 'disabled' && s.enabled) return false;
+      return (
+        !q ||
         s.name.toLowerCase().includes(q) ||
         s.slug.toLowerCase().includes(q) ||
         s.description.toLowerCase().includes(q)
-    );
-  }, [skills, searchQuery]);
+      );
+    });
+  }, [skills, searchQuery, scopeFilter, statusFilter]);
+  const enabledCount = skills.filter((s) => s.enabled).length;
 
   const handleAddSkill = async () => {
     if (!newSkill.name.trim() || !newSkill.prompt.trim()) {
@@ -112,12 +121,8 @@ export default function SkillsSettingsPage() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title={
-          <span className="flex items-center gap-2">
-            Skills
-            <Badge>{filteredSkills.length}</Badge>
-          </span>
-        }
+        title="Skills"
+        badge={`${enabledCount} enabled`}
         description={
           <>
             Reusable prompts invocable in the chat with /&lt;slug&gt; — or type /create-skill in the chat and the
@@ -204,9 +209,38 @@ export default function SkillsSettingsPage() {
         </SettingsNotice>
       )}
 
-      {skills.length > 0 && (
-        <SettingsSearch value={searchQuery} onChange={setSearchQuery} placeholder="Search skills..." />
-      )}
+      <SettingsTableToolbar
+        search={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search skills..."
+        filters={
+          <>
+            <SettingsFilterSelect
+              label="Visibility"
+              value={scopeFilter}
+              onChange={setScopeFilter}
+              options={[
+                { value: 'all', label: 'All visibilities' },
+                ...(Object.keys(SCOPE_LABELS) as SkillScope[]).map((scope) => ({
+                  value: scope,
+                  label: SCOPE_LABELS[scope],
+                })),
+              ]}
+            />
+            <SettingsFilterSelect
+              label="Status"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: 'all', label: 'All statuses' },
+                { value: 'enabled', label: 'Enabled' },
+                { value: 'disabled', label: 'Disabled' },
+              ]}
+            />
+          </>
+        }
+        meta={`${countLabel(filteredSkills.length, skills.length, 'skill')} · ${enabledCount} enabled`}
+      />
 
       <div className={settingsTable.wrapper}>
         <table className={settingsTable.table}>
@@ -224,8 +258,8 @@ export default function SkillsSettingsPage() {
             {filteredSkills.length === 0 ? (
               <tr>
                 <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                  {searchQuery
-                    ? `No skills match "${searchQuery}"`
+                  {skills.length > 0
+                    ? 'No skills match the current search and filters'
                     : 'No skills yet. Type /create-skill in the chat, or add one here.'}
                 </td>
               </tr>

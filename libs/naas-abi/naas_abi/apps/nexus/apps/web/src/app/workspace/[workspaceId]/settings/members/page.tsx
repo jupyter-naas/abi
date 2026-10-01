@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useParams } from 'next/navigation';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
 import { Input, Select } from '@/components/ui/input';
@@ -15,7 +14,10 @@ import {
   SettingsLoading,
   SettingsNotice,
   SettingsPageHeader,
+  SettingsFilterSelect,
   SettingsSection,
+  SettingsTableToolbar,
+  countLabel,
   settingsTable,
 } from '@/components/settings/settings-ui';
 
@@ -63,6 +65,8 @@ export default function MembersPage() {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState('');
   const [actionError, setActionError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
   const { confirm: confirmRemove, dialog: confirmDialog } = useConfirm();
 
   const membershipRole =
@@ -200,15 +204,18 @@ export default function MembersPage() {
     }
   };
 
+  const query = searchQuery.trim().toLowerCase();
+  const filteredMembers = members.filter((member) => {
+    if (roleFilter !== 'all' && member.role !== roleFilter) return false;
+    return !query || member.name.toLowerCase().includes(query) || member.email.toLowerCase().includes(query);
+  });
+  const adminCount = members.filter((m) => m.role === 'owner' || m.role === 'admin').length;
+
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title={
-          <span className="flex items-center gap-2">
-            Members
-            <Badge>{members.length}</Badge>
-          </span>
-        }
+        title="Members"
+        badge={`${members.length} active`}
         description="Manage who has access to this workspace"
         actions={
           <Button
@@ -285,6 +292,27 @@ export default function MembersPage() {
       ) : members.length === 0 ? (
         <SettingsEmpty title="No members yet." />
       ) : (
+        <div className="space-y-4">
+        <SettingsTableToolbar
+          search={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search members by name or email..."
+          filters={
+            <SettingsFilterSelect
+              label="Role"
+              value={roleFilter}
+              onChange={setRoleFilter}
+              options={[
+                { value: 'all', label: 'All roles' },
+                ...(Object.keys(roleConfig) as (keyof typeof roleConfig)[]).map((role) => ({
+                  value: role,
+                  label: roleConfig[role].label,
+                })),
+              ]}
+            />
+          }
+          meta={`${countLabel(filteredMembers.length, members.length, 'member')} · ${adminCount} owner${adminCount === 1 ? '' : 's'} or admin${adminCount === 1 ? '' : 's'}`}
+        />
         <div className={settingsTable.wrapper}>
           <table className={settingsTable.table}>
             <thead>
@@ -296,7 +324,14 @@ export default function MembersPage() {
               </tr>
             </thead>
             <tbody>
-              {members.map((member) => {
+              {filteredMembers.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                    No members match the current search and filters
+                  </td>
+                </tr>
+              )}
+              {filteredMembers.map((member) => {
                 const role = roleConfig[member.role] || roleConfig.member;
                 const RoleIcon = role.icon;
                 const initial = (member.name || member.email || '?').charAt(0).toUpperCase();
@@ -354,6 +389,7 @@ export default function MembersPage() {
               })}
             </tbody>
           </table>
+        </div>
         </div>
       )}
 

@@ -19,7 +19,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox, radioClass } from '@/components/ui/checkbox';
 import { fieldClass } from '@/components/ui/input';
-import { SettingsEmpty, SettingsLoading, SettingsNotice, SettingsPageHeader, settingsTable } from '@/components/settings/settings-ui';
+import {
+  SettingsEmpty, SettingsFilterSelect, SettingsLoading, SettingsNotice, SettingsPageHeader, SettingsTableToolbar, countLabel, settingsTable,
+} from '@/components/settings/settings-ui';
 import {
   blankTopic, searchHref,
   type PreviewResult, type QueryRole, type RoleContract, type SearchTopic, type TopicSection,
@@ -62,6 +64,9 @@ function SearchSettings() {
 
   const [toggling, setToggling] = useState<string | null>(null);
   const [tableError, setTableError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [groupFilter, setGroupFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   // Features and web engines: one switch each for the whole workspace.
   const toggleScope = async (scopeId: string, enabled: boolean) => {
     setToggling(scopeId); setTableError(null);
@@ -125,16 +130,33 @@ function SearchSettings() {
     );
   }
 
+  // One list for the table: topics, Nexus features and web engines, each with what the filters need.
+  const query = searchQuery.trim().toLowerCase();
+  const matches = (group: string, on: boolean, ...texts: string[]) =>
+    (groupFilter === 'all' || groupFilter === group) &&
+    (statusFilter === 'all' || (statusFilter === 'enabled') === on) &&
+    (!query || texts.some(text => text.toLowerCase().includes(query)));
+  const featureRows = FEATURE_SCOPES.map(scope => {
+    const available = featureOn(scope.feature);
+    return { scope, available, on: available && !disabledScopes.includes(scope.id) };
+  });
+  const engineRows = WEB_ENGINES.map(engine => {
+    const id = webEngineScopeId(engine.id);
+    return { engine, id, on: !disabledScopes.includes(id) };
+  });
+  const shownTopics = topics.filter(t => matches('Custom', t.enabled, t.plural_label, t.id));
+  const shownFeatures = featureRows.filter(r => matches('Workspace', r.on, r.scope.label, r.scope.id, r.scope.description));
+  const shownEngines = engineRows.filter(r => matches('Web', r.on, r.engine.label, r.id, r.engine.description));
+  const totalRows = topics.length + featureRows.length + engineRows.length;
+  const shownRows = shownTopics.length + shownFeatures.length + shownEngines.length;
+  const enabledRows = topics.filter(t => t.enabled).length + featureRows.filter(r => r.on).length + engineRows.filter(r => r.on).length;
+
   return (
     <div className="space-y-6">
       {prompt.dialog}
       <SettingsPageHeader
-        title={
-          <span className="flex items-center gap-2">
-            Search
-            <Badge>{topics.length + FEATURE_SCOPES.length + WEB_ENGINES.length}</Badge>
-          </span>
-        }
+        title="Search"
+        badge={`${enabledRows} enabled`}
         description="What the search page of this workspace can look into. A disabled entry disappears from search for every member. Topics read every graph this workspace can read, unless a topic is limited to some of them."
         actions={
           canEdit && (
@@ -148,6 +170,38 @@ function SearchSettings() {
       {error && <SettingsNotice tone="error"><span role="alert">{error}</span></SettingsNotice>}
       {tableError && <SettingsNotice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></SettingsNotice>}
       {!canEdit && !loading && <SettingsNotice>Only workspace owners and admins can change search topics.</SettingsNotice>}
+
+      <SettingsTableToolbar
+        search={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search topics, features and engines..."
+        filters={
+          <>
+            <SettingsFilterSelect
+              label="Group"
+              value={groupFilter}
+              onChange={setGroupFilter}
+              options={[
+                { value: 'all', label: 'All groups' },
+                { value: 'Custom', label: 'Custom' },
+                { value: 'Workspace', label: 'Workspace' },
+                { value: 'Web', label: 'Web' },
+              ]}
+            />
+            <SettingsFilterSelect
+              label="Status"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: 'all', label: 'All statuses' },
+                { value: 'enabled', label: 'Enabled' },
+                { value: 'disabled', label: 'Disabled' },
+              ]}
+            />
+          </>
+        }
+        meta={`${countLabel(shownRows, totalRows, 'entry', 'entries')} · ${enabledRows} enabled · ${topics.length} topic${topics.length === 1 ? '' : 's'}`}
+      />
 
       <div className={settingsTable.wrapper}>
         <table className={settingsTable.table}>
@@ -163,7 +217,10 @@ function SearchSettings() {
             {loading && !topics.length && (
               <tr><td colSpan={4} className={cn(settingsTable.td, 'text-muted-foreground')}><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
             )}
-            {topics.map(t => (
+            {!loading && shownRows === 0 && (
+              <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">No entries match the current search and filters</td></tr>
+            )}
+            {shownTopics.map(t => (
               <tr key={t.id} onClick={() => select(t.id)} className={cn(settingsTable.row, 'cursor-pointer')}>
                 <td className={settingsTable.td}>
                   <div className="flex items-center gap-3">
@@ -188,9 +245,7 @@ function SearchSettings() {
               </tr>
             ))}
 
-            {FEATURE_SCOPES.map(scope => {
-              const available = featureOn(scope.feature);
-              const on = available && !disabledScopes.includes(scope.id);
+            {shownFeatures.map(({ scope, available, on }) => {
               return (
                 <ScopeRow key={scope.id} icon={scope.icon} name={scope.label} id={scope.id} group="Workspace" type="Nexus feature"
                   description={available ? scope.description : `${scope.description} — the ${scope.label} feature is off in this workspace`}>
@@ -200,9 +255,7 @@ function SearchSettings() {
               );
             })}
 
-            {WEB_ENGINES.map(engine => {
-              const id = webEngineScopeId(engine.id);
-              const on = !disabledScopes.includes(id);
+            {shownEngines.map(({ engine, id, on }) => {
               return (
                 <ScopeRow key={id} icon={engine.icon} name={engine.label} id={id} group="Web" type="Web engine" description={`${engine.description} — the query leaves Nexus`}>
                   <EnabledSwitch label={engine.label} on={on} busy={toggling === id}

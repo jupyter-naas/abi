@@ -14,7 +14,9 @@ import {
   SettingsLoading,
   SettingsNotice,
   SettingsPageHeader,
-  SettingsSearch,
+  SettingsFilterSelect,
+  SettingsTableToolbar,
+  countLabel,
   SettingsSection,
   settingsTable,
 } from '@/components/settings/settings-ui';
@@ -64,6 +66,8 @@ export function ResourceAccessEditor({
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [draft, setDraft] = useState<Policy>({});
   const [search, setSearch] = useState('');
+  const [accessFilter, setAccessFilter] = useState('all');
+  const [availabilityFilter, setAvailabilityFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -188,29 +192,43 @@ export function ResourceAccessEditor({
     });
   }
   const catalog = snapshot?.catalog || [];
-  const rows = catalog.filter((item) =>
-    `${item.name} ${item.description}`
-      .toLowerCase()
-      .includes(search.toLowerCase()),
-  );
+  // Effective access of a row under the current (unsaved) draft.
+  const accessOf = (item: Entry): 'enabled' | 'disabled' | 'edit' | 'read' | 'none' => {
+    if (kind === 'ontologies') return draft.enabled?.includes(item.id) ? 'enabled' : 'disabled';
+    const owned = !!draft.include_owned && !!item.owned;
+    if (!item.read_only && (owned || draft.write?.includes(item.id))) return 'edit';
+    if (draft.read_all || owned || draft.read?.includes(item.id)) return 'read';
+    return 'none';
+  };
+  const rows = catalog.filter((item) => {
+    if (accessFilter !== 'all' && accessOf(item) !== accessFilter) return false;
+    if (availabilityFilter === 'available' && !item.available) return false;
+    if (availabilityFilter === 'unavailable' && item.available) return false;
+    return `${item.name} ${item.description}`.toLowerCase().includes(search.toLowerCase());
+  });
   const enabledCount =
     kind === 'ontologies'
       ? (draft.enabled || []).length
-      : catalog.filter(
-          (item) =>
-            draft.read_all ||
-            (draft.include_owned && item.owned) ||
-            draft.read?.includes(item.id) ||
-            draft.write?.includes(item.id),
-        ).length;
+      : catalog.filter((item) => accessOf(item) !== 'none').length;
+  const editableCount = kind === 'graphs' ? catalog.filter((item) => accessOf(item) === 'edit').length : 0;
+  const unavailableCount = catalog.filter((item) => !item.available).length;
+  const noun = kind === 'ontologies' ? 'ontology' : 'graph';
+  const meta = [
+    countLabel(rows.length, catalog.length, noun, kind === 'ontologies' ? 'ontologies' : 'graphs'),
+    kind === 'ontologies' ? `${enabledCount} enabled` : `${enabledCount} readable · ${editableCount} editable`,
+    unavailableCount ? `${unavailableCount} unavailable` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
-  const th = cn(settingsTable.th, 'sticky top-0 z-[1] bg-muted');
+  const th = settingsTable.th;
   const checkCol = 'w-20 text-center';
 
   return (
     <section className="space-y-4" aria-busy={loading || saving}>
       <SettingsPageHeader
         title={title}
+        badge={snapshot ? (kind === 'ontologies' ? `${enabledCount} enabled` : `${enabledCount} readable`) : undefined}
         description={
           kind === 'ontologies'
             ? 'Choose the ontologies available in this workspace.'
@@ -269,18 +287,46 @@ export function ResourceAccessEditor({
                 </fieldset>
               </SettingsSection>
             )}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <SettingsSearch
-                value={search}
-                onChange={setSearch}
-                placeholder={`Search ${title.toLowerCase()}…`}
-                className="sm:w-72"
-              />
-              <span className="text-sm text-muted-foreground">
-                {enabledCount} enabled · {catalog.length} listed
-              </span>
-            </div>
-            <div className={cn(settingsTable.wrapper, 'max-h-[65vh] overflow-auto')}>
+            <SettingsTableToolbar
+              search={search}
+              onSearchChange={setSearch}
+              searchPlaceholder={`Search ${title.toLowerCase()}…`}
+              filters={
+                <>
+                  <SettingsFilterSelect
+                    label={kind === 'ontologies' ? 'Status' : 'Access'}
+                    value={accessFilter}
+                    onChange={setAccessFilter}
+                    options={
+                      kind === 'ontologies'
+                        ? [
+                            { value: 'all', label: 'All statuses' },
+                            { value: 'enabled', label: 'Enabled' },
+                            { value: 'disabled', label: 'Disabled' },
+                          ]
+                        : [
+                            { value: 'all', label: 'All access' },
+                            { value: 'edit', label: 'Read & edit' },
+                            { value: 'read', label: 'Read only' },
+                            { value: 'none', label: 'No access' },
+                          ]
+                    }
+                  />
+                  <SettingsFilterSelect
+                    label="Availability"
+                    value={availabilityFilter}
+                    onChange={setAvailabilityFilter}
+                    options={[
+                      { value: 'all', label: 'All availability' },
+                      { value: 'available', label: 'Available' },
+                      { value: 'unavailable', label: 'Unavailable' },
+                    ]}
+                  />
+                </>
+              }
+              meta={meta}
+            />
+            <div className={settingsTable.wrapper}>
               <table className={settingsTable.table}>
                 <thead>
                   <tr className={settingsTable.headRow}>
@@ -358,7 +404,7 @@ export function ResourceAccessEditor({
               </table>
               {rows.length === 0 && (
                 <p className="p-6 text-center text-sm text-muted-foreground">
-                  {search ? 'No matching resources.' : 'No resources available.'}
+                  {catalog.length ? 'No resources match the current search and filters.' : 'No resources available.'}
                 </p>
               )}
             </div>

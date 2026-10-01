@@ -9,7 +9,6 @@ import { useAgentsStore, type Agent } from '@/stores/agents';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useServersStore } from '@/stores/servers';
 import { useParams, useRouter } from 'next/navigation';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
@@ -19,8 +18,10 @@ import {
   SettingsField,
   SettingsLoading,
   SettingsPageHeader,
-  SettingsSearch,
+  SettingsFilterSelect,
   SettingsSection,
+  SettingsTableToolbar,
+  countLabel,
   settingsTable,
 } from '@/components/settings/settings-ui';
 
@@ -53,6 +54,8 @@ export default function AgentsPage() {
   const [mounted, setMounted] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [modelFilter, setModelFilter] = useState('all');
   const [newAgent, setNewAgent] = useState({
     name: '',
     description: '',
@@ -98,17 +101,7 @@ export default function AgentsPage() {
 
   const enabledProviders = mounted ? providers.filter((p) => p.enabled) : [];
   const displayAgents = mounted ? agents : [];
-  
-  // Filter and sort agents alphabetically by name
-  const filteredAgents = searchQuery.trim()
-    ? displayAgents
-        .filter(
-          (agent) =>
-            agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            agent.description.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-        .sort((a, b) => a.name.localeCompare(b.name))
-    : displayAgents.slice().sort((a, b) => a.name.localeCompare(b.name));
+
 
   const handleAddAgent = () => {
     if (!newAgent.name.trim()) return;
@@ -178,6 +171,24 @@ export default function AgentsPage() {
     return rawId ? [rawId] : [];
   };
 
+  // Search + filters, sorted alphabetically by name. Declared after getModelIds, which it uses.
+  const query = searchQuery.trim().toLowerCase();
+  const filteredAgents = displayAgents
+    .filter((agent) => {
+      if (statusFilter === 'enabled' && !agent.enabled) return false;
+      if (statusFilter === 'disabled' && agent.enabled) return false;
+      const hasModel = getModelIds(agent).length > 0;
+      if (modelFilter === 'assigned' && !hasModel) return false;
+      if (modelFilter === 'unassigned' && hasModel) return false;
+      return (
+        !query ||
+        agent.name.toLowerCase().includes(query) ||
+        agent.description.toLowerCase().includes(query)
+      );
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const enabledCount = displayAgents.filter((agent) => agent.enabled).length;
+
   if (!mounted) {
     return <SettingsLoading label="Loading agents…" />;
   }
@@ -196,12 +207,8 @@ export default function AgentsPage() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title={
-          <span className="flex items-center gap-2">
-            Agents
-            <Badge>{filteredAgents.length}</Badge>
-          </span>
-        }
+        title="Agents"
+        badge={`${enabledCount} enabled`}
         description="Manage AI agents and their configurations"
         actions={
           <Button onClick={() => setShowAddForm(true)}>
@@ -278,17 +285,40 @@ export default function AgentsPage() {
         <SettingsEmpty
           icon={<Bot size={40} className="opacity-40" />}
           title="No agents configured"
-          description="Create AI agents to get started"
-          action={
-            <Button onClick={() => setShowAddForm(true)}>
-              <Plus size={16} />
-              Add Agent
-            </Button>
-          }
+          description="Use Add Agent at the top right to create your first agent."
         />
       ) : (
         <div className="space-y-4">
-          <SettingsSearch value={searchQuery} onChange={setSearchQuery} placeholder="Search agents..." />
+          <SettingsTableToolbar
+            search={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="Search agents..."
+            filters={
+              <>
+                <SettingsFilterSelect
+                  label="Status"
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  options={[
+                    { value: 'all', label: 'All statuses' },
+                    { value: 'enabled', label: 'Enabled' },
+                    { value: 'disabled', label: 'Disabled' },
+                  ]}
+                />
+                <SettingsFilterSelect
+                  label="Model"
+                  value={modelFilter}
+                  onChange={setModelFilter}
+                  options={[
+                    { value: 'all', label: 'All models' },
+                    { value: 'assigned', label: 'Model assigned' },
+                    { value: 'unassigned', label: 'No model' },
+                  ]}
+                />
+              </>
+            }
+            meta={`${countLabel(filteredAgents.length, displayAgents.length, 'agent')} · ${enabledCount} enabled`}
+          />
 
           <div className={settingsTable.wrapper}>
             <table className={settingsTable.table}>
@@ -304,7 +334,7 @@ export default function AgentsPage() {
                 {filteredAgents.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                      {searchQuery ? `No agents match "${searchQuery}"` : 'No agents available'}
+                      No agents match the current search and filters
                     </td>
                   </tr>
                 ) : (

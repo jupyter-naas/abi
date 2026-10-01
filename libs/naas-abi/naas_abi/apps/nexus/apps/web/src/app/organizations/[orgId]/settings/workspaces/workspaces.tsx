@@ -63,6 +63,7 @@ export default function OrganizationWorkspacesPage() {
     <div className="org-settings-workspaces-page">
       <OrgSettingsPageHeader
         title="Workspaces"
+        badge={`${workspaces.length} ${workspaces.length === 1 ? 'workspace' : 'workspaces'}`}
         subtitle="Manage workspaces belonging to this organization"
         actions={
           <button type="button" className="org-settings-primary-button">
@@ -76,13 +77,9 @@ export default function OrganizationWorkspacesPage() {
         <div className=" border border-dashed bg-card p-12 text-center">
           <FolderKanban size={48} className="mx-auto mb-4 text-muted-foreground" />
           <h3 className="mb-2 text-lg font-semibold">No workspaces yet</h3>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Create your first workspace to get started
+          <p className="text-sm text-muted-foreground">
+            Use Create Workspace at the top right to get started
           </p>
-          <button type="button" className="org-settings-primary-button">
-            <Plus size={16} />
-            Create Workspace
-          </button>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -11,7 +11,9 @@ import {
   SettingsEmpty,
   SettingsLoading,
   SettingsPageHeader,
-  SettingsSearch,
+  SettingsFilterSelect,
+  SettingsTableToolbar,
+  countLabel,
   settingsTable,
 } from '@/components/settings/settings-ui';
 
@@ -52,6 +54,8 @@ export default function AppsSettingsPage() {
   const workspaceId = params?.workspaceId as string | undefined;
   const [mounted, setMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const { apps, loading, fetchApps, toggleApp } = useAppsStore();
 
@@ -69,16 +73,23 @@ export default function AppsSettingsPage() {
     [apps]
   );
 
+  const categories = useMemo(
+    () => Array.from(new Set(installedApps.map((a) => a.category).filter(Boolean))).sort(),
+    [installedApps]
+  );
+
   const filteredApps = useMemo(() => {
-    const list = installedApps.slice().sort((a, b) => a.name.localeCompare(b.name));
-    if (!searchQuery.trim()) return list;
-    const q = searchQuery.toLowerCase();
-    return list.filter(
-      (a) =>
-        a.name.toLowerCase().includes(q) ||
-        (a.description ?? '').toLowerCase().includes(q)
-    );
-  }, [installedApps, searchQuery]);
+    const q = searchQuery.trim().toLowerCase();
+    return installedApps
+      .filter((a) => {
+        if (categoryFilter !== 'all' && a.category !== categoryFilter) return false;
+        if (statusFilter === 'enabled' && !a.enabled) return false;
+        if (statusFilter === 'disabled' && a.enabled) return false;
+        return !q || a.name.toLowerCase().includes(q) || (a.description ?? '').toLowerCase().includes(q);
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [installedApps, searchQuery, categoryFilter, statusFilter]);
+  const enabledCount = installedApps.filter((a) => a.enabled).length;
 
   if (!mounted) {
     return <SettingsLoading label="Loading apps…" />;
@@ -87,12 +98,8 @@ export default function AppsSettingsPage() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title={
-          <span className="flex items-center gap-2">
-            Apps
-            <Badge>{filteredApps.length}</Badge>
-          </span>
-        }
+        title="Apps"
+        badge={`${enabledCount} enabled`}
         description="Enable or disable the marketplace apps available in this workspace"
       />
 
@@ -106,7 +113,36 @@ export default function AppsSettingsPage() {
         />
       ) : (
         <div className="space-y-4">
-          <SettingsSearch value={searchQuery} onChange={setSearchQuery} placeholder="Search apps..." />
+          <SettingsTableToolbar
+            search={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="Search apps..."
+            filters={
+              <>
+                <SettingsFilterSelect
+                  label="Category"
+                  value={categoryFilter}
+                  onChange={setCategoryFilter}
+                  options={[
+                    { value: 'all', label: 'All categories' },
+                    ...categories.map((category) => ({ value: category, label: category })),
+                  ]}
+                  className="capitalize"
+                />
+                <SettingsFilterSelect
+                  label="Status"
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  options={[
+                    { value: 'all', label: 'All statuses' },
+                    { value: 'enabled', label: 'Enabled' },
+                    { value: 'disabled', label: 'Disabled' },
+                  ]}
+                />
+              </>
+            }
+            meta={`${countLabel(filteredApps.length, installedApps.length, 'app')} · ${enabledCount} enabled`}
+          />
 
           <div className={settingsTable.wrapper}>
             <table className={settingsTable.table}>
@@ -122,7 +158,7 @@ export default function AppsSettingsPage() {
                 {filteredApps.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                      {searchQuery ? `No apps match "${searchQuery}"` : 'No apps available'}
+                      No apps match the current search and filters
                     </td>
                   </tr>
                 ) : (

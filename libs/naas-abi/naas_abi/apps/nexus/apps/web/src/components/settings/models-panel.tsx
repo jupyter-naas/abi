@@ -18,13 +18,14 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Select } from '@/components/ui/input';
 import {
   SettingsEmpty,
   SettingsLoading,
   SettingsNotice,
   SettingsPageHeader,
-  SettingsSearch,
+  SettingsFilterSelect,
+  SettingsTableToolbar,
+  countLabel,
   settingsTable,
 } from '@/components/settings/settings-ui';
 
@@ -387,13 +388,8 @@ export function ModelsPanel() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title={
-          <span className="flex items-center gap-2">
-            Models
-            <Badge>{sortedModels.length}</Badge>
-            <Badge variant="primary">{configuredCount} configured</Badge>
-          </span>
-        }
+        title="Models"
+        badge={`${configuredCount} configured`}
         description="All AI models discovered from naas_abi_marketplace.ai modules"
       />
 
@@ -412,74 +408,61 @@ export function ModelsPanel() {
         />
       ) : (
         <div className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <SettingsSearch
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Search by model, provider, or canonical id..."
-              className="flex-1"
-            />
-
-            <Select value={providerFilter} onChange={(e) => setProviderFilter(e.target.value)} className="sm:w-48">
-              <option value="all">All providers</option>
-              {providers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </Select>
-
-            <div className="flex h-9 border border-border bg-background">
-              {STATUS_FILTERS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setStatusFilter(opt.value)}
-                  className={cn(
-                    'px-3 text-sm transition-colors',
-                    statusFilter === opt.value
-                      ? 'bg-primary/10 font-medium text-primary'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          <SettingsTableToolbar
+            search={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="Search by model, provider, or canonical id..."
+            filters={
+              <>
+                <SettingsFilterSelect
+                  label="Provider"
+                  value={providerFilter}
+                  onChange={setProviderFilter}
+                  options={[{ value: 'all', label: 'All providers' }, ...providers.map((p) => ({ value: p.id, label: p.name }))]}
+                  className="sm:w-48"
+                />
+                <SettingsFilterSelect
+                  label="Status"
+                  value={statusFilter}
+                  onChange={(value) => setStatusFilter(value as StatusFilter)}
+                  options={STATUS_FILTERS}
+                />
+                <div className="relative" ref={columnsMenuRef}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setColumnsMenuOpen((open) => !open)}
+                    className={cn(columnsMenuOpen && 'bg-muted')}
+                  >
+                    <SlidersHorizontal size={16} />
+                    Columns
+                    <Badge>{orderedVisibleColumns.length}</Badge>
+                  </Button>
+                  {columnsMenuOpen && (
+                    <div className="absolute right-0 z-20 mt-2 w-56 border border-border bg-popover p-1 shadow-lg">
+                      <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                        Toggle columns
+                      </div>
+                      {COLUMN_META.map((col) => {
+                        const checked = visibleColumns.has(col.key);
+                        const isLast = checked && visibleColumns.size === 1;
+                        return (
+                          <Checkbox
+                            key={col.key}
+                            checked={checked}
+                            onCheckedChange={() => toggleColumn(col.key)}
+                            disabled={isLast}
+                            label={col.label}
+                            className="flex w-full px-2 py-1.5 hover:bg-muted"
+                          />
+                        );
+                      })}
+                    </div>
                   )}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="relative" ref={columnsMenuRef}>
-              <Button
-                variant="secondary"
-                onClick={() => setColumnsMenuOpen((open) => !open)}
-                className={cn(columnsMenuOpen && 'bg-muted')}
-              >
-                <SlidersHorizontal size={16} />
-                Columns
-                <Badge>{orderedVisibleColumns.length}</Badge>
-              </Button>
-              {columnsMenuOpen && (
-                <div className="absolute right-0 z-20 mt-2 w-56 border border-border bg-popover p-1 shadow-lg">
-                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                    Toggle columns
-                  </div>
-                  {COLUMN_META.map((col) => {
-                    const checked = visibleColumns.has(col.key);
-                    const isLast = checked && visibleColumns.size === 1;
-                    return (
-                      <Checkbox
-                        key={col.key}
-                        checked={checked}
-                        onCheckedChange={() => toggleColumn(col.key)}
-                        disabled={isLast}
-                        label={col.label}
-                        className="flex w-full px-2 py-1.5 hover:bg-muted"
-                      />
-                    );
-                  })}
                 </div>
-              )}
-            </div>
-          </div>
+              </>
+            }
+            meta={`${countLabel(sortedModels.length, models.length, 'model')} · ${configuredCount} configured · ${providers.length} providers`}
+          />
 
           <div className={settingsTable.wrapper}>
             <table className={settingsTable.table}>

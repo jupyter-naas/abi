@@ -21,6 +21,26 @@
   list-style: none;
 }
 
+/* Own scroll box so the header row stays pinned while rows scroll. */
+.org-settings-users-list-scroll {
+  max-height: 65vh;
+  overflow: auto;
+}
+
+.org-settings-users-list-scroll > .org-settings-users-header-row {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: hsl(var(--muted));
+}
+
+.org-settings-users-no-match {
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
+}
+
 .org-settings-users-header-row {
   display: grid;
   grid-template-columns: minmax(180px, 1.2fr) minmax(220px, 1.6fr) minmax(120px, auto);

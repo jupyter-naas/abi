@@ -17,7 +17,6 @@ import {
   FileKey,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
 import { Input, Select, Textarea } from '@/components/ui/input';
@@ -27,7 +26,10 @@ import {
   SettingsLoading,
   SettingsNotice,
   SettingsPageHeader,
+  SettingsFilterSelect,
   SettingsSection,
+  SettingsTableToolbar,
+  countLabel,
   settingsTable,
 } from '@/components/settings/settings-ui';
 import { useSecretsStore, type Secret } from '@/stores/secrets';
@@ -64,6 +66,8 @@ export function SecretsPanel() {
   const [importContent, setImportContent] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [importNotice, setImportNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const { confirm: confirmDelete, dialog: confirmDialog } = useConfirm();
   
@@ -185,16 +189,20 @@ export function SecretsPanel() {
     return value.slice(0, 4) + '••••••••' + value.slice(-4);
   };
 
-  // Group secrets by category
-  const secretsByCategory = mounted
-    ? secrets.reduce((acc, secret) => {
-        if (!acc[secret.category]) {
-          acc[secret.category] = [];
-        }
-        acc[secret.category].push(secret);
-        return acc;
-      }, {} as Record<string, Secret[]>)
-    : {};
+  const query = searchQuery.trim().toLowerCase();
+  const filteredSecrets = mounted
+    ? secrets
+        .filter((secret) => {
+          if (categoryFilter !== 'all' && secret.category !== categoryFilter) return false;
+          return (
+            !query ||
+            secret.key.toLowerCase().includes(query) ||
+            (secret.description || '').toLowerCase().includes(query)
+          );
+        })
+        .sort((a, b) => a.key.localeCompare(b.key))
+    : [];
+  const categoryCount = new Set(secrets.map((secret) => secret.category)).size;
 
   if (!mounted) {
     return <SettingsLoading label="Loading secrets…" />;
@@ -208,12 +216,8 @@ export function SecretsPanel() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title={
-          <span className="flex items-center gap-2">
-            Secrets
-            <Badge>{secrets.length}</Badge>
-          </span>
-        }
+        title="Secrets"
+        badge={`${secrets.length} stored`}
         description="Manage API keys, tokens, and credentials"
         actions={
           <>
@@ -343,96 +347,99 @@ DATABASE_URL=postgres://..."
         <SettingsEmpty
           icon={<Key size={40} className="opacity-40" />}
           title="No secrets configured"
-          description="Add API keys and credentials to use with your models and integrations"
-          action={
-            <div className="flex gap-2">
-              <Button variant="secondary" onClick={() => setShowImportModal(true)}>
-                <Upload size={16} />
-                Import .env
-              </Button>
-              <Button onClick={() => setShowAddForm(true)}>
-                <Plus size={16} />
-                Add Secret
-              </Button>
-            </div>
-          }
+          description="Use Add Secret or Import at the top right to add API keys and credentials for your models and integrations."
         />
       ) : (
-        <div className="space-y-6">
-          {Object.entries(secretsByCategory).map(([category, categorySecrets]) => {
-            const CategoryIcon = categoryIcons[category as Secret['category']] || Key;
+        <div className="space-y-4">
+          <SettingsTableToolbar
+            search={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="Search secrets by key or description..."
+            filters={
+              <SettingsFilterSelect
+                label="Category"
+                value={categoryFilter}
+                onChange={setCategoryFilter}
+                options={[
+                  { value: 'all', label: 'All categories' },
+                  ...(Object.keys(categoryLabels) as Secret['category'][]).map((category) => ({
+                    value: category,
+                    label: categoryLabels[category],
+                  })),
+                ]}
+              />
+            }
+            meta={`${countLabel(filteredSecrets.length, secrets.length, 'secret')} · ${categoryCount} ${categoryCount === 1 ? 'category' : 'categories'} · values are encrypted`}
+          />
 
-            return (
-              <div key={category} className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <CategoryIcon size={16} className="text-muted-foreground" />
-                  <h3 className="text-sm font-medium text-muted-foreground">
-                    {categoryLabels[category as Secret['category']] || category}
-                  </h3>
-                  <Badge>{categorySecrets.length}</Badge>
-                </div>
+          <div className={settingsTable.wrapper}>
+            <table className={settingsTable.table}>
+              <thead>
+                <tr className={settingsTable.headRow}>
+                  <th className={settingsTable.th}>Key</th>
+                  <th className={settingsTable.th}>Category</th>
+                  <th className={settingsTable.th}>Value</th>
+                  <th className={settingsTable.th}>Description</th>
+                  <th className={cn(settingsTable.th, 'w-24')}>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSecrets.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-muted-foreground">
+                      No secrets match the current search and filters
+                    </td>
+                  </tr>
+                )}
+                {filteredSecrets.map((secret) => {
+                  const isCopied = copiedId === secret.id;
+                  const CategoryIcon = categoryIcons[secret.category] || Key;
 
-                <div className={settingsTable.wrapper}>
-                  <table className={settingsTable.table}>
-                    <thead>
-                      <tr className={settingsTable.headRow}>
-                        <th className={settingsTable.th}>Key</th>
-                        <th className={settingsTable.th}>Value</th>
-                        <th className={settingsTable.th}>Description</th>
-                        <th className={cn(settingsTable.th, 'w-24')}>
-                          <span className="sr-only">Actions</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {categorySecrets.map((secret) => {
-                        const isCopied = copiedId === secret.id;
-
-                        return (
-                          <tr key={secret.id} className={settingsTable.row}>
-                            <td className={settingsTable.td}>
-                              <code className="bg-muted px-2 py-1 font-mono text-xs">{secret.key}</code>
-                            </td>
-                            <td className={settingsTable.td}>
-                              <div className="flex items-center gap-2">
-                                <code className="bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">
-                                  {secret.masked_value}
-                                </code>
-                                <span className="text-xs text-muted-foreground">(encrypted)</span>
-                              </div>
-                            </td>
-                            <td className={cn(settingsTable.td, 'text-muted-foreground')}>
-                              {secret.description || '—'}
-                            </td>
-                            <td className={settingsTable.td}>
-                              <div className="flex items-center justify-end gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => copyToClipboard(secret.id, secret.key)}
-                                  title="Copy secret key"
-                                >
-                                  {isCopied ? <Check size={14} className="text-primary" /> : <Copy size={14} />}
-                                </Button>
-                                <Button
-                                  variant="destructive-ghost"
-                                  size="icon"
-                                  onClick={() => void handleDelete(secret.id)}
-                                  title="Delete"
-                                >
-                                  <Trash2 size={14} />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            );
-          })}
+                  return (
+                    <tr key={secret.id} className={settingsTable.row}>
+                      <td className={settingsTable.td}>
+                        <code className="bg-muted px-2 py-1 font-mono text-xs">{secret.key}</code>
+                      </td>
+                      <td className={settingsTable.td}>
+                        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                          <CategoryIcon size={14} />
+                          {categoryLabels[secret.category] || secret.category}
+                        </span>
+                      </td>
+                      <td className={settingsTable.td}>
+                        <code className="bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">
+                          {secret.masked_value}
+                        </code>
+                      </td>
+                      <td className={cn(settingsTable.td, 'text-muted-foreground')}>{secret.description || '—'}</td>
+                      <td className={settingsTable.td}>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => copyToClipboard(secret.id, secret.key)}
+                            title="Copy secret key"
+                          >
+                            {isCopied ? <Check size={14} className="text-primary" /> : <Copy size={14} />}
+                          </Button>
+                          <Button
+                            variant="destructive-ghost"
+                            size="icon"
+                            onClick={() => void handleDelete(secret.id)}
+                            title="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

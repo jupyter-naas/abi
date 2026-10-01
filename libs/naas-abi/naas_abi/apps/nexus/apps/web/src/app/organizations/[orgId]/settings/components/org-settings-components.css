@@ -8,13 +8,20 @@
 
 .org-settings-page-header-with-actions {
   flex-direction: row;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-4);
 }
 
+/* Actions (e.g. the add button) stay in the top-right corner and never shrink. */
+.org-settings-page-header-with-actions > :last-child {
+  flex-shrink: 0;
+}
+
 .org-settings-page-header-text {
   display: flex;
+  flex: 1;
+  min-width: 0;
   flex-direction: column;
   gap: var(--space-1);
 }
