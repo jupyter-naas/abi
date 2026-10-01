@@ -23,7 +23,6 @@ import {
   moveNavItem,
   shiftForReorder,
 } from '@/lib/sidebar-nav';
-import { requestQuickOpen } from '@/lib/quick-open';
 import { isDocumentsNestedPath } from './documents-tree';
 import { isSlidesNestedPath } from './slides-tree';
 import { getWorkspacePath } from './utils';
@@ -45,10 +44,10 @@ type SectionDef = {
 
 const SECTIONS: SectionDef[] = [
   { id: 'home',        icon: <Home size={18} />,          label: 'Home',        description: 'Workspace overview and shortcuts',     href: '/home' },
+  { id: 'search',      icon: <Search size={18} />,        label: 'Search',      description: 'Search people, organizations and more',     href: '/search',      feature: 'search' },
   { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        description: 'Installed and available apps',          href: '/apps',        feature: 'apps' },
   { id: 'files',       icon: <Files size={18} />,         label: 'Files',       description: 'Browse and manage workspace files',     href: '/files',       feature: 'files' },
   { id: 'chat',        icon: <MessageSquare size={18} />, label: 'Chat',        description: 'Conversations with Abi and your team',  href: '/chat',        feature: 'chat' },
-  { id: 'search',      icon: <Search size={18} />,        label: 'Search',      description: 'Jump to anything in the workspace',     href: '/search',      feature: 'search' },
   { id: 'maps',        icon: <MapIcon size={18} />,       label: 'Maps',        description: 'Geographic and network presence maps',  href: '/maps',        feature: 'maps' },
   { id: 'ontology',    icon: <BrainCircuit size={18} />,  label: 'Ontology',    description: 'Explore ontology classes and relations', href: '/ontology',    feature: 'ontology' },
   { id: 'graph',       icon: <Waypoints size={18} />,     label: 'Knowledge Graph', description: 'Browse the knowledge graph',        href: '/graph', feature: 'graph' },
@@ -283,7 +282,6 @@ export function Sidebar() {
   useEffect(() => {
     if (!currentWorkspaceId) return;
     for (const section of orderedSections) {
-      if (section.id === 'search') continue;
       const path = getDefaultPath(section.id);
       if (path) router.prefetch(path);
     }
@@ -292,10 +290,6 @@ export function Sidebar() {
   const handleSectionClick = (section: SectionDef) => {
     setHoverTip(null);
     clearAppsSkipRestore();
-    if (section.id === 'search') {
-      requestQuickOpen();
-      return;
-    }
     const path = getDefaultPath(section.id);
     // Navigating: only flip the dock highlight now. The pathname reconciler
     // above opens the matching column when the route commits, so the column
@@ -633,10 +627,8 @@ export function Sidebar() {
               onPointerUp={(e) => onItemPointerUp(section, e)}
               onPointerCancel={onItemPointerCancel}
               onPointerEnter={(e) => {
-                if (section.id !== 'search') {
-                  const path = getDefaultPath(section.id);
-                  if (path) router.prefetch(path);
-                }
+                const path = getDefaultPath(section.id);
+                if (path) router.prefetch(path);
                 showHoverTip(section, e.currentTarget);
               }}
               onPointerLeave={hideHoverTip}

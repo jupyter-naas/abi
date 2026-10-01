@@ -13,6 +13,7 @@ import {
   Shield,
   Users,
   Zap,
+  Search,
   type LucideIcon,
 } from 'lucide-react';
 import { DOCKER_SERVICES } from '@/lib/docker-services';
@@ -56,6 +57,7 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
       { href: '/settings/agents', label: 'Agents', icon: Bot },
       { href: '/settings/ontologies', label: 'Ontologies', icon: BrainCircuit },
       { href: '/settings/graphs', label: 'Graphs', icon: Network },
+      { href: '/settings/search', label: 'Search', icon: Search },
       { href: '/settings/skills', label: 'Skills', icon: Zap },
       { href: '/settings/apps', label: 'Apps', icon: AppWindow },
       { href: '/settings/models', label: 'Models', icon: Cpu },

@@ -1,0 +1,220 @@
+from __future__ import annotations
+
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import GraphQuerySpecError
+from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.secondary.graph_query__secondary_adapter__triplestore import (  # noqa: E501
+    GraphQueryTripleStoreAdapter,
+)
+from naas_abi.apps.nexus.apps.api.app.services.search.topics.adapters.secondary.memory import (
+    InMemorySearchTopicStore,
+)
+from naas_abi.apps.nexus.apps.api.app.services.search.topics.builtin import BUILTIN_TOPICS
+from naas_abi.apps.nexus.apps.api.app.services.search.topics.service import SearchTopicService
+from naas_abi.apps.nexus.apps.api.app.services.search.topics.templating import (
+    render,
+    validate_query,
+    validate_topic,
+)
+from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema import (
+    SearchTopic,
+    SearchTopicNotFoundError,
+    SearchTopicValidationError,
+)
+from rdflib import Graph
+
+WS = "ws-1"
+DEMO_TTL = next(
+    (
+        parent
+        / "libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/graphs/demo/personnel.ttl"
+        for parent in Path(__file__).resolve().parents
+        if (
+            parent
+            / "libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/graphs/demo/personnel.ttl"
+        ).exists()
+    ),
+    None,
+)
+ALICE = "http://ontology.naas.ai/abi/Person/alice-dupont"
+
+
+@pytest.fixture(scope="module")
+def store() -> GraphQueryTripleStoreAdapter:
+    if DEMO_TTL is None:
+        pytest.skip("personnel demo graph not available")
+    return GraphQueryTripleStoreAdapter(Graph().parse(DEMO_TTL, format="turtle"))
+
+
+@pytest.fixture
+def service() -> SearchTopicService:
+    return SearchTopicService(InMemorySearchTopicStore())
+
+
+class TestContract:
+    @pytest.mark.parametrize("topic_id", sorted(BUILTIN_TOPICS))
+    def test_builtin_topics_fit_their_contract(self, topic_id: str) -> None:
+        validate_topic(BUILTIN_TOPICS[topic_id])
+
+    def test_results_query_must_project_uri_and_title(self) -> None:
+        errors = validate_query("SELECT ?uri WHERE { ?uri ?p ?o }", "results")
+        assert errors == ["must project ?title"]
+
+    def test_placeholder_outside_role_is_rejected(self) -> None:
+        errors = validate_query(
+            'SELECT ?title WHERE { {{ uri }} ?p ?title FILTER(?title = "{{ q }}") }', "header"
+        )
+        assert any("{{ q }}" in e for e in errors)
+
+    def test_updates_are_rejected(self) -> None:
+        assert validate_query("INSERT DATA { <a:a> <a:b> <a:c> }", "results")
+
+    def test_federation_and_datasets_are_rejected(self) -> None:
+        query = "SELECT ?uri ?title FROM <http://other/graph> WHERE { ?uri ?p ?title }"
+        assert "not allowed" in validate_query(query, "results")[0]
+
+    def test_search_text_cannot_escape_its_literal(self) -> None:
+        rendered = render(
+            'SELECT ?uri ?title WHERE { ?uri ?p ?title FILTER(CONTAINS(?title, "{{ q }}")) }',
+            "results",
+            {"q": '") } DROP ALL #', "limit": 1, "offset": 0},
+        )
+        assert '"\\") } DROP ALL #"' in rendered
+
+    def test_uri_is_validated(self) -> None:
+        with pytest.raises(GraphQuerySpecError):
+            render("SELECT ?title WHERE { {{ uri }} ?p ?title }", "header", {"uri": "x> } ; <y"})
+
+
+class TestDefinitions:
+    async def test_lists_builtins_by_order(self, service: SearchTopicService) -> None:
+        assert [t.id for t in await service.list_topics(WS)] == ["person", "organization"]
+
+    async def test_override_then_reset(self, service: SearchTopicService) -> None:
+        renamed = replace(BUILTIN_TOPICS["person"], label="Consultant")
+        saved = await service.save_topic(WS, renamed, user_id="u")
+        assert saved.source == "override"
+        assert (await service.get_topic(WS, "person")).label == "Consultant"
+        assert (await service.get_topic("other-ws", "person")).label == "Person"
+        assert (await service.reset_topic(WS, "person")).label == "Person"  # type: ignore[union-attr]
+
+    async def test_custom_topic_is_validated(self, service: SearchTopicService) -> None:
+        broken = SearchTopic.from_dict(
+            {
+                "id": "skill",
+                "label": "Skill",
+                "results_query": "SELECT ?uri WHERE { ?uri ?p ?o }",
+                "header_query": "SELECT ?title WHERE { {{ uri }} ?p ?title }",
+            }
+        )
+        with pytest.raises(SearchTopicValidationError) as exc:
+            await service.save_topic(WS, broken, user_id="u")
+        assert exc.value.errors == ["results query: must project ?title"]
+
+    async def test_topic_cannot_shadow_a_feature_scope(self, service: SearchTopicService) -> None:
+        shadow = replace(BUILTIN_TOPICS["person"], id="files")
+        with pytest.raises(SearchTopicValidationError) as exc:
+            await service.save_topic(WS, shadow, user_id="u")
+        assert exc.value.errors == ["id 'files' is reserved for a search scope"]
+
+    async def test_reset_unknown_custom_topic(self, service: SearchTopicService) -> None:
+        with pytest.raises(SearchTopicNotFoundError):
+            await service.reset_topic(WS, "nope")
+
+    def test_round_trips_through_dict(self) -> None:
+        topic = BUILTIN_TOPICS["person"]
+        assert SearchTopic.from_dict(topic.to_dict()) == topic
+
+
+class TestExecution:
+    async def test_empty_query_lists_every_person(self, service: SearchTopicService, store) -> None:
+        results = await service.search(WS, "person", "", store)
+        assert len(results.items) == 8
+        assert all(item.uri.startswith("http") for item in results.items)
+
+    async def test_matches_name_case_insensitively(
+        self, service: SearchTopicService, store
+    ) -> None:
+        results = await service.search(WS, "person", "ALICE", store)
+        assert [i.uri for i in results.items] == [ALICE]
+
+    async def test_has_more_pages(self, service: SearchTopicService, store) -> None:
+        page = await service.search(WS, "person", "", store, limit=3)
+        assert len(page.items) == 3 and page.has_more
+
+    async def test_person_detail_has_sections(self, service: SearchTopicService, store) -> None:
+        detail = await service.detail(WS, "person", ALICE, store)
+        assert detail.title
+        sections = {s.id: s for s in detail.sections}
+        assert set(sections) == {"experience", "education", "skills", "languages"}
+        assert sections["experience"].items and not sections["experience"].error
+        assert any(i.item for i in sections["experience"].items)
+
+    async def test_organization_links_back_to_people(
+        self, service: SearchTopicService, store
+    ) -> None:
+        orgs = await service.search(WS, "organization", "", store)
+        assert orgs.items
+        detail = await service.detail(WS, "organization", orgs.items[0].uri, store)
+        people = next(s for s in detail.sections if s.id == "people")
+        assert people.link_topic == "person" and people.items
+
+    async def test_unknown_individual(self, service: SearchTopicService, store) -> None:
+        with pytest.raises(SearchTopicNotFoundError):
+            await service.detail(WS, "person", "http://example.org/nobody", store)
+
+
+class TestGraphScope:
+    def test_no_graphs_means_every_workspace_graph(self) -> None:
+        from naas_abi.apps.nexus.apps.api.app.services.graph.access import GraphAccessScope
+        from naas_abi.apps.nexus.apps.api.app.services.search.topics.scope import topic_scope
+
+        scope = GraphAccessScope("w", frozenset({"urn:a", "urn:b"}), frozenset({"urn:a"}))
+        narrowed = topic_scope(scope, ())
+        assert narrowed.readable == {"urn:a", "urn:b"} and not narrowed.writable
+
+    def test_named_graphs_never_widen_access(self) -> None:
+        from naas_abi.apps.nexus.apps.api.app.services.graph.access import GraphAccessScope
+        from naas_abi.apps.nexus.apps.api.app.services.search.topics.scope import topic_scope
+
+        scope = GraphAccessScope("w", frozenset({"urn:a", "urn:b"}), frozenset())
+        assert topic_scope(scope, ("urn:b", "urn:secret")).readable == {"urn:b"}
+
+    def test_graphs_round_trip_and_are_validated(self) -> None:
+        topic = replace(BUILTIN_TOPICS["person"], graphs=("http://x/g",))
+        assert SearchTopic.from_dict(topic.to_dict()).graphs == ("http://x/g",)
+        with pytest.raises(SearchTopicValidationError):
+            validate_topic(replace(topic, graphs=("not an iri>",)))
+
+
+class TestScopeSwitches:
+    async def test_defaults_keep_apps_chats_agents_and_web(
+        self, service: SearchTopicService
+    ) -> None:
+        disabled = await service.disabled_scopes(WS)
+        assert not disabled & {"apps", "chat", "agents", "web.wikipedia", "web.duckduckgo"}
+        assert disabled == {
+            "files",
+            "documents",
+            "slides",
+            "sheets",
+            "datasets",
+            "ontology",
+            "graph",
+            "maps",
+        }
+
+    async def test_switch_off_and_on_per_workspace(self, service: SearchTopicService) -> None:
+        await service.set_scope_enabled(WS, "files", True, user_id="u")
+        await service.set_scope_enabled(WS, "web.wikipedia", False, user_id="u")
+        disabled = await service.disabled_scopes(WS)
+        assert "files" not in disabled and "web.wikipedia" in disabled
+        assert "files" in await service.disabled_scopes("other-ws")
+        await service.set_scope_enabled(WS, "apps", False, user_id="u")
+        assert "apps" in await service.disabled_scopes(WS)
+
+    async def test_topics_are_not_switched_here(self, service: SearchTopicService) -> None:
+        with pytest.raises(SearchTopicNotFoundError):
+            await service.set_scope_enabled(WS, "person", False, user_id="u")
