@@ -196,6 +196,7 @@ async def topic_results(
     current_user=Depends(get_current_user_required),
     service: SearchTopicService = Depends(get_search_topic_service),
 ) -> dict[str, Any]:
+    await require_workspace_access(current_user.id, workspace_id)
     try:
         topic = await service.get_topic(workspace_id, topic_id)
         store = await _scoped_store(current_user.id, workspace_id, topic.graphs)
@@ -213,6 +214,7 @@ async def topic_detail(
     current_user=Depends(get_current_user_required),
     service: SearchTopicService = Depends(get_search_topic_service),
 ) -> dict[str, Any]:
+    await require_workspace_access(current_user.id, workspace_id)
     try:
         topic = await service.get_topic(workspace_id, topic_id)
         store = await _scoped_store(current_user.id, workspace_id, topic.graphs)
