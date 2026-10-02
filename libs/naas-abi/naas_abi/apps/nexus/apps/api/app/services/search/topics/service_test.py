@@ -166,6 +166,60 @@ class TestExecution:
             await service.detail(WS, "person", "http://example.org/nobody", store)
 
 
+class TestResultDecoration:
+    def test_uris_render_as_a_values_block(self) -> None:
+        rendered = render(
+            "SELECT ?uri ?image WHERE { VALUES ?uri { {{ uris }} } ?uri <http://x/img> ?image }",
+            "image",
+            {"uris": ["http://a/1", "http://a/2"]},
+        )
+        assert "VALUES ?uri { <http://a/1> <http://a/2> }" in rendered
+
+    def test_uris_are_validated(self) -> None:
+        with pytest.raises(GraphQuerySpecError):
+            render(
+                "SELECT ?uri ?value WHERE { VALUES ?uri { {{ uris }} } }",
+                "row",
+                {"uris": ["not an iri"]},
+            )
+
+    def test_row_query_must_project_uri_and_value(self) -> None:
+        errors = validate_query("SELECT ?uri WHERE { VALUES ?uri { {{ uris }} } }", "row")
+        assert errors == ["must project ?value"]
+
+    def test_rows_round_trip_and_are_validated(self) -> None:
+        person = BUILTIN_TOPICS["person"]
+        assert SearchTopic.from_dict(person.to_dict()) == person
+        broken = replace(person, image_query="SELECT ?uri WHERE { VALUES ?uri { {{ uris }} } }")
+        with pytest.raises(SearchTopicValidationError, match="image query"):
+            validate_topic(broken)
+
+    async def test_people_get_portraits_and_rows(self, service: SearchTopicService, store) -> None:
+        results = await service.search(WS, "person", "alice", store)
+        alice = next(item for item in results.items if item.uri == ALICE)
+        assert [row.id for row in alice.rows][:1] == ["organization"]
+        assert all(row.value for row in alice.rows)
+
+    async def test_organizations_count_people_in_a_row(
+        self, service: SearchTopicService, store
+    ) -> None:
+        results = await service.search(WS, "organization", "", store)
+        top = results.items[0]
+        assert any(row.id == "people" and int(row.value) > 0 for row in top.rows)
+
+    async def test_a_broken_row_leaves_the_results(
+        self, service: SearchTopicService, store
+    ) -> None:
+        person = BUILTIN_TOPICS["person"]
+        failing = replace(
+            person.result_rows[0],
+            query="SELECT ?uri ?value WHERE { VALUES ?uri { {{ uris }} } BIND(1/0 AS ?value) }",
+        )
+        await service.save_topic(WS, replace(person, result_rows=(failing,)), user_id="u")
+        results = await service.search(WS, "person", "", store)
+        assert results.items and all(not item.rows for item in results.items)
+
+
 class TestGraphScope:
     def test_no_graphs_means_every_workspace_graph(self) -> None:
         from naas_abi.apps.nexus.apps.api.app.services.graph.access import GraphAccessScope

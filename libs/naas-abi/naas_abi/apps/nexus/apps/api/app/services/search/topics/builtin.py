@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema import (
     SearchTopic,
+    TopicResultRowDef,
     TopicSection,
 )
 
@@ -39,7 +40,7 @@ PERSON = SearchTopic(
     source="builtin",
     results_query=_PREFIXES
     + """
-SELECT ?uri ?title (SAMPLE(?headline) AS ?subtitle) (SAMPLE(?about) AS ?snippet) (SAMPLE(?portrait) AS ?image)
+SELECT ?uri ?title (SAMPLE(?headline) AS ?subtitle) (SAMPLE(?about) AS ?snippet)
 WHERE {
   ?uri rdf:type abi:Person ;
        rdfs:label ?title .
@@ -48,7 +49,6 @@ WHERE {
     OPTIONAL { ?summary people:headline_text ?headline . }
     OPTIONAL { ?summary people:summary_content ?about . }
   }
-  OPTIONAL { ?uri people:hasPortrait ?p . ?p people:portrait_url ?portrait . }
   OPTIONAL { ?uri people:hasSkill ?skill . ?skill rdfs:label ?skillLabel . }
   FILTER(
     CONTAINS(LCASE(STR(?title)), LCASE("{{ q }}"))
@@ -61,6 +61,61 @@ ORDER BY LCASE(STR(?title))
 LIMIT {{ limit }}
 OFFSET {{ offset }}
 """,
+    detail_label="Resume",
+    image_query=_PREFIXES
+    + """
+SELECT ?uri ?image
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?uri people:hasPortrait ?p .
+  ?p people:portrait_url ?image .
+}
+""",
+    result_rows=(
+        TopicResultRowDef(
+            id="organization",
+            label="Organization",
+            query=_PREFIXES
+            + """
+SELECT DISTINCT ?uri ?value
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?uri people:worksFor|personnel:isEmployedBy ?org .
+  ?org rdfs:label ?value .
+}
+""",
+        ),
+        TopicResultRowDef(
+            id="role",
+            label="Role",
+            query=_PREFIXES
+            + """
+SELECT DISTINCT ?uri ?value
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?uri people:hasActOfWorking ?act .
+  ?act abi:realizes ?role .
+  ?role people:job_title ?value .
+}
+""",
+        ),
+        TopicResultRowDef(
+            id="location",
+            label="Location",
+            query=_PREFIXES
+            + """
+SELECT DISTINCT ?uri ?value
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?uri people:hasWorkLocation ?site .
+  OPTIONAL { ?site people:office_label ?office . }
+  OPTIONAL { ?site people:country_name ?country . }
+  BIND(COALESCE(?office, ?country) AS ?value)
+  FILTER(BOUND(?value))
+}
+""",
+        ),
+    ),
     header_query=_PREFIXES
     + """
 SELECT ?title ?subtitle ?snippet ?image ?url ?employer ?office ?country ?serviceLine ?grade ?yearsOfExperience
@@ -183,7 +238,6 @@ ORGANIZATION = SearchTopic(
     results_query=_PREFIXES
     + """
 SELECT ?uri ?title
-       (CONCAT(STR(COUNT(DISTINCT ?person)), IF(COUNT(DISTINCT ?person) = 1, " person", " people")) AS ?subtitle)
 WHERE {
   ?uri rdf:type abi:Organization ;
        rdfs:label ?title .
@@ -198,6 +252,37 @@ ORDER BY DESC(COUNT(DISTINCT ?person)) LCASE(STR(?title))
 LIMIT {{ limit }}
 OFFSET {{ offset }}
 """,
+    detail_label="Card",
+    result_rows=(
+        TopicResultRowDef(
+            id="people",
+            label="People",
+            query=_PREFIXES
+            + """
+SELECT ?uri (STR(COUNT(DISTINCT ?person)) AS ?value)
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?act people:forOrganization ?uri .
+  ?person people:hasActOfWorking ?act .
+}
+GROUP BY ?uri
+""",
+        ),
+        TopicResultRowDef(
+            id="consultants",
+            label="Consultants",
+            query=_PREFIXES
+            + """
+SELECT ?uri (STR(COUNT(DISTINCT ?person)) AS ?value)
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?act people:forClient ?uri .
+  ?person people:hasActOfWorking ?act .
+}
+GROUP BY ?uri
+""",
+        ),
+    ),
     header_query=_PREFIXES
     + """
 SELECT ?title (COUNT(DISTINCT ?employee) AS ?people) (COUNT(DISTINCT ?consultant) AS ?consultants)

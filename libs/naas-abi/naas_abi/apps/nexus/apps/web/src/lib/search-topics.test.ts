@@ -14,6 +14,16 @@ test('a search view round-trips through its URL', () => {
   assert.equal(searchHref('w', { scope: 'all', q: 'x' }), '/workspace/w/search?q=x');
 });
 
+test('an opened individual lands on the detail tab and keeps it across tabs', () => {
+  const href = searchHref('ws', { scope: 'person', item: 'http://x/alice', tab: 'details' });
+  assert.match(href, /tab=details/);
+  const route = readSearchRoute(new URLSearchParams(href.split('?')[1]));
+  assert.equal(route.tab, 'details');
+  const ontology = readSearchRoute(new URLSearchParams(searchHref('ws', { ...route, tab: 'ontology' }).split('?')[1]));
+  assert.equal(ontology.item, 'http://x/alice');
+  assert.equal(readSearchRoute(new URLSearchParams('tab=nope')).tab, 'results');
+});
+
 test('the earlier ?topic= links still open their topic', () => {
   assert.equal(readSearchRoute(new URLSearchParams('topic=person')).scope, 'person');
 });

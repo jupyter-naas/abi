@@ -15,7 +15,16 @@ role       placeholders         required vars       optional vars
 results    q, limit, offset     uri, title          subtitle, snippet, image, score
 header     uri                  title               subtitle, snippet, image, url  (+ any → facts)
 section    uri, limit           title               item, subtitle, snippet, image, start, end, url
+image      uris                 uri, image
+row        uris                 uri, value
 =========  ===================  ==================  ===========================================
+
+``image`` and ``row`` queries decorate a page of results: they run once per
+page with ``{{ uris }}`` standing for that page's individuals (write
+``VALUES ?uri { {{ uris }} }``). The image query gives each result its picture
+(a person's portrait, an organization's logo); each row query is one labelled
+line of metadata under a result (employer, office, people…), its values joined
+when it binds several.
 
 Placeholders are substituted server-side only, never by string formatting:
 ``{{ q }}`` is the *content* of a string literal (write it inside quotes),
@@ -34,7 +43,7 @@ import re
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal
 
-QueryRole = Literal["results", "header", "section"]
+QueryRole = Literal["results", "header", "section", "image", "row"]
 TopicSource = Literal["builtin", "override", "custom"]
 
 TOPIC_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{1,47}$")
@@ -96,6 +105,16 @@ ROLE_CONTRACTS: dict[str, RoleContract] = {
         required=frozenset({"title"}),
         optional=frozenset({"item", "subtitle", "snippet", "image", "start", "end", "url"}),
     ),
+    "image": RoleContract(
+        placeholders=frozenset({"uris"}),
+        required=frozenset({"uri", "image"}),
+        optional=frozenset(),
+    ),
+    "row": RoleContract(
+        placeholders=frozenset({"uris"}),
+        required=frozenset({"uri", "value"}),
+        optional=frozenset(),
+    ),
 }
 
 
@@ -124,6 +143,15 @@ class TopicSection:
 
 
 @dataclass(frozen=True)
+class TopicResultRowDef:
+    """One labelled line of metadata under each result, filled by a ``row`` query."""
+
+    id: str
+    label: str
+    query: str
+
+
+@dataclass(frozen=True)
 class SearchTopic:
     id: str
     label: str
@@ -134,6 +162,12 @@ class SearchTopic:
     results_query: str
     header_query: str
     sections: tuple[TopicSection, ...] = ()
+    # The picture of each result (``image`` role); empty: the results query's ?image.
+    image_query: str = ""
+    # Metadata lines under each result (``row`` role), in order.
+    result_rows: tuple[TopicResultRowDef, ...] = ()
+    # The tab that shows one individual: "Resume" for a person, "Card" for an organization.
+    detail_label: str = "Details"
     # Graphs the topic reads, within what the workspace may read. Empty: every
     # graph the workspace can read (the default for every topic).
     graphs: tuple[str, ...] = ()
@@ -144,6 +178,7 @@ class SearchTopic:
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["sections"] = [asdict(s) for s in self.sections]
+        data["result_rows"] = [asdict(r) for r in self.result_rows]
         data["graphs"] = list(self.graphs)
         return data
 
@@ -169,6 +204,12 @@ class SearchTopic:
             results_query=str(data["results_query"]),
             header_query=str(data["header_query"]),
             sections=sections,
+            image_query=str(data.get("image_query") or ""),
+            result_rows=tuple(
+                TopicResultRowDef(id=str(r["id"]), label=str(r["label"]), query=str(r["query"]))
+                for r in data.get("result_rows") or []
+            ),
+            detail_label=str(data.get("detail_label") or "Details"),
             graphs=tuple(dict.fromkeys(str(g) for g in data.get("graphs") or [] if str(g).strip())),
             enabled=bool(data.get("enabled", True)),
             order=int(data.get("order", 100)),
@@ -180,6 +221,13 @@ class SearchTopic:
 
 
 @dataclass(frozen=True)
+class TopicResultRow:
+    id: str
+    label: str
+    value: str
+
+
+@dataclass(frozen=True)
 class TopicResultItem:
     uri: str
     title: str
@@ -187,6 +235,7 @@ class TopicResultItem:
     snippet: str | None = None
     image: str | None = None
     score: float | None = None
+    rows: list[TopicResultRow] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

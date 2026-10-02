@@ -48,7 +48,7 @@ function HitRow({ workspaceId, hit, compact }: { workspaceId: string; hit: Scope
   }
   if (action.kind === 'href') return <Link href={action.href} className={row}>{body}</Link>;
   if (action.kind === 'topic-item') {
-    return <Link href={searchHref(workspaceId, { scope: action.topic, item: action.uri })} scroll={false} className={row}>{body}</Link>;
+    return <Link href={searchHref(workspaceId, { scope: action.topic, item: action.uri, tab: 'details' })} scroll={false} className={row}>{body}</Link>;
   }
   // Files open in the Files page, at their folder, the way quick-open does it.
   return (

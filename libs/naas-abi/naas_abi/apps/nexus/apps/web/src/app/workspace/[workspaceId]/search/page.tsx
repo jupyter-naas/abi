@@ -157,7 +157,7 @@ function Search() {
               topic={topic}
               route={route}
               canEdit={canEdit}
-              onTab={(tab) => go({ tab, ...(tab === 'ontology' ? { item: null } : {}) })}
+              onTab={(tab) => go({ tab })}
             />
           ) : active.kind === 'web' ? (
             <WebSearchPanel query={route.q} />

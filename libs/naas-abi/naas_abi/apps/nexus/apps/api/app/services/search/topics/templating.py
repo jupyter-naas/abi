@@ -32,6 +32,7 @@ _SAMPLE_PARAMS: dict[str, Any] = {
     "uri": "http://example.org/sample",
     "limit": 10,
     "offset": 0,
+    "uris": ["http://example.org/sample"],
 }
 
 
@@ -45,6 +46,11 @@ def _render_value(name: str, value: Any) -> str:
         return sparql_string_literal(str(value or ""))[1:-1]
     if name == "uri":
         return sparql_iri(str(value))
+    if name == "uris":
+        # The IRIs of a VALUES block: the template writes ``VALUES ?uri { {{ uris }} }``.
+        if isinstance(value, str) or not isinstance(value, (list, tuple)):
+            raise GraphQuerySpecError("uris must be a list of IRIs")
+        return " ".join(sparql_iri(str(item)) for item in value)
     if name in {"limit", "offset"}:
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise GraphQuerySpecError(f"{name} must be a non-negative integer")
@@ -128,6 +134,18 @@ def validate_topic(topic: SearchTopic) -> None:
             errors.append(f"graph {graph!r} is not a valid IRI")
     errors += validate_query(topic.results_query, "results", label="results query")
     errors += validate_query(topic.header_query, "header", label="header query")
+    if topic.image_query.strip():
+        errors += validate_query(topic.image_query, "image", label="image query")
+    rows_seen: set[str] = set()
+    for row in topic.result_rows:
+        if not TOPIC_ID_PATTERN.match(row.id):
+            errors.append(f"result row id {row.id!r} is invalid")
+        if row.id in rows_seen:
+            errors.append(f"result row id {row.id!r} is duplicated")
+        rows_seen.add(row.id)
+        if not row.label.strip():
+            errors.append(f"result row {row.id}: label is required")
+        errors += validate_query(row.query, "row", label=f"result row {row.id}")
     seen: set[str] = set()
     for section in topic.sections:
         if not TOPIC_ID_PATTERN.match(section.id):

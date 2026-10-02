@@ -33,7 +33,7 @@ export function TopicDetailView({ detail, loading, error, backHref, linkFor }: {
 
   return (
     <article className="space-y-5">
-      <BackLink href={backHref} className="lg:hidden" />
+      <BackLink href={backHref} />
       <header className="flex gap-4">
         <TopicAvatar label={detail.title} image={detail.image} size={72} className="rounded-xl" />
         <div className="min-w-0 flex-1 space-y-1">
