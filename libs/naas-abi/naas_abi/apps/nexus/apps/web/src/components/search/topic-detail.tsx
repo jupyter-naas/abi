@@ -33,7 +33,7 @@ export function TopicDetailView({ detail, loading, error, backHref, linkFor }: {
 
   return (
     <article className="space-y-5">
-      <BackLink href={backHref} className="lg:hidden" />
+      <BackLink href={backHref} />
       <header className="flex gap-4">
         <TopicAvatar label={detail.title} image={detail.image} size={72} className="rounded-xl" />
         <div className="min-w-0 flex-1 space-y-1">
@@ -53,7 +53,7 @@ export function TopicDetailView({ detail, loading, error, backHref, linkFor }: {
       {detail.snippet && <p className="whitespace-pre-line text-sm leading-relaxed">{detail.snippet}</p>}
 
       {detail.facts.length > 0 && (
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border bg-card p-3 text-sm sm:grid-cols-3">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border bg-card p-3 text-sm sm:grid-cols-4">
           {detail.facts.map(fact => (
             <div key={fact.key} className="min-w-0">
               <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{fact.label}</dt>
@@ -62,7 +62,7 @@ export function TopicDetailView({ detail, loading, error, backHref, linkFor }: {
           ))}
         </dl>
       )}
-      <SparqlDisclosure sparql={detail.header_sparql} label="Header SPARQL" />
+      <SparqlDisclosure sparql={detail.header_sparql} />
 
       {detail.sections.map(section => <Section key={section.id} section={section} linkFor={linkFor} />)}
     </article>
@@ -79,16 +79,13 @@ function BackLink({ href, className }: { href: string; className?: string }) {
 
 function Section({ section, linkFor }: { section: TopicSectionResult; linkFor: (topicId: string, uri: string) => string }) {
   // Rows with only a title (skills, tags…) read better as chips than as a list.
-  const compact = section.items.length > 0 && section.items.every(i => !i.subtitle && !i.snippet && !i.start && !i.end);
+  const compact = section.items.length > 0 && section.items.every(i => !i.subtitle && !i.snippet && !i.start && !i.end && !i.tags?.length);
   return (
     <section className="space-y-2 border-t pt-4">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">
-          {section.label}
-          {section.items.length > 0 && <span className="ml-2 text-xs font-normal text-muted-foreground">{section.items.length}</span>}
-        </h3>
-        <SparqlDisclosure sparql={section.sparql} />
-      </div>
+      <h3 className="text-sm font-semibold">
+        {section.label}
+        {section.items.length > 0 && <span className="ml-2 text-xs font-normal text-muted-foreground">{section.items.length}</span>}
+      </h3>
 
       {section.error ? (
         <p role="alert" className="text-sm text-red-500">This section could not be loaded: {section.error}</p>
@@ -128,6 +125,11 @@ function Section({ section, linkFor }: { section: TopicSectionResult; linkFor: (
                         </ul>
                       : <p className="mt-1 text-xs text-muted-foreground">{item.snippet}</p>
                   )}
+                  {item.tags && item.tags.length > 0 && (
+                    <ul className="mt-1.5 flex flex-wrap gap-1" aria-label="Skills and languages">
+                      {item.tags.map(tag => <li key={tag} className="bg-secondary px-1.5 py-0.5 text-[11px]">{tag}</li>)}
+                    </ul>
+                  )}
                   {item.url && /^https?:\/\//i.test(item.url) && (
                     <a href={item.url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs text-workspace-accent hover:underline">
                       Source <ExternalLink size={10} />
@@ -139,6 +141,7 @@ function Section({ section, linkFor }: { section: TopicSectionResult; linkFor: (
           })}
         </ol>
       )}
+      <SparqlDisclosure sparql={section.sparql} />
     </section>
   );
 }

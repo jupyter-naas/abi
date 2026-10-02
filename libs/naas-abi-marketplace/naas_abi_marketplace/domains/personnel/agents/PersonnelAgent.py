@@ -47,9 +47,9 @@ Help the user accomplish their human resources tasks using the tools available t
 
     suggestions: list[dict] = [
         {
-            "label": "Working history",
-            "value": "Show the working history of {{Person}}",
-            "description": "List every act of working with role, mission and skills",
+            "label": "Headcount",
+            "value": "What is our current headcount by job family?",
+            "description": "Count active employees per job family",
         },
         {
             "label": "Job Description",
@@ -100,43 +100,20 @@ Help the user accomplish their human resources tasks using the tools available t
             "find_open_job_positions",
             "find_positions_by_title",
             "find_headcount_by_job_family",
-            "find_working_experiences",
-            "find_skills_developed",
-            "find_educations",
-            "find_people_directory",
-            "find_profile_header",
-            "find_person_skills",
-            "find_certifications",
-            "find_acts_of_certification",
-            "find_languages",
-            "find_recommendations",
-            "find_interests",
         ]
         return list(templatable_sparql_query_module.get_tools(personnel_sparql_tools))
 
     @classmethod
     def get_pipeline_tools(cls) -> list:
-        """Process registration and profile-from-source orchestration tools."""
+        """Tools that record what the organization keeps about its own staff."""
         from naas_abi_marketplace.domains.personnel import ABIModule
-        from naas_abi_marketplace.domains.personnel.pipelines.ActOfCertificationPipeline import (
-            ActOfCertificationPipeline,
-            ActOfCertificationPipelineConfiguration,
+        from naas_abi_marketplace.domains.personnel.pipelines.ActOfEmploymentPipeline import (
+            ActOfEmploymentPipeline,
+            ActOfEmploymentPipelineConfiguration,
         )
-        from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline import (
-            ActOfStudyingPipeline,
-            ActOfStudyingPipelineConfiguration,
-        )
-        from naas_abi_marketplace.domains.personnel.pipelines.ActOfWorkingPipeline import (
-            ActOfWorkingPipeline,
-            ActOfWorkingPipelineConfiguration,
-        )
-        from naas_abi_marketplace.domains.personnel.pipelines.PersonProfilePipeline import (
-            PersonProfilePipeline,
-            PersonProfilePipelineConfiguration,
-        )
-        from naas_abi_marketplace.domains.personnel.pipelines.profile_from_source import (
-            ProfileFromSourcePipeline,
-            ProfileFromSourcePipelineConfiguration,
+        from naas_abi_marketplace.domains.personnel.pipelines.PersonnelProfilePipeline import (
+            PersonnelProfilePipeline,
+            PersonnelProfilePipelineConfiguration,
         )
         from rdflib import URIRef
 
@@ -146,22 +123,13 @@ Help the user accomplish their human resources tasks using the tools available t
         pipeline_cfg = dict(
             triple_store=triple_store, graph_name=graph_name, persist=True
         )
-        working = ActOfWorkingPipeline(ActOfWorkingPipelineConfiguration(**pipeline_cfg))
-        studying = ActOfStudyingPipeline(ActOfStudyingPipelineConfiguration(**pipeline_cfg))
-        certification = ActOfCertificationPipeline(
-            ActOfCertificationPipelineConfiguration(**pipeline_cfg)
+        employment = ActOfEmploymentPipeline(
+            ActOfEmploymentPipelineConfiguration(**pipeline_cfg)
         )
-        profile = PersonProfilePipeline(PersonProfilePipelineConfiguration(**pipeline_cfg))
-        from_source = ProfileFromSourcePipeline(
-            ProfileFromSourcePipelineConfiguration(**pipeline_cfg)
+        profile = PersonnelProfilePipeline(
+            PersonnelProfilePipelineConfiguration(**pipeline_cfg)
         )
-        return [
-            *from_source.as_tools(),
-            *working.as_tools(),
-            *studying.as_tools(),
-            *certification.as_tools(),
-            *profile.as_tools(),
-        ]
+        return [*employment.as_tools(), *profile.as_tools()]
 
     @classmethod
     def get_tools(cls) -> list:

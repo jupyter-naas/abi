@@ -1,0 +1,244 @@
+from __future__ import annotations
+
+from langchain_core.messages import AnyMessage
+from naas_abi_core.services.agent.Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+)
+
+
+class PeopleAgent(Agent):
+    name: str = "People"
+    description: str = (
+        "People intelligence analyst: who people are, where they worked and "
+        "studied, what they know and hold, from what has been published about them."
+    )
+    logo_url: str = "naas_abi_marketplace/domains/intelligence/modules/people/assets/public/people-intelligence.png"
+    system_prompt: str = """<role>
+You are PeopleAgent, a people intelligence analyst. You know what can be
+established about any person from what has been published about them: their
+working and study history, the roles and missions they held, their skills,
+certifications, languages, interests and recommendations.
+</role>
+
+<objective>
+Answer questions about people from the people graph, and register what a
+published profile states about someone, using the tools available to you.
+</objective>
+
+<tools>
+[TOOLS]
+</tools>
+
+<operating_guidelines>
+- Maintain a clear, concise, and professional tone.
+- Format responses as clean, well-structured Markdown.
+- Say where a fact comes from: every statement in the graph is traceable to the
+  profile document it was read from.
+- Distinguish what a source states from what you infer.
+</operating_guidelines>
+
+<constraints>
+- Preserve the language of the user's message in your response.
+- Only use the provided tools - do not fabricate data or capabilities.
+- An organization's internal HR records (employee roles, contracts, grades,
+  service lines) are not people intelligence; do not claim them.
+</constraints>
+"""
+    suggestions: list[dict] = [
+        {
+            "label": "Working history",
+            "value": "Show the working history of {{Person}}",
+            "description": "List every act of working with role, mission and skills",
+        },
+        {
+            "label": "Who knows",
+            "value": "Who has experience with {{Skill}}?",
+            "description": "Find people by a skill they bear",
+        },
+        {
+            "label": "Certifications",
+            "value": "Who holds a {{Certification}} certification?",
+            "description": "List certifications and who issued them",
+        },
+        {
+            "label": "Register a profile",
+            "value": "Register the profile at {{URL}}",
+            "description": "Read a published profile into the people graph",
+        },
+    ]
+
+    @classmethod
+    def get_sparql_tools(cls) -> list:
+        """Load the people SPARQL competency-question tools by name."""
+        from naas_abi_core.module.Module import BaseModule
+        from naas_abi_core.modules.templatablesparqlquery import (
+            ABIModule as TemplatableSparqlQueryABIModule,
+        )
+        from naas_abi_marketplace.domains.intelligence.modules.people import ABIModule
+
+        templatable_sparql_query_module: BaseModule = (
+            ABIModule.get_instance().engine.modules[
+                "naas_abi_core.modules.templatablesparqlquery"
+            ]
+        )
+        assert isinstance(
+            templatable_sparql_query_module, TemplatableSparqlQueryABIModule
+        ), "TemplatableSparqlQueryABIModule must be a subclass of BaseModule"
+
+        people_sparql_tools = [
+            "find_working_experiences",
+            "find_skills_developed",
+            "find_educations",
+            "find_people_directory",
+            "find_profile_header",
+            "find_person_skills",
+            "find_certifications",
+            "find_acts_of_certification",
+            "find_languages",
+            "find_recommendations",
+            "find_interests",
+        ]
+        return list(templatable_sparql_query_module.get_tools(people_sparql_tools))
+
+    @classmethod
+    def get_pipeline_tools(cls) -> list:
+        """Process registration and profile-from-source orchestration tools."""
+        from naas_abi_marketplace.domains.intelligence.modules.people import ABIModule
+        from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfCertificationPipeline import (
+            ActOfCertificationPipeline,
+            ActOfCertificationPipelineConfiguration,
+        )
+        from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfStudyingPipeline import (
+            ActOfStudyingPipeline,
+            ActOfStudyingPipelineConfiguration,
+        )
+        from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfWorkingPipeline import (
+            ActOfWorkingPipeline,
+            ActOfWorkingPipelineConfiguration,
+        )
+        from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.PersonProfilePipeline import (
+            PersonProfilePipeline,
+            PersonProfilePipelineConfiguration,
+        )
+        from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.profile_from_source import (
+            ProfileFromSourcePipeline,
+            ProfileFromSourcePipelineConfiguration,
+        )
+        from rdflib import URIRef
+
+        module = ABIModule.get_instance()
+        triple_store = module.engine.services.triple_store
+        graph_name = URIRef(module.configuration.graph_name)
+        pipeline_cfg = dict(
+            triple_store=triple_store, graph_name=graph_name, persist=True
+        )
+        working = ActOfWorkingPipeline(
+            ActOfWorkingPipelineConfiguration(**pipeline_cfg)
+        )
+        studying = ActOfStudyingPipeline(
+            ActOfStudyingPipelineConfiguration(**pipeline_cfg)
+        )
+        certification = ActOfCertificationPipeline(
+            ActOfCertificationPipelineConfiguration(**pipeline_cfg)
+        )
+        profile = PersonProfilePipeline(
+            PersonProfilePipelineConfiguration(**pipeline_cfg)
+        )
+        from_source = ProfileFromSourcePipeline(
+            ProfileFromSourcePipelineConfiguration(**pipeline_cfg)
+        )
+        return [
+            *from_source.as_tools(),
+            *working.as_tools(),
+            *studying.as_tools(),
+            *certification.as_tools(),
+            *profile.as_tools(),
+        ]
+
+    @classmethod
+    def get_tools(cls) -> list:
+        """SPARQL query tools and process registration pipelines."""
+        return list(cls.get_sparql_tools()) + list(cls.get_pipeline_tools())
+
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> PeopleAgent:
+        from naas_abi_core.engine.context import get_default_model_registry
+
+        # Use the workspace's default chat model from the model registry.
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        chat_model = registry.get_default_chat_model()
+
+        tools: list = cls.get_tools()
+
+        agents: list = []
+
+        # Use provided configuration or build one from the class system prompt.
+        if agent_configuration is None:
+            tools_section = (
+                "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
+                or ""
+            )
+            agent_configuration = AgentConfiguration(
+                system_prompt=cls.system_prompt.replace("[TOOLS]", tools_section)
+            )
+
+        # Use provided shared state or create new one
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState(thread_id="0")
+
+        return cls(
+            name=cls.name,
+            description=cls.description,
+            chat_model=chat_model,
+            tools=tools,
+            agents=agents,
+            memory=None,
+            state=agent_shared_state,
+            configuration=agent_configuration,
+        )
+
+    # ------------------------------------------------------------------
+    # Message hooks
+    #
+    # Already wired: the runtime calls these on every message, you only have
+    # to fill in the body. They are observation points -- whatever you return
+    # is ignored, and if you raise, the error is logged and swallowed so the
+    # conversation keeps going.
+    #
+    # They run inline on the streaming thread, so keep them quick. Hand slow
+    # work (HTTP calls, big writes) off to a queue or a thread yourself.
+    # ------------------------------------------------------------------
+
+    def onHumanMessage(self, message: AnyMessage) -> None:
+        """Called every time the user sends a new message to this agent.
+
+        Runs once per turn, before the message reaches the model.
+
+        Args:
+            message (AnyMessage): The HumanMessage that was just received.
+        """
+        # Example -- replace with whatever you need:
+        # from naas_abi_core.utils.Logger import logger
+        # logger.info(f"[{self.name}] human: {message.content}")
+
+    def onAImessage(self, message: AnyMessage, agent_name: str) -> None:
+        """Called every time a new AI message is emitted.
+
+        Fires for messages from this agent *and* from any of its sub-agents --
+        use ``agent_name`` to tell them apart. Messages that only carry tool
+        calls are not reported here.
+
+        Args:
+            message (AnyMessage): The AIMessage that was just emitted.
+            agent_name (str): Name of the agent that produced the message.
+        """
+        # Example -- replace with whatever you need:
+        # from naas_abi_core.utils.Logger import logger
+        # logger.info(f"[{agent_name}] ai: {message.content}")

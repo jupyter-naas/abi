@@ -32,6 +32,8 @@ export function InstanceNetworkCanvas({
   minimumAutoFitScale = 0.35,
   focusOnSelection = true,
   interactive = true,
+  bfoZones = false,
+  ontologyCards = false,
 }: {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -48,6 +50,10 @@ export function InstanceNetworkCanvas({
   minimumAutoFitScale?: number;
   focusOnSelection?: boolean;
   interactive?: boolean;
+  /** Place the nodes in BFO zones: occurrents above continuants, one zone per bucket. */
+  bfoZones?: boolean;
+  /** Draw ontology terms as the Network page does: labelled cards, square connectors, zones hidden. */
+  ontologyCards?: boolean;
 }) {
   const [search, setSearch] = useState('');
   const filtered = useMemo(
@@ -103,11 +109,13 @@ export function InstanceNetworkCanvas({
         nodeSpacing={nodeSpacing ?? 80}
         minimumAutoFitScale={minimumAutoFitScale}
         viewStateKey={`${viewStateKey}|instance-circles`}
-        orthogonalEdges={false}
-        circularNodes
-        labelPlacement="top"
+        orthogonalEdges={ontologyCards}
+        circularNodes={!ontologyCards}
+        labelPlacement={ontologyCards ? 'inside' : 'top'}
         getNodeTitle={interactive ? getNodeTitle : undefined}
         interactive={interactive}
+        bfoZones={bfoZones}
+        bfoZonesVisible={ontologyCards ? { topLevel: false, buckets: false } : undefined}
       />
     </div>
   );

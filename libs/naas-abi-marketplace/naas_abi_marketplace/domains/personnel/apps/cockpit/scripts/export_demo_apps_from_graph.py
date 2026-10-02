@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run personnel SPARQL queries against the demo TTL and write app JSON.
+"""Run the people and personnel SPARQL queries against the demo TTL and write app JSON.
 
 Reads ``graphs/demo/personnel.ttl``, executes competency queries, then:
 
@@ -16,6 +16,9 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.graph_payload import (
+    build_graph_page_payload,
+)
 from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import (
     load_config,
     load_default_entity,
@@ -24,11 +27,10 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.data_store import (
     publish_data_tree,
     runtime_storage_prefix,
 )
-from naas_abi_marketplace.domains.personnel.apps.cockpit.graph_payload import (
-    build_graph_page_payload,
-)
 from naas_abi_marketplace.domains.personnel.apps.cockpit.graph_query import (
+    graph_page_roster,
     load_query_templates,
+    process_class_catalog,
     query_source_rows,
     roster_and_kpis,
 )
@@ -45,7 +47,7 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import (
 from naas_abi_marketplace.domains.personnel.apps.cockpit.processes_payload import (
     build_processes_page_payload,
 )
-from naas_abi_marketplace.domains.personnel.paths import PERSONNEL_ROOT
+from naas_abi_marketplace.domains.personnel.utils.paths import PERSONNEL_ROOT
 from rdflib import Graph
 
 SCHEMA = "1.0"
@@ -70,15 +72,15 @@ def _envelope(records: list, **extra) -> dict:
 
 def _dump(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     print(f"  wrote {path.relative_to(PERSONNEL_ROOT)}")
 
 
 def main() -> None:
     if not GRAPH_FILE.exists():
-        raise SystemExit(
-            f"Missing {GRAPH_FILE}. Run make demo-graph first."
-        )
+        raise SystemExit(f"Missing {GRAPH_FILE}. Run make demo-graph first.")
 
     print(f"Loading {GRAPH_FILE.relative_to(PERSONNEL_ROOT)}…")
     graph = Graph()
@@ -95,9 +97,7 @@ def main() -> None:
     # --- page datasets ------------------------------------------------------
     print(f"data/entities/{ENTITY_ID}/")
     org_label = load_default_entity().get("organizationLabel") or "Demo"
-    roster_rows, roster_source, kpis = roster_and_kpis(
-        source_rows, org_label=org_label
-    )
+    roster_rows, roster_source, kpis = roster_and_kpis(source_rows, org_label=org_label)
     print(f"  roster: {len(roster_rows)} rows from {roster_source}")
 
     _dump(
@@ -107,10 +107,11 @@ def main() -> None:
     _dump(ENTITY_DATA / "dashboard" / "roster.json", _envelope(roster_rows))
 
     graph_payload = build_graph_page_payload(
-        roster_rows,
+        graph_page_roster(roster_rows),
         source_rows.get("find_working_experiences", []),
         source_rows.get("find_skills_developed", []),
         source_rows.get("find_educations", []),
+        process_class_catalog=process_class_catalog(),
     )
     _dump(
         ENTITY_DATA / "graph" / "index.json",

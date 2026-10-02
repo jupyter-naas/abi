@@ -1,29 +1,21 @@
-"""Personnel process pipelines (Act of Working, Studying and Certification)."""
+"""Personnel pipelines: what an organization records about its own staff."""
 
-from naas_abi_marketplace.domains.personnel.pipelines.ActOfCertificationPipeline import (
-    ActOfCertificationPipeline,
-    ActOfCertificationPipelineConfiguration,
-    ActOfCertificationPipelineParameters,
+from naas_abi_marketplace.domains.personnel.pipelines.ActOfEmploymentPipeline import (
+    ActOfEmploymentPipeline,
+    ActOfEmploymentPipelineConfiguration,
+    ActOfEmploymentPipelineParameters,
 )
-from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline import (
-    ActOfStudyingPipeline,
-    ActOfStudyingPipelineConfiguration,
-    ActOfStudyingPipelineParameters,
-)
-from naas_abi_marketplace.domains.personnel.pipelines.ActOfWorkingPipeline import (
-    ActOfWorkingPipeline,
-    ActOfWorkingPipelineConfiguration,
-    ActOfWorkingPipelineParameters,
+from naas_abi_marketplace.domains.personnel.pipelines.PersonnelProfilePipeline import (
+    PersonnelProfilePipeline,
+    PersonnelProfilePipelineConfiguration,
+    PersonnelProfilePipelineParameters,
 )
 
 __all__ = [
-    "ActOfCertificationPipeline",
-    "ActOfCertificationPipelineConfiguration",
-    "ActOfCertificationPipelineParameters",
-    "ActOfStudyingPipeline",
-    "ActOfStudyingPipelineConfiguration",
-    "ActOfStudyingPipelineParameters",
-    "ActOfWorkingPipeline",
-    "ActOfWorkingPipelineConfiguration",
-    "ActOfWorkingPipelineParameters",
+    "ActOfEmploymentPipeline",
+    "ActOfEmploymentPipelineConfiguration",
+    "ActOfEmploymentPipelineParameters",
+    "PersonnelProfilePipeline",
+    "PersonnelProfilePipelineConfiguration",
+    "PersonnelProfilePipelineParameters",
 ]

@@ -57,6 +57,12 @@ class TopicSectionIn(BaseModel):
     link_topic: str | None = None
 
 
+class TopicResultRowIn(BaseModel):
+    id: str
+    label: str
+    query: str
+
+
 class TopicIn(BaseModel):
     label: str
     plural_label: str = ""
@@ -66,6 +72,10 @@ class TopicIn(BaseModel):
     results_query: str
     header_query: str
     sections: list[TopicSectionIn] = Field(default_factory=list)
+    image_query: str = ""
+    result_rows: list[TopicResultRowIn] = Field(default_factory=list)
+    detail_label: str = "Details"
+    detail_facts: list[TopicResultRowIn] = Field(default_factory=list)
     graphs: list[str] = Field(default_factory=list)
     enabled: bool = True
     order: int = 100

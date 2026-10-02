@@ -1,102 +1,31 @@
 {
   "schema_version": "1.0",
-  "data_version": "2026-08-19 17:25",
+  "data_version": "2026-10-02 17:30",
   "person": {
     "first_name": "Bob",
     "last_name": "Martin",
-    "full_name": "Bob Martin",
-    "linkedin_profile_url": "https://demo.example/profiles/bob_martin",
-    "email": "bob.martin@demo.example",
-    "phone": "+33 1 99 00 00 02",
-    "linkedin_url": "https://www.linkedin.com/in/bob-martin-demo"
+    "full_name": "Bob Martin"
   },
-  "records": [
+  "employer": "Demo",
+  "service_line": "Strategy",
+  "grade": "Partner",
+  "roster": {
+    "employee_id": "E-10428",
+    "job_title": "CEO",
+    "job_family": "Executive",
+    "hire_date": "2023-04-01",
+    "termination_date": null,
+    "status": "active"
+  },
+  "employments": [
     {
-      "process_type": "ActOfWorking",
       "organization": "Demo",
+      "client": null,
       "title": "CEO",
-      "contract_type": "Permanent",
-      "site": "World",
-      "start": "2023-04-01",
-      "end": null,
-      "duration": "3 yrs",
-      "mission_label": "Set product strategy and partnerships for the Demo data platform.",
-      "mission": "Set product strategy and partnerships for the Demo data platform.",
-      "skills": [
-        "Strategy",
-        "Data Engineering"
-      ],
-      "source": "https://demo.example/profiles/bob_martin"
-    },
-    {
-      "process_type": "ActOfWorking",
-      "organization": "Global Advisors",
-      "title": "Senior Advisor, Data & AI",
-      "contract_type": "Part-time",
-      "site": "Remote",
-      "start": "2024-11-01",
-      "end": null,
-      "duration": "1 yr",
-      "mission_label": "Advise enterprise clients on trustworthy AI adoption.",
-      "mission": "Advise enterprise clients on trustworthy AI adoption.",
-      "skills": [
-        "AI Strategy",
-        "Business Intelligence"
-      ],
-      "source": "https://demo.example/profiles/bob_martin"
-    },
-    {
-      "process_type": "ActOfWorking",
-      "organization": "Nexus Labs",
-      "title": "Founder",
-      "contract_type": null,
-      "site": "Paris",
-      "start": "2016-11-01",
-      "end": "2023-04-30",
-      "duration": "6 yrs",
-      "mission_label": "Founded an automation services company for business teams.",
-      "mission": "Founded an automation services company for business teams.",
-      "skills": [
-        "Strategy",
-        "Data Engineering"
-      ],
-      "source": "https://demo.example/profiles/bob_martin"
+      "contract_type": "Permanent (CDI)",
+      "job_family": "Executive",
+      "remuneration_amount": 120000,
+      "remuneration_currency": "EUR"
     }
-  ],
-  "profile": {
-    "slug": "bob_martin",
-    "headline": "CEO, Demo",
-    "about": "Founded Nexus Labs and now leads Demo. Spends most of his time with customers and the rest arguing about data models.",
-    "years_of_experience": 18,
-    "organization": "Demo",
-    "service_line": "Strategy",
-    "grade": "Partner",
-    "location": {
-      "office": "Paris Opéra",
-      "city": "Paris",
-      "country": "France",
-      "country_code": "FR"
-    },
-    "photo_path": "apps/people/web/assets/portraits/bob_martin.svg",
-    "certifications": [
-      {
-        "name": "Demo Data Strategy Practitioner",
-        "issuer": "Demo Institute",
-        "issue_date": "2020-01-20",
-        "status": "active"
-      }
-    ],
-    "languages": [
-      {
-        "name": "French",
-        "proficiency": "Native or bilingual"
-      },
-      {
-        "name": "English",
-        "proficiency": "Full professional"
-      }
-    ],
-    "interests": [],
-    "recommendations": []
-  }
+  ]
 }

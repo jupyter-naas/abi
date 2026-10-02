@@ -59,7 +59,9 @@ def test_current_act_supplies_title_and_earliest_start_is_hire_date():
 
 
 def test_open_ended_act_is_active_and_closed_only_is_terminated():
-    rows = {row["personLabel"]: row for row in derive_roster_rows(WORKING, org_label="Demo")}
+    rows = {
+        row["personLabel"]: row for row in derive_roster_rows(WORKING, org_label="Demo")
+    }
     assert rows["Alice Dupont"]["status_value"] == "active"
     assert rows["Frank Moreau"]["status_value"] == "terminated"
 
