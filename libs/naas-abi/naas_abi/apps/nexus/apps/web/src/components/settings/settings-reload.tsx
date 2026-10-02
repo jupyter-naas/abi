@@ -1,10 +1,11 @@
 'use client';
 
 import { Fragment, createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { SETTINGS_CACHE_REFRESH_PATH } from '@/lib/settings-cache';
+import { SETTINGS_CACHE_REFRESH_PATH, isComponentsSettingsRoute } from '@/lib/settings-cache';
 import { authFetch } from '@/stores/auth';
 import { useAgentsStore } from '@/stores/agents';
 import { useModelsStore } from '@/stores/models';
@@ -61,10 +62,14 @@ export function SettingsReloadProvider({
   );
 }
 
-/** Reload button for settings page headers; renders nothing outside a settings tree. */
+/**
+ * Reload button for settings page headers. Shown on the Components settings pages only
+ * (the cached ones); renders nothing elsewhere or outside a settings tree.
+ */
 export function SettingsReloadButton({ className }: { className?: string }) {
   const context = useContext(SettingsReloadContext);
-  if (!context) return null;
+  const pathname = usePathname();
+  if (!context || !isComponentsSettingsRoute(pathname ?? '')) return null;
   return (
     <Button
       variant="secondary"

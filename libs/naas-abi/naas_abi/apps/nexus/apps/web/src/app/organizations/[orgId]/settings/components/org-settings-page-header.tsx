@@ -1,4 +1,3 @@
-import { SettingsReloadButton } from '@/components/settings/settings-reload';
 import './org-settings-components.css';
 
 type OrgSettingsPageHeaderProps = {
@@ -29,7 +28,6 @@ export function OrgSettingsPageHeader({
         <p className="org-settings-page-header-subtitle">{subtitle}</p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <SettingsReloadButton />
         {actions}
       </div>
     </div>
