@@ -79,7 +79,7 @@ function BackLink({ href, className }: { href: string; className?: string }) {
 
 function Section({ section, linkFor }: { section: TopicSectionResult; linkFor: (topicId: string, uri: string) => string }) {
   // Rows with only a title (skills, tags…) read better as chips than as a list.
-  const compact = section.items.length > 0 && section.items.every(i => !i.subtitle && !i.snippet && !i.start && !i.end);
+  const compact = section.items.length > 0 && section.items.every(i => !i.subtitle && !i.snippet && !i.start && !i.end && !i.tags?.length);
   return (
     <section className="space-y-2 border-t pt-4">
       <div className="flex items-center justify-between gap-2">
@@ -127,6 +127,11 @@ function Section({ section, linkFor }: { section: TopicSectionResult; linkFor: (
                           {item.snippet.split('\n').filter(Boolean).map((line, j) => <li key={j}>{line}</li>)}
                         </ul>
                       : <p className="mt-1 text-xs text-muted-foreground">{item.snippet}</p>
+                  )}
+                  {item.tags && item.tags.length > 0 && (
+                    <ul className="mt-1.5 flex flex-wrap gap-1" aria-label="Skills and languages">
+                      {item.tags.map(tag => <li key={tag} className="bg-secondary px-1.5 py-0.5 text-[11px]">{tag}</li>)}
+                    </ul>
                   )}
                   {item.url && /^https?:\/\//i.test(item.url) && (
                     <a href={item.url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs text-workspace-accent hover:underline">

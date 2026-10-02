@@ -15,7 +15,7 @@ const PAGE_SIZE = 30;
 /**
  * A SPARQL topic on its own, in three tabs: the results list (with paging), the
  * topic's ontology, and the detail of one individual under the topic's detail
- * label ("Resume" for a person, "Card" for an organization). Opening a result
+ * label ("Profile" for a person, "Card" for an organization). Opening a result
  * switches to that tab; until one is opened it is empty.
  */
 export function TopicScopeView({ workspaceId, topic, route, canEdit, onTab }: {

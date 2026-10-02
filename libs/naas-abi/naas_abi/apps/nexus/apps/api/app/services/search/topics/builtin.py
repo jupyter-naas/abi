@@ -61,7 +61,7 @@ ORDER BY LCASE(STR(?title))
 LIMIT {{ limit }}
 OFFSET {{ offset }}
 """,
-    detail_label="Resume",
+    detail_label="Profile",
     image_query=_PREFIXES
     + """
 SELECT ?uri ?image
@@ -148,9 +148,31 @@ LIMIT 1
             link_topic="organization",
             query=_PREFIXES
             + """
-SELECT ?title ?item ?subtitle ?snippet ?start ?end
+SELECT ?title ?item ?subtitle ?snippet ?start ?end ?tags
 WHERE {
   {{ uri }} people:hasActOfWorking ?act .
+  OPTIONAL {
+    # The skills and languages this experience developed, one chip each.
+    SELECT ?act (GROUP_CONCAT(DISTINCT ?quality; separator="\\n") AS ?tags)
+    WHERE {
+      {{ uri }} people:hasActOfWorking ?act .
+      {
+        ?act people:developsSkill ?skill .
+        OPTIONAL { ?skill rdfs:label ?skillLabel . }
+        OPTIONAL { ?skill people:skill_name ?skillName . }
+        BIND(COALESCE(?skillLabel, ?skillName) AS ?quality)
+      } UNION {
+        ?act people:developsLanguageCapability ?cap .
+        OPTIONAL { ?cap people:language_name ?language . }
+        OPTIONAL { ?cap rdfs:label ?capLabel . }
+        OPTIONAL { ?cap people:proficiency_level ?level . }
+        BIND(COALESCE(?language, ?capLabel) AS ?name)
+        BIND(IF(BOUND(?level), CONCAT(?name, " (", ?level, ")"), ?name) AS ?quality)
+      }
+      FILTER(BOUND(?quality))
+    }
+    GROUP BY ?act
+  }
   OPTIONAL { ?act people:forOrganization ?item . ?item rdfs:label ?orgLabel . }
   OPTIONAL { ?act people:forClient ?client . ?client rdfs:label ?clientLabel . }
   OPTIONAL {

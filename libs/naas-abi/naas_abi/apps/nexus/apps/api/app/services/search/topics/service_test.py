@@ -152,6 +152,15 @@ class TestExecution:
         assert sections["experience"].items and not sections["experience"].error
         assert any(i.item for i in sections["experience"].items)
 
+    async def test_experience_shows_the_skills_it_developed(
+        self, service: SearchTopicService, store
+    ) -> None:
+        detail = await service.detail(WS, "person", ALICE, store)
+        experience = next(s for s in detail.sections if s.id == "experience")
+        tags = [tag for item in experience.items for tag in item.tags]
+        assert "Python" in tags
+        assert all(len(item.tags) == len(set(item.tags)) for item in experience.items)
+
     async def test_organization_links_back_to_people(
         self, service: SearchTopicService, store
     ) -> None:

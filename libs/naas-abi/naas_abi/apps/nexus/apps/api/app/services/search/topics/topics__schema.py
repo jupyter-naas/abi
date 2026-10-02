@@ -14,7 +14,7 @@ role       placeholders         required vars       optional vars
 =========  ===================  ==================  ===========================================
 results    q, limit, offset     uri, title          subtitle, snippet, image, score
 header     uri                  title               subtitle, snippet, image, url  (+ any → facts)
-section    uri, limit           title               item, subtitle, snippet, image, start, end, url
+section    uri, limit           title               item, subtitle, snippet, image, start, end, url, tags
 image      uris                 uri, image
 row        uris                 uri, value
 =========  ===================  ==================  ===========================================
@@ -25,6 +25,10 @@ page with ``{{ uris }}`` standing for that page's individuals (write
 (a person's portrait, an organization's logo); each row query is one labelled
 line of metadata under a result (employer, office, people…), its values joined
 when it binds several.
+
+A section's ``tags`` is one string of newline-separated labels shown as chips
+on its row (the skills and languages an experience developed): aggregate them
+with ``GROUP_CONCAT(…; separator="\\n")``.
 
 Placeholders are substituted server-side only, never by string formatting:
 ``{{ q }}`` is the *content* of a string literal (write it inside quotes),
@@ -103,7 +107,7 @@ ROLE_CONTRACTS: dict[str, RoleContract] = {
     "section": RoleContract(
         placeholders=frozenset({"uri", "limit"}),
         required=frozenset({"title"}),
-        optional=frozenset({"item", "subtitle", "snippet", "image", "start", "end", "url"}),
+        optional=frozenset({"item", "subtitle", "snippet", "image", "start", "end", "url", "tags"}),
     ),
     "image": RoleContract(
         placeholders=frozenset({"uris"}),
@@ -166,7 +170,7 @@ class SearchTopic:
     image_query: str = ""
     # Metadata lines under each result (``row`` role), in order.
     result_rows: tuple[TopicResultRowDef, ...] = ()
-    # The tab that shows one individual: "Resume" for a person, "Card" for an organization.
+    # The tab that shows one individual: "Profile" for a person, "Card" for an organization.
     detail_label: str = "Details"
     # Graphs the topic reads, within what the workspace may read. Empty: every
     # graph the workspace can read (the default for every topic).
@@ -265,6 +269,7 @@ class TopicSectionItem:
     start: str | None = None
     end: str | None = None
     url: str | None = None
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

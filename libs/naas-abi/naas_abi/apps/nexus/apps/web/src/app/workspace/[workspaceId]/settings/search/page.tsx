@@ -429,7 +429,7 @@ function TopicEditor({ workspaceId, topic, topics, graphs, contract, canEdit, is
       <fieldset disabled={disabled} className="grid gap-3 sm:grid-cols-2">
         <Field label="Label (singular)"><input className={input} value={draft.label} onChange={e => set('label', e.target.value)} /></Field>
         <Field label="Label (plural, tab name)"><input className={input} value={draft.plural_label} onChange={e => set('plural_label', e.target.value)} /></Field>
-        <Field label="Detail tab label" hint="The tab that shows one individual, after Results and Ontology (e.g. Resume, Card).">
+        <Field label="Detail tab label" hint="The tab that shows one individual, after Results and Ontology (e.g. Profile, Card).">
           <input className={input} value={draft.detail_label} onChange={e => set('detail_label', e.target.value)} placeholder="Details" />
         </Field>
         <Field label="Description" wide><input className={input} value={draft.description} onChange={e => set('description', e.target.value)} /></Field>

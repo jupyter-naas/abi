@@ -38,7 +38,7 @@ export interface SearchTopic {
   image_query: string;
   /** Metadata lines under each result (`row` role), in order. */
   result_rows: TopicResultRowDef[];
-  /** The tab that shows one individual: "Resume" for a person, "Card" for an organization. */
+  /** The tab that shows one individual: "Profile" for a person, "Card" for an organization. */
   detail_label: string;
   /** Graphs read, within the workspace's. Empty: every graph the workspace can read. */
   graphs: string[];
@@ -76,6 +76,8 @@ export interface TopicSectionItem {
   start: string | null;
   end: string | null;
   url: string | null;
+  /** Labels shown as chips on the row (the skills and languages an experience developed). */
+  tags?: string[];
 }
 
 export interface TopicSectionResult {

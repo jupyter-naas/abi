@@ -51,6 +51,13 @@ def _value(row: ResultRow, name: str) -> str | None:
     return binding.value if binding.value.strip() else None
 
 
+def _tags(value: str | None) -> list[str]:
+    """Split a section's newline-separated ``tags`` into distinct labels, in order."""
+    if not value:
+        return []
+    return list(dict.fromkeys(tag.strip() for tag in value.split("\n") if tag.strip()))
+
+
 def _humanize(name: str) -> str:
     words = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", name).replace("_", " ").strip()
     return words[:1].upper() + words[1:].lower()
@@ -250,6 +257,7 @@ class SearchTopicService:
                     start=_value(row, "start"),
                     end=_value(row, "end"),
                     url=_value(row, "url"),
+                    tags=_tags(_value(row, "tags")),
                 )
                 for row in rows
                 if (title := _value(row, "title"))
