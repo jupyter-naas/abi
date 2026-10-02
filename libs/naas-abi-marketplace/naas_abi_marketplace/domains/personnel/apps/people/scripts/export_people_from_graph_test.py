@@ -207,7 +207,9 @@ class TestBuildRowsFromTheDemoGraph:
         }
 
     def test_every_table_in_the_schema_is_produced(self, tables) -> None:
-        from naas_abi_marketplace.domains.personnel.apps.people.scripts import datasets as ds
+        from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+            datasets as ds,
+        )
 
         assert set(tables) == set(ds.TABLES)
 

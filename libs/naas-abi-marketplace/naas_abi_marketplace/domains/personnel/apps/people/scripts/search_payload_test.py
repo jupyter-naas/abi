@@ -8,6 +8,8 @@ from naas_abi_core.services.dataset.DatasetFactory import DatasetFactory
 from naas_abi_marketplace.domains.personnel.apps.people.config_loader import load_config
 from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
     datasets as ds,
+)
+from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
     search_payload,
 )
 from naas_abi_marketplace.domains.personnel.apps.people.scripts.search_payload import (

@@ -12,7 +12,6 @@ from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology
     JobPosition,
 )
 from naas_abi_marketplace.domains.personnel.paths import (
-    DEMO_GRAPH_DIR,
     DEMO_GRAPH_FILE,
     DEMO_SOURCE_DIR,
     ONTOLOGIES_DIR,
@@ -23,13 +22,13 @@ from naas_abi_marketplace.domains.personnel.person_sources import (
     payload_to_profile_source_parameters,
     sources_to_employees,
 )
-from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline import (
-    ActOfStudyingPipeline,
-    ActOfStudyingPipelineConfiguration,
-)
 from naas_abi_marketplace.domains.personnel.pipelines.ActOfCertificationPipeline import (
     ActOfCertificationPipeline,
     ActOfCertificationPipelineConfiguration,
+)
+from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline import (
+    ActOfStudyingPipeline,
+    ActOfStudyingPipelineConfiguration,
 )
 from naas_abi_marketplace.domains.personnel.pipelines.ActOfWorkingPipeline import (
     ActOfWorkingPipeline,

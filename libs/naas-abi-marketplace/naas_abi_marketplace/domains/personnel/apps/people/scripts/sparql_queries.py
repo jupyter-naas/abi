@@ -96,10 +96,7 @@ def format_sparql(sparql: str) -> str:
         elif upper.startswith("SELECT "):
             in_select = True
             line_depth = 0
-        elif upper.startswith("WHERE "):
-            in_select = False
-            line_depth = 0
-        elif upper.startswith("LIMIT ") or upper.startswith("ORDER BY"):
+        elif upper.startswith("WHERE ") or upper.startswith("LIMIT ") or upper.startswith("ORDER BY"):
             in_select = False
             line_depth = 0
         elif in_select and stripped.startswith("?"):

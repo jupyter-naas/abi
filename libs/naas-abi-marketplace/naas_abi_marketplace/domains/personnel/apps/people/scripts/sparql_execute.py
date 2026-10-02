@@ -10,7 +10,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import sparql_queries as sq
+from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+    sparql_queries as sq,
+)
 from naas_abi_marketplace.domains.personnel.apps.people.scripts.profile_sparql import (
     SECTION_QUERY_NAMES,
 )
@@ -77,7 +79,7 @@ def execute_profile_query(
                     for column in columns
                 ]
             )
-    except Exception as exc:  # noqa: BLE001 - surface parse/runtime errors to API
+    except Exception as exc:
         raise SparqlExecutionError(str(exc)) from exc
 
     return {

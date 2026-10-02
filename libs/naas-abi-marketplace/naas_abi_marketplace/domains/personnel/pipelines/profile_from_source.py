@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
@@ -90,7 +90,7 @@ class StudyingRecordInput(BaseModel):
 
 
 SourceRecordInput = Annotated[
-    Union[WorkingRecordInput, StudyingRecordInput],
+    WorkingRecordInput | StudyingRecordInput,
     Field(discriminator="process_type"),
 ]
 

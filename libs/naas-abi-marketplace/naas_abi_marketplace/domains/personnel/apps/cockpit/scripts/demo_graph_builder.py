@@ -7,17 +7,16 @@ for each person, and writes ``graphs/demo/personnel.ttl``.
 
 from __future__ import annotations
 
+from naas_abi_marketplace.domains.personnel.graph.demo import schema_relative_paths
 from naas_abi_marketplace.domains.personnel.paths import PERSONNEL_ROOT
 from naas_abi_marketplace.domains.personnel.workflows.DemoPersonGraphWorkflow import (
     DemoPersonGraphWorkflow,
     DemoPersonGraphWorkflowConfiguration,
     DemoPersonGraphWorkflowParameters,
 )
-from naas_abi_marketplace.domains.personnel.graph.demo import schema_relative_paths
 
 
 def build_and_write_demo_graph(source_dir=None):
-    from pathlib import Path
 
     print("Loading ontology schema…")
     for rel in schema_relative_paths():

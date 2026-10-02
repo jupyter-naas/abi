@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from naas_abi_marketplace.domains.personnel.paths import DEMO_GRAPH_FILE, DEMO_SOURCE_DIR
+from naas_abi_marketplace.domains.personnel.paths import (
+    DEMO_SOURCE_DIR,
+)
 from naas_abi_marketplace.domains.personnel.workflows.DemoPersonGraphWorkflow import (
     DemoPersonGraphWorkflow,
     DemoPersonGraphWorkflowConfiguration,

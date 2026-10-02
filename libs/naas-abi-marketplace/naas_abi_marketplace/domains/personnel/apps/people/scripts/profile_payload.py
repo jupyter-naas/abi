@@ -13,7 +13,9 @@ from typing import Any
 
 from naas_abi_core.services.dataset.DatasetService import DatasetService
 from naas_abi_marketplace.domains.personnel.apps.people.scripts import datasets as ds
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import sparql_queries as sq
+from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+    sparql_queries as sq,
+)
 from naas_abi_marketplace.domains.personnel.apps.people.scripts.profile_sparql import (
     competency_queries_for_profile,
 )

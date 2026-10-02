@@ -14,12 +14,14 @@ import pytest
 from naas_abi_core.services.dataset.DatasetFactory import DatasetFactory
 from naas_abi_core.services.dataset.DatasetPort import DatasetSpec
 from naas_abi_core.services.dataset.DatasetService import DatasetService
+from naas_abi_marketplace.domains.personnel.apps.people.config_loader import load_config
 from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
     datasets as ds,
+)
+from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
     profile_payload,
     search_payload,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.config_loader import load_config
 from naas_abi_marketplace.domains.personnel.apps.people.scripts.text import search_text
 
 NAMESPACE = "personnel"

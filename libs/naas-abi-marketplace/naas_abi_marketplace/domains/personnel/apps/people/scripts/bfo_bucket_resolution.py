@@ -10,10 +10,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import naas_abi
+from naas_abi_marketplace.domains.personnel.paths import ONTOLOGIES_DIR
 from rdflib import Graph
 from rdflib.query import ResultRow
-
-from naas_abi_marketplace.domains.personnel.paths import ONTOLOGIES_DIR
 
 _ABI_NS = "http://ontology.naas.ai/abi/"
 _BFO_NS = "http://purl.obolibrary.org/obo/"
