@@ -1,12 +1,14 @@
-"""Tests for the personnel ontology viewer payload."""
+"""Tests for the people ontology viewer payload."""
 
 from __future__ import annotations
 
-from naas_abi_marketplace.domains.personnel.apps.people.scripts.ontology_payload import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.ontology_payload import (
     build_ontology_payload,
-    load_personnel_schema_graph,
+    load_people_schema_graph,
 )
-from naas_abi_marketplace.domains.personnel.paths import ONTOLOGIES_DIR
+from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+    ONTOLOGIES_DIR,
+)
 from rdflib import OWL, Graph, URIRef
 from rdflib.compare import isomorphic
 
@@ -15,7 +17,7 @@ class TestOntologyPayload:
     def test_bundle_includes_core_module_and_process_slices(self) -> None:
         payload = build_ontology_payload()
         names = {source["name"] for source in payload["sources"]}
-        assert "PersonnelOntology.ttl" in names
+        assert "PeopleOntology.ttl" in names
         assert "ActOfWorkingProcess.ttl" in names
         assert "@prefix" in payload["display_ttl"]
 
@@ -28,13 +30,13 @@ class TestOntologyPayload:
     def test_the_merged_ontology_is_one_deduplicated_document(self) -> None:
         payload = build_ontology_payload()
         merged = Graph().parse(data=payload["display_ttl"], format="turtle")
-        union = load_personnel_schema_graph()
+        union = load_people_schema_graph()
         # The same graph as the files taken together, not five files in a row.
         assert isomorphic(merged, union)
         text = payload["display_ttl"]
-        assert text.count("@prefix personnel:") == 1
+        assert text.count("@prefix people:") == 1
         # A class the slices restate is one block, not one per file.
-        assert text.count("personnel:Certification a owl:Class") == 1
+        assert text.count("people:Certification a owl:Class") == 1
 
     def test_no_connection_is_listed_twice(self) -> None:
         edges = build_ontology_payload()["graph"]["edges"]
@@ -44,21 +46,19 @@ class TestOntologyPayload:
     def test_the_profiling_act_is_in_the_graph(self) -> None:
         payload = build_ontology_payload()
         ids = {node["id"] for node in payload["graph"]["nodes"]}
-        assert "personnel:ActOfPersonnelProfiling" in ids
-        detail = payload["classes"][
-            "http://ontology.naas.ai/personnel/ActOfPersonnelProfiling"
-        ]
+        assert "people:ActOfProfiling" in ids
+        detail = payload["classes"]["http://ontology.naas.ai/people/ActOfProfiling"]
         # its restriction points at the ProfileDocument declared in the working slice
         assert any(
-            r["filler"] == "personnel:ProfileDocument" for r in detail["restrictions"]
+            r["filler"] == "people:ProfileDocument" for r in detail["restrictions"]
         )
 
     def test_the_where_of_each_act_is_a_facility_not_a_bare_site(self) -> None:
         payload = build_ontology_payload()
         where = {
-            "personnel:ActOfWorking": "cco:ont00000468",  # Office Building
-            "personnel:ActOfStudying": "cco:ont00000270",  # Educational Facility
-            "personnel:ActOfCertification": "cco:ont00000192",  # Facility
+            "people:ActOfWorking": "cco:ont00000468",  # Office Building
+            "people:ActOfStudying": "cco:ont00000270",  # Educational Facility
+            "people:ActOfCertification": "cco:ont00000192",  # Facility
         }
         for act, facility in where.items():
             occurs_in = [
@@ -84,20 +84,20 @@ class TestOntologyPayload:
             if edge["kind"] == "restriction"
         }
         expected = {
-            ("abi:Person", "cco:ont00000468", "personnel:hasWorkFacility"),
-            ("abi:Organization", "cco:ont00000468", "personnel:hasOfficeBuilding"),
-            ("abi:Person", "cco:ont00000270", "personnel:hasStudyFacility"),
-            ("cco:ont00000564", "cco:ont00000270", "personnel:hasEducationalFacility"),
-            ("abi:Person", "cco:ont00000192", "personnel:hasCertificationFacility"),
-            ("abi:Organization", "cco:ont00000192", "personnel:hasAssessmentFacility"),
+            ("abi:Person", "cco:ont00000468", "people:hasWorkFacility"),
+            ("abi:Organization", "cco:ont00000468", "people:hasOfficeBuilding"),
+            ("abi:Person", "cco:ont00000270", "people:hasStudyFacility"),
+            ("cco:ont00000564", "cco:ont00000270", "people:hasEducationalFacility"),
+            ("abi:Person", "cco:ont00000192", "people:hasCertificationFacility"),
+            ("abi:Organization", "cco:ont00000192", "people:hasAssessmentFacility"),
         }
         assert expected <= restrictions
 
     def test_every_facility_property_has_an_inverse_and_no_slice_asks_for_a_bare_site(
         self,
     ) -> None:
-        graph = load_personnel_schema_graph()
-        personnel = "http://ontology.naas.ai/personnel/"
+        graph = load_people_schema_graph()
+        people = "http://ontology.naas.ai/people/"
         for name in (
             "WorkFacility",
             "StudyFacility",
@@ -106,7 +106,7 @@ class TestOntologyPayload:
             "EducationalFacility",
             "AssessmentFacility",
         ):
-            has = URIRef(f"{personnel}has{name}")
+            has = URIRef(f"{people}has{name}")
             [inverse] = list(graph.objects(has, OWL.inverseOf))
             assert (inverse, OWL.inverseOf, has) in graph, name
         occurs_in = URIRef("http://ontology.naas.ai/abi/occursIn")
@@ -122,21 +122,19 @@ class TestOntologyPayload:
             edge["from"]
             for edge in payload["graph"]["edges"]
             if edge["kind"] == "restriction"
-            and edge["to"] == "personnel:LanguageCapability"
+            and edge["to"] == "people:LanguageCapability"
             and "developsLanguageCapability" in edge["label"]
         }
         assert developed_by == {
-            "personnel:ActOfWorking",
-            "personnel:ActOfStudying",
-            "personnel:ActOfCertification",
+            "people:ActOfWorking",
+            "people:ActOfStudying",
+            "people:ActOfCertification",
         }
         # a quality, like Skill, and stated from its own side too
-        detail = payload["classes"][
-            "http://ontology.naas.ai/personnel/LanguageCapability"
-        ]
+        detail = payload["classes"]["http://ontology.naas.ai/people/LanguageCapability"]
         assert detail["bfo_bucket"] == "Quality"
         assert any(
-            r["property"] == "personnel:isLanguageCapabilityDevelopedIn"
+            r["property"] == "people:isLanguageCapabilityDevelopedIn"
             for r in detail["restrictions"]
         )
 
@@ -149,14 +147,12 @@ class TestOntologyPayload:
         assert stats["datatype_properties"] > 0
         assert stats["annotation_properties"] > 0
 
-    def test_employee_role_is_in_the_graph(self) -> None:
+    def test_occupation_role_is_in_the_graph(self) -> None:
         payload = build_ontology_payload()
         ids = {node["id"] for node in payload["graph"]["nodes"]}
-        assert "personnel:EmployeeRole" in ids
-        detail = payload["classes"][
-            "http://ontology.naas.ai/personnel/EmployeeRole"
-        ]
-        assert detail["label"] == "employee role" or "Employee" in detail["label"]
+        assert "people:OccupationRole" in ids
+        detail = payload["classes"]["http://ontology.naas.ai/people/OccupationRole"]
+        assert "Occupation" in detail["label"] or detail["label"] == "occupation role"
 
     def test_restrictions_surface_as_edges(self) -> None:
         payload = build_ontology_payload()
@@ -170,7 +166,7 @@ class TestOntologyPayload:
             assert isinstance(node.get("bfo_bucket"), str) and node["bfo_bucket"]
             detail = payload["classes"][node["iri"]]
             assert detail["bfo_bucket"] == node["bfo_bucket"]
-        role = payload["classes"]["http://ontology.naas.ai/personnel/EmployeeRole"]
+        role = payload["classes"]["http://ontology.naas.ai/people/OccupationRole"]
         assert role["bfo_bucket"] == "Realizable"
         buckets = {node["bfo_bucket"] for node in payload["graph"]["nodes"]}
         assert "Unknown" not in buckets

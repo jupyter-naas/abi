@@ -1,6 +1,6 @@
 """Tests for ontology-derived process class catalogs."""
 
-from naas_abi_marketplace.domains.personnel.apps.cockpit.process_class_catalog import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.process_class_catalog import (
     build_process_class_catalog,
 )
 
@@ -14,12 +14,14 @@ def test_working_catalog_includes_seven_bucket_classes() -> None:
     assert "Site" not in labels
     assert "Temporal Region" in labels
     assert "Temporal Instant" in labels
-    assert "Employee Role" in labels
+    assert "Occupation Role" in labels
     assert "Skill" in labels
-    assert "Employment Contract" in labels
     assert "Mission" in labels
     assert "Profile Document" in labels
-    assert "Remuneration" in labels
+    # Internal HR records are not part of the generic act of working.
+    assert "Employee Role" not in labels
+    assert "Employment Contract" not in labels
+    assert "Remuneration" not in labels
     assert "Person" not in labels
     assert "Act of Working" not in labels
 

@@ -31,7 +31,9 @@ def standalone_service() -> DatasetService:
 def dataset_service() -> DatasetService:
     """The engine's dataset service when a module is loaded, else a local one."""
     try:
-        from naas_abi_marketplace.domains.personnel.apps.people import ABIModule
+        from naas_abi_marketplace.domains.intelligence.modules.people.apps.people import (
+            ABIModule,
+        )
 
         module = ABIModule.get_instance()
     except Exception:  # noqa: BLE001 - not running inside the engine

@@ -1,7 +1,9 @@
-"""Pipeline utilities for personnel process RDF builders."""
+"""Pipeline utilities for people process RDF builders."""
 
-from naas_abi_marketplace.domains.personnel.pipelines.utils.graph_builders import (
-    PersonnelGraphContext,
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.graph_builders import (
+    PeopleGraphContext,
+    act_of_working_key,
+    act_of_working_uri,
     bind_graph_prefixes,
     individual_uri,
     slug,
@@ -9,7 +11,9 @@ from naas_abi_marketplace.domains.personnel.pipelines.utils.graph_builders impor
 )
 
 __all__ = [
-    "PersonnelGraphContext",
+    "PeopleGraphContext",
+    "act_of_working_key",
+    "act_of_working_uri",
     "bind_graph_prefixes",
     "individual_uri",
     "slug",

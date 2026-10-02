@@ -6,17 +6,15 @@ from datetime import date
 from unittest.mock import MagicMock
 
 from naas_abi.ontologies.modules.ABIOntology import Site
-from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
+from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.modules.PeopleOntology import (
     Certification,
-    Grade,
     Interest,
     LanguageCapability,
     Portrait,
     ProfileSummary,
     Recommendation,
-    ServiceLine,
 )
-from naas_abi_marketplace.domains.personnel.pipelines.PersonProfilePipeline import (
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.PersonProfilePipeline import (
     PersonProfilePipeline,
     PersonProfilePipelineConfiguration,
     PersonProfilePipelineParameters,
@@ -24,15 +22,15 @@ from naas_abi_marketplace.domains.personnel.pipelines.PersonProfilePipeline impo
 from rdflib import URIRef
 from rdflib.namespace import RDF
 
-ABI_HAS_MEMBER_PART = URIRef("http://ontology.naas.ai/abi/hasMemberPart")
 ABI_PERSON = URIRef("http://ontology.naas.ai/abi/Person")
-PERSONNEL_EMAIL = URIRef("http://ontology.naas.ai/personnel/email_address")
-PERSONNEL_PHONE = URIRef("http://ontology.naas.ai/personnel/telephone_number")
-PERSONNEL_LINKEDIN = URIRef("http://ontology.naas.ai/personnel/linkedin_url")
-PERSONNEL_COUNTRY_CODE = URIRef("http://ontology.naas.ai/personnel/country_code")
-PERSONNEL_PROFILE_SLUG = URIRef("http://ontology.naas.ai/personnel/profile_slug")
-PERSONNEL_SITE = URIRef(Site._class_uri)
-PERSONNEL_YEARS = URIRef("http://ontology.naas.ai/personnel/years_of_experience")
+PEOPLE_EMAIL = URIRef("http://ontology.naas.ai/people/email_address")
+PEOPLE_PHONE = URIRef("http://ontology.naas.ai/people/telephone_number")
+PEOPLE_LINKEDIN = URIRef("http://ontology.naas.ai/people/linkedin_url")
+PEOPLE_COUNTRY_CODE = URIRef("http://ontology.naas.ai/people/country_code")
+PEOPLE_PROFILE_SLUG = URIRef("http://ontology.naas.ai/people/profile_slug")
+PEOPLE_SITE = URIRef(Site._class_uri)
+PEOPLE_YEARS = URIRef("http://ontology.naas.ai/people/years_of_experience")
+PEOPLE_WORKS_FOR = URIRef("http://ontology.naas.ai/people/worksFor")
 
 
 def _profile_params(**overrides: object) -> PersonProfilePipelineParameters:
@@ -44,8 +42,6 @@ def _profile_params(**overrides: object) -> PersonProfilePipelineParameters:
         "about": "Leads platform operations and agent orchestration.",
         "years_of_experience": 12,
         "organization": "Demo",
-        "service_line": "Operations",
-        "grade": "Partner",
         "office": "Paris La Défense",
         "city": "Paris",
         "country": "France",
@@ -80,17 +76,15 @@ def test_run_emits_person_level_individuals() -> None:
     assert ABI_PERSON in types
     assert URIRef(ProfileSummary._class_uri) in types
     assert URIRef(Portrait._class_uri) in types
-    assert URIRef(ServiceLine._class_uri) in types
-    assert URIRef(Grade._class_uri) in types
-    assert PERSONNEL_SITE in types
-    assert PERSONNEL_PROFILE_SLUG in _predicates(graph)
+    assert PEOPLE_SITE in types
+    assert PEOPLE_PROFILE_SLUG in _predicates(graph)
 
 
 def test_years_of_experience_is_carried_by_the_summary() -> None:
     """It is a claim the source makes, not a figure counted from acts of working."""
     graph = _pipeline().run(_profile_params())
 
-    subjects = list(graph.subjects(PERSONNEL_YEARS, None))
+    subjects = list(graph.subjects(PEOPLE_YEARS, None))
     assert len(subjects) == 1
     assert (subjects[0], RDF.type, URIRef(ProfileSummary._class_uri)) in graph
 
@@ -98,24 +92,28 @@ def test_years_of_experience_is_carried_by_the_summary() -> None:
 def test_country_code_is_upper_cased_on_the_site() -> None:
     graph = _pipeline().run(_profile_params(country_code="fr"))
 
-    assert [str(o) for o in graph.objects(None, PERSONNEL_COUNTRY_CODE)] == ["FR"]
+    assert [str(o) for o in graph.objects(None, PEOPLE_COUNTRY_CODE)] == ["FR"]
 
 
-def test_person_is_a_member_part_of_the_service_line() -> None:
-    """The facet must survive a person whose working history is not recorded."""
+def test_person_works_for_the_organization_the_source_names() -> None:
     graph = _pipeline().run(_profile_params())
 
-    lines = list(graph.subjects(RDF.type, URIRef(ServiceLine._class_uri)))
-    assert len(lines) == 1
-    members = list(graph.objects(lines[0], ABI_HAS_MEMBER_PART))
-    assert len(members) == 1
+    employers = list(graph.objects(None, PEOPLE_WORKS_FOR))
+    assert len(employers) == 1
 
 
-def test_service_line_needs_an_employer() -> None:
-    """A service line with no parent organization is not what the source says."""
-    graph = _pipeline().run(_profile_params(organization=None, service_line="Audit"))
+def test_no_organization_means_no_works_for() -> None:
+    graph = _pipeline().run(_profile_params(organization=None))
 
-    assert URIRef(ServiceLine._class_uri) not in _types(graph)
+    assert list(graph.triples((None, PEOPLE_WORKS_FOR, None))) == []
+
+
+def test_internal_records_are_not_written() -> None:
+    """Grade and service line are an employer's internal records, not people facts."""
+    graph = _pipeline().run(_profile_params())
+
+    for _, _, o in graph.triples((None, RDF.type, None)):
+        assert not str(o).startswith("http://ontology.naas.ai/personnel/")
 
 
 def test_optional_sections_are_written_when_given() -> None:
@@ -146,7 +144,7 @@ def test_optional_sections_are_written_when_given() -> None:
     types = _types(graph)
     assert URIRef(Certification._class_uri) in types
     # a certification is always the outcome of an act of certification
-    assert URIRef("http://ontology.naas.ai/personnel/ActOfCertification") in types
+    assert URIRef("http://ontology.naas.ai/people/ActOfCertification") in types
     assert URIRef(LanguageCapability._class_uri) in types
     assert URIRef(Interest._class_uri) in types
     assert URIRef(Recommendation._class_uri) in types
@@ -158,7 +156,7 @@ def test_empty_sections_emit_nothing() -> None:
 
     types = _types(graph)
     assert URIRef(Certification._class_uri) not in types
-    assert URIRef("http://ontology.naas.ai/personnel/ActOfCertification") not in types
+    assert URIRef("http://ontology.naas.ai/people/ActOfCertification") not in types
     assert URIRef(LanguageCapability._class_uri) not in types
     assert URIRef(Interest._class_uri) not in types
     assert URIRef(Recommendation._class_uri) not in types
@@ -178,7 +176,7 @@ def test_a_source_with_nothing_to_summarise_is_still_recorded() -> None:
     assert any(
         str(o) == "https://demo.example/profiles/alice_dupont"
         for _, _, o in graph.triples(
-            (None, URIRef("http://ontology.naas.ai/personnel/source_url"), None)
+            (None, URIRef("http://ontology.naas.ai/people/source_url"), None)
         )
     )
 
@@ -211,7 +209,7 @@ def test_recommendation_carries_its_author() -> None:
     authors = list(
         graph.objects(
             recommendations[0],
-            URIRef("http://ontology.naas.ai/personnel/hasRecommendationAuthor"),
+            URIRef("http://ontology.naas.ai/people/hasRecommendationAuthor"),
         )
     )
     assert len(authors) == 1
@@ -233,10 +231,10 @@ def test_contact_details_are_data_properties_of_the_person() -> None:
         )
     )
     person = next(graph.subjects(RDF.type, ABI_PERSON))
-    assert str(graph.value(person, PERSONNEL_EMAIL)) == "alice.dupont@demo.example"
-    assert str(graph.value(person, PERSONNEL_PHONE)) == "+33 1 99 00 00 01"
+    assert str(graph.value(person, PEOPLE_EMAIL)) == "alice.dupont@demo.example"
+    assert str(graph.value(person, PEOPLE_PHONE)) == "+33 1 99 00 00 01"
     assert (
-        str(graph.value(person, PERSONNEL_LINKEDIN))
+        str(graph.value(person, PEOPLE_LINKEDIN))
         == "https://www.linkedin.com/in/alice-dupont-demo"
     )
 
@@ -251,19 +249,19 @@ def test_contact_details_are_declared_as_data_properties_of_person() -> None:
         Path(__file__).resolve().parent.parent
         / "ontologies"
         / "modules"
-        / "PersonnelOntology.ttl"
+        / "PeopleOntology.ttl"
     )
     ontology = Graph().parse(ttl, format="turtle")
-    for prop in (PERSONNEL_EMAIL, PERSONNEL_PHONE, PERSONNEL_LINKEDIN):
+    for prop in (PEOPLE_EMAIL, PEOPLE_PHONE, PEOPLE_LINKEDIN):
         assert (prop, RDF.type, OWL.DatatypeProperty) in ontology, prop
         assert (prop, RDFS.domain, ABI_PERSON) in ontology, prop
 
 
 def test_absent_contact_details_are_left_unstated() -> None:
     graph = _pipeline().run(_profile_params(phone="+33 1 99 00 00 01"))
-    assert list(graph.triples((None, PERSONNEL_EMAIL, None))) == []
-    assert list(graph.triples((None, PERSONNEL_LINKEDIN, None))) == []
-    assert len(list(graph.triples((None, PERSONNEL_PHONE, None)))) == 1
+    assert list(graph.triples((None, PEOPLE_EMAIL, None))) == []
+    assert list(graph.triples((None, PEOPLE_LINKEDIN, None))) == []
+    assert len(list(graph.triples((None, PEOPLE_PHONE, None)))) == 1
 
 
 def test_run_persists_delta_to_triple_store() -> None:

@@ -16,28 +16,30 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
-from naas_abi_marketplace.domains.personnel.apps.people.api.service import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.api.service import (
     dataset_service,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.config_loader import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.config_loader import (
     load_config,
     public_config,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import profile_payload
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
+    profile_payload,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
     search_payload as search_module,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.scripts.datasets import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.datasets import (
     DatasetsMissingError,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.scripts.graph_view import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.graph_view import (
     graph_view,
     graph_view_css,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.scripts.ontology_payload import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.ontology_payload import (
     build_ontology_payload,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.scripts.sparql_execute import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.sparql_execute import (
     CONTACT_VARIABLES,
     SparqlExecutionError,
     execute_profile_query,
@@ -46,7 +48,7 @@ from naas_abi_marketplace.domains.personnel.apps.people.scripts.sparql_execute i
 
 def build_router(config_path: Path | None = None) -> APIRouter:
     """Routes reading one instance's configuration."""
-    router = APIRouter(tags=["personnel-people"])
+    router = APIRouter(tags=["people"])
 
     def config() -> dict:
         return load_config(config_path)
@@ -100,7 +102,7 @@ def build_router(config_path: Path | None = None) -> APIRouter:
 
     @router.get("/people/{slug}/graph")
     def get_person_graph(slug: str) -> dict:
-        """The cockpit graph page's data, run live on this instance's graph."""
+        """The person graph page's data, run live on this instance's graph."""
         try:
             return graph_view(dataset_service(), config(), slug=slug)
         except profile_payload.ProfileNotFoundError as exc:

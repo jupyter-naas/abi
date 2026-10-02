@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from naas_abi_marketplace.domains.personnel.apps.people.scripts.bfo_bucket_resolution import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.bfo_bucket_resolution import (
     find_bfo_bucket_root_iri,
     infer_cockpit_bfo_bucket,
     load_bucket_inference_graph,
@@ -10,11 +10,14 @@ from naas_abi_marketplace.domains.personnel.apps.people.scripts.bfo_bucket_resol
 
 
 class TestBfoBucketResolution:
-    def test_employee_role_maps_to_realizable(self) -> None:
+    def test_occupation_role_maps_to_realizable(self) -> None:
         graph = load_bucket_inference_graph()
-        iri = "http://ontology.naas.ai/personnel/EmployeeRole"
+        iri = "http://ontology.naas.ai/people/OccupationRole"
         assert infer_cockpit_bfo_bucket(graph, iri) == "Realizable"
-        assert find_bfo_bucket_root_iri(graph, iri) == "http://purl.obolibrary.org/obo/BFO_0000017"
+        assert (
+            find_bfo_bucket_root_iri(graph, iri)
+            == "http://purl.obolibrary.org/obo/BFO_0000017"
+        )
 
     def test_abi_person_maps_to_material_entity(self) -> None:
         graph = load_bucket_inference_graph()
@@ -23,5 +26,5 @@ class TestBfoBucketResolution:
 
     def test_act_of_working_maps_to_process(self) -> None:
         graph = load_bucket_inference_graph()
-        iri = "http://ontology.naas.ai/personnel/ActOfWorking"
+        iri = "http://ontology.naas.ai/people/ActOfWorking"
         assert infer_cockpit_bfo_bucket(graph, iri) == "Process"

@@ -71,8 +71,6 @@ PERSON_FIELDS = (
     "city",
     "country",
     "country_code",
-    "service_line",
-    "grade",
     "years_of_experience",
     "public_profile_url",
 )
@@ -330,7 +328,9 @@ def _validate_search(search: dict[str, Any]) -> dict[str, Any]:
     out["facet_field"] = facet_field
     out["facet_label"] = _text(search.get("facet_label"), "search.facet_label")
     out["all_facet_label"] = search.get("all_facet_label") or "All"
-    out["unspecified_facet_label"] = search.get("unspecified_facet_label") or "Not specified"
+    out["unspecified_facet_label"] = (
+        search.get("unspecified_facet_label") or "Not specified"
+    )
     out["and_semantics"] = bool(search.get("and_semantics", True))
     for key, default in (
         ("snippet_length", 220),
@@ -373,8 +373,8 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
             raise ConfigError(f"data.tables.{key} must be a SQL identifier: {name!r}")
 
     graph_out: dict[str, Any] = {
-        "iri": "http://ontology.naas.ai/graph/personnel",
-        "label": "Personnel",
+        "iri": "http://ontology.naas.ai/graph/people",
+        "label": "People",
         # The TTL the profile page re-runs a competency query against. None
         # means the domain's own demo graph.
         "file": None,
@@ -412,7 +412,9 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
     organization_logos_raw = data.get("organization_logos")
     organization_logos: dict[str, str] = {}
     if organization_logos_raw not in (None, {}):
-        for key, value in _mapping(organization_logos_raw, "data.organization_logos").items():
+        for key, value in _mapping(
+            organization_logos_raw, "data.organization_logos"
+        ).items():
             organization_logos[str(key)] = _text(
                 value, f"data.organization_logos.{key}"
             )
@@ -460,9 +462,7 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
             "sections": _validate_sections(profile),
         },
         "data": _validate_data(_mapping(config.get("data"), "data"), app_root),
-        "privacy": _validate_privacy(
-            _mapping(config.get("privacy") or {}, "privacy")
-        ),
+        "privacy": _validate_privacy(_mapping(config.get("privacy") or {}, "privacy")),
     }
 
 

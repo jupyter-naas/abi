@@ -1,1 +1,1 @@
-"""Personnel module workflows."""
+"""People module workflows."""

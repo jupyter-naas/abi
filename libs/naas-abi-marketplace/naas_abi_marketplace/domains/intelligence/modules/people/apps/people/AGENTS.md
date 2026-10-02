@@ -1,16 +1,16 @@
 # AGENTS — People Search
 
-> Scope: `domains/personnel/apps/people/`. A configurable people directory over
-> the personnel graph. See `README.md` for how to run and retarget it.
+> Scope: `domains/intelligence/modules/people/apps/people/`. A configurable people directory over
+> the people graph. See `README.md` for how to run and retarget it.
 
 ## The chain
 
 ```
 data/demo/person/*/index.json          source (fictional, for the demo)
   -> pipelines/                        ActOfWorking, ActOfStudying, ActOfCertification, PersonProfile
-  -> graphs/demo/personnel.ttl         the graph, ontology-backed
+  -> graphs/demo/people.ttl         the graph, ontology-backed
   -> ontologies/queries/*.ttl          competency queries
-  -> dataset service (DuckLake)        nine typed tables in the `personnel` namespace
+  -> dataset service (DuckLake)        nine typed tables in the `people` namespace
   -> api/ + web/                       this app
 ```
 
@@ -52,7 +52,7 @@ instance-agnostic ones absolutely under the API prefix.
 
 2. **The browser never reads the warehouse.** Table names, the namespace and the
    privacy rules are dropped by `public_config()`. Requests go to
-   `/api/personnel-people/*`, which decides what may be read. Do not add a route
+   `/api/people/*`, which decides what may be read. Do not add a route
    that takes a table name or a SQL fragment from the client.
 
 ## Adding a profile section
@@ -62,8 +62,8 @@ instance-agnostic ones absolutely under the API prefix.
 2. Add its id to `REGISTERED_SECTION_IDS` in `config_loader.py`.
 3. Add its table to `scripts/datasets.TABLES`, its shaping to `scripts/profile_payload._section_items`,
    and its rows to `scripts/export_people_from_graph.py`.
-4. Add the competency query it reads to `ontologies/queries/PersonnelSparqlQueries.ttl`
-   and register its label in `agents/PersonnelAgent.get_sparql_tools()`.
+4. Add the competency query it reads to `ontologies/queries/PeopleSparqlQueries.ttl`
+   and register its label in `agents/PeopleAgent.get_sparql_tools()`.
 5. Add it to `config.yaml` with a label, an order and an `empty_text`.
 
 If the graph cannot answer step 4, the section has no business existing yet.
@@ -71,7 +71,7 @@ Extend the ontology first.
 
 Which sections are **process-shaped** (ActOfWorking / ActOfStudying / ActOfCertification) vs **person-level**
 (PersonProfilePipeline) is documented in
-[`personnel/README.md`](../../README.md) under **Profile sections vs ontology layers**.
+[`people/README.md`](../../README.md) under **Profile sections vs ontology layers**.
 
 ## Rules
 
@@ -144,7 +144,7 @@ Which sections are **process-shaped** (ActOfWorking / ActOfStudying / ActOfCerti
   under Material Artifact. `bfo_bucket_resolution.py` treats `cco:ont00000192` as
   a WHERE root so the facilities, and their subclasses, are drawn in the Site
   zone; the payload (`_add_imported_classes`) states the CCO classes the
-  personnel files use, with their labels, so the page can name them. A new CCO
+  people files use, with their labels, so the page can name them. A new CCO
   class used by a slice is picked up if it belongs to the Facility ontology.
 - **The Turtle panel is resizable.** A handle on its right edge (drag, arrow keys,
   Home or double-click to reset) sets its width, kept between 240px and what
@@ -176,17 +176,17 @@ Which sections are **process-shaped** (ActOfWorking / ActOfStudying / ActOfCerti
 
 ## Naming
 
-Python package `people` · catalog id `personnel-people` · API prefix
-`/api/personnel-people` · dataset namespace `personnel` · Nexus app id
-`naas_abi_marketplace.domains.personnel:people`.
+Python package `people` · catalog id `people` · API prefix
+`/api/people` · dataset namespace `people` · Nexus app id
+`naas_abi_marketplace.domains.intelligence.modules.people:people`.
 
 An instance picks its own prefix and namespace and keeps everything else, for
-example `/api/personnel-people-acme` and `personnel_acme`.
+example `/api/people-acme` and `people_acme`.
 
 ## Tests
 
 ```bash
-uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel -q
+uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/domains/intelligence/modules/people -q
 
 # the ontology page's layout and router (Node 20, no install), from apps/people
 node --test web/lib/

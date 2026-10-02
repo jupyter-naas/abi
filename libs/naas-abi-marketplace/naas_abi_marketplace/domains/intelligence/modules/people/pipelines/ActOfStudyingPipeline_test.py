@@ -6,17 +6,17 @@ from datetime import date
 from unittest.mock import MagicMock
 
 from naas_abi.ontologies.modules.ABIOntology import Site
-from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
+from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.modules.PeopleOntology import (
     AcademicDegree,
     EnrollmentRecord,
     ProfileDocument,
     Skill,
     StudentRole,
 )
-from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfStudyingProcess import (
+from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.processes.ActOfStudyingProcess import (
     ActOfStudying,
 )
-from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline import (
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfStudyingPipeline import (
     ActOfStudyingPipeline,
     ActOfStudyingPipelineConfiguration,
     ActOfStudyingPipelineParameters,
@@ -28,9 +28,9 @@ ABI_ORGANIZATION = URIRef("http://ontology.naas.ai/abi/Organization")
 ABI_PERSON = URIRef("http://ontology.naas.ai/abi/Person")
 ABI_TEMPORAL_REGION = URIRef("http://ontology.naas.ai/abi/TemporalRegion")
 CCO_EDUCATIONAL_ORG = URIRef("https://www.commoncoreontologies.org/ont00000564")
-PERSONNEL_ACTIVITIES = URIRef("http://ontology.naas.ai/personnel/activities_content")
-PERSONNEL_HAS_ACT_OF_STUDYING = URIRef("http://ontology.naas.ai/personnel/hasActOfStudying")
-PERSONNEL_SITE = URIRef(Site._class_uri)
+PEOPLE_ACTIVITIES = URIRef("http://ontology.naas.ai/people/activities_content")
+PEOPLE_HAS_ACT_OF_STUDYING = URIRef("http://ontology.naas.ai/people/hasActOfStudying")
+PEOPLE_SITE = URIRef(Site._class_uri)
 
 
 def _studying_params(**overrides: object) -> ActOfStudyingPipelineParameters:
@@ -52,7 +52,9 @@ def _studying_params(**overrides: object) -> ActOfStudyingPipelineParameters:
 
 
 def _types(graph) -> set[URIRef]:
-    return {o for _, _, o in graph.triples((None, RDF.type, None)) if isinstance(o, URIRef)}
+    return {
+        o for _, _, o in graph.triples((None, RDF.type, None)) if isinstance(o, URIRef)
+    }
 
 
 def test_run_emits_act_of_studying_and_seven_bucket_individuals() -> None:
@@ -72,9 +74,11 @@ def test_run_emits_act_of_studying_and_seven_bucket_individuals() -> None:
     assert ABI_PERSON in types
     assert ABI_ORGANIZATION in types
     assert CCO_EDUCATIONAL_ORG in types
-    assert PERSONNEL_SITE in types
+    assert PEOPLE_SITE in types
     assert ABI_TEMPORAL_REGION in types
-    assert any(p == PERSONNEL_HAS_ACT_OF_STUDYING for _, p, _ in graph.triples((None, None, None)))
+    assert any(
+        p == PEOPLE_HAS_ACT_OF_STUDYING for _, p, _ in graph.triples((None, None, None))
+    )
 
 
 def test_run_stores_activities_on_enrollment_record() -> None:
@@ -86,7 +90,7 @@ def test_run_stores_activities_on_enrollment_record() -> None:
         _studying_params(activities="President of the student association")
     )
 
-    assert any(p == PERSONNEL_ACTIVITIES for _, p, _ in graph.triples((None, None, None)))
+    assert any(p == PEOPLE_ACTIVITIES for _, p, _ in graph.triples((None, None, None)))
 
 
 def test_run_persists_delta_to_triple_store() -> None:

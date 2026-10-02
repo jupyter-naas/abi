@@ -1,4 +1,10 @@
-"""Shared RDF builders for personnel process pipelines."""
+"""Shared RDF builders for people process pipelines.
+
+Everything here is what a published source can say about a person. An
+organization's internal records (employee role, job position, contract,
+remuneration, grade, service line) are written by the personnel module, which
+extends :class:`PeopleGraphContext`.
+"""
 
 from __future__ import annotations
 
@@ -13,32 +19,28 @@ from naas_abi.ontologies.modules.ABIOntology import (
     TemporalInstant,
 )
 from naas_abi.ontologies.modules.ABIOntology import TemporalRegion as AbiTemporalRegion
-from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
+from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.modules.PeopleOntology import (
     AcademicDegree,
     Certification,
-    EmployeeRole,
-    EmploymentContract,
     EnrollmentRecord,
-    Grade,
     Interest,
     LanguageCapability,
+    OccupationRole,
     Portrait,
     ProfileDocument,
     ProfileSummary,
     Recommendation,
-    Remuneration,
-    ServiceLine,
     Skill,
     StudentRole,
 )
-from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfCertificationProcess import (
+from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.processes.ActOfCertificationProcess import (
     ActOfCertification,
     CertificationCandidateRole,
 )
-from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfStudyingProcess import (
+from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.processes.ActOfStudyingProcess import (
     ActOfStudying,
 )
-from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfWorkingProcess import (
+from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.processes.ActOfWorkingProcess import (
     ActOfWorking,
     Mission,
 )
@@ -46,7 +48,7 @@ from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, XSD
 
 ABI = Namespace("http://ontology.naas.ai/abi/")
-PERSONNEL = Namespace("http://ontology.naas.ai/personnel/")
+PEOPLE = Namespace("http://ontology.naas.ai/people/")
 CCO = Namespace("https://www.commoncoreontologies.org/")
 
 
@@ -58,6 +60,28 @@ def slug(*parts: str) -> str:
 def individual_uri(ns: str, class_name: str, stable_id: str) -> str:
     safe = re.sub(r"[^A-Za-z0-9_\-]", "_", stable_id)
     return f"{ns}{class_name}/{safe}"
+
+
+def act_of_working_key(
+    person_label: str, org_label: str, client_label: str | None, title: str
+) -> str:
+    """The stable key of one act of working, shared by its role and mission.
+
+    The client (when staffed there by an employer) is part of what makes an act
+    of working distinct: the same title recurs across different client
+    engagements at one employer, and without the client in the key those
+    engagements collide onto the same node and silently merge their missions.
+    A module that adds its own records to an act (an employer's contract, say)
+    mints the act's IRI from this same key.
+    """
+    return slug(person_label, org_label, client_label or "", title)
+
+
+def act_of_working_uri(
+    person_label: str, org_label: str, client_label: str | None, title: str
+) -> str:
+    key = act_of_working_key(person_label, org_label, client_label, title)
+    return individual_uri(str(PEOPLE), "ActOfWorking", key)
 
 
 def utc_now() -> datetime:
@@ -76,22 +100,20 @@ def period_label(start: date | None, end: date | None) -> str:
 
 
 @dataclass
-class PersonnelGraphContext:
+class PeopleGraphContext:
     """Mutable builder state shared across process pipelines in one batch."""
 
     graph: Graph = field(default_factory=Graph)
-    creator: str = "personnel_pipeline"
+    creator: str = "people_pipeline"
     people: dict[str, Person] = field(default_factory=dict)
     orgs: dict[str, Organization] = field(default_factory=dict)
     sites: dict[str, Site] = field(default_factory=dict)
     skills: dict[str, Skill] = field(default_factory=dict)
-    service_lines: dict[str, ServiceLine] = field(default_factory=dict)
-    grades: dict[str, Grade] = field(default_factory=dict)
     portraits: dict[str, Portrait] = field(default_factory=dict)
     profile_summaries: dict[str, ProfileSummary] = field(default_factory=dict)
     work_profiles: dict[str, ProfileDocument] = field(default_factory=dict)
     education_profiles: dict[str, ProfileDocument] = field(default_factory=dict)
-    last_position_uri: str | None = None
+    last_role_uri: str | None = None
 
     def ensure_person(self, first: str, last: str) -> Person:
         key = f"{first} {last}"
@@ -110,10 +132,10 @@ class PersonnelGraphContext:
         self.graph += person.rdf()
         self.graph.add((URIRef(uri), RDF.type, CCO.ont00000562))
         self.graph.add(
-            (URIRef(uri), PERSONNEL.given_name, Literal(first, datatype=XSD.string))
+            (URIRef(uri), PEOPLE.given_name, Literal(first, datatype=XSD.string))
         )
         self.graph.add(
-            (URIRef(uri), PERSONNEL.family_name, Literal(last, datatype=XSD.string))
+            (URIRef(uri), PEOPLE.family_name, Literal(last, datatype=XSD.string))
         )
         self.people[key] = person
         return person
@@ -137,7 +159,7 @@ class PersonnelGraphContext:
         if label in self.sites:
             return self.sites[label]
         site = Site(
-            _uri=individual_uri(str(PERSONNEL), "Site", slug(label)),
+            _uri=individual_uri(str(PEOPLE), "Site", slug(label)),
             label=label,
             created=utc_now(),
             creator=self.creator,
@@ -151,7 +173,7 @@ class PersonnelGraphContext:
         if key in self.skills:
             return self.skills[key]
         skill = Skill(
-            _uri=individual_uri(str(PERSONNEL), "Skill", slug(person.label or "", name)),
+            _uri=individual_uri(str(PEOPLE), "Skill", slug(person.label or "", name)),
             label=name,
             skill_name=name,
             inheresIn=[person._uri],
@@ -159,7 +181,7 @@ class PersonnelGraphContext:
             creator=self.creator,
         )
         self.graph += skill.rdf()
-        self.graph.add((URIRef(person._uri), PERSONNEL.hasSkill, URIRef(skill._uri)))
+        self.graph.add((URIRef(person._uri), PEOPLE.hasSkill, URIRef(skill._uri)))
         self.skills[key] = skill
         return skill
 
@@ -168,7 +190,7 @@ class PersonnelGraphContext:
         self.graph.add(
             (
                 URIRef(person._uri),
-                PERSONNEL.profile_slug,
+                PEOPLE.profile_slug,
                 Literal(slug_value, datatype=XSD.string),
             )
         )
@@ -184,9 +206,9 @@ class PersonnelGraphContext:
     ) -> None:
         """State how the person can be reached. Absent values are left unstated."""
         for predicate, value, datatype in (
-            (PERSONNEL.email_address, email, XSD.string),
-            (PERSONNEL.telephone_number, phone, XSD.string),
-            (PERSONNEL.linkedin_url, linkedin_url, XSD.anyURI),
+            (PEOPLE.email_address, email, XSD.string),
+            (PEOPLE.telephone_number, phone, XSD.string),
+            (PEOPLE.linkedin_url, linkedin_url, XSD.anyURI),
         ):
             if value:
                 self.graph.add(
@@ -208,54 +230,16 @@ class PersonnelGraphContext:
         properties are what a directory reads instead of parsing that label.
         """
         for prop, value in (
-            (PERSONNEL.office_label, office),
-            (PERSONNEL.city_name, city),
-            (PERSONNEL.country_name, country),
-            (PERSONNEL.country_code, country_code.upper() if country_code else None),
+            (PEOPLE.office_label, office),
+            (PEOPLE.city_name, city),
+            (PEOPLE.country_name, country),
+            (PEOPLE.country_code, country_code.upper() if country_code else None),
         ):
             if value:
                 self.graph.add(
                     (URIRef(site._uri), prop, Literal(value, datatype=XSD.string))
                 )
         return site
-
-    def ensure_service_line(self, label: str, org: Organization) -> ServiceLine:
-        """A service line of one organization: itself an organization, not a label."""
-        key = f"{org.label}|{label}"
-        if key in self.service_lines:
-            return self.service_lines[key]
-        line = ServiceLine(
-            _uri=individual_uri(
-                str(PERSONNEL), "ServiceLine", slug(org.label or "", label)
-            ),
-            label=label,
-            is_service_line_of=[org._uri],
-            created=utc_now(),
-            creator=self.creator,
-        )
-        self.graph += line.rdf()
-        self.graph.add((URIRef(org._uri), PERSONNEL.hasServiceLine, URIRef(line._uri)))
-        self.service_lines[key] = line
-        return line
-
-    def ensure_grade(self, value: str, person: Person) -> Grade:
-        key = f"{person.label}|{value}"
-        if key in self.grades:
-            return self.grades[key]
-        grade = Grade(
-            _uri=individual_uri(
-                str(PERSONNEL), "Grade", slug(person.label or "", value)
-            ),
-            label=value,
-            grade_value=value,
-            inheres_in=[person._uri],
-            created=utc_now(),
-            creator=self.creator,
-        )
-        self.graph += grade.rdf()
-        self.graph.add((URIRef(person._uri), PERSONNEL.hasGrade, URIRef(grade._uri)))
-        self.grades[key] = grade
-        return grade
 
     def ensure_portrait(
         self, person: Person, *, url: str | None = None, path: str | None = None
@@ -267,7 +251,7 @@ class PersonnelGraphContext:
         if key in self.portraits:
             return self.portraits[key]
         portrait = Portrait(
-            _uri=individual_uri(str(PERSONNEL), "Portrait", slug(key)),
+            _uri=individual_uri(str(PEOPLE), "Portrait", slug(key)),
             label=f"Portrait - {person.label}",
             portrait_url=url,
             portrait_path=path,
@@ -276,9 +260,7 @@ class PersonnelGraphContext:
             creator=self.creator,
         )
         self.graph += portrait.rdf()
-        self.graph.add(
-            (URIRef(person._uri), PERSONNEL.hasPortrait, URIRef(portrait._uri))
-        )
+        self.graph.add((URIRef(person._uri), PEOPLE.hasPortrait, URIRef(portrait._uri)))
         self.portraits[key] = portrait
         return portrait
 
@@ -306,7 +288,7 @@ class PersonnelGraphContext:
         if key in self.profile_summaries:
             return self.profile_summaries[key]
         summary = ProfileSummary(
-            _uri=individual_uri(str(PERSONNEL), "ProfileSummary", slug(key)),
+            _uri=individual_uri(str(PEOPLE), "ProfileSummary", slug(key)),
             label=headline or f"Profile - {person.label}",
             headline_text=headline,
             summary_content=about,
@@ -319,7 +301,7 @@ class PersonnelGraphContext:
         )
         self.graph += summary.rdf()
         self.graph.add(
-            (URIRef(person._uri), PERSONNEL.hasProfileSummary, URIRef(summary._uri))
+            (URIRef(person._uri), PEOPLE.hasProfileSummary, URIRef(summary._uri))
         )
         self.profile_summaries[key] = summary
         return summary
@@ -348,7 +330,7 @@ class PersonnelGraphContext:
         """
         key = slug(person.label or "", name)
         certification = Certification(
-            _uri=individual_uri(str(PERSONNEL), "Certification", key),
+            _uri=individual_uri(str(PEOPLE), "Certification", key),
             label=name,
             certification_name=name,
             issue_date=issue_date,
@@ -365,7 +347,7 @@ class PersonnelGraphContext:
         self.graph.add(
             (
                 URIRef(person._uri),
-                PERSONNEL.hasCertification,
+                PEOPLE.hasCertification,
                 URIRef(certification._uri),
             )
         )
@@ -373,7 +355,7 @@ class PersonnelGraphContext:
             self.graph.add(
                 (
                     URIRef(certification._uri),
-                    PERSONNEL.isSourcedFrom,
+                    PEOPLE.isSourcedFrom,
                     URIRef(profile._uri),
                 )
             )
@@ -388,7 +370,7 @@ class PersonnelGraphContext:
         )
 
         role = CertificationCandidateRole(
-            _uri=individual_uri(str(PERSONNEL), "CertificationCandidateRole", key),
+            _uri=individual_uri(str(PEOPLE), "CertificationCandidateRole", key),
             label=f"Candidate - {name}",
             is_certification_candidate_role_of=[person._uri],
             created=utc_now(),
@@ -398,12 +380,12 @@ class PersonnelGraphContext:
         self.graph.add(
             (
                 URIRef(person._uri),
-                PERSONNEL.hasCertificationCandidateRole,
+                PEOPLE.hasCertificationCandidateRole,
                 URIRef(role._uri),
             )
         )
 
-        act_uri = individual_uri(str(PERSONNEL), "ActOfCertification", key)
+        act_uri = individual_uri(str(PEOPLE), "ActOfCertification", key)
         act = ActOfCertification(
             _uri=act_uri,
             label=f"{name} @ {issuer.label}" if issuer else name,
@@ -419,13 +401,13 @@ class PersonnelGraphContext:
         )
         self.graph += act.rdf()
         self.graph.add(
-            (URIRef(person._uri), PERSONNEL.hasActOfCertification, URIRef(act_uri))
+            (URIRef(person._uri), PEOPLE.hasActOfCertification, URIRef(act_uri))
         )
         # demonstratesSkill is multi-valued but generated single-valued, so the
         # skills are stated directly rather than through the entity.
         for skill in skills or []:
             self.graph.add(
-                (URIRef(act_uri), PERSONNEL.demonstratesSkill, URIRef(skill._uri))
+                (URIRef(act_uri), PEOPLE.demonstratesSkill, URIRef(skill._uri))
             )
         return certification
 
@@ -434,7 +416,7 @@ class PersonnelGraphContext:
     ) -> LanguageCapability:
         key = slug(person.label or "", name)
         capability = LanguageCapability(
-            _uri=individual_uri(str(PERSONNEL), "LanguageCapability", key),
+            _uri=individual_uri(str(PEOPLE), "LanguageCapability", key),
             label=f"{name} - {proficiency}" if proficiency else name,
             language_name=name,
             proficiency_level=proficiency,
@@ -446,7 +428,7 @@ class PersonnelGraphContext:
         self.graph.add(
             (
                 URIRef(person._uri),
-                PERSONNEL.hasLanguageCapability,
+                PEOPLE.hasLanguageCapability,
                 URIRef(capability._uri),
             )
         )
@@ -464,7 +446,7 @@ class PersonnelGraphContext:
         """Two people are required: the subject, and the colleague who wrote it."""
         key = slug(person.label or "", author.label or "", (written_on or "").__str__())
         recommendation = Recommendation(
-            _uri=individual_uri(str(PERSONNEL), "Recommendation", key),
+            _uri=individual_uri(str(PEOPLE), "Recommendation", key),
             label=f"Recommendation for {person.label} by {author.label}",
             recommendation_content=content,
             recommendation_date=written_on,
@@ -478,7 +460,7 @@ class PersonnelGraphContext:
         self.graph.add(
             (
                 URIRef(person._uri),
-                PERSONNEL.hasRecommendation,
+                PEOPLE.hasRecommendation,
                 URIRef(recommendation._uri),
             )
         )
@@ -500,7 +482,7 @@ class PersonnelGraphContext:
         """
         key = slug(person.label or "", name)
         interest = Interest(
-            _uri=individual_uri(str(PERSONNEL), "Interest", key),
+            _uri=individual_uri(str(PEOPLE), "Interest", key),
             label=name,
             interest_name=name,
             interest_description=description,
@@ -511,9 +493,7 @@ class PersonnelGraphContext:
             creator=self.creator,
         )
         self.graph += interest.rdf()
-        self.graph.add(
-            (URIRef(person._uri), PERSONNEL.hasInterest, URIRef(interest._uri))
-        )
+        self.graph.add((URIRef(person._uri), PEOPLE.hasInterest, URIRef(interest._uri)))
         return interest
 
     def ensure_work_profile(self, person: Person, source_url: str) -> ProfileDocument:
@@ -521,9 +501,7 @@ class PersonnelGraphContext:
         if key in self.work_profiles:
             return self.work_profiles[key]
         doc = ProfileDocument(
-            _uri=individual_uri(
-                str(PERSONNEL), "ProfileDocument", slug(key, "linkedin")
-            ),
+            _uri=individual_uri(str(PEOPLE), "ProfileDocument", slug(key, "linkedin")),
             label=f"LinkedIn experience - {person.label}",
             source_url=source_url,
             is_profile_document_of=[person._uri],
@@ -531,17 +509,21 @@ class PersonnelGraphContext:
             creator=self.creator,
         )
         self.graph += doc.rdf()
-        self.graph.add((URIRef(person._uri), PERSONNEL.hasProfileDocument, URIRef(doc._uri)))
+        self.graph.add(
+            (URIRef(person._uri), PEOPLE.hasProfileDocument, URIRef(doc._uri))
+        )
         self.work_profiles[key] = doc
         return doc
 
-    def ensure_education_profile(self, person: Person, source_url: str) -> ProfileDocument:
+    def ensure_education_profile(
+        self, person: Person, source_url: str
+    ) -> ProfileDocument:
         key = person.label or ""
         if key in self.education_profiles:
             return self.education_profiles[key]
         doc = ProfileDocument(
             _uri=individual_uri(
-                str(PERSONNEL), "ProfileDocument", slug(key, "linkedin-education")
+                str(PEOPLE), "ProfileDocument", slug(key, "linkedin-education")
             ),
             label=f"LinkedIn education - {person.label}",
             source_url=source_url,
@@ -550,7 +532,9 @@ class PersonnelGraphContext:
             creator=self.creator,
         )
         self.graph += doc.rdf()
-        self.graph.add((URIRef(person._uri), PERSONNEL.hasProfileDocument, URIRef(doc._uri)))
+        self.graph.add(
+            (URIRef(person._uri), PEOPLE.hasProfileDocument, URIRef(doc._uri))
+        )
         self.education_profiles[key] = doc
         return doc
 
@@ -585,7 +569,7 @@ class PersonnelGraphContext:
             for triple in node.rdf():
                 self.graph.add(triple)
             self.graph.add(
-                (URIRef(uri), PERSONNEL.instant_date, Literal(moment, datatype=XSD.date))
+                (URIRef(uri), PEOPLE.instant_date, Literal(moment, datatype=XSD.date))
             )
             return uri
 
@@ -606,7 +590,7 @@ class PersonnelGraphContext:
             self.graph.add(
                 (
                     URIRef(region_uri),
-                    PERSONNEL.duration_label,
+                    PEOPLE.duration_label,
                     Literal(duration, datatype=XSD.string),
                 )
             )
@@ -623,20 +607,16 @@ class PersonnelGraphContext:
         title: str,
         mission_label: str,
         mission_content: str,
-        contract_type: str | None,
+        employment_type: str | None,
         start: date | None,
         end: date | None,
         duration: str | None,
-        remuneration_amount: float | None = None,
-        remuneration_currency: str = "EUR",
         client: Organization | None = None,
         mission_context: str | None = None,
     ) -> tuple[str, str]:
-        # The client (when staffed there by an employer) is part of what makes an
-        # act of working distinct: the same title recurs across different client
-        # engagements at one employer, and without the client in the key those
-        # engagements collide onto the same node and silently merge their missions.
-        key = slug(person.label or "", org.label or "", client.label if client else "", title)
+        key = act_of_working_key(
+            person.label or "", org.label or "", client.label if client else None, title
+        )
 
         temporal_uri = self.add_temporal_region(
             key=f"{key}-working",
@@ -647,7 +627,7 @@ class PersonnelGraphContext:
         )
 
         mission = Mission(
-            _uri=individual_uri(str(PERSONNEL), "Mission", key),
+            _uri=individual_uri(str(PEOPLE), "Mission", key),
             label=mission_label,
             mission_content=mission_content,
             mission_context=mission_context,
@@ -657,86 +637,38 @@ class PersonnelGraphContext:
         )
         self.graph += mission.rdf()
         self.graph.add(
-            (URIRef(person._uri), PERSONNEL.hasMissionCarried, URIRef(mission._uri))
+            (URIRef(person._uri), PEOPLE.hasMissionCarried, URIRef(mission._uri))
         )
         if profile:
             self.graph.add(
-                (URIRef(mission._uri), PERSONNEL.isSourcedFrom, URIRef(profile._uri))
+                (URIRef(mission._uri), PEOPLE.isSourcedFrom, URIRef(profile._uri))
             )
 
-        from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
-            JobPosition,
-        )
-
-        position = JobPosition(
-            _uri=individual_uri(str(PERSONNEL), "JobPosition", key),
+        role = OccupationRole(
+            _uri=individual_uri(str(PEOPLE), "OccupationRole", key),
             label=title,
             job_title=title,
-            created=utc_now(),
-            creator=self.creator,
-        )
-        self.graph += position.rdf()
-
-        role = EmployeeRole(
-            _uri=individual_uri(str(PERSONNEL), "EmployeeRole", key),
-            label=title,
-            is_employee_role_of=[person._uri],
-            has_job_position=[position._uri],
+            is_occupation_role_of=[person._uri],
             created=utc_now(),
             creator=self.creator,
         )
         self.graph += role.rdf()
-        self.graph.add((URIRef(person._uri), PERSONNEL.hasEmployeeRole, URIRef(role._uri)))
         self.graph.add(
-            (URIRef(position._uri), PERSONNEL.isJobPositionOf, URIRef(role._uri))
+            (URIRef(person._uri), PEOPLE.hasOccupationRole, URIRef(role._uri))
         )
-        self.graph.add((URIRef(role._uri), PERSONNEL.hasMission, URIRef(mission._uri)))
-        self.graph.add((URIRef(mission._uri), PERSONNEL.isMissionOf, URIRef(role._uri)))
+        self.graph.add((URIRef(role._uri), PEOPLE.hasMission, URIRef(mission._uri)))
+        self.graph.add((URIRef(mission._uri), PEOPLE.isMissionOf, URIRef(role._uri)))
 
-        contract_uri = None
-        if contract_type:
-            contract = EmploymentContract(
-                _uri=individual_uri(str(PERSONNEL), "EmploymentContract", key),
-                label=f"{contract_type} - {person.label} / {org.label}",
-                created=utc_now(),
-                creator=self.creator,
-            )
-            self.graph += contract.rdf()
-            self.graph.add(
-                (
-                    URIRef(contract._uri),
-                    PERSONNEL.contract_type,
-                    Literal(contract_type, datatype=XSD.string),
-                )
-            )
-            contract_uri = contract._uri
-
-        participants = [person._uri]
-        if remuneration_amount:
-            remuneration = Remuneration(
-                _uri=individual_uri(str(PERSONNEL), "Remuneration", key),
-                label=f"{int(remuneration_amount):,} {remuneration_currency}/year".replace(
-                    ",", " "
-                ),
-                remuneration_amount=remuneration_amount,
-                remuneration_currency=remuneration_currency,
-                inheresIn=[person._uri],
-                created=utc_now(),
-                creator=self.creator,
-            )
-            self.graph += remuneration.rdf()
-            participants.append(remuneration._uri)
-
-        working_uri = individual_uri(str(PERSONNEL), "ActOfWorking", key)
+        working_uri = individual_uri(str(PEOPLE), "ActOfWorking", key)
         working = ActOfWorking(
             _uri=working_uri,
             label=f"{title} @ {org.label}",
-            hasParticipant=participants,
+            hasParticipant=[person._uri],
             occursIn=site._uri if site else None,
             occupiesTemporalRegion=[temporal_uri] if temporal_uri else None,
             for_organization=[org._uri],
             for_client=[client._uri] if client else None,
-            has_contract=contract_uri,
+            employment_type=employment_type,
             is_act_of_working_of=[person._uri],
             realizes=role._uri,
             created=utc_now(),
@@ -744,22 +676,24 @@ class PersonnelGraphContext:
         )
         self.graph += working.rdf()
 
-        self.graph.add((URIRef(person._uri), PERSONNEL.hasActOfWorking, URIRef(working_uri)))
+        self.graph.add(
+            (URIRef(person._uri), PEOPLE.hasActOfWorking, URIRef(working_uri))
+        )
         if site:
             self.graph.add(
-                (URIRef(person._uri), PERSONNEL.hasWorkLocation, URIRef(site._uri))
+                (URIRef(person._uri), PEOPLE.hasWorkLocation, URIRef(site._uri))
             )
         # developsSkill is declared in the shared module, which a process slice does
         # not import, so it is not a field of the entity: the relation is stated here.
         for skill in skills:
             self.graph.add(
-                (URIRef(working_uri), PERSONNEL.developsSkill, URIRef(skill._uri))
+                (URIRef(working_uri), PEOPLE.developsSkill, URIRef(skill._uri))
             )
             self.graph.add(
-                (URIRef(skill._uri), PERSONNEL.isSkillDevelopedIn, URIRef(working_uri))
+                (URIRef(skill._uri), PEOPLE.isSkillDevelopedIn, URIRef(working_uri))
             )
-        self.last_position_uri = position._uri
-        return working_uri, position._uri
+        self.last_role_uri = role._uri
+        return working_uri, role._uri
 
     def add_studying(
         self,
@@ -788,17 +722,17 @@ class PersonnelGraphContext:
         )
 
         role = StudentRole(
-            _uri=individual_uri(str(PERSONNEL), "StudentRole", key),
+            _uri=individual_uri(str(PEOPLE), "StudentRole", key),
             label=f"Student - {program}",
             is_student_role_of=[person._uri],
             created=utc_now(),
             creator=self.creator,
         )
         self.graph += role.rdf()
-        self.graph.add((URIRef(person._uri), PERSONNEL.hasStudentRole, URIRef(role._uri)))
+        self.graph.add((URIRef(person._uri), PEOPLE.hasStudentRole, URIRef(role._uri)))
 
         enrollment = EnrollmentRecord(
-            _uri=individual_uri(str(PERSONNEL), "EnrollmentRecord", key),
+            _uri=individual_uri(str(PEOPLE), "EnrollmentRecord", key),
             label=f"Enrollment - {program}",
             program_name=program,
             enrollment_date=start,
@@ -809,32 +743,34 @@ class PersonnelGraphContext:
         )
         self.graph += enrollment.rdf()
         self.graph.add(
-            (URIRef(person._uri), PERSONNEL.hasEnrollmentRecord, URIRef(enrollment._uri))
+            (URIRef(person._uri), PEOPLE.hasEnrollmentRecord, URIRef(enrollment._uri))
         )
         if profile:
             self.graph.add(
-                (URIRef(enrollment._uri), PERSONNEL.isSourcedFrom, URIRef(profile._uri))
+                (URIRef(enrollment._uri), PEOPLE.isSourcedFrom, URIRef(profile._uri))
             )
         if activities:
             self.graph.add(
                 (
                     URIRef(enrollment._uri),
-                    PERSONNEL.activities_content,
+                    PEOPLE.activities_content,
                     Literal(activities, datatype=XSD.string),
                 )
             )
 
         degree = AcademicDegree(
-            _uri=individual_uri(str(PERSONNEL), "AcademicDegree", key),
+            _uri=individual_uri(str(PEOPLE), "AcademicDegree", key),
             label=program,
             created=utc_now(),
             creator=self.creator,
         )
         self.graph += degree.rdf()
         if profile:
-            self.graph.add((URIRef(degree._uri), PERSONNEL.isSourcedFrom, URIRef(profile._uri)))
+            self.graph.add(
+                (URIRef(degree._uri), PEOPLE.isSourcedFrom, URIRef(profile._uri))
+            )
 
-        studying_uri = individual_uri(str(PERSONNEL), "ActOfStudying", key)
+        studying_uri = individual_uri(str(PEOPLE), "ActOfStudying", key)
         studying = ActOfStudying(
             _uri=studying_uri,
             label=f"{program} @ {org.label}" if org else program,
@@ -851,24 +787,26 @@ class PersonnelGraphContext:
         )
         self.graph += studying.rdf()
 
-        self.graph.add((URIRef(person._uri), PERSONNEL.hasActOfStudying, URIRef(studying_uri)))
+        self.graph.add(
+            (URIRef(person._uri), PEOPLE.hasActOfStudying, URIRef(studying_uri))
+        )
         if site:
             self.graph.add(
-                (URIRef(person._uri), PERSONNEL.hasStudyLocation, URIRef(site._uri))
+                (URIRef(person._uri), PEOPLE.hasStudyLocation, URIRef(site._uri))
             )
         # developsSkill is declared in the shared module, which a process slice does
         # not import, so it is not a field of the entity: the relation is stated here.
         for skill in skills:
             self.graph.add(
-                (URIRef(studying_uri), PERSONNEL.developsSkill, URIRef(skill._uri))
+                (URIRef(studying_uri), PEOPLE.developsSkill, URIRef(skill._uri))
             )
             self.graph.add(
-                (URIRef(skill._uri), PERSONNEL.isSkillDevelopedIn, URIRef(studying_uri))
+                (URIRef(skill._uri), PEOPLE.isSkillDevelopedIn, URIRef(studying_uri))
             )
         return studying_uri
 
 
 def bind_graph_prefixes(graph: Graph) -> None:
     graph.bind("abi", ABI)
-    graph.bind("personnel", PERSONNEL)
+    graph.bind("people", PEOPLE)
     graph.bind("cco", CCO)

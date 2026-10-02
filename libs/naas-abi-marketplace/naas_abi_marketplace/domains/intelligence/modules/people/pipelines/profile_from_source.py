@@ -13,23 +13,25 @@ from typing import Annotated, Literal
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from naas_abi_marketplace.domains.personnel.paths import module_graph_name
-from naas_abi_marketplace.domains.personnel.pipelines.ActOfCertificationPipeline import (
+from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+    module_graph_name,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfCertificationPipeline import (
     ActOfCertificationPipeline,
     ActOfCertificationPipelineConfiguration,
     ActOfCertificationPipelineParameters,
 )
-from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline import (
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfStudyingPipeline import (
     ActOfStudyingPipeline,
     ActOfStudyingPipelineConfiguration,
     ActOfStudyingPipelineParameters,
 )
-from naas_abi_marketplace.domains.personnel.pipelines.ActOfWorkingPipeline import (
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfWorkingPipeline import (
     ActOfWorkingPipeline,
     ActOfWorkingPipelineConfiguration,
     ActOfWorkingPipelineParameters,
 )
-from naas_abi_marketplace.domains.personnel.pipelines.PersonProfilePipeline import (
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.PersonProfilePipeline import (
     CertificationInput,
     InterestInput,
     LanguageInput,
@@ -38,10 +40,10 @@ from naas_abi_marketplace.domains.personnel.pipelines.PersonProfilePipeline impo
     PersonProfilePipelineParameters,
     RecommendationInput,
 )
-from naas_abi_marketplace.domains.personnel.pipelines.utils.graph_builders import (
-    PersonnelGraphContext,
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.graph_builders import (
+    PeopleGraphContext,
 )
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 from rdflib import Graph, URIRef
 
 
@@ -69,11 +71,11 @@ class WorkingRecordInput(BaseModel):
     # organization directly. Unset for a direct employment role.
     client: str | None = None
     mission_context: str | None = None
-    contract_type: str | None = None
+    employment_type: str | None = Field(
+        default=None, validation_alias=AliasChoices("employment_type", "contract_type")
+    )
     skills: list[str] = []
     source: str | None = None
-    remuneration_amount: float | None = None
-    remuneration_currency: str = "EUR"
 
 
 class StudyingRecordInput(BaseModel):
@@ -102,8 +104,6 @@ class ProfileBlockInput(BaseModel):
     quote: str | None = None
     years_of_experience: int | None = None
     organization: str | None = None
-    service_line: str | None = None
-    grade: str | None = None
     office: str | None = None
     city: str | None = None
     country: str | None = None
@@ -128,13 +128,13 @@ class ProfileFromSourcePipelineConfiguration(PipelineConfiguration):
     triple_store: TripleStoreService | None = None
     graph_name: URIRef = URIRef(module_graph_name())
     persist: bool = True
-    context: PersonnelGraphContext | None = None
+    context: PeopleGraphContext | None = None
 
 
 def apply_profile_source_payload(
     parameters: ProfileFromSourcePipelineParameters,
     *,
-    context: PersonnelGraphContext,
+    context: PeopleGraphContext,
     working: ActOfWorkingPipeline,
     studying: ActOfStudyingPipeline,
     profile_pipeline: PersonProfilePipeline,
@@ -188,11 +188,9 @@ def apply_profile_source_payload(
                 mission=record.mission,
                 client=record.client,
                 mission_context=record.mission_context,
-                contract_type=record.contract_type,
+                employment_type=record.employment_type,
                 skills=record.skills,
                 source_url=record.source or default_profile_url,
-                remuneration_amount=record.remuneration_amount,
-                remuneration_currency=record.remuneration_currency,
             )
         )
 
@@ -233,8 +231,6 @@ def apply_profile_source_payload(
                 quote=block.quote,
                 years_of_experience=block.years_of_experience,
                 organization=block.organization,
-                service_line=block.service_line,
-                grade=block.grade,
                 office=block.office,
                 city=block.city,
                 country=block.country,
@@ -270,7 +266,7 @@ class ProfileFromSourcePipeline(Pipeline):
 
     def run(self, parameters: ProfileFromSourcePipelineParameters) -> Graph:
         owned_context = self.__configuration.context is None
-        context = self.__configuration.context or PersonnelGraphContext()
+        context = self.__configuration.context or PeopleGraphContext()
         before = len(context.graph)
         # One persist at the end when we own the context; otherwise each child
         # pipeline persists its own delta (shared external context).

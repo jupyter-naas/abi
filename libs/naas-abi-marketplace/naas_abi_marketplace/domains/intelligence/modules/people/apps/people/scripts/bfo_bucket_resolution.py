@@ -2,7 +2,7 @@
 
 Nexus keeps a module-only graph for queries and an imports-enriched graph for
 ``bfo_parent_iri``. This module mirrors ``_find_bfo_ancestor`` and the ABI
-bucket-root aliases so personnel classes resolve the same way.
+bucket-root aliases so people classes resolve the same way.
 """
 
 from __future__ import annotations
@@ -10,7 +10,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import naas_abi
-from naas_abi_marketplace.domains.personnel.paths import ONTOLOGIES_DIR
+from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+    ONTOLOGIES_DIR,
+)
 from rdflib import Graph
 from rdflib.query import ResultRow
 
@@ -76,10 +78,13 @@ _ABI_IMPORTS_DIR = Path(naas_abi.__file__).resolve().parent / "ontologies" / "im
 # Where the CCO mid-level ontologies (Agent, Artifact, Facility...) are bundled.
 CCO_MID_LEVEL_DIR = _ABI_IMPORTS_DIR / "mid-level"
 _ABI_ONTOLOGY_PATH = (
-    Path(naas_abi.__file__).resolve().parent / "ontologies" / "modules" / "ABIOntology.ttl"
+    Path(naas_abi.__file__).resolve().parent
+    / "ontologies"
+    / "modules"
+    / "ABIOntology.ttl"
 )
 
-# Bundled imports referenced by PersonnelOntology / ABIOntology (same as Nexus _IMPORT_URI_TO_LOCAL).
+# Bundled imports referenced by PeopleOntology / ABIOntology (same as Nexus _IMPORT_URI_TO_LOCAL).
 _BUCKET_INFERENCE_TTL_PATHS: tuple[Path, ...] = (
     _ABI_ONTOLOGY_PATH,
     _ABI_IMPORTS_DIR / "top-level" / "bfo-core.ttl",
@@ -132,14 +137,14 @@ def cockpit_bucket_type(bfo_root_iri: str | None) -> str:
     return _BFO_IRI_TO_COCKPIT_TYPE.get(bfo_root_iri, "Unknown")
 
 
-_PERSONNEL_ONTOLOGY_PATHS: tuple[Path, ...] = (
-    ONTOLOGIES_DIR / "modules" / "PersonnelOntology.ttl",
+_PEOPLE_ONTOLOGY_PATHS: tuple[Path, ...] = (
+    ONTOLOGIES_DIR / "modules" / "PeopleOntology.ttl",
     *sorted((ONTOLOGIES_DIR / "processes").glob("*.ttl")),
 )
 
 
 def load_bucket_inference_graph() -> Graph:
-    """Personnel module graph plus import closure used only for bucket ancestry."""
+    """People module graph plus import closure used only for bucket ancestry."""
     graph = Graph()
     seen: set[str] = set()
 
@@ -150,7 +155,7 @@ def load_bucket_inference_graph() -> Graph:
         seen.add(key)
         graph.parse(path, format="turtle")
 
-    for path in _PERSONNEL_ONTOLOGY_PATHS:
+    for path in _PEOPLE_ONTOLOGY_PATHS:
         merge_path(path)
     for path in _BUCKET_INFERENCE_TTL_PATHS:
         merge_path(path)

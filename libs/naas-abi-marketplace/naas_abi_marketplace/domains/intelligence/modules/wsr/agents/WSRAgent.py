@@ -1,4 +1,3 @@
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -105,7 +104,7 @@ The WSR platform fuses the following live data layers:
         agent_configuration: AgentConfiguration | None = None,
     ) -> "WSRAgent":
 
-        from naas_abi_marketplace.domains.intelligence import ABIModule
+        from naas_abi_marketplace.domains.intelligence.modules.wsr import ABIModule
 
         abi_module = ABIModule.get_instance()
 

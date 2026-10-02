@@ -1,4 +1,4 @@
-"""Competency SPARQL templates from PersonnelSparqlQueries.ttl.
+"""Competency SPARQL templates from PeopleSparqlQueries.ttl.
 
 Shared by the graph exporter and the profile API so the UI can show the same
 queries that populate each section.
@@ -11,12 +11,14 @@ import textwrap
 from functools import lru_cache
 from typing import Any
 
-from naas_abi_marketplace.domains.personnel.paths import ONTOLOGIES_DIR
+from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+    ONTOLOGIES_DIR,
+)
 from rdflib import RDF, RDFS, Graph, URIRef
 
 INTENT = "http://ontology.naas.ai/intentMapping/"
-GRAPH_IRI = "http://ontology.naas.ai/graph/personnel"
-QUERIES_TTL = ONTOLOGIES_DIR / "queries" / "PersonnelSparqlQueries.ttl"
+GRAPH_IRI = "http://ontology.naas.ai/graph/people"
+QUERIES_TTL = ONTOLOGIES_DIR / "queries" / "PeopleSparqlQueries.ttl"
 DEFAULT_ROW_LIMIT = 2000
 
 
@@ -43,9 +45,7 @@ def load_query_descriptions() -> dict[str, str]:
     graph = _queries_graph()
     intent_description = URIRef(INTENT + "intentDescription")
     descriptions: dict[str, str] = {}
-    for subject in graph.subjects(
-        RDF.type, URIRef(INTENT + "TemplatableSparqlQuery")
-    ):
+    for subject in graph.subjects(RDF.type, URIRef(INTENT + "TemplatableSparqlQuery")):
         name = str(graph.value(subject, RDFS.label))
         if not name:
             continue
@@ -78,7 +78,7 @@ def format_sparql(sparql: str) -> str:
     in_select = False
     last_line_depth = 0
     triple_predicate_depth: int | None = None
-    _PREDICATE_START = ("rdfs:", "rdf:", "abi:", "personnel:")
+    _PREDICATE_START = ("rdfs:", "rdf:", "abi:", "people:")
 
     for line in lines:
         stripped = line.strip()
@@ -96,17 +96,25 @@ def format_sparql(sparql: str) -> str:
         elif upper.startswith("SELECT "):
             in_select = True
             line_depth = 0
-        elif upper.startswith("WHERE ") or upper.startswith("LIMIT ") or upper.startswith("ORDER BY"):
+        elif (
+            upper.startswith("WHERE ")
+            or upper.startswith("LIMIT ")
+            or upper.startswith("ORDER BY")
+        ):
             in_select = False
             line_depth = 0
         elif in_select and stripped.startswith("?"):
             line_depth = 1
         elif stripped.startswith("#"):
             line_depth = depth
-        elif triple_predicate_depth is not None and stripped.startswith(_PREDICATE_START):
-            line_depth = triple_predicate_depth
-        elif formatted and formatted[-1].rstrip().endswith(";") and stripped.startswith(
+        elif triple_predicate_depth is not None and stripped.startswith(
             _PREDICATE_START
+        ):
+            line_depth = triple_predicate_depth
+        elif (
+            formatted
+            and formatted[-1].rstrip().endswith(";")
+            and stripped.startswith(_PREDICATE_START)
         ):
             triple_predicate_depth = last_line_depth + 1
             line_depth = triple_predicate_depth
@@ -152,7 +160,7 @@ def restrict_to_profile_slug(sparql: str, slug: str) -> str:
     escaped = _sparql_string_literal(slug)
     injection = (
         "            FILTER EXISTS {\n"
-        "              ?person personnel:profile_slug ?__profileSlug .\n"
+        "              ?person people:profile_slug ?__profileSlug .\n"
         f'              FILTER(LCASE(STR(?__profileSlug)) = LCASE("{escaped}"))\n'
         "            }\n"
     )
@@ -189,9 +197,7 @@ def render_query_raw(
     if query_name == "find_profile_header":
         if not slug:
             raise ValueError("find_profile_header requires slug")
-        return fill_template(
-            sparql, person_slug=_sparql_string_literal(slug)
-        ).strip()
+        return fill_template(sparql, person_slug=_sparql_string_literal(slug)).strip()
     sparql = fill_template(sparql, limit=limit)
     if slug:
         sparql = restrict_to_profile_slug(sparql, slug)
@@ -207,15 +213,11 @@ def render_query(
     display: bool = True,
 ) -> str:
     """Fill a template and optionally restrict it to one person."""
-    raw = render_query_raw(
-        query_name, slug=slug, limit=limit, strip_graph=strip_graph
-    )
+    raw = render_query_raw(query_name, slug=slug, limit=limit, strip_graph=strip_graph)
     return format_sparql(raw) if display else raw
 
 
-def run_query(
-    graph: Graph, template: str, **arguments: object
-) -> list[dict[str, Any]]:
+def run_query(graph: Graph, template: str, **arguments: object) -> list[dict[str, Any]]:
     """Execute one filled template against an rdflib graph (exporter)."""
     sparql = fill_template(strip_named_graph(template), **arguments)
     rows: list[dict[str, Any]] = []

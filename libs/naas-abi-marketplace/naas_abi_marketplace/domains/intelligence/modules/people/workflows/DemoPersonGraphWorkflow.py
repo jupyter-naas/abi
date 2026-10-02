@@ -1,6 +1,6 @@
-"""Register demo person JSON sources into the personnel graph.
+"""Register demo person JSON sources into the people graph.
 
-``mode=demo`` writes ``graphs/demo/personnel.ttl`` on disk (no triple store).
+``mode=demo`` writes ``graphs/demo/people.ttl`` on disk (no triple store).
 ``mode=triple_store`` inserts instance triples into the configured named graph.
 """
 
@@ -14,15 +14,15 @@ from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
-from naas_abi_marketplace.domains.personnel.graph.demo import (
+from naas_abi_marketplace.domains.intelligence.modules.people.graph.demo import (
     build_instance_graph,
     schema_relative_paths,
     write_demo_graph_file,
 )
-from naas_abi_marketplace.domains.personnel.paths import (
+from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
     DEMO_GRAPH_FILE,
     DEMO_SOURCE_DIR,
-    PERSONNEL_ROOT,
+    PEOPLE_ROOT,
     module_graph_name,
 )
 from pydantic import Field
@@ -31,7 +31,7 @@ from rdflib import URIRef
 
 def _path_for_report(path: Path) -> str:
     try:
-        return str(path.relative_to(PERSONNEL_ROOT))
+        return str(path.relative_to(PEOPLE_ROOT))
     except ValueError:
         return str(path)
 
@@ -47,8 +47,8 @@ class DemoPersonGraphWorkflowParameters(WorkflowParameters):
         Literal["demo", "triple_store"],
         Field(
             description=(
-                "demo: serialize schema + instances to graphs/demo/personnel.ttl. "
-                "triple_store: insert instances into the personnel named graph."
+                "demo: serialize schema + instances to graphs/demo/people.ttl. "
+                "triple_store: insert instances into the people named graph."
             ),
         ),
     ] = "demo"
@@ -64,12 +64,14 @@ class DemoPersonGraphWorkflowParameters(WorkflowParameters):
     output_path: Annotated[
         str | None,
         Field(
-            description="TTL output path when mode=demo. Defaults to graphs/demo/personnel.ttl.",
+            description="TTL output path when mode=demo. Defaults to graphs/demo/people.ttl.",
         ),
     ] = None
     include_schema_in_output: Annotated[
         bool,
-        Field(description="When mode=demo, merge ontology TTL schema into the output file."),
+        Field(
+            description="When mode=demo, merge ontology TTL schema into the output file."
+        ),
     ] = True
 
 
@@ -81,7 +83,9 @@ class DemoPersonGraphWorkflow(Workflow[DemoPersonGraphWorkflowParameters]):
         self.__configuration = configuration
 
     def run(self, parameters: DemoPersonGraphWorkflowParameters) -> dict[str, object]:
-        source = Path(parameters.source_dir) if parameters.source_dir else DEMO_SOURCE_DIR
+        source = (
+            Path(parameters.source_dir) if parameters.source_dir else DEMO_SOURCE_DIR
+        )
         if parameters.mode == "demo":
             output, schema_triples, instance_triples = write_demo_graph_file(
                 source,
@@ -137,9 +141,9 @@ class DemoPersonGraphWorkflow(Workflow[DemoPersonGraphWorkflowParameters]):
                 name="build_demo_person_graph",
                 description=(
                     "Load data/demo/person/*/index.json and register each profile "
-                    "via register_profile_from_source (working, studying, person "
-                    "profile, then roster employment records). "
-                    "Use mode=demo to write graphs/demo/personnel.ttl locally."
+                    "via register_profile_from_source (working, studying, certification "
+                    "and person profile). "
+                    "Use mode=demo to write graphs/demo/people.ttl locally."
                 ),
             )
         ]
@@ -162,19 +166,19 @@ def main() -> None:
         "--source-dir",
         type=Path,
         default=None,
-        help=f"Person JSON root (default: {DEMO_SOURCE_DIR.relative_to(PERSONNEL_ROOT)})",
+        help=f"Person JSON root (default: {DEMO_SOURCE_DIR.relative_to(PEOPLE_ROOT)})",
     )
     parser.add_argument(
         "--output",
         type=Path,
         default=None,
-        help=f"Output TTL when mode=demo (default: {DEMO_GRAPH_FILE.relative_to(PERSONNEL_ROOT)})",
+        help=f"Output TTL when mode=demo (default: {DEMO_GRAPH_FILE.relative_to(PEOPLE_ROOT)})",
     )
     args = parser.parse_args()
 
     triple_store = None
     if args.mode == "triple_store":
-        from naas_abi_marketplace.domains.personnel import ABIModule
+        from naas_abi_marketplace.domains.intelligence.modules.people import ABIModule
 
         triple_store = ABIModule.get_instance().engine.services.triple_store
 

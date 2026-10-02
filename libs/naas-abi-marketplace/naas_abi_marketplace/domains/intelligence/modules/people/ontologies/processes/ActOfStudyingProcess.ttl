@@ -8,12 +8,12 @@
 @prefix bfo:   <http://purl.obolibrary.org/obo/> .
 @prefix cco:   <https://www.commoncoreontologies.org/> .
 @prefix abi:   <http://ontology.naas.ai/abi/> .
-@prefix personnel: <http://ontology.naas.ai/personnel/> .
+@prefix people: <http://ontology.naas.ai/people/> .
 
-personnel:ActOfStudyingProcess a owl:Ontology ;
+people:ActOfStudyingProcess a owl:Ontology ;
   # Slice: process class + process-only properties. Shared classes
-  # (StudentRole, EnrollmentRecord, AcademicDegree) live in PersonnelOntology.
-  # Does NOT import PersonnelOntology (the module imports this file).
+  # (StudentRole, EnrollmentRecord, AcademicDegree) live in PeopleOntology.
+  # Does NOT import PeopleOntology (the module imports this file).
   #
   # Seven-bucket mapping for one course of study:
   #   WHO          Person (the student), Organization (the educational institution)
@@ -28,15 +28,15 @@ personnel:ActOfStudyingProcess a owl:Ontology ;
   owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
   owl:imports <https://www.commoncoreontologies.org/FacilityOntology> ;
   owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
-  rdfs:seeAlso <http://ontology.naas.ai/personnel/PersonnelOntology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/people/PeopleOntology> ;
   rdfs:member "bpl-processes/personnel" ;
-  abi:pythonPackage "naas_abi_marketplace.domains.personnel" ;
+  abi:pythonPackage "naas_abi_marketplace.domains.intelligence.modules.people" ;
   abi:ontologyResource "ontologies/processes/ActOfStudyingProcess.ttl" ;
   abi:pythonResource "ontologies/processes/ActOfStudyingProcess.py" ;
   dc:title "Act of Studying Process Ontology"@en ;
   dc:description "Process slice for the act of studying - a CCO Planned Act (Act of Educational Training Acquisition) in which a person acquires knowledge of a curriculum from an educational organization in an educational facility over a temporal region, realizing a student role, developing skills and language capabilities, and concretizing an enrollment record and academic degree."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
-  rdfs:comment "Process slice for Act of Studying. Reuses shared personnel classes, Skill and ProfileDocument from PersonnelOntology."@en ;
+  rdfs:comment "Process slice for Act of Studying. Reuses shared people classes, Skill and ProfileDocument from PeopleOntology."@en ;
   dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
   dc11:date "2026-08-19"^^xsd:date .
 
@@ -44,19 +44,19 @@ personnel:ActOfStudyingProcess a owl:Ontology ;
 #    Classes - WHAT
 #################################################################
 
-personnel:ActOfStudying a owl:Class ;
+people:ActOfStudying a owl:Class ;
   rdfs:subClassOf cco:ont00000228 ,
     cco:ont00001074 ,
     [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
-    [ a owl:Restriction ; owl:onProperty personnel:forEducationalOrganization ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty people:forEducationalOrganization ; owl:someValuesFrom abi:Organization ] ,
     [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom cco:ont00000270 ] ,
     [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
-    [ a owl:Restriction ; owl:onProperty personnel:hasEnrollment ; owl:someValuesFrom personnel:EnrollmentRecord ] ,
-    [ a owl:Restriction ; owl:onProperty personnel:hasDegree ; owl:someValuesFrom personnel:AcademicDegree ] ,
-    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom personnel:StudentRole ] ,
-    [ a owl:Restriction ; owl:onProperty personnel:developsSkill ; owl:someValuesFrom personnel:Skill ] ,
-    [ a owl:Restriction ; owl:onProperty personnel:developsLanguageCapability ; owl:someValuesFrom personnel:LanguageCapability ] ,
-    [ a owl:Restriction ; owl:onProperty personnel:hasSourceDocument ; owl:someValuesFrom personnel:ProfileDocument ] ;
+    [ a owl:Restriction ; owl:onProperty people:hasEnrollment ; owl:someValuesFrom people:EnrollmentRecord ] ,
+    [ a owl:Restriction ; owl:onProperty people:hasDegree ; owl:someValuesFrom people:AcademicDegree ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom people:StudentRole ] ,
+    [ a owl:Restriction ; owl:onProperty people:developsSkill ; owl:someValuesFrom people:Skill ] ,
+    [ a owl:Restriction ; owl:onProperty people:developsLanguageCapability ; owl:someValuesFrom people:LanguageCapability ] ,
+    [ a owl:Restriction ; owl:onProperty people:hasSourceDocument ; owl:someValuesFrom people:ProfileDocument ] ;
   rdfs:label "Act of Studying"@en ;
   skos:definition "A Planned Act, and an Act of Educational Training Acquisition, in which a person acquires knowledge of a curriculum from an educational organization in an educational facility over a temporal region, realizing a student role, developing skills and language capabilities, under an enrollment record and academic degree."@en ;
   skos:example "Alice Dupont studying for a Master's Degree in Corporate Finance at KEDGE Business School in Bordeaux from 2012 to 2016."@en .
@@ -65,11 +65,11 @@ personnel:ActOfStudying a owl:Class ;
 #    Classes - HOW WE KNOW (restrictions on shared IRIs)
 #################################################################
 
-personnel:EnrollmentRecord rdfs:subClassOf
-    [ a owl:Restriction ; owl:onProperty personnel:isSourcedFrom ; owl:someValuesFrom personnel:ProfileDocument ] .
+people:EnrollmentRecord rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty people:isSourcedFrom ; owl:someValuesFrom people:ProfileDocument ] .
 
-personnel:AcademicDegree rdfs:subClassOf
-    [ a owl:Restriction ; owl:onProperty personnel:isSourcedFrom ; owl:someValuesFrom personnel:ProfileDocument ] .
+people:AcademicDegree rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty people:isSourcedFrom ; owl:someValuesFrom people:ProfileDocument ] .
 
 #################################################################
 #    Classes - WHO x WHERE (restrictions on shared IRIs)
@@ -79,123 +79,123 @@ personnel:AcademicDegree rdfs:subClassOf
 # a CCO class: this slice only adds, by restriction, what the act of studying ties
 # them to.
 abi:Person rdfs:subClassOf
-    [ a owl:Restriction ; owl:onProperty personnel:hasStudyFacility ; owl:someValuesFrom cco:ont00000270 ] .
+    [ a owl:Restriction ; owl:onProperty people:hasStudyFacility ; owl:someValuesFrom cco:ont00000270 ] .
 
 cco:ont00000564 rdfs:subClassOf
-    [ a owl:Restriction ; owl:onProperty personnel:hasEducationalFacility ; owl:someValuesFrom cco:ont00000270 ] .
+    [ a owl:Restriction ; owl:onProperty people:hasEducationalFacility ; owl:someValuesFrom cco:ont00000270 ] .
 
 #################################################################
 #    Object properties - process-only
 #################################################################
 
-personnel:hasActOfStudying a owl:ObjectProperty ;
+people:hasActOfStudying a owl:ObjectProperty ;
   rdfs:subPropertyOf abi:participatesIn ;
-  owl:inverseOf personnel:isActOfStudyingOf ;
+  owl:inverseOf people:isActOfStudyingOf ;
   rdfs:label "has act of studying"@en ;
   skos:definition "Relates a person to the act of studying in which they acquire a curriculum."@en ;
   rdfs:domain abi:Person ;
-  rdfs:range  personnel:ActOfStudying .
+  rdfs:range  people:ActOfStudying .
 
-personnel:isActOfStudyingOf a owl:ObjectProperty ;
+people:isActOfStudyingOf a owl:ObjectProperty ;
   rdfs:subPropertyOf abi:hasParticipant ;
-  owl:inverseOf personnel:hasActOfStudying ;
+  owl:inverseOf people:hasActOfStudying ;
   rdfs:label "is act of studying of"@en ;
   skos:definition "Relates an act of studying to the person acquiring the curriculum."@en ;
-  rdfs:domain personnel:ActOfStudying ;
+  rdfs:domain people:ActOfStudying ;
   rdfs:range  abi:Person .
 
-personnel:forEducationalOrganization a owl:ObjectProperty ;
+people:forEducationalOrganization a owl:ObjectProperty ;
   rdfs:subPropertyOf abi:hasParticipant ;
-  owl:inverseOf personnel:isEducationalOrganizationOfStudying ;
+  owl:inverseOf people:isEducationalOrganizationOfStudying ;
   rdfs:label "for educational organization"@en ;
   skos:definition "Relates an act of studying to the educational organization that participates as the training provider."@en ;
-  rdfs:domain personnel:ActOfStudying ;
+  rdfs:domain people:ActOfStudying ;
   rdfs:range  abi:Organization .
 
-personnel:isEducationalOrganizationOfStudying a owl:ObjectProperty ;
+people:isEducationalOrganizationOfStudying a owl:ObjectProperty ;
   rdfs:subPropertyOf abi:participatesIn ;
-  owl:inverseOf personnel:forEducationalOrganization ;
+  owl:inverseOf people:forEducationalOrganization ;
   rdfs:label "is educational organization of studying"@en ;
   skos:definition "Relates an educational organization to an act of studying it participates in as the training provider."@en ;
   rdfs:domain abi:Organization ;
-  rdfs:range  personnel:ActOfStudying .
+  rdfs:range  people:ActOfStudying .
 
-personnel:hasEnrollment a owl:ObjectProperty ;
+people:hasEnrollment a owl:ObjectProperty ;
   rdfs:subPropertyOf abi:concretizes ;
-  owl:inverseOf personnel:isEnrollmentOf ;
+  owl:inverseOf people:isEnrollmentOf ;
   rdfs:label "has enrollment"@en ;
   skos:definition "Relates an act of studying to the enrollment record it concretizes."@en ;
-  rdfs:domain personnel:ActOfStudying ;
-  rdfs:range  personnel:EnrollmentRecord .
+  rdfs:domain people:ActOfStudying ;
+  rdfs:range  people:EnrollmentRecord .
 
-personnel:isEnrollmentOf a owl:ObjectProperty ;
+people:isEnrollmentOf a owl:ObjectProperty ;
   rdfs:subPropertyOf abi:isConcretizedBy ;
-  owl:inverseOf personnel:hasEnrollment ;
+  owl:inverseOf people:hasEnrollment ;
   rdfs:label "is enrollment of"@en ;
   skos:definition "Relates an enrollment record to the act of studying that concretizes it."@en ;
-  rdfs:domain personnel:EnrollmentRecord ;
-  rdfs:range  personnel:ActOfStudying .
+  rdfs:domain people:EnrollmentRecord ;
+  rdfs:range  people:ActOfStudying .
 
 # WHAT ↔ HOW WE KNOW - the act concretizes the awarded degree document
-personnel:hasDegree a owl:ObjectProperty ;
+people:hasDegree a owl:ObjectProperty ;
   rdfs:subPropertyOf abi:concretizes ;
-  owl:inverseOf personnel:isDegreeOf ;
+  owl:inverseOf people:isDegreeOf ;
   rdfs:label "has degree"@en ;
   skos:definition "Relates an act of studying to the academic degree it concretizes."@en ;
-  rdfs:domain personnel:ActOfStudying ;
-  rdfs:range  personnel:AcademicDegree .
+  rdfs:domain people:ActOfStudying ;
+  rdfs:range  people:AcademicDegree .
 
-personnel:isDegreeOf a owl:ObjectProperty ;
+people:isDegreeOf a owl:ObjectProperty ;
   rdfs:subPropertyOf abi:isConcretizedBy ;
-  owl:inverseOf personnel:hasDegree ;
+  owl:inverseOf people:hasDegree ;
   rdfs:label "is degree of"@en ;
   skos:definition "Relates an academic degree to the act of studying that concretizes it."@en ;
-  rdfs:domain personnel:AcademicDegree ;
-  rdfs:range  personnel:ActOfStudying .
+  rdfs:domain people:AcademicDegree ;
+  rdfs:range  people:ActOfStudying .
 
 # WHO ↔ WHERE (place) - the place a student studies in, as a Site.
 # Not the facility: the backbone is ActOfStudying abi:occursIn EducationalFacility
 # (see hasStudyFacility below). A source that only names a city says where the
 # study was, not which school, so it is kept as a Site (place) of its own.
-personnel:hasStudyLocation a owl:ObjectProperty ;
-  owl:inverseOf personnel:isStudyLocationOf ;
+people:hasStudyLocation a owl:ObjectProperty ;
+  owl:inverseOf people:isStudyLocationOf ;
   rdfs:label "has study location"@en ;
   skos:definition "Relates a person to the place (a site: a city or a country) at which they study. Says where, not at which school: for the facility see has study facility."@en ;
   rdfs:domain abi:Person ;
   rdfs:range  abi:Site .
 
-personnel:isStudyLocationOf a owl:ObjectProperty ;
-  owl:inverseOf personnel:hasStudyLocation ;
+people:isStudyLocationOf a owl:ObjectProperty ;
+  owl:inverseOf people:hasStudyLocation ;
   rdfs:label "is study location of"@en ;
   skos:definition "Relates a site to a person who studies there."@en ;
   rdfs:domain abi:Site ;
   rdfs:range  abi:Person .
 
 # WHO ↔ WHERE (facility) - the student and the facility they study in.
-personnel:hasStudyFacility a owl:ObjectProperty ;
-  owl:inverseOf personnel:isStudyFacilityOf ;
+people:hasStudyFacility a owl:ObjectProperty ;
+  owl:inverseOf people:isStudyFacilityOf ;
   rdfs:label "has study facility"@en ;
   skos:definition "Relates a person to the educational facility in which they perform an act of studying."@en ;
   rdfs:domain abi:Person ;
   rdfs:range  cco:ont00000270 .
 
-personnel:isStudyFacilityOf a owl:ObjectProperty ;
-  owl:inverseOf personnel:hasStudyFacility ;
+people:isStudyFacilityOf a owl:ObjectProperty ;
+  owl:inverseOf people:hasStudyFacility ;
   rdfs:label "is study facility of"@en ;
   skos:definition "Relates an educational facility to a person who performs an act of studying in it."@en ;
   rdfs:domain cco:ont00000270 ;
   rdfs:range  abi:Person .
 
 # WHO ↔ WHERE (facility) - the educational organization and its facility.
-personnel:hasEducationalFacility a owl:ObjectProperty ;
-  owl:inverseOf personnel:isEducationalFacilityOf ;
+people:hasEducationalFacility a owl:ObjectProperty ;
+  owl:inverseOf people:isEducationalFacilityOf ;
   rdfs:label "has educational facility"@en ;
   skos:definition "Relates an educational organization to an educational facility in which it teaches."@en ;
   rdfs:domain cco:ont00000564 ;
   rdfs:range  cco:ont00000270 .
 
-personnel:isEducationalFacilityOf a owl:ObjectProperty ;
-  owl:inverseOf personnel:hasEducationalFacility ;
+people:isEducationalFacilityOf a owl:ObjectProperty ;
+  owl:inverseOf people:hasEducationalFacility ;
   rdfs:label "is educational facility of"@en ;
   skos:definition "Relates an educational facility to the educational organization that teaches in it."@en ;
   rdfs:domain cco:ont00000270 ;
@@ -205,8 +205,8 @@ personnel:isEducationalFacilityOf a owl:ObjectProperty ;
 #    Data properties
 #################################################################
 
-personnel:activities_content a owl:DatatypeProperty ;
+people:activities_content a owl:DatatypeProperty ;
   rdfs:label "activities content"@en ;
   skos:definition "Extracurricular activities and societies listed under an enrollment on the source profile."@en ;
-  rdfs:domain personnel:EnrollmentRecord ;
+  rdfs:domain people:EnrollmentRecord ;
   rdfs:range  xsd:string .

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
     sparql_queries as sq,
 )
 

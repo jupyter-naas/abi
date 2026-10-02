@@ -1,15 +1,17 @@
-# onto2py-source-sha256: 9306c0e9a95fcf49b2428d9deef73def8de08b586066fce679141ee74dba30cf
 from __future__ import annotations
 
 import contextlib
 import datetime
 import os
 import uuid
-from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
+    Callable,
     ClassVar,
+    Iterable,
+    List,
+    Optional,
     Union,
     get_args,
     get_origin,
@@ -101,7 +103,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, list):
+        if origin in (list, List):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -319,19 +321,19 @@ class ActOfWorking(RDFEntity):
     Act of Working
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/ActOfWorking"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/people/ActOfWorking"
     _name: ClassVar[str] = "Act of Working"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "developsLanguageCapability": "http://ontology.naas.ai/personnel/developsLanguageCapability",
-        "developsSkill": "http://ontology.naas.ai/personnel/developsSkill",
-        "for_client": "http://ontology.naas.ai/personnel/forClient",
-        "for_organization": "http://ontology.naas.ai/personnel/forOrganization",
+        "developsLanguageCapability": "http://ontology.naas.ai/people/developsLanguageCapability",
+        "developsSkill": "http://ontology.naas.ai/people/developsSkill",
+        "employment_type": "http://ontology.naas.ai/people/employment_type",
+        "for_client": "http://ontology.naas.ai/people/forClient",
+        "for_organization": "http://ontology.naas.ai/people/forOrganization",
         "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
-        "hasSourceDocument": "http://ontology.naas.ai/personnel/hasSourceDocument",
-        "has_contract": "http://ontology.naas.ai/personnel/hasContract",
-        "is_act_of_working_of": "http://ontology.naas.ai/personnel/isActOfWorkingOf",
+        "hasSourceDocument": "http://ontology.naas.ai/people/hasSourceDocument",
+        "is_act_of_working_of": "http://ontology.naas.ai/people/isActOfWorkingOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "occupiesTemporalRegion": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
         "occursIn": "http://ontology.naas.ai/abi/occursIn",
@@ -344,7 +346,6 @@ class ActOfWorking(RDFEntity):
         "for_organization",
         "hasParticipant",
         "hasSourceDocument",
-        "has_contract",
         "is_act_of_working_of",
         "occupiesTemporalRegion",
         "occursIn",
@@ -352,38 +353,68 @@ class ActOfWorking(RDFEntity):
     }
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    employment_type: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Engagement type a source states for an act of working, e.g. 'Full-time', 'Freelance', 'Self-employed', 'Internship'. What was published, not the terms of a contract: a contract is an internal record of the employing organization, outside this vocabulary."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
-        datetime.datetime | None,
+        Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
+    ] = datetime.datetime.now(datetime.timezone.utc)
     creator: Annotated[
-        Any | None,
+        Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    developsLanguageCapability: Annotated[URIRef | str, Field()] | None = None
-    developsSkill: Annotated[URIRef | str, Field()] | None = None
-    for_client: Annotated[list[Organization | URIRef | str], Field(description="Relates an act of working to the client organization the work was performed for, when the worker was staffed there by their employer (forOrganization) rather than working for the client directly.")] | None = None
-    for_organization: Annotated[list[Organization | URIRef | str], Field(description="Relates an act of working to the organization that participates as employer.")] | None = None
-    hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = (
+    developsLanguageCapability: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    developsSkill: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    for_client: Optional[
+        Annotated[
+            List[Union[Organization, URIRef, str]],
+            Field(
+                description="Relates an act of working to the client organization the work was performed for, when the worker was staffed there by their employer (forOrganization) rather than working for the client directly."
+            ),
+        ]
+    ] = None
+    for_organization: Optional[
+        Annotated[
+            List[Union[Organization, URIRef, str]],
+            Field(
+                description="Relates an act of working to the organization that participates as employer."
+            ),
+        ]
+    ] = None
+    hasParticipant: Optional[Annotated[List[Union[Person, URIRef, str]], Field()]] = (
         None
     )
-    hasSourceDocument: Annotated[URIRef | str, Field()] | None = None
-    has_contract: Annotated[URIRef | str, Field(description="Relates an act of working to the employment contract it concretizes.")] | None = None
-    is_act_of_working_of: Annotated[list[Person | URIRef | str], Field(description="Relates an act of working to the person performing the work.")] | None = None
-    occupiesTemporalRegion: Annotated[list[TemporalRegion | URIRef | str], Field()] | None = None
-    occursIn: Annotated[URIRef | str, Field()] | None = None
-    realizes: Annotated[URIRef | str, Field()] | None = None
+    hasSourceDocument: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    is_act_of_working_of: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(
+                description="Relates an act of working to the person performing the work."
+            ),
+        ]
+    ] = None
+    occupiesTemporalRegion: Optional[
+        Annotated[List[Union[TemporalRegion, URIRef, str]], Field()]
+    ] = None
+    occursIn: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    realizes: Optional[Annotated[Union[URIRef, str], Field()]] = None
 
 
 class Mission(GenericallyDependentContinuant, RDFEntity):
     """
-    Deliberately a GDC and NOT a BFO function. A mission is stated, copied between systems and survives the person leaving the post, which a disposition inhering in the person could not. The WHY that inheres in the person is personnel:EmployeeRole; the mission is what that role concretizes, mirroring the JobPosition ← EmployeeRole pattern in PersonnelOntology. rdfs:label carries the opening sentence; personnel:mission_content carries the full text.
+    Deliberately a GDC and NOT a BFO function. A mission is stated, copied between systems and survives the person leaving the post, which a disposition inhering in the person could not. The WHY that inheres in the person is people:OccupationRole; the mission is what that role concretizes. rdfs:label carries the opening sentence; people:mission_content carries the full text.
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/Mission"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/people/Mission"
     _name: ClassVar[str] = "Mission"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
@@ -391,13 +422,13 @@ class Mission(GenericallyDependentContinuant, RDFEntity):
         "genericallyDependsOn": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "isConcretizedBy": "http://ontology.naas.ai/abi/isConcretizedBy",
-        "isSourcedFrom": "http://ontology.naas.ai/personnel/isSourcedFrom",
+        "isSourcedFrom": "http://ontology.naas.ai/people/isSourcedFrom",
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
-        "is_mission_carried_by": "http://ontology.naas.ai/personnel/isMissionCarriedBy",
-        "is_mission_of": "http://ontology.naas.ai/personnel/isMissionOf",
+        "is_mission_carried_by": "http://ontology.naas.ai/people/isMissionCarriedBy",
+        "is_mission_of": "http://ontology.naas.ai/people/isMissionOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "mission_content": "http://ontology.naas.ai/personnel/mission_content",
-        "mission_context": "http://ontology.naas.ai/personnel/mission_context",
+        "mission_content": "http://ontology.naas.ai/people/mission_content",
+        "mission_context": "http://ontology.naas.ai/people/mission_context",
     }
     _object_properties: ClassVar[set[str]] = {
         "genericallyDependsOn",
@@ -410,20 +441,72 @@ class Mission(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    mission_context: Annotated[str, Field(description="The situation a mission was undertaken in: what the organization needed and why, stated as prose before the mission's own objectives and activities. Optional: a source that states only what was done, not the situation it responded to, leaves this unset.")] | None = None
-    mission_content: Annotated[str, Field(description="Full stated text of a mission: the objectives and activities listed under its opening sentence, one per line when the source enumerates them as discrete tasks. The opening sentence alone is carried by rdfs:label; the situation the mission responded to is carried by personnel:mission_context, not here.")] | None = None
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+    mission_context: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The situation a mission was undertaken in: what the organization needed and why, stated as prose before the mission's own objectives and activities. Optional: a source that states only what was done, not the situation it responded to, leaves this unset."
+            ),
+        ]
+    ] = None
+    mission_content: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Full stated text of a mission: the objectives and activities listed under its opening sentence, one per line when the source enumerates them as discrete tasks. The opening sentence alone is carried by rdfs:label; the situation the mission responded to is carried by people:mission_context, not here."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
 
     # Object properties
-    genericallyDependsOn: Annotated[list[Person | URIRef | str], Field()] | None = None
-    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
-    isConcretizedBy: Annotated[URIRef | str, Field()] | None = None
-    isSourcedFrom: Annotated[URIRef | str, Field()] | None = None
-    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
-    is_mission_carried_by: Annotated[list[Person | URIRef | str], Field(description="Relates a mission to the person on which it generically depends.")] | None = None
-    is_mission_of: Annotated[URIRef | str, Field(description="Relates a mission to the employee role that concretizes it while the post is occupied.")] | None = None
+    genericallyDependsOn: Optional[
+        Annotated[List[Union[Person, URIRef, str]], Field()]
+    ] = None
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    isConcretizedBy: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    isSourcedFrom: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
+    is_mission_carried_by: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(
+                description="Relates a mission to the person on which it generically depends."
+            ),
+        ]
+    ] = None
+    is_mission_of: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(
+                description="Relates a mission to the occupation role that concretizes it while the person works in that capacity."
+            ),
+        ]
+    ] = None
 
 
 # Rebuild models to resolve forward references

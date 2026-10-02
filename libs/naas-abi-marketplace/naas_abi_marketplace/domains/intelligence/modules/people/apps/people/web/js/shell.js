@@ -69,7 +69,7 @@ function renderTopbar(state) {
 function renderFooter() {
   footer.hidden = false;
   document.getElementById("footer-note").textContent =
-    `${config.brand?.name || "People"} · built from the personnel graph`;
+    `${config.brand?.name || "People"} · built from the people graph`;
 }
 
 async function render() {

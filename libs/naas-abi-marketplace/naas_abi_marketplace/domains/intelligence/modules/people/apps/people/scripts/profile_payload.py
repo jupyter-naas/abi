@@ -12,11 +12,13 @@ import re
 from typing import Any
 
 from naas_abi_core.services.dataset.DatasetService import DatasetService
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import datasets as ds
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
+    datasets as ds,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
     sparql_queries as sq,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.scripts.profile_sparql import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.profile_sparql import (
     competency_queries_for_profile,
 )
 
@@ -25,8 +27,9 @@ def _knowledge_graph(config: dict[str, Any]) -> dict[str, str]:
     graph = (config.get("data") or {}).get("graph") or {}
     return {
         "iri": str(graph.get("iri") or sq.GRAPH_IRI),
-        "label": str(graph.get("label") or "Personnel"),
+        "label": str(graph.get("label") or "People"),
     }
+
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 CHILD_TABLES = (

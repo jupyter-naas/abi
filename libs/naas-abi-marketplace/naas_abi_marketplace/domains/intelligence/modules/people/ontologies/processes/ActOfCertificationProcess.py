@@ -4,11 +4,14 @@ import contextlib
 import datetime
 import os
 import uuid
-from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
+    Callable,
     ClassVar,
+    Iterable,
+    List,
+    Optional,
     Union,
     get_args,
     get_origin,
@@ -98,7 +101,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, list):
+        if origin in (list, List):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -316,18 +319,18 @@ class ActOfCertification(RDFEntity):
     No CCO act of certification; the process is a direct subclass of CCO Planned Act. The act is not the certificate: it ends when the certification is awarded, whereas the Certification persists and may later expire.
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/ActOfCertification"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/people/ActOfCertification"
     _name: ClassVar[str] = "Act of Certification"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "demonstrates_skill": "http://ontology.naas.ai/personnel/demonstratesSkill",
-        "developsLanguageCapability": "http://ontology.naas.ai/personnel/developsLanguageCapability",
-        "for_certifying_organization": "http://ontology.naas.ai/personnel/forCertifyingOrganization",
+        "demonstrates_skill": "http://ontology.naas.ai/people/demonstratesSkill",
+        "developsLanguageCapability": "http://ontology.naas.ai/people/developsLanguageCapability",
+        "for_certifying_organization": "http://ontology.naas.ai/people/forCertifyingOrganization",
         "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
-        "hasSourceDocument": "http://ontology.naas.ai/personnel/hasSourceDocument",
-        "has_awarded_certification": "http://ontology.naas.ai/personnel/hasAwardedCertification",
-        "is_act_of_certification_of": "http://ontology.naas.ai/personnel/isActOfCertificationOf",
+        "hasSourceDocument": "http://ontology.naas.ai/people/hasSourceDocument",
+        "has_awarded_certification": "http://ontology.naas.ai/people/hasAwardedCertification",
+        "is_act_of_certification_of": "http://ontology.naas.ai/people/isActOfCertificationOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "occupiesTemporalRegion": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
         "occursIn": "http://ontology.naas.ai/abi/occursIn",
@@ -347,35 +350,71 @@ class ActOfCertification(RDFEntity):
     }
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
-        datetime.datetime | None,
+        Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
+    ] = datetime.datetime.now(datetime.timezone.utc)
     creator: Annotated[
-        Any | None,
+        Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    demonstrates_skill: Annotated[URIRef | str, Field(description="Relates an act of certification to a skill the person demonstrates in the course of it.")] | None = None
-    developsLanguageCapability: Annotated[URIRef | str, Field()] | None = None
-    for_certifying_organization: Annotated[list[Organization | URIRef | str], Field(description="Relates an act of certification to the organization that participates as the certifying body.")] | None = None
-    hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = None
-    hasSourceDocument: Annotated[URIRef | str, Field()] | None = None
-    has_awarded_certification: Annotated[URIRef | str, Field(description="Relates an act of certification to the certification it concretizes.")] | None = None
-    is_act_of_certification_of: Annotated[list[Person | URIRef | str], Field(description="Relates an act of certification to the person being certified.")] | None = None
-    occupiesTemporalRegion: Annotated[list[TemporalRegion | URIRef | str], Field()] | None = None
-    occursIn: Annotated[URIRef | str, Field()] | None = None
-    realizes: Annotated[list[CertificationCandidateRole | URIRef | str], Field()] | None = None
+    demonstrates_skill: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(
+                description="Relates an act of certification to a skill the person demonstrates in the course of it."
+            ),
+        ]
+    ] = None
+    developsLanguageCapability: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    for_certifying_organization: Optional[
+        Annotated[
+            List[Union[Organization, URIRef, str]],
+            Field(
+                description="Relates an act of certification to the organization that participates as the certifying body."
+            ),
+        ]
+    ] = None
+    hasParticipant: Optional[Annotated[List[Union[Person, URIRef, str]], Field()]] = (
+        None
+    )
+    hasSourceDocument: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    has_awarded_certification: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(
+                description="Relates an act of certification to the certification it concretizes."
+            ),
+        ]
+    ] = None
+    is_act_of_certification_of: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(
+                description="Relates an act of certification to the person being certified."
+            ),
+        ]
+    ] = None
+    occupiesTemporalRegion: Optional[
+        Annotated[List[Union[TemporalRegion, URIRef, str]], Field()]
+    ] = None
+    occursIn: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    realizes: Optional[
+        Annotated[List[Union[CertificationCandidateRole, URIRef, str]], Field()]
+    ] = None
 
 
 class CertificationCandidateRole(Role, RDFEntity):
     """
-    No CCO candidate-role class; minted in the personnel namespace. Kept apart from the employee and student roles: a person is a candidate whether or not they were employed or enrolled at the time.
+    No CCO candidate-role class; minted in the people namespace. Kept apart from the occupation and student roles: a person is a candidate whether or not they were working or enrolled at the time.
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/CertificationCandidateRole"
+    _class_uri: ClassVar[str] = (
+        "http://ontology.naas.ai/people/CertificationCandidateRole"
+    )
     _name: ClassVar[str] = "Certification Candidate Role"
     _property_uris: ClassVar[dict] = {
         "concretizes": "http://ontology.naas.ai/abi/concretizes",
@@ -384,7 +423,7 @@ class CertificationCandidateRole(Role, RDFEntity):
         "hasRealization": "http://ontology.naas.ai/abi/hasRealization",
         "has_realization": "http://ontology.naas.ai/abi/hasRealization",
         "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_certification_candidate_role_of": "http://ontology.naas.ai/personnel/isCertificationCandidateRoleOf",
+        "is_certification_candidate_role_of": "http://ontology.naas.ai/people/isCertificationCandidateRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {
@@ -396,16 +435,54 @@ class CertificationCandidateRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
 
     # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    hasRealization: Annotated[list[ActOfCertification | URIRef | str], Field()] | None = None
-    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
-    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
-    is_certification_candidate_role_of: Annotated[list[Person | URIRef | str], Field(description="Relates a certification candidate role to the person in whom it inheres.")] | None = None
+    concretizes: Optional[
+        Annotated[
+            List[Union[GenericallyDependentContinuant, URIRef, str]],
+            Field(
+                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
+            ),
+        ]
+    ] = None
+    hasRealization: Optional[
+        Annotated[List[Union[ActOfCertification, URIRef, str]], Field()]
+    ] = None
+    has_realization: Optional[
+        Annotated[
+            List[Union[Process, URIRef, str]],
+            Field(description="b has realization c =Def c realizes b"),
+        ]
+    ] = None
+    inheres_in: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
+            ),
+        ]
+    ] = None
+    is_certification_candidate_role_of: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(
+                description="Relates a certification candidate role to the person in whom it inheres."
+            ),
+        ]
+    ] = None
 
 
 # Rebuild models to resolve forward references

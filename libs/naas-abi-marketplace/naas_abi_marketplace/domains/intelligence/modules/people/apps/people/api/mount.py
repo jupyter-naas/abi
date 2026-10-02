@@ -16,21 +16,22 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import FastAPI
-from naas_abi_marketplace.domains.personnel.apps.people.api.routes import build_router
-from naas_abi_marketplace.domains.personnel.apps.people.config_loader import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.api.routes import (
+    build_router,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.config_loader import (
     SHARED_WEB_ROOT,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.scripts.graph_view import (
-    COCKPIT_PAGES,
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.graph_view import (
+    GRAPH_PAGE_DIR,
 )
 from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
 SHARED_WEB_URL = "web"
-# The cockpit's page modules, for the profile's graph view. Its scripts are
-# loaded as they are rather than copied, so the view stays the cockpit's.
-COCKPIT_PAGES_URL = "cockpit-pages"
+# The person graph page (graph_page/), for the profile's graph view.
+GRAPH_PAGE_URL = "graph-page"
 
 
 class RevalidatedStaticFiles(StaticFiles):
@@ -68,7 +69,7 @@ def mount_people_app(
         name=f"{name}-shared-web",
     )
     app.mount(
-        f"{prefix.rstrip('/')}/{COCKPIT_PAGES_URL}",
-        RevalidatedStaticFiles(directory=COCKPIT_PAGES),
-        name=f"{name}-cockpit-pages",
+        f"{prefix.rstrip('/')}/{GRAPH_PAGE_URL}",
+        RevalidatedStaticFiles(directory=GRAPH_PAGE_DIR),
+        name=f"{name}-graph-page",
     )

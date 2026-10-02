@@ -44,7 +44,7 @@ ALICE = "http://ontology.naas.ai/abi/Person/alice-dupont"
 @pytest.fixture(scope="module")
 def store() -> GraphQueryTripleStoreAdapter:
     if DEMO_TTL is None:
-        pytest.skip("personnel demo graph not available")
+        pytest.skip("personnel demo graph (people + personnel records) not available")
     return GraphQueryTripleStoreAdapter(Graph().parse(DEMO_TTL, format="turtle"))
 
 

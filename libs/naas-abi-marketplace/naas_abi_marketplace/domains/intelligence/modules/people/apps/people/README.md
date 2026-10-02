@@ -1,7 +1,7 @@
 # People Search
 
 A people directory: Google-style search, a profile page per person. Everything
-it shows comes from the personnel knowledge graph, and everything it looks like
+it shows comes from the people knowledge graph, and everything it looks like
 comes from `config.yaml`.
 
 ```
@@ -13,10 +13,10 @@ person + experience  ->  graph (ontology-backed)  ->  datasets  ->  app
 ## Run it
 
 ```bash
-cd libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel
+cd libs/naas-abi-marketplace/naas_abi_marketplace/domains/intelligence/modules/people
 make people            # rebuild the graph and the datasets, then serve
-make app-personnel-people   # serve what is already exported
-PORT=4000 make app-personnel-people
+make app-people   # serve what is already exported
+PORT=4000 make app-people
 ```
 
 Then open <http://localhost:3001/>. On WSL, if `localhost` does not answer from
@@ -30,19 +30,19 @@ it.
 
 ```bash
 make people-datasets                       # demo graph -> dataset service
-python -m naas_abi_marketplace.domains.personnel.apps.people.scripts.export_people_from_graph \
+python -m naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.export_people_from_graph \
     --graph /path/to/your.ttl \
     --catalog sqlite:storage/datasets.sqlite --data-path storage/datasets/
 ```
 
 The exporter runs the competency queries in
-`ontologies/queries/PersonnelSparqlQueries.ttl` and writes nine tables. It
+`ontologies/queries/PeopleSparqlQueries.ttl` and writes nine tables. It
 refuses to publish an email address or a phone number anywhere in the text.
 
 Contact details have one way through. A source states them on the person
 (`person.email`, `person.phone`, `person.linkedin_url`). The pipeline writes them
-as the `personnel:email_address`, `personnel:telephone_number` and
-`personnel:linkedin_url` data properties of `abi:Person`. The exporter puts them
+as the `people:email_address`, `people:telephone_number` and
+`people:linkedin_url` data properties of `abi:Person`. The exporter puts them
 in the `email`, `phone` and `linkedin_url` columns of `people`, checked for
 shape, and only when `privacy.publish_contact_details` is true; otherwise those
 columns are left empty. The profile header shows each one that a person has,
@@ -105,7 +105,7 @@ A client does not fork this folder. They make one of their own holding a
 this app from their module:
 
 ```python
-from naas_abi_marketplace.domains.personnel.apps.people.api.mount import mount_people_app
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.api.mount import mount_people_app
 
 class ABIModule(BaseModule):
     dependencies = ModuleDependencies(modules=[], services=[DatasetService])
@@ -132,7 +132,7 @@ files, `data.graph.file`, and `data.portrait_prefix`. Run one locally with
 
 ```bash
 PEOPLE_APP_CONFIG=/path/to/their/config.yaml PEOPLE_API_PREFIX=/api/their-people \
-  python -m naas_abi_marketplace.domains.personnel.apps.people.api.dev_server
+  python -m naas_abi_marketplace.domains.intelligence.modules.people.apps.people.api.dev_server
 ```
 
 and export into it with `--config`.
@@ -144,22 +144,22 @@ means adding it to both, in the same change.
 ## Resume and graph views
 
 A profile opens as a resume. The switch at its top right turns it into a graph:
-the cockpit's own graph page (`apps/cockpit/web/components/pages/graph/`), not a
-copy of it, opened on that person.
+the person graph page in `graph_page/` (the 7-bucket canvas: occurrents and
+continuants, a zone per BFO bucket), opened on that person. The personnel
+cockpit embeds the same page; it lives here because nothing in it is HR.
 
-- **Data, live.** `GET <prefix>/people/<slug>/graph` runs the cockpit's graph
-  queries (`apps/cockpit/graph_query.py`) against this instance's graph file
+- **Data, live.** `GET <prefix>/people/<slug>/graph` runs the people working,
+  skills and studying queries (`scripts/graph_view.py`) against this instance's graph file
   (`data.graph.file`) with `?person` bound to the profile's person. The result
   is complete and takes well under a second, even on a large directory. It is
   cached until the graph file changes.
-- **Scripts.** The cockpit's page modules are mounted under
-  `<prefix>/cockpit-pages/`, and the profile imports `GraphPage.js` from there
+- **Scripts.** `graph_page/` is mounted under `<prefix>/graph-page/`, and the
+  profile imports `GraphPage.js` from there
   with `syncUrl: false`, so the page leaves this app's address bar alone.
-- **Styles.** `GET <prefix>/graph-view.css` holds the cockpit `app.css` rules
-  that name a class the graph page renders, scoped under `.profile-graph`. Change
-  the look in the cockpit stylesheet; this one is derived from it.
-- **Settings.** Graph defaults (2D/3D, distance, parameters, BFO colours) come
-  from the cockpit's `config.yaml`.
+- **Styles.** `graph_page/graph-page.css` holds the rules the page renders with.
+  `GET <prefix>/graph-view.css` serves them scoped under `.profile-graph`.
+- **Settings.** Graph defaults (2D/3D, distance, parameters) come from
+  `graph_page/graph.yaml`; BFO colours from this app's `theme.bfo_buckets`.
 
 The graph shows one person. To look at someone else, open their profile.
 

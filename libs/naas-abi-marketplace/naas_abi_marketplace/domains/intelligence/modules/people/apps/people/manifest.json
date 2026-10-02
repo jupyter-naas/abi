@@ -1,6 +1,6 @@
 {
   "name": "People Search",
-  "description": "Configurable people directory: search by name, skill, place or school, then open a profile. Built from the personnel graph through the dataset service; retargeted with config.yaml.",
+  "description": "Configurable people directory: search by name, skill, place or school, then open a profile. Built from the people graph through the dataset service; retargeted with config.yaml.",
   "category": "alpha",
   "url": "html:web/index.html",
   "icon_emoji": "🔎",
@@ -12,14 +12,14 @@
     "directory",
     "search",
     "profile",
-    "personnel",
+    "people",
     "hr",
     "sparql",
     "dataset",
     "template"
   ],
   "dependencies": {
-    "personnel-people": "0.1.0"
+    "people": "0.1.0"
   },
   "tier": "community",
   "maintainer": "naas.ai",

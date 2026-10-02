@@ -1,16 +1,16 @@
-"""Personnel process pipelines (Act of Working, Studying and Certification)."""
+"""People process pipelines (Act of Working, Studying and Certification)."""
 
-from naas_abi_marketplace.domains.personnel.pipelines.ActOfCertificationPipeline import (
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfCertificationPipeline import (
     ActOfCertificationPipeline,
     ActOfCertificationPipelineConfiguration,
     ActOfCertificationPipelineParameters,
 )
-from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline import (
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfStudyingPipeline import (
     ActOfStudyingPipeline,
     ActOfStudyingPipelineConfiguration,
     ActOfStudyingPipelineParameters,
 )
-from naas_abi_marketplace.domains.personnel.pipelines.ActOfWorkingPipeline import (
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfWorkingPipeline import (
     ActOfWorkingPipeline,
     ActOfWorkingPipelineConfiguration,
     ActOfWorkingPipelineParameters,

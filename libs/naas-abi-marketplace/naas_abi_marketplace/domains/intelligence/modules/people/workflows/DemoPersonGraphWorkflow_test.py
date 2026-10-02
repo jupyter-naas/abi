@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from naas_abi_marketplace.domains.personnel.paths import (
+from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
     DEMO_SOURCE_DIR,
 )
-from naas_abi_marketplace.domains.personnel.workflows.DemoPersonGraphWorkflow import (
+from naas_abi_marketplace.domains.intelligence.modules.people.workflows.DemoPersonGraphWorkflow import (
     DemoPersonGraphWorkflow,
     DemoPersonGraphWorkflowConfiguration,
     DemoPersonGraphWorkflowParameters,
@@ -15,7 +15,7 @@ from naas_abi_marketplace.domains.personnel.workflows.DemoPersonGraphWorkflow im
 
 
 def test_demo_mode_writes_local_ttl(tmp_path: Path) -> None:
-    output = tmp_path / "personnel.ttl"
+    output = tmp_path / "people.ttl"
     workflow = DemoPersonGraphWorkflow(DemoPersonGraphWorkflowConfiguration())
     result = workflow.run(
         DemoPersonGraphWorkflowParameters(
@@ -30,10 +30,12 @@ def test_demo_mode_writes_local_ttl(tmp_path: Path) -> None:
     assert result["person_count"] == len(list(DEMO_SOURCE_DIR.glob("*/index.json")))
 
 
-def test_demo_mode_default_output_path_exists_after_run(tmp_path: Path, monkeypatch) -> None:
-    target = tmp_path / "graphs" / "demo" / "personnel.ttl"
+def test_demo_mode_default_output_path_exists_after_run(
+    tmp_path: Path, monkeypatch
+) -> None:
+    target = tmp_path / "graphs" / "demo" / "people.ttl"
     monkeypatch.setattr(
-        "naas_abi_marketplace.domains.personnel.graph.demo.DEMO_GRAPH_FILE",
+        "naas_abi_marketplace.domains.intelligence.modules.people.graph.demo.DEMO_GRAPH_FILE",
         target,
     )
     workflow = DemoPersonGraphWorkflow(DemoPersonGraphWorkflowConfiguration())

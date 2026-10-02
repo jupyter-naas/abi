@@ -22,7 +22,7 @@ export function mountHome(view, { config }) {
           : ""
       }
       <p class="home-ontology">
-        <a class="home-ontology-link" href="${ontologyHref(config)}">Personnel ontology</a>
+        <a class="home-ontology-link" href="${ontologyHref(config)}">People ontology</a>
       </p>
     </div>`;
   wireSearch(view, config);

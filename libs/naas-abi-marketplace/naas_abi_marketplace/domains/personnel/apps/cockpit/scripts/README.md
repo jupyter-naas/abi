@@ -9,7 +9,7 @@ store, payload builders, `data_source.py`) live one level up in
 
 ```
 scripts/
-├── person_sources.py                 # read data/demo/person/<slug>/index.json
+├── person_sources.py                 # re-export: people demo loaders + personnel roster reader
 ├── demo_graph_builder.py             # source JSON → graphs/demo/personnel.ttl
 ├── roster_builder.py                 # dashboard roster rows (records → acts of working)
 ├── roster_builder_test.py            # unit tests for the roster derivation
@@ -43,7 +43,7 @@ server still starts and the pages render empty.
 
 ### `person_sources.py`
 
-Loads the committed demo inputs from `data/demo/person/<slug>/index.json` and
+Loads the committed demo inputs from the people module's `data/demo/person/<slug>/index.json` and
 shapes them for the pipelines:
 
 - `load_person_sources(dir)` — read every `<slug>/index.json`

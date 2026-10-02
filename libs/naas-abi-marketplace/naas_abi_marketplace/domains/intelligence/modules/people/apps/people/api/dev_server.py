@@ -19,10 +19,10 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
-from naas_abi_marketplace.domains.personnel.apps.people.api.mount import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.api.mount import (
     mount_people_app,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.config_loader import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.config_loader import (
     ConfigError,
     public_config,
     web_root_for,
@@ -30,7 +30,7 @@ from naas_abi_marketplace.domains.personnel.apps.people.config_loader import (
 from starlette.responses import FileResponse, Response
 from starlette.staticfiles import StaticFiles
 
-DEFAULT_PREFIX = "/api/personnel-people"
+DEFAULT_PREFIX = "/api/people"
 
 
 class DevStaticFiles(StaticFiles):

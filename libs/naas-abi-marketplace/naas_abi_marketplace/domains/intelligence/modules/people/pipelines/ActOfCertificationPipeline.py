@@ -9,9 +9,11 @@ from typing import Annotated
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from naas_abi_marketplace.domains.personnel.paths import module_graph_name
-from naas_abi_marketplace.domains.personnel.pipelines.utils.graph_builders import (
-    PersonnelGraphContext,
+from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+    module_graph_name,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.graph_builders import (
+    PeopleGraphContext,
 )
 from pydantic import Field
 from rdflib import Graph, URIRef
@@ -22,7 +24,7 @@ class ActOfCertificationPipelineConfiguration(PipelineConfiguration):
     triple_store: TripleStoreService | None = None
     graph_name: URIRef = URIRef(module_graph_name())
     persist: bool = True
-    context: PersonnelGraphContext | None = None
+    context: PeopleGraphContext | None = None
 
 
 class ActOfCertificationPipelineParameters(PipelineParameters):
@@ -62,7 +64,7 @@ class ActOfCertificationPipeline(Pipeline):
 
     def run(self, parameters: ActOfCertificationPipelineParameters) -> Graph:
         owned_context = self.__configuration.context is None
-        context = self.__configuration.context or PersonnelGraphContext()
+        context = self.__configuration.context or PeopleGraphContext()
         person = context.ensure_person(parameters.first_name, parameters.last_name)
         profile = (
             context.ensure_work_profile(person, parameters.source_url)

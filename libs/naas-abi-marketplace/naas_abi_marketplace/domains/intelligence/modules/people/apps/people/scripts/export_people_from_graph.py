@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Run the personnel competency queries and write the People Search datasets.
+"""Run the people competency queries and write the People Search datasets.
 
     graph (ontology-backed)  ->  SPARQL  ->  dataset service  ->  app
 
-Reads ``graphs/demo/personnel.ttl`` by default. Every value passes the privacy
+Reads ``graphs/demo/people.ttl`` by default. Every value passes the privacy
 gate before it is written, so an email address or a phone number cannot slip
 out through a headline or a mission. Contact details go in the three contact
 columns of ``people`` only, are checked for shape there, and are left empty
@@ -15,7 +15,7 @@ whichever graph that instance is built from:
     python -m …apps.people.scripts.export_people_from_graph
     python -m …apps.people.scripts.export_people_from_graph \
         --config path/to/instance/config.yaml \
-        --graph  path/to/instance/graphs/personnel.ttl
+        --graph  path/to/instance/graphs/people.ttl
 """
 
 from __future__ import annotations
@@ -27,13 +27,22 @@ from pathlib import Path
 from typing import Any
 
 from naas_abi_core.services.dataset.DatasetService import DatasetService
-from naas_abi_marketplace.domains.personnel.apps.people.config_loader import load_config
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import datasets as ds
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.config_loader import (
+    load_config,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
+    datasets as ds,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
     sparql_queries as sq,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.scripts.text import search_text
-from naas_abi_marketplace.domains.personnel.paths import DEMO_GRAPH_FILE, PERSONNEL_ROOT
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.text import (
+    search_text,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+    DEMO_GRAPH_FILE,
+    PEOPLE_ROOT,
+)
 from rdflib import Graph
 
 # The interactive query runner caps its rows (sq.DEFAULT_ROW_LIMIT) to keep a page
@@ -354,8 +363,6 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
             "full_name": [row.get("personLabel") or ""],
             "headline": [row.get("headline") or ""],
             "about": [row.get("about") or ""],
-            "service_line": [row.get("serviceLineLabel") or ""],
-            "grade": [row.get("gradeValue") or ""],
             "office": [row.get("officeLabel") or "", row.get("cityName") or ""],
             "country": [row.get("countryName") or ""],
             "skills": person_skills,
@@ -406,8 +413,6 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
                 "city": row.get("cityName"),
                 "country": row.get("countryName"),
                 "country_code": row.get("countryCode"),
-                "service_line": row.get("serviceLineLabel"),
-                "grade": row.get("gradeValue"),
                 "years_of_experience": _int(row.get("yearsOfExperience")),
                 "public_profile_url": row.get("profileUrl"),
                 "email": row.get("emailAddress"),
@@ -467,7 +472,7 @@ def default_dataset_service() -> DatasetService:
     The exporter has to work as a plain script - that is how the Makefile runs
     it - so "no module initialized" is the normal case, not an error.
     """
-    from naas_abi_marketplace.domains.personnel.apps.people.api.service import (
+    from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.api.service import (
         dataset_service,
     )
 
@@ -519,7 +524,7 @@ def main(argv: list[str] | None = None) -> int:
     publish(service, config, tables)
     print(
         f"Done: {len(tables['people'])} people from "
-        f"{args.graph.relative_to(PERSONNEL_ROOT) if args.graph.is_relative_to(PERSONNEL_ROOT) else args.graph}",
+        f"{args.graph.relative_to(PEOPLE_ROOT) if args.graph.is_relative_to(PEOPLE_ROOT) else args.graph}",
         flush=True,
     )
     return 0

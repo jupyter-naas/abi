@@ -1,8 +1,9 @@
-"""Load personnel demo inputs from ``data/demo/person/*/index.json``.
+"""Load people demo inputs from ``data/demo/person/*/index.json``.
 
 The JSON files are the committed source of truth for the demo graph: each
-folder holds one person, their HR ``roster`` block, and their process records
-(``ActOfWorking`` / ``ActOfStudying``).
+folder holds one person, their published ``profile`` block, and their process
+records (``ActOfWorking`` / ``ActOfStudying``). An HR ``roster`` block, when a
+file carries one, is internal and read by the personnel module, not here.
 """
 
 from __future__ import annotations
@@ -11,7 +12,9 @@ import json
 from datetime import date
 from pathlib import Path
 
-from naas_abi_marketplace.domains.personnel.paths import DEMO_SOURCE_DIR
+from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+    DEMO_SOURCE_DIR,
+)
 
 SOURCE_DIR = DEMO_SOURCE_DIR
 
@@ -30,35 +33,6 @@ def load_person_sources(source_dir: Path | None = None) -> list[dict]:
     if not payloads:
         raise FileNotFoundError(f"No person sources under {root}/<slug>/index.json")
     return payloads
-
-
-def sources_to_employees(payloads: list[dict]) -> list[dict]:
-    """Roster rows (one per person) from the ``roster`` block of each payload."""
-    seen: set[tuple[str, str]] = set()
-    employees: list[dict] = []
-    for payload in payloads:
-        person = payload["person"]
-        key = (person["first_name"], person["last_name"])
-        if key in seen:
-            continue
-        roster = payload.get("roster")
-        if not roster:
-            continue
-        seen.add(key)
-        employees.append(
-            {
-                "first": key[0],
-                "last": key[1],
-                "employee_id": roster["employee_id"],
-                "job_title": roster["job_title"],
-                "job_family": roster["job_family"],
-                "hire_date": _parse_date(roster["hire_date"]),
-                "termination_date": _parse_date(roster.get("termination_date")),
-                "status": roster["status"],
-                "remuneration": roster.get("remuneration_amount"),
-            }
-        )
-    return employees
 
 
 def sources_to_profile_urls(payloads: list[dict]) -> dict[str, str]:
@@ -104,7 +78,8 @@ def sources_to_experiences(payloads: list[dict]) -> list[dict]:
                     "person": person_tuple,
                     "organization": record["organization"],
                     "title": record["title"],
-                    "contract_type": record.get("contract_type"),
+                    "employment_type": record.get("employment_type")
+                    or record.get("contract_type"),
                     "site": record.get("site"),
                     "start": _parse_date(record.get("start")),
                     "end": _parse_date(record.get("end")),
@@ -112,8 +87,6 @@ def sources_to_experiences(payloads: list[dict]) -> list[dict]:
                     "mission_label": record["mission_label"],
                     "mission": record["mission"],
                     "skills": list(record.get("skills") or []),
-                    "remuneration_amount": record.get("remuneration_amount"),
-                    "remuneration_currency": record.get("remuneration_currency") or "EUR",
                 }
             )
     return experiences
@@ -121,13 +94,13 @@ def sources_to_experiences(payloads: list[dict]) -> list[dict]:
 
 def payload_to_profile_source_parameters(payload: dict) -> object:
     """Build ``ProfileFromSourcePipelineParameters`` from one demo ``index.json``."""
-    from naas_abi_marketplace.domains.personnel.pipelines.PersonProfilePipeline import (
+    from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.PersonProfilePipeline import (
         CertificationInput,
         InterestInput,
         LanguageInput,
         RecommendationInput,
     )
-    from naas_abi_marketplace.domains.personnel.pipelines.profile_from_source import (
+    from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.profile_from_source import (
         ProfileBlockInput,
         ProfileFromSourcePipelineParameters,
         SourcePersonInput,
@@ -172,11 +145,10 @@ def payload_to_profile_source_parameters(payload: dict) -> object:
                     mission=record["mission"],
                     client=record.get("client"),
                     mission_context=record.get("mission_context"),
-                    contract_type=record.get("contract_type"),
+                    employment_type=record.get("employment_type")
+                    or record.get("contract_type"),
                     skills=list(record.get("skills") or []),
                     source=record.get("source"),
-                    remuneration_amount=record.get("remuneration_amount"),
-                    remuneration_currency=record.get("remuneration_currency") or "EUR",
                 )
             )
 
@@ -191,8 +163,6 @@ def payload_to_profile_source_parameters(payload: dict) -> object:
             quote=raw_profile.get("quote"),
             years_of_experience=raw_profile.get("years_of_experience"),
             organization=raw_profile.get("organization"),
-            service_line=raw_profile.get("service_line"),
-            grade=raw_profile.get("grade"),
             office=location.get("office"),
             city=location.get("city"),
             country=location.get("country"),
@@ -263,8 +233,6 @@ def sources_to_profiles(payloads: list[dict]) -> list[dict]:
                 "quote": profile.get("quote"),
                 "years_of_experience": profile.get("years_of_experience"),
                 "organization": profile.get("organization"),
-                "service_line": profile.get("service_line"),
-                "grade": profile.get("grade"),
                 "office": location.get("office"),
                 "city": location.get("city"),
                 "country": location.get("country"),

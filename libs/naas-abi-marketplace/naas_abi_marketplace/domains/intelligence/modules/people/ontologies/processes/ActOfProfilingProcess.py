@@ -4,11 +4,14 @@ import contextlib
 import datetime
 import os
 import uuid
-from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
+    Callable,
     ClassVar,
+    Iterable,
+    List,
+    Optional,
     Union,
     get_args,
     get_origin,
@@ -92,7 +95,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, list):
+        if origin in (list, List):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -305,43 +308,59 @@ class RDFEntity(BaseModel):
         return g
 
 
-class ActOfPersonnelProfiling(RDFEntity):
+class ActOfProfiling(RDFEntity):
     """
     Orchestration only. Episode triples are written by the working and studying pipelines; summary, certifications and social proof by the person profile pipeline.
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/ActOfPersonnelProfiling"
-    _name: ClassVar[str] = "Act of Personnel Profiling"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/people/ActOfProfiling"
+    _name: ClassVar[str] = "Act of Profiling"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "from_profile_document": "http://ontology.naas.ai/personnel/fromProfileDocument",
+        "from_profile_document": "http://ontology.naas.ai/people/fromProfileDocument",
         "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
-        "is_act_of_personnel_profiling_of": "http://ontology.naas.ai/personnel/isActOfPersonnelProfilingOf",
+        "is_act_of_profiling_of": "http://ontology.naas.ai/people/isActOfProfilingOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {
         "from_profile_document",
         "hasParticipant",
-        "is_act_of_personnel_profiling_of",
+        "is_act_of_profiling_of",
     }
 
     # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Annotated[
-        datetime.datetime | None,
+        Optional[datetime.datetime],
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
+    ] = datetime.datetime.now(datetime.timezone.utc)
     creator: Annotated[
-        Any | None,
+        Optional[Any],
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    from_profile_document: Annotated[URIRef | str, Field(description="Relates an act of personnel profiling to the profile document that was read as its source.")] | None = None
-    hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = None
-    is_act_of_personnel_profiling_of: Annotated[list[Person | URIRef | str], Field(description="Relates an act of personnel profiling to the person who is its subject.")] | None = None
+    from_profile_document: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(
+                description="Relates an act of profiling to the profile document that was read as its source."
+            ),
+        ]
+    ] = None
+    hasParticipant: Optional[Annotated[List[Union[Person, URIRef, str]], Field()]] = (
+        None
+    )
+    is_act_of_profiling_of: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(
+                description="Relates an act of profiling to the person who is its subject."
+            ),
+        ]
+    ] = None
 
 
 # Rebuild models to resolve forward references
-ActOfPersonnelProfiling.model_rebuild()
+ActOfProfiling.model_rebuild()

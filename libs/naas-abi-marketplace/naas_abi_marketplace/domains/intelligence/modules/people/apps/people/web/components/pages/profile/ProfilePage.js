@@ -38,8 +38,8 @@ function relatedHtml(config, related, query) {
 }
 
 const DEFAULT_KNOWLEDGE_GRAPH = {
-  iri: "http://ontology.naas.ai/graph/personnel",
-  label: "Personnel",
+  iri: "http://ontology.naas.ai/graph/people",
+  label: "People",
 };
 
 function resolveKnowledgeGraph(knowledgeGraph, fallback) {
@@ -266,7 +266,7 @@ function viewSwitchHtml() {
   </div>`;
 }
 
-/** The cockpit's stylesheet for its graph page, scoped by the API, loaded once. */
+/** The graph page's stylesheet, scoped by the API, loaded once. */
 function ensureGraphStylesheet() {
   if (document.querySelector("link[data-graph-view-css]")) return;
   const link = document.createElement("link");
@@ -277,8 +277,8 @@ function ensureGraphStylesheet() {
 }
 
 /**
- * Mount the cockpit graph page for one person. The module is the cockpit's own,
- * served under the API prefix, so this view is that page rather than a copy.
+ * Mount the person graph page (graph_page/GraphPage.js) for one person, served
+ * under the API prefix.
  * Returns the page's disposer.
  */
 async function mountGraphView(host, slug) {
@@ -286,7 +286,7 @@ async function mountGraphView(host, slug) {
   ensureGraphStylesheet();
   const [view, graphModule] = await Promise.all([
     fetchPersonGraph(slug),
-    import(`${API_BASE}/cockpit-pages/graph/GraphPage.js`),
+    import(`${API_BASE}/graph-page/GraphPage.js`),
   ]);
   graphModule.configureGraph(view.config);
   host.innerHTML = "";

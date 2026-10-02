@@ -1,9 +1,9 @@
-"""People Search - a configurable people directory over the personnel graph.
+"""People Search - a configurable people directory over the people graph.
 
     person + experience  ->  graph (ontology-backed)  ->  datasets  ->  app
 
 The app itself holds no people. ``scripts/export_people_from_graph.py`` runs the
-personnel competency queries and writes nine typed tables through the dataset
+people competency queries and writes nine typed tables through the dataset
 service; this module serves them, shaped by ``config.yaml``.
 
 See ``README.md`` for how to point it at another population, and ``AGENTS.md``
@@ -34,11 +34,13 @@ class ABIModule(BaseModule):
 
     class Configuration(ModuleConfiguration):
         """
-        module: naas_abi_marketplace.domains.personnel.apps.people
+        module: naas_abi_marketplace.domains.intelligence.modules.people.apps.people
         enabled: true
         """
 
     def api(self, app: FastAPI) -> None:
-        from naas_abi_marketplace.domains.personnel.apps.people.api.routes import router
+        from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.api.routes import (
+            router,
+        )
 
-        app.include_router(router, prefix="/api/personnel-people")
+        app.include_router(router, prefix="/api/people")

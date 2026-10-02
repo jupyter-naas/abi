@@ -10,9 +10,7 @@ def test_config_defines_every_registered_page_once_in_order() -> None:
     pages = load_config()["app"]["pages"]
 
     assert {page["page_id"] for page in pages} == REGISTERED_PAGE_IDS
-    assert [page["order"] for page in pages] == sorted(
-        page["order"] for page in pages
-    )
+    assert [page["order"] for page in pages] == sorted(page["order"] for page in pages)
     assert len({page["url"] for page in pages}) == len(pages)
 
 

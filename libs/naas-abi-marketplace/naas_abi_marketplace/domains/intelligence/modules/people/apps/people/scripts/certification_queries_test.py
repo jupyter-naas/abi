@@ -4,21 +4,21 @@ from __future__ import annotations
 
 from datetime import date
 
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
     sparql_queries as sq,
 )
-from naas_abi_marketplace.domains.personnel.pipelines.ActOfCertificationPipeline import (
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfCertificationPipeline import (
     ActOfCertificationPipeline,
     ActOfCertificationPipelineConfiguration,
     ActOfCertificationPipelineParameters,
 )
-from naas_abi_marketplace.domains.personnel.pipelines.utils.graph_builders import (
-    PersonnelGraphContext,
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.graph_builders import (
+    PeopleGraphContext,
 )
 
 
 def _rows() -> list[dict]:
-    context = PersonnelGraphContext()
+    context = PeopleGraphContext()
     pipeline = ActOfCertificationPipeline(
         ActOfCertificationPipelineConfiguration(
             triple_store=None, persist=False, context=context

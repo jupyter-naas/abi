@@ -15,7 +15,9 @@ _DEFAULT_ENTITY = load_default_entity()
 DEFAULT_ENTITY_ID = _DEFAULT_ENTITY["entity_id"]
 DEFAULT_ENTITY_SLUG = _DEFAULT_ENTITY["url_slug"]
 WEB_ROOT = COCKPIT_ROOT / "web"
-DATA_ROOT = COCKPIT_ROOT / "data"  # committed structure reference; runtime data is in ObjectStorage
+DATA_ROOT = (
+    COCKPIT_ROOT / "data"
+)  # committed structure reference; runtime data is in ObjectStorage
 ENTITY_DATA = DATA_ROOT / "entities" / DEFAULT_ENTITY_ID
 GRAPH_FILE = DEMO_GRAPH_FILE
 

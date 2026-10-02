@@ -5,16 +5,16 @@ from __future__ import annotations
 from datetime import date
 
 from naas_abi.ontologies.modules.ABIOntology import Site
-from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
+from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.modules.PeopleOntology import (
     Certification,
     ProfileDocument,
     Skill,
 )
-from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfCertificationProcess import (
+from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.processes.ActOfCertificationProcess import (
     ActOfCertification,
     CertificationCandidateRole,
 )
-from naas_abi_marketplace.domains.personnel.pipelines.ActOfCertificationPipeline import (
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfCertificationPipeline import (
     ActOfCertificationPipeline,
     ActOfCertificationPipelineConfiguration,
     ActOfCertificationPipelineParameters,
@@ -22,7 +22,7 @@ from naas_abi_marketplace.domains.personnel.pipelines.ActOfCertificationPipeline
 from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import RDF
 
-PERSONNEL = "http://ontology.naas.ai/personnel/"
+PEOPLE = "http://ontology.naas.ai/people/"
 ABI_ORGANIZATION = URIRef("http://ontology.naas.ai/abi/Organization")
 ABI_PERSON = URIRef("http://ontology.naas.ai/abi/Person")
 ABI_TEMPORAL_REGION = URIRef("http://ontology.naas.ai/abi/TemporalRegion")
@@ -35,7 +35,7 @@ SITE = URIRef(Site._class_uri)
 
 
 def p(name: str) -> URIRef:
-    return URIRef(f"{PERSONNEL}{name}")
+    return URIRef(f"{PEOPLE}{name}")
 
 
 def params(**overrides: object) -> ActOfCertificationPipelineParameters:
@@ -178,15 +178,18 @@ class TestWhatTheSourceDoesNotSay:
         first = pipeline.run(params())
         second = pipeline.run(params())
         assert len(first) == len(second)
-        assert len(list(first.subjects(RDF.type, URIRef(ActOfCertification._class_uri)))) == 1
+        assert (
+            len(list(first.subjects(RDF.type, URIRef(ActOfCertification._class_uri))))
+            == 1
+        )
 
 
 def test_two_certifications_are_two_acts_sharing_the_candidate() -> None:
-    from naas_abi_marketplace.domains.personnel.pipelines.utils.graph_builders import (
-        PersonnelGraphContext,
+    from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.graph_builders import (
+        PeopleGraphContext,
     )
 
-    context = PersonnelGraphContext()
+    context = PeopleGraphContext()
     pipeline = ActOfCertificationPipeline(
         ActOfCertificationPipelineConfiguration(
             triple_store=None, persist=False, context=context
@@ -195,7 +198,9 @@ def test_two_certifications_are_two_acts_sharing_the_candidate() -> None:
     pipeline.run(params())
     pipeline.run(params(name="Certified Public Accountant", issuer="AICPA"))
     graph = context.graph
-    assert len(list(graph.subjects(RDF.type, URIRef(ActOfCertification._class_uri)))) == 2
+    assert (
+        len(list(graph.subjects(RDF.type, URIRef(ActOfCertification._class_uri)))) == 2
+    )
     assert len(list(graph.subjects(RDF.type, ABI_PERSON))) == 1
 
 

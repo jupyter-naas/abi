@@ -1,16 +1,25 @@
-"""Run the personnel competency queries on a graph and shape them for the cockpit.
+"""Run the people and personnel competency queries on a graph and shape them for the cockpit.
 
-Shared by the demo exporter, which writes the results to storage, and by any
-app that wants the same payloads live from a graph it already holds - the
-People Search profile's graph view reads ``graph_page_payload`` on request.
+Used by the demo exporter, which writes the results to storage. The graph page
+itself (``GraphPage.js``) and its payload builder belong to the people module;
+the cockpit feeds the builder its HR roster (employee id, job family, status,
+the employee role) through the roster rows.
 """
 
 from __future__ import annotations
 
 import re
 
-from naas_abi_marketplace.domains.personnel.apps.cockpit.graph_payload import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.graph_payload import (
     build_graph_page_payload,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.process_class_catalog import (
+    PROCESS_SPECS,
+    SHARED_ONTOLOGY as PEOPLE_SHARED_ONTOLOGY,
+    build_process_class_catalog,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+    ONTOLOGIES_DIR as PEOPLE_ONTOLOGIES_DIR,
 )
 from naas_abi_marketplace.domains.personnel.apps.cockpit.scripts.roster_builder import (
     build_roster_rows,
@@ -18,11 +27,16 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.scripts.roster_builder 
 from naas_abi_marketplace.domains.personnel.apps.cockpit.scripts.workforce_metrics import (
     build_workforce_metrics,
 )
-from naas_abi_marketplace.domains.personnel.paths import PERSONNEL_ROOT
+from naas_abi_marketplace.domains.personnel.paths import ONTOLOGIES_DIR
 from rdflib import Graph, Literal, URIRef
 
-QUERIES_TTL = PERSONNEL_ROOT / "ontologies" / "queries" / "PersonnelSparqlQueries.ttl"
-GRAPH_IRI = "http://ontology.naas.ai/graph/personnel"
+# Career history, skills and studies are people queries; the roster and
+# positions are personnel ones. The cockpit reads both.
+QUERIES_TTLS = (
+    PEOPLE_ONTOLOGIES_DIR / "queries" / "PeopleSparqlQueries.ttl",
+    ONTOLOGIES_DIR / "queries" / "PersonnelSparqlQueries.ttl",
+)
+PERSONNEL_NS = "http://ontology.naas.ai/personnel/"
 # The queries the graph page is built from. The rest feed other cockpit pages.
 GRAPH_PAGE_QUERIES = (
     "find_employee_roster",
@@ -35,7 +49,7 @@ GRAPH_PAGE_QUERIES = (
 
 def _strip_graph(sparql: str) -> str:
     """Remove GRAPH <iri> { ... } wrappers so queries run on the default graph."""
-    return re.sub(rf"GRAPH\s*<{re.escape(GRAPH_IRI)}>\s*\{{", "{", sparql)
+    return re.sub(r"GRAPH\s*<[^>]+>\s*\{", "{", sparql)
 
 
 def _fill_args(template: str, **kwargs: str) -> str:
@@ -106,7 +120,94 @@ def _run_select(
 
 
 def load_query_templates() -> dict[str, str]:
-    return _parse_query_templates(QUERIES_TTL.read_text(encoding="utf-8"))
+    templates: dict[str, str] = {}
+    for path in QUERIES_TTLS:
+        templates.update(_parse_query_templates(path.read_text(encoding="utf-8")))
+    return templates
+
+
+def process_class_catalog() -> dict:
+    """The people catalog, with the employer's classes shown on acts of working.
+
+    In the cockpit an act of working for the organization is an act of
+    employment, so its employee role, contract and remuneration are drawn with
+    the act rather than left out as classes of no process.
+    """
+    employment = build_process_class_catalog(
+        process_specs=(
+            {
+                "process_label": "Act of Employment",
+                "process_class": f"{PERSONNEL_NS}ActOfEmployment",
+                "process_ontology": ONTOLOGIES_DIR
+                / "processes"
+                / "ActOfEmploymentProcess.ttl",
+                "support_ontologies": (
+                    PEOPLE_ONTOLOGIES_DIR / "processes" / "ActOfWorkingProcess.ttl",
+                ),
+            },
+        ),
+        shared_ontologies=(
+            PEOPLE_SHARED_ONTOLOGY,
+            ONTOLOGIES_DIR / "modules" / "PersonnelOntology.ttl",
+        ),
+    )["Act of Employment"]
+    catalog = build_process_class_catalog(process_specs=PROCESS_SPECS)
+    working = catalog["Act of Working"]
+    working["classLabels"] = sorted(
+        set(working["classLabels"]) | set(employment["classLabels"])
+    )
+    return catalog
+
+
+def graph_page_roster(roster_rows: list[dict]) -> list[dict]:
+    """Cockpit roster rows in the graph page builder's terms: HR facts as properties."""
+
+    def prop(uri: str, label: str, value: object) -> dict | None:
+        return (
+            None
+            if value in (None, "")
+            else {"uri": uri, "label": label, "value": str(value)}
+        )
+
+    rows = []
+    for row in roster_rows:
+        rows.append(
+            {
+                **row,
+                "kind": "employee",
+                "properties": [
+                    p
+                    for p in (
+                        prop(
+                            "personnel:job_family", "job family", row.get("job_family")
+                        ),
+                        prop(
+                            "personnel:employee_id",
+                            "employee id",
+                            row.get("employee_id"),
+                        ),
+                        prop(
+                            "personnel:status_value", "status", row.get("status_value")
+                        ),
+                    )
+                    if p
+                ],
+                "roleClass": "personnel:EmployeeRole",
+                "roleClassLabel": "Employee Role",
+                "rolePredicate": "personnel:hasEmployeeRole",
+                "rolePredicateLabel": "has employee role",
+                "roleProperties": [
+                    p
+                    for p in (
+                        prop(
+                            "personnel:job_family", "job family", row.get("job_family")
+                        ),
+                    )
+                    if p
+                ],
+            }
+        )
+    return rows
 
 
 def query_source_rows(
@@ -240,8 +341,9 @@ def graph_page_payload(
     source_rows = query_source_rows(graph, labels=GRAPH_PAGE_QUERIES, person=person)
     roster_rows, _, _ = roster_and_kpis(source_rows, org_label=org_label)
     return build_graph_page_payload(
-        roster_rows,
+        graph_page_roster(roster_rows),
         source_rows.get("find_working_experiences", []),
         source_rows.get("find_skills_developed", []),
         source_rows.get("find_educations", []),
+        process_class_catalog=process_class_catalog(),
     )

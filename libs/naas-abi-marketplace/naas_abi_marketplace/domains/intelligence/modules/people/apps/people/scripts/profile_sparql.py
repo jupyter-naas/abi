@@ -1,22 +1,22 @@
 """SPARQL provenance for each profile section.
 
-Section → query → ontology layer (see domains/personnel/README.md,
+Section → query → ontology layer (see domains/intelligence/modules/people/README.md,
 "Profile sections vs ontology layers"):
 
 - Process episodes: experience → find_working_experiences; education → find_educations.
 - Person-level / module vocabulary: about, certifications, languages, recommendations,
-  interests (PersonProfilePipeline + PersonnelOntology.ttl).
+  interests (PersonProfilePipeline + PeopleOntology.ttl).
 - Skills: find_person_skills (person bears Skill); find_skills_developed is the
   act-level provenance query, not shown on the profile card.
 """
 
 from __future__ import annotations
 
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
     sparql_queries as sq,
 )
 
-# Logical section id -> competency query label(s) in PersonnelSparqlQueries.ttl.
+# Logical section id -> competency query label(s) in PeopleSparqlQueries.ttl.
 SECTION_QUERY_NAMES: dict[str, tuple[str, ...]] = {
     "about": ("find_profile_header",),
     "experience": ("find_working_experiences",),

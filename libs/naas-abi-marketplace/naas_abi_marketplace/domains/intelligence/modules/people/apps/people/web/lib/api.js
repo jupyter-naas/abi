@@ -31,7 +31,7 @@ export function fetchPerson(slug) {
   return getJson(`/people/${encodeURIComponent(slug)}`);
 }
 
-/** The cockpit graph page's data, built live from the graph, opened on this person. */
+/** The person graph page's data, built live from the graph, opened on this person. */
 export function fetchPersonGraph(slug) {
   return getJson(`/people/${encodeURIComponent(slug)}/graph`);
 }

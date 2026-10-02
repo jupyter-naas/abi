@@ -39,8 +39,6 @@ TABLES: dict[str, tuple[tuple[str, ...], tuple[tuple[str, str], ...]]] = {
             ("city", "string"),
             ("country", "string"),
             ("country_code", "string"),
-            ("service_line", "string"),
-            ("grade", "string"),
             ("years_of_experience", "integer"),
             ("public_profile_url", "string"),
             # Contact details. Empty unless the instance publishes them
@@ -161,7 +159,7 @@ class DatasetsMissingError(RuntimeError):
     """
 
     BUILD_COMMAND = (
-        "cd libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel "
+        "cd libs/naas-abi-marketplace/naas_abi_marketplace/domains/intelligence/modules/people "
         "&& make people-datasets"
     )
 

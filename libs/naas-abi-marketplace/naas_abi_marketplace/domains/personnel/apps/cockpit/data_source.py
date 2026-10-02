@@ -79,10 +79,14 @@ def resolve_apps_data_root(
     if storage_has_datasets(datastore_path=resolved_datastore):
         return "object_storage", Path(storage_prefix)
 
-    if object_storage is not None and _storage_has_prefix(object_storage, storage_prefix):
+    if object_storage is not None and _storage_has_prefix(
+        object_storage, storage_prefix
+    ):
         return "object_storage", Path(storage_prefix)
 
-    if triple_store is not None and _triplestore_has_personnel(triple_store, resolved_graph):
+    if triple_store is not None and _triplestore_has_personnel(
+        triple_store, resolved_graph
+    ):
         logger.info(
             "personnel data: TripleStore graph populated; "
             "cockpit still expects ObjectStorage datasets — run make demo-data"

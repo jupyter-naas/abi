@@ -31,7 +31,7 @@ signals agents that still carry workflows/ontologies.
 
 | Module | Caps | Agent | Role |
 |---|:---:|---|---|
-| [`personnel/`](personnel/) | AOQ | `PersonnelAgent` | HR ops, hiring, policy — bucket-level module, agent sits directly in [`personnel/agents/`](personnel/agents/) |
+| [`personnel/`](personnel/) | AWPOXQ | `PersonnelAgent` | HR records about our own staff (roster, positions, employment, grade, service line) and the workforce cockpit — bucket-level module, agent sits directly in [`personnel/agents/`](personnel/agents/). Specializes `intelligence/modules/people` |
 
 ### S2 — `intelligence/` · collection, analysis, situational awareness
 
@@ -39,8 +39,9 @@ signals agents that still carry workflows/ontologies.
 |---|:---:|---|---|
 | [`agents/OSINTResearcherAgent.py`](intelligence/agents/OSINTResearcherAgent.py) | A | `OSINTResearcherAgent` | Open-source intelligence research |
 | [`agents/PrivateInvestigatorAgent.py`](intelligence/agents/PrivateInvestigatorAgent.py) | A | `PrivateInvestigatorAgent` | Investigative research workflows |
-| [`apps/wsr/`](intelligence/apps/wsr/) | AXO | `WSRAgent` | World Situation Room — global situational-awareness dashboard |
-| [`ontologies/organizations/`](intelligence/ontologies/organizations/) | OQ | — | Organization vocabulary + alliance/restructuring process ontologies + 10 SPARQL query tools (no agent yet) |
+| [`modules/organizations/`](intelligence/modules/organizations/) | OQ | — | Organization vocabulary + alliance/restructuring process ontologies + 10 SPARQL query tools (no agent yet) |
+| [`modules/people/`](intelligence/modules/people/) | AWPOXQ | `PeopleAgent` | People intelligence: career, studies, skills, certifications, profiles; People Search and the 7-bucket person graph |
+| [`modules/wsr/`](intelligence/modules/wsr/) | AXO | `WSRAgent` | World Situation Room — global situational-awareness dashboard |
 
 ### S3 — `operations/` · executing the current mission
 

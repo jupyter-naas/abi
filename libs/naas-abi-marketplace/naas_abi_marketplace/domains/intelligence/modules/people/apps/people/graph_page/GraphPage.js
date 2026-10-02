@@ -6,7 +6,7 @@ import {
   BFO_SEVEN,
   bfoColor,
   configureBfoBuckets,
-} from "../processes/bfo-buckets.js";
+} from "./bfo-buckets.js";
 import {
   applyDateFilter,
   collectProcessTemporalRecords,
@@ -169,8 +169,8 @@ function workerLabel(record) {
   const props = record?.properties || [];
   const worker = props.find(
     (p) =>
-      p.uri === "personnel:isActOfWorkingOf" ||
-      p.uri === "personnel:isActOfStudyingOf" ||
+      p.uri === "people:isActOfWorkingOf" ||
+      p.uri === "people:isActOfStudyingOf" ||
       p.label === "worker" ||
       p.label === "student"
   );
@@ -398,12 +398,11 @@ function visibleProcessInstanceOptions(instances, hiddenProcessTypes) {
   return instances.filter((instance) => !hiddenProcessTypes.has(instance.type));
 }
 
-const CAREER_ARTIFACT_CLASSES = new Set([
-  "Employee Role",
-  "Mission",
-  "Skill",
-  "Employment Contract",
-]);
+// Role classes an act of working realizes: the generic occupation role, and
+// any role a module keeping internal records specializes it into.
+const ROLE_CLASSES = new Set(["Occupation Role", "Employee Role"]);
+
+const CAREER_ARTIFACT_CLASSES = new Set([...ROLE_CLASSES, "Mission", "Skill"]);
 
 function buildRecordsById(visible) {
   const byId = new Map();
@@ -430,13 +429,13 @@ function isProcessRayBridge(nodeId, record, focusPersonId, adjacency) {
   return (adjacency.get(nodeId) || new Set()).has(focusPersonId);
 }
 
-/** Resolve the act of working that owns a career artifact (directly or via its employee role). */
+/** Resolve the act of working that owns a career artifact (directly or via its role). */
 function findOwnedProcessRoot(nodeId, adjacency, allRootIds, recordsById) {
   for (const neighbour of adjacency.get(nodeId) || []) {
     if (allRootIds.has(neighbour)) return neighbour;
   }
   for (const neighbour of adjacency.get(nodeId) || []) {
-    if (recordsById.get(neighbour)?.classLabel !== "Employee Role") continue;
+    if (!ROLE_CLASSES.has(recordsById.get(neighbour)?.classLabel)) continue;
     for (const next of adjacency.get(neighbour) || []) {
       if (allRootIds.has(next)) return next;
     }

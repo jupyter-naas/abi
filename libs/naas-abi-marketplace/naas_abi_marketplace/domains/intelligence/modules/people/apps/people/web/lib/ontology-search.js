@@ -9,7 +9,7 @@ function fold(text) {
     .toLowerCase();
 }
 
-/** ``personnel:hasEmployeeRole`` → ``has employee role``; the prefix is dropped. */
+/** ``people:hasEmployeeRole`` → ``has employee role``; the prefix is dropped. */
 function localWords(qname) {
   const local = String(qname ?? "").split(":").pop();
   return fold(local.replace(/_/g, " ").replace(/([a-z0-9])([A-Z])/g, "$1 $2"));
@@ -29,7 +29,7 @@ export function classSearchEntry(node, detail) {
     node,
     label: fold(node.label),
     // The prefix says which vocabulary a class is from. It is matched only when
-    // typed in full, or "pers" would return every personnel: class.
+    // typed in full, or "pers" would return every people: class.
     prefix: node.id.includes(":") ? fold(node.id.split(":")[0]) : "",
     local: localWords(node.id),
     definition: fold(detail?.definition || ""),
@@ -40,7 +40,7 @@ export function classSearchEntry(node, detail) {
 /**
  * Rank classes against a query. Every word must match somewhere; the name counts
  * most, then the local id, then a property, then the definition. A word that
- * is exactly a namespace prefix (``personnel``, ``abi``) keeps that namespace.
+ * is exactly a namespace prefix (``people``, ``abi``) keeps that namespace.
  */
 export function searchClasses(entries, query) {
   const words = fold(query).split(/[^a-z0-9]+/).filter(Boolean);

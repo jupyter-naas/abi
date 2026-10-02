@@ -16,11 +16,12 @@ from typing import Annotated
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from naas_abi_marketplace.domains.personnel.paths import module_graph_name
-from naas_abi_marketplace.domains.personnel.pipelines.utils.graph_builders import (
-    ABI,
-    PERSONNEL,
-    PersonnelGraphContext,
+from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+    module_graph_name,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.graph_builders import (
+    PEOPLE,
+    PeopleGraphContext,
 )
 from pydantic import BaseModel, Field
 from rdflib import Graph, URIRef
@@ -31,7 +32,7 @@ class PersonProfilePipelineConfiguration(PipelineConfiguration):
     triple_store: TripleStoreService | None = None
     graph_name: URIRef = URIRef(module_graph_name())
     persist: bool = True
-    context: PersonnelGraphContext | None = None
+    context: PeopleGraphContext | None = None
 
 
 class CertificationInput(BaseModel):
@@ -79,8 +80,6 @@ class PersonProfilePipelineParameters(PipelineParameters):
     quote: str | None = None
     years_of_experience: int | None = None
     organization: str | None = None
-    service_line: str | None = None
-    grade: str | None = None
     office: str | None = None
     city: str | None = None
     country: str | None = None
@@ -117,7 +116,7 @@ class PersonProfilePipeline(Pipeline):
 
     def run(self, parameters: PersonProfilePipelineParameters) -> Graph:
         owned_context = self.__configuration.context is None
-        context = self.__configuration.context or PersonnelGraphContext()
+        context = self.__configuration.context or PeopleGraphContext()
         before = len(context.graph)
 
         person = context.ensure_person(parameters.first_name, parameters.last_name)
@@ -146,42 +145,15 @@ class PersonProfilePipeline(Pipeline):
             person, url=parameters.photo_url, path=parameters.photo_path
         )
 
-        org = None
         if parameters.organization:
             org = context.ensure_org(parameters.organization)
             context.graph.add(
                 (
                     URIRef(person._uri),
-                    PERSONNEL.isEmployedBy,
+                    PEOPLE.worksFor,
                     URIRef(org._uri),
                 )
             )
-
-        # A service line is a part of the employing organization, so it cannot be
-        # minted without one. Stated alone, it would be an organization with no
-        # parent, which is not what the source says.
-        if parameters.service_line and org is not None:
-            line = context.ensure_service_line(parameters.service_line, org)
-            # The person is a member part of the service line whether or not any
-            # employee role has been recorded for them yet. Roles come from
-            # ActOfWorkingPipeline, which may run after this one, or never.
-            context.graph.add(
-                (URIRef(line._uri), ABI.hasMemberPart, URIRef(person._uri))
-            )
-            for role_uri in context.graph.objects(
-                URIRef(person._uri),
-                PERSONNEL.hasEmployeeRole,
-            ):
-                context.graph.add(
-                    (
-                        role_uri,
-                        PERSONNEL.inServiceLine,
-                        URIRef(line._uri),
-                    )
-                )
-
-        if parameters.grade:
-            context.ensure_grade(parameters.grade, person)
 
         for skill_name in parameters.skills:
             context.ensure_skill(skill_name, person)
@@ -199,7 +171,7 @@ class PersonProfilePipeline(Pipeline):
             context.graph.add(
                 (
                     URIRef(person._uri),
-                    PERSONNEL.hasWorkLocation,
+                    PEOPLE.hasWorkLocation,
                     URIRef(site._uri),
                 )
             )
@@ -263,7 +235,8 @@ class PersonProfilePipeline(Pipeline):
                 name="register_person_profile",
                 description=(
                     "Register the person-level facts of a profile: contact details "
-                    "(email, phone, LinkedIn URL), headline, summary, quote, portrait, work location, service line, grade, "
+                    "(email, phone, LinkedIn URL), headline, summary, quote, portrait, the organization "
+                    "they work for, work location, "
                     "certifications, languages, interests and recommendations. "
                     "Jobs are registered with register_act_of_working and studies "
                     "with register_act_of_studying."

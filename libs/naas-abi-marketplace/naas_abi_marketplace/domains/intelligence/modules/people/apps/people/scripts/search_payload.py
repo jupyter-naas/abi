@@ -11,8 +11,10 @@ from __future__ import annotations
 from typing import Any
 
 from naas_abi_core.services.dataset.DatasetService import DatasetService
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import datasets as ds
-from naas_abi_marketplace.domains.personnel.apps.people.scripts.text import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
+    datasets as ds,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.text import (
     query_tokens,
     truncate,
     words,
@@ -51,8 +53,6 @@ def field_words(
         "full_name": words(person.get("full_name")),
         "headline": words(person.get("headline")),
         "about": words(person.get("about")),
-        "service_line": words(person.get("service_line")),
-        "grade": words(person.get("grade")),
         "office": words(person.get("office")) + words(person.get("city")),
         "country": words(person.get("country")),
         "skills": [
@@ -242,8 +242,6 @@ def _result(person: dict[str, Any], snippet_value: dict[str, str]) -> dict[str, 
         "headline": person.get("headline"),
         "photo_url": person.get("photo_url"),
         "organization": person.get("organization"),
-        "service_line": person.get("service_line"),
-        "grade": person.get("grade"),
         "country_code": person.get("country_code"),
         "place": [value for value in place if value],
         "snippet": snippet_value,
@@ -434,7 +432,6 @@ def suggest(
         fields = {
             "full_name": words(person.get("full_name")),
             "headline": words(person.get("headline")),
-            "service_line": words(person.get("service_line")),
         }
         total, matched, _ = score(fields, tokens, weights)
         if matched:

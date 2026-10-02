@@ -1,4 +1,4 @@
-"""Run profile competency queries against a personnel graph file.
+"""Run profile competency queries against a people graph file.
 
 Which TTL that is comes from ``data.graph.file``: the domain's demo graph by
 default, an instance's own graph when it configures one.
@@ -10,13 +10,15 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
     sparql_queries as sq,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.scripts.profile_sparql import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.profile_sparql import (
     SECTION_QUERY_NAMES,
 )
-from naas_abi_marketplace.domains.personnel.paths import DEMO_GRAPH_FILE
+from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+    DEMO_GRAPH_FILE,
+)
 from rdflib import Graph
 
 PROFILE_QUERY_NAMES = frozenset(
@@ -30,7 +32,7 @@ class SparqlExecutionError(RuntimeError):
 
 
 @lru_cache(maxsize=4)
-def personnel_graph(graph_file: str | None = None) -> Graph:
+def people_graph(graph_file: str | None = None) -> Graph:
     path = Path(graph_file) if graph_file else DEMO_GRAPH_FILE
     if not path.is_file():
         raise SparqlExecutionError(f"Graph file not found: {path}")
@@ -60,7 +62,7 @@ def execute_profile_query(
         raise ValueError("max_rows must be positive")
 
     sparql = sq.render_query_raw(query_name, slug=slug)
-    graph = personnel_graph(graph_file)
+    graph = people_graph(graph_file)
 
     columns: list[str] = []
     rows: list[list[str | None]] = []

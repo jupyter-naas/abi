@@ -9,11 +9,13 @@ from typing import Annotated
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from naas_abi_marketplace.domains.personnel.paths import module_graph_name
-from naas_abi_marketplace.domains.personnel.pipelines.utils.graph_builders import (
-    PersonnelGraphContext,
+from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+    module_graph_name,
 )
-from pydantic import Field
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.graph_builders import (
+    PeopleGraphContext,
+)
+from pydantic import AliasChoices, Field
 from rdflib import Graph, URIRef
 
 
@@ -22,7 +24,7 @@ class ActOfWorkingPipelineConfiguration(PipelineConfiguration):
     triple_store: TripleStoreService | None = None
     graph_name: URIRef = URIRef(module_graph_name())
     persist: bool = True
-    context: PersonnelGraphContext | None = None
+    context: PeopleGraphContext | None = None
 
 
 class ActOfWorkingPipelineParameters(PipelineParameters):
@@ -45,11 +47,13 @@ class ActOfWorkingPipelineParameters(PipelineParameters):
     # directly. Unset for a direct employment role.
     client: str | None = None
     mission_context: str | None = None
-    contract_type: str | None = None
+    # The engagement type the source states ('Full-time', 'Freelance', ...).
+    # What was published, not the terms of a contract.
+    employment_type: str | None = Field(
+        default=None, validation_alias=AliasChoices("employment_type", "contract_type")
+    )
     skills: list[str] = []
     source_url: str | None = None
-    remuneration_amount: float | None = None
-    remuneration_currency: str = "EUR"
 
 
 class ActOfWorkingPipeline(Pipeline):
@@ -71,7 +75,7 @@ class ActOfWorkingPipeline(Pipeline):
 
     def run(self, parameters: ActOfWorkingPipelineParameters) -> Graph:
         owned_context = self.__configuration.context is None
-        context = self.__configuration.context or PersonnelGraphContext()
+        context = self.__configuration.context or PeopleGraphContext()
         person = context.ensure_person(parameters.first_name, parameters.last_name)
         profile = None
         if parameters.source_url:
@@ -79,9 +83,7 @@ class ActOfWorkingPipeline(Pipeline):
         org = context.ensure_org(parameters.organization)
         client = context.ensure_org(parameters.client) if parameters.client else None
         site = context.ensure_site(parameters.site) if parameters.site else None
-        skill_nodes = [
-            context.ensure_skill(name, person) for name in parameters.skills
-        ]
+        skill_nodes = [context.ensure_skill(name, person) for name in parameters.skills]
         before = len(context.graph)
         context.add_working(
             person=person,
@@ -94,12 +96,10 @@ class ActOfWorkingPipeline(Pipeline):
             mission_label=parameters.mission_label,
             mission_content=parameters.mission,
             mission_context=parameters.mission_context,
-            contract_type=parameters.contract_type,
+            employment_type=parameters.employment_type,
             start=parameters.start,
             end=parameters.end,
             duration=parameters.duration,
-            remuneration_amount=parameters.remuneration_amount,
-            remuneration_currency=parameters.remuneration_currency,
         )
         delta = Graph()
         for triple in list(context.graph)[before:]:

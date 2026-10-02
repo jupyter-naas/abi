@@ -2,9 +2,9 @@
 
 Real-time geospatial intelligence platform. Fuses live satellite orbits, commercial and military flight data, seismic activity, CCTV streams, and conflict-zone intelligence into a single 3D globe — all from open-source feeds.
 
-Part of the [ABI Marketplace](https://github.com/jupyter-naas/abi), shipped as an **app of the
-`intelligence` bucket** (`naas_abi_marketplace.domains.intelligence`, app id
-`naas_abi_marketplace.domains.intelligence:wsr`). It is not a loadable module of its own — see
+Part of the [ABI Marketplace](https://github.com/jupyter-naas/abi), shipped as a **module of the
+`intelligence` bucket** (`naas_abi_marketplace.domains.intelligence.modules.wsr`, app id
+`naas_abi_marketplace.domains.intelligence.modules.wsr:dashboard`) — see
 [ABI integration](#abi-integration).
 
 ---
@@ -40,7 +40,8 @@ wsr/
 ├── TODO.md                  # backlog
 ├── agents/
 │   └── WSRAgent.py          # ABI chat agent for situational awareness queries
-├── apps/
+├── apps/dashboard/
+│   ├── manifest.json        # Nexus app catalog entry → app id <module>:dashboard
 │   ├── Makefile             # dev launcher: make dev / stop / logs / api / ui
 │   ├── api/                 # Python 3.11+ / FastAPI — geospatial data service
 │   │   ├── main.py
@@ -171,37 +172,34 @@ Without any API keys, all free feeds still work: flights via airplanes.live, Lon
 
 ## ABI integration
 
-WSR is **not loaded as a module**. Loading the `intelligence` bucket is enough — the app is
-discovered from the `manifest.json` beside this README, and its settings are a nested `wsr:` block
-on the bucket's own config (`config.yaml` or `config.local.yaml`):
+WSR is a loadable module of its own. Enable it next to the `intelligence` bucket; its settings
+are the module's own config (`config.yaml` or `config.local.yaml`):
 
 ```yaml
-- module: naas_abi_marketplace.domains.intelligence
+- module: naas_abi_marketplace.domains.intelligence.modules.wsr
   enabled: true
   config:
-    wsr:
-      opensky_client_id: ""
-      opensky_client_secret: ""
-      tfl_app_key: ""
-      openwebcamdb_api_key: ""
-      demo_login: ""
-      demo_password: ""
+    opensky_client_id: ""
+    opensky_client_secret: ""
+    tfl_app_key: ""
+    openwebcamdb_api_key: ""
+    demo_login: ""
+    demo_password: ""
 ```
 
-The schema is `WSRConfiguration` in [`domains/intelligence/__init__.py`](../../__init__.py). Note
-that `ModuleConfiguration` sets `extra="forbid"`, so these keys are only accepted under `wsr:`.
+The schema is `ABIModule.Configuration` in [`__init__.py`](__init__.py).
 
 | Concern | Where it lives |
 |---|---|
-| App discovery | `manifest.json` here → app id `naas_abi_marketplace.domains.intelligence:wsr` |
-| Configuration | `WSRConfiguration` on the intelligence module, under `wsr:` |
-| Agent | [`domains/intelligence/agents/WSRAgent.py`](../../agents/WSRAgent.py) |
+| App discovery | `apps/dashboard/manifest.json` → app id `naas_abi_marketplace.domains.intelligence.modules.wsr:dashboard` |
+| Configuration | `ABIModule.Configuration` in this module's `__init__.py` |
+| Agent | [`agents/WSRAgent.py`](agents/WSRAgent.py) |
 | Dashboard backend | `apps/dashboard/api/` — standalone service, reads its own `.env` |
 
 The `WSRAgent` registers as a chat agent in Nexus under the Agents dropdown. It answers situational awareness queries (conflict zones, flight anomalies, seismic activity, breaking news) and can guide users to the WSR globe.
 
 The dashboard API is a standalone FastAPI service with its own `pyproject.toml` and `Dockerfile`;
-it reads credentials from `apps/dashboard/api/.env`, not from the ABI config. The `wsr:` block is
+it reads credentials from `apps/dashboard/api/.env`, not from the ABI config. The module config is
 the workspace-level source of truth used to provision that `.env`.
 
 ---

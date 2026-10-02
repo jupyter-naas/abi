@@ -6,15 +6,15 @@ from datetime import date
 from unittest.mock import MagicMock
 
 from naas_abi.ontologies.modules.ABIOntology import Site
-from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
+from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.modules.PeopleOntology import (
     ProfileDocument,
     Skill,
 )
-from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfWorkingProcess import (
+from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.processes.ActOfWorkingProcess import (
     ActOfWorking,
     Mission,
 )
-from naas_abi_marketplace.domains.personnel.pipelines.ActOfWorkingPipeline import (
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfWorkingPipeline import (
     ActOfWorkingPipeline,
     ActOfWorkingPipelineConfiguration,
     ActOfWorkingPipelineParameters,
@@ -26,8 +26,8 @@ ABI_ORGANIZATION = URIRef("http://ontology.naas.ai/abi/Organization")
 ABI_PERSON = URIRef("http://ontology.naas.ai/abi/Person")
 ABI_SITE = URIRef(Site._class_uri)
 ABI_TEMPORAL_REGION = URIRef("http://ontology.naas.ai/abi/TemporalRegion")
-PERSONNEL_HAS_ACT_OF_WORKING = URIRef("http://ontology.naas.ai/personnel/hasActOfWorking")
-PERSONNEL_IS_SOURCED_FROM = URIRef("http://ontology.naas.ai/personnel/isSourcedFrom")
+PEOPLE_HAS_ACT_OF_WORKING = URIRef("http://ontology.naas.ai/people/hasActOfWorking")
+PEOPLE_IS_SOURCED_FROM = URIRef("http://ontology.naas.ai/people/isSourcedFrom")
 
 
 def _working_params(**overrides: object) -> ActOfWorkingPipelineParameters:
@@ -49,7 +49,9 @@ def _working_params(**overrides: object) -> ActOfWorkingPipelineParameters:
 
 
 def _types(graph) -> set[URIRef]:
-    return {o for _, _, o in graph.triples((None, RDF.type, None)) if isinstance(o, URIRef)}
+    return {
+        o for _, _, o in graph.triples((None, RDF.type, None)) if isinstance(o, URIRef)
+    }
 
 
 def test_run_emits_act_of_working_and_seven_bucket_individuals() -> None:
@@ -68,7 +70,9 @@ def test_run_emits_act_of_working_and_seven_bucket_individuals() -> None:
     assert ABI_ORGANIZATION in types
     assert ABI_SITE in types
     assert ABI_TEMPORAL_REGION in types
-    assert any(p == PERSONNEL_HAS_ACT_OF_WORKING for _, p, _ in graph.triples((None, None, None)))
+    assert any(
+        p == PEOPLE_HAS_ACT_OF_WORKING for _, p, _ in graph.triples((None, None, None))
+    )
 
 
 def test_run_links_profile_document_to_mission() -> None:
@@ -78,7 +82,9 @@ def test_run_links_profile_document_to_mission() -> None:
 
     graph = pipeline.run(_working_params())
 
-    assert any(p == PERSONNEL_IS_SOURCED_FROM for _, p, _ in graph.triples((None, None, None)))
+    assert any(
+        p == PEOPLE_IS_SOURCED_FROM for _, p, _ in graph.triples((None, None, None))
+    )
 
 
 def test_run_persists_delta_to_triple_store() -> None:

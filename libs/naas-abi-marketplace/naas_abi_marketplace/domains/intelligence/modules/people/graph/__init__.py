@@ -1,1 +1,1 @@
-"""Graph build helpers for the personnel module."""
+"""Graph build helpers for the people module."""

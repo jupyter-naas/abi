@@ -1,4 +1,4 @@
-"""Personnel ontology bundle for the People Search schema viewer."""
+"""People ontology bundle for the People Search schema viewer."""
 
 from __future__ import annotations
 
@@ -6,22 +6,24 @@ from functools import lru_cache
 from pathlib import Path
 
 from naas_abi_core.utils.validate_bfo_ontology import _collect_all_restrictions
-from naas_abi_marketplace.domains.personnel.apps.people.scripts.bfo_bucket_resolution import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.bfo_bucket_resolution import (
     CCO_MID_LEVEL_DIR,
     infer_cockpit_bfo_bucket,
     load_bucket_inference_graph,
 )
-from naas_abi_marketplace.domains.personnel.paths import ONTOLOGIES_DIR
+from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+    ONTOLOGIES_DIR,
+)
 from rdflib import OWL, RDF, RDFS, Graph, URIRef
 from rdflib.namespace import SKOS
 
-PERSONNEL_NS = "http://ontology.naas.ai/personnel/"
+PEOPLE_NS = "http://ontology.naas.ai/people/"
 ABI_NS = "http://ontology.naas.ai/abi/"
 
 # The module first, then every process slice: a new slice is picked up by being
 # filed under ontologies/processes, not by being remembered here.
 ONTOLOGY_SOURCES: tuple[tuple[str, Path], ...] = (
-    ("PersonnelOntology.ttl", ONTOLOGIES_DIR / "modules" / "PersonnelOntology.ttl"),
+    ("PeopleOntology.ttl", ONTOLOGIES_DIR / "modules" / "PeopleOntology.ttl"),
     *(
         (path.name, path)
         for path in sorted((ONTOLOGIES_DIR / "processes").glob("*.ttl"))
@@ -30,7 +32,7 @@ ONTOLOGY_SOURCES: tuple[tuple[str, Path], ...] = (
 
 CCO_NS = "https://www.commoncoreontologies.org/"
 
-# CCO classes the personnel ontology builds on and the viewer shows as classes of
+# CCO classes the people ontology builds on and the viewer shows as classes of
 # their own: the facilities an act occurs in, and the educational organization
 # that runs one. Everything else of CCO stays out, as before.
 _FACILITY_ONTOLOGY = CCO_MID_LEVEL_DIR / "FacilityOntology.ttl"
@@ -54,7 +56,7 @@ def _facility_classes() -> frozenset[URIRef]:
 def _in_scope(uri: URIRef) -> bool:
     text = str(uri)
     return (
-        text.startswith(PERSONNEL_NS)
+        text.startswith(PEOPLE_NS)
         or text.startswith(ABI_NS)
         or uri in _facility_classes()
     )
@@ -82,7 +84,7 @@ def _text_value(graph: Graph, uri: URIRef, predicate: URIRef) -> str | None:
 
 
 def _add_imported_classes(graph: Graph) -> None:
-    """State, as classes, the CCO facility classes the personnel files build on.
+    """State, as classes, the CCO facility classes the people files build on.
 
     The files name them by IRI only (``occursIn some cco:ont00000468``); their
     labels live in the CCO imports. Each one used is stated here with its label,
@@ -114,7 +116,7 @@ def _add_imported_classes(graph: Graph) -> None:
                 pending.append(parent)
 
 
-def load_personnel_schema_graph() -> Graph:
+def load_people_schema_graph() -> Graph:
     graph = Graph()
     for _, path in ONTOLOGY_SOURCES:
         graph.parse(path, format="turtle")
@@ -123,7 +125,7 @@ def load_personnel_schema_graph() -> Graph:
 
 
 PREFIXES = {
-    "personnel": PERSONNEL_NS,
+    "people": PEOPLE_NS,
     "abi": ABI_NS,
     "cco": "https://www.commoncoreontologies.org/",
     "bfo": "http://purl.obolibrary.org/obo/",
@@ -155,7 +157,13 @@ def _ttl_bundle(graph: Graph) -> tuple[list[dict[str, str]], str]:
     sources: list[dict[str, str]] = []
     for name, path in ONTOLOGY_SOURCES:
         text = path.read_text(encoding="utf-8")
-        sources.append({"name": name, "path": str(path.relative_to(ONTOLOGIES_DIR.parent)), "text": text})
+        sources.append(
+            {
+                "name": name,
+                "path": str(path.relative_to(ONTOLOGIES_DIR.parent)),
+                "text": text,
+            }
+        )
     return sources, merged_turtle(graph)
 
 
@@ -204,14 +212,20 @@ def _object_properties(graph: Graph) -> list[URIRef]:
     props = [
         s for s in graph.subjects(RDF.type, OWL.ObjectProperty) if isinstance(s, URIRef)
     ]
-    return sorted([p for p in props if _in_scope(p)], key=lambda uri: _label(graph, uri).lower())
+    return sorted(
+        [p for p in props if _in_scope(p)], key=lambda uri: _label(graph, uri).lower()
+    )
 
 
 def _datatype_properties(graph: Graph) -> list[URIRef]:
     props = [
-        s for s in graph.subjects(RDF.type, OWL.DatatypeProperty) if isinstance(s, URIRef)
+        s
+        for s in graph.subjects(RDF.type, OWL.DatatypeProperty)
+        if isinstance(s, URIRef)
     ]
-    return sorted([p for p in props if _in_scope(p)], key=lambda uri: _label(graph, uri).lower())
+    return sorted(
+        [p for p in props if _in_scope(p)], key=lambda uri: _label(graph, uri).lower()
+    )
 
 
 _STANDARD_ANNOTATION_PREDICATES: tuple[URIRef, ...] = (
@@ -265,7 +279,7 @@ def _subclasses(graph: Graph, class_uri: URIRef, known: set[URIRef]) -> list[str
 
 
 def build_ontology_payload() -> dict:
-    graph = load_personnel_schema_graph()
+    graph = load_people_schema_graph()
     bucket_graph = load_bucket_inference_graph()
     sources, display_ttl = _ttl_bundle(graph)
     class_uris = _class_uris(graph)
@@ -289,16 +303,24 @@ def build_ontology_payload() -> dict:
                     "property": _qname(graph, prop),
                     "property_label": _label(graph, prop),
                     "quantifier": item.get("quantifier") or "restriction",
-                    "filler": _qname(graph, filler) if isinstance(filler, URIRef) else None,
-                    "filler_label": _label(graph, filler) if isinstance(filler, URIRef) else None,
+                    "filler": _qname(graph, filler)
+                    if isinstance(filler, URIRef)
+                    else None,
+                    "filler_label": _label(graph, filler)
+                    if isinstance(filler, URIRef)
+                    else None,
                 }
             )
 
         domain_props: list[dict[str, str]] = []
         range_props: list[dict[str, str]] = []
         for prop in object_props:
-            domains = [d for d in graph.objects(prop, RDFS.domain) if isinstance(d, URIRef)]
-            ranges = [r for r in graph.objects(prop, RDFS.range) if isinstance(r, URIRef)]
+            domains = [
+                d for d in graph.objects(prop, RDFS.domain) if isinstance(d, URIRef)
+            ]
+            ranges = [
+                r for r in graph.objects(prop, RDFS.range) if isinstance(r, URIRef)
+            ]
             if class_uri in domains:
                 domain_props.append(
                     {"property": _qname(graph, prop), "label": _label(graph, prop)}
@@ -310,7 +332,9 @@ def build_ontology_payload() -> dict:
 
         datatype_on_class: list[dict[str, str]] = []
         for prop in datatype_props:
-            domains = [d for d in graph.objects(prop, RDFS.domain) if isinstance(d, URIRef)]
+            domains = [
+                d for d in graph.objects(prop, RDFS.domain) if isinstance(d, URIRef)
+            ]
             if class_uri in domains:
                 ranges = [r for r in graph.objects(prop, RDFS.range) if r is not None]
                 datatype_on_class.append(
@@ -404,7 +428,7 @@ def build_ontology_payload() -> dict:
                     )
 
     ontology_iri = graph.value(None, RDF.type, OWL.Ontology)
-    title = "Personnel Ontology"
+    title = "People Ontology"
     if isinstance(ontology_iri, URIRef):
         title = _text_value(graph, ontology_iri, RDFS.label) or title
 

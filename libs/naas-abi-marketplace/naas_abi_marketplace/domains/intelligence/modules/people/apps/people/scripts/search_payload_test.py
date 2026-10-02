@@ -5,18 +5,22 @@ from __future__ import annotations
 from pathlib import Path
 
 from naas_abi_core.services.dataset.DatasetFactory import DatasetFactory
-from naas_abi_marketplace.domains.personnel.apps.people.config_loader import load_config
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.config_loader import (
+    load_config,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
     datasets as ds,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
     search_payload,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.scripts.search_payload import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.search_payload import (
     facet_counts,
     facet_value,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.scripts.text import search_text
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.text import (
+    search_text,
+)
 
 NONE = "Not specified"
 
@@ -39,13 +43,18 @@ def test_the_counts_add_up_to_the_matched_set() -> None:
     """The UI's "All" tab is the sum of the counts."""
     hits = [hit("Audit")] + [hit(None)] * 9
 
-    assert sum(f["count"] for f in facet_counts(hits, "service_line", NONE)) == len(hits)
+    assert sum(f["count"] for f in facet_counts(hits, "service_line", NONE)) == len(
+        hits
+    )
 
 
 def test_the_catch_all_is_last_even_when_it_is_the_biggest() -> None:
     hits = [hit("Audit")] + [hit(None)] * 9
 
-    assert [f["value"] for f in facet_counts(hits, "service_line", NONE)] == ["Audit", NONE]
+    assert [f["value"] for f in facet_counts(hits, "service_line", NONE)] == [
+        "Audit",
+        NONE,
+    ]
 
 
 def test_no_catch_all_tab_when_everyone_has_a_value() -> None:
@@ -80,19 +89,28 @@ def test_a_directory_bigger_than_the_old_candidate_cap_is_fully_searchable(
             {
                 "slug": f"person_{i:04d}",
                 "full_name": name,
-                "headline": None, "about": None, "quote": None, "photo_url": None,
-                "organization": "Demo", "office": None, "city": None,
-                "country": None, "country_code": None,
-                "service_line": "Audit" if i % 2 else None,
-                "grade": None, "years_of_experience": None,
+                "headline": None,
+                "about": None,
+                "quote": None,
+                "photo_url": None,
+                "organization": "Demo",
+                "office": None,
+                "city": None,
+                "country": "Belgium" if i % 2 else None,
+                "country_code": None,
+                "years_of_experience": None,
                 "public_profile_url": None,
-                "email": None, "phone": None, "linkedin_url": None,
+                "email": None,
+                "phone": None,
+                "linkedin_url": None,
                 "search_text": search_text({"name": [name]}),
             }
         )
-    namespace = "personnel"
+    namespace = "people"
     for logical in ds.TABLES:
-        spec = ds.dataset_spec(logical, table=config["data"]["tables"][logical], namespace=namespace)
+        spec = ds.dataset_spec(
+            logical, table=config["data"]["tables"][logical], namespace=namespace
+        )
         ds.replace_rows(warehouse, spec, rows if logical == "people" else [])
     config["data"]["namespace"] = namespace
     config["search"]["page_size"] = 20

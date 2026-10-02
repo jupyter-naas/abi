@@ -14,17 +14,21 @@ import pytest
 from naas_abi_core.services.dataset.DatasetFactory import DatasetFactory
 from naas_abi_core.services.dataset.DatasetPort import DatasetSpec
 from naas_abi_core.services.dataset.DatasetService import DatasetService
-from naas_abi_marketplace.domains.personnel.apps.people.config_loader import load_config
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.config_loader import (
+    load_config,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
     datasets as ds,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
     profile_payload,
     search_payload,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.scripts.text import search_text
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.text import (
+    search_text,
+)
 
-NAMESPACE = "personnel"
+NAMESPACE = "people"
 
 
 def person_row(**overrides: Any) -> dict[str, Any]:
@@ -40,8 +44,6 @@ def person_row(**overrides: Any) -> dict[str, Any]:
         "city": "Paris",
         "country": "France",
         "country_code": "FR",
-        "service_line": "Operations",
-        "grade": "Partner",
         "years_of_experience": 12,
         "public_profile_url": "https://demo.example/alice",
         "email": "alice.dupont@demo.example",
@@ -89,7 +91,6 @@ def seeded(tmp_path_factory) -> DatasetService:
             "headline": [alice["headline"]],
             "about": [alice["about"]],
             "place": [alice["office"], alice["country"]],
-            "line": [alice["service_line"], alice["grade"]],
             "skills": ["Kubernetes", "Python"],
             # The exporter folds every searchable section in here; a section
             # left out of search_text is a section nobody can search for.
@@ -101,10 +102,10 @@ def seeded(tmp_path_factory) -> DatasetService:
         full_name="Cédric Laumont",
         headline="Associé Audit",
         about="Audite des groupes cotés.",
-        service_line="Audit",
-        grade="Partner",
-        office="Lyon",
-        city="Lyon",
+        office="Bruxelles",
+        city="Bruxelles",
+        country="Belgium",
+        country_code="BE",
         years_of_experience=None,
         email=None,
         phone=None,
@@ -116,7 +117,6 @@ def seeded(tmp_path_factory) -> DatasetService:
             "headline": [cedric["headline"]],
             "about": [cedric["about"]],
             "place": [cedric["office"]],
-            "line": [cedric["service_line"], cedric["grade"]],
         }
     )
     publish(
@@ -272,7 +272,7 @@ class TestSearch:
     def test_every_word_must_match(
         self, seeded: DatasetService, config: dict[str, Any]
     ) -> None:
-        payload = search_payload.search(seeded, config, query="audit lyon")
+        payload = search_payload.search(seeded, config, query="audit bruxelles")
         assert payload["mode"] == "all"
         assert [hit["slug"] for hit in payload["results"]] == ["cedric_laumont"]
 
@@ -301,14 +301,14 @@ class TestSearch:
     ) -> None:
         payload = search_payload.search(seeded, config)
         assert {facet["value"]: facet["count"] for facet in payload["facets"]} == {
-            "Operations": 1,
-            "Audit": 1,
+            "France": 1,
+            "Belgium": 1,
         }
 
     def test_facet_filters_results_but_not_the_counts(
         self, seeded: DatasetService, config: dict[str, Any]
     ) -> None:
-        payload = search_payload.search(seeded, config, facet="Audit")
+        payload = search_payload.search(seeded, config, facet="Belgium")
         assert [hit["slug"] for hit in payload["results"]] == ["cedric_laumont"]
         assert len(payload["facets"]) == 2
 
@@ -394,7 +394,7 @@ class TestProfile:
         payload = profile_payload.profile(seeded, config, slug="cedric_laumont")
         labels = [fact["label"] for fact in payload["facts"]]
         assert "Experience" not in labels
-        assert "Grade" in labels
+        assert "Organization" in labels
 
     def test_the_header_offers_every_way_to_reach_the_person(
         self, seeded: DatasetService, config: dict[str, Any]
@@ -443,5 +443,5 @@ class TestProfile:
         self, seeded: DatasetService, config: dict[str, Any]
     ) -> None:
         related = profile_payload.related(seeded, config, slug="alice_dupont")
-        assert related["value"] == "Operations"
+        assert related["value"] == "France"
         assert related["people"] == []

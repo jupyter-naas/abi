@@ -42,11 +42,11 @@ export async function mountOntology(view, { config }) {
     view.innerHTML = `<div class="ontology-page"><div class="empty-state error-block">
       <h2>Could not load ontology</h2><p>${escapeHtml(error.message)}</p>
       <p><a class="home-ontology-link" href="${searchHref(config, {})}">Back to search</a></p></div></div>`;
-    return { showTopbarSearch: false, title: "Personnel Ontology" };
+    return { showTopbarSearch: false, title: "People Ontology" };
   }
 
   configureBfoBuckets(config.theme?.bfo_buckets);
-  const title = payload.title || "Personnel Ontology";
+  const title = payload.title || "People Ontology";
   const graph = buildOntologyGraph(payload);
   const classes = payload.classes;
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));

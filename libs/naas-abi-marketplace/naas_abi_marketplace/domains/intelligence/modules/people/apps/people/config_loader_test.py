@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 import yaml
-from naas_abi_marketplace.domains.personnel.apps.people.config_loader import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.config_loader import (
     CONFIG_PATH,
     REGISTERED_SECTION_IDS,
     WEB_ROOT,
@@ -54,7 +54,7 @@ class TestShippedConfig:
     def test_it_loads(self) -> None:
         config = load_config()
         assert config["brand"]["name"]
-        assert config["data"]["namespace"] == "personnel"
+        assert config["data"]["namespace"] == "people"
 
     def test_every_registered_section_is_configured(self) -> None:
         """A registered section nobody configured would never be reachable."""
@@ -209,7 +209,7 @@ class TestFactsAndSearch:
 class TestData:
     def test_namespace_must_be_an_identifier(self, tmp_path: Path) -> None:
         def mutate(raw: dict[str, Any]) -> None:
-            raw["data"]["namespace"] = "personnel; drop table people"
+            raw["data"]["namespace"] = "people; drop table people"
 
         fails(tmp_path, mutate, "data.namespace must be a SQL identifier")
 
@@ -284,9 +284,7 @@ class TestSecondInstance:
 
         fails(tmp_path, mutate, "points at a file that does not exist")
 
-    def test_graph_file_is_resolved_and_kept_off_the_wire(
-        self, tmp_path: Path
-    ) -> None:
+    def test_graph_file_is_resolved_and_kept_off_the_wire(self, tmp_path: Path) -> None:
         ttl = tmp_path / "instance.ttl"
         ttl.write_text("")
 

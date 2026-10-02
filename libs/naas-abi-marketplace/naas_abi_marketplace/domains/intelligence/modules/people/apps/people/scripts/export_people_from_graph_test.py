@@ -9,11 +9,15 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from naas_abi_marketplace.domains.personnel.apps.people.config_loader import load_config
-from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.config_loader import (
+    load_config,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
     export_people_from_graph as export,
 )
-from naas_abi_marketplace.domains.personnel.paths import DEMO_GRAPH_FILE
+from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+    DEMO_GRAPH_FILE,
+)
 from rdflib import Graph
 
 CONFIG = load_config()
@@ -144,7 +148,9 @@ class TestGateRows:
         export.gate_rows(tables, CONFIG)  # does not raise
 
     def test_the_source_field_is_still_gated(self) -> None:
-        tables = {"people": [{"slug": "a", "about": "Call 0612345678", "search_text": ""}]}
+        tables = {
+            "people": [{"slug": "a", "about": "Call 0612345678", "search_text": ""}]
+        }
         with pytest.raises(export.PrivacyError, match=r"people\[0\]\.about"):
             export.gate_rows(tables, CONFIG)
 
@@ -156,7 +162,7 @@ class TestGateRows:
 
 class TestNothingIsSilentlyCut:
     def test_the_export_is_not_capped_at_the_interactive_limit(self) -> None:
-        from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+        from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
             sparql_queries as sq,
         )
 
@@ -189,7 +195,7 @@ class TestQueries:
 
     def test_the_named_graph_wrapper_is_stripped_for_file_queries(self) -> None:
         sparql = export.load_queries()["find_people_directory"]
-        assert "GRAPH <http://ontology.naas.ai/graph/personnel>" in sparql
+        assert "GRAPH <http://ontology.naas.ai/graph/people>" in sparql
         assert "GRAPH <" not in export._strip_named_graph(sparql)
 
 
@@ -207,18 +213,19 @@ class TestBuildRowsFromTheDemoGraph:
         }
 
     def test_every_table_in_the_schema_is_produced(self, tables) -> None:
-        from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+        from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
             datasets as ds,
         )
 
         assert set(tables) == set(ds.TABLES)
 
-    def test_a_person_carries_their_place_and_line(self, tables) -> None:
+    def test_a_person_carries_their_place(self, tables) -> None:
         alice = next(row for row in tables["people"] if row["slug"] == "alice_dupont")
         assert alice["country_code"] == "FR"
-        assert alice["service_line"] == "Operations"
-        assert alice["grade"] == "Partner"
         assert alice["years_of_experience"] == 12
+        # Grade and service line are an employer's internal records.
+        assert "service_line" not in alice
+        assert "grade" not in alice
 
     def test_search_text_is_folded(self, tables) -> None:
         alice = next(row for row in tables["people"] if row["slug"] == "alice_dupont")

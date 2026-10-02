@@ -11,7 +11,7 @@
  */
 export const API_BASE =
   document.querySelector('meta[name="people-api-base"]')?.content?.replace(/\/$/, "") ||
-  "/api/personnel-people";
+  "/api/people";
 
 let cached = null;
 

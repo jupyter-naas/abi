@@ -1,46 +1,55 @@
-"""Process-scoped class labels derived from personnel ontology restrictions."""
+"""Process-scoped class labels derived from people ontology restrictions.
+
+A module that specializes these processes passes its own
+specs and shared ontologies to :func:`build_process_class_catalog`.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from naas_abi_core.utils.validate_bfo_ontology import _collect_all_restrictions
-from naas_abi_marketplace.domains.personnel.paths import ONTOLOGIES_DIR, PERSONNEL_ROOT
+from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+    ONTOLOGIES_DIR,
+)
 from rdflib import Graph, URIRef
 from rdflib.namespace import OWL, RDF, RDFS
 
-PERSONNEL_NS = "http://ontology.naas.ai/personnel/"
+PEOPLE_NS = "http://ontology.naas.ai/people/"
 ABI_NS = "http://ontology.naas.ai/abi/"
+NAAS_ONTOLOGY_NS = "http://ontology.naas.ai/"
 CCO_NS = "https://www.commoncoreontologies.org/"
 
 PROCESS_SPECS: tuple[dict[str, str | Path | tuple[Path, ...]], ...] = (
     {
         "process_label": "Act of Working",
-        "process_class": f"{PERSONNEL_NS}ActOfWorking",
+        "process_class": f"{PEOPLE_NS}ActOfWorking",
         "process_ontology": ONTOLOGIES_DIR / "processes" / "ActOfWorkingProcess.ttl",
         "support_ontologies": (),
     },
     {
         "process_label": "Act of Studying",
-        "process_class": f"{PERSONNEL_NS}ActOfStudying",
+        "process_class": f"{PEOPLE_NS}ActOfStudying",
         "process_ontology": ONTOLOGIES_DIR / "processes" / "ActOfStudyingProcess.ttl",
         "support_ontologies": (),
     },
     {
         "process_label": "Act of Certification",
-        "process_class": f"{PERSONNEL_NS}ActOfCertification",
-        "process_ontology": ONTOLOGIES_DIR / "processes" / "ActOfCertificationProcess.ttl",
+        "process_class": f"{PEOPLE_NS}ActOfCertification",
+        "process_ontology": ONTOLOGIES_DIR
+        / "processes"
+        / "ActOfCertificationProcess.ttl",
         "support_ontologies": (),
     },
     {
-        "process_label": "Act of Personnel Profiling",
-        "process_class": f"{PERSONNEL_NS}ActOfPersonnelProfiling",
-        "process_ontology": ONTOLOGIES_DIR / "processes" / "ActOfPersonnelProfilingProcess.ttl",
+        "process_label": "Act of Profiling",
+        "process_class": f"{PEOPLE_NS}ActOfProfiling",
+        "process_ontology": ONTOLOGIES_DIR / "processes" / "ActOfProfilingProcess.ttl",
         "support_ontologies": (),
     },
 )
 
-SHARED_ONTOLOGY = ONTOLOGIES_DIR / "modules" / "PersonnelOntology.ttl"
+SHARED_ONTOLOGY = ONTOLOGIES_DIR / "modules" / "PeopleOntology.ttl"
 
 EXCLUDED_CLASS_LABELS = frozenset(
     {
@@ -48,11 +57,11 @@ EXCLUDED_CLASS_LABELS = frozenset(
         "Act of Working",
         "Act of Studying",
         "Act of Certification",
-        "Act of Personnel Profiling",
+        "Act of Profiling",
     }
 )
 
-# ABI classes referenced by personnel restrictions but not always labelled in slice TTLs.
+# ABI classes referenced by people restrictions but not always labelled in slice TTLs.
 _ABI_CLASS_LABELS: dict[str, str] = {
     f"{ABI_NS}Person": "Person",
     f"{ABI_NS}Organization": "Organization",
@@ -78,7 +87,11 @@ def _class_label(graph: Graph, class_uri: URIRef) -> str | None:
 
 
 def _declared_classes(graph: Graph) -> set[URIRef]:
-    return {subject for subject in graph.subjects(RDF.type, OWL.Class) if isinstance(subject, URIRef)}
+    return {
+        subject
+        for subject in graph.subjects(RDF.type, OWL.Class)
+        if isinstance(subject, URIRef)
+    }
 
 
 def _is_catalog_class(graph: Graph, class_uri: URIRef) -> bool:
@@ -89,7 +102,8 @@ def _is_catalog_class(graph: Graph, class_uri: URIRef) -> bool:
 
 def _is_relevant_uri(class_uri: URIRef) -> bool:
     text = str(class_uri)
-    return text.startswith(PERSONNEL_NS) or text.startswith(ABI_NS) or text in _ABI_CLASS_LABELS
+    # Any naas.ai vocabulary: people, ABI, and whatever module specializes them.
+    return text.startswith(NAAS_ONTOLOGY_NS) or text in _ABI_CLASS_LABELS
 
 
 def _restriction_fillers(graph: Graph, class_uri: URIRef) -> set[URIRef]:
@@ -147,7 +161,9 @@ def _collect_process_class_uris(
     return discovered
 
 
-def _labels_for_process(graph: Graph, process_class: URIRef, process_slice: Graph) -> list[str]:
+def _labels_for_process(
+    graph: Graph, process_class: URIRef, process_slice: Graph
+) -> list[str]:
     labels: set[str] = set()
     for class_uri in _collect_process_class_uris(graph, process_class, process_slice):
         label = _class_label(graph, class_uri)
@@ -162,14 +178,16 @@ def _labels_for_process(graph: Graph, process_class: URIRef, process_slice: Grap
 
 def build_process_class_catalog(
     *,
-    personnel_root: Path = PERSONNEL_ROOT,
+    process_specs: tuple[dict[str, str | Path | tuple[Path, ...]], ...] = PROCESS_SPECS,
+    shared_ontologies: tuple[Path, ...] = (SHARED_ONTOLOGY,),
 ) -> dict[str, dict[str, list[str]]]:
     """Return allowed non-process class labels keyed by process class label."""
     shared = Graph()
-    shared.parse(SHARED_ONTOLOGY)
+    for path in shared_ontologies:
+        shared.parse(path)
 
     catalog: dict[str, dict[str, list[str]]] = {}
-    for spec in PROCESS_SPECS:
+    for spec in process_specs:
         process_slice = Graph()
         process_slice.parse(spec["process_ontology"])
         graph = Graph()
