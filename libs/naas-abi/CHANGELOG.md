@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v2.76.0 (2026-10-02)
+
+### Features
+
+- **settings**: Update Nexus settings design system and UI components
+  ([`f0fa360`](https://github.com/jupyter-naas/abi/commit/f0fa360ecffc894981b2d31f152a5a62190b8efb))
+
+- **settings-cache**: Add 24h API cache for settings pages with manual reload
+  ([`df9a6b0`](https://github.com/jupyter-naas/abi/commit/df9a6b058dfcc031f4694a8e6620e5befe3261ec))
+
+- **settings-cache**: Add 24h caching middleware for Nexus settings API
+  ([`43b9ebc`](https://github.com/jupyter-naas/abi/commit/43b9ebc5061ea53c5daca65a0332a17ad1e07be4))
+
+### Refactoring
+
+- **settings**: Large refactor of Nexus settings UI and components
+  ([`2a04ea2`](https://github.com/jupyter-naas/abi/commit/2a04ea2c8bd406f2671cd40975ca01117ec6bc90))
+
+- **settings**: Update components settings cache and remove reload button from org header
+  ([`13b5afc`](https://github.com/jupyter-naas/abi/commit/13b5afcaed8c38983517a2ed53415455f0620047))
+
+- **settings**: Update nexus settings design system and related components
+  ([`4daec20`](https://github.com/jupyter-naas/abi/commit/4daec2050a5761d2702aa464c25ea3a6f760025b))
+
+
 ## v2.75.0 (2026-10-01)
 
 ### Bug Fixes
