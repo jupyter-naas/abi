@@ -76,7 +76,7 @@ def test_get_object_stream_closes_after_partial_read(monkeypatch):
     )
     calls = []
 
-    def call(operation, request, response_type):
+    def call(operation, request, response_type, transfer=None):
         calls.append(operation)
         if operation == "read":
             return pb.ReadResponse(data=b"hello", frame_end=True)

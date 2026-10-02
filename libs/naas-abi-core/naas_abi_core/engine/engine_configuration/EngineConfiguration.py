@@ -425,6 +425,27 @@ def _read_overlay(path: str | None) -> dict[str, Any] | None:
     return overlay
 
 
+class TelemetryConfiguration(BaseModel):
+    """OpenTelemetry tracing (needs ``naas-abi-core[otel]``).
+
+    Spans cover HTTP requests and every NATS call; W3C trace context travels in
+    NATS headers so one request is one trace across processes. Exported over
+    OTLP/HTTP to ``otlp_endpoint`` (e.g. ``http://jaeger:4318``), or to the
+    standard ``OTEL_EXPORTER_OTLP_*`` variables when unset. ``ui_url`` is the
+    trace viewer (e.g. Jaeger, ``http://localhost:16686``) the Nexus System app
+    links to.
+    """
+
+    enabled: bool = False
+    otlp_endpoint: str | None = Field(default=None, pattern=r"^https?://")
+    service_name: str = "abi-engine"
+    sample_ratio: float = Field(default=1.0, ge=0, le=1)
+    ui_url: str | None = Field(default=None, pattern=r"^https?://")
+    # Where the API reads recent spans for the System app's live traffic
+    # (Jaeger's query API, e.g. ``http://jaeger:16686`` inside compose). Defaults to ui_url.
+    query_url: str | None = Field(default=None, pattern=r"^https?://")
+
+
 class EngineConfiguration(BaseModel):
     api: ApiConfiguration
 
@@ -435,6 +456,7 @@ class EngineConfiguration(BaseModel):
     global_config: GlobalConfig
 
     nats: NATSConfiguration | None = None
+    telemetry: TelemetryConfiguration = Field(default_factory=TelemetryConfiguration)
 
     modules: list[ModuleConfig]
 

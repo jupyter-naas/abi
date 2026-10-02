@@ -2,6 +2,7 @@
 
 from naas_abi_core.engine import nats_runtime
 from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_naming import connection_name
 from naas_abi_core.models.Model import ChatModel, EmbeddingModel
 from naas_abi_core.services.model_registry.ModelRegistryPort import ModelNotFoundError
 from naas_abi_core.services.model_registry.ModelRegistryService import (
@@ -17,7 +18,10 @@ class ModelRegistryNATSClient(ModelRegistryService):
         super().__init__()
         self.owner = owner
         self.transport = Transport(
-            url, lambda: issue_service_token("engine", secret), timeout=120
+            url,
+            lambda: issue_service_token("engine", secret),
+            timeout=120,
+            name=connection_name("abi-engine:model_registry"),
         )
         self.remote = RemoteRegistry(ModelRegistryClient(self.transport))
 

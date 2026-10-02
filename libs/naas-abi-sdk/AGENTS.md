@@ -55,3 +55,10 @@ at-least-once: handlers must be idempotent. One durable pull consumer per job;
 in the provider's document namespace (`job_runs_<hash(project)>`), written with CAS.
 Cancellation is cooperative (`ctx.cancelled`). tests/test_jobs_integration.py needs
 `nats-server` on PATH; run it after touching schedules, consumers or acks.
+
+`telemetry.py` is the one OpenTelemetry implementation (core reuses it): W3C trace
+context in NATS headers, CLIENT spans in `Transport.call`, CONSUMER spans for job
+runs, spans for agent submits and runs, `record_error` on error replies. Keep it
+stdlib plus optional OpenTelemetry API, and a no-op without a provider. Modules
+export spans when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (`[otel]` extra). See
+docs/adr/20261002_observability.md.

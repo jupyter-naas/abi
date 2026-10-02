@@ -30,7 +30,7 @@ def test_object_methods_hide_requests_and_responses_and_preserve_domain_error():
     client._transport.connect.return_value = SimpleNamespace(max_payload=8192)
     state = {}
 
-    async def call(subject, request, response_type):
+    async def call(subject, request, response_type, **_options):
         if subject.endswith(".open"):
             metadata = objects.GetObjectRequest.FromString(request.metadata)
             if metadata.key == "missing":

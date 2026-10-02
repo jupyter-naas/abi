@@ -22,16 +22,16 @@ def test_run_coro_returns_the_coroutine_result():
 
 
 def test_get_connection_reuses_the_existing_connection_for_the_same_url(monkeypatch):
-    connect = AsyncMock(
-        return_value=MagicMock(is_connected=True, close=AsyncMock())
-    )
+    connect = AsyncMock(return_value=MagicMock(is_connected=True, close=AsyncMock()))
     monkeypatch.setattr(nats_runtime.nats, "connect", connect)
 
     first = nats_runtime.get_connection("nats://127.0.0.1:4222")
     second = nats_runtime.get_connection("nats://127.0.0.1:4222")
 
     assert first is second
-    connect.assert_awaited_once_with("nats://127.0.0.1:4222")
+    connect.assert_awaited_once_with(
+        "nats://127.0.0.1:4222", name=nats_runtime.connection_name("abi-engine")
+    )
 
 
 def test_get_connection_reconnects_when_the_url_changes(monkeypatch):

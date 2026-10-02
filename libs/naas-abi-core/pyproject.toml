@@ -74,6 +74,7 @@ all = [
     "naas-abi-core[rabbitmq]",
     "naas-abi-core[nats]",
     "naas-abi-core[microsoft]",
+    "naas-abi-core[otel]",
 ]
 openrouter = [
     "langchain-openai>=0.3.35",
@@ -97,6 +98,9 @@ nats = [
 ]
 microsoft = [
     "msal>=1.37.0",
+]
+otel = [
+    "naas-abi-sdk[otel]>=0.1.0,<0.2",
 ]
 [project.scripts]
 onto2py = "naas_abi_core.utils.onto2py.__main__:main"

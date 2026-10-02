@@ -46,6 +46,7 @@ from naas_abi_core.services.object_storage.ObjectStoragePort import (
     ObjectMetaData,
 )
 from naas_abi_proto.transfer.v1 import transfer_pb2 as transfer_pb
+from naas_abi_sdk.telemetry import transfer_span
 from naas_abi_sdk.transfer import read_legacy_upload, transfer_subject
 from nats.errors import NoRespondersError
 
@@ -68,6 +69,9 @@ def _pb_to_metadata(pb: object_storage_pb2.ObjectMetaData) -> ObjectMetaData:
         mime_type=pb.mime_type if pb.HasField("mime_type") else None,
         encoding=pb.encoding if pb.HasField("encoding") else None,
     )
+
+
+TRANSFER_PREFIX = f"{SUBJECT_PREFIX}.transfer"
 
 
 def _raise_for_error(error: common_pb2.CallError) -> None:
@@ -110,20 +114,19 @@ class ObjectStorageSecondaryAdapterNATSClient(NatsRPCClient, IObjectStorageAdapt
     # IObjectStorageAdapter.
     # ------------------------------------------------------------------
 
-    def _transfer_call(self, operation, request, response_type):
+    def _transfer_call(self, operation, request, response_type, transfer=None):
         request.context.CopyFrom(self._context())
         response = self._call(
-            transfer_subject(
-                f"{SUBJECT_PREFIX}.transfer", operation, getattr(request, "id", "")
-            ),
+            transfer_subject(TRANSFER_PREFIX, operation, getattr(request, "id", "")),
             request,
             response_type,
+            transfer=transfer,
         )
         if response.HasField("error"):
             _raise_for_error(response.error)
         return response
 
-    def _open_transfer(self, operation, prefix, key):
+    def _open_transfer(self, operation, prefix, key, transfer=None):
         nc = self._run_coro(self._ensure_connection_async())
         size = min(64 * 1024, nc.max_payload // 2)
         return self._transfer_call(
@@ -136,14 +139,16 @@ class ObjectStorageSecondaryAdapterNATSClient(NatsRPCClient, IObjectStorageAdapt
                 chunk_bytes=size,
             ),
             transfer_pb.OpenResponse,
+            transfer,
         )
 
-    def _close_transfer(self, transfer_id: str) -> None:
+    def _close_transfer(self, transfer_id: str, transfer=None) -> None:
         try:
             self._transfer_call(
                 "close",
                 transfer_pb.CloseRequest(id=transfer_id),
                 transfer_pb.CloseResponse,
+                transfer,
             )
         except Exception as exc:  # noqa: BLE001 - cleanup must preserve the operation error
             # Idle expiry cleans up when the final exchange cannot reach the owner.
@@ -155,8 +160,19 @@ class ObjectStorageSecondaryAdapterNATSClient(NatsRPCClient, IObjectStorageAdapt
 
     @contextmanager
     def get_object_stream(self, prefix: str, key: str) -> Iterator[BinaryIO]:
+        # One span for the whole download (totals as attributes), not one per chunk.
+        with (
+            transfer_span(TRANSFER_PREFIX, "get") as transfer,
+            self._get_object_stream(prefix, key, transfer) as stream,
+        ):
+            yield stream
+
+    @contextmanager
+    def _get_object_stream(
+        self, prefix: str, key: str, transfer=None
+    ) -> Iterator[BinaryIO]:
         try:
-            opened = self._open_transfer("get", prefix, key)
+            opened = self._open_transfer("get", prefix, key, transfer)
         except NoRespondersError:
             request = object_storage_pb2.GetObjectRequest(
                 context=self._context(), prefix=prefix, key=key
@@ -176,14 +192,15 @@ class ObjectStorageSecondaryAdapterNATSClient(NatsRPCClient, IObjectStorageAdapt
                 "start",
                 transfer_pb.StartRequest(id=opened.id),
                 transfer_pb.StartResponse,
+                transfer,
             )
-            with io.BufferedReader(_RemoteReader(self, opened.id)) as stream:
+            with io.BufferedReader(_RemoteReader(self, opened.id, transfer)) as stream:
                 stream.peek(
                     1
                 )  # Surface open/read errors before entering the caller body.
                 yield stream
         finally:
-            self._close_transfer(opened.id)
+            self._close_transfer(opened.id, transfer)
 
     def put_object(self, prefix: str, key: str, content: bytes) -> None:
         nc = self._run_coro(self._ensure_connection_async())
@@ -205,8 +222,14 @@ class ObjectStorageSecondaryAdapterNATSClient(NatsRPCClient, IObjectStorageAdapt
             _raise_for_error(response.error)
 
     def put_object_stream(self, prefix: str, key: str, stream: BinaryIO) -> None:
+        with transfer_span(TRANSFER_PREFIX, "put") as transfer:
+            self._put_object_stream(prefix, key, stream, transfer)
+
+    def _put_object_stream(
+        self, prefix: str, key: str, stream: BinaryIO, transfer=None
+    ) -> None:
         try:
-            opened = self._open_transfer("put", prefix, key)
+            opened = self._open_transfer("put", prefix, key, transfer)
         except NoRespondersError:
             nc = self._run_coro(self._ensure_connection_async())
             limit = min(nc.max_payload, 8 * 1024 * 1024)
@@ -222,17 +245,19 @@ class ObjectStorageSecondaryAdapterNATSClient(NatsRPCClient, IObjectStorageAdapt
                         id=opened.id, sequence=sequence, data=chunk
                     ),
                     transfer_pb.WriteResponse,
+                    transfer,
                 )
                 sequence += 1
             self._transfer_call(
                 "start",
                 transfer_pb.StartRequest(id=opened.id),
                 transfer_pb.StartResponse,
+                transfer,
             )
-            reader = _RemoteReader(self, opened.id)
+            reader = _RemoteReader(self, opened.id, transfer)
             reader.read()
         finally:
-            self._close_transfer(opened.id)
+            self._close_transfer(opened.id, transfer)
 
     def delete_object(self, prefix: str, key: str) -> None:
         request = object_storage_pb2.DeleteObjectRequest(
@@ -297,9 +322,9 @@ class ObjectStorageSecondaryAdapterNATSClient(NatsRPCClient, IObjectStorageAdapt
 
 
 class _RemoteReader(io.RawIOBase):
-    def __init__(self, client, id):
+    def __init__(self, client, id, transfer=None):
         super().__init__()
-        self.client, self.id = client, id
+        self.client, self.id, self.transfer = client, id, transfer
         self.sequence = 0
         self.buffer = bytearray()
         self.done = False
@@ -315,6 +340,7 @@ class _RemoteReader(io.RawIOBase):
                 "read",
                 transfer_pb.ReadRequest(id=self.id, sequence=self.sequence),
                 transfer_pb.ReadResponse,
+                self.transfer,
             )
             if response.sequence != self.sequence:
                 raise ValueError("Transfer sequence mismatch")

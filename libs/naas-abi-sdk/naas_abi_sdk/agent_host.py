@@ -19,6 +19,7 @@ from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 from naas_abi_sdk.agent import TERMINAL, agent_subject
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
 from naas_abi_sdk.services.models import CollectionSpec
+from naas_abi_sdk.telemetry import internal_span, server_span
 from naas_abi_sdk.transport import RPCError
 
 
@@ -144,6 +145,11 @@ class AgentHost:
         return response.caller_identity
 
     async def _handle(self, name: str, operation: str, msg) -> None:
+        # Runs started by a submit inherit this span (their task copies the context).
+        with server_span(msg.subject, msg.headers, attributes={"abi.agent.name": name}):
+            await self._handle_operation(name, operation, msg)
+
+    async def _handle_operation(self, name: str, operation: str, msg) -> None:
         cls = getattr(pb, operation.title() + "Request")
         response_cls = getattr(pb, operation.title() + "Response")
         response = response_cls()
@@ -446,6 +452,13 @@ class AgentHost:
         run.progress_at = asyncio.get_running_loop().time()
 
     async def _execute(self, name: str, req, run: _Run) -> None:
+        with internal_span(
+            f"agent {name} run",
+            {"abi.agent.name": name, "abi.agent.invocation_id": req.invocation_id},
+        ):
+            await self._execute_run(name, req, run)
+
+    async def _execute_run(self, name: str, req, run: _Run) -> None:
         completed = False
         run.started.set()
         try:

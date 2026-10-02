@@ -136,12 +136,14 @@ class EngineJobLoader:
         assert self._loop is not None and self.configuration is not None
         if self._transport is None:
             from naas_abi_core.engine.nats_auth import issue_service_token
+            from naas_abi_core.engine.nats_naming import connection_name
             from naas_abi_sdk.transport import Transport
 
             secret = self.configuration.jwt_secret
             self._transport = Transport(
                 self.configuration.nats_url,
                 lambda: issue_service_token(ENGINE_IDENTITY, secret),
+                name=connection_name("abi-engine:jobs"),
             )
         handlers = module._job_handlers
         host = self.host_factory(

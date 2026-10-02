@@ -318,3 +318,78 @@ def test_close_cancels_jobs_still_running_after_the_grace_period():
     assert run["status"] == "RETRYING"
     assert run["error"] == "Interrupted by host shutdown"
     assert msg.calls[-1][0] == "nak"
+
+
+def test_a_run_continues_the_trace_of_its_trigger(monkeypatch):
+    pytest = __import__("pytest")
+    pytest.importorskip("opentelemetry.sdk")
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+    from opentelemetry.trace import SpanKind, StatusCode
+
+    from naas_abi_sdk import telemetry
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(telemetry, "_tracer", lambda: provider.get_tracer("test"))
+
+    trigger_headers = {}
+    with telemetry.client_span(
+        job_subjects(PROJECT, MODULE, "ingest").trigger, trigger_headers
+    ):
+        pass
+
+    async def failing(ctx):
+        raise RuntimeError("upstream 503")
+
+    msg = Msg()
+    msg.headers = {**msg.headers, **trigger_headers}
+    msg.subject = job_subjects(PROJECT, MODULE, "ingest").trigger
+    _run(_host(), JobDescriptor("ingest"), failing, msg)
+
+    trigger, run = exporter.get_finished_spans()
+    assert run.name == "job ingest" and run.kind is SpanKind.CONSUMER
+    assert run.context.trace_id == trigger.context.trace_id
+    assert run.attributes["abi.job.run_id"] == "ingest:7"
+    assert run.status.status_code is StatusCode.ERROR
+
+
+def test_manual_triggers_carry_the_callers_trace(monkeypatch):
+    from naas_abi_sdk.jobs import JobProxy
+
+    published = []
+
+    class _JS:
+        async def publish(self, subject, payload, headers=None, stream=None):
+            published.append(dict(headers or {}))
+            return SimpleNamespace(seq=3)
+
+    class _NC:
+        def jetstream(self):
+            return _JS()
+
+    class _Transport:
+        async def connect(self):
+            return _NC()
+
+    monkeypatch.setattr(
+        "naas_abi_sdk.jobs.client_span",
+        lambda subject, headers: _inject(headers),
+    )
+    asyncio.run(
+        JobProxy(_Transport(), PROJECT, MODULE, JobDescriptor("ingest")).trigger({})
+    )
+
+    assert published[0]["traceparent"] == "00-" + "a" * 32 + "-" + "b" * 16 + "-01"
+    assert published[0][TRIGGER_HEADER] == "manual"
+
+
+def _inject(headers):
+    import contextlib
+
+    headers["traceparent"] = "00-" + "a" * 32 + "-" + "b" * 16 + "-01"
+    return contextlib.nullcontext()
