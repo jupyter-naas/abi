@@ -2,6 +2,8 @@
 
 Inputs spool to temporary disk. Only an explicit start calls the domain handler;
 closing an incomplete upload cannot modify its destination. No durable replay.
+Each session is one SERVER span continuing the caller's trace from ``open``; the
+handler runs inside it, and its real failure is recorded there, never replied.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from naas_abi_core.engine.nats_auth import (
     verify_service_token,
 )
 from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
+from naas_abi_sdk.telemetry import ServedTransfer, serve_transfer
 
 OPERATIONS = {
     "open": (pb.OpenRequest, pb.OpenResponse),
@@ -52,6 +55,7 @@ class TransferSession:
     uploaded: int = 0
     touched: float = 0
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    trace: ServedTransfer = field(default_factory=ServedTransfer)
 
 
 async def stream_thread(function, *args):
@@ -156,7 +160,7 @@ class TransferHost:
         for task in self.tasks:
             task.cancel()
         for key in list(self.sessions):
-            self._begin_close(key)
+            self._begin_close(key, "stopped")
         pending = self.tasks | self.retiring
         if pending:
             await asyncio.wait(pending, timeout=self.close_timeout_seconds)
@@ -171,12 +175,16 @@ class TransferHost:
                 if not value.lock.locked() and now - value.touched > self.idle_seconds
             ]
             for key in expired:
-                self._begin_close(key)
+                self._begin_close(key, "expired")
 
-    def _begin_close(self, key):
+    def _begin_close(self, key, how):
         session = self.sessions.pop(key, None)
         if session is None:
             return None
+        # The span ends with the public session, not with a blocked backend.
+        session.trace.end(
+            how, cancelled=session.task is not None and not session.task.done()
+        )
         task = asyncio.create_task(self._retire(session))
         self.retiring.add(task)
         task.add_done_callback(self.retiring.discard)
@@ -202,7 +210,7 @@ class TransferHost:
                 self.buffered_upload_bytes -= session.uploaded
 
     async def _close(self, key):
-        task = self._begin_close(key)
+        task = self._begin_close(key, "closed")
         if task:
             done, _ = await asyncio.wait({task}, timeout=self.close_timeout_seconds)
             if not done:
@@ -262,7 +270,7 @@ class TransferHost:
                     "PAYLOAD_TOO_LARGE", "Transfer packet exceeds broker limit"
                 )
             request = OPERATIONS[operation][0].FromString(msg.data)
-            response = await self._execute(operation, request, caller)
+            response = await self._execute(operation, request, caller, msg.headers)
         except Exception as exc:  # noqa: BLE001 - sanitize errors at transport boundary
             response.error.code, response.error.message = self._error(exc)
         if msg.reply:
@@ -283,16 +291,21 @@ class TransferHost:
             finally:
                 await iterator.aclose()
 
-        try:
-            if self.total_seconds is None:
-                await consume()
-            else:
-                await asyncio.wait_for(consume(), self.total_seconds)
-        except Exception as exc:  # noqa: BLE001 - delivered on the next read
-            # Record failures even if the caller has abandoned the transfer.
-            session.error = TransferError(*self._error(exc))
+        # The handler's spans nest under the session's; asyncio.to_thread (and
+        # so stream_thread) copies this context into its worker thread.
+        with session.trace.activate():
+            try:
+                if self.total_seconds is None:
+                    await consume()
+                else:
+                    await asyncio.wait_for(consume(), self.total_seconds)
+            except Exception as exc:  # noqa: BLE001 - delivered on the next read
+                # Record failures even if the caller has abandoned the transfer.
+                code, message = self._error(exc)
+                session.trace.fail(exc, code, message)
+                session.error = TransferError(code, message)
 
-    async def _execute(self, operation, request, caller):
+    async def _execute(self, operation, request, caller, headers=None):
         now = asyncio.get_running_loop().time()
         if operation == "open":
             if (
@@ -311,8 +324,20 @@ class TransferHost:
             if size < 1024:
                 raise ValueError("Chunk size is too small")
             key = f"{self.owner}:{uuid4().hex}"
+            trace = serve_transfer(
+                self.prefix,
+                request.operation,
+                headers,
+                attributes={"abi.caller": caller},
+            )
+            trace.messages += 1
             self.sessions[key] = TransferSession(
-                caller, request.operation, request.metadata, size, touched=now
+                caller,
+                request.operation,
+                request.metadata,
+                size,
+                touched=now,
+                trace=trace,
             )
             return pb.OpenResponse(id=key, chunk_bytes=size)
         session = self.sessions.get(request.id)
@@ -325,6 +350,7 @@ class TransferHost:
                 "PERMISSION_DENIED", "Transfer belongs to another caller"
             )
         session.touched = now
+        session.trace.messages += 1
         if operation == "close":
             await self._close(request.id)
             return pb.CloseResponse()
@@ -361,6 +387,7 @@ class TransferHost:
                 self.buffered_upload_bytes += len(request.data)
                 session.uploaded += len(request.data)
                 await stream_thread(session.source.write, request.data)
+                session.trace.bytes_received += len(request.data)
                 session.upload_sequence += 1
                 return pb.WriteResponse()
             if operation == "start":
@@ -393,6 +420,7 @@ class TransferHost:
                                 data=data, frame_end=end, sequence=session.read_sequence
                             )
                             session.read_sequence += 1
+                            session.trace.bytes_sent += len(data)
                             return response
                     finally:
                         waiting.cancel()
@@ -409,4 +437,5 @@ class TransferHost:
                 data=data, frame_end=end, sequence=session.read_sequence
             )
             session.read_sequence += 1
+            session.trace.bytes_sent += len(data)
             return response

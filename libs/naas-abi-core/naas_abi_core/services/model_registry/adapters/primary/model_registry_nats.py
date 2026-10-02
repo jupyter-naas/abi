@@ -31,6 +31,7 @@ from naas_abi_sdk.model_codec import (
     encode_json,
     encode_message,
 )
+from naas_abi_sdk.telemetry import internal_span
 
 OPERATIONS = {
     "list_models": (pb.ListModelsRequest, pb.ListModelsResponse),
@@ -41,6 +42,38 @@ OPERATIONS = {
     "stream_next": (pb.StreamNextRequest, pb.StreamNextResponse),
     "stream_close": (pb.StreamCloseRequest, pb.StreamCloseResponse),
 }
+
+_USAGE_KEYS = ("input_tokens", "output_tokens", "total_tokens")
+
+
+def _model_span(operation, canonical, wrapper, inputs):
+    """INTERNAL span around one provider call: model identity and counts only,
+    never messages, texts, options or credentials."""
+    return internal_span(
+        f"model {operation} {canonical}",
+        {
+            "abi.model.id": canonical,
+            "abi.model.kind": "embedding" if operation == "embed" else "chat",
+            "abi.model.provider": str(wrapper.provider),
+            "abi.model.provider_model_id": wrapper.model_id,
+            "abi.model.adapter": type(wrapper.model).__name__,
+            "abi.model.inputs": inputs,
+        },
+    )
+
+
+def _add_usage(total, usage):
+    """Token counts the provider reported (LangChain sums them across chunks)."""
+    for key in _USAGE_KEYS:
+        if usage and key in usage:
+            total[key] = total.get(key, 0) + usage[key]
+    return total
+
+
+def _record_usage(span, usage):
+    if span is not None:
+        for key, value in _add_usage({}, usage).items():
+            span.set_attribute(f"abi.model.usage.{key}", value)
 
 
 @dataclass
@@ -337,7 +370,7 @@ class ModelRegistryNATS:
             or any(k.startswith("_") for k in (*options, *tool_options))
         ):
             raise ValueError("Runtime configuration is not a generation option")
-        _, wrapper = await asyncio.to_thread(self._resolve, request.ref)
+        canonical, wrapper = await asyncio.to_thread(self._resolve, request.ref)
         model = wrapper.model
         if request.tools_json:
             tools = [decode_json(tool) for tool in request.tools_json]
@@ -346,7 +379,8 @@ class ModelRegistryNATS:
             model = model.bind_tools(tools, **tool_options)
         elif tool_options:
             raise ValueError("Tool options require tool definitions")
-        return model, messages, {**options, "stop": list(request.stop) or None}
+        options = {**options, "stop": list(request.stop) or None}
+        return canonical, wrapper, model, messages, options
 
     async def _produce(self, stream, model, messages, options):
         iterator = model.astream(messages, **options)
@@ -403,15 +437,19 @@ class ModelRegistryNATS:
             response = await self._execute(operation, request, "")
             yield response.SerializeToString()
             return
-        model, messages, options = await self._chat(request)
-        iterator = model.astream(messages, **options)
-        try:
-            async for chunk in iterator:
-                if not isinstance(chunk, AIMessageChunk):
-                    raise TypeError("Provider returned a non-AI chunk")
-                yield encode_message(chunk).SerializeToString()
-        finally:
-            await iterator.aclose()
+        canonical, wrapper, model, messages, options = await self._chat(request)
+        with _model_span("stream", canonical, wrapper, len(messages)) as span:
+            usage: dict[str, int] = {}
+            iterator = model.astream(messages, **options)
+            try:
+                async for chunk in iterator:
+                    if not isinstance(chunk, AIMessageChunk):
+                        raise TypeError("Provider returned a non-AI chunk")
+                    _add_usage(usage, chunk.usage_metadata)
+                    yield encode_message(chunk).SerializeToString()
+            finally:
+                await iterator.aclose()
+                _record_usage(span, usage)
 
     async def _execute(self, operation, request, caller):
         if operation == "list_models":
@@ -476,12 +514,13 @@ class ModelRegistryNATS:
                     or (request.query and len(request.texts) != 1)
                 ):
                     raise ValueError("Embedding requires 1..1024 texts (one for query)")
-                _, wrapper = await asyncio.to_thread(self._resolve, request.ref)
-                vectors = (
-                    [await wrapper.model.aembed_query(request.texts[0])]
-                    if request.query
-                    else await wrapper.model.aembed_documents(list(request.texts))
-                )
+                canonical, wrapper = await asyncio.to_thread(self._resolve, request.ref)
+                with _model_span("embed", canonical, wrapper, len(request.texts)):
+                    vectors = (
+                        [await wrapper.model.aembed_query(request.texts[0])]
+                        if request.query
+                        else await wrapper.model.aembed_documents(list(request.texts))
+                    )
                 if len(vectors) != len(request.texts) or any(
                     not math.isfinite(v) for vector in vectors for v in vector
                 ):
@@ -489,11 +528,13 @@ class ModelRegistryNATS:
                 return pb.EmbedResponse(
                     vectors=[pb.Vector(values=vector) for vector in vectors]
                 )
-            model, messages, options = await self._chat(
+            canonical, wrapper, model, messages, options = await self._chat(
                 request.chat if operation == "stream_open" else request
             )
             if operation == "chat":
-                message = await model.ainvoke(messages, **options)
+                with _model_span("chat", canonical, wrapper, len(messages)) as span:
+                    message = await model.ainvoke(messages, **options)
+                    _record_usage(span, getattr(message, "usage_metadata", None))
                 if not isinstance(message, AIMessage):
                     raise TypeError("Provider returned a non-AI message")
                 return pb.ChatResponse(message=encode_message(message))

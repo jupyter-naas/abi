@@ -30,7 +30,7 @@ from naas_abi_sdk.jobs import (
 )
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
 from naas_abi_sdk.services.models import CollectionSpec
-from naas_abi_sdk.telemetry import record_error, server_span
+from naas_abi_sdk.telemetry import current_trace_id, record_error, server_span
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,16 @@ MAX_SCHEDULED_TICK_TTL_SECONDS = 3600
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _fired_at(msg: Any) -> str:
+    """When JetStream stored the trigger (its schedule fired, or someone triggered it)."""
+    stamp = getattr(getattr(msg, "metadata", None), "timestamp", None)
+    if isinstance(stamp, datetime):
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        return stamp.astimezone(timezone.utc).isoformat()
+    return _now()
 
 
 def _seconds(go_duration: str) -> float:
@@ -401,7 +411,9 @@ class JobHost:
                 "trigger": trigger,
                 "payload": payload,
                 "instance": self.instance_id,
+                "fired_at": _fired_at(msg),
                 "started_at": _now(),
+                "trace_id": current_trace_id(),
                 "error": "",
             },
         )

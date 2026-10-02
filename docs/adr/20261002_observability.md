@@ -48,6 +48,10 @@ connections were unnamed, so the broker's `/connz` could not tell processes apar
   (per-worktree ports) and adds the `telemetry:` block to the dev overlay.
   A transfer's trace is an explicit object passed to its chunk calls, never the
   current span: model streams are async generators advanced from several tasks.
+  The owner (`TransferHost`) continues it with one SERVER span per session, from
+  `open` to close, idle expiry or stop (`abi.transfer.end`). The domain handler
+  runs inside it, so a remote model call shows `model chat <id>` under it; a
+  handler failure is recorded there while the caller keeps the sanitized error.
 
 ## Consequences
 - Tracing needs `naas-abi-core[otel]` / `naas-abi-sdk[otel]`; without them nothing

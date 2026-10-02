@@ -393,3 +393,60 @@ def _inject(headers):
 
     headers["traceparent"] = "00-" + "a" * 32 + "-" + "b" * 16 + "-01"
     return contextlib.nullcontext()
+
+
+def test_a_run_records_when_its_trigger_fired():
+    docs = Documents()
+    fired = datetime(2026, 10, 2, 6, 0, 0, tzinfo=timezone.utc)
+
+    async def handler(ctx):
+        return None
+
+    msg = Msg(trigger="schedule")
+    msg.metadata.timestamp = fired
+    _run(_host(docs), JobDescriptor("ingest"), handler, msg)
+
+    run = docs.run("ingest:7")
+    assert run["fired_at"] == fired.isoformat()
+    assert run["trace_id"] == ""  # no tracer configured
+
+
+def test_fired_at_falls_back_to_now_without_a_message_timestamp():
+    docs = Documents()
+
+    async def handler(ctx):
+        return None
+
+    before = datetime.now(timezone.utc)
+    _run(_host(docs), JobDescriptor("ingest"), handler, Msg())
+
+    fired_at = datetime.fromisoformat(docs.run("ingest:7")["fired_at"])
+    assert before <= fired_at <= datetime.now(timezone.utc)
+
+
+def test_a_run_records_the_trace_of_its_consumer_span(monkeypatch):
+    pytest = __import__("pytest")
+    pytest.importorskip("opentelemetry.sdk")
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    from naas_abi_sdk import telemetry
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(telemetry, "_tracer", lambda: provider.get_tracer("test"))
+    docs = Documents()
+
+    async def handler(ctx):
+        return None
+
+    msg = Msg()
+    msg.subject = job_subjects(PROJECT, MODULE, "ingest").trigger
+    _run(_host(docs), JobDescriptor("ingest"), handler, msg)
+
+    (span,) = exporter.get_finished_spans()
+    assert docs.run("ingest:7")["trace_id"] == format(span.context.trace_id, "032x")
