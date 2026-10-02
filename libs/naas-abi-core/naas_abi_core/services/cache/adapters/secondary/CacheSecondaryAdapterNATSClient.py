@@ -40,9 +40,11 @@ from naas_abi_core.services.cache.adapters.cache_nats_contract import (
 from naas_abi_core.services.cache.CachePort import (
     CachedData,
     CacheExpiredError,
+    CacheKeyPage,
     CacheNotFoundError,
     DataType,
     ICacheAdapter,
+    check_page_limit,
 )
 
 _DATA_TYPE_TO_PB: dict[DataType, cache_pb2.DataType] = {
@@ -85,6 +87,8 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
         raise CacheNotFoundError(error.message)
     if error.code == "CACHE_EXPIRED":
         raise CacheExpiredError(error.message)
+    if error.code == "INVALID_ARGUMENT":
+        raise ValueError(error.message)
     raise RuntimeError(f"cache NATS RPC failed ({error.code}): {error.message}")
 
 
@@ -161,3 +165,22 @@ class CacheSecondaryAdapterNATSClient(NatsRPCClient, ICacheAdapter):
         if response.HasField("error"):
             _raise_for_error(response.error)
         return response.value
+
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> CacheKeyPage:
+        check_page_limit(limit)
+        request = cache_pb2.ListKeysRequest(
+            context=self._context(), prefix=prefix, limit=limit
+        )
+        if after is not None:
+            request.after = after
+        response = self._call(
+            f"{self._subject_prefix}.list_keys", request, cache_pb2.ListKeysResponse
+        )
+        if response.HasField("error"):
+            _raise_for_error(response.error)
+        return CacheKeyPage(
+            tuple(response.keys),
+            response.next_after if response.HasField("next_after") else None,
+        )

@@ -44,7 +44,7 @@ from naas_abi_core.engine.nats_auth import (
 )
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
-from naas_abi_core.engine.nats_tracing import add_traced_service
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.cache.v1 import cache_pb2
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.services.cache.adapters.cache_nats_contract import (
@@ -66,7 +66,6 @@ from naas_abi_core.services.cache.ontologies.modules.CacheEventOntology import (
     CacheSet,
 )
 from nats.micro.request import Request
-from nats.micro.service import Service
 
 __all__ = [
     "AUTH_HEADER",
@@ -137,7 +136,7 @@ class CachePrimaryAdapterNATS:
         self._adapter = adapter
         self._jwt_secret = jwt_secret
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
-        self._service: Service | None = None
+        self._service: TracedService | None = None
 
     def _emit_set(self, key: str, value: CachedData) -> None:
         self._emit(
@@ -216,6 +215,11 @@ class CachePrimaryAdapterNATS:
             handler=self._handle_exists,
         )
         await service.add_endpoint(
+            name="list_keys",
+            subject=f"{self._subject_prefix}.list_keys",
+            handler=self._handle_list_keys,
+        )
+        await service.add_endpoint(
             name="describe",
             subject=f"{self._subject_prefix}.describe",
             handler=self._handle_describe,
@@ -283,6 +287,12 @@ class CachePrimaryAdapterNATS:
         except CacheExpiredError as exc:
             await self._respond_error(
                 request, response_cls, "CACHE_EXPIRED", str(exc), retryable=False
+            )
+            return
+        except ValueError as exc:
+            # Bad arguments the adapter rejected (e.g. a list_keys limit out of range).
+            await self._respond_error(
+                request, response_cls, "INVALID_ARGUMENT", str(exc), retryable=False
             )
             return
         except Exception:  # noqa: BLE001 - a handler must never crash the service
@@ -398,3 +408,24 @@ class CachePrimaryAdapterNATS:
             cache_pb2.DescribeResponse,
             lambda _: cache_pb2.DescribeResponse(tiers=self._tiers),
         )
+
+    async def _handle_list_keys(self, request: Request) -> None:
+        await self._handle(
+            request,
+            cache_pb2.ListKeysRequest,
+            cache_pb2.ListKeysResponse,
+            self._call_list_keys,
+        )
+
+    def _call_list_keys(
+        self, req: cache_pb2.ListKeysRequest
+    ) -> cache_pb2.ListKeysResponse:
+        page = self._adapter.list_keys(
+            req.prefix,
+            limit=req.limit,
+            after=req.after if req.HasField("after") else None,
+        )
+        response = cache_pb2.ListKeysResponse(keys=page.keys)
+        if page.next_after is not None:
+            response.next_after = page.next_after
+        return response

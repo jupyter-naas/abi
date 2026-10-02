@@ -30,7 +30,10 @@ pytestmark = [
 def document_host(broker, tmp_path):  # noqa: F811 - imported pytest fixture
     url, _ = broker
     backend = DocumentSecondaryAdapterSQLite(str(tmp_path / "documents.sqlite"))
-    primary = DocumentPrimaryAdapterNATS(DocumentService._for_engine(backend), SECRET)
+    # "test" is the contract's caller; "peer" stays an ordinary identity.
+    primary = DocumentPrimaryAdapterNATS(
+        DocumentService._for_engine(backend), SECRET, admin_identities={"test"}
+    )
     connection = nats_runtime.get_connection(url)
     nats_runtime.run_coro(primary.start(connection))
     nats_runtime.run_coro(connection.flush())
@@ -58,3 +61,12 @@ class TestDocumentNATS(DocumentSecondaryAdapterContract):
             yield client
         finally:
             client.close()
+
+
+def test_namespaces_need_a_platform_identity(document_host):
+    client = DocumentSecondaryAdapterNATSClient(document_host, SECRET, "acme.module")
+    try:
+        with pytest.raises(PermissionError):
+            client.namespaces()
+    finally:
+        client.close()

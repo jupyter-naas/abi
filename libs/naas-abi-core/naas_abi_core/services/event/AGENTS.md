@@ -42,6 +42,7 @@ max_seq(event_type=None) -> int
 get_cursor(consumer_id, event_type) -> int
 set_cursor(consumer_id, event_type, last_seq) -> None
 query_for_consumer(consumer_id, event_type, limit) -> list[StoredEvent]   # atomic cursor advance
+list_event_types() -> list[EventTypeSummary]   # type IRI, count, last_seq, last_timestamp
 ```
 
 ## Service API (`EventService.py`)
@@ -66,7 +67,16 @@ seek_consumer_to_end(consumer_id, event_class) -> dict  # jump cursor to max seq
 
 subscribe(event_class, callback, filter=None) -> Thread
 # Live-only fanout. Each subscriber is independent. Filter evaluated in-memory.
+
+# Raw access by type IRI (admin views, tools without the event classes):
+event_types() -> list[EventTypeSummary]
+query_stored(event_type=None, since_seq=None, until_seq=None, limit=None,
+             newest_first=False, search=None) -> list[StoredEvent]
+get_stored(seq) -> StoredEvent          # EventNotFoundError if absent
 ```
+
+The Nexus System app (Data tab) browses the log read-only through these: event
+types as folders, events newest first. The log is append-only by design.
 
 ## Filter DSL
 

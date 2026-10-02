@@ -50,7 +50,11 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
 )
-from naas_abi_core.services.cache.CachePort import CachedData, ICacheAdapter
+from naas_abi_core.services.cache.CachePort import (
+    CachedData,
+    CacheKeyPage,
+    ICacheAdapter,
+)
 from naas_abi_core.services.cache.CacheService import CacheService
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -130,6 +134,7 @@ class _NoOpCacheAdapter(ICacheAdapter):
     def set_if_absent(self, key: str, value: CachedData) -> bool: return self._fail()  # type: ignore[return-value]
     def delete(self, key: str) -> None: self._fail()
     def exists(self, key: str) -> bool: return self._fail()  # type: ignore[return-value]
+    def list_keys(self, prefix: str = "", *, limit: int = 100, after: str | None = None) -> CacheKeyPage: return self._fail()  # type: ignore[return-value]
 
 
 class ObjectStorageBackedAdapter(ICacheAdapter):
@@ -166,6 +171,11 @@ class ObjectStorageBackedAdapter(ICacheAdapter):
 
     def exists(self, key: str) -> bool:
         return self._inner.exists(key)
+
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> CacheKeyPage:
+        return self._inner.list_keys(prefix, limit=limit, after=after)
 
 
 # ---------------------------------------------------------------------------

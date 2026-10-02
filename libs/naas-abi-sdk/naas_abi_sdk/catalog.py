@@ -2,7 +2,15 @@
 
 OPERATIONS = {
     "activity_log": ["record", "query", "list_actors", "shutdown"],
-    "cache": ["get", "set", "set_if_absent", "delete", "exists", "describe"],
+    "cache": [
+        "get",
+        "set",
+        "set_if_absent",
+        "delete",
+        "exists",
+        "describe",
+        "list_keys",
+    ],
     "coding_environment": [
         "ensure_user",
         "list_templates",
@@ -11,6 +19,7 @@ OPERATIONS = {
         "stop",
         "delete",
         "list_environments",
+        "list_all_environments",
         "get_status",
         "get_logs",
         "get_access",
@@ -31,13 +40,14 @@ OPERATIONS = {
         "ensure_collection",
         "drop_collection",
         "collections",
+        "namespaces",
         "put",
         "get",
         "delete",
         "find",
         "count",
     ],
-    "email": ["send"],
+    "email": ["send", "list_sent", "get_sent", "delete_sent"],
     "event": [
         "append",
         "query",
@@ -45,6 +55,7 @@ OPERATIONS = {
         "get_cursor",
         "set_cursor",
         "query_for_consumer",
+        "list_event_types",
     ],
     "keyvalue": [
         "get",
@@ -53,6 +64,8 @@ OPERATIONS = {
         "delete",
         "delete_if_value_matches",
         "exists",
+        "list_keys",
+        "get_ttl",
     ],
     "model_registry": [
         "list_models",
@@ -76,6 +89,7 @@ OPERATIONS = {
         "ensure_user",
         "ensure_repo",
         "list_repos",
+        "delete_repo",
         "add_collaborator",
         "list_contents",
         "get_file",
@@ -125,6 +139,8 @@ OPERATIONS = {
         "update_vector",
         "delete_vectors",
         "count_vectors",
+        "list_vectors",
+        "get_collection_info",
         "close",
     ],
 }

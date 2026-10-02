@@ -20,7 +20,7 @@ broadcasting on ``publish``, live ``subscribe``, generator-based
 layered *above* this port, in ``EventService`` itself, wherever it is
 constructed -- not something this adapter needs to replicate. Consequently
 this primary adapter has no bus access and registers endpoints only for
-``IEventAdapter``'s six methods.
+``IEventAdapter``'s methods.
 """
 
 from __future__ import annotations
@@ -33,7 +33,6 @@ import nats.micro
 from google.protobuf import struct_pb2
 from google.protobuf.message import DecodeError, Message
 from nats.micro.request import Request
-from nats.micro.service import Service
 
 from naas_abi_core import logger
 from naas_abi_core.engine.nats_auth import (
@@ -42,7 +41,7 @@ from naas_abi_core.engine.nats_auth import (
 )
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
-from naas_abi_core.engine.nats_tracing import add_traced_service
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.event.v1 import event_pb2
 from naas_abi_core.services.event.adapters.event_nats_contract import (
@@ -53,6 +52,7 @@ from naas_abi_core.services.event.adapters.event_nats_contract import (
 )
 from naas_abi_core.services.event.EventPort import (
     EventNotFoundError,
+    EventTypeSummary,
     IEventAdapter,
     InvalidEventError,
     StoredEvent,
@@ -77,6 +77,15 @@ def _event_to_pb(event: StoredEvent) -> event_pb2.StoredEvent:
         seq=event.seq,
         timestamp=event.timestamp,
         payload=event.payload,
+    )
+
+
+def _type_to_pb(summary: EventTypeSummary) -> event_pb2.EventTypeSummary:
+    return event_pb2.EventTypeSummary(
+        event_type=summary.event_type,
+        count=summary.count,
+        last_seq=summary.last_seq,
+        last_timestamp=summary.last_timestamp,
     )
 
 
@@ -128,7 +137,7 @@ class EventPrimaryAdapterNATS:
         self._adapter = adapter
         self._jwt_secret = jwt_secret
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
-        self._service: Service | None = None
+        self._service: TracedService | None = None
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``event`` NATS service on ``nc``.
@@ -175,6 +184,11 @@ class EventPrimaryAdapterNATS:
             name="query_for_consumer",
             subject=f"{SUBJECT_PREFIX}.query_for_consumer",
             handler=self._handle_query_for_consumer,
+        )
+        await service.add_endpoint(
+            name="list_event_types",
+            subject=f"{SUBJECT_PREFIX}.list_event_types",
+            handler=self._handle_list_event_types,
         )
         self._service = service
 
@@ -389,4 +403,22 @@ class EventPrimaryAdapterNATS:
         )
         return event_pb2.QueryForConsumerResponse(
             events=event_pb2.StoredEvents(events=[_event_to_pb(row) for row in rows])
+        )
+
+    async def _handle_list_event_types(self, request: Request) -> None:
+        await self._handle(
+            request,
+            event_pb2.ListEventTypesRequest,
+            event_pb2.ListEventTypesResponse,
+            self._call_list_event_types,
+        )
+
+    def _call_list_event_types(
+        self, req: event_pb2.ListEventTypesRequest
+    ) -> event_pb2.ListEventTypesResponse:
+        summaries = self._adapter.list_event_types()
+        return event_pb2.ListEventTypesResponse(
+            types=event_pb2.EventTypeSummaries(
+                types=[_type_to_pb(s) for s in summaries]
+            )
         )

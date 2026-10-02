@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -149,6 +150,15 @@ class LocalGitAdapter(ISourceControlAdapter):
                 if self._repo_exists(repo_id):
                     repos.append(self._to_repo(repo_id))
         return repos
+
+    def delete_repo(self, *, repo_id: str) -> None:
+        if not self._repo_exists(repo_id):
+            raise RepoNotFoundError(repo_id)
+        path = self._repo_path(repo_id)
+        shutil.rmtree(path)
+        owner_dir = path.parent
+        if owner_dir != self._root and not any(owner_dir.iterdir()):
+            owner_dir.rmdir()
 
     def add_collaborator(
         self, *, repo_id: str, username: str, permission: str = "write"

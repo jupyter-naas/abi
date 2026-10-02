@@ -36,7 +36,7 @@ from naas_abi_core.engine.nats_auth import (
 )
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
-from naas_abi_core.engine.nats_tracing import add_traced_service
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.keyvalue.v1 import keyvalue_pb2
 from naas_abi_core.services.keyvalue.adapters.keyvalue_nats_contract import (
@@ -52,7 +52,6 @@ from naas_abi_core.services.keyvalue.KeyValuePorts import (
 )
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from nats.micro.request import Request
-from nats.micro.service import Service
 
 __all__ = [
     "AUTH_HEADER",
@@ -95,7 +94,7 @@ class KeyValuePrimaryAdapterNATS:
         self._adapter = adapter
         self._jwt_secret = jwt_secret
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
-        self._service: Service | None = None
+        self._service: TracedService | None = None
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``keyvalue`` NATS service on ``nc``.
@@ -142,6 +141,16 @@ class KeyValuePrimaryAdapterNATS:
             name="exists",
             subject=f"{SUBJECT_PREFIX}.exists",
             handler=self._handle_exists,
+        )
+        await service.add_endpoint(
+            name="list_keys",
+            subject=f"{SUBJECT_PREFIX}.list_keys",
+            handler=self._handle_list_keys,
+        )
+        await service.add_endpoint(
+            name="get_ttl",
+            subject=f"{SUBJECT_PREFIX}.get_ttl",
+            handler=self._handle_get_ttl,
         )
         self._service = service
 
@@ -199,6 +208,12 @@ class KeyValuePrimaryAdapterNATS:
         except KVNotFoundError as exc:
             await self._respond_error(
                 request, response_cls, "KV_NOT_FOUND", str(exc), retryable=False
+            )
+            return
+        except ValueError as exc:
+            # Bad arguments the domain rejected (e.g. a list_keys limit out of range).
+            await self._respond_error(
+                request, response_cls, "INVALID_ARGUMENT", str(exc), retryable=False
             )
             return
         except KVLockTimeoutError as exc:
@@ -340,3 +355,41 @@ class KeyValuePrimaryAdapterNATS:
     ) -> keyvalue_pb2.ExistsResponse:
         exists = self._adapter.exists(req.key)
         return keyvalue_pb2.ExistsResponse(ok_value=exists)
+
+    async def _handle_list_keys(self, request: Request) -> None:
+        await self._handle(
+            request,
+            keyvalue_pb2.ListKeysRequest,
+            keyvalue_pb2.ListKeysResponse,
+            self._call_list_keys,
+        )
+
+    def _call_list_keys(
+        self, req: keyvalue_pb2.ListKeysRequest
+    ) -> keyvalue_pb2.ListKeysResponse:
+        page = self._adapter.list_keys(
+            req.prefix,
+            limit=req.limit,
+            after=req.after if req.HasField("after") else None,
+        )
+        response = keyvalue_pb2.ListKeysResponse(keys=page.keys)
+        if page.next_after is not None:
+            response.next_after = page.next_after
+        return response
+
+    async def _handle_get_ttl(self, request: Request) -> None:
+        await self._handle(
+            request,
+            keyvalue_pb2.GetTtlRequest,
+            keyvalue_pb2.GetTtlResponse,
+            self._call_get_ttl,
+        )
+
+    def _call_get_ttl(
+        self, req: keyvalue_pb2.GetTtlRequest
+    ) -> keyvalue_pb2.GetTtlResponse:
+        seconds = self._adapter.get_ttl(req.key)
+        response = keyvalue_pb2.GetTtlResponse()
+        if seconds is not None:
+            response.seconds = seconds
+        return response

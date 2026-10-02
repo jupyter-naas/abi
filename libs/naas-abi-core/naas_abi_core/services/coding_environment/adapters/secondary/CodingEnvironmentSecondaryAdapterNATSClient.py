@@ -63,7 +63,13 @@ def _pb_to_template(pb: coding_environment_pb2.WorkspaceTemplate) -> WorkspaceTe
 
 def _pb_to_status(pb: coding_environment_pb2.WorkspaceStatus) -> WorkspaceStatus:
     return WorkspaceStatus(
-        id=pb.id, name=pb.name, phase=pb.phase, agent_ready=pb.agent_ready
+        id=pb.id,
+        name=pb.name,
+        phase=pb.phase,
+        agent_ready=pb.agent_ready,
+        owner=pb.owner,
+        template=pb.template,
+        created_at=pb.created_at if pb.HasField("created_at") else None,
     )
 
 
@@ -112,6 +118,8 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
         raise QuotaExceededError(error.message, status=status)
     if error.code == "ACCESS_DENIED":
         raise AccessDeniedError(error.message, status=status)
+    if error.code == "UNIMPLEMENTED":
+        raise NotImplementedError(error.message)
     raise RuntimeError(
         f"coding_environment NATS RPC failed ({error.code}): {error.message}"
     )
@@ -236,6 +244,19 @@ class CodingEnvironmentSecondaryAdapterNATSClient(
             f"{SUBJECT_PREFIX}.list_environments",
             request,
             coding_environment_pb2.ListEnvironmentsResponse,
+        )
+        if response.HasField("error"):
+            _raise_for_error(response.error)
+        return [_pb_to_status(e) for e in response.environments.environments]
+
+    def list_all_environments(self) -> list[WorkspaceStatus]:
+        request = coding_environment_pb2.ListAllEnvironmentsRequest(
+            context=self._context()
+        )
+        response = self._call(
+            f"{SUBJECT_PREFIX}.list_all_environments",
+            request,
+            coding_environment_pb2.ListAllEnvironmentsResponse,
         )
         if response.HasField("error"):
             _raise_for_error(response.error)

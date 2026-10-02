@@ -4,13 +4,17 @@
 from __future__ import annotations
 
 import datetime
+import pickle
 import time
 
+import pytest
 from naas_abi_core.services.cache.CachePort import (
     CachedData,
+    CacheKeyPage,
     CacheNotFoundError,
     DataType,
     ICacheAdapter,
+    paginate_keys,
 )
 from naas_abi_core.services.cache.CacheService import TIER_COLD, TIER_HOT, CacheService
 from naas_abi_core.services.cache.ontologies.modules.CacheEventOntology import (
@@ -49,6 +53,11 @@ class CacheMemoryAdapter(ICacheAdapter):
 
     def exists(self, key: str) -> bool:
         return key in self.store
+
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> CacheKeyPage:
+        return paginate_keys(self.store, prefix, limit, after)
 
 
 def _single_cold() -> CacheService:
@@ -239,6 +248,11 @@ class _BrokenAdapter(ICacheAdapter):
         raise OSError("Redis connection refused")
 
     def exists(self, key: str) -> bool:
+        raise OSError("Redis connection refused")
+
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> CacheKeyPage:
         raise OSError("Redis connection refused")
 
 
@@ -534,3 +548,86 @@ def test_publisher_exception_does_not_break_mutation() -> None:
     # Must not raise — cache write is authoritative, event publication is best-effort
     cache.set_json("k", {"v": 1})
     assert cache.get("k") == {"v": 1}
+
+
+# ---------------------------------------------------------------------------
+# Administration: listing, raw entries, named tiers
+# ---------------------------------------------------------------------------
+
+
+def _text(key: str) -> CachedData:
+    return CachedData(key=key, data=f"value of {key}", data_type=DataType.TEXT)
+
+
+def test_list_keys_merges_tiers_without_duplicates():
+    hot, cold, svc = _hot_cold()
+    for key in ("b", "d", "shared"):
+        hot.set(key, _text(key))
+    for key in ("a", "c", "shared", "e"):
+        cold.set(key, _text(key))
+
+    seen, after = [], None
+    for _ in range(10):
+        page = svc.list_keys(limit=2, after=after)
+        seen += page.keys
+        after = page.next_after
+        if after is None:
+            break
+
+    assert seen == ["a", "b", "c", "d", "e", "shared"]
+    assert svc.list_keys("s", limit=10).keys == ("shared",)
+
+
+def test_list_keys_skips_an_unavailable_tier_but_not_all():
+    cold, svc = _broken_hot_cold()
+    cold.set("k", _text("k"))
+
+    assert svc.list_keys(limit=10).keys == ("k",)
+
+    with pytest.raises(OSError):
+        CacheService(adapters=[(TIER_COLD, _BrokenAdapter())]).list_keys()
+
+
+def test_get_entry_returns_the_stored_entry_and_its_tier_without_deserializing():
+    class Explodes:
+        def __reduce__(self):
+            return (_never_called, ())
+
+    hot, cold, svc = _hot_cold()
+    cold.set("p", CachedData(key="p", data="", data_type=DataType.TEXT))
+    svc.cold.set_pickle("p", Explodes())
+    hot.set("h", _text("h"))
+    cold.set("h", CachedData(key="h", data="stale", data_type=DataType.TEXT))
+
+    pickled = svc.get_entry("p")
+    hot_first = svc.get_entry("h")
+
+    assert (pickled.tier, pickled.cached.data_type) == (TIER_COLD, DataType.PICKLE)
+    assert isinstance(pickled.cached.data, str)  # still base64 text
+    assert (hot_first.tier, hot_first.cached.data) == (TIER_HOT, "value of h")
+    with pytest.raises(CacheNotFoundError):
+        svc.get_entry("missing")
+
+
+def _never_called():
+    raise AssertionError("an admin read must never unpickle")
+
+
+def test_named_tiers():
+    _, _, svc = _hot_cold()
+
+    assert svc.tier_names == (TIER_HOT, TIER_COLD)
+    svc.tier(TIER_HOT).set_text("k", "v")
+    assert svc.tier(TIER_HOT).get_entry("k").tier == TIER_HOT
+    assert svc.tier(TIER_HOT).list_keys().keys == ("k",)
+    with pytest.raises(ValueError):
+        svc.tier("lukewarm")
+
+
+def test_pickle_payload_is_valid_base64_of_a_pickle():
+    # Guards the assumption above: set_pickle stores base64 text, decoded only by get().
+    _, _, svc = _hot_cold()
+    svc.cold.set_pickle("n", 42)
+    import base64
+
+    assert pickle.loads(base64.b64decode(svc.get_entry("n").cached.data)) == 42

@@ -52,7 +52,7 @@ from naas_abi_core.engine.nats_auth import (
 )
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
-from naas_abi_core.engine.nats_tracing import add_traced_service
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
 from naas_abi_core.services.triple_store.adapters.triple_store_nats_contract import (
@@ -68,7 +68,6 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     OntologyEvent,
 )
 from nats.micro.request import Request
-from nats.micro.service import Service
 from rdflib import Graph, URIRef
 
 __all__ = [
@@ -204,7 +203,7 @@ class TripleStorePrimaryAdapterNATS:
         self._adapter = adapter
         self._jwt_secret = jwt_secret
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
-        self._service: Service | None = None
+        self._service: TracedService | None = None
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``triple_store`` NATS service on ``nc``.

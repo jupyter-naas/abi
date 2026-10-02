@@ -175,3 +175,56 @@ def test_two_registry_owners_do_not_duplicate_mutations(broker):  # noqa: F811
             await nc.close()
 
     asyncio.run(scenario())
+
+
+def test_admins_evict_a_live_instance_which_registers_again(broker):  # noqa: F811
+    discovery = pytest.importorskip("naas_abi_sdk.discovery")
+    transport_module = pytest.importorskip("naas_abi_sdk.transport")
+
+    async def scenario():
+        url, _ = broker
+        nc = await nats.connect(url)
+        primary = await start_discovery(nc, SECRET, project="evict", lease_seconds=2)
+        module = transport_module.Transport(
+            url, issue_service_token("research", SECRET), timeout=2
+        )
+        admin = transport_module.Transport(
+            url, issue_service_token("api", SECRET), timeout=2
+        )
+        session = discovery.DiscoverySession(
+            discovery.DiscoveryClient(module, "evict"),
+            pb.ModuleDescriptor(module_id="research", contract_major=1),
+        )
+        try:
+            await session.start()
+            first = session.instance_id
+            client = discovery.DiscoveryClient(admin, "evict")
+
+            with pytest.raises(transport_module.RPCError, match="PERMISSION_DENIED"):
+                await discovery.DiscoveryClient(module, "evict").evict(first)
+            evicted = await client.evict(first)
+            assert (evicted.module_id, evicted.instance_id) == ("research", first)
+
+            # The heartbeat (at most a quarter lease) sees LEASE_EXPIRED and registers anew.
+            for _ in range(60):
+                instances, _ = await client.list_modules()
+                if (
+                    [i.instance_id for i in instances]
+                    == [session.instance_id]
+                    != [first]
+                ):
+                    break
+                await asyncio.sleep(0.1)
+            instances, _ = await client.list_modules()
+            assert [i.instance_id for i in instances] == [session.instance_id]
+            assert session.instance_id != first
+            with pytest.raises(transport_module.RPCError, match="INSTANCE_NOT_FOUND"):
+                await client.evict(first)
+        finally:
+            await session.close()
+            await module.close()
+            await admin.close()
+            await primary.stop()
+            await nc.close()
+
+    asyncio.run(scenario())

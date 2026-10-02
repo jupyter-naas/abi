@@ -13,7 +13,7 @@ instead.
 
 Scope note: this contract covers only ``IEventAdapter`` -- the durable-log
 secondary port (``append``/``query``/``max_seq``/``get_cursor``/
-``set_cursor``/``query_for_consumer``) -- not the domain-level
+``set_cursor``/``query_for_consumer``/``list_event_types``) -- not the domain-level
 ``IEventService``. ``EventService(adapter, bus)`` composes an
 ``IEventAdapter`` with a ``BusService``; a client built against this contract
 is only a drop-in replacement for the ``adapter`` argument. ``publish``,

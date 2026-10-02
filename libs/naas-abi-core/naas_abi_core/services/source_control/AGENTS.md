@@ -18,6 +18,12 @@ Manage repositories, files, branches, proposals, reviews, and checks through int
 Implement every abstract method of `ISourceControlAdapter` in `SourceControlPorts.py`.
 Keep provider dependencies in secondary adapters and preserve typed domain errors.
 
+Platform admin operations (the Nexus System app uses them): `delete_repo(repo_id=...)`
+removes a repository irreversibly (RepoNotFoundError when missing; Forgejo
+`DELETE /repos/{owner}/{repo}`, local git removes the checkout). Delete a file with
+`upsert_files([FileWrite(path, b"", delete=True)], ...)`: one commit, and the
+`delete` flag crosses NATS (`FileWrite.delete`, field 4).
+
 ## Service API
 
 `SourceControlService(adapter)` delegates port operations and publishes domain events.
@@ -50,6 +56,11 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/source_control/ --import
 `adapters/primary/source_control__primary_adapter__NATS.py` exposes the service's
 protobuf endpoints. `adapters/secondary/SourceControlSecondaryAdapterNATSClient.py` implements the outbound
 port. Wire contracts live under `naas_abi_core/proto/source_control/v1/`.
+
+A `NotImplementedError` in the wrapped adapter crosses NATS as the non-retryable
+code `UNIMPLEMENTED` and is raised again as `NotImplementedError` by the client.
+`adapters/secondary/SourceControlSecondaryAdapterNATSClient_broker_test.py` runs the
+admin operations against a local `nats-server` (no Docker).
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception

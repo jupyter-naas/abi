@@ -114,6 +114,11 @@ def test_raise_for_error_maps_validation_error():
         _raise_for_error(common_pb2.CallError(code="VALIDATION_ERROR", message="x"))
 
 
+def test_raise_for_error_maps_unimplemented_to_not_implemented():
+    with pytest.raises(NotImplementedError, match="not here"):
+        _raise_for_error(common_pb2.CallError(code="UNIMPLEMENTED", message="not here"))
+
+
 def test_raise_for_error_maps_unknown_code_to_runtime_error():
     with pytest.raises(RuntimeError, match="INTERNAL"):
         _raise_for_error(common_pb2.CallError(code="INTERNAL", message="boom"))

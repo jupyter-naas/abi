@@ -25,10 +25,18 @@ class ActivityEvent(BaseModel):
     )
     correlation_id: str | None = None
     attributes: dict[str, Any] = Field(default_factory=dict)
+    # Assigned by the store, increasing per actor; set on events read back,
+    # ignored on ``record``. Used to page through an actor's log.
+    seq: int | None = None
 
 
 class ActivityLogQuery(BaseModel):
-    """Optional filters for ``query``. All fields are AND-ed."""
+    """Optional filters for ``query``. All fields are AND-ed.
+
+    Paging: ``newest_first`` orders by ``seq`` descending (default ascending);
+    ``before_seq`` / ``after_seq`` keep events strictly below / above a seq, so
+    the last ``seq`` of a page is the cursor for the next one.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -36,6 +44,9 @@ class ActivityLogQuery(BaseModel):
     since: datetime | None = None
     until: datetime | None = None
     limit: int | None = None
+    newest_first: bool = False
+    before_seq: int | None = None
+    after_seq: int | None = None
 
 
 class IActivityLogAdapter(ABC):

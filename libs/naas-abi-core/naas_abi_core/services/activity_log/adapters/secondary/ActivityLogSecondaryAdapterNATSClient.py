@@ -47,6 +47,8 @@ def _event_to_pb(event: ActivityEvent) -> activity_log_pb2.ActivityEvent:
     if event.correlation_id is not None:
         pb.correlation_id = event.correlation_id
     pb.attributes.update(event.attributes)
+    if event.seq is not None:
+        pb.seq = event.seq
     return pb
 
 
@@ -57,6 +59,7 @@ def _pb_to_event(pb: activity_log_pb2.ActivityEvent) -> ActivityEvent:
         timestamp=pb.timestamp.ToDatetime(tzinfo=UTC),
         correlation_id=pb.correlation_id if pb.HasField("correlation_id") else None,
         attributes=json_format.MessageToDict(pb.attributes),
+        seq=pb.seq if pb.HasField("seq") else None,
     )
 
 
@@ -70,6 +73,11 @@ def _query_to_pb(query: ActivityLogQuery) -> activity_log_pb2.ActivityLogQueryFi
         pb.until.FromDatetime(query.until)
     if query.limit is not None:
         pb.limit = query.limit
+    pb.newest_first = query.newest_first
+    if query.before_seq is not None:
+        pb.before_seq = query.before_seq
+    if query.after_seq is not None:
+        pb.after_seq = query.after_seq
     return pb
 
 

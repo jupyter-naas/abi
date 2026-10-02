@@ -188,3 +188,86 @@ class GenericVectorStoreAdapterTest(ABC):
         adapter.initialize()
         adapter.close()
         assert True
+    # ------------------------------------------------------------------
+    # Paging through a collection and describing it (admin browsing).
+    # ------------------------------------------------------------------
+
+    def _walk(self, adapter, collection_name, limit, include_vectors=False):
+        ids, cursor = [], None
+        for _ in range(100):
+            page = adapter.list_vectors(
+                collection_name,
+                limit=limit,
+                cursor=cursor,
+                include_vectors=include_vectors,
+            )
+            assert len(page.documents) <= limit
+            ids += [document.id for document in page.documents]
+            cursor = page.next_cursor
+            if cursor is None:
+                return ids
+        raise AssertionError("list_vectors never ended")
+
+    def test_list_vectors_pages_through_every_document_once(
+        self, adapter, test_collection_name, test_dimension, sample_documents
+    ):
+        adapter.initialize()
+        adapter.create_collection(test_collection_name, test_dimension)
+        adapter.store_vectors(test_collection_name, sample_documents)
+
+        ids = self._walk(adapter, test_collection_name, limit=2)
+
+        assert sorted(ids) == sorted(d.id for d in sample_documents)
+        assert len(ids) == len(set(ids))
+        # Stable order: walking again, with another page size, gives the same ids.
+        assert self._walk(adapter, test_collection_name, limit=3) == ids
+        assert self._walk(adapter, test_collection_name, limit=100) == ids
+
+    def test_list_vectors_carries_metadata_and_vectors_only_on_request(
+        self, adapter, test_collection_name, test_dimension, sample_documents
+    ):
+        adapter.initialize()
+        adapter.create_collection(test_collection_name, test_dimension)
+        adapter.store_vectors(test_collection_name, sample_documents)
+
+        light = {d.id: d for d in adapter.list_vectors(test_collection_name).documents}
+        full = {
+            d.id: d
+            for d in adapter.list_vectors(
+                test_collection_name, include_vectors=True
+            ).documents
+        }
+
+        assert light["doc_1"].metadata == {"category": "cat_1", "index": 1}
+        assert light["doc_1"].payload == {"data": "payload_1"}
+        assert light["doc_1"].vector.size == 0
+        np.testing.assert_array_almost_equal(
+            full["doc_1"].vector, sample_documents[1].vector, decimal=5
+        )
+
+    def test_list_vectors_of_an_empty_collection(
+        self, adapter, test_collection_name, test_dimension
+    ):
+        adapter.initialize()
+        adapter.create_collection(test_collection_name, test_dimension)
+
+        page = adapter.list_vectors(test_collection_name)
+
+        assert page.documents == []
+        assert page.next_cursor is None
+
+    def test_collection_info_reports_dimension_metric_and_size(
+        self, adapter, test_collection_name, test_dimension, sample_documents
+    ):
+        adapter.initialize()
+        adapter.create_collection(
+            test_collection_name, test_dimension, distance_metric="euclidean"
+        )
+        adapter.store_vectors(test_collection_name, sample_documents)
+
+        info = adapter.get_collection_info(test_collection_name)
+
+        assert info.name == test_collection_name
+        assert info.dimension == test_dimension
+        assert info.distance_metric == "euclidean"
+        assert info.size == len(sample_documents)

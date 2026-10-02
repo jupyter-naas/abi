@@ -30,6 +30,16 @@ class StoredEvent:
     payload: bytes     # serialized RDF graph (n-triples)
 
 
+@dataclass(frozen=True)
+class EventTypeSummary:
+    """One event type present in the log (admin views, tooling)."""
+
+    event_type: str      # class IRI
+    count: int           # events of this type currently stored
+    last_seq: int        # seq of the newest one
+    last_timestamp: str  # its ISO 8601 timestamp
+
+
 class IEventAdapter(ABC):
     """Secondary port: durable event log."""
 
@@ -74,6 +84,10 @@ class IEventAdapter(ABC):
         Used by iterators to capture a snapshot upper bound at start of
         iteration so that events appended during iteration are not included.
         """
+
+    @abstractmethod
+    def list_event_types(self) -> list[EventTypeSummary]:
+        """Every event type with at least one stored event, ordered by type IRI."""
 
     @abstractmethod
     def get_cursor(self, consumer_id: str, event_type: str) -> int:
@@ -145,6 +159,31 @@ class IEventService(ABC):
         most recent N matches. ``search`` is a case-insensitive substring match
         over the raw payload text.
         """
+
+    @abstractmethod
+    def event_types(self) -> list[EventTypeSummary]:
+        """Every event type present in the log, with counts, by type IRI."""
+
+    @abstractmethod
+    def query_stored(
+        self,
+        event_type: str | None = None,
+        since_seq: int | None = None,
+        until_seq: int | None = None,
+        limit: int | None = None,
+        newest_first: bool = False,
+        search: str | None = None,
+    ) -> list[StoredEvent]:
+        """Raw stored records, filtered by type IRI (no event class needed).
+
+        For admin views and tools that must read any type, including ones
+        whose Python class is not importable here. Same ordering and bounds as
+        :meth:`query` (``since_seq`` exclusive, ``until_seq`` inclusive).
+        """
+
+    @abstractmethod
+    def get_stored(self, seq: int) -> StoredEvent:
+        """The raw record with this ``seq``; ``EventNotFoundError`` if none."""
 
     @abstractmethod
     def iter_query(

@@ -7,7 +7,9 @@ from contextlib import contextmanager
 from naas_abi_core import logger
 from naas_abi_core.services.keyvalue.KeyValuePorts import (
     IKeyValueAdapter,
+    KVKeyPage,
     KVLockTimeoutError,
+    check_page_limit,
 )
 from naas_abi_core.services.keyvalue.ontologies.modules.KeyValueEventOntology import (
     KeyValueDeleted,
@@ -108,6 +110,17 @@ class KeyValueService(ServiceBase):
 
     def exists(self, key: str) -> bool:
         return self.__adapter.exists(key)
+
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> KVKeyPage:
+        """A page of live keys, ascending; pass ``page.next_after`` as ``after``."""
+        check_page_limit(limit)
+        return self.__adapter.list_keys(prefix, limit=limit, after=after)
+
+    def get_ttl(self, key: str) -> int | None:
+        """Seconds before ``key`` expires, ``None`` if never. Raises KVNotFoundError."""
+        return self.__adapter.get_ttl(key)
 
     @contextmanager
     def lock(

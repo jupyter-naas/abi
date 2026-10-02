@@ -62,6 +62,14 @@ class DocumentSecondaryAdapterNATSClient(NatsRPCClient):
             ).collections
         )
 
+    def namespaces(self) -> list[str]:
+        """Needs a platform service identity on the server (PermissionError otherwise)."""
+        return list(
+            self._request(
+                "namespaces", pb.NamespacesRequest(), pb.NamespacesResponse
+            ).namespaces
+        )
+
     def put(
         self,
         namespace: str,

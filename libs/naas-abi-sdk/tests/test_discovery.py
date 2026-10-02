@@ -184,3 +184,31 @@ def test_retry_schedule_recovers_before_lease_expiry(monkeypatch):
         assert 0.05 <= session._heartbeat_delay(100) <= 10
 
     asyncio.run(scenario())
+
+
+def test_evict_calls_the_admin_operation_and_returns_the_instance():
+    transport = AsyncMock()
+    transport.call.return_value = pb.EvictResponse(
+        instance=pb.Instance(
+            descriptor=pb.ModuleDescriptor(
+                module_id="research",
+                contract_major=2,
+                dependencies=[pb.Dependency(module_id="store", contract_major=1)],
+            ),
+            instance_id="r-1",
+            status="READY",
+        )
+    )
+
+    evicted = asyncio.run(DiscoveryClient(transport, "zen").evict("r-1"))
+
+    subject, request, response_type = transport.call.call_args.args
+    assert subject == "abi.discovery.zen.v1.evict"
+    assert request == pb.EvictRequest(instance_id="r-1")
+    assert response_type is pb.EvictResponse
+    assert (evicted.module_id, evicted.instance_id, evicted.contract_major) == (
+        "research",
+        "r-1",
+        2,
+    )
+    assert evicted.dependencies == (("store", 1),)

@@ -34,7 +34,7 @@ from naas_abi_core.engine.nats_auth import (
 )
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
-from naas_abi_core.engine.nats_tracing import add_traced_service
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.coding_environment.v1 import coding_environment_pb2
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.services.coding_environment.adapters.coding_environment_nats_contract import (
@@ -61,7 +61,6 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
 from nats.micro.request import Request
-from nats.micro.service import Service
 
 __all__ = [
     "AUTH_HEADER",
@@ -86,12 +85,17 @@ def _template_to_pb(
 
 
 def _status_to_pb(status: WorkspaceStatus) -> coding_environment_pb2.WorkspaceStatus:
-    return coding_environment_pb2.WorkspaceStatus(
+    pb = coding_environment_pb2.WorkspaceStatus(
         id=status.id,
         name=status.name,
         phase=status.phase,
         agent_ready=status.agent_ready,
+        owner=status.owner,
+        template=status.template,
     )
+    if status.created_at is not None:
+        pb.created_at = status.created_at
+    return pb
 
 
 def _access_to_pb(access: WorkspaceAccess) -> coding_environment_pb2.WorkspaceAccess:
@@ -156,7 +160,7 @@ class CodingEnvironmentPrimaryAdapterNATS:
         self._adapter = adapter
         self._jwt_secret = jwt_secret
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
-        self._service: Service | None = None
+        self._service: TracedService | None = None
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``coding_environment`` NATS service on ``nc``.
@@ -208,6 +212,11 @@ class CodingEnvironmentPrimaryAdapterNATS:
             name="list_environments",
             subject=f"{SUBJECT_PREFIX}.list_environments",
             handler=self._handle_list_environments,
+        )
+        await service.add_endpoint(
+            name="list_all_environments",
+            subject=f"{SUBJECT_PREFIX}.list_all_environments",
+            handler=self._handle_list_all_environments,
         )
         await service.add_endpoint(
             name="get_status",
@@ -355,6 +364,12 @@ class CodingEnvironmentPrimaryAdapterNATS:
                 str(exc),
                 retryable=False,
                 status=exc.status,
+            )
+            return
+        except NotImplementedError as exc:
+            # The wrapped adapter cannot do this: say so instead of a retryable INTERNAL.
+            await self._respond_error(
+                request, response_cls, "UNIMPLEMENTED", str(exc), retryable=False
             )
             return
         except Exception:  # noqa: BLE001 - a handler must never crash the service
@@ -513,6 +528,24 @@ class CodingEnvironmentPrimaryAdapterNATS:
     ) -> coding_environment_pb2.ListEnvironmentsResponse:
         environments = self._adapter.list_environments(user_id=req.user_id)
         return coding_environment_pb2.ListEnvironmentsResponse(
+            environments=coding_environment_pb2.WorkspaceStatuses(
+                environments=[_status_to_pb(e) for e in environments]
+            )
+        )
+
+    async def _handle_list_all_environments(self, request: Request) -> None:
+        await self._handle(
+            request,
+            coding_environment_pb2.ListAllEnvironmentsRequest,
+            coding_environment_pb2.ListAllEnvironmentsResponse,
+            self._call_list_all_environments,
+        )
+
+    def _call_list_all_environments(
+        self, req: coding_environment_pb2.ListAllEnvironmentsRequest
+    ) -> coding_environment_pb2.ListAllEnvironmentsResponse:
+        environments = self._adapter.list_all_environments()
+        return coding_environment_pb2.ListAllEnvironmentsResponse(
             environments=coding_environment_pb2.WorkspaceStatuses(
                 environments=[_status_to_pb(e) for e in environments]
             )

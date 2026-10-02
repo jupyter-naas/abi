@@ -15,6 +15,16 @@ caller identity plus a lease token. Stage 1 does not authorize logical module ID
 `discovery_factory.py` composes the service. Engine exposure is explicit opt-in;
 replicas use a project queue group and share the same JetStream CAS snapshot. No silent in-memory fallback.
 
+## Eviction (platform administration)
+`evict` removes a registration whatever its lease. Only `admin_identities`
+(default `api` and `engine`, the Nexus System app and the engine) may call it;
+any other caller gets PERMISSION_DENIED. Identities are Stage 1 service names,
+so this is hygiene between first-party processes, not a security boundary
+against holders of the shared secret. A live owner's next renewal fails with
+LEASE_EXPIRED and the SDK session registers a fresh instance id, so eviction
+clears crashed or stuck registrations; stopping a module means stopping its
+process.
+
 ## Tests
 Use `uv run pytest .../services/discovery --import-mode=importlib`. Unit tests inject
 a clock and a fake port; integration tests use native nats-server. Add port

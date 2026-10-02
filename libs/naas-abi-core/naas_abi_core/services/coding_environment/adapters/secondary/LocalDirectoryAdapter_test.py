@@ -58,3 +58,33 @@ def test_provision_clone_and_sidecar(
     logs = workspace_adapter.get_logs(workspace_id=status.id)
     assert any("sidecar:" in line for line in logs)
     del git_adapter
+
+
+def test_list_all_environments_reads_every_persisted_workspace(tmp_path) -> None:
+    import json
+
+    root = tmp_path / "workspaces"
+    for user, name, workspace_id in (("u-alice", "dev", "w1"), ("u-bob", "api", "w2")):
+        meta = root / user / name / ".abi" / "workspace.json"
+        meta.parent.mkdir(parents=True)
+        meta.write_text(
+            json.dumps(
+                {
+                    "id": workspace_id,
+                    "name": name,
+                    "user_id": user,
+                    "checkout": str(root / user / name),
+                    "phase": "stopped",
+                    "created_at": "2026-10-02T10:00:00+00:00",
+                }
+            )
+        )
+
+    adapter = LocalDirectoryAdapter(workspaces_root=str(root))
+    environments = {e.id: e for e in adapter.list_all_environments()}
+
+    assert set(environments) == {"w1", "w2"}
+    assert environments["w2"].owner == "u-bob"
+    assert environments["w1"].template == LocalDirectoryAdapter.TEMPLATE_ID
+    assert environments["w1"].created_at == "2026-10-02T10:00:00+00:00"
+    assert [e.id for e in adapter.list_environments(user_id="u-alice")] == ["w1"]

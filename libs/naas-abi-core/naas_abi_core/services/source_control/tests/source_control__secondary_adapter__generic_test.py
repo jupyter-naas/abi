@@ -6,6 +6,7 @@ REQUIRED_METHODS = (
     "ensure_user",
     "ensure_repo",
     "list_repos",
+    "delete_repo",
     "add_collaborator",
     "list_contents",
     "get_file",

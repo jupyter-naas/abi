@@ -23,6 +23,8 @@ OPERATIONS: dict[str, tuple[Any, Any, bool]] = {
     "register": (pb.RegisterRequest, pb.RegisterResponse, True),
     "renew": (pb.RenewRequest, pb.RenewResponse, True),
     "unregister": (pb.UnregisterRequest, pb.UnregisterResponse, True),
+    # Admin identities only (DiscoveryService.admin_identities).
+    "evict": (pb.EvictRequest, pb.EvictResponse, True),
     "get_module": (pb.GetModuleRequest, pb.GetModuleResponse, False),
     "list_modules": (pb.ListModulesRequest, pb.ListModulesResponse, False),
 }

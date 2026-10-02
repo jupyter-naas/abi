@@ -232,6 +232,64 @@ class CountVectorsResponse(_message.Message):
     error: _common_pb2.CallError
     def __init__(self, count: _Optional[int] = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...
 
+class ListVectorsRequest(_message.Message):
+    __slots__ = ("context", "collection_name", "limit", "cursor", "include_vectors")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    COLLECTION_NAME_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    CURSOR_FIELD_NUMBER: _ClassVar[int]
+    INCLUDE_VECTORS_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    collection_name: str
+    limit: int
+    cursor: str
+    include_vectors: bool
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., collection_name: _Optional[str] = ..., limit: _Optional[int] = ..., cursor: _Optional[str] = ..., include_vectors: bool = ...) -> None: ...
+
+class VectorPage(_message.Message):
+    __slots__ = ("documents", "next_cursor")
+    DOCUMENTS_FIELD_NUMBER: _ClassVar[int]
+    NEXT_CURSOR_FIELD_NUMBER: _ClassVar[int]
+    documents: _containers.RepeatedCompositeFieldContainer[VectorDocument]
+    next_cursor: str
+    def __init__(self, documents: _Optional[_Iterable[_Union[VectorDocument, _Mapping]]] = ..., next_cursor: _Optional[str] = ...) -> None: ...
+
+class ListVectorsResponse(_message.Message):
+    __slots__ = ("page", "error")
+    PAGE_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    page: VectorPage
+    error: _common_pb2.CallError
+    def __init__(self, page: _Optional[_Union[VectorPage, _Mapping]] = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...
+
+class GetCollectionInfoRequest(_message.Message):
+    __slots__ = ("context", "collection_name")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    COLLECTION_NAME_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    collection_name: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., collection_name: _Optional[str] = ...) -> None: ...
+
+class CollectionInfo(_message.Message):
+    __slots__ = ("name", "dimension", "distance_metric", "size")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    DIMENSION_FIELD_NUMBER: _ClassVar[int]
+    DISTANCE_METRIC_FIELD_NUMBER: _ClassVar[int]
+    SIZE_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    dimension: int
+    distance_metric: str
+    size: int
+    def __init__(self, name: _Optional[str] = ..., dimension: _Optional[int] = ..., distance_metric: _Optional[str] = ..., size: _Optional[int] = ...) -> None: ...
+
+class GetCollectionInfoResponse(_message.Message):
+    __slots__ = ("info", "error")
+    INFO_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    info: CollectionInfo
+    error: _common_pb2.CallError
+    def __init__(self, info: _Optional[_Union[CollectionInfo, _Mapping]] = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...
+
 class CloseRequest(_message.Message):
     __slots__ = ("context",)
     CONTEXT_FIELD_NUMBER: _ClassVar[int]

@@ -43,6 +43,11 @@ class CacheClient:
             f"{self._subject_prefix}.describe", request, pb.DescribeResponse
         )
 
+    async def list_keys(self, request: pb.ListKeysRequest) -> pb.ListKeysResponse:
+        return await self._transport.call(
+            f"{self._subject_prefix}.list_keys", request, pb.ListKeysResponse
+        )
+
     def tier(self, index: int) -> "CacheClient":
         """Select an explicitly configured tier by its order in cache.adapters."""
         if index < 0:

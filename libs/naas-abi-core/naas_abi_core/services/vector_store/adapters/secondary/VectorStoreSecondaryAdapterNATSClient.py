@@ -52,9 +52,11 @@ from naas_abi_core.services.vector_store.adapters.vector_store_nats_contract imp
     SUBJECT_PREFIX,
 )
 from naas_abi_core.services.vector_store.IVectorStorePort import (
+    CollectionInfo,
     IVectorStorePort,
     SearchResult,
     VectorDocument,
+    VectorPage,
 )
 
 
@@ -304,6 +306,54 @@ class VectorStoreSecondaryAdapterNATSClient(NatsRPCClient, IVectorStorePort):
         if response.HasField("error"):
             _raise_for_error(response.error)
         return response.count
+
+    def list_vectors(
+        self,
+        collection_name: str,
+        limit: int = 100,
+        cursor: str | None = None,
+        include_vectors: bool = False,
+    ) -> VectorPage:
+        request = vector_store_pb2.ListVectorsRequest(
+            context=self._context(),
+            collection_name=collection_name,
+            limit=limit,
+            cursor=cursor,
+            include_vectors=include_vectors,
+        )
+        response = self._call(
+            f"{SUBJECT_PREFIX}.list_vectors",
+            request,
+            vector_store_pb2.ListVectorsResponse,
+        )
+        if response.HasField("error"):
+            _raise_for_error(response.error)
+        page = response.page
+        return VectorPage(
+            documents=[_pb_to_document(document) for document in page.documents],
+            next_cursor=page.next_cursor if page.HasField("next_cursor") else None,
+        )
+
+    def get_collection_info(self, collection_name: str) -> CollectionInfo:
+        request = vector_store_pb2.GetCollectionInfoRequest(
+            context=self._context(), collection_name=collection_name
+        )
+        response = self._call(
+            f"{SUBJECT_PREFIX}.get_collection_info",
+            request,
+            vector_store_pb2.GetCollectionInfoResponse,
+        )
+        if response.HasField("error"):
+            _raise_for_error(response.error)
+        info = response.info
+        return CollectionInfo(
+            name=info.name,
+            dimension=info.dimension if info.HasField("dimension") else None,
+            distance_metric=info.distance_metric
+            if info.HasField("distance_metric")
+            else None,
+            size=info.size,
+        )
 
     # Note: `close()` (IVectorStorePort's close, not a network call) is
     # defined once already, up in the connection-lifecycle section above --

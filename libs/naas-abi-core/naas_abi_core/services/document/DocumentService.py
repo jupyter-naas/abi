@@ -56,14 +56,28 @@ class DocumentService(ServiceBase):
             raise PermissionError("The engine document root only binds namespaces")
         return self.__namespace
 
-    def _for_namespace(self, namespace: str) -> "DocumentService":
-        """Composition-root hook; module proxies choose the namespace."""
+    def for_namespace(self, namespace: str) -> "DocumentService":
+        """A view bound to ``namespace``; only the engine root can create one.
+
+        Module proxies bind their own module's namespace. Platform administration
+        (the unlocked proxy's ``document_admin``) may bind any namespace.
+        """
         if not self.__can_bind_namespaces:
             raise PermissionError("A bound document service cannot change namespace")
         scoped = DocumentService(self.__adapter, namespace)
         if self.services_wired:
             scoped.set_services(self.services)
         return scoped
+
+    def _for_namespace(self, namespace: str) -> "DocumentService":
+        """Composition-root hook kept for existing callers; see ``for_namespace``."""
+        return self.for_namespace(namespace)
+
+    def namespaces(self) -> list[str]:
+        """Namespaces holding at least one collection; engine root only."""
+        if not self.__can_bind_namespaces:
+            raise PermissionError("A bound document service cannot list namespaces")
+        return self.__adapter.namespaces()
 
     def ensure_collection(self, spec: CollectionSpec) -> None:
         self.__adapter.ensure_collection(self.namespace, spec)

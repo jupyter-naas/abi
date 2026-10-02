@@ -4,6 +4,8 @@ from naas_abi_core import logger
 from naas_abi_core.services.email.EmailPorts import (
     EmailAttachment,
     IEmailAdapter,
+    SentEmail,
+    SentEmailSummary,
     resolve_recipients,
 )
 from naas_abi_core.services.email.ontologies.modules.EmailEventOntology import (
@@ -49,7 +51,8 @@ class EmailService(ServiceBase):
         attachments: list[EmailAttachment] | None = None,
         to_emails: list[str] | str | None = None,
         cc_emails: list[str] | str | None = None,
-    ) -> None:
+    ) -> str | None:
+        """Send; returns the id of the kept copy when the adapter keeps one."""
         recipients = ", ".join(resolve_recipients(to_email, to_emails))
         cc_recipients = (
             ", ".join(resolve_recipients(None, cc_emails)) if cc_emails else ""
@@ -58,7 +61,7 @@ class EmailService(ServiceBase):
             f"{recipients}; cc: {cc_recipients}" if cc_recipients else recipients
         )
         try:
-            self._adapter.send(
+            message_id = self._adapter.send(
                 to_email=to_email,
                 subject=subject,
                 text_body=text_body,
@@ -78,3 +81,16 @@ class EmailService(ServiceBase):
         self.__publish_event(
             EmailSent(to=display_recipients, subject=subject, sender=from_email)
         )
+        return message_id
+
+    def list_sent(
+        self, *, limit: int = 100, before: str | None = None
+    ) -> list[SentEmailSummary]:
+        """Kept sent mail, newest first. ``SentEmailsNotKept`` if the adapter keeps none."""
+        return self._adapter.list_sent(limit=limit, before=before)
+
+    def get_sent(self, message_id: str) -> SentEmail:
+        return self._adapter.get_sent(message_id)
+
+    def delete_sent(self, message_id: str) -> None:
+        self._adapter.delete_sent(message_id)

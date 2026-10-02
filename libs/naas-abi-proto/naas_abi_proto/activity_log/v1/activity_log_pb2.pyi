@@ -12,30 +12,38 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class ActivityEvent(_message.Message):
-    __slots__ = ("actor_id", "event_type", "timestamp", "correlation_id", "attributes")
+    __slots__ = ("actor_id", "event_type", "timestamp", "correlation_id", "attributes", "seq")
     ACTOR_ID_FIELD_NUMBER: _ClassVar[int]
     EVENT_TYPE_FIELD_NUMBER: _ClassVar[int]
     TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
     CORRELATION_ID_FIELD_NUMBER: _ClassVar[int]
     ATTRIBUTES_FIELD_NUMBER: _ClassVar[int]
+    SEQ_FIELD_NUMBER: _ClassVar[int]
     actor_id: str
     event_type: str
     timestamp: _timestamp_pb2.Timestamp
     correlation_id: str
     attributes: _struct_pb2.Struct
-    def __init__(self, actor_id: _Optional[str] = ..., event_type: _Optional[str] = ..., timestamp: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., correlation_id: _Optional[str] = ..., attributes: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    seq: int
+    def __init__(self, actor_id: _Optional[str] = ..., event_type: _Optional[str] = ..., timestamp: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., correlation_id: _Optional[str] = ..., attributes: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., seq: _Optional[int] = ...) -> None: ...
 
 class ActivityLogQueryFilter(_message.Message):
-    __slots__ = ("event_type", "since", "until", "limit")
+    __slots__ = ("event_type", "since", "until", "limit", "newest_first", "before_seq", "after_seq")
     EVENT_TYPE_FIELD_NUMBER: _ClassVar[int]
     SINCE_FIELD_NUMBER: _ClassVar[int]
     UNTIL_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
+    NEWEST_FIRST_FIELD_NUMBER: _ClassVar[int]
+    BEFORE_SEQ_FIELD_NUMBER: _ClassVar[int]
+    AFTER_SEQ_FIELD_NUMBER: _ClassVar[int]
     event_type: str
     since: _timestamp_pb2.Timestamp
     until: _timestamp_pb2.Timestamp
     limit: int
-    def __init__(self, event_type: _Optional[str] = ..., since: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., until: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., limit: _Optional[int] = ...) -> None: ...
+    newest_first: bool
+    before_seq: int
+    after_seq: int
+    def __init__(self, event_type: _Optional[str] = ..., since: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., until: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., limit: _Optional[int] = ..., newest_first: bool = ..., before_seq: _Optional[int] = ..., after_seq: _Optional[int] = ...) -> None: ...
 
 class RecordRequest(_message.Message):
     __slots__ = ("context", "event")

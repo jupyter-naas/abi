@@ -33,7 +33,7 @@ from naas_abi_core.engine.nats_auth import (
 )
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
-from naas_abi_core.engine.nats_tracing import add_traced_service
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.engine.nats_transfer import TransferHost, stream_thread
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.object_storage.v1 import object_storage_pb2
@@ -50,7 +50,6 @@ from naas_abi_core.services.object_storage.ObjectStoragePort import (
     ObjectMetaData,
 )
 from nats.micro.request import Request
-from nats.micro.service import Service
 
 __all__ = [
     "AUTH_HEADER",
@@ -132,7 +131,7 @@ class ObjectStoragePrimaryAdapterNATS:
             error_mapper=self._transfer_error,
             **(transfer_options or {}),
         )
-        self._service: Service | None = None
+        self._service: TracedService | None = None
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``object_storage`` NATS service on ``nc``.

@@ -36,8 +36,21 @@ class IEmailAdapter:
         from_name: str | None = None,
         reply_to: str | None = None,
         attachments: list[EmailAttachment] | None = None,
-    ) -> None
+    ) -> str | None          # id of the kept copy, or None
+
+    # Kept sent mail (optional; defaults raise SentEmailsNotKept):
+    def list_sent(*, limit=100, before=None) -> list[SentEmailSummary]   # newest first
+    def get_sent(message_id) -> SentEmail                                # SentEmailNotFound
+    def delete_sent(message_id) -> None                                  # the copy only
 ```
+
+Only `FilesystemAdapter` keeps sent mail (`<directory>/<epoch ms>-<uuid>.eml`,
+ids increasing per adapter). Provider adapters (SMTP, SES, SendGrid, Outlook)
+inherit the defaults: they keep nothing, and say so with `SentEmailsNotKept`
+(a `NotImplementedError`). Over NATS: `list_sent`/`get_sent`/`delete_sent`
+endpoints, error codes `SENT_EMAILS_NOT_KEPT` and `SENT_EMAIL_NOT_FOUND`;
+`SendResponse.message_id` carries the kept id. Deleting a kept copy never
+recalls the message.
 
 ## Service API (`EmailService.py`)
 
@@ -45,8 +58,9 @@ class IEmailAdapter:
 EmailService(adapter: IEmailAdapter)
 
 send(to_email, subject, text_body, html_body=None, *,
-     from_email, from_name=None, reply_to=None, attachments=None)
-# → publishes EmailSent on success, EmailError on failure
+     from_email, from_name=None, reply_to=None, attachments=None) -> str | None
+# → publishes EmailSent on success, EmailError on failure; returns the kept id
+list_sent(limit=100, before=None) / get_sent(id) / delete_sent(id)   # delegate
 ```
 
 ## Available Adapters

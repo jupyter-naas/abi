@@ -418,6 +418,22 @@ class DocumentSecondaryAdapterContract(ABC):
         docs.ensure_collection("module", CollectionSpec(name="records"))
         assert docs.count("module", "records", ()) == 0
 
+    def test_namespaces_lists_each_namespace_holding_a_collection(self, adapter):
+        adapter.ensure_collection("zeta.module", CollectionSpec(name="a"))
+        adapter.ensure_collection("alpha.module", CollectionSpec(name="b"))
+        adapter.ensure_collection("alpha.module", CollectionSpec(name="c"))
+        adapter.put("alpha.module", "b", "id", {}, None)
+
+        names = adapter.namespaces()
+
+        assert {"alpha.module", "zeta.module"} <= set(names)
+        assert names == sorted(names)
+        assert len(names) == len(set(names))
+
+        adapter.drop_collection("zeta.module", "a")
+        assert "zeta.module" not in adapter.namespaces()
+        assert "alpha.module" in adapter.namespaces()
+
     @pytest.mark.parametrize("operation", ["get", "put", "delete", "find", "count"])
     def test_missing_collection_raises(self, adapter, operation):
         args = {

@@ -60,14 +60,16 @@ class FileContent(_message.Message):
     def __init__(self, path: _Optional[str] = ..., name: _Optional[str] = ..., size: _Optional[int] = ..., text: _Optional[str] = ..., is_binary: bool = ..., data: _Optional[bytes] = ...) -> None: ...
 
 class FileWrite(_message.Message):
-    __slots__ = ("path", "text_content", "binary_content")
+    __slots__ = ("path", "text_content", "binary_content", "delete")
     PATH_FIELD_NUMBER: _ClassVar[int]
     TEXT_CONTENT_FIELD_NUMBER: _ClassVar[int]
     BINARY_CONTENT_FIELD_NUMBER: _ClassVar[int]
+    DELETE_FIELD_NUMBER: _ClassVar[int]
     path: str
     text_content: str
     binary_content: bytes
-    def __init__(self, path: _Optional[str] = ..., text_content: _Optional[str] = ..., binary_content: _Optional[bytes] = ...) -> None: ...
+    delete: bool
+    def __init__(self, path: _Optional[str] = ..., text_content: _Optional[str] = ..., binary_content: _Optional[bytes] = ..., delete: bool = ...) -> None: ...
 
 class Commit(_message.Message):
     __slots__ = ("sha", "message", "author", "date")
@@ -328,6 +330,20 @@ class ListReposResponse(_message.Message):
     repos: Repos
     error: _common_pb2.CallError
     def __init__(self, repos: _Optional[_Union[Repos, _Mapping]] = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...
+
+class DeleteRepoRequest(_message.Message):
+    __slots__ = ("context", "repo_id")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    REPO_ID_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    repo_id: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., repo_id: _Optional[str] = ...) -> None: ...
+
+class DeleteRepoResponse(_message.Message):
+    __slots__ = ("error",)
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...
 
 class AddCollaboratorRequest(_message.Message):
     __slots__ = ("context", "repo_id", "username", "permission")

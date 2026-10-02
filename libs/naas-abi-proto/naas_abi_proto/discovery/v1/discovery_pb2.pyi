@@ -183,6 +183,22 @@ class ListModulesResponse(_message.Message):
     next_after_instance_id: str
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., instances: _Optional[_Iterable[_Union[Instance, _Mapping]]] = ..., next_after_instance_id: _Optional[str] = ...) -> None: ...
 
+class EvictRequest(_message.Message):
+    __slots__ = ("context", "instance_id")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    instance_id: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., instance_id: _Optional[str] = ...) -> None: ...
+
+class EvictResponse(_message.Message):
+    __slots__ = ("error", "instance")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    INSTANCE_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    instance: Instance
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., instance: _Optional[_Union[Instance, _Mapping]] = ...) -> None: ...
+
 class RegistryRecord(_message.Message):
     __slots__ = ("instance", "owner", "lease_hash", "initialized", "draining")
     INSTANCE_FIELD_NUMBER: _ClassVar[int]

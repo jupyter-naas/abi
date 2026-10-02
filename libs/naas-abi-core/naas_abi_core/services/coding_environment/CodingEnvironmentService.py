@@ -140,6 +140,9 @@ class CodingEnvironmentService(ServiceBase):
     def list_environments(self, *, user_id: str) -> list[WorkspaceStatus]:
         return self._adapter.list_environments(user_id=user_id)
 
+    def list_all_environments(self) -> list[WorkspaceStatus]:
+        return self._adapter.list_all_environments()
+
     def get_status(self, *, workspace_id: str) -> WorkspaceStatus:
         return self._adapter.get_status(workspace_id=workspace_id)
 
