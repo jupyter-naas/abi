@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import logging
 import socket
+from collections.abc import Awaitable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
@@ -206,13 +207,14 @@ class BaseModule(JobsMixin, Generic[Config]):
     def get_dependencies(cls) -> ModuleDependencies:
         return cls.dependencies
 
-    def on_load(self) -> None:
+    # Lifecycle hooks may be sync or async: run_module awaits what they return.
+    def on_load(self) -> None | Awaitable[None]:
         pass
 
-    def on_initialized(self) -> None:
+    def on_initialized(self) -> None | Awaitable[None]:
         pass
 
-    def on_unloaded(self) -> None:
+    def on_unloaded(self) -> None | Awaitable[None]:
         pass
 
     async def run(self) -> Any:
