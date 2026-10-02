@@ -14,7 +14,7 @@ import contextlib
 import uuid
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from langchain_core.language_models import BaseChatModel
@@ -375,7 +375,7 @@ class Agent(ToolCallRepair):
                 self._state.supervisor_agent or "", system_prompt
             )
         if "CURRENT_DATE" not in state["system_prompt"]:
-            current_date = f"CURRENT_DATE: The current date is {datetime.now(UTC).strftime('%Y-%m-%d')}\n"
+            current_date = f"CURRENT_DATE: The current date is {datetime.now(timezone.utc).strftime('%Y-%m-%d')}\n"
             system_prompt = system_prompt + "\n" + current_date
         return Command(
             goto="continue_conversation", update={"system_prompt": system_prompt}
