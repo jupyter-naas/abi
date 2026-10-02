@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import socket
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
+from naas_abi_sdk import telemetry
 from naas_abi_sdk.catalog import OPERATIONS
 from naas_abi_sdk.client import ABIClient
 from naas_abi_sdk.discovery import (
@@ -258,8 +260,12 @@ async def run_module(
     **connection_options,
 ) -> Any:
     """Own transport, dependency injection, ordered startup and guaranteed cleanup."""
+    identity = module_type.module_id or module_type.__module__
+    # Spans export when OTEL_EXPORTER_OTLP_ENDPOINT is set (needs naas-abi-sdk[otel]).
+    telemetry.configure_from_env(identity)
+    # Named after the module so the broker's /connz shows which module is which.
+    connection_options.setdefault("name", f"{identity}@{socket.gethostname()}")
     async with ABIClient(url, token, timeout=timeout, **connection_options) as client:
-        identity = module_type.module_id or module_type.__module__
         dependencies = module_type.get_dependencies()
         discovery_client = (
             DiscoveryClient(client._transport, discovery.project) if discovery else None

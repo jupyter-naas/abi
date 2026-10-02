@@ -15,6 +15,7 @@ from naas_abi_core.engine.context import (
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
 )
+from naas_abi_core.engine.engine_loaders import EngineTelemetryLoader
 from naas_abi_core.engine.engine_loaders.EngineJobLoader import EngineJobLoader
 from naas_abi_core.engine.engine_loaders.EngineModuleLoader import EngineModuleLoader
 from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import (
@@ -99,6 +100,9 @@ class Engine(IEngine):
                     f"defaults are resolvable."
                 )
                 module_names = [*module_names, *extra]
+
+        # First, so every span from here on is exported (no-op unless enabled).
+        EngineTelemetryLoader.configure(self.__configuration.telemetry)
 
         module_dependencies = self.__engine_module_loader.get_modules_dependencies(
             module_names

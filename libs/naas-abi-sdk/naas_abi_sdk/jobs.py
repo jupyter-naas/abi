@@ -30,6 +30,8 @@ from typing import Any, ClassVar
 
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
+from naas_abi_sdk.telemetry import client_span
+
 JOB_CONTRACT_MAJOR = 1
 MAX_TRIGGERS = 16
 TRIGGER_HEADER = "Abi-Job-Trigger"
@@ -488,12 +490,16 @@ class JobProxy:
 
     async def trigger(self, payload: dict[str, Any] | None = None) -> JobRun:
         nc = await self.transport.connect()
-        ack = await nc.jetstream().publish(
-            job_subjects(self.project, self.module_id, self.name).trigger,
-            json.dumps(payload or {}).encode(),
-            headers={TRIGGER_HEADER: "manual", "Nats-TTL": "168h"},
-            stream=stream_name(self.project),
-        )
+        subject = job_subjects(self.project, self.module_id, self.name).trigger
+        headers = {TRIGGER_HEADER: "manual", "Nats-TTL": "168h"}
+        # The run continues this trace (the host reads traceparent off the message).
+        with client_span(subject, headers):
+            ack = await nc.jetstream().publish(
+                subject,
+                json.dumps(payload or {}).encode(),
+                headers=headers,
+                stream=stream_name(self.project),
+            )
         return JobRun(
             self.transport,
             self.project,

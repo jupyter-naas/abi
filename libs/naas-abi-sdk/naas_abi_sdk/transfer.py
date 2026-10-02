@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 from contextlib import asynccontextmanager
 from typing import BinaryIO
 
 from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
+
+from naas_abi_sdk.telemetry import transfer_span
 
 
 def transfer_subject(prefix: str, operation: str, transfer_id: str = "") -> str:
@@ -93,19 +96,33 @@ class Transfer:
 
 @asynccontextmanager
 async def open_transfer(transport, prefix: str, operation: str, metadata: bytes = b""):
+    # One span for the whole transfer (totals as attributes), not one per chunk.
+    # Passed explicitly: model streams are advanced from several tasks.
+    with transfer_span(prefix, operation) as trace:
+        call = functools.partial(transport.call, transfer=trace)
+        async with _open_transfer(
+            transport, call, prefix, operation, metadata
+        ) as transfer:
+            yield transfer
+
+
+@asynccontextmanager
+async def _open_transfer(
+    transport, call, prefix: str, operation: str, metadata: bytes = b""
+):
     nc = await transport.connect()
     size = min(64 * 1024, nc.max_payload // 2)
-    opened = await transport.call(
+    opened = await call(
         f"{prefix}.open",
         pb.OpenRequest(operation=operation, metadata=metadata, chunk_bytes=size),
         pb.OpenResponse,
     )
-    transfer = Transfer(transport.call, prefix, opened.id, opened.chunk_bytes)
+    transfer = Transfer(call, prefix, opened.id, opened.chunk_bytes)
     try:
         yield transfer
     finally:
         try:
-            await transport.call(
+            await call(
                 transfer_subject(prefix, "close", opened.id),
                 pb.CloseRequest(id=opened.id),
                 pb.CloseResponse,

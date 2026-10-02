@@ -18,7 +18,14 @@ from typing import Any, Self, TypeVar, cast
 from google.protobuf.message import Message
 from naas_abi_core import logger
 from naas_abi_core.engine.nats_auth import DEFAULT_TTL, issue_service_token
+from naas_abi_core.engine.nats_naming import connection_name, rpc_client_role
 from naas_abi_core.proto.common.v1 import common_pb2
+from naas_abi_sdk.telemetry import (
+    TransferTrace,
+    client_span,
+    record_error,
+    record_reply,
+)
 from nats.aio.client import Client as NATSClient
 from nats.errors import MaxPayloadError
 from nats.micro.request import ERROR_CODE_HEADER, ERROR_HEADER, Request
@@ -26,6 +33,10 @@ from nats.micro.request import ERROR_CODE_HEADER, ERROR_HEADER, Request
 MAX_RPC_PAYLOAD = 8 * 1024 * 1024
 _TOKEN_RENEWAL_MARGIN = timedelta(minutes=5)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
+
+
+# Reply header naming the CallError code of an error reply (ABI-level, not micro).
+ERROR_CODE_REPLY_HEADER = "Abi-Error-Code"
 
 
 class NatsRPCError(RuntimeError):
@@ -51,15 +62,34 @@ def _call_error(response: Message) -> common_pb2.CallError:
     return error
 
 
+def _error_code(response: Message) -> str:
+    try:
+        if not response.HasField("error"):
+            return ""
+    except ValueError:  # a response type without an error field
+        return ""
+    return _call_error(response).code
+
+
 async def respond_protobuf(
     request: Request, response: Message, response_cls: Callable[..., Message]
 ) -> None:
-    """Replace an oversized reply with a small, non-retryable protobuf error."""
+    """Reply; replace an oversized reply with a small, non-retryable protobuf error.
+
+    Error replies also carry their code in the ``Abi-Error-Code`` header (for the
+    traffic view, which never reads payloads) and fail the current trace span.
+    """
     payload = response.SerializeToString()
+    code = _error_code(response)
+    if code:
+        record_error(code, _call_error(response).message)
     try:
         if len(payload) > MAX_RPC_PAYLOAD:
             raise MaxPayloadError()
-        await request.respond(payload)
+        if code:
+            await request.respond(payload, headers={ERROR_CODE_REPLY_HEADER: code})
+        else:
+            await request.respond(payload)
     except MaxPayloadError:
         error_response = response_cls()
         _call_error(error_response).CopyFrom(
@@ -70,7 +100,11 @@ async def respond_protobuf(
                 retryable=False,
             )
         )
-        await request.respond(error_response.SerializeToString())
+        record_error("PAYLOAD_TOO_LARGE")
+        await request.respond(
+            error_response.SerializeToString(),
+            headers={ERROR_CODE_REPLY_HEADER: "PAYLOAD_TOO_LARGE"},
+        )
 
 
 class NatsRPCClient:
@@ -184,7 +218,13 @@ class NatsRPCClient:
                 return self._nc
             nc = NATSClient()
             try:
-                await nc.connect(self._nats_url, pending_size=0)
+                await nc.connect(
+                    self._nats_url,
+                    pending_size=0,
+                    name=connection_name(
+                        rpc_client_role(self._service_identity, type(self))
+                    ),
+                )
             except BaseException:
                 await nc.close()
                 raise
@@ -230,32 +270,43 @@ class NatsRPCClient:
         )
 
     def _call(
-        self, subject: str, request: Message, response_cls: type[_ResponseT]
+        self,
+        subject: str,
+        request: Message,
+        response_cls: type[_ResponseT],
+        *,
+        transfer: TransferTrace | None = None,
     ) -> _ResponseT:
         payload = request.SerializeToString()
         with self._call_lock:
             headers = {self._auth_header: self._current_token()}
-        msg = self._run_coro(
-            asyncio.wait_for(
-                self._do_request_async(subject, payload, headers),
-                timeout=self._timeout_seconds,
-            )
-        )
-
-        reply_headers = msg.headers or {}
-        if ERROR_HEADER in reply_headers or ERROR_CODE_HEADER in reply_headers:
-            raise NatsRPCError(
-                reply_headers.get(ERROR_CODE_HEADER, "UNKNOWN"),
-                reply_headers.get(ERROR_HEADER, "remote service error"),
+        # The span starts in the calling thread, whose context holds the parent
+        # (e.g. a request handler); the trace travels in the headers.
+        with client_span(subject, headers, size=len(payload), transfer=transfer):
+            msg = self._run_coro(
+                asyncio.wait_for(
+                    self._do_request_async(subject, payload, headers),
+                    timeout=self._timeout_seconds,
+                )
             )
 
-        response = response_cls()
-        response.ParseFromString(msg.data)
-        if response.HasField("error"):
-            error = _call_error(response)
-            if error.code == "PAYLOAD_TOO_LARGE":
-                raise NatsRPCPayloadTooLargeError(error.message)
-        return response
+            record_reply(len(msg.data or b""), transfer=transfer)
+            reply_headers = msg.headers or {}
+            if ERROR_HEADER in reply_headers or ERROR_CODE_HEADER in reply_headers:
+                code = reply_headers.get(ERROR_CODE_HEADER, "UNKNOWN")
+                record_error(code)
+                raise NatsRPCError(
+                    code, reply_headers.get(ERROR_HEADER, "remote service error")
+                )
+
+            response = response_cls()
+            response.ParseFromString(msg.data)
+            if response.HasField("error"):
+                error = _call_error(response)
+                record_error(error.code, error.message)
+                if error.code == "PAYLOAD_TOO_LARGE":
+                    raise NatsRPCPayloadTooLargeError(error.message)
+            return response
 
     async def _do_request_async(
         self, subject: str, payload: bytes, headers: dict[str, str]

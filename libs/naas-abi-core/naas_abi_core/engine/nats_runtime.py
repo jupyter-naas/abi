@@ -27,6 +27,7 @@ from threading import Thread
 
 import nats
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_naming import connection_name
 from nats.aio.client import Client as NATSClient
 
 _loop: asyncio.AbstractEventLoop | None = None
@@ -84,7 +85,9 @@ def get_connection(nats_url: str, timeout: float = 10.0) -> NATSClient:
             return _nc
         if _nc is not None:
             _close_locked()
-        _nc = run_coro(nats.connect(nats_url), timeout=timeout)
+        _nc = run_coro(
+            nats.connect(nats_url, name=connection_name("abi-engine")), timeout=timeout
+        )
         _nc_url = nats_url
         return _nc
 

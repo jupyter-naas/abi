@@ -30,6 +30,7 @@ from naas_abi_sdk.jobs import (
 )
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
 from naas_abi_sdk.services.models import CollectionSpec
+from naas_abi_sdk.telemetry import record_error, server_span
 
 logger = logging.getLogger(__name__)
 
@@ -354,6 +355,27 @@ class JobHost:
         return json.loads(encoded)
 
     async def handle(self, descriptor: JobDescriptor, handler: Any, msg: Any) -> None:
+        """Run one delivery inside a CONSUMER span continuing its trigger's trace."""
+        attributes = {
+            "abi.module.id": self.module_id,
+            "abi.job.name": descriptor.name,
+            "abi.job.run_id": run_key(descriptor.name, msg.metadata.sequence.stream),
+            "abi.job.attempt": msg.metadata.num_delivered,
+        }
+        with server_span(
+            getattr(msg, "subject", ""),
+            msg.headers,
+            kind="consumer",
+            name=f"job {descriptor.name}",
+            attributes=attributes,
+        ):
+            status = await self._handle_delivery(descriptor, handler, msg)
+            if status not in ("SUCCEEDED", "CANCELLED"):
+                record_error(status)
+
+    async def _handle_delivery(
+        self, descriptor: JobDescriptor, handler: Any, msg: Any
+    ) -> str:
         sequence, attempt = msg.metadata.sequence.stream, msg.metadata.num_delivered
         run_id = run_key(descriptor.name, sequence)
         headers = msg.headers or {}
@@ -436,3 +458,4 @@ class JobHost:
         if status == "SUCCEEDED":
             fields["result"] = result
         await self._save(run_id, fields)
+        return status

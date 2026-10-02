@@ -146,3 +146,49 @@ def test_current_module_cleanup_on_cancellation(monkeypatch):
     asyncio.run(scenario())
     assert unloaded == [True]
     client.__aexit__.assert_awaited_once()
+
+
+def _capturing_client(monkeypatch, calls):
+    def client_factory(*args, **kwargs):
+        calls.append(kwargs)
+        client = MagicMock()
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=False)
+        return client
+
+    monkeypatch.setattr("naas_abi_sdk.module.ABIClient", client_factory)
+
+
+def test_run_module_names_its_connection_after_the_module(monkeypatch):
+    import socket
+
+    calls = []
+    _capturing_client(monkeypatch, calls)
+
+    class Named(BaseModule):
+        module_id = "acme.reports"
+
+        async def run(self):
+            return None
+
+    asyncio.run(run_module(Named, url="nats://unused", token="t"))
+    asyncio.run(run_module(Named, url="nats://unused", token="t", name="custom"))
+
+    assert calls[0]["name"] == f"acme.reports@{socket.gethostname()}"
+    assert calls[1]["name"] == "custom"
+
+
+def test_run_module_configures_tracing_from_the_environment(monkeypatch):
+    calls = []
+    _capturing_client(monkeypatch, [])
+    monkeypatch.setattr("naas_abi_sdk.telemetry.configure_from_env", calls.append)
+
+    class Traced(BaseModule):
+        module_id = "acme.traced"
+
+        async def run(self):
+            return None
+
+    asyncio.run(run_module(Traced, url="nats://unused", token="t"))
+
+    assert calls == ["acme.traced"]

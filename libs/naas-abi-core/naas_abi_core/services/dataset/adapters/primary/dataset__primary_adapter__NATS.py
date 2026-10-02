@@ -32,6 +32,7 @@ from naas_abi_core.engine.nats_auth import (
 )
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
+from naas_abi_core.engine.nats_tracing import add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.dataset.v1 import dataset_pb2
 from naas_abi_core.services.dataset.adapters.dataset_nats_contract import (
@@ -222,7 +223,7 @@ class DatasetPrimaryAdapterNATS:
         if self._service is not None:
             return
 
-        service = await nats.micro.add_service(
+        service = await add_traced_service(
             nc,
             name=SERVICE_NAME,
             version=SERVICE_VERSION,

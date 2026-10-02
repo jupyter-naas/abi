@@ -12,6 +12,13 @@ from google.protobuf.message import Message
 from nats.aio.client import Client
 from nats.errors import MaxPayloadError
 
+from naas_abi_sdk.telemetry import (
+    TransferTrace,
+    client_span,
+    record_error,
+    record_reply,
+)
+
 Response = TypeVar("Response", bound=Message)
 MAX_PAYLOAD = 8 * 1024 * 1024
 
@@ -67,7 +74,12 @@ class Transport:
                 await self.connection.close()
 
     async def call(
-        self, subject: str, request: Message, response_type: type[Response]
+        self,
+        subject: str,
+        request: Message,
+        response_type: type[Response],
+        *,
+        transfer: TransferTrace | None = None,
     ) -> Response:
         # Copy so concurrent calls never mutate a caller-owned request.
         outgoing = type(request)()
@@ -81,12 +93,24 @@ class Transport:
             raise ValueError("A nonempty service token without newlines is required")
         headers = {"Nats-Auth-Token": token}
         payload = outgoing.SerializeToString()
+        # The span covers the whole exchange; the trace travels in the headers.
+        with client_span(subject, headers, size=len(payload), transfer=transfer):
+            return await self._exchange(
+                subject, payload, headers, response_type, transfer
+            )
 
+    async def _exchange(
+        self,
+        subject: str,
+        payload: bytes,
+        headers: dict[str, str],
+        response_type: type[Response],
+        transfer: TransferTrace | None = None,
+    ) -> Response:
         async def send():
             nc = await self.connect()
-            size = len(payload) + len(
-                f"NATS/1.0\r\nNats-Auth-Token: {token}\r\n\r\n".encode()
-            )
+            header_block = "".join(f"{k}: {v}\r\n" for k, v in headers.items())
+            size = len(payload) + len(f"NATS/1.0\r\n{header_block}\r\n".encode())
             if size > min(nc.max_payload, MAX_PAYLOAD):
                 raise RPCError("PAYLOAD_TOO_LARGE", "Request exceeds broker limit")
             try:
@@ -99,16 +123,17 @@ class Transport:
                 ) from exc
 
         reply = await asyncio.wait_for(send(), timeout=self.timeout)
+        record_reply(len(reply.data or b""), transfer=transfer)
         h = reply.headers or {}
         if "Nats-Service-Error" in h or "Nats-Service-Error-Code" in h:
-            raise RPCError(
-                h.get("Nats-Service-Error-Code", "UNKNOWN"),
-                h.get("Nats-Service-Error", "Remote error"),
-            )
+            code = h.get("Nats-Service-Error-Code", "UNKNOWN")
+            record_error(code)
+            raise RPCError(code, h.get("Nats-Service-Error", "Remote error"))
         response = response_type.FromString(reply.data)
         if response.HasField("error"):
             error = cast(Any, response).error
             while "error" in error.DESCRIPTOR.fields_by_name:
                 error = error.error
+            record_error(error.code, error.message)
             raise RPCError(error.code, error.message, response=response)
         return response

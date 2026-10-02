@@ -143,12 +143,14 @@ def error_of(response):
 
 def test_primary_returns_non_retryable_error_for_oversized_reply(primary):
     replies = []
+    reply_headers = []
     response_cls = response_class(primary)
 
-    async def respond(data):
+    async def respond(data, headers=None):  # nats.micro Request.respond
         if len(data) > 512:
             raise MaxPayloadError()
         replies.append(response_cls.FromString(data))
+        reply_headers.append(headers)
 
     request = SimpleNamespace(
         data=keyvalue_pb2.GetRequest(key="k").SerializeToString(),
@@ -172,6 +174,7 @@ def test_primary_returns_non_retryable_error_for_oversized_reply(primary):
     assert len(replies) == 1
     assert error_of(replies[0]).code == "PAYLOAD_TOO_LARGE"
     assert not error_of(replies[0]).retryable
+    assert reply_headers == [{"Abi-Error-Code": "PAYLOAD_TOO_LARGE"}]
 
 
 def test_primary_rejects_malformed_protobuf_before_dispatch(primary):

@@ -11,6 +11,7 @@ from naas_abi_core.engine.nats_auth import (
 )
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
+from naas_abi_core.engine.nats_tracing import add_traced_service
 from naas_abi_core.services.document.adapters.document_nats_codec import (
     ERRORS,
     decode_order,
@@ -47,7 +48,7 @@ class DocumentPrimaryAdapterNATS:
     async def start(self, nc: nats.NATS) -> None:
         if self._service is not None:
             return
-        service = await nats.micro.add_service(nc, name="document", version="1.0.0")
+        service = await add_traced_service(nc, name="document", version="1.0.0")
         self._service = service
         for operation in OPERATIONS:
             await service.add_endpoint(
