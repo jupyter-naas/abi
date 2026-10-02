@@ -75,6 +75,7 @@ class TopicIn(BaseModel):
     image_query: str = ""
     result_rows: list[TopicResultRowIn] = Field(default_factory=list)
     detail_label: str = "Details"
+    detail_facts: list[TopicResultRowIn] = Field(default_factory=list)
     graphs: list[str] = Field(default_factory=list)
     enabled: bool = True
     order: int = 100

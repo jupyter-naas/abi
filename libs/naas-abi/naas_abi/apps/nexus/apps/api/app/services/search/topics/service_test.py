@@ -22,6 +22,7 @@ from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema impo
     SearchTopic,
     SearchTopicNotFoundError,
     SearchTopicValidationError,
+    TopicResultRowDef,
 )
 from rdflib import Graph
 
@@ -227,6 +228,71 @@ class TestResultDecoration:
         await service.save_topic(WS, replace(person, result_rows=(failing,)), user_id="u")
         results = await service.search(WS, "person", "", store)
         assert results.items and all(not item.rows for item in results.items)
+
+
+SERVICE_LINE = TopicResultRowDef(
+    id="service_line",
+    label="Service line",
+    query="""PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX abi: <http://ontology.naas.ai/abi/>
+PREFIX personnel: <http://ontology.naas.ai/personnel/>
+SELECT ?uri ?value
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?line rdf:type personnel:ServiceLine ; abi:hasMemberPart ?uri ; rdfs:label ?value .
+}""",
+)
+GRADE = TopicResultRowDef(
+    id="grade",
+    label="Grade",
+    query="""PREFIX personnel: <http://ontology.naas.ai/personnel/>
+SELECT ?uri ?value
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?uri personnel:hasGrade ?grade .
+  ?grade personnel:grade_value ?value .
+}""",
+)
+
+
+class TestDetailFacts:
+    def test_header_is_employer_then_years_of_experience(self) -> None:
+        person = BUILTIN_TOPICS["person"]
+        assert "?employer ?yearsOfExperience" in person.header_query
+        assert "hasGrade" not in person.header_query and "ServiceLine" not in person.header_query
+        assert person.detail_facts == ()
+
+    def test_facts_round_trip_and_are_validated(self) -> None:
+        person = replace(BUILTIN_TOPICS["person"], detail_facts=(SERVICE_LINE, GRADE))
+        assert SearchTopic.from_dict(person.to_dict()) == person
+        validate_topic(person)
+        with pytest.raises(SearchTopicValidationError, match="detail fact grade"):
+            validate_topic(replace(person, detail_facts=(replace(GRADE, label=""),)))
+
+    async def test_configured_facts_follow_the_header_facts(
+        self, service: SearchTopicService, store
+    ) -> None:
+        person = BUILTIN_TOPICS["person"]
+        await service.save_topic(
+            WS, replace(person, detail_facts=(SERVICE_LINE, GRADE)), user_id="u"
+        )
+        detail = await service.detail(WS, "person", ALICE, store)
+        keys = [fact.key for fact in detail.facts]
+        assert keys[-2:] == ["service_line", "grade"]
+        assert keys.index("employer") < keys.index("service_line")
+        assert next(f for f in detail.facts if f.key == "grade").value == "Partner"
+
+    async def test_a_broken_fact_is_left_out(self, service: SearchTopicService, store) -> None:
+        broken = replace(
+            GRADE,
+            query="SELECT ?uri ?value WHERE { VALUES ?uri { {{ uris }} } BIND(1/0 AS ?value) }",
+        )
+        await service.save_topic(
+            WS, replace(BUILTIN_TOPICS["person"], detail_facts=(broken,)), user_id="u"
+        )
+        detail = await service.detail(WS, "person", ALICE, store)
+        assert detail.title and all(fact.key != "grade" for fact in detail.facts)
 
 
 class TestGraphScope:

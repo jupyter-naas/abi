@@ -75,7 +75,7 @@ export function TopicScopeView({ workspaceId, topic, route, canEdit, onTab }: {
       </div>
 
       {route.tab === 'ontology' ? (
-        <TopicOntology workspaceId={workspaceId} topic={topic} canEdit={canEdit} />
+        <TopicOntology workspaceId={workspaceId} topic={topic} />
       ) : route.tab === 'details' ? (
         route.item ? (
           <TopicDetailView detail={detail.data} loading={detail.loading} error={detail.error} backHref={backHref} linkFor={linkFor} />

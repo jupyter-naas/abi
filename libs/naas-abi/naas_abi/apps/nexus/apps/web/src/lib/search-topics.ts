@@ -40,6 +40,8 @@ export interface SearchTopic {
   result_rows: TopicResultRowDef[];
   /** The tab that shows one individual: "Profile" for a person, "Card" for an organization. */
   detail_label: string;
+  /** Facts added to the detail header (`row` role, `{{ uris }}` is the one individual), after the header query's. */
+  detail_facts?: TopicResultRowDef[];
   /** Graphs read, within the workspace's. Empty: every graph the workspace can read. */
   graphs: string[];
   enabled: boolean;
@@ -189,6 +191,7 @@ export function blankTopic(id: string): SearchTopic {
     image_query: '',
     result_rows: [],
     detail_label: 'Details',
+    detail_facts: [],
     results_query: `PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT ?uri ?title
 WHERE {

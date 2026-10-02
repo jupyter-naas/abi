@@ -53,7 +53,7 @@ export function TopicDetailView({ detail, loading, error, backHref, linkFor }: {
       {detail.snippet && <p className="whitespace-pre-line text-sm leading-relaxed">{detail.snippet}</p>}
 
       {detail.facts.length > 0 && (
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border bg-card p-3 text-sm sm:grid-cols-3">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border bg-card p-3 text-sm sm:grid-cols-4">
           {detail.facts.map(fact => (
             <div key={fact.key} className="min-w-0">
               <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{fact.label}</dt>

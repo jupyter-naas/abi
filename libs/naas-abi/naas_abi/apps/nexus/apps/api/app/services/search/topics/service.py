@@ -30,6 +30,7 @@ from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema impo
     TopicFact,
     TopicResultItem,
     TopicResultRow,
+    TopicResultRowDef,
     TopicResults,
     TopicSectionItem,
     TopicSectionResult,
@@ -56,6 +57,13 @@ def _tags(value: str | None) -> list[str]:
     if not value:
         return []
     return list(dict.fromkeys(tag.strip() for tag in value.split("\n") if tag.strip()))
+
+
+def _projection(sparql: str) -> dict[str, int]:
+    """Position of each variable in a query's SELECT clause: header facts keep that order."""
+    match = re.search(r"\bSELECT\b(.*?)\bWHERE\b", sparql, re.IGNORECASE | re.DOTALL)
+    names = re.findall(r"\?(\w+)", match.group(1)) if match else []
+    return {name: i for i, name in reversed(list(enumerate(names)))}
 
 
 def _humanize(name: str) -> str:
@@ -271,19 +279,40 @@ class SearchTopicService:
                 sparql=sparql,
             )
 
-        header_rows, *sections = await asyncio.gather(
+        async def run_fact(definition: TopicResultRowDef) -> TopicFact | None:
+            try:
+                rows = await asyncio.to_thread(
+                    store.select, render(definition.query, "row", {"uris": [uri]})
+                )
+            except Exception as exc:  # noqa: BLE001 - a broken fact leaves its slot empty
+                logger.warning("search topic %s fact %s failed: %s", topic.id, definition.id, exc)
+                return None
+            values = list(dict.fromkeys(v for row in rows if (v := _value(row, "value"))))
+            if not values:
+                return None
+            return TopicFact(key=definition.id, label=definition.label, value=", ".join(values))
+
+        header_rows, extra_facts, *sections = await asyncio.gather(
             asyncio.to_thread(store.select, header_sparql),
+            asyncio.gather(*(run_fact(f) for f in topic.detail_facts)),
             *(run_section(s) for s in topic.sections),
         )
         if not header_rows:
             raise SearchTopicNotFoundError(f"{topic.label} not found in the workspace graphs")
         header = header_rows[0]
         slots = ROLE_CONTRACTS["header"].required | ROLE_CONTRACTS["header"].optional
-        facts = [
-            TopicFact(key=name, label=_humanize(name), value=binding.value, is_uri=binding.is_uri)
-            for name, binding in header.items()
-            if name not in slots and binding.value.strip()
-        ]
+        projection = _projection(header_sparql)
+        facts = sorted(
+            (
+                TopicFact(
+                    key=name, label=_humanize(name), value=binding.value, is_uri=binding.is_uri
+                )
+                for name, binding in header.items()
+                if name not in slots and binding.value.strip()
+            ),
+            key=lambda fact: projection.get(fact.key, len(projection)),
+        )
+        facts += [fact for fact in extra_facts if fact is not None]
         return TopicDetail(
             topic_id=topic.id,
             uri=uri,

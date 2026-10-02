@@ -118,7 +118,7 @@ WHERE {
     ),
     header_query=_PREFIXES
     + """
-SELECT ?title ?subtitle ?snippet ?image ?url ?employer ?office ?country ?serviceLine ?grade ?yearsOfExperience
+SELECT ?title ?subtitle ?snippet ?image ?url ?employer ?yearsOfExperience
 WHERE {
   {{ uri }} rdfs:label ?title .
   OPTIONAL {
@@ -130,13 +130,6 @@ WHERE {
   }
   OPTIONAL { {{ uri }} people:hasPortrait ?p . ?p people:portrait_url ?image . }
   OPTIONAL { {{ uri }} people:worksFor|personnel:isEmployedBy ?org . ?org rdfs:label ?employer . }
-  OPTIONAL { ?sl rdf:type personnel:ServiceLine ; abi:hasMemberPart {{ uri }} ; rdfs:label ?serviceLine . }
-  OPTIONAL { {{ uri }} personnel:hasGrade ?g . ?g personnel:grade_value ?grade . }
-  OPTIONAL {
-    {{ uri }} people:hasWorkLocation ?site .
-    ?site people:office_label ?office .
-    OPTIONAL { ?site people:country_name ?country . }
-  }
 }
 LIMIT 1
 """,

@@ -353,14 +353,48 @@ function TopicEditor({ workspaceId, topic, topics, graphs, contract, canEdit, is
   const set = <K extends keyof SearchTopic>(key: K, value: SearchTopic[K]) => setDraft(d => ({ ...d, [key]: value }));
   const setSection = (index: number, patch: Partial<TopicSection>) =>
     setDraft(d => ({ ...d, sections: d.sections.map((s, i) => (i === index ? { ...s, ...patch } : s)) }));
-  const setRow = (index: number, patch: Partial<TopicResultRowDef>) =>
-    setDraft(d => ({ ...d, result_rows: d.result_rows.map((r, i) => (i === index ? { ...r, ...patch } : r)) }));
-  const moveRow = (index: number, delta: number) => setDraft(d => {
-    const rows = [...d.result_rows];
+  // Result rows and detail facts are both lists of `row` queries.
+  type RowList = 'result_rows' | 'detail_facts';
+  const rowsOf = (d: SearchTopic, key: RowList) => d[key] ?? [];
+  const setRow = (key: RowList, index: number, patch: Partial<TopicResultRowDef>) =>
+    setDraft(d => ({ ...d, [key]: rowsOf(d, key).map((r, i) => (i === index ? { ...r, ...patch } : r)) }));
+  const moveRow = (key: RowList, index: number, delta: number) => setDraft(d => {
+    const rows = [...rowsOf(d, key)];
     const [moved] = rows.splice(index, 1);
     rows.splice(Math.max(0, Math.min(rows.length, index + delta)), 0, moved!);
-    return { ...d, result_rows: rows };
+    return { ...d, [key]: rows };
   });
+  const rowListEditor = (key: RowList, { title, help, empty, noun, template }: { title: string; help: string; empty: string; noun: string; template: string }) => {
+    const rows = rowsOf(draft, key);
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold">{title}</h4>
+          {canEdit && (
+            <button type="button" onClick={() => set(key, [...rows, { id: `${noun}_${rows.length + 1}`, label: `New ${noun}`, query: template }])}
+              className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}><Plus size={14} /> Add {noun}</button>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">{help}</p>
+        {rows.length === 0 && <p className="text-sm text-muted-foreground">{empty}</p>}
+        {rows.map((row, index) => (
+          <div key={index} className="space-y-3 border border-border bg-card p-3">
+            <fieldset disabled={disabled} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+              <Field label="Id"><input className={cn(input, 'font-mono text-xs')} value={row.id} onChange={e => setRow(key, index, { id: e.target.value })} /></Field>
+              <Field label="Label"><input className={input} value={row.label} onChange={e => setRow(key, index, { label: e.target.value })} /></Field>
+              <div className="flex items-end gap-1 pb-0.5">
+                <IconButton label="Move up" onClick={() => moveRow(key, index, -1)} disabled={index === 0}><ChevronUp size={14} /></IconButton>
+                <IconButton label="Move down" onClick={() => moveRow(key, index, 1)} disabled={index === rows.length - 1}><ChevronDown size={14} /></IconButton>
+                <IconButton label={`Remove ${noun}`} onClick={() => set(key, rows.filter((_, i) => i !== index))}><Trash2 size={14} /></IconButton>
+              </div>
+            </fieldset>
+            <QueryEditor role="row" label="Query" contract={contract?.row} value={row.query} disabled={disabled}
+              onChange={v => setRow(key, index, { query: v })} workspaceId={workspaceId} testUri={testUri} canEdit={canEdit} graphs={draft.graphs} />
+          </div>
+        ))}
+      </div>
+    );
+  };
   const moveSection = (index: number, delta: number) => setDraft(d => {
     const sections = [...d.sections];
     const [moved] = sections.splice(index, 1);
@@ -502,35 +536,24 @@ function TopicEditor({ workspaceId, topic, topics, graphs, contract, canEdit, is
         placeholder={IMAGE_QUERY_TEMPLATE}
         onChange={v => set('image_query', v)} workspaceId={workspaceId} testUri={testUri} canEdit={canEdit} graphs={draft.graphs} />
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold">Result rows</h4>
-          {canEdit && (
-            <button type="button" onClick={() => set('result_rows', [...draft.result_rows, { id: `row_${draft.result_rows.length + 1}`, label: 'New row', query: ROW_QUERY_TEMPLATE }])}
-              className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}><Plus size={14} /> Add row</button>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">Each row is one labelled line of metadata under every result. Several values are joined.</p>
-        {draft.result_rows.length === 0 && <p className="text-sm text-muted-foreground">No rows: results show their title and subtitle only.</p>}
-        {draft.result_rows.map((row, index) => (
-          <div key={index} className="space-y-3 border border-border bg-card p-3">
-            <fieldset disabled={disabled} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-              <Field label="Id"><input className={cn(input, 'font-mono text-xs')} value={row.id} onChange={e => setRow(index, { id: e.target.value })} /></Field>
-              <Field label="Label"><input className={input} value={row.label} onChange={e => setRow(index, { label: e.target.value })} /></Field>
-              <div className="flex items-end gap-1 pb-0.5">
-                <IconButton label="Move up" onClick={() => moveRow(index, -1)} disabled={index === 0}><ChevronUp size={14} /></IconButton>
-                <IconButton label="Move down" onClick={() => moveRow(index, 1)} disabled={index === draft.result_rows.length - 1}><ChevronDown size={14} /></IconButton>
-                <IconButton label="Remove row" onClick={() => set('result_rows', draft.result_rows.filter((_, i) => i !== index))}><Trash2 size={14} /></IconButton>
-              </div>
-            </fieldset>
-            <QueryEditor role="row" label="Query" contract={contract?.row} value={row.query} disabled={disabled}
-              onChange={v => setRow(index, { query: v })} workspaceId={workspaceId} testUri={testUri} canEdit={canEdit} graphs={draft.graphs} />
-          </div>
-        ))}
-      </div>
+      {rowListEditor('result_rows', {
+        title: 'Result rows',
+        help: 'Each row is one labelled line of metadata under every result. Several values are joined.',
+        empty: 'No rows: results show their title and subtitle only.',
+        noun: 'row',
+        template: ROW_QUERY_TEMPLATE,
+      })}
 
       <QueryEditor role="header" label="Detail header query" contract={contract?.header} value={draft.header_query} disabled={disabled}
         onChange={v => set('header_query', v)} workspaceId={workspaceId} testUri={testUri} canEdit={canEdit} graphs={draft.graphs} />
+
+      {rowListEditor('detail_facts', {
+        title: 'Detail facts',
+        help: "Facts added to the detail header, in order, after the header query's own (e.g. a service line or a grade). {{ uris }} is the individual shown.",
+        empty: 'No extra facts: the header shows the header query only.',
+        noun: 'fact',
+        template: ROW_QUERY_TEMPLATE,
+      })}
 
       <div className="space-y-3">
         <div className="flex items-center justify-between">

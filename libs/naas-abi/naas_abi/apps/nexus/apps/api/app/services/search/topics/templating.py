@@ -22,6 +22,7 @@ from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema impo
     TOPIC_ID_PATTERN,
     SearchTopic,
     SearchTopicValidationError,
+    TopicResultRowDef,
 )
 from rdflib.plugins.sparql import prepareQuery
 
@@ -114,6 +115,22 @@ def validate_query(template: str, role: str, *, label: str = "") -> list[str]:
     return errors
 
 
+def _validate_rows(rows: tuple[TopicResultRowDef, ...], kind: str) -> list[str]:
+    """Result rows and detail facts: ``row``-role queries with a unique id and a label."""
+    errors: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        if not TOPIC_ID_PATTERN.match(row.id):
+            errors.append(f"{kind} id {row.id!r} is invalid")
+        if row.id in seen:
+            errors.append(f"{kind} id {row.id!r} is duplicated")
+        seen.add(row.id)
+        if not row.label.strip():
+            errors.append(f"{kind} {row.id}: label is required")
+        errors += validate_query(row.query, "row", label=f"{kind} {row.id}")
+    return errors
+
+
 def validate_topic(topic: SearchTopic) -> None:
     errors: list[str] = []
     if not TOPIC_ID_PATTERN.match(topic.id):
@@ -136,16 +153,8 @@ def validate_topic(topic: SearchTopic) -> None:
     errors += validate_query(topic.header_query, "header", label="header query")
     if topic.image_query.strip():
         errors += validate_query(topic.image_query, "image", label="image query")
-    rows_seen: set[str] = set()
-    for row in topic.result_rows:
-        if not TOPIC_ID_PATTERN.match(row.id):
-            errors.append(f"result row id {row.id!r} is invalid")
-        if row.id in rows_seen:
-            errors.append(f"result row id {row.id!r} is duplicated")
-        rows_seen.add(row.id)
-        if not row.label.strip():
-            errors.append(f"result row {row.id}: label is required")
-        errors += validate_query(row.query, "row", label=f"result row {row.id}")
+    errors += _validate_rows(topic.result_rows, "result row")
+    errors += _validate_rows(topic.detail_facts, "detail fact")
     seen: set[str] = set()
     for section in topic.sections:
         if not TOPIC_ID_PATTERN.match(section.id):

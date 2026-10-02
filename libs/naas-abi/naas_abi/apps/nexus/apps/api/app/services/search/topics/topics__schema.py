@@ -24,7 +24,10 @@ page with ``{{ uris }}`` standing for that page's individuals (write
 ``VALUES ?uri { {{ uris }} }``). The image query gives each result its picture
 (a person's portrait, an organization's logo); each row query is one labelled
 line of metadata under a result (employer, office, people…), its values joined
-when it binds several.
+when it binds several. A topic's *detail facts* are ``row`` queries too, run for
+the one individual a detail shows: each adds a labelled fact to its header
+(a service line, a grade… whatever a workspace records and the built-in topic
+does not assume).
 
 A section's ``tags`` is one string of newline-separated labels shown as chips
 on its row (the skills and languages an experience developed): aggregate them
@@ -172,6 +175,9 @@ class SearchTopic:
     result_rows: tuple[TopicResultRowDef, ...] = ()
     # The tab that shows one individual: "Profile" for a person, "Card" for an organization.
     detail_label: str = "Details"
+    # Facts added to the detail header (``row`` role, ``{{ uris }}`` is the one
+    # individual), in order, after the header query's own facts.
+    detail_facts: tuple[TopicResultRowDef, ...] = ()
     # Graphs the topic reads, within what the workspace may read. Empty: every
     # graph the workspace can read (the default for every topic).
     graphs: tuple[str, ...] = ()
@@ -183,6 +189,7 @@ class SearchTopic:
         data = asdict(self)
         data["sections"] = [asdict(s) for s in self.sections]
         data["result_rows"] = [asdict(r) for r in self.result_rows]
+        data["detail_facts"] = [asdict(r) for r in self.detail_facts]
         data["graphs"] = list(self.graphs)
         return data
 
@@ -214,6 +221,10 @@ class SearchTopic:
                 for r in data.get("result_rows") or []
             ),
             detail_label=str(data.get("detail_label") or "Details"),
+            detail_facts=tuple(
+                TopicResultRowDef(id=str(r["id"]), label=str(r["label"]), query=str(r["query"]))
+                for r in data.get("detail_facts") or []
+            ),
             graphs=tuple(dict.fromkeys(str(g) for g in data.get("graphs") or [] if str(g).strip())),
             enabled=bool(data.get("enabled", True)),
             order=int(data.get("order", 100)),
