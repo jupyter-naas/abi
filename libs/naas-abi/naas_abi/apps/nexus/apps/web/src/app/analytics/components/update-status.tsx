@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { getApiUrl } from '@/lib/config';
+import { authFetch, useAuthStore } from '@/stores/auth';
 
 function formatLocal(iso: string): string {
   const d = new Date(iso);
@@ -22,13 +22,26 @@ interface Metadata {
   aggregates: FileStats[];
 }
 
+function usePersistedAuthReady(): boolean {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (useAuthStore.persist.hasHydrated()) {
+      setReady(true);
+      return;
+    }
+    return useAuthStore.persist.onFinishHydration(() => setReady(true));
+  }, []);
+  return ready;
+}
+
 export function UpdateStatus() {
   const [metadata, setMetadata] = useState<Metadata | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const authReady = usePersistedAuthReady();
 
   const fetchMetadata = useCallback(async () => {
     try {
-      const r = await fetch(`${getApiUrl()}/api/analytics/metadata`, { cache: 'no-store' });
+      const r = await authFetch('/api/analytics/metadata', { cache: 'no-store' });
       if (!r.ok) return;
       const data = await r.json();
       setMetadata(data);
@@ -38,21 +51,22 @@ export function UpdateStatus() {
   }, []);
 
   useEffect(() => {
+    if (!authReady) return;
     fetchMetadata();
-  }, [fetchMetadata]);
+  }, [authReady, fetchMetadata]);
 
   const refresh = useCallback(async () => {
-    if (refreshing) return;
+    if (refreshing || !authReady) return;
     setRefreshing(true);
     try {
-      await fetch(`${getApiUrl()}/api/analytics/rebuild`, { method: 'POST' });
+      await authFetch('/api/analytics/rebuild', { method: 'POST' });
       await fetchMetadata();
     } catch {
       // ignore — keep the previous metadata visible on failure
     } finally {
       setRefreshing(false);
     }
-  }, [refreshing, fetchMetadata]);
+  }, [authReady, refreshing, fetchMetadata]);
 
   const tooltip = metadata
     ? `${metadata.events.count} events · ${metadata.aggregates.length} aggregates · rebuilt in ${metadata.duration_ms} ms`

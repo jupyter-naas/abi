@@ -1,0 +1,105 @@
+/* data/services — discovery */
+
+.data-discovery-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.data-discovery-pills,
+.data-discovery-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.data-discovery-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.data-discovery-label {
+  flex: none;
+  width: 44px;
+  padding-top: 3px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground-hex);
+}
+
+.data-discovery-lease {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.data-discovery-lease-success {
+  color: var(--muted-foreground-hex);
+}
+
+.data-discovery-lease-warn {
+  color: #B45309;
+}
+
+.data-discovery-lease-danger {
+  color: var(--destructive-hex);
+}
+
+.dark .data-discovery-lease-warn {
+  color: #FCD34D;
+}
+
+.data-discovery-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.data-discovery-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.data-discovery-agents {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.data-discovery-agent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--background-hex);
+}
+
+.data-discovery-agent-name {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.data-discovery-agent-text {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--muted-foreground-hex);
+}
+
+.data-discovery-jobs td {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}

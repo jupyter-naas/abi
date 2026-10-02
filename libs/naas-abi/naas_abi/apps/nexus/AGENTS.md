@@ -343,7 +343,7 @@ Notes:
 
 - Invite **creates** the user when missing, adds membership, and emails OTP / magic-link sign-in (same challenge as `/api/auth/magic-link/request`). Optional `workspace_id` on org invite also adds workspace membership.
 - UI must hide or disable Add / Invite for non-admins; API still returns `403`.
-- **Agents:** `invite_organization_member` / `invite_workspace_member` in `naas_abi/agents/tools/nexus_admin_tools.py` use the same create-on-invite path in-process.
+- **Agents:** `invite_organization_member` / `invite_workspace_member` in `naas_abi/tools/nexus_admin_tools.py` use the same create-on-invite path in-process.
 
 Web entry points: `organizations/[orgId]/settings/users/`, workspace `organization/users/`, workspace `settings/members/`. Store: `stores/organization.ts`.
 
@@ -563,6 +563,33 @@ The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so al
 
 - Migrate `chat-interface.tsx` to semantic CSS
 
+## System app (platform super admins)
+
+`/workspace/[id]/admin/system` (dock entry "System", visible when `is_superadmin`). Tabs: Overview, Services, Data, Jobs, Modules, NATS, Live traffic, Traces; the tab is the `?tab=` query. Live traffic is an SSE stream read with raw `fetch` and `getAuthHeader()` (like chat), started and stopped by the user.
+
+- API: `apps/api/app/services/sysadmin/` (hexagonal, see its `AGENTS.md`), mounted at `/api/admin/system/*` behind `require_superadmin` on the router. `main_public_routes_test.py` fails if a route there loses it.
+- Web: `apps/web/src/app/workspace/[workspaceId]/admin/system/`, the three-file route convention plus colocated modules (`system-api.ts`, `system-model.ts`, one component per tab) and jsdom render tests. Views poll every 10 s while visible; the footer Refresh reloads the active tab.
+- Data tab: `admin/system/data/`, a three-pane explorer (service rail, browser, inspector) over `/api/admin/system/resources`.
+  - The shell owns layout, state (`use-explorer.ts`), URL deep links (`?service=&in=&item=`), keyboard shortcuts (`?` lists them), dialogs (typed-confirmation delete, Monaco editor, custom create), toasts, history and recent changes. Do not fork it per service.
+  - Each service is one `ServiceView` in `data/services/<service>.tsx` (contract in `services/types.ts`, registered in `services/registry.ts`). It sets per-depth columns or cards, icons, nouns, badges, summaries, facts, a custom preview, an editor spec or a custom create form, and the delete copy. Its styles live in `services/<service>.css` (`data-<service>-*`).
+  - Shared renderers live in `data/viewers/`: JSON tree, Monaco code, data grid, RDF triples, vector, email, message, status, binary (hex dump and images), and LangGraph checkpoints (`checkpoint-view.tsx`: transcript with tool calls, models and tokens; state, pending writes, metadata; "The step before" opens the parent through `PreviewContext.open`). In Documents, the saver collections list as "Step N · source" rows grouped by thread (`title` hook on `ServiceView` for entries whose name is an opaque id). Adapters send a structured `view` (shapes in the API's `resources.py`) and the generic preview picks the renderer.
+  - Secrets stay masked until Reveal (shown for a while, then hidden again). Replace and Delete need the id typed back. The API audits every change and reveal before it runs. Never use browser `confirm()` dialogs here.
+  - Tests: `data/*.test.ts` (shell flows with an in-memory API), `data/viewers/*.test.ts`, `data/services/*.test.ts(x)`.
+- Jobs tab: `admin/system/jobs/` over `/api/admin/system/jobs`, a Dagster-like view of module jobs (engine and remote).
+  - Jobs list: failing and running first, schedules in plain words with a live next tick, a strip of the last 20 runs, and queue depth.
+  - Job page: triggers, health (success rate, average duration), queue, settings, its runs.
+  - Run feed with status filters.
+  - Run inspector: a trigger → start → finish timeline with the wait before start, the error, logs (`ctx.log`), payload, result, and the run's trace (the Traces waterfall, embedded).
+  - Run now, Re-run and Cancel are audited by the API. It reuses the Data tab's atoms, viewers, modal and toasts (`../data/`) and polls only while visible: 5 s, or 1.5 s for a live run.
+- Traces tab: `admin/system/traces/` over `/api/admin/system/traces`, so nobody needs the Jaeger UI. The API reads the tracing backend's query API (Jaeger `/api/v3`, `telemetry.query_url`, else `telemetry.ui_url`); the browser never talks to Jaeger.
+  - Search by service, operation, time window, minimum duration and errors only, or jump to a trace id. Results are a duration-over-time scatter plus a list.
+  - Trace: a waterfall (`waterfall.tsx`) in span-tree order with service colors, self time, events as ticks, a minimap to drag-zoom (double-click a span to zoom to it), a span filter that keeps ancestors, collapse and expand, and ↑/↓/←/→. Above 300 visible rows it renders only the rows on screen.
+  - Repeated calls fold: 5 or more siblings with the same service and operation (polling, saves) become one row with the count, total time, cadence (`every …`) and a tick per call, placed where the first starts. Unfolding lists one collapsed row per call. A toolbar toggle shows every call; filtering always lists matches flat; a selected or linked span opens the groups and spans above it (`layoutRows`, `pathTo` in `traces-model.ts`).
+  - Span detail: timing, parent and children, attributes grouped by namespace (`abi.`, `messaging.`, `rpc.`, `http.`…), events, resource and links to other traces.
+  - Deep links: `?tab=traces&trace=<id>&span=<id>`. Live traffic trace ids and the Jobs run inspector open here (`TraceView` is embeddable with `compact`); Jaeger stays a secondary link when `ui_url` is set.
+  - Pure helpers (tree, self time, ticks, placement, filters) live in `traces-model.ts`; tests in `traces/*.test.ts` with `traces-fixtures.ts`.
+- A source that is down (NATS mode off, discovery not configured, `nats.monitoring_url` unset or unreachable) never fails a whole view: the API returns the others plus a reason, or a 503 `{source, reason}` for NATS-only views, and the page shows that reason.
+
 ## Mobile list-detail pattern
 
 Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a **detail screen** with back navigation. Desktop keeps the two-column sidebar + content layout unchanged.
@@ -630,3 +657,31 @@ cd apps/web && pnpm typecheck
 ## Conventional commits
 
 NEXUS uses Conventional Commits enforced via `CONTRIBUTING.md` (`feat:`, `fix:`, `docs:`, `refactor:`, and so on). Consistent prefixes make cherry-picks and release notes tractable when syncing with upstream ABI. Match the style of recent commits when authoring messages.
+
+
+## Sheets UI and agent
+
+The Sheets editor uses `apps/web/src/components/sheets/workbook-grid.tsx`, a
+virtualized native grid. `workbook-model.ts` reads/writes the JSON block in
+`workbook.html`. Do not restore the fixed 1280×720 slide preview as the editor.
+Sparse `column_widths` and `row_heights` persist pixel dimensions per tab and
+are preserved by duplication and XLSX export. Formula entry supports arrow-key
+and mouse cell references without moving the destination cell.
+Row/column headers are editor chrome; row 1 remains workbook data. Bottom tabs
+select sheets; direct edits, clipboard changes and tab changes autosave through
+the existing workbook endpoint. Keep raw formulas intact in stored HTML/XLSX.
+
+`POST /api/sheets/evaluate` validates workspace access and calculates a local
+draft without saving. Both the grid and SheetsAgent use `sheets/formulas.py`.
+`agents/SheetsAgent.py` loads `agents/sheets/skills/nexus-sheets/SKILL.md`.
+`update_sheets_cells` performs bounded A1 edits without replacing other cells.
+Include `naas_abi SheetsAgent` in explicitly restricted workspace agent rosters.
+
+Focused checks from web: `pnpm test -- workbook-grid.test.ts workbook-model.test.ts sheets-`
+and `pnpm typecheck`. Backend: run pytest on `apps/nexus/sheets/`,
+`agents/SheetsAgent_test.py`, and the sheets primary adapter tests. The skill's
+validation script checks HTML workbooks without mutating formulas.
+
+Sheets mutations require writer membership. Saves use the existing source-control
+upsert operations, as Slides does. Git is authoritative; sidecars are mirrors.
+Dev output is `.next-dev`, separate from the production `.next` build directory.

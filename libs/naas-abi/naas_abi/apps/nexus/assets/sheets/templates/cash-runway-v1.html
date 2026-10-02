@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="nexus-sheets-template" content="cash-runway-v1" />
+<title>Cash runway</title>
+<script type="application/vnd.nexus.sheet+json">
+{
+  "title": "Cash runway",
+  "sheets": [
+    {
+      "name": "Assumptions",
+      "rows": [
+        [
+          "Role",
+          "Parameter",
+          "Value",
+          "Unit",
+          "Notes"
+        ],
+        [
+          "INPUT",
+          "Opening cash (Jan)",
+          850,
+          "EUR '000",
+          "Edit yellow cells"
+        ],
+        [
+          "LABEL",
+          "Unit",
+          "EUR thousands",
+          "",
+          ""
+        ],
+        [
+          "INPUT",
+          "Jan inflows",
+          118,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Feb inflows",
+          121,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Mar inflows",
+          125,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Apr inflows",
+          130,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "May inflows",
+          128,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Jun inflows",
+          135,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Jul inflows",
+          140,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Aug inflows",
+          138,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Sep inflows",
+          142,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Oct inflows",
+          145,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Nov inflows",
+          150,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Dec inflows",
+          155,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Jan outflows",
+          142,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Feb outflows",
+          145,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Mar outflows",
+          148,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Apr outflows",
+          151,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "May outflows",
+          155,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Jun outflows",
+          158,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Jul outflows",
+          160,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Aug outflows",
+          162,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Sep outflows",
+          165,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Oct outflows",
+          168,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Nov outflows",
+          170,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Dec outflows",
+          172,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "Backend monthly cost",
+          9.5,
+          "EUR '000",
+          "Hiring plan"
+        ],
+        [
+          "INPUT",
+          "Backend months H1",
+          4,
+          "months",
+          ""
+        ],
+        [
+          "INPUT",
+          "AE monthly cost",
+          8.2,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "AE months H1",
+          3,
+          "months",
+          ""
+        ],
+        [
+          "INPUT",
+          "CSM monthly cost",
+          7.0,
+          "EUR '000",
+          ""
+        ],
+        [
+          "INPUT",
+          "CSM months H1",
+          1,
+          "months",
+          ""
+        ]
+      ]
+    },
+    {
+      "name": "Runway",
+      "rows": [
+        [
+          "Month",
+          "Opening cash (EUR '000)",
+          "Inflows",
+          "Outflows",
+          "Net change",
+          "Closing cash",
+          "Runway (months)"
+        ],
+        [
+          "Jan",
+          "=Assumptions!C2",
+          "=Assumptions!C4",
+          "=Assumptions!C16",
+          "=C2-D2",
+          "=B2+E2",
+          "=IF(D2=0,0,F2/D2)"
+        ],
+        [
+          "Feb",
+          "=F2",
+          "=Assumptions!C5",
+          "=Assumptions!C17",
+          "=C3-D3",
+          "=B3+E3",
+          "=IF(D3=0,0,F3/D3)"
+        ],
+        [
+          "Mar",
+          "=F3",
+          "=Assumptions!C6",
+          "=Assumptions!C18",
+          "=C4-D4",
+          "=B4+E4",
+          "=IF(D4=0,0,F4/D4)"
+        ],
+        [
+          "Apr",
+          "=F4",
+          "=Assumptions!C7",
+          "=Assumptions!C19",
+          "=C5-D5",
+          "=B5+E5",
+          "=IF(D5=0,0,F5/D5)"
+        ],
+        [
+          "May",
+          "=F5",
+          "=Assumptions!C8",
+          "=Assumptions!C20",
+          "=C6-D6",
+          "=B6+E6",
+          "=IF(D6=0,0,F6/D6)"
+        ],
+        [
+          "Jun",
+          "=F6",
+          "=Assumptions!C9",
+          "=Assumptions!C21",
+          "=C7-D7",
+          "=B7+E7",
+          "=IF(D7=0,0,F7/D7)"
+        ],
+        [
+          "Jul",
+          "=F7",
+          "=Assumptions!C10",
+          "=Assumptions!C22",
+          "=C8-D8",
+          "=B8+E8",
+          "=IF(D8=0,0,F8/D8)"
+        ],
+        [
+          "Aug",
+          "=F8",
+          "=Assumptions!C11",
+          "=Assumptions!C23",
+          "=C9-D9",
+          "=B9+E9",
+          "=IF(D9=0,0,F9/D9)"
+        ],
+        [
+          "Sep",
+          "=F9",
+          "=Assumptions!C12",
+          "=Assumptions!C24",
+          "=C10-D10",
+          "=B10+E10",
+          "=IF(D10=0,0,F10/D10)"
+        ],
+        [
+          "Oct",
+          "=F10",
+          "=Assumptions!C13",
+          "=Assumptions!C25",
+          "=C11-D11",
+          "=B11+E11",
+          "=IF(D11=0,0,F11/D11)"
+        ],
+        [
+          "Nov",
+          "=F11",
+          "=Assumptions!C14",
+          "=Assumptions!C26",
+          "=C12-D12",
+          "=B12+E12",
+          "=IF(D12=0,0,F12/D12)"
+        ],
+        [
+          "Dec",
+          "=F12",
+          "=Assumptions!C15",
+          "=Assumptions!C27",
+          "=C13-D13",
+          "=B13+E13",
+          "=IF(D13=0,0,F13/D13)"
+        ]
+      ]
+    },
+    {
+      "name": "Hiring plan",
+      "rows": [
+        [
+          "Role",
+          "Start month",
+          "Monthly cost (EUR '000)",
+          "Months active (H1)",
+          "H1 cost"
+        ],
+        [
+          "Backend engineer",
+          "Mar",
+          "=Assumptions!C28",
+          "=Assumptions!C29",
+          "=C2*D2"
+        ],
+        [
+          "AE",
+          "Apr",
+          "=Assumptions!C30",
+          "=Assumptions!C31",
+          "=C3*D3"
+        ],
+        [
+          "CSM",
+          "Jun",
+          "=Assumptions!C32",
+          "=Assumptions!C33",
+          "=C4*D4"
+        ],
+        [
+          "Total planned hires",
+          "",
+          "",
+          "",
+          "=SUM(E2:E4)"
+        ]
+      ]
+    },
+    {
+      "name": "Checks",
+      "rows": [
+        [
+          "Check",
+          "Left",
+          "Right",
+          "Diff",
+          "Status"
+        ],
+        [
+          "Jan closing = opening + net",
+          "=Runway!F2",
+          "=Runway!B2+Runway!E2",
+          "=B2-C2",
+          "=IF(ABS(D2)<0.001,\"OK\",\"BREAK\")"
+        ],
+        [
+          "Feb opening = Jan closing",
+          "=Runway!B3",
+          "=Runway!F2",
+          "=B3-C3",
+          "=IF(ABS(D3)<0.001,\"OK\",\"BREAK\")"
+        ],
+        [
+          "Dec closing = Jan opening + sum nets",
+          "=Runway!F13",
+          "=Assumptions!C2+SUM(Runway!E2:E13)",
+          "=B4-C4",
+          "=IF(ABS(D4)<0.001,\"OK\",\"BREAK\")"
+        ],
+        [
+          "Hiring H1 total",
+          "='Hiring plan'!E5",
+          "=Assumptions!C28*Assumptions!C29+Assumptions!C30*Assumptions!C31+Assumptions!C32*Assumptions!C33",
+          "=B5-C5",
+          "=IF(ABS(D5)<0.001,\"OK\",\"BREAK\")"
+        ],
+        [
+          "All checks OK count",
+          "=IF(E2=\"OK\",1,0)+IF(E3=\"OK\",1,0)+IF(E4=\"OK\",1,0)+IF(E5=\"OK\",1,0)",
+          4,
+          "=B6-C6",
+          "=IF(ABS(D6)<0.001,\"OK\",\"BREAK\")"
+        ]
+      ]
+    }
+  ]
+}
+</script>
+<style>
+  :root {
+    --grid-bg: #f3f3f3;
+    --cell-bg: #ffffff;
+    --header-bg: #f8f9fa;
+    --border: #dadce0;
+    --ink: #202124;
+    --accent: #1a73e8;
+    --input: #0000ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; font-family: Arial, "Helvetica Neue", sans-serif; background: var(--grid-bg); color: var(--ink); }
+  .workbook { max-width: 1200px; margin: 0 auto; padding: 16px; }
+  .workbook-menubar {
+    display: flex; align-items: center; gap: 12px; padding: 8px 12px;
+    background: var(--cell-bg); border: 1px solid var(--border); border-radius: 8px 8px 0 0;
+  }
+  .workbook-menubar h1 { font-size: 14px; font-weight: 600; margin: 0; flex: 1; }
+  .workbook-menubar button {
+    border: 1px solid var(--border); background: var(--cell-bg); padding: 6px 10px;
+    border-radius: 4px; font-size: 12px; cursor: pointer;
+  }
+  .workbook-menubar button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .legend { font-size: 12px; color: #5f6368; padding: 8px 12px; background: #fff; border: 1px solid var(--border); border-top: none; }
+  table.sheet-grid {
+    width: 100%; border-collapse: collapse; background: var(--cell-bg);
+    border: 1px solid var(--border); border-top: none;
+  }
+  table.sheet-grid th, table.sheet-grid td {
+    border: 1px solid var(--border); padding: 6px 8px; min-width: 72px; font-size: 13px;
+  }
+  table.sheet-grid th { background: var(--header-bg); font-weight: 600; text-align: left; }
+  table.sheet-grid td.input { color: var(--input); background: #ffff99; }
+  table.sheet-grid td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+</style>
+</head>
+<body>
+<div class="workbook">
+  <div class="workbook-menubar">
+    <h1 id="workbook-title">Cash runway</h1>
+    <button type="button" id="sync-grid">Sync grid</button>
+    <button type="button" class="primary" id="export-xlsx-hint" title="Use Nexus Export or: python -m naas_abi.apps.nexus.sheets.cli">Export XLSX</button>
+  </div>
+  <div class="legend">Yellow / blue cells are inputs. Black cells are formulas. Amounts in EUR thousands unless noted. Checks tab must read OK.</div>
+  <table class="sheet-grid" id="sheet-grid" aria-label="Sheet1">
+    <tbody></tbody>
+  </table>
+</div>
+<script>
+(function () {
+  var JSON_TYPE = 'application/vnd.nexus.sheet+json';
+  var script = document.querySelector('script[type="' + JSON_TYPE + '"]');
+  if (!script) return;
+  var model = JSON.parse(script.textContent);
+  document.getElementById('workbook-title').textContent = model.title || 'Workbook';
+  var tbody = document.querySelector('#sheet-grid tbody');
+  var rows = (model.sheets && model.sheets[0] && model.sheets[0].rows) || [];
+  rows.forEach(function (row, ri) {
+    var tr = document.createElement('tr');
+    row.forEach(function (cell, ci) {
+      var el = document.createElement(ri === 0 ? 'th' : 'td');
+      el.textContent = cell == null ? '' : String(cell);
+      if (ri > 0) el.setAttribute('contenteditable', 'true');
+      if (ri > 0 && model.sheets[0].name === 'Assumptions' && ci > 1 && typeof cell === 'number') el.className = 'input';
+      tr.appendChild(el);
+    });
+    tbody.appendChild(tr);
+  });
+  document.getElementById('sync-grid').addEventListener('click', function () {
+    var out = [];
+    tbody.querySelectorAll('tr').forEach(function (tr) {
+      var row = [];
+      tr.querySelectorAll('th, td').forEach(function (cell) { row.push(cell.textContent.trim()); });
+      out.push(row);
+    });
+    if (model.sheets && model.sheets[0]) model.sheets[0].rows = out;
+    script.textContent = JSON.stringify(model, null, 2);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="nexus-sheets-template" content="monthly-pnl-v1" />
+<title>Monthly P&L</title>
+<script type="application/vnd.nexus.sheet+json">
+{
+  "title": "Monthly P&L",
+  "sheets": [
+    {
+      "name": "Assumptions",
+      "rows": [
+        [
+          "Role",
+          "Line (EUR '000)",
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Notes"
+        ],
+        [
+          "INPUT",
+          "Product revenue",
+          82,
+          86,
+          91,
+          88,
+          95,
+          102,
+          "Edit yellow cells only"
+        ],
+        [
+          "INPUT",
+          "Services revenue",
+          34,
+          36,
+          35,
+          39,
+          41,
+          43,
+          ""
+        ],
+        [
+          "INPUT",
+          "COGS materials",
+          21,
+          22,
+          23.5,
+          22.8,
+          24.5,
+          26,
+          ""
+        ],
+        [
+          "INPUT",
+          "COGS labor",
+          14.5,
+          14.8,
+          15.1,
+          15,
+          15.5,
+          16,
+          ""
+        ],
+        [
+          "INPUT",
+          "Salaries",
+          28,
+          28,
+          28.5,
+          28.5,
+          29,
+          29.5,
+          ""
+        ],
+        [
+          "INPUT",
+          "Marketing",
+          8.5,
+          9.2,
+          8.8,
+          11,
+          10.5,
+          12,
+          ""
+        ],
+        [
+          "INPUT",
+          "Facilities",
+          6.2,
+          6.2,
+          6.2,
+          6.4,
+          6.4,
+          6.4,
+          ""
+        ],
+        [
+          "INPUT",
+          "Software",
+          4.1,
+          4.1,
+          4.3,
+          4.3,
+          4.5,
+          4.5,
+          ""
+        ],
+        [
+          "INPUT",
+          "Target gross margin",
+          0.55,
+          "",
+          "",
+          "",
+          "",
+          "",
+          "ratio"
+        ],
+        [
+          "LABEL",
+          "Unit",
+          "EUR thousands",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "All P&L figures"
+        ]
+      ]
+    },
+    {
+      "name": "P&L",
+      "rows": [
+        [
+          "Line item (EUR '000)",
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "H1"
+        ],
+        [
+          "Product revenue",
+          "=Assumptions!C2",
+          "=Assumptions!D2",
+          "=Assumptions!E2",
+          "=Assumptions!F2",
+          "=Assumptions!G2",
+          "=Assumptions!H2",
+          "=SUM(B2:G2)"
+        ],
+        [
+          "Services revenue",
+          "=Assumptions!C3",
+          "=Assumptions!D3",
+          "=Assumptions!E3",
+          "=Assumptions!F3",
+          "=Assumptions!G3",
+          "=Assumptions!H3",
+          "=SUM(B3:G3)"
+        ],
+        [
+          "Total revenue",
+          "=B2+B3",
+          "=C2+C3",
+          "=D2+D3",
+          "=E2+E3",
+          "=F2+F3",
+          "=G2+G3",
+          "=SUM(B4:G4)"
+        ],
+        [
+          "COGS materials",
+          "=Assumptions!C4",
+          "=Assumptions!D4",
+          "=Assumptions!E4",
+          "=Assumptions!F4",
+          "=Assumptions!G4",
+          "=Assumptions!H4",
+          "=SUM(B5:G5)"
+        ],
+        [
+          "COGS labor",
+          "=Assumptions!C5",
+          "=Assumptions!D5",
+          "=Assumptions!E5",
+          "=Assumptions!F5",
+          "=Assumptions!G5",
+          "=Assumptions!H5",
+          "=SUM(B6:G6)"
+        ],
+        [
+          "Total COGS",
+          "=B5+B6",
+          "=C5+C6",
+          "=D5+D6",
+          "=E5+E6",
+          "=F5+F6",
+          "=G5+G6",
+          "=SUM(B7:G7)"
+        ],
+        [
+          "Gross profit",
+          "=B4-B7",
+          "=C4-C7",
+          "=D4-D7",
+          "=E4-E7",
+          "=F4-F7",
+          "=G4-G7",
+          "=SUM(B8:G8)"
+        ],
+        [
+          "Gross margin %",
+          "=B8/B4",
+          "=C8/C4",
+          "=D8/D4",
+          "=E8/E4",
+          "=F8/F4",
+          "=G8/G4",
+          "=H8/H4"
+        ],
+        [
+          "Salaries",
+          "=Assumptions!C6",
+          "=Assumptions!D6",
+          "=Assumptions!E6",
+          "=Assumptions!F6",
+          "=Assumptions!G6",
+          "=Assumptions!H6",
+          "=SUM(B10:G10)"
+        ],
+        [
+          "Marketing",
+          "=Assumptions!C7",
+          "=Assumptions!D7",
+          "=Assumptions!E7",
+          "=Assumptions!F7",
+          "=Assumptions!G7",
+          "=Assumptions!H7",
+          "=SUM(B11:G11)"
+        ],
+        [
+          "Facilities",
+          "=Assumptions!C8",
+          "=Assumptions!D8",
+          "=Assumptions!E8",
+          "=Assumptions!F8",
+          "=Assumptions!G8",
+          "=Assumptions!H8",
+          "=SUM(B12:G12)"
+        ],
+        [
+          "Software",
+          "=Assumptions!C9",
+          "=Assumptions!D9",
+          "=Assumptions!E9",
+          "=Assumptions!F9",
+          "=Assumptions!G9",
+          "=Assumptions!H9",
+          "=SUM(B13:G13)"
+        ],
+        [
+          "Total opex",
+          "=SUM(B10:B13)",
+          "=SUM(C10:C13)",
+          "=SUM(D10:D13)",
+          "=SUM(E10:E13)",
+          "=SUM(F10:F13)",
+          "=SUM(G10:G13)",
+          "=SUM(B14:G14)"
+        ],
+        [
+          "EBITDA",
+          "=B8-B14",
+          "=C8-C14",
+          "=D8-D14",
+          "=E8-E14",
+          "=F8-F14",
+          "=G8-G14",
+          "=SUM(B15:G15)"
+        ],
+        [
+          "MoM revenue growth",
+          null,
+          "=(C4-B4)/B4",
+          "=(D4-C4)/C4",
+          "=(E4-D4)/D4",
+          "=(F4-E4)/E4",
+          "=(G4-F4)/F4",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "Checks",
+      "rows": [
+        [
+          "Check",
+          "Left",
+          "Right",
+          "Diff",
+          "Status"
+        ],
+        [
+          "Jan product+services = total revenue",
+          "=Assumptions!C2+Assumptions!C3",
+          "='P&L'!B4",
+          "=B2-C2",
+          "=IF(ABS(D2)<0.001,\"OK\",\"BREAK\")"
+        ],
+        [
+          "H1 revenue = sum of months",
+          "='P&L'!H4",
+          "=SUM('P&L'!B4:G4)",
+          "=B3-C3",
+          "=IF(ABS(D3)<0.001,\"OK\",\"BREAK\")"
+        ],
+        [
+          "Jan gross profit = revenue - COGS",
+          "='P&L'!B8",
+          "='P&L'!B4-'P&L'!B7",
+          "=B4-C4",
+          "=IF(ABS(D4)<0.001,\"OK\",\"BREAK\")"
+        ],
+        [
+          "Jan EBITDA = GP - opex",
+          "='P&L'!B15",
+          "='P&L'!B8-'P&L'!B14",
+          "=B5-C5",
+          "=IF(ABS(D5)<0.001,\"OK\",\"BREAK\")"
+        ],
+        [
+          "H1 COGS = materials + labor",
+          "='P&L'!H7",
+          "='P&L'!H5+'P&L'!H6",
+          "=B6-C6",
+          "=IF(ABS(D6)<0.001,\"OK\",\"BREAK\")"
+        ],
+        [
+          "All checks OK count",
+          "=IF(E2=\"OK\",1,0)+IF(E3=\"OK\",1,0)+IF(E4=\"OK\",1,0)+IF(E5=\"OK\",1,0)+IF(E6=\"OK\",1,0)",
+          5,
+          "=B7-C7",
+          "=IF(ABS(D7)<0.001,\"OK\",\"BREAK\")"
+        ]
+      ]
+    }
+  ]
+}
+</script>
+<style>
+  :root {
+    --grid-bg: #f3f3f3;
+    --cell-bg: #ffffff;
+    --header-bg: #f8f9fa;
+    --border: #dadce0;
+    --ink: #202124;
+    --accent: #1a73e8;
+    --input: #0000ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; font-family: Arial, "Helvetica Neue", sans-serif; background: var(--grid-bg); color: var(--ink); }
+  .workbook { max-width: 1200px; margin: 0 auto; padding: 16px; }
+  .workbook-menubar {
+    display: flex; align-items: center; gap: 12px; padding: 8px 12px;
+    background: var(--cell-bg); border: 1px solid var(--border); border-radius: 8px 8px 0 0;
+  }
+  .workbook-menubar h1 { font-size: 14px; font-weight: 600; margin: 0; flex: 1; }
+  .workbook-menubar button {
+    border: 1px solid var(--border); background: var(--cell-bg); padding: 6px 10px;
+    border-radius: 4px; font-size: 12px; cursor: pointer;
+  }
+  .workbook-menubar button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .legend { font-size: 12px; color: #5f6368; padding: 8px 12px; background: #fff; border: 1px solid var(--border); border-top: none; }
+  table.sheet-grid {
+    width: 100%; border-collapse: collapse; background: var(--cell-bg);
+    border: 1px solid var(--border); border-top: none;
+  }
+  table.sheet-grid th, table.sheet-grid td {
+    border: 1px solid var(--border); padding: 6px 8px; min-width: 72px; font-size: 13px;
+  }
+  table.sheet-grid th { background: var(--header-bg); font-weight: 600; text-align: left; }
+  table.sheet-grid td.input { color: var(--input); background: #ffff99; }
+  table.sheet-grid td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+</style>
+</head>
+<body>
+<div class="workbook">
+  <div class="workbook-menubar">
+    <h1 id="workbook-title">Monthly P&L</h1>
+    <button type="button" id="sync-grid">Sync grid</button>
+    <button type="button" class="primary" id="export-xlsx-hint" title="Use Nexus Export or: python -m naas_abi.apps.nexus.sheets.cli">Export XLSX</button>
+  </div>
+  <div class="legend">Yellow / blue cells are inputs. Black cells are formulas. Amounts in EUR thousands unless noted. Checks tab must read OK.</div>
+  <table class="sheet-grid" id="sheet-grid" aria-label="Sheet1">
+    <tbody></tbody>
+  </table>
+</div>
+<script>
+(function () {
+  var JSON_TYPE = 'application/vnd.nexus.sheet+json';
+  var script = document.querySelector('script[type="' + JSON_TYPE + '"]');
+  if (!script) return;
+  var model = JSON.parse(script.textContent);
+  document.getElementById('workbook-title').textContent = model.title || 'Workbook';
+  var tbody = document.querySelector('#sheet-grid tbody');
+  var rows = (model.sheets && model.sheets[0] && model.sheets[0].rows) || [];
+  rows.forEach(function (row, ri) {
+    var tr = document.createElement('tr');
+    row.forEach(function (cell, ci) {
+      var el = document.createElement(ri === 0 ? 'th' : 'td');
+      el.textContent = cell == null ? '' : String(cell);
+      if (ri > 0) el.setAttribute('contenteditable', 'true');
+      if (ri > 0 && model.sheets[0].name === 'Assumptions' && ci > 1 && typeof cell === 'number') el.className = 'input';
+      tr.appendChild(el);
+    });
+    tbody.appendChild(tr);
+  });
+  document.getElementById('sync-grid').addEventListener('click', function () {
+    var out = [];
+    tbody.querySelectorAll('tr').forEach(function (tr) {
+      var row = [];
+      tr.querySelectorAll('th, td').forEach(function (cell) { row.push(cell.textContent.trim()); });
+      out.push(row);
+    });
+    if (model.sheets && model.sheets[0]) model.sheets[0].rows = out;
+    script.textContent = JSON.stringify(model, null, 2);
+  });
+})();
+</script>
+</body>
+</html>

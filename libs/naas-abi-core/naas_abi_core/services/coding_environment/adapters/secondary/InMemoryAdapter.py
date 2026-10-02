@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     PHASE_PROVISIONING,
     PHASE_RUNNING,
@@ -63,6 +65,7 @@ class InMemoryAdapter(ICodingEnvironmentAdapter):
             "name": name,
             "user_id": user_id,
             "template_id": template_id,
+            "created_at": datetime.now(UTC).isoformat(),
             "phase": PHASE_RUNNING if ready else PHASE_PROVISIONING,
             "agent_ready": ready,
             "polls_left": self._polls_until_ready,
@@ -81,6 +84,9 @@ class InMemoryAdapter(ICodingEnvironmentAdapter):
             name=record["name"],
             phase=record["phase"],
             agent_ready=record["agent_ready"],
+            owner=record["user_id"],
+            template=record["template_id"],
+            created_at=record.get("created_at"),
         )
 
     def list_environments(self, *, user_id: str) -> list[WorkspaceStatus]:
@@ -89,6 +95,9 @@ class InMemoryAdapter(ICodingEnvironmentAdapter):
             for workspace_id, record in self._workspaces.items()
             if record["user_id"] == user_id
         ]
+
+    def list_all_environments(self) -> list[WorkspaceStatus]:
+        return [self._status(workspace_id) for workspace_id in self._workspaces]
 
     def get_logs(self, *, workspace_id: str) -> list[str]:
         record = self._record(workspace_id)

@@ -19,8 +19,10 @@ from naas_abi_core.engine.Engine import Engine
 
 def _bare_engine(primaries: list) -> Engine:
     engine = Engine.__new__(Engine)
+    engine._Engine__nats_dependencies = None  # type: ignore[attr-defined]
     engine._Engine__nats_primary_adapters = primaries  # type: ignore[attr-defined]
     engine._Engine__nats_runtime_started = bool(primaries)  # type: ignore[attr-defined]
+    engine._Engine__job_loader = None  # type: ignore[attr-defined]
     return engine
 
 
@@ -123,3 +125,23 @@ def test_shutdown_can_be_called_more_than_once(monkeypatch):
 
     assert run_coro.call_count == 1
     close.assert_called_once()
+
+
+def test_shutdown_stops_module_jobs_before_the_nats_primaries(monkeypatch):
+    order: list[str] = []
+    run_coro = MagicMock(
+        side_effect=lambda coro, *a, **k: (order.append("stop_primary"), coro.close())
+    )
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.run_coro", run_coro)
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.close", MagicMock())
+    primary = MagicMock()
+    primary.stop = AsyncMock()
+    jobs = MagicMock()
+    jobs.stop = MagicMock(side_effect=lambda: order.append("stop_jobs"))
+    engine = _bare_engine([primary])
+    engine._Engine__job_loader = jobs  # type: ignore[attr-defined]
+
+    engine.shutdown()
+    engine.shutdown()
+
+    assert order == ["stop_jobs", "stop_primary"]

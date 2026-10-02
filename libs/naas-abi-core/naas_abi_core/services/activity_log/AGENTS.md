@@ -21,6 +21,11 @@ activity_log/
 
 ## Port (`ActivityLogPort.py`)
 
+Paging: events read back carry `seq` (store-assigned, increasing per actor;
+ignored on `record`). `ActivityLogQuery(newest_first=True, before_seq=...,
+after_seq=...)` pages with it: the last `seq` of a page is the next cursor. The
+Nexus System app (Data tab) browses actors and their events read-only this way.
+
 ```python
 class IActivityLogAdapter:
     def record(event: ActivityEvent) -> None

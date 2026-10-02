@@ -44,6 +44,7 @@ import {
 import { authFetch, useAuthStore } from '@/stores/auth';
 import { usePrompt, useConfirm } from '@/components/ui/dialogs';
 import { PdfViewer } from '@/components/files/pdf-viewer';
+import { CsvPreview } from '@/components/files/csv-preview';
 import { FilesAddSheet } from '../components/files-add-sheet';
 import { FilesMenuBar } from '../components/files-menu-bar';
 import { FilesMobileRow } from '../components/files-mobile-row';
@@ -239,7 +240,7 @@ export default function FilesPage() {
   const [imageViewerError, setImageViewerError] = useState<string | null>(null);
   const [textViewerFileName, setTextViewerFileName] = useState<string | null>(null);
   const [textViewerContent, setTextViewerContent] = useState<string>('');
-  const [textViewerMode, setTextViewerMode] = useState<'markdown' | 'code'>('code');
+  const [textViewerMode, setTextViewerMode] = useState<'markdown' | 'csv' | 'code'>('code');
   // HTML files get a rendered preview with a toggle between preview and source.
   const [textViewerIsHtml, setTextViewerIsHtml] = useState(false);
   const [htmlPreview, setHtmlPreview] = useState(true);
@@ -935,8 +936,20 @@ export default function FilesPage() {
     );
   };
 
-  // Extensions that are reliably plain text. Markdown is detected separately
-  // so it can be rendered with ReactMarkdown instead of as raw source.
+  const isCsvFile = (file: FileInfo) => {
+    if (file.type !== 'file') return false;
+    const lowerName = file.name.toLowerCase();
+    const ct = file.content_type?.toLowerCase() || '';
+    return (
+      lowerName.endsWith('.csv') ||
+      lowerName.endsWith('.tsv') ||
+      ct === 'text/csv' ||
+      ct === 'text/tab-separated-values'
+    );
+  };
+
+  // Extensions that are reliably plain text. Markdown/CSV are detected
+  // separately so they can use dedicated previews instead of raw source.
   const TEXT_EXTENSIONS = new Set([
     'txt', 'log', 'rst', 'tex', 'csv', 'tsv',
     'json', 'jsonc', 'json5', 'ndjson', 'geojson',
@@ -1117,7 +1130,11 @@ export default function FilesPage() {
     if (!isTextFile(file)) return;
     clearPdfViewerState();
     clearImageViewerState();
-    const mode: 'markdown' | 'code' = isMarkdownFile(file) ? 'markdown' : 'code';
+    const mode: 'markdown' | 'csv' | 'code' = isMarkdownFile(file)
+      ? 'markdown'
+      : isCsvFile(file)
+        ? 'csv'
+        : 'code';
     const html = isHtmlFile(file);
     setTextViewerError(null);
     setTextViewerLoading(true);
@@ -1402,7 +1419,11 @@ export default function FilesPage() {
                 className="files-browse-row-context-item"
               >
                 <Eye size={14} />
-                {isMarkdownFile(file) ? 'View Markdown' : 'Preview'}
+                {isMarkdownFile(file)
+                  ? 'View Markdown'
+                  : isCsvFile(file)
+                    ? 'View Spreadsheet'
+                    : 'Preview'}
               </button>
             )}
             {starred ? (
@@ -1830,11 +1851,14 @@ export default function FilesPage() {
                       <pre className="files-browse-preview-code">{textViewerContent}</pre>
                     )}
                     {!textViewerLoading && !textViewerError && !textViewerIsHtml && textViewerMode === 'markdown' && (
-                      <div className="files-browse-preview-markdown prose prose-sm max-w-none dark:prose-invert">
+                      <div className="files-browse-preview-markdown">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {textViewerContent}
                         </ReactMarkdown>
                       </div>
+                    )}
+                    {!textViewerLoading && !textViewerError && !textViewerIsHtml && textViewerMode === 'csv' && (
+                      <CsvPreview content={textViewerContent} fileName={textViewerFileName} />
                     )}
                     {!textViewerLoading && !textViewerError && !textViewerIsHtml && textViewerMode === 'code' && (
                       <pre className="files-browse-preview-code">{textViewerContent}</pre>

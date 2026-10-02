@@ -2,6 +2,81 @@
 
 <!-- version list -->
 
+## v3.54.0 (2026-09-30)
+
+### Bug Fixes
+
+- **scripts**: Minor cleanup in _engine_bootstrap.py and audit_envelope_bookkeeping.py
+  ([`953755a`](https://github.com/jupyter-naas/abi/commit/953755a32c0a55250aea9eed5059e476f4f5980b))
+
+- **x_proxy**: Add count buckets sync and fallback for timeseries
+  ([`2a6bae4`](https://github.com/jupyter-naas/abi/commit/2a6bae43b2445e669853ad085d16f294e6015813))
+
+- **x_proxy**: Dedupe users by username with correct rank order
+  ([`e37530a`](https://github.com/jupyter-naas/abi/commit/e37530a32ebaabc6c98eb273c48f1945d0817121))
+
+- **x_proxy**: Merge username case variants in facet values and related fixes
+  ([`6e26a21`](https://github.com/jupyter-naas/abi/commit/6e26a21665b0bd70c89d52924c1b919e90a2fbe2))
+
+- **x_proxy**: Rename variable for clarity in count_endpoint_timeseries usage
+  ([`c1540df`](https://github.com/jupyter-naas/abi/commit/c1540df09fbe6d752b19cd5e9fb2e4dd48f59dd8))
+
+### Documentation
+
+- **x**: Update AGENTS.md with count buckets only usage
+  ([`5623434`](https://github.com/jupyter-naas/abi/commit/56234348067352a50ce500827c32ecb7c0a13d8f))
+
+### Features
+
+- **x**: Add --count-envelopes-only and --skip-count-envelopes flags to backfill_x_datasets.py
+  ([`5623434`](https://github.com/jupyter-naas/abi/commit/56234348067352a50ce500827c32ecb7c0a13d8f))
+
+- **x/scripts**: Add engine bootstrap and improve backfill and bookkeeping scripts
+  ([`76aa9ad`](https://github.com/jupyter-naas/abi/commit/76aa9adb2d9106cceff970192889bb0a1ced032d))
+
+- **x_proxy**: Add dataset-backed X Proxy HTTP endpoints and compaction orchestration
+  ([`1c319c5`](https://github.com/jupyter-naas/abi/commit/1c319c5db0079e04f9482f2b5fa1b0050b020c16))
+
+- **x_proxy**: Add first_post_at to author stats and backfill
+  ([`020ca95`](https://github.com/jupyter-naas/abi/commit/020ca95cc0d55a08ba550ca391f36ce67c07fb9a))
+
+- **x_proxy**: Add robust hourly count bucket normalization and merging
+  ([`f19d9d0`](https://github.com/jupyter-naas/abi/commit/f19d9d00eff9296b4c7dcca0e8e335a050993893))
+
+- **x_proxy**: Enhance user and tweet search filtering and stats
+  ([`d720a58`](https://github.com/jupyter-naas/abi/commit/d720a58d05f1f80a2f3d3cce9ec8ed913ed0e8b7))
+
+### Testing
+
+- **x_proxy**: Update tests for cache and routes with minor fixes
+  ([`b65d5d4`](https://github.com/jupyter-naas/abi/commit/b65d5d45b4d591faeef0e0fb81b40243e5a925b3))
+
+
+## v3.53.1 (2026-09-23)
+
+### Bug Fixes
+
+- **x/orchestrations**: Improve dataset sync and app publish logic in
+  XSearchRecentTweetsEventOrchestration
+  ([`9692ab0`](https://github.com/jupyter-naas/abi/commit/9692ab0c3c639927bb4afb6e38c33e0e585b95d6))
+
+
+## v3.53.0 (2026-09-23)
+
+### Features
+
+- **x_proxy**: Add envelope_paths_in_dataset bulk lookup and recent tweets file filtering
+  ([`b466ef4`](https://github.com/jupyter-naas/abi/commit/b466ef4fa3210cf66ff82d8118d54ba5050a6a0e))
+
+
+## v3.52.0 (2026-09-22)
+
+### Features
+
+- **x_reprocess**: Add observability and progress logging to envelope reprocessing
+  ([`b4f4998`](https://github.com/jupyter-naas/abi/commit/b4f49985cedeb3276d69c9b916a65b3692e1dde8))
+
+
 ## v3.51.0 (2026-09-22)
 
 ### Bug Fixes

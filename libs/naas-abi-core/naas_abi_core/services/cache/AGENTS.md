@@ -31,9 +31,18 @@ class ICacheAdapter:
     def set_if_absent(key: str, value: CachedData) -> bool
     def delete(key: str) -> None                 # raises CacheNotFoundError
     def exists(key: str) -> bool
+    def list_keys(prefix="", *, limit=100, after=None) -> CacheKeyPage  # logical keys, ascending
 ```
 
-DTO: `CachedData(key, data, data_type: DataType, created_at)`. `DataType` ∈ `TEXT | JSON | BINARY | PICKLE`.
+DTOs: `CachedData(key, data, data_type: DataType, created_at)`. `DataType` ∈ `TEXT | JSON | BINARY | PICKLE`.
+`CacheKeyPage(keys, next_after)`: pass `next_after` back as `after`; `limit` is 1..`MAX_KEYS_PER_PAGE` (1000).
+`CacheEntry(tier, cached)`: a stored entry as is.
+
+Every adapter stores entries under a SHA-256 of the key, so `list_keys` enumerates
+the adapter's entries and reads each key back (`paginate_keys` sorts and pages):
+O(entries) per call, for administration rather than hot paths. The FS adapter
+reads only each file's head. Adapters implement it; `ICacheAdapter` is not an ABC,
+so a missing method raises `NotImplementedError`.
 
 Exceptions: `CacheNotFoundError`, `CacheExpiredError`.
 
@@ -50,10 +59,16 @@ set_pickle(key, value)          → None           # cold
 set_json_if_absent(key, value)  → bool           # cold
 set_binary_if_absent(key, value)→ bool           # cold
 
+# administration
+list_keys(prefix="", limit=100, after=None) → CacheKeyPage   # merged across tiers, deduplicated
+get_entry(key)                  → CacheEntry     # hot first; never deserialized (pickle stays opaque), no TTL check
+
 # tier views
 cache.hot                       → CacheService   # raises if no hot tier
 cache.cold                      → CacheService   # falls back to last adapter
 cache.hot_available()           → bool
+cache.tier_names                → tuple[str, ...]
+cache.tier(name)                → SingleTierCacheService  # ValueError if unknown; has list_keys/get_entry too
 
 # decorator (defaults to cold tier)
 @cache(key_builder, cache_type=DataType.JSON, ttl=None, auto_cache=True)
@@ -84,10 +99,9 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/cache/CacheService_test.
 
 ## Adding a new adapter
 
-1. Implement `ICacheAdapter` in `adapters/secondary/<Name>Adapter.py`. All five methods. `set_if_absent` may raise `NotImplementedError` (service falls back to check-then-act).
-2. Add a `<Name>Adapter_test.py` next to it.
+1. Implement `ICacheAdapter` in `adapters/secondary/<Name>Adapter.py`. Every method, `list_keys` included. `set_if_absent` may raise `NotImplementedError` (service falls back to check-then-act).
+2. Add a `<Name>Adapter_test.py` next to it with a class subclassing `tests/cache__secondary_adapter__generic_test.py::GenericCacheAdapterTest` (fixture `adapter`). Every adapter runs it, the NATS client over a live `nats-server` and Redis on `fakeredis`.
 3. If the adapter has a stable, off-the-shelf setup, add a `CacheFactory.<Name>(...)` helper.
-4. Verify against the generic contract by writing tests that exercise the public `ICacheAdapter` surface — same shape as the existing `_test.py` siblings.
 
 ## NATS RPC adapters
 
@@ -108,3 +122,22 @@ a timeout can hide a completed operation. Reconcile its outcome before retrying.
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
 The latter uses a local `nats-server` executable without Docker.
+
+The engine exposes its cold-tier adapter under the cache v1 subject when NATS is
+configured. A cold tier already backed by a NATS client is not re-exposed. The SDK uses an authenticated `describe` endpoint on the canonical cache
+subject to discover tier order. Cache decorators remain process-local.
+`list_keys` is served on every cache subject (cold and `tier.<index>`); an
+out-of-range `limit` answers `INVALID_ARGUMENT`, which the client raises as `ValueError`.
+
+`adapter: keyvalue` is a lazy adapter to the engine KV domain, with `cache_prefix`
+configuration matching object-storage cache configuration. It uses KV atomic
+set-if-not-exists and maps missing keys to CacheNotFoundError. This is distinct
+from the cache's direct Redis adapter. The loader includes required KV/storage
+services transitively. In NATS mode those dependencies are network facades.
+Every configured local tier also serves `abi.svc.cache.v1.tier.<index>.*`; cold's
+original endpoint remains compatible. `DescribeRequest`/`DescribeResponse` add
+tier discovery without changing existing request shapes.
+
+NATS mode rejects mixed local/remote tier configurations. Mutation audit events
+are emitted by each owning primary, including for SDK callers; remote facades
+must not emit a second copy. Endpoint helpers take an injected event publisher.

@@ -4,7 +4,11 @@
 from __future__ import annotations
 
 import pytest
-from naas_abi_core.services.keyvalue.KeyValuePorts import IKeyValueAdapter
+from naas_abi_core.services.keyvalue.KeyValuePorts import (
+    IKeyValueAdapter,
+    KVKeyPage,
+    paginate_keys,
+)
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.keyvalue.ontologies.modules.KeyValueEventOntology import (
     KeyValueDeleted,
@@ -43,6 +47,14 @@ class _FakeKVAdapter(IKeyValueAdapter):
     def exists(self, key: str) -> bool:
         return key in self.store
 
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> KVKeyPage:
+        return paginate_keys(self.store, prefix, limit, after)
+
+    def get_ttl(self, key: str) -> int | None:
+        return None
+
 
 class _BrokenKVAdapter(IKeyValueAdapter):
     def get(self, key: str) -> bytes:
@@ -63,6 +75,14 @@ class _BrokenKVAdapter(IKeyValueAdapter):
         raise OSError("backend down")
 
     def exists(self, key: str) -> bool:
+        raise OSError("backend down")
+
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> KVKeyPage:
+        raise OSError("backend down")
+
+    def get_ttl(self, key: str) -> int | None:
         raise OSError("backend down")
 
 

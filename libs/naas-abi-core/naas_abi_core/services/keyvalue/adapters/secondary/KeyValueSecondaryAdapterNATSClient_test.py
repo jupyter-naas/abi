@@ -1,4 +1,7 @@
 import asyncio
+import shutil
+import socket
+import subprocess
 import time
 from datetime import UTC, datetime, timedelta
 from threading import Event as ThreadingEvent
@@ -88,6 +91,15 @@ def test_raise_for_error_maps_kv_lock_timeout_with_detail():
 def test_raise_for_error_maps_kv_lock_timeout_without_detail_to_runtime_error():
     with pytest.raises(RuntimeError, match="KV_LOCK_TIMEOUT"):
         _raise_for_error(common_pb2.CallError(code="KV_LOCK_TIMEOUT", message="x"))
+
+
+def test_raise_for_error_maps_invalid_argument_to_value_error():
+    with pytest.raises(ValueError, match="limit"):
+        _raise_for_error(
+            common_pb2.CallError(
+                code="INVALID_ARGUMENT", message="limit must be between 1 and 1000"
+            )
+        )
 
 
 def test_raise_for_error_maps_unknown_code_to_runtime_error():
@@ -223,8 +235,41 @@ class _PrimaryAdapterServer:
             await self._nc.close()
 
 
+def _native_nats_server():
+    """A throwaway local ``nats-server`` when one is on PATH (no Docker needed)."""
+    binary = shutil.which("nats-server")
+    if binary is None:
+        return None
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    process = subprocess.Popen(
+        [binary, "-a", "127.0.0.1", "-p", str(port)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                return process, f"nats://127.0.0.1:{port}"
+        except OSError:
+            time.sleep(0.05)
+    process.terminate()
+    return None
+
+
 @pytest.fixture(scope="session")
 def nats_url():
+    native = _native_nats_server()
+    if native is not None:
+        process, url = native
+        try:
+            yield url
+        finally:
+            process.terminate()
+            process.wait(timeout=5)
+        return
     try:
         # Imported here, not at module level: testcontainers is a dev-only
         # dependency, absent from environments that don't run

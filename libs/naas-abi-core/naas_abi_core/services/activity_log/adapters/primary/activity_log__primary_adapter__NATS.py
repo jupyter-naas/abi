@@ -25,7 +25,6 @@ every other endpoint's "always call straight through" behaviour.
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from datetime import UTC
 from typing import TypeVar
@@ -39,7 +38,9 @@ from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.activity_log.v1 import activity_log_pb2
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.services.activity_log.ActivityLogPort import (
@@ -55,7 +56,6 @@ from naas_abi_core.services.activity_log.adapters.activity_log_nats_contract imp
     SUBJECT_PREFIX,
 )
 from nats.micro.request import Request
-from nats.micro.service import Service
 
 __all__ = [
     "AUTH_HEADER",
@@ -78,6 +78,8 @@ def _event_to_pb(event: ActivityEvent) -> activity_log_pb2.ActivityEvent:
     if event.correlation_id is not None:
         pb.correlation_id = event.correlation_id
     pb.attributes.update(event.attributes)
+    if event.seq is not None:
+        pb.seq = event.seq
     return pb
 
 
@@ -88,6 +90,7 @@ def _pb_to_event(pb: activity_log_pb2.ActivityEvent) -> ActivityEvent:
         timestamp=pb.timestamp.ToDatetime(tzinfo=UTC),
         correlation_id=pb.correlation_id if pb.HasField("correlation_id") else None,
         attributes=json_format.MessageToDict(pb.attributes),
+        seq=pb.seq if pb.HasField("seq") else None,
     )
 
 
@@ -97,6 +100,9 @@ def _pb_to_query(pb: activity_log_pb2.ActivityLogQueryFilter) -> ActivityLogQuer
         since=pb.since.ToDatetime(tzinfo=UTC) if pb.HasField("since") else None,
         until=pb.until.ToDatetime(tzinfo=UTC) if pb.HasField("until") else None,
         limit=pb.limit if pb.HasField("limit") else None,
+        newest_first=pb.newest_first,
+        before_seq=pb.before_seq if pb.HasField("before_seq") else None,
+        after_seq=pb.after_seq if pb.HasField("after_seq") else None,
     )
 
 
@@ -131,7 +137,8 @@ class ActivityLogPrimaryAdapterNATS:
     ) -> None:
         self._adapter = adapter
         self._jwt_secret = jwt_secret
-        self._service: Service | None = None
+        self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
+        self._service: TracedService | None = None
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``activity_log`` NATS service on ``nc``.
@@ -143,7 +150,7 @@ class ActivityLogPrimaryAdapterNATS:
         if self._service is not None:
             return
 
-        service = await nats.micro.add_service(
+        service = await add_traced_service(
             nc,
             name=SERVICE_NAME,
             version=SERVICE_VERSION,
@@ -175,8 +182,11 @@ class ActivityLogPrimaryAdapterNATS:
         """Deregister the service, draining its subscriptions."""
         service = self._service
         self._service = None
-        if service is not None:
-            await service.stop()
+        try:
+            if service is not None:
+                await service.stop()
+        finally:
+            self._dispatch.close()
 
     # ------------------------------------------------------------------
     # Shared request handling: auth, decode, dispatch, encode.
@@ -218,7 +228,7 @@ class ActivityLogPrimaryAdapterNATS:
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await asyncio.to_thread(call, parsed_request)
+            response = await self._dispatch.call(call, parsed_request)
         except Exception:  # noqa: BLE001 - a handler must never crash the service
             logger.opt(exception=True).error(
                 f"ActivityLogPrimaryAdapterNATS: unexpected error handling {request.subject!r}"

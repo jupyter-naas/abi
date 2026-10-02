@@ -29,7 +29,7 @@ API:
 - {_API}/services/files/legacy_storage_migration.py: moves legacy paths into the drive layout.
 - {_API}/services/files/files__schema.py: FileInfoData, errors (AlreadyExists, NotFound, NotText, UploadTooLarge).
 Engine: naas_abi_core/services/object_storage/ (ObjectStorageService; MinIO/S3 and local adapters).
-Agent: naas_abi/agents/FilesAgent.py and naas_abi/agents/tools/files_tools.py."""
+Agent: naas_abi/agents/FilesAgent.py and naas_abi/tools/files_tools.py."""
 
 FILES_CAPABILITIES = """- Browse drives: My drive (yours only), the workspace drive (every member), and the platform and system drives when the workspace enables them in Settings > Drives.
 - Folders and files: create, upload, rename or move, delete, download a folder as a zip, preview PDFs and office files, edit text files.
@@ -100,8 +100,8 @@ class FilesAgent(IntentAgent):
 
     @staticmethod
     def get_tools() -> list:
-        from naas_abi.agents.tools.files_tools import files_tools
-        from naas_abi.agents.tools.nexus_source_tools import nexus_source_tools
+        from naas_abi.tools.files_tools import files_tools
+        from naas_abi.tools.nexus_source_tools import nexus_source_tools
 
         return files_tools() + nexus_source_tools()
 

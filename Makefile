@@ -123,6 +123,7 @@ help:
 	@echo "  test-api                 Run API-specific tests"
 	@echo "  test-local-embedded-core Run no-docker local embedded core e2e test"
 	@echo "  test-integration-core    Run core integration tests (testcontainers)"
+	@echo "  test-document-core       Run document tests (set DOCUMENT_TEST_POSTGRES_DSN for PostgreSQL)"
 	@echo "  test-api-init            Test API initialization with production secrets"
 	@echo "  test-api-init-container  Test API initialization in containerized environment"
 	@echo "  ftest                    Interactive test selector using fzf (fuzzy finder)"
@@ -560,6 +561,12 @@ test-local-embedded-core: deps
 test-integration-core: deps check-docker
 	@ echo "🔍 Running core integration tests (testcontainers)..."
 	@ cd libs/naas-abi-core && uv sync --all-extras && uv run pytest naas_abi_core/services/triple_store/adaptors/secondary/ApacheJenaTDB2_integration_test.py naas_abi_core/services/triple_store/adaptors/secondary/Oxigraph_integration_test.py -m integration -v
+
+# Run document unit tests and the optional PostgreSQL adapter contract
+test-document-core:
+	@ uv run --project libs/naas-abi-core --all-extras python -m pytest -c libs/naas-abi-core/pyproject.toml libs/naas-abi-core/naas_abi_core/services/document libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_DocumentService_test.py libs/naas-abi-core/naas_abi_core/engine/EngineProxy_test.py -q
+
+.PHONY: test-document-core
 
 # Test API initialization with production secrets
 test-api-init: deps
@@ -1039,3 +1046,11 @@ clean:
 # Declare all targets as phony to avoid conflicts with files of the same name
 
 .PHONY: ollama-models test test-local-embedded-core test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology docs docs-clean
+
+.PHONY: test-sdk demo-sdk
+test-sdk:
+	$(MAKE) -C libs/naas-abi-proto test
+	$(MAKE) -C libs/naas-abi-sdk test
+
+demo-sdk:
+	$(MAKE) -C examples/standalone_module demo

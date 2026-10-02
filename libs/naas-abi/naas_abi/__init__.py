@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import FastAPI
 from naas_abi_core.module.Module import (
@@ -199,6 +199,8 @@ FeatureKey = Literal[
     "slides",
     # Business documents (Forgejo HTML docs + Monaco). On for members by default.
     "documents",
+    # Business sheets (Forgejo HTML workbook + XLSX export).
+    "sheets",
 ]
 
 # Default catalog (excludes opt-in features like "code").
@@ -217,6 +219,7 @@ _ALL_FEATURES: list[FeatureKey] = [
     "settings",
     "slides",
     "documents",
+    "sheets",
 ]
 
 
@@ -228,8 +231,8 @@ def _default_role_baseline() -> dict[str, list[FeatureKey]]:
     return {
         "owner": list(_ALL_FEATURES),
         "admin": list(_ALL_FEATURES),
-        "member": ["maps", "chat", "files", "datasets", "skills", "slides", "documents"],
-        "viewer": ["maps", "chat", "files", "datasets", "skills", "slides", "documents"],
+        "member": ["maps", "chat", "files", "datasets", "skills", "slides", "documents", "sheets"],
+        "viewer": ["maps", "chat", "files", "datasets", "skills", "slides", "documents", "sheets"],
     }
 
 
@@ -266,6 +269,15 @@ class SlidesTemplateSourceConfig(BaseModel):
 
 class DocumentsTemplateSourceConfig(BaseModel):
     """An extra tree of Nexus Documents seed templates, declared by the deploy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    namespace: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=32)
+    path: str = Field(min_length=1)
+
+
+class SheetsTemplateSourceConfig(BaseModel):
+    """Extra Nexus Sheets seed workbooks declared by the deploy."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -405,6 +417,7 @@ class NexusConfig(BaseModel):
 
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
+    auth_signup_enabled: bool = False
     pages_sso_secret: str = ""
     pages_sso_expire_seconds: int = 300
     magic_link_allow_signup: bool = False
@@ -457,6 +470,7 @@ class NexusConfig(BaseModel):
 
     rate_limit_enabled: bool = True
     rate_limit_login_attempts: int = 5
+    rate_limit_ip_attempts: int = 20
     rate_limit_window_seconds: int = 300
 
     enable_security_headers: bool = True
@@ -481,8 +495,29 @@ class NexusConfig(BaseModel):
     )
     documents_default_template_id: str | None = None
     documents_hidden_template_ids: list[str] = Field(default_factory=list)
+    sheets_template_sources: list[SheetsTemplateSourceConfig] = Field(
+        default_factory=list
+    )
     users: list[UserSeedConfig] = Field(default_factory=list)
     organizations: list[OrganizationSeedConfig] = Field(default_factory=list)
+
+
+# Settings the Nexus ``Settings`` also reads from the environment. Passing
+# NexusConfig's defaults for them as init kwargs would shadow ``SECRET_KEY`` /
+# ``ENVIRONMENT`` / ``NEXUS_ENV``, so they are forwarded only when set in yaml.
+_ENV_OVERRIDABLE_NEXUS_FIELDS = ("secret_key", "environment", "nexus_env")
+
+
+def nexus_settings_kwargs(nexus_config: NexusConfig) -> dict[str, Any]:
+    """Build the kwargs for the Nexus ``Settings`` from the module config."""
+    settings_kwargs = nexus_config.model_dump(exclude_none=True)
+    for field in _ENV_OVERRIDABLE_NEXUS_FIELDS:
+        if field not in nexus_config.model_fields_set:
+            settings_kwargs.pop(field, None)
+    # Empty yaml (``pages_sso_secret: ""``) would override ``PAGES_SSO_SECRET``.
+    if not str(settings_kwargs.get("pages_sso_secret") or "").strip():
+        settings_kwargs.pop("pages_sso_secret", None)
+    return settings_kwargs
 
 
 class ABIModule(BaseModule):
@@ -675,6 +710,7 @@ class ABIModule(BaseModule):
         # slides follow ``abi_agent_model``, which the engine already resolves.
         abi_slides_agent_model: str = ""
         abi_documents_agent_model: str = ""
+        abi_sheets_agent_model: str = ""
 
         # Canonical model id used by OntologyEngineerAgent. Same registry
         # semantics as ``abi_agent_model``.
@@ -716,18 +752,21 @@ class ABIModule(BaseModule):
                 self._engine.services.model_registry,
                 self.configuration.abi_documents_agent_model,
             )
+            from naas_abi.agents.sheets import validate_configured_sheets_model
+
+            validate_configured_sheets_model(
+                self._engine.services.model_registry,
+                self.configuration.abi_sheets_agent_model,
+            )
 
         super().on_initialized()
         # Initialize Nexus settings and service registry
 
         from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 
-        settings_kwargs = self.configuration.nexus_config.model_dump(exclude_none=True)
-        # Empty yaml (``pages_sso_secret: ""``) would override ``PAGES_SSO_SECRET``.
-        if not str(settings_kwargs.get("pages_sso_secret") or "").strip():
-            settings_kwargs.pop("pages_sso_secret", None)
-
-        nexus_config.settings = nexus_config.Settings(**settings_kwargs)
+        nexus_config.settings = nexus_config.Settings(
+            **nexus_settings_kwargs(self.configuration.nexus_config)
+        )
 
         _initialize_nexus_service_registry()
 
@@ -813,6 +852,16 @@ class ABIModule(BaseModule):
         # record one event per HTTP request.
         if self.engine.services.activity_log_available():
             app.state.activity_log_service = self.engine.services.activity_log
+
+        # Only the API process resolves the key: generating it here rather than
+        # in ``on_initialized`` keeps Dagster and CLI engines from racing the
+        # API to write a different one.
+        from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
+        from naas_abi.apps.nexus.apps.api.app.core.secret_key import resolve_secret_key
+
+        nexus_config.settings.secret_key = resolve_secret_key(
+            nexus_config.settings.secret_key, self.engine.services.secret
+        )
 
         from naas_abi.apps.nexus.apps.api.app.main import create_app
 

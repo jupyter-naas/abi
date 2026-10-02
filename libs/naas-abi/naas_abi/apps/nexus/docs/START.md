@@ -12,7 +12,7 @@ make up         # Start servers
 
 Visit http://localhost:3000
 
-**Login:** admin@example.com / Admin1234!
+**Login:** admin@example.com, password from `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` in `.env` (generated; there is no default)
 
 ## What Is This?
 

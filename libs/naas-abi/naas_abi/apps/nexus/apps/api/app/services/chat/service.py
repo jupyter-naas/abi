@@ -392,6 +392,45 @@ def _render_documents_context_block(
     )
 
 
+def _render_sheets_context_block(
+    client_context: dict | None,
+    workspace_id: str | None = None,
+) -> str:
+    if not isinstance(client_context, dict):
+        return ""
+    sheets = client_context.get("sheets")
+    if not isinstance(sheets, dict):
+        return ""
+    slug = str(sheets.get("slug") or "").strip()
+    if not slug:
+        return ""
+    ws = str(sheets.get("workspace_id") or workspace_id or "").strip()
+    default_path = (
+        f"sheets/{ws}/{slug}/workbook.html" if ws else f"sheets/{slug}/workbook.html"
+    )
+    default_branch = f"sheets/{ws}/{slug}" if ws else f"sheets/{slug}"
+    path = str(sheets.get("path") or default_path).strip()
+    branch = str(sheets.get("branch") or default_branch).strip()
+    title = str(sheets.get("title") or "").strip()
+    lines = [
+        f"- slug: {slug}",
+        f"- path: {path}",
+        f"- branch: {branch}",
+    ]
+    if ws:
+        lines.append(f"- workspace_id: {ws}")
+    if title:
+        lines.append(f"- title: {title}")
+    return (
+        "\n\n## Open Sheets workbook\n"
+        "The user is editing this spreadsheet in Nexus Sheets. "
+        "If you lack write_sheets_workbook, call transfer_to_Sheets and stop.\n"
+        "Edit the JSON model via Sheets tools; omit slug (defaults to this workbook).\n"
+        + "\n".join(lines)
+        + "\n"
+    )
+
+
 def _render_coding_context_block(client_context: dict | None) -> str:
     """Inject open Code repo/branch so Abi edits the sandbox checkout."""
     if not isinstance(client_context, dict):
@@ -504,6 +543,9 @@ class ChatService:
         documents_block = _render_documents_context_block(client_context, workspace_id)
         if documents_block:
             system_prompt += documents_block
+        sheets_block = _render_sheets_context_block(client_context, workspace_id)
+        if sheets_block:
+            system_prompt += sheets_block
         coding_block = _render_coding_context_block(client_context)
         if coding_block:
             system_prompt += coding_block
@@ -548,6 +590,9 @@ class ChatService:
         documents_block = _render_documents_context_block(client_context, workspace_id)
         if documents_block.strip():
             parts.append(documents_block.strip())
+        sheets_block = _render_sheets_context_block(client_context, workspace_id)
+        if sheets_block.strip():
+            parts.append(sheets_block.strip())
 
         coding_block = _render_coding_context_block(client_context)
         if coding_block.strip():
@@ -571,6 +616,26 @@ class ChatService:
                 parts.append(addendum.strip())
 
         return "\n\n".join(parts) if parts else None
+
+    async def build_remote_agent_preamble(
+        self,
+        prior_messages: list,
+        user_id: str | None,
+        workspace_id: str | None = None,
+        conversation_id: str | None = None,
+    ) -> str | None:
+        """Context prepended for agents published by remote modules (NATS).
+
+        Only the first-turn user profile: the skills catalog, open documents,
+        coding workspace and multi-agent notice describe Nexus tooling a remote
+        agent cannot use, and they crowd out its own system prompt.
+        """
+        if any(getattr(m, "role", None) == "assistant" for m in prior_messages):
+            return None
+        addendum = await self.build_user_context_addendum(
+            prior_messages, user_id, workspace_id, conversation_id
+        )
+        return addendum.strip() or None
 
     async def _build_skills_block(
         self, context: RequestContext | None, workspace_id: str | None
@@ -1405,6 +1470,10 @@ class ChatService:
         workspace_id: str | None = None,
     ) -> ResolvedProvider | None:
         incoming_llm = getattr(provider, "llm_model", None) if provider else None
+        # A remote agent is reached only through its agent row (sync + roster),
+        # never by naming its key in a client-supplied provider payload.
+        if provider and getattr(provider, "type", None) == "remote":
+            provider = None
         if provider and getattr(provider, "enabled", False):
             return ResolvedProvider(
                 id=provider.id,
@@ -1423,6 +1492,20 @@ class ChatService:
                 agent = await self.get_agent(context=context, agent_id=agent_id)
                 if agent and agent.provider:
                     workspace_id = agent.workspace_id
+                    if agent.provider == "remote" and agent.class_name:
+                        # Published by a remote module (NATS discovery): stream
+                        # through its agent proxy; class_name is the agent key.
+                        return ResolvedProvider(
+                            id=f"remote-{agent.id}",
+                            name=f"Remote ({agent.class_name.rpartition('/')[0]})",
+                            type="remote",
+                            enabled=True,
+                            endpoint=None,
+                            api_key=None,
+                            account_id=None,
+                            model=agent.class_name,
+                            llm_model=None,
+                        )
                     if agent.provider == "abi":
                         inprocess_agent_ref = (
                             agent.class_name or agent.name or agent.model_id or agent.id

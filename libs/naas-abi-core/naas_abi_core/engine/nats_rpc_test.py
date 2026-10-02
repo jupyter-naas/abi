@@ -121,8 +121,12 @@ def test_client_preserves_reconnecting_connection(client, monkeypatch):
 def primary(request):
     cls = adapter_class(*request.param, primary=True)
     instance = cls.__new__(cls)
+    from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
+
     instance._jwt_secret = SECRET
-    return instance
+    instance._dispatch = DomainRPCDispatcher(request.param[0])
+    yield instance
+    instance._dispatch.close()
 
 
 def response_class(primary):
@@ -139,12 +143,14 @@ def error_of(response):
 
 def test_primary_returns_non_retryable_error_for_oversized_reply(primary):
     replies = []
+    reply_headers = []
     response_cls = response_class(primary)
 
-    async def respond(data):
+    async def respond(data, headers=None):  # nats.micro Request.respond
         if len(data) > 512:
             raise MaxPayloadError()
         replies.append(response_cls.FromString(data))
+        reply_headers.append(headers)
 
     request = SimpleNamespace(
         data=keyvalue_pb2.GetRequest(key="k").SerializeToString(),
@@ -168,6 +174,7 @@ def test_primary_returns_non_retryable_error_for_oversized_reply(primary):
     assert len(replies) == 1
     assert error_of(replies[0]).code == "PAYLOAD_TOO_LARGE"
     assert not error_of(replies[0]).retryable
+    assert reply_headers == [{"Abi-Error-Code": "PAYLOAD_TOO_LARGE"}]
 
 
 def test_primary_rejects_malformed_protobuf_before_dispatch(primary):
@@ -223,3 +230,49 @@ def test_timeout_cancels_local_wait_without_replaying(client):
         call(client)
     assert cancelled.wait(1)
     assert nc.request.await_count == 1
+
+
+def test_concurrent_requests_share_connection_without_serializing(client):
+    from concurrent.futures import ThreadPoolExecutor
+
+    entered = 0
+    all_entered = None
+
+    async def request(*args, **kwargs):
+        nonlocal entered, all_entered
+        if all_entered is None:
+            all_entered = asyncio.Event()
+        entered += 1
+        if entered == 4:
+            all_entered.set()
+        await asyncio.wait_for(all_entered.wait(), 1)
+        return SimpleNamespace(data=b"", headers={})
+
+    nc = connection(client, side_effect=request)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        assert len(list(pool.map(lambda _: call(client), range(4)))) == 4
+    assert nc.request.await_count == 4
+
+
+def test_simultaneous_first_requests_share_completed_connection(monkeypatch):
+    from naas_abi_core.engine.nats_rpc import NatsRPCClient
+
+    nc = SimpleNamespace(is_closed=False, close=AsyncMock())
+
+    async def connect(*args, **kwargs):
+        await asyncio.sleep(0.01)
+
+    nc.connect = AsyncMock(side_effect=connect)
+    factory = Mock(return_value=nc)
+    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.NATSClient", factory)
+    client = NatsRPCClient("nats://unused:4222", SECRET, "test")
+
+    async def scenario():
+        connections = await asyncio.gather(
+            *(client._ensure_connection_async() for _ in range(8))
+        )
+        assert all(c is nc for c in connections)
+        nc.connect.assert_awaited_once()
+        factory.assert_called_once()
+
+    asyncio.run(scenario())

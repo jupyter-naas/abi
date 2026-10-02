@@ -41,6 +41,7 @@ from naas_abi_core.services.event.adapters.event_nats_contract import (
 )
 from naas_abi_core.services.event.EventPort import (
     EventNotFoundError,
+    EventTypeSummary,
     IEventAdapter,
     InvalidEventError,
     StoredEvent,
@@ -230,3 +231,22 @@ class EventSecondaryAdapterNATSClient(NatsRPCClient, IEventAdapter):
         if response.HasField("error"):
             _raise_for_error(response.error)
         return [_pb_to_event(pb) for pb in response.events.events]
+
+    def list_event_types(self) -> list[EventTypeSummary]:
+        request = event_pb2.ListEventTypesRequest(context=self._context())
+        response = self._call(
+            f"{SUBJECT_PREFIX}.list_event_types",
+            request,
+            event_pb2.ListEventTypesResponse,
+        )
+        if response.HasField("error"):
+            _raise_for_error(response.error)
+        return [
+            EventTypeSummary(
+                event_type=pb.event_type,
+                count=pb.count,
+                last_seq=pb.last_seq,
+                last_timestamp=pb.last_timestamp,
+            )
+            for pb in response.types.types
+        ]

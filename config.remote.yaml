@@ -79,6 +79,11 @@ modules:
         priority_option_id: "4fb76f2d"
 
 services:
+  document:
+    document_adapter:
+      adapter: "postgresql"
+      config:
+        dsn: "postgresql://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@{{ secret.POSTGRES_HOST }}:{{ secret.POSTGRES_PORT }}/{{ secret.POSTGRES_DB }}"
   secret:
     secret_adapters:
       - adapter: "dotenv"

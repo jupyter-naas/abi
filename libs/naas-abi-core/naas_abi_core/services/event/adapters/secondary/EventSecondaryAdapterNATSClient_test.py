@@ -1,5 +1,9 @@
 import asyncio
+import shutil
+import socket
+import subprocess
 import time
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from threading import Event as ThreadingEvent
 from threading import Thread
@@ -194,8 +198,44 @@ class _PrimaryAdapterServer:
             await self._nc.close()
 
 
+@contextmanager
+def _native_nats_server(binary: str, workdir):
+    """A throwaway local ``nats-server`` on a free port (no Docker needed)."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    with (workdir / "nats.log").open("w") as log:
+        process = subprocess.Popen(
+            [binary, "-a", "127.0.0.1", "-p", str(port)],
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if process.poll() is not None:
+                    pytest.fail("nats-server exited before accepting connections")
+                try:
+                    with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                        break
+                except OSError:
+                    time.sleep(0.01)
+            else:
+                pytest.fail("nats-server did not become ready")
+            yield f"nats://127.0.0.1:{port}"
+        finally:
+            process.terminate()
+            process.wait(timeout=5)
+
+
 @pytest.fixture(scope="session")
-def nats_url():
+def nats_url(tmp_path_factory):
+    # A local nats-server binary first (fast, no Docker), else a container.
+    binary = shutil.which("nats-server")
+    if binary is not None:
+        with _native_nats_server(binary, tmp_path_factory.mktemp("nats")) as url:
+            yield url
+        return
     try:
         # Imported here, not at module level: testcontainers is a dev-only
         # dependency, absent from environments that don't run
@@ -251,7 +291,7 @@ def _server_and_client(nats_url, tmp_path):
 
 @pytest.mark.integration
 class TestEventSecondaryAdapterNATSClient:
-    """Round-trips IEventAdapter's six methods through a real primary adapter
+    """Round-trips IEventAdapter's methods through a real primary adapter
     (wrapping a real SQLite adapter) and the real client, over a live NATS
     server."""
 
@@ -327,6 +367,21 @@ class TestEventSecondaryAdapterNATSClient:
 
         # Draining again with nothing new appended returns nothing.
         assert client.query_for_consumer("consumer-1", "urn:Type:A") == []
+
+    def test_list_event_types_round_trips(self, _server_and_client):
+        client = _server_and_client
+        client.append("urn:e1", "urn:Type:B", "2026-01-01T00:00:00", b"1")
+        client.append("urn:e2", "urn:Type:A", "2026-01-01T00:00:01", b"2")
+        client.append("urn:e3", "urn:Type:B", "2026-01-01T00:00:02", b"3")
+
+        summaries = client.list_event_types()
+
+        assert [
+            (s.event_type, s.count, s.last_seq, s.last_timestamp) for s in summaries
+        ] == [
+            ("urn:Type:A", 1, 2, "2026-01-01T00:00:01"),
+            ("urn:Type:B", 2, 3, "2026-01-01T00:00:02"),
+        ]
 
     def test_query_for_consumer_respects_limit(self, _server_and_client):
         client = _server_and_client

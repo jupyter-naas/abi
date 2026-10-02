@@ -8,6 +8,7 @@ from typing import Self
 import nats
 import nats.errors
 import nats.js.errors
+from naas_abi_core.engine.nats_naming import connection_name
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
 from naas_abi_core.utils.Logger import logger
 from nats.aio.client import Client as NATSClient
@@ -138,7 +139,9 @@ class NATSJetStreamAdapter(IBusAdapter):
             assert self.__js is not None
             return self.__nc, self.__js
 
-        nc = await nats.connect(self.__nats_url, pending_size=0)
+        nc = await nats.connect(
+            self.__nats_url, pending_size=0, name=connection_name("abi-bus")
+        )
         js = nc.jetstream()
         self.__nc = nc
         self.__js = js
@@ -283,7 +286,9 @@ class NATSJetStreamAdapter(IBusAdapter):
     async def _subscribe_forever(
         self, topic: str, routing_key: str, callback: Callable[[bytes], None]
     ) -> None:
-        nc = await nats.connect(self.__nats_url)
+        nc = await nats.connect(
+            self.__nats_url, name=connection_name("abi-bus:subscriber")
+        )
         subject = self._subject(topic, self._to_nats_pattern(routing_key))
         stop_event = asyncio.Event()
 
@@ -352,7 +357,7 @@ class NATSJetStreamAdapter(IBusAdapter):
     async def _dequeue_forever(
         self, topic: str, routing_key: str, callback: Callable[[bytes], None]
     ) -> None:
-        nc = await nats.connect(self.__nats_url)
+        nc = await nats.connect(self.__nats_url, name=connection_name("abi-bus:worker"))
         try:
             js = nc.jetstream()
             stream_name = await self._ensure_stream_async(js, topic)

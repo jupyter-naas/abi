@@ -85,6 +85,81 @@ def recompute_author_stats(dataset, author_ids: list[str]) -> int:
     return upsert_table(dataset, AUTHOR_STATS_V1, payload)
 
 
+def earliest_post_at_by_author(dataset) -> dict[str, Any]:
+    """First retrieved tweet per author: sort posts by ``created_at``, one row each.
+
+    Same as pandas ``sort_values('created_at').drop_duplicates('author_id')``.
+    """
+    ensure_x_datasets(dataset)
+    cte = canonical_cte(use_matched_index=matched_index_ready(dataset))
+    result = dataset.query(
+        f"WITH {cte} "
+        f"SELECT author_id, MIN(created_at) AS first_post_at "
+        f"FROM canonical_enriched "
+        f"WHERE author_id <> '' "
+        f"GROUP BY author_id",
+        namespace=X_DATASET_NAMESPACE,
+    )
+    out: dict[str, Any] = {}
+    for row in result.rows:
+        author_id = str(row.get("author_id") or "").strip()
+        if author_id and row.get("first_post_at") is not None:
+            out[author_id] = row["first_post_at"]
+    return out
+
+
+def stamp_missing_first_post_at_from_posts(dataset) -> int:
+    """Write ``first_post_at`` onto stats rows that still have it null.
+
+    New authors get the field on first ingest via ``recompute_author_stats``.
+    Everyone already in ``author_stats_v1`` is filled from the posts table.
+    """
+    ensure_x_datasets(dataset)
+    missing = dataset.query(
+        f"SELECT * FROM {AUTHOR_STATS_V1} "
+        f"WHERE author_id <> '' AND first_post_at IS NULL",
+        namespace=X_DATASET_NAMESPACE,
+    )
+    if not missing.rows:
+        return 0
+    earliest = earliest_post_at_by_author(dataset)
+    if not earliest:
+        return 0
+    now = _utc_now()
+    payload: list[dict[str, Any]] = []
+    for row in missing.rows:
+        author_id = str(row.get("author_id") or "").strip()
+        first_post_at = earliest.get(author_id)
+        if not author_id or first_post_at is None:
+            continue
+        payload.append(
+            {
+                "author_id": author_id,
+                "matched_count": int(row.get("matched_count") or 0),
+                "referenced_count": int(row.get("referenced_count") or 0),
+                "first_post_at": first_post_at,
+                "last_post_at": row.get("last_post_at") or first_post_at,
+                "updated_at": now,
+            }
+        )
+    if not payload:
+        return 0
+    return upsert_table(dataset, AUTHOR_STATS_V1, payload)
+
+
+def count_authors_missing_first_post(dataset) -> int:
+    """How many ``author_stats_v1`` rows still have a null first post."""
+    ensure_x_datasets(dataset)
+    result = dataset.query(
+        f"SELECT COUNT(*) AS n FROM {AUTHOR_STATS_V1} "
+        f"WHERE author_id <> '' AND first_post_at IS NULL",
+        namespace=X_DATASET_NAMESPACE,
+    )
+    if not result.rows:
+        return 0
+    return int(result.rows[0]["n"] or 0)
+
+
 def fetch_author_stats(dataset, author_id: str) -> dict[str, Any] | None:
     """Read cached stats for one author."""
     aid = str(author_id or "").strip()
@@ -101,10 +176,19 @@ def fetch_author_stats(dataset, author_id: str) -> dict[str, Any] | None:
     return dict(result.rows[0])
 
 
+def _stats_complete(stats: dict[str, Any] | None) -> bool:
+    """True when the cache row can serve the user-page KPIs without a recompute."""
+    return stats is not None and stats.get("first_post_at") is not None
+
+
 def profile_stats(dataset, author_id: str) -> dict[str, Any] | None:
-    """Cached stats, recomputing and persisting when missing."""
+    """Cached stats, recomputing when missing or ``first_post_at`` is null.
+
+    Rows created before ``first_post_at`` was added still have counts and
+    ``last_post_at``; treating those as complete left First post retrieved empty.
+    """
     stats = fetch_author_stats(dataset, author_id)
-    if stats is not None:
+    if _stats_complete(stats):
         return stats
     recompute_author_stats(dataset, [author_id])
     return fetch_author_stats(dataset, author_id)

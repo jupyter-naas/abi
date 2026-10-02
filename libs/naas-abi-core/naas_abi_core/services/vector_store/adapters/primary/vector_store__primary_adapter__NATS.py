@@ -32,7 +32,6 @@ never passes any.
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -45,7 +44,9 @@ from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
 from naas_abi_core.services.vector_store.adapters.vector_store_nats_contract import (
@@ -59,8 +60,15 @@ from naas_abi_core.services.vector_store.IVectorStorePort import (
     SearchResult,
     VectorDocument,
 )
+from naas_abi_core.services.vector_store.ontologies.modules.VectorStoreEventOntology import (
+    CollectionDeleted,
+    CollectionEnsured,
+    DocumentsAdded,
+    DocumentsDeleted,
+    DocumentUpdated,
+    VectorStoreError,
+)
 from nats.micro.request import Request
-from nats.micro.service import Service
 
 __all__ = [
     "AUTH_HEADER",
@@ -129,10 +137,42 @@ class VectorStorePrimaryAdapterNATS:
         self,
         adapter: IVectorStorePort,
         jwt_secret: str,
+        *,
+        event_publisher: Callable[[object], None] | None = None,
     ) -> None:
+        self._event_publisher = event_publisher
         self._adapter = adapter
         self._jwt_secret = jwt_secret
-        self._service: Service | None = None
+        self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
+        self._service: TracedService | None = None
+
+    def _invoke(self, call, request):
+        try:
+            return call(request)
+        except Exception as exc:
+            operation = {
+                "_call_create_collection": "ensure_collection",
+                "_call_store_vectors": "add_documents",
+                "_call_update_vector": "update_document",
+                "_call_delete_vectors": "delete_documents",
+                "_call_delete_collection": "delete_collection",
+            }.get(call.__name__)
+            if operation:
+                self._emit(
+                    VectorStoreError(
+                        collection_name=request.collection_name,
+                        operation=operation,
+                        message=str(exc),
+                    )
+                )
+            raise
+
+    def _emit(self, event: object) -> None:
+        if self._event_publisher is not None:
+            try:
+                self._event_publisher(event)
+            except Exception as exc:  # noqa: BLE001 - audit is fail-open
+                logger.warning("NATS mutation audit failed: {}", type(exc).__name__)
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``vector_store`` NATS service on ``nc``.
@@ -144,7 +184,7 @@ class VectorStorePrimaryAdapterNATS:
         if self._service is not None:
             return
 
-        service = await nats.micro.add_service(
+        service = await add_traced_service(
             nc,
             name=SERVICE_NAME,
             version=SERVICE_VERSION,
@@ -201,6 +241,16 @@ class VectorStorePrimaryAdapterNATS:
             handler=self._handle_count_vectors,
         )
         await service.add_endpoint(
+            name="list_vectors",
+            subject=f"{SUBJECT_PREFIX}.list_vectors",
+            handler=self._handle_list_vectors,
+        )
+        await service.add_endpoint(
+            name="get_collection_info",
+            subject=f"{SUBJECT_PREFIX}.get_collection_info",
+            handler=self._handle_get_collection_info,
+        )
+        await service.add_endpoint(
             name="close",
             subject=f"{SUBJECT_PREFIX}.close",
             handler=self._handle_close,
@@ -211,8 +261,11 @@ class VectorStorePrimaryAdapterNATS:
         """Deregister the service, draining its subscriptions."""
         service = self._service
         self._service = None
-        if service is not None:
-            await service.stop()
+        try:
+            if service is not None:
+                await service.stop()
+        finally:
+            self._dispatch.close()
 
     # ------------------------------------------------------------------
     # Shared request handling: auth, decode, dispatch, encode.
@@ -254,7 +307,9 @@ class VectorStorePrimaryAdapterNATS:
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await asyncio.to_thread(call, parsed_request)
+            response = await self._dispatch.call(
+                lambda req: self._invoke(call, req), parsed_request
+            )
         except Exception:  # noqa: BLE001 - a handler must never crash the service
             logger.opt(exception=True).error(
                 f"VectorStorePrimaryAdapterNATS: unexpected error handling {request.subject!r}"
@@ -323,6 +378,7 @@ class VectorStorePrimaryAdapterNATS:
         self._adapter.create_collection(
             req.collection_name, req.dimension, req.distance_metric
         )
+        self._emit(CollectionEnsured(collection_name=req.collection_name))
         return vector_store_pb2.CreateCollectionResponse()
 
     async def _handle_delete_collection(self, request: Request) -> None:
@@ -337,6 +393,7 @@ class VectorStorePrimaryAdapterNATS:
         self, req: vector_store_pb2.DeleteCollectionRequest
     ) -> vector_store_pb2.DeleteCollectionResponse:
         self._adapter.delete_collection(req.collection_name)
+        self._emit(CollectionDeleted(collection_name=req.collection_name))
         return vector_store_pb2.DeleteCollectionResponse()
 
     async def _handle_list_collections(self, request: Request) -> None:
@@ -378,6 +435,11 @@ class VectorStorePrimaryAdapterNATS:
             for doc in req.documents
         ]
         self._adapter.store_vectors(req.collection_name, documents)
+        self._emit(
+            DocumentsAdded(
+                collection_name=req.collection_name, document_count=len(documents)
+            )
+        )
         return vector_store_pb2.StoreVectorsResponse()
 
     async def _handle_search(self, request: Request) -> None:
@@ -444,6 +506,11 @@ class VectorStorePrimaryAdapterNATS:
             metadata=dict(req.metadata) if req.HasField("metadata") else None,
             payload=dict(req.payload) if req.HasField("payload") else None,
         )
+        self._emit(
+            DocumentUpdated(
+                collection_name=req.collection_name, document_id=req.vector_id
+            )
+        )
         return vector_store_pb2.UpdateVectorResponse()
 
     async def _handle_delete_vectors(self, request: Request) -> None:
@@ -458,6 +525,11 @@ class VectorStorePrimaryAdapterNATS:
         self, req: vector_store_pb2.DeleteVectorsRequest
     ) -> vector_store_pb2.DeleteVectorsResponse:
         self._adapter.delete_vectors(req.collection_name, list(req.vector_ids))
+        self._emit(
+            DocumentsDeleted(
+                collection_name=req.collection_name, document_count=len(req.vector_ids)
+            )
+        )
         return vector_store_pb2.DeleteVectorsResponse()
 
     async def _handle_count_vectors(self, request: Request) -> None:
@@ -473,6 +545,51 @@ class VectorStorePrimaryAdapterNATS:
     ) -> vector_store_pb2.CountVectorsResponse:
         count = self._adapter.count_vectors(req.collection_name)
         return vector_store_pb2.CountVectorsResponse(count=count)
+
+    async def _handle_list_vectors(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.ListVectorsRequest,
+            vector_store_pb2.ListVectorsResponse,
+            self._call_list_vectors,
+        )
+
+    def _call_list_vectors(
+        self, req: vector_store_pb2.ListVectorsRequest
+    ) -> vector_store_pb2.ListVectorsResponse:
+        page = self._adapter.list_vectors(
+            req.collection_name,
+            limit=req.limit or 100,
+            cursor=req.cursor if req.HasField("cursor") else None,
+            include_vectors=req.include_vectors,
+        )
+        return vector_store_pb2.ListVectorsResponse(
+            page=vector_store_pb2.VectorPage(
+                documents=[_document_to_pb(document) for document in page.documents],
+                next_cursor=page.next_cursor,
+            )
+        )
+
+    async def _handle_get_collection_info(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.GetCollectionInfoRequest,
+            vector_store_pb2.GetCollectionInfoResponse,
+            self._call_get_collection_info,
+        )
+
+    def _call_get_collection_info(
+        self, req: vector_store_pb2.GetCollectionInfoRequest
+    ) -> vector_store_pb2.GetCollectionInfoResponse:
+        info = self._adapter.get_collection_info(req.collection_name)
+        return vector_store_pb2.GetCollectionInfoResponse(
+            info=vector_store_pb2.CollectionInfo(
+                name=info.name,
+                dimension=info.dimension,
+                distance_metric=info.distance_metric,
+                size=info.size,
+            )
+        )
 
     async def _handle_close(self, request: Request) -> None:
         await self._handle(

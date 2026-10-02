@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from threading import Lock
 from typing import TYPE_CHECKING
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
@@ -13,6 +14,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
 from naas_abi_core.services.dataset.DatasetService import DatasetService
+from naas_abi_core.services.document.DocumentService import DocumentService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
@@ -50,6 +52,9 @@ class ServicesProxy:
         self.__module_name = module_name
         self.__module_dependencies = module_dependencies
         self.__unlocked = unlocked
+        self.__document_source: DocumentService | None = None
+        self.__document_view: DocumentService | None = None
+        self.__document_lock = Lock()
 
     # def __accessible_services(self) -> List[Any]:
     #     engine_services = {
@@ -92,6 +97,22 @@ class ServicesProxy:
         if not self.__unlocked and DatasetService not in self.__module_dependencies.services:
             return False
         return self.__engine.services.dataset_available()
+
+    @property
+    def document(self) -> DocumentService:
+        self.__ensure_access(DocumentService)
+        with self.__document_lock:
+            source = self.__engine.services.document
+            if source is not self.__document_source:
+                self.__document_view = source._for_namespace(self.__module_name)
+                self.__document_source = source
+            assert self.__document_view is not None
+            return self.__document_view
+
+    def document_available(self) -> bool:
+        if not self.__unlocked and DocumentService not in self.__module_dependencies.services:
+            return False
+        return self.__engine.services.document_available()
 
     @property
     def triple_store(self) -> TripleStoreService:
@@ -177,6 +198,20 @@ class ServicesProxy:
         # Platform service used by the Nexus API resolvers — exempt from the
         # per-module dependency check (like ``model_registry``).
         return self.__engine.services.coding_environment
+
+    @property
+    def document_admin(self) -> DocumentService:
+        """The engine's document root: ``namespaces()`` and ``for_namespace(ns)``.
+
+        Platform administration across module namespaces, for the unlocked proxy
+        (the platform module) only. Module proxies keep their scoped ``document``.
+        """
+        if not self.__unlocked:
+            raise PermissionError(
+                f"Module {self.__module_name} is not the platform module: "
+                "document administration needs the unlocked engine proxy"
+            )
+        return self.__engine.services.document
 
     @property
     def source_control(self) -> SourceControlService:

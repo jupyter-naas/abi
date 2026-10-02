@@ -655,3 +655,46 @@ def test_subscribe_fanout_across_multiple_subscribers(tmp_path):
     assert pdf_done.wait(timeout=2)
     assert received_unfiltered == ["alice", "report.pdf", "bob"]
     assert received_pdf_only == ["report.pdf"]
+
+
+# ---------------------------------------------------------------------------
+# raw access by type IRI (admin views)
+# ---------------------------------------------------------------------------
+
+
+class _Other(LogProcess):
+    _class_uri: ClassVar[str] = "http://example.org/Other"
+
+
+def test_event_types_and_raw_queries_by_type_iri(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    service.publish(UserAuthenticated(user_id="alice"))
+    service.publish(_Other())
+    service.publish(UserAuthenticated(user_id="bob"))
+
+    types = {t.event_type: t for t in service.event_types()}
+    newest = service.query_stored(
+        UserAuthenticated._class_uri, newest_first=True, limit=1
+    )
+    older = service.query_stored(
+        UserAuthenticated._class_uri, until_seq=newest[0].seq - 1, newest_first=True
+    )
+
+    assert (types[UserAuthenticated._class_uri].count, types[_Other._class_uri].count) == (2, 1)
+    assert [e.seq for e in newest] == [3]
+    assert [e.seq for e in older] == [1]
+    assert b"bob" in newest[0].payload
+
+
+def test_get_stored_by_seq(tmp_path):
+    import pytest
+
+    from naas_abi_core.services.event.EventPort import EventNotFoundError
+
+    service, _, _ = _make_service(tmp_path)
+    service.publish(UserAuthenticated(user_id="alice"))
+    service.publish(_Other())
+
+    assert service.get_stored(2).event_type == _Other._class_uri
+    with pytest.raises(EventNotFoundError):
+        service.get_stored(3)

@@ -127,6 +127,11 @@ class _StubAdapter(ICodingEnvironmentAdapter):
             raise self.next_error
         return list(self.environments.values())
 
+    def list_all_environments(self) -> list[WorkspaceStatus]:
+        if self.next_error is not None:
+            raise self.next_error
+        return list(self.environments.values())
+
     def get_status(self, *, workspace_id: str) -> WorkspaceStatus:
         if self.next_error is not None:
             raise self.next_error
@@ -260,6 +265,58 @@ def test_list_environments_round_trips_statuses():
     assert [e.id for e in response.environments.environments] == ["ws-a"]
     assert response.environments.environments[0].phase == PHASE_RUNNING
     assert response.environments.environments[0].agent_ready is True
+
+
+def test_list_all_environments_round_trips_owner_template_and_created_at():
+    stub = _StubAdapter()
+    stub.environments["ws-a"] = WorkspaceStatus(
+        id="ws-a",
+        name="a",
+        phase=PHASE_RUNNING,
+        agent_ready=True,
+        owner="alice",
+        template="docker",
+        created_at="2026-10-02T10:00:00Z",
+    )
+    stub.environments["ws-b"] = WorkspaceStatus(
+        id="ws-b", name="b", phase=PHASE_RUNNING
+    )
+    adapter = CodingEnvironmentPrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=coding_environment_pb2.ListAllEnvironmentsRequest().SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.coding_environment.v1.list_all_environments",
+    )
+
+    asyncio.run(adapter._handle_list_all_environments(request))
+
+    response = coding_environment_pb2.ListAllEnvironmentsResponse()
+    response.ParseFromString(request.responses[0])
+    a, b = response.environments.environments
+    assert (a.owner, a.template, a.created_at) == (
+        "alice",
+        "docker",
+        "2026-10-02T10:00:00Z",
+    )
+    assert b.owner == "" and not b.HasField("created_at")
+
+
+def test_not_implemented_maps_to_unimplemented_not_retryable():
+    stub = _StubAdapter()
+    stub.next_error = NotImplementedError("no admin listing here")
+    adapter = CodingEnvironmentPrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=coding_environment_pb2.ListAllEnvironmentsRequest().SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.coding_environment.v1.list_all_environments",
+    )
+
+    asyncio.run(adapter._handle_list_all_environments(request))
+
+    response = coding_environment_pb2.ListAllEnvironmentsResponse()
+    response.ParseFromString(request.responses[0])
+    assert response.error.code == "UNIMPLEMENTED"
+    assert response.error.retryable is False
 
 
 # ---------------------------------------------------------------------------

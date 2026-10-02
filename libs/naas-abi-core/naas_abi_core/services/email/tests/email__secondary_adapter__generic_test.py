@@ -11,3 +11,5 @@ class GenericEmailSecondaryAdapterTest(ABC):
 
     def test_adapter_has_required_methods(self, adapter_class):
         assert callable(getattr(adapter_class, "send", None))
+        for method in ("list_sent", "get_sent", "delete_sent"):
+            assert callable(getattr(adapter_class, method, None))

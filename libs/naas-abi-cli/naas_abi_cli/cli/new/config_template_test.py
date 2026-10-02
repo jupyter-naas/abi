@@ -152,3 +152,16 @@ def test_local_config_uses_dedicated_postgres_ducklake_catalog() -> None:
     assert dataset["adapter"] == "ducklake"
     assert dataset["config"]["catalog"].endswith("@postgres:5432/ducklake")
     assert dataset["config"]["data_path"] == "storage/datasets/"
+
+
+def test_document_config_uses_sqlite_locally_and_existing_postgres_database_in_stack() -> (
+    None
+):
+    document = _render("config.yaml")["services"]["document"]["document_adapter"]
+    assert document == {
+        "adapter": "sqlite",
+        "config": {"path": "storage/documents.sqlite"},
+    }
+    document = _render("config.local.yaml")["services"]["document"]["document_adapter"]
+    assert document["adapter"] == "postgresql"
+    assert document["config"]["dsn"].endswith("@postgres:5432/{{ secret.POSTGRES_DB }}")

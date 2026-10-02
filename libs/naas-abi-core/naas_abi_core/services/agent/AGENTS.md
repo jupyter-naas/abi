@@ -21,6 +21,8 @@ Orchestration layer binding a chat model to tools and sub-agents. Handles:
 | `OpencodeAgent` | `OpencodeAgent.py` | External AI-IDE session orchestrator (subprocess + SSE streaming) |
 | `OpencodeSessionService` | `OpencodeSessionService.py` | Session/message/file-event persistence (SQLAlchemy async or in-memory) |
 | `SqliteCheckpointSaver` | `SqliteCheckpointSaver.py` | SQLite-backed LangGraph checkpointer (survives restarts) |
+| `DocumentCheckpointSaver` | `DocumentCheckpointSaver.py` | Engine agent memory in the Document Service (sync + async LangGraph API); `LegacyDocumentCheckpointReader` reads schema 1 |
+| `migrate_checkpoints` | `CheckpointMigration.py` | One-shot copy of LangGraph threads into document schema 2 (from PostgresSaver or schema 1) |
 
 ## `Agent` Constructor
 
@@ -89,7 +91,41 @@ Distinct from the `on_tool_usage` / `on_tool_response` / `on_ai_message`
 
 ## Memory / Checkpointing
 
-- `create_checkpointer()` auto-detects `POSTGRES_URL` → `PostgresSaver`, else `MemorySaver`.
+`memory=None` (every module factory) calls `create_checkpointer()`, which returns,
+in order: the engine's agent checkpointer when an engine is loaded, else a shared
+`PostgresSaver` when `POSTGRES_URL` is set, else a new `MemorySaver`. An explicit
+`memory=` always wins.
+
+- `Engine.load()` binds `DocumentCheckpointSaver.for_engine(services.document)`
+  through `engine.context.set_default_agent_checkpointer` before modules load;
+  `shutdown()` unbinds it. It uses the engine's own document root, never the NATS
+  client view (snapshots must not hit the broker payload limit). No document
+  service, or no naas-abi-sdk (core `[nats]`), keeps the fallback above.
+- Scope: every engine agent shares namespace `naas_abi_core.services.agent` and
+  agent_id `engine.v1`, as they shared one PostgresSaver. A thread is keyed by
+  `thread_id` (+ `checkpoint_ns`) whichever agent writes it. Load-bearing: Nexus
+  and the OpenAI gateway rebuild agents per request and restore history and the
+  active agent (`current_active_agent`) from the thread; sub-agents run in their
+  supervisor's graph and checkpointer; a sub-agent invoked directly continues its
+  supervisor's thread. Do not split the scope per agent or module without
+  replacing that. SDK agents keep their own module namespace.
+- Documents are those of `naas_abi_sdk.langgraph.DocumentCheckpointSaver`
+  (`naas_abi_sdk.langgraph_documents`, schema 2): change the schema there, for
+  both savers; the savers only do I/O. Each step stores what changed (values
+  content-addressed in blobs / items / parts), no document holds more than
+  256 KiB of a value and reads fetch in batches of at most 2 MiB. Schema 1
+  (`*_v1`, full snapshots) is still read; new writes are schema 2.
+- A saver remembers what checkpoints it loaded or wrote reference
+  (`KnownReferences`), so a put skips it. Keep the write order (parts, items,
+  blobs, checkpoint last): a stored checkpoint must always be complete.
+- Concurrent turns on one thread fork from the same parent; the newest checkpoint
+  becomes the head (as with PostgresSaver). Checkpoint documents are create-only
+  and values content-addressed, so nothing is overwritten. There is no run lease.
+- Migration into schema 2: `abi agent migrate-memory` (dry run; `--apply` to
+  write; `--thread` to select; `--from postgres` with `$POSTGRES_URL` or
+  `--source-url`, or `--from documents-v1`; `--namespace`/`--agent-id` for
+  another scope). Idempotent. Stop the engines first: threads they served on
+  documents before the copy are reported as `diverged`.
 - `SqliteCheckpointSaver` is available for file-backed persistence.
 - Conversation state keyed by `thread_id` on `AgentSharedState`.
 
@@ -116,7 +152,19 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/OpencodeAgent_test
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/OpencodeSessionService_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/AgentMemory_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/test_agent_memory.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/DocumentCheckpointSaver_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_document_memory_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/CheckpointMigration_test.py
 ```
+
+`tests/checkpoint_saver__generic_test.py` is the saver contract, held to LangGraph's
+`InMemorySaver`; `DocumentCheckpointSaver_test.py` runs it for the engine saver
+(sync and async API) and the SDK saver on one document backend.
+`Agent_document_memory_test.py` runs agent scenarios against today's shared saver
+and the document saver across restarts; their transcripts must match.
+`DocumentCheckpointSaver_test.py` also asserts flat bytes per turn over a 30-turn
+chat and a 20 MB value under a capped transport; `tests/legacy_checkpoints.py`
+writes schema 1 documents for the fallback and migration tests.
 
 Integration tests (require infra):
 
@@ -129,3 +177,13 @@ Integration tests (require infra):
 2. Register intents in `intents/default_intents.py` (or a domain-local module) if you want the router to dispatch to it.
 3. Emit events via the dataclasses in `ontologies/modules/AgentEventOntology.py` — never invent ad-hoc event types.
 4. Mirror the test pattern: `MyAgent_test.py` next to the implementation.
+
+
+## Remote hosting
+
+RemoteAgentAdapter wraps an existing Agent/IntentAgent as an async SDK host
+handler without importing the SDK. It duplicates per invocation with an isolated
+thread ID and preserves SSE events. Cancellation must wait for the synchronous
+worker to stop before the host releases its conversation claim. Cover both
+invocation and cancellation in RemoteAgentAdapter_test.py; the full network
+regression is examples/standalone_module/agent_integration_test.py.

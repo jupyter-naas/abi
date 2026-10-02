@@ -102,7 +102,7 @@ def test_sections_agent_owns_the_write_and_research_tools() -> None:
     assert leftover.isdisjoint(names)
     source = inspect.getsource(DocumentsAgent.get_tools)
     assert (
-        "naas_abi.agents.tools.web_tools" in source
+        "naas_abi.tools.web_tools" in source
         or "documents_research_tools" in source
     )
     assert "nexus_admin_tools" not in source

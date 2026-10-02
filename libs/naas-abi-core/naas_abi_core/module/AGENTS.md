@@ -18,6 +18,7 @@
 | `ModuleWorkflowLoader.py` | `workflows/` → `Workflow` subclasses |
 | `ModulePipelineLoader.py` | `pipelines/` → `Pipeline` subclasses |
 | `ModuleToolLoader.py` | `tools/` → `Expose` and `BaseTool` subclasses |
+| `jobs.py` | Job API (`job`, `JobDescriptor`, `Cron`, `Every`, `OnEvent`, `JobContext`), shared with the SDK |
 | `../utils/process_api.py` | `instantiate_process`, default `run()` POST |
 
 ## Lifecycle
@@ -27,6 +28,10 @@
 3. Kernel `_load_runtime_routes`: agents via `New()` + `as_api`; processes via `mount_module_processes`.
 
 A class that needs constructor config we cannot supply is skipped and logged. That is intentional. Do not invent a fake instance.
+
+## Jobs
+
+Declare `jobs` or decorate methods with `@job(triggers=(Cron(...),))` from `naas_abi_core.module.jobs`. Bind other handlers with `expose_job` in `on_initialized`. Handlers take a `JobContext` and may be sync (run in a worker thread) or async. In NATS mode the engine hosts them (`engine_loaders/EngineJobLoader.py`). Every declared job needs a handler, or `Engine.load` fails. Handlers must be idempotent: delivery is at-least-once. A sync handler that times out or is cancelled gets `ctx.cancelled`, then `JobInterrupted` in its thread after `nats.jobs.interrupt_grace_seconds` (`SyncJobRunner`); check `ctx.cancelled` in long loops and set I/O timeouts. Never catch `BaseException` broadly in job code. See `docs/adr/20261001_nats-jobs.md`.
 
 ## Tools
 

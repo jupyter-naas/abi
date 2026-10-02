@@ -41,7 +41,7 @@ App builder (create and edit static apps, code | live preview | agent):
 - {_API}/services/apps/projects/adapters/secondary/: source_control.py (git branch apps/<workspace>/<slug>), object_storage.py (live draft), module_apps.py ("Edit" copies a module app), github.py (submit as a review branch).
 - {_API}/services/apps/projects/adapters/primary/app_projects__primary_adapter__FastAPI.py: /api/app-projects routes and the /app-preview/<token>/<path> preview (CSP sandbox, no session).
 - {_API}/services/apps/projects/preview_token.py: preview tokens that are never session tokens.
-Agent: naas_abi/agents/AppsAgent.py, naas_abi/agents/tools/apps_tools.py and app_builder_tools.py (this agent)."""
+Agent: naas_abi/agents/AppsAgent.py, naas_abi/tools/apps_tools.py and app_builder_tools.py (this agent)."""
 
 APPS_CAPABILITIES = """- Browse the workspace's apps as a database (gallery, table, list, board views with filters, sort, group, search). Module apps and tenant external shortcuts appear together.
 - Open an app: bundled HTML apps embed same-origin through /app-html/ with a short-lived access token; external apps embed directly, with a Pages SSO token when the host needs one. The metadata panel is opt-in.
@@ -185,9 +185,9 @@ In the app editor the block names open_app_project_id instead: the builder tools
     @staticmethod
     def get_tools() -> list:
         """Apps and app builder tools, plus read-only Nexus source tools."""
-        from naas_abi.agents.tools.app_builder_tools import app_builder_tools
-        from naas_abi.agents.tools.apps_tools import apps_tools
-        from naas_abi.agents.tools.nexus_source_tools import nexus_source_tools
+        from naas_abi.tools.app_builder_tools import app_builder_tools
+        from naas_abi.tools.apps_tools import apps_tools
+        from naas_abi.tools.nexus_source_tools import nexus_source_tools
 
         return apps_tools() + app_builder_tools() + nexus_source_tools()
 

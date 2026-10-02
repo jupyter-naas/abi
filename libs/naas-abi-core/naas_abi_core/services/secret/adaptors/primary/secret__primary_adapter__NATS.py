@@ -15,7 +15,6 @@ accepted, temporary gap, not an oversight.
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -27,7 +26,9 @@ from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.secret.v1 import secret_pb2
 from naas_abi_core.services.secret.adaptors.secret_nats_contract import (
@@ -42,7 +43,6 @@ from naas_abi_core.services.secret.SecretPorts import (
     SecretAuthenticationError,
 )
 from nats.micro.request import Request
-from nats.micro.service import Service
 
 __all__ = [
     "AUTH_HEADER",
@@ -87,7 +87,8 @@ class SecretPrimaryAdapterNATS:
     ) -> None:
         self._adapter = adapter
         self._jwt_secret = jwt_secret
-        self._service: Service | None = None
+        self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
+        self._service: TracedService | None = None
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``secret`` NATS service on ``nc``.
@@ -99,7 +100,7 @@ class SecretPrimaryAdapterNATS:
         if self._service is not None:
             return
 
-        service = await nats.micro.add_service(
+        service = await add_traced_service(
             nc,
             name=SERVICE_NAME,
             version=SERVICE_VERSION,
@@ -131,8 +132,11 @@ class SecretPrimaryAdapterNATS:
         """Deregister the service, draining its subscriptions."""
         service = self._service
         self._service = None
-        if service is not None:
-            await service.stop()
+        try:
+            if service is not None:
+                await service.stop()
+        finally:
+            self._dispatch.close()
 
     # ------------------------------------------------------------------
     # Shared request handling: auth, decode, dispatch, encode.
@@ -174,7 +178,7 @@ class SecretPrimaryAdapterNATS:
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await asyncio.to_thread(call, parsed_request)
+            response = await self._dispatch.call(call, parsed_request)
         except SecretAuthenticationError as exc:
             await self._respond_error(
                 request, response_cls, "SECRET_AUTH_FAILED", str(exc), retryable=False

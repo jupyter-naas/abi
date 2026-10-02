@@ -240,3 +240,15 @@ def test_upsert_files_deletes_in_the_same_commit() -> None:
         adapter.get_file(repo_id=repo_id, path="apps/ws/demo/index.html").text
         == "<p>2</p>"
     )
+
+
+def test_delete_repo_removes_it_and_a_missing_repo_raises() -> None:
+    adapter = InMemoryAdapter()
+    repo_id = _repo(adapter)
+    adapter.ensure_repo(owner="alice", name="other")
+
+    adapter.delete_repo(repo_id=repo_id)
+
+    assert [f"{r.owner}/{r.name}" for r in adapter.list_repos()] == ["alice/other"]
+    with pytest.raises(RepoNotFoundError):
+        adapter.delete_repo(repo_id=repo_id)

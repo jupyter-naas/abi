@@ -432,18 +432,17 @@ class Oxigraph(ITripleStorePort):
 
             result_data = json.loads(response.text)
 
-            # Create a result wrapper that's compatible with RDFLib's ResultRow
-            from rdflib.query import ResultRow
+            if "boolean" in result_data:
+                ask_result = rdflib.query.Result("ASK")
+                ask_result.askAnswer = bool(result_data["boolean"])
+                return ask_result
+
             from rdflib.term import BNode, Literal, URIRef, Variable
 
             # Extract variables
             vars = result_data.get("head", {}).get("vars", [])
             bindings = result_data.get("results", {}).get("bindings", [])
 
-            # Convert variable names to Variable objects
-            var_objects = [Variable(var) for var in vars]
-
-            # Convert bindings to result rows
             results = []
 
             for binding in bindings:
@@ -491,15 +490,16 @@ class Oxigraph(ITripleStorePort):
                                 value = Literal(value_str)
 
                         row_values[var_obj] = value
-                    else:
-                        row_values[var_obj] = None  # type: ignore
 
-                # Create a ResultRow compatible object
-                row = ResultRow(row_values, var_objects)
-                results.append(row)
+                # Unbound variables stay out of the binding; ResultRow reads them as None.
+                results.append(row_values)
 
-            # Return an iterable result
-            return iter(results)  # type: ignore
+            # The port's rdflib Result (re-iterable), which the NATS primary can send;
+            # a bare iterator of rows failed every SELECT over NATS with INTERNAL.
+            select_result = rdflib.query.Result("SELECT")
+            select_result.vars = [Variable(var) for var in vars]
+            select_result.bindings = results
+            return select_result
         elif "n-triples" in content_type or "turtle" in content_type:
             # CONSTRUCT or DESCRIBE query
             graph = Graph()

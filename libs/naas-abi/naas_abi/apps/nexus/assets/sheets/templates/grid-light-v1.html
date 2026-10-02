@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="nexus-sheets-template" content="grid-light-v1" />
+<title>Untitled workbook</title>
+<script type="application/vnd.nexus.sheet+json">
+{
+  "title": "Untitled workbook",
+  "sheets": [
+    {
+      "name": "Sheet1",
+      "rows": []
+    }
+  ]
+}
+</script>
+<style>
+  :root {
+    --grid-bg: #f3f3f3;
+    --cell-bg: #ffffff;
+    --header-bg: #f8f9fa;
+    --border: #dadce0;
+    --ink: #202124;
+    --accent: #1a73e8;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; font-family: "Roboto", Arial, sans-serif; background: var(--grid-bg); color: var(--ink); }
+  .workbook { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  .workbook-menubar {
+    display: flex; align-items: center; gap: 12px; padding: 8px 12px;
+    background: var(--cell-bg); border: 1px solid var(--border); border-radius: 8px 8px 0 0;
+  }
+  .workbook-menubar h1 { font-size: 14px; font-weight: 600; margin: 0; flex: 1; }
+  .workbook-menubar button {
+    border: 1px solid var(--border); background: var(--cell-bg); padding: 6px 10px;
+    border-radius: 4px; font-size: 12px; cursor: pointer;
+  }
+  .workbook-menubar button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  table.sheet-grid {
+    width: 100%; border-collapse: collapse; background: var(--cell-bg);
+    border: 1px solid var(--border); border-top: none;
+  }
+  table.sheet-grid th, table.sheet-grid td {
+    border: 1px solid var(--border); padding: 6px 8px; min-width: 72px; font-size: 13px;
+  }
+  table.sheet-grid th { background: var(--header-bg); font-weight: 600; text-align: left; }
+  table.sheet-grid td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+</style>
+</head>
+<body>
+<div class="workbook">
+  <div class="workbook-menubar">
+    <h1 id="workbook-title">Untitled workbook</h1>
+    <button type="button" id="sync-grid">Sync grid</button>
+    <button type="button" class="primary" id="export-xlsx-hint" title="Use Nexus Export or: python -m naas_abi.apps.nexus.sheets.cli">Export XLSX</button>
+  </div>
+  <table class="sheet-grid" id="sheet-grid" aria-label="Sheet1">
+    <tbody></tbody>
+  </table>
+</div>
+<script>
+(function () {
+  var JSON_TYPE = 'application/vnd.nexus.sheet+json';
+  var script = document.querySelector('script[type="' + JSON_TYPE + '"]');
+  if (!script) return;
+  var model = JSON.parse(script.textContent);
+  document.getElementById('workbook-title').textContent = model.title || 'Workbook';
+  var tbody = document.querySelector('#sheet-grid tbody');
+  var rows = (model.sheets && model.sheets[0] && model.sheets[0].rows) || [];
+  rows.forEach(function (row, ri) {
+    var tr = document.createElement('tr');
+    row.forEach(function (cell, ci) {
+      var el = document.createElement(ri === 0 ? 'th' : 'td');
+      el.textContent = cell == null ? '' : String(cell);
+      if (ri > 0) el.setAttribute('contenteditable', 'true');
+      tr.appendChild(el);
+    });
+    tbody.appendChild(tr);
+  });
+  document.getElementById('sync-grid').addEventListener('click', function () {
+    var out = [];
+    tbody.querySelectorAll('tr').forEach(function (tr) {
+      var row = [];
+      tr.querySelectorAll('th, td').forEach(function (cell) { row.push(cell.textContent.trim()); });
+      out.push(row);
+    });
+    if (model.sheets && model.sheets[0]) model.sheets[0].rows = out;
+    script.textContent = JSON.stringify(model, null, 2);
+  });
+})();
+</script>
+</body>
+</html>

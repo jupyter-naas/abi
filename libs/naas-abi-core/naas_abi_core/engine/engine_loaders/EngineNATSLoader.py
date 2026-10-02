@@ -5,9 +5,9 @@ See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md and
 implements: ``config.yaml``'s top-level ``nats:`` block is what turns this
 on at all -- no per-service opt-in flag. When present, every loaded service
 that has a NATS primary adapter available gets one started automatically,
-wrapping the *same* service instance every in-process caller already uses
-(so remote callers get identical behaviour -- event publishing, prefix
-normalization, whatever the domain service does beyond the raw adapter).
+wrapping the owning service instance. Local modules and other domains receive
+NATS-backed facades, so their calls use the same endpoints as remote modules.
+Service-level endpoints retain event publishing and prefix normalization.
 
 Extending to another service means adding one more branch to
 ``expose_services`` below, following the same shape -- not a generic/
@@ -21,16 +21,12 @@ holding a valid service token can read every secret this process's
 ("if it's adding security problems we will have to fix that anyway"), not
 an oversight -- revisit once Stage 2 per-caller authorization exists. It
 also has its own re-exposure guard shape (see ``expose_services`` below):
-``Secret`` fans out over a *list* of adapters, not one, so it's only
-skipped when literally every configured adapter is itself a NATS client
-(nothing local left to serve) rather than when any single one is.
+``Secret`` fans out over a *list* of adapters, not one, so it is skipped when
+any configured adapter is itself a NATS client, preventing
+recursive self-routing on the globally shared secret subjects.
 
-Deliberately NOT exposed here, on purpose (see the RFC / dev log for the
-full reasoning, not an oversight):
-- ``model_registry`` -- has no secondary-adapter-port/``Literal[...,"custom"]``
-  slot to hang a NATS client on at all, and its ``get*`` methods return live
-  LangChain client objects bound to local credentials/HTTP sessions --
-  fundamentally process-local, not serializable.
+Model registry endpoints resolve metadata and execute inference at the owner;
+clients receive LangChain proxies instead of serialized live model objects.
 """
 
 from __future__ import annotations
@@ -47,6 +43,12 @@ from naas_abi_core.services.activity_log.adapters.primary.activity_log__primary_
 from naas_abi_core.services.activity_log.adapters.secondary.ActivityLogSecondaryAdapterNATSClient import (
     ActivityLogSecondaryAdapterNATSClient,
 )
+from naas_abi_core.services.cache.adapters.primary.cache__primary_adapter__NATS import (
+    CachePrimaryAdapterNATS,
+)
+from naas_abi_core.services.cache.adapters.secondary.CacheSecondaryAdapterNATSClient import (
+    CacheSecondaryAdapterNATSClient,
+)
 from naas_abi_core.services.coding_environment.adapters.primary.coding_environment__primary_adapter__NATS import (
     CodingEnvironmentPrimaryAdapterNATS,
 )
@@ -58,6 +60,12 @@ from naas_abi_core.services.dataset.adapters.primary.dataset__primary_adapter__N
 )
 from naas_abi_core.services.dataset.adapters.secondary.DatasetSecondaryAdapterNATSClient import (
     DatasetSecondaryAdapterNATSClient,
+)
+from naas_abi_core.services.document.adapters.primary.document__primary_adapter__NATS import (
+    DocumentPrimaryAdapterNATS,
+)
+from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterNATSClient import (
+    DocumentSecondaryAdapterNATSClient,
 )
 from naas_abi_core.services.email.adapters.primary.email__primary_adapter__NATS import (
     EmailPrimaryAdapterNATS,
@@ -89,6 +97,7 @@ from naas_abi_core.services.secret.adaptors.primary.secret__primary_adapter__NAT
 from naas_abi_core.services.secret.adaptors.secondary.SecretSecondaryAdapterNATSClient import (
     SecretSecondaryAdapterNATSClient,
 )
+from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.source_control.adapters.primary.source_control__primary_adapter__NATS import (
     SourceControlPrimaryAdapterNATS,
 )
@@ -107,6 +116,11 @@ from naas_abi_core.services.vector_store.adapters.primary.vector_store__primary_
 from naas_abi_core.services.vector_store.adapters.secondary.VectorStoreSecondaryAdapterNATSClient import (
     VectorStoreSecondaryAdapterNATSClient,
 )
+
+
+def _publish_owner_event(service: ServiceBase, event: object) -> None:
+    if service.services_wired and service.services.events_available():
+        service.services.events.publish(event)
 
 
 class EngineNATSLoader:
@@ -129,6 +143,21 @@ class EngineNATSLoader:
 
         nc = nats_runtime.get_connection(nats_config.nats_url)
         started: list[object] = []
+        if nats_config.discovery is not None:
+            from naas_abi_core.services.discovery.discovery_factory import (
+                start_discovery,
+            )
+
+            started.append(
+                nats_runtime.run_coro(
+                    start_discovery(
+                        nc,
+                        nats_config.jwt_secret,
+                        nats_config.discovery.project,
+                        nats_config.discovery.lease_seconds,
+                    )
+                )
+            )
 
         if services.object_storage_available() and not isinstance(
             services.object_storage.adapter, ObjectStorageSecondaryAdapterNATSClient
@@ -137,7 +166,9 @@ class EngineNATSLoader:
             # see ObjectStoragePrimaryAdapterNATS's docstring for why that
             # distinction matters (event publishing, prefix normalization).
             primary = ObjectStoragePrimaryAdapterNATS(
-                services.object_storage, nats_config.jwt_secret
+                services.object_storage,
+                nats_config.jwt_secret,
+                transfer_options=nats_config.object_storage_streaming.model_dump(),
             )
             nats_runtime.run_coro(primary.start(nc))
             started.append(primary)
@@ -145,17 +176,15 @@ class EngineNATSLoader:
         elif services.object_storage_available():
             logger.debug(
                 "EngineNATSLoader: object_storage is itself a NATS client "
-                "(adapter: \"nats_rpc\") -- not re-exposing a remote proxy"
+                '(adapter: "nats_rpc") -- not re-exposing a remote proxy'
             )
 
-        if services.secret_available() and not all(
+        if services.secret_available() and not any(
             isinstance(adapter, SecretSecondaryAdapterNATSClient)
             for adapter in services.secret.adapters
         ):
-            # Skip only when EVERY configured adapter is itself a NATS
-            # client -- Secret fans out over a list, so having a nats_rpc
-            # adapter alongside a real one (dotenv, naas, ...) still means
-            # there's something local worth serving.
+            # A fanout containing a proxy must not serve its own global subject.
+            # Dependency wiring rejects mixed local/remote ownership explicitly.
             primary_secret = SecretPrimaryAdapterNATS(
                 services.secret, nats_config.jwt_secret
             )
@@ -164,7 +193,7 @@ class EngineNATSLoader:
             logger.debug("EngineNATSLoader: exposed secret over NATS")
         elif services.secret_available():
             logger.debug(
-                "EngineNATSLoader: secret is entirely backed by NATS clients "
+                "EngineNATSLoader: secret contains NATS clients "
                 "-- not re-exposing a remote proxy"
             )
 
@@ -186,9 +215,7 @@ class EngineNATSLoader:
         if services.kv_available() and not isinstance(
             services.kv.adapter, KeyValueSecondaryAdapterNATSClient
         ):
-            primary_kv = KeyValuePrimaryAdapterNATS(
-                services.kv, nats_config.jwt_secret
-            )
+            primary_kv = KeyValuePrimaryAdapterNATS(services.kv, nats_config.jwt_secret)
             nats_runtime.run_coro(primary_kv.start(nc))
             started.append(primary_kv)
             logger.debug("EngineNATSLoader: exposed kv over NATS")
@@ -224,7 +251,7 @@ class EngineNATSLoader:
             logger.debug("EngineNATSLoader: exposed activity_log over NATS")
         elif services.activity_log_available():
             logger.debug(
-                'EngineNATSLoader: activity_log is itself a NATS client '
+                "EngineNATSLoader: activity_log is itself a NATS client "
                 '(adapter: "nats_rpc") -- not re-exposing a remote proxy'
             )
 
@@ -240,7 +267,7 @@ class EngineNATSLoader:
             logger.debug("EngineNATSLoader: exposed coding_environment over NATS")
         elif services.coding_environment_available():
             logger.debug(
-                'EngineNATSLoader: coding_environment is itself a NATS client '
+                "EngineNATSLoader: coding_environment is itself a NATS client "
                 '(adapter: "nats_rpc") -- not re-exposing a remote proxy'
             )
 
@@ -274,25 +301,28 @@ class EngineNATSLoader:
             logger.debug("EngineNATSLoader: exposed source_control over NATS")
         elif services.source_control_available():
             logger.debug(
-                'EngineNATSLoader: source_control is itself a NATS client '
+                "EngineNATSLoader: source_control is itself a NATS client "
                 '(adapter: "nats_rpc") -- not re-exposing a remote proxy'
             )
 
         if services.vector_store_available() and not isinstance(
             services.vector_store.adapter, VectorStoreSecondaryAdapterNATSClient
         ):
-            # Wraps the raw IVectorStorePort -- VectorStoreService has no
-            # richer event-publishing side effect at this port boundary to
-            # preserve, unlike object_storage.
+            # The port owns persistence; the primary records mutation audit events
+            # through the owner's injected event service for every caller.
             primary_vector_store = VectorStorePrimaryAdapterNATS(
-                services.vector_store.adapter, nats_config.jwt_secret
+                services.vector_store.adapter,
+                nats_config.jwt_secret,
+                event_publisher=lambda event: _publish_owner_event(
+                    services.vector_store, event
+                ),
             )
             nats_runtime.run_coro(primary_vector_store.start(nc))
             started.append(primary_vector_store)
             logger.debug("EngineNATSLoader: exposed vector_store over NATS")
         elif services.vector_store_available():
             logger.debug(
-                'EngineNATSLoader: vector_store is itself a NATS client '
+                "EngineNATSLoader: vector_store is itself a NATS client "
                 '(adapter: "nats_rpc") -- not re-exposing a remote proxy'
             )
 
@@ -312,8 +342,70 @@ class EngineNATSLoader:
             logger.debug("EngineNATSLoader: exposed triple_store over NATS")
         elif services.triple_store_available():
             logger.debug(
-                'EngineNATSLoader: triple_store is itself a NATS client '
+                "EngineNATSLoader: triple_store is itself a NATS client "
                 '(adapter: "nats_rpc") -- not re-exposing a remote proxy'
             )
+
+        if services.cache_available() and not isinstance(
+            services.cache.cold.adapter, CacheSecondaryAdapterNATSClient
+        ):
+            # v1 exposes one adapter. Use the canonical cold tier for remote callers.
+            primary_cache = CachePrimaryAdapterNATS(
+                services.cache.cold.adapter,
+                nats_config.jwt_secret,
+                tiers=tuple(tier for tier, _ in services.cache.adapters),
+                event_publisher=lambda event: _publish_owner_event(
+                    services.cache, event
+                ),
+                tier_name=next(
+                    (
+                        tier
+                        for tier, adapter in services.cache.adapters
+                        if adapter is services.cache.cold.adapter
+                    ),
+                    "cold",
+                ),
+            )
+            nats_runtime.run_coro(primary_cache.start(nc))
+            started.append(primary_cache)
+
+        if services.cache_available():
+            for index, (tier, adapter) in enumerate(services.cache.adapters):
+                if isinstance(adapter, CacheSecondaryAdapterNATSClient):
+                    continue
+                primary_tier = CachePrimaryAdapterNATS(
+                    adapter,
+                    nats_config.jwt_secret,
+                    subject_prefix=f"abi.svc.cache.v1.tier.{index}",
+                    event_publisher=lambda event: _publish_owner_event(
+                        services.cache, event
+                    ),
+                    tier_name=tier,
+                )
+                nats_runtime.run_coro(primary_tier.start(nc))
+                started.append(primary_tier)
+
+        if services.document_available() and not isinstance(
+            services.document.adapter, DocumentSecondaryAdapterNATSClient
+        ):
+            primary_document = DocumentPrimaryAdapterNATS(
+                services.document, nats_config.jwt_secret
+            )
+            nats_runtime.run_coro(primary_document.start(nc))
+            started.append(primary_document)
+
+        if services.model_registry_available():
+            from naas_abi_core.services.model_registry.adapters.primary.model_registry_nats import (
+                ModelRegistryNATS,
+            )
+
+            primary_models = ModelRegistryNATS(
+                services.model_registry,
+                nats_config.jwt_secret,
+                deadline=nats_config.models.generation_timeout_seconds,
+                transfer_options=nats_config.models.streaming.model_dump(),
+            )
+            nats_runtime.run_coro(primary_models.start(nc))
+            started.append(primary_models)
 
         return started

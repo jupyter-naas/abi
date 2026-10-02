@@ -84,3 +84,29 @@ def test_override_wins_over_real_registry() -> None:
         assert get_default_model_registry() is fake
     # After exit, the bound real registry is what's returned.
     assert get_default_model_registry() is real
+
+
+# --------------------------------------------------------------------------- #
+# Agent checkpointer                                                           #
+# --------------------------------------------------------------------------- #
+
+
+def test_agent_checkpointer_is_unset_until_an_engine_binds_one() -> None:
+    from langgraph.checkpoint.memory import InMemorySaver
+    from naas_abi_core.engine.context import (
+        get_default_agent_checkpointer,
+        set_default_agent_checkpointer,
+        with_agent_checkpointer_override,
+    )
+
+    assert get_default_agent_checkpointer() is None
+    bound, override = InMemorySaver(), InMemorySaver()
+    set_default_agent_checkpointer(bound)
+    try:
+        assert get_default_agent_checkpointer() is bound
+        with with_agent_checkpointer_override(override):
+            assert get_default_agent_checkpointer() is override
+        assert get_default_agent_checkpointer() is bound
+    finally:
+        set_default_agent_checkpointer(None)
+    assert get_default_agent_checkpointer() is None

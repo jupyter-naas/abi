@@ -26,7 +26,7 @@ API:
 - {_API}/services/agents/service.py, port.py, adapters/secondary/postgres.py: AgentService and AgentRecord.
 - {_API}/core/workspace_catalog_seed.py: parse_agent_ref and workspace seeds (default_agent, agents).
 Engine: naas_abi_core/module/ModuleAgentLoader.py (how agent classes are discovered from <module>/agents/*.py).
-Agent: naas_abi/agents/AgentCatalogAgent.py and naas_abi/agents/tools/agent_catalog_tools.py."""
+Agent: naas_abi/agents/AgentCatalogAgent.py and naas_abi/tools/agent_catalog_tools.py."""
 
 CATALOG_CAPABILITIES = """- See the workspace's agent roster: which agents are enabled, which one is the default (main chat orchestrator), their models.
 - Open an agent: description, suggestions, intents, prompt preview; enable or disable it; pick its model.
@@ -94,8 +94,8 @@ class AgentCatalogAgent(IntentAgent):
 
     @staticmethod
     def get_tools() -> list:
-        from naas_abi.agents.tools.agent_catalog_tools import agent_catalog_tools
-        from naas_abi.agents.tools.nexus_source_tools import nexus_source_tools
+        from naas_abi.tools.agent_catalog_tools import agent_catalog_tools
+        from naas_abi.tools.nexus_source_tools import nexus_source_tools
 
         return agent_catalog_tools() + nexus_source_tools()
 

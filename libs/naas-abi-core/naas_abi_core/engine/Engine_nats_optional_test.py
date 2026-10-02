@@ -18,8 +18,7 @@ def test_legacy_config_loads_and_shuts_down_without_nats(tmp_path, nats_config):
         "services:\n"
         "  secret: {secret_adapters: []}\n"
         "  bus: {bus_adapter: {adapter: python_queue, config: {}}}\n"
-        "  kv: {kv_adapter: {adapter: python, config: {}}}\n"
-        + nats_config
+        "  kv: {kv_adapter: {adapter: python, config: {}}}\n" + nats_config
     )
     result = subprocess.run(
         [
@@ -71,15 +70,21 @@ def test_legacy_config_loads_and_shuts_down_without_nats(tmp_path, nats_config):
 
 def test_explicit_nats_config_still_exposes_services(monkeypatch):
     from naas_abi_core.engine.Engine import Engine
+    from naas_abi_core.engine.engine_loaders.EngineJobLoader import EngineJobLoader
     from naas_abi_core.engine.engine_loaders.EngineNATSLoader import EngineNATSLoader
 
+    # This test stubs the endpoints, so do not initialize built-in modules that query them.
+    monkeypatch.setattr(Engine, "on_initialized", lambda self: None)
+    # Nor host jobs on them; only check which owners would be hosted.
+    start_jobs = MagicMock()
+    monkeypatch.setattr(EngineJobLoader, "start", start_jobs)
     expose = MagicMock(return_value=[])
     close = MagicMock()
     monkeypatch.setattr(EngineNATSLoader, "expose_services", expose)
     monkeypatch.setattr("naas_abi_core.engine.nats_runtime.close", close)
     engine = Engine(
         "api: {}\n"
-        "global_config: {ai_mode: cloud}\n"
+        "global_config: {ai_mode: cloud, skip_ontology_loading: true}\n"
         "modules: []\n"
         "services: {secret: {secret_adapters: []}}\n"
         "nats: {jwt_secret: test-secret}\n"
@@ -88,6 +93,76 @@ def test_explicit_nats_config_still_exposes_services(monkeypatch):
     close.assert_not_called()
 
     engine.load()
-    expose.assert_called_once_with(engine.services)
+    expose.assert_called_once()
+    assert "naas_abi_core.dataset" in start_jobs.call_args.args[0]
+    owners = expose.call_args.args[0]
+    assert owners is not engine.services
+    assert owners.coding_environment.services is not owners
+    assert (
+        owners.coding_environment.services.coding_environment
+        is engine.services.coding_environment
+    )
     engine.shutdown()
     close.assert_called_once()
+
+
+def test_core_without_the_sdk_imports_and_declares_jobs(tmp_path):
+    """naas-abi-core without [nats] has no naas-abi-sdk: modules with jobs must still load."""
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "api: {}\n"
+        "global_config: {ai_mode: cloud, skip_ontology_loading: true}\n"
+        "modules: []\n"
+        "services:\n"
+        "  secret: {secret_adapters: []}\n"
+        "  bus: {bus_adapter: {adapter: python_queue, config: {}}}\n"
+        "  kv: {kv_adapter: {adapter: python, config: {}}}\n"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            textwrap.dedent(
+                """
+                import importlib.abc
+                import sys
+                from pathlib import Path
+
+                BLOCKED = ("nats", "naas_abi_sdk", "naas_abi_proto")
+
+                class NoExtra(importlib.abc.MetaPathFinder):
+                    def find_spec(self, fullname, path=None, target=None):
+                        if fullname.split(".")[0] in BLOCKED:
+                            raise ModuleNotFoundError("not installed", name=fullname)
+
+                sys.meta_path.insert(0, NoExtra())
+                from naas_abi_core.engine.Engine import Engine
+                from naas_abi_core.module.jobs import Cron, JobDescriptor, job
+                from naas_abi_core.module.Module import BaseModule, ModuleConfiguration
+
+                class Reports(BaseModule):
+                    class Configuration(ModuleConfiguration):
+                        pass
+
+                    jobs = (JobDescriptor("explicit"),)
+
+                    @job(triggers=(Cron("0 0 6 * * *", time_zone="UTC"),))
+                    def nightly(self, ctx):
+                        return None
+
+                assert {j.name for j in Reports.jobs} == {"explicit", "nightly"}
+                engine = Engine(Path(sys.argv[1]).read_text())
+                engine.load()
+                engine.shutdown()
+                assert not any(m.split(".")[0] in BLOCKED for m in sys.modules)
+                """
+            ),
+            str(config),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

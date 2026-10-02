@@ -95,10 +95,12 @@ def _pb_to_file_content(pb: source_control_pb2.FileContent) -> FileContent:
 def _file_write_to_pb(file_write: FileWrite) -> source_control_pb2.FileWrite:
     if isinstance(file_write.content, bytes):
         return source_control_pb2.FileWrite(
-            path=file_write.path, binary_content=file_write.content
+            path=file_write.path,
+            binary_content=file_write.content,
+            delete=file_write.delete,
         )
     return source_control_pb2.FileWrite(
-        path=file_write.path, text_content=file_write.content
+        path=file_write.path, text_content=file_write.content, delete=file_write.delete
     )
 
 
@@ -225,6 +227,8 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
         raise AccessDeniedError(error.message, status=status)
     if error.code == "VALIDATION_ERROR":
         raise ValidationError(error.message, status=status)
+    if error.code == "UNIMPLEMENTED":
+        raise NotImplementedError(error.message)
     raise RuntimeError(
         f"source_control NATS RPC failed ({error.code}): {error.message}"
     )
@@ -297,6 +301,18 @@ class SourceControlSecondaryAdapterNATSClient(NatsRPCClient, ISourceControlAdapt
         if response.HasField("error"):
             _raise_for_error(response.error)
         return [_pb_to_repo(r) for r in response.repos.repos]
+
+    def delete_repo(self, *, repo_id: str) -> None:
+        request = source_control_pb2.DeleteRepoRequest(
+            context=self._context(), repo_id=repo_id
+        )
+        response = self._call(
+            f"{SUBJECT_PREFIX}.delete_repo",
+            request,
+            source_control_pb2.DeleteRepoResponse,
+        )
+        if response.HasField("error"):
+            _raise_for_error(response.error)
 
     def add_collaborator(
         self, *, repo_id: str, username: str, permission: str = "write"

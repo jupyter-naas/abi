@@ -6,7 +6,7 @@ test.use({ channel: 'chrome' });
 
 const WEB = process.env.WEB_URL || 'http://localhost:3000';
 const ADMIN_EMAIL = process.env.NEXUS_ADMIN_EMAIL || 'admin@example.com';
-const ADMIN_PASSWORD = process.env.NEXUS_ADMIN_PASSWORD || 'admin';
+const ADMIN_PASSWORD = process.env.NEXUS_ADMIN_PASSWORD ?? '';
 
 /** Log in as the admin user and wait until we've left the login page. */
 export async function login(page: Page): Promise<void> {

@@ -77,6 +77,9 @@ class _BlockedMergeAdapter(ISourceControlAdapter):
     def list_repos(self, **kwargs) -> list[Repo]:
         return []
 
+    def delete_repo(self, **kwargs) -> None:
+        return None
+
     def list_contents(self, **kwargs) -> list:
         return []
 

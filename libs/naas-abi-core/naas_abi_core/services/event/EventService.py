@@ -27,6 +27,8 @@ from naas_abi_core.services.event.context import (
     event_triggered_via,
 )
 from naas_abi_core.services.event.EventPort import (
+    EventNotFoundError,
+    EventTypeSummary,
     IEventAdapter,
     IEventService,
     InvalidEventError,
@@ -182,6 +184,33 @@ class EventService(ServiceBase, IEventService):
             search=search,
         )
         return [self._reconstruct(row, event_class) for row in rows]
+
+    def event_types(self) -> list[EventTypeSummary]:
+        return self._adapter.list_event_types()
+
+    def query_stored(
+        self,
+        event_type: str | None = None,
+        since_seq: int | None = None,
+        until_seq: int | None = None,
+        limit: int | None = None,
+        newest_first: bool = False,
+        search: str | None = None,
+    ) -> list[StoredEvent]:
+        return self._adapter.query(
+            event_type=event_type,
+            since_seq=since_seq,
+            until_seq=until_seq,
+            limit=limit,
+            newest_first=newest_first,
+            search=search,
+        )
+
+    def get_stored(self, seq: int) -> StoredEvent:
+        rows = self._adapter.query(since_seq=seq - 1, until_seq=seq, limit=1)
+        if not rows or rows[0].seq != seq:
+            raise EventNotFoundError(f"No event with seq {seq}")
+        return rows[0]
 
     def iter_query(
         self,

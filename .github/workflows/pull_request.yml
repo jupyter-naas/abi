@@ -5,6 +5,40 @@ on:
     branches: [ main, master ]
 
 jobs:
+  document-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: document_test
+          POSTGRES_PASSWORD: document_test
+          POSTGRES_DB: document_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U document_test -d document_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Run document contract on SQLite and PostgreSQL
+        env:
+          UV_PYTHON: ${{ matrix.python-version }}
+          DOCUMENT_TEST_POSTGRES_DSN: postgresql://document_test:document_test@localhost:5432/document_test
+        run: make test-document-core
+
   check:
     runs-on: ubuntu-latest
     strategy:

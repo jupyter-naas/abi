@@ -1,12 +1,25 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from langgraph.checkpoint.base import BaseCheckpointSaver
+    from naas_abi_core.engine.engine_loaders.EngineNATSDependencies import (
+        EngineNATSDependencies,
+    )
 
 from naas_abi_core import logger
 from naas_abi_core.engine.context import (
+    get_default_agent_checkpointer,
+    set_default_agent_checkpointer,
     set_default_event_service,
     set_default_model_registry,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
 )
+from naas_abi_core.engine.engine_loaders import EngineTelemetryLoader
+from naas_abi_core.engine.engine_loaders.EngineJobLoader import EngineJobLoader
 from naas_abi_core.engine.engine_loaders.EngineModuleLoader import EngineModuleLoader
 from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import (
     EngineOntologyLoader,
@@ -17,6 +30,7 @@ from naas_abi_core.module.Module import BaseModule
 
 
 class Engine(IEngine):
+    __nats_dependencies: EngineNATSDependencies | None
     __configuration: EngineConfiguration
     __engine_module_loader: EngineModuleLoader
     __engine_service_loader: EngineServiceLoader
@@ -31,6 +45,10 @@ class Engine(IEngine):
     # block -- otherwise always []. Consumed by shutdown() below.
     __nats_primary_adapters: list[object]
     __nats_runtime_started: bool
+    # Hosts the modules' jobs (NATS mode only); stopped first in shutdown().
+    __job_loader: EngineJobLoader | None
+    # Memory of agents built with memory=None, bound by load() (see context.py).
+    __agent_checkpointer: BaseCheckpointSaver | None = None
 
     @property
     def configuration(self) -> EngineConfiguration:
@@ -47,6 +65,8 @@ class Engine(IEngine):
 
     @property
     def services(self) -> IEngine.Services:
+        if self.__nats_dependencies is not None:
+            return self.__nats_dependencies.module_services
         return self.__services
 
     def __init__(self, configuration: str | None = None):
@@ -56,8 +76,10 @@ class Engine(IEngine):
         self.__engine_service_loader = EngineServiceLoader(self.__configuration)
         # Set here, not only inside load(), so shutdown() is safe to call
         # even if load() was never (or not yet) invoked.
+        self.__nats_dependencies = None
         self.__nats_primary_adapters = []
         self.__nats_runtime_started = False
+        self.__job_loader = None
 
     def load(self, module_names: list[str] | None = None):
         # Per-module CLI invocations (e.g. ``abi chat <module> <agent>``)
@@ -74,9 +96,7 @@ class Engine(IEngine):
         if module_names is None:
             module_names = []
         if module_names:
-            model_providers = (
-                self.__engine_module_loader.get_model_providing_modules()
-            )
+            model_providers = self.__engine_module_loader.get_model_providing_modules()
             extra = [m for m in model_providers if m not in module_names]
             if extra:
                 logger.debug(
@@ -85,6 +105,9 @@ class Engine(IEngine):
                     f"defaults are resolvable."
                 )
                 module_names = [*module_names, *extra]
+
+        # First, so every span from here on is exported (no-op unless enabled).
+        EngineTelemetryLoader.configure(self.__configuration.telemetry)
 
         module_dependencies = self.__engine_module_loader.get_modules_dependencies(
             module_names
@@ -96,14 +119,23 @@ class Engine(IEngine):
         )
         logger.debug("Engine services loaded")
 
+        # Before modules load: their factories build agents with memory=None.
+        self.__bind_agent_memory()
+
         # Config-gated: a no-op unless config.yaml has a top-level `nats:`
         # block. See EngineNATSLoader / EngineConfiguration.NATSConfiguration.
         if self.__configuration.nats is not None:
             # The NATS extra must not be imported by existing non-NATS installs.
+            from naas_abi_core.engine.engine_loaders.EngineNATSDependencies import (
+                EngineNATSDependencies,
+            )
             from naas_abi_core.engine.engine_loaders.EngineNATSLoader import (
                 EngineNATSLoader,
             )
 
+            self.__nats_dependencies = EngineNATSDependencies(self.__configuration.nats)
+            dependencies = self.__nats_dependencies.build(self.__services)
+            self.__services.wire_services(dependencies)
             self.__nats_runtime_started = True
             self.__nats_primary_adapters = EngineNATSLoader(
                 self.__configuration
@@ -137,18 +169,72 @@ class Engine(IEngine):
         # EngineProxy and the module dependency-declaration system; see
         # ``engine/context.py`` for the rationale.
         if self.__services.events_available():
-            set_default_event_service(self.__services.events)
+            set_default_event_service(self.services.events)
         else:
             set_default_event_service(None)
 
         if self.__services.model_registry_available():
-            set_default_model_registry(self.__services.model_registry)
+            set_default_model_registry(self.services.model_registry)
         else:
             set_default_model_registry(None)
 
         logger.debug("Initializing engine")
         self.on_initialized()
         logger.debug("Engine initialized")
+
+        # Module jobs start last: their handlers may use anything initialized above.
+        self.__job_loader = EngineJobLoader(self.__configuration.nats)
+        self.__job_loader.start(
+            self.job_owners(), document_available=self.__services.document_available()
+        )
+
+    def __bind_agent_memory(self) -> None:
+        """Agents built with memory=None checkpoint into the document service.
+
+        The engine's own root (the local adapter when this process owns the
+        service), never a NATS client view: checkpoints are full snapshots and
+        must not be bounded by the broker's payload limit. Without the service,
+        agents keep the standalone fallback (POSTGRES_URL, else in memory).
+        """
+        self.__agent_checkpointer = None
+        if self.__services.document_available():
+            try:
+                from naas_abi_core.services.agent.DocumentCheckpointSaver import (
+                    DocumentCheckpointSaver,
+                )
+            except ModuleNotFoundError as exc:
+                if (exc.name or "").split(".")[0] != "naas_abi_sdk":
+                    raise
+                logger.warning(
+                    "Agent memory is not in the document service: it needs "
+                    "naas-abi-sdk (naas-abi-core[nats])"
+                )
+            else:
+                self.__agent_checkpointer = DocumentCheckpointSaver.for_engine(
+                    self.__services.document
+                )
+        set_default_agent_checkpointer(self.__agent_checkpointer)
+
+    @property
+    def hosts_jobs(self) -> bool:
+        """Whether this engine hosts jobs (NATS mode with ``nats.jobs.enabled``)."""
+        nats = self.__configuration.nats
+        return nats is not None and nats.jobs.enabled
+
+    def job_owners(self) -> dict[str, object]:
+        """Modules plus kernel job owners (NATS mode only), keyed by owner id."""
+        owners: dict[str, object] = dict(self.__modules)
+        if (
+            self.__configuration.nats is not None
+            and self.__services.dataset_available()
+        ):
+            from naas_abi_core.services.dataset.DatasetMaintenanceJobs import (
+                DATASET_JOBS_OWNER,
+                DatasetMaintenanceJobs,
+            )
+
+            owners[DATASET_JOBS_OWNER] = DatasetMaintenanceJobs(self.services.dataset)
+        return owners
 
     def on_initialized(self):
         for module in self.__modules.values():
@@ -171,9 +257,18 @@ class Engine(IEngine):
         reaps naturally -- this only makes the *clean* shutdown path
         actually clean, it's not required for correctness.
         """
+        # Jobs first: running ones still save their run records over NATS.
+        job_loader, self.__job_loader = self.__job_loader, None
+        if job_loader is not None:
+            job_loader.stop()
+        # Agents built from now on must not reach storage this engine releases.
+        memory, self.__agent_checkpointer = self.__agent_checkpointer, None
+        if memory is not None and get_default_agent_checkpointer() is memory:
+            set_default_agent_checkpointer(None)
         if not self.__nats_runtime_started:
             return
         self.__nats_runtime_started = False
+        set_default_event_service(None)
         from naas_abi_core.engine import nats_runtime
 
         primaries, self.__nats_primary_adapters = self.__nats_primary_adapters, []
@@ -192,6 +287,9 @@ class Engine(IEngine):
                     f"Engine.shutdown: error stopping a NATS primary adapter "
                     f"({type(primary).__name__}): {exc}"
                 )
+        if self.__nats_dependencies is not None:
+            self.__nats_dependencies.close()
+            self.__nats_dependencies = None
         nats_runtime.close()
 
 

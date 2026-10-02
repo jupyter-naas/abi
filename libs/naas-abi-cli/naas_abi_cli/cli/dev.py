@@ -14,6 +14,13 @@ Managed services:
 Optional (not started by default — pass `--service nats` to include):
   - nats        (NATS/JetStream, for the Stage 1 NATS-distributed-modules
                  work; requires the `nats-server` binary on PATH)
+  - jaeger      (Jaeger v2, OpenTelemetry traces; requires the `jaeger` binary)
+
+`abi dev up --with-nats` starts nats and runs the engine in NATS mode;
+`--with-tracing` starts a native Jaeger and has the engine export spans to it.
+The project config is left untouched: a generated overlay
+(`.abi/dev/dev.overlay.yaml`, via ABI_CONFIG_OVERLAY) adds the `nats:` and
+`telemetry:` blocks.
 """
 
 from __future__ import annotations
@@ -44,6 +51,12 @@ from rich.console import Console, Group
 from rich.live import Live
 from rich.table import Table
 from rich.text import Text
+
+from naas_abi_cli.cli.admin_credentials import (
+    ensure_admin_credentials,
+    ensure_api_key,
+    ensure_nats_secret,
+)
 
 DEV_DIR_NAME = ".abi/dev"
 INSTANCE_FILENAME = "instance.json"
@@ -80,6 +93,7 @@ PROBE_HOST = (
 )
 
 PORT_OFFSET_RANGE = 900  # ~3-digit per-worktree offset
+PORT_RELEASE_WAIT_SECONDS = 5.0
 
 # Per-service port bases — chosen so that base + offset ranges never overlap.
 SERVICE_PORT_BASES = {
@@ -88,6 +102,7 @@ SERVICE_PORT_BASES = {
     "dagster": 11000,   # 11000..11899
     "nexus-web": 12000, # 12000..12899
     "nats": 13000,      # 13000..13899 (client port; see NATS_MONITOR_PORT_OFFSET)
+    "jaeger": 15000,    # 15000..15899 (query API + UI; see _jaeger_ports)
 }
 
 # nats-server needs two ports: the client port (allocated like every other
@@ -115,7 +130,7 @@ ALL_SERVICES = ("oxigraph", "api", "dagster", "nexus-web")
 # nothing reads these unless you ask for them (config.yaml's bus_adapter
 # still defaults to "python_queue", not "nats_jetstream"). Add explicitly:
 # `abi dev up --service api --service nats`.
-OPTIONAL_SERVICES = ("nats",)
+OPTIONAL_SERVICES = ("nats", "jaeger")
 
 # nats-server refuses any single message above `max_payload` (1 MB by default),
 # which is the hard ceiling for one RPC request or reply. 8 MB is the largest
@@ -128,6 +143,20 @@ NATS_MAX_PAYLOAD = "8MB"
 # accept. `_validate_services` still defaults to just `ALL_SERVICES` when
 # nothing is explicitly selected.
 KNOWN_SERVICES = ALL_SERVICES + OPTIONAL_SERVICES
+
+# Start order. nats comes before the api and dagster: in NATS mode their engine
+# connects to it while booting. Stopping goes the other way round.
+START_ORDER = ("oxigraph", "nats", "jaeger", "api", "dagster", "nexus-web")
+
+# The overlay `--with-nats` hands the engine through this variable.
+CONFIG_OVERLAY_ENV = "ABI_CONFIG_OVERLAY"
+DEV_OVERLAY_FILENAME = "dev.overlay.yaml"
+
+# Jaeger listens on three ports: the query API/UI (allocated like every other
+# service) plus OTLP/HTTP and query gRPC derived from it, clear of every other
+# service's 900-wide window.
+JAEGER_OTLP_PORT_OFFSET = 1000
+JAEGER_GRPC_PORT_OFFSET = 2000
 
 # `abi dev up` exists to watch the stack come up, and the slowest part of api
 # boot — `Engine.load()`, behind the lazy app factory — narrates itself only at
@@ -234,6 +263,10 @@ def _service_url(port: int) -> str:
 
 def _port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        # Bind like the servers do: connections a stopped server closed linger in
+        # TIME_WAIT on its port and would otherwise read as "busy" (and move the
+        # service to another port). A listening socket still conflicts.
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.settimeout(0.3)
         try:
             sock.bind((BIND_HOST, port))
@@ -251,7 +284,14 @@ def _find_free_port(service: str, preferred: int) -> int:
     is busy we wrap to the start. Returns the first free port found, or
     raises if nothing is available.
     """
-    if not _port_in_use(preferred):
+    # A service stopped a moment ago may still be releasing it: moving away
+    # would break the api <-> nexus-web wiring both read at launch.
+    deadline = time.monotonic() + PORT_RELEASE_WAIT_SECONDS
+    while _port_in_use(preferred):
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(0.2)
+    else:
         return preferred
     base = SERVICE_PORT_BASES[service]
     end = base + PORT_OFFSET_RANGE
@@ -364,6 +404,127 @@ def _nats_url(ports: dict[str, int]) -> str:
     return f"nats://{PROBE_HOST}:{ports['nats']}"
 
 
+def _discovery_project() -> str:
+    """Discovery project for the dev engine: the project folder name, sanitized."""
+    name = re.sub(r"[^A-Za-z0-9_-]+", "-", _project_root().name).strip("-")
+    return (name or "dev")[:64]
+
+
+def _jaeger_ports(query_port: int) -> dict[str, int]:
+    return {
+        "query": query_port,
+        "otlp": query_port + JAEGER_OTLP_PORT_OFFSET,
+        "grpc": query_port + JAEGER_GRPC_PORT_OFFSET,
+    }
+
+
+def _write_dev_overlay(
+    ports: dict[str, int], *, nats_secret: str | None, tracing: bool = False
+) -> Path:
+    """The blocks the engine merges over the project config (ABI_CONFIG_OVERLAY).
+
+    `nats:` (and the JetStream bus) when `nats_secret` is given, `telemetry:`
+    when `tracing`. JSON is valid YAML, so no YAML writer is needed. Holds the
+    JWT secret: owner-only.
+    """
+    overlay: dict = {}
+    if nats_secret is not None:
+        overlay["nats"] = {
+            "nats_url": _nats_url(ports),
+            "jwt_secret": nats_secret,
+            "discovery": {"project": _discovery_project()},
+            "monitoring_url": f"http://{PROBE_HOST}:{_nats_monitor_port(ports['nats'])}",
+        }
+        # NATS mode runs the bus on JetStream (replaces the project's bus adapter).
+        overlay["services"] = {
+            "bus": {
+                "bus_adapter": {
+                    "adapter": "nats_jetstream",
+                    "config": {"nats_url": _nats_url(ports)},
+                }
+            }
+        }
+    if tracing:
+        jaeger = _jaeger_ports(ports["jaeger"])
+        overlay["telemetry"] = {
+            "enabled": True,
+            "otlp_endpoint": f"http://{PROBE_HOST}:{jaeger['otlp']}",
+            "service_name": f"{_discovery_project()}-engine",
+            "ui_url": f"http://{BROWSER_HOST}:{jaeger['query']}",
+            "query_url": f"http://{PROBE_HOST}:{jaeger['query']}",
+        }
+    path = _dev_dir() / DEV_OVERLAY_FILENAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch(mode=0o600, exist_ok=True)
+    path.chmod(0o600)
+    path.write_text(
+        "# Generated by `abi dev up --with-nats/--with-tracing`; rewritten on every start.\n"
+        + json.dumps(overlay, indent=2)
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _jaeger_config(ports: dict[str, int]) -> str:
+    """Jaeger v2 (an OpenTelemetry Collector build): OTLP/HTTP in, in-memory store,
+    query API + UI. Traces are lost when it stops."""
+    return f"""service:
+  extensions: [jaeger_storage, jaeger_query]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [jaeger_storage_exporter]
+  telemetry:
+    metrics:
+      level: none
+extensions:
+  jaeger_query:
+    storage:
+      traces: memstore
+    http:
+      endpoint: {BIND_HOST}:{ports['query']}
+    grpc:
+      endpoint: {BIND_HOST}:{ports['grpc']}
+  jaeger_storage:
+    backends:
+      memstore:
+        memory:
+          max_traces: 100000
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: {BIND_HOST}:{ports['otlp']}
+processors:
+  batch:
+    timeout: 200ms
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: memstore
+"""
+
+
+def _launch_jaeger(spec: ServiceSpec) -> int:
+    """Launch a native Jaeger v2 from a generated config (per-worktree ports)."""
+    binary = shutil.which("jaeger")
+    if binary is None:
+        raise click.ClickException(
+            "`jaeger` (v2) is not on PATH. Download the release for your platform "
+            "from https://github.com/jaegertracing/jaeger/releases, put the `jaeger` "
+            "binary on PATH and retry, or drop `--with-tracing`."
+        )
+    store_path = _project_root() / "storage" / "jaeger"
+    store_path.mkdir(parents=True, exist_ok=True)
+    config_path = store_path / "config.yaml"
+    config_path.write_text(_jaeger_config(_jaeger_ports(spec.port)), encoding="utf-8")
+    env = os.environ.copy()
+    # Jaeger would otherwise try to export its own spans to a default collector.
+    env["OTEL_TRACES_EXPORTER"] = "none"
+    return _spawn(spec, [binary, "--config", str(config_path)], _project_root(), env)
+
+
 def _nats_server_config() -> str:
     """Body of the nats.conf handed to nats-server with -c. Ports, bind
     address and JetStream stay on the command line (flags override the file),
@@ -412,12 +573,18 @@ def _launch_nats(spec: ServiceSpec) -> int:
 
 
 def _launch_api(
-    spec: ServiceSpec, ports: dict[str, int], log_level: str | None = None
+    spec: ServiceSpec,
+    ports: dict[str, int],
+    log_level: str | None = None,
+    config_overlay: Path | None = None,
 ) -> int:
     env = os.environ.copy()
-    # Local-dev default so Bearer auth works without a hand-authored .env.
+    if config_overlay is not None:
+        env[CONFIG_OVERLAY_ENV] = str(config_overlay)
+    # Generated per project so Bearer auth works without a hand-authored .env.
     # Never overwrites an explicit value from the parent environment.
-    env.setdefault("ABI_API_KEY", DEFAULT_API_KEY)
+    if not env.get("ABI_API_KEY"):
+        env["ABI_API_KEY"] = ensure_api_key(_project_root() / ".env")
     # Engine boot phases (services → modules → ontologies) are DEBUG-level;
     # without this the long silence after "naas_abi_core imported" is opaque.
     env["LOG_LEVEL"] = _resolve_log_level(log_level)
@@ -464,8 +631,11 @@ def _launch_dagster(
     ports: dict[str, int],
     log_level: str | None = None,
     skip_ontology_loading: bool = True,
+    config_overlay: Path | None = None,
 ) -> int:
     env = os.environ.copy()
+    if config_overlay is not None:
+        env[CONFIG_OVERLAY_ENV] = str(config_overlay)
     env.setdefault("DAGSTER_HOME", str(_project_root() / ".dagster"))
     Path(env["DAGSTER_HOME"]).mkdir(parents=True, exist_ok=True)
     # dagster and the api share this stack's single oxigraph, so the ontology
@@ -606,6 +776,7 @@ SERVICE_READY_PATHS = {
     "dagster": "/",
     "nexus-web": "/",
     "nats": "/healthz",  # probed against the derived monitor port, not ports["nats"] -- see _ready_probe_port
+    "jaeger": "/",  # the query API / UI port
 }
 
 
@@ -623,6 +794,7 @@ def _start_service(
     ports: dict[str, int],
     log_level: str | None = None,
     selected: list[str] | None = None,
+    config_overlay: Path | None = None,
 ) -> ServiceSpec:
     existing_spec = _service_spec(name, ports[name])
 
@@ -656,16 +828,20 @@ def _start_service(
         pid = _launch_oxigraph(spec)
     elif name == "nats":
         pid = _launch_nats(spec)
+    elif name == "jaeger":
+        pid = _launch_jaeger(spec)
     elif name == "api":
-        pid = _launch_api(spec, ports, log_level)
+        extra = {"config_overlay": config_overlay} if config_overlay else {}
+        pid = _launch_api(spec, ports, log_level, **extra)
     elif name == "nexus-web":
         pid = _launch_nexus_web(spec, ports)
     elif name == "dagster":
         # No explicit selection == the default `abi dev up`, which starts the
         # api too, so it is the ontology owner.
         api_is_running = "api" in (selected if selected is not None else ALL_SERVICES)
+        extra = {"config_overlay": config_overlay} if config_overlay else {}
         pid = _launch_dagster(
-            spec, ports, log_level, skip_ontology_loading=api_is_running
+            spec, ports, log_level, skip_ontology_loading=api_is_running, **extra
         )
     else:
         raise click.ClickException(f"Unknown service: {name}")
@@ -702,21 +878,29 @@ def _stop_service(name: str, port: int, force: bool = False) -> None:
         return
 
     try:
-        os.killpg(os.getpgid(pid), signal.SIGTERM)
+        # Kept: children (uvicorn workers, next's node) outlive the leader briefly.
+        pgid = os.getpgid(pid)
+        os.killpg(pgid, signal.SIGTERM)
     except ProcessLookupError:
         _pid_path(spec).unlink(missing_ok=True)
         return
 
+    # Done when the leader is gone *and* the port is free; otherwise the next
+    # `abi dev up` finds it busy and moves the service to another port, which
+    # breaks the api <-> nexus-web wiring (URLs, CORS) set at their launch.
     deadline = time.monotonic() + 10.0
     while time.monotonic() < deadline:
-        if not _pid_alive(pid):
+        if not _pid_alive(pid) and not _port_in_use(port):
             break
         time.sleep(0.2)
     else:
         try:
-            os.killpg(os.getpgid(pid), signal.SIGKILL)
+            os.killpg(pgid, signal.SIGKILL)
         except ProcessLookupError:
             pass
+        release = time.monotonic() + 3.0
+        while _port_in_use(port) and time.monotonic() < release:
+            time.sleep(0.1)
 
     _pid_path(spec).unlink(missing_ok=True)
     click.echo(f"{name}: stopped (pid {pid})")
@@ -985,83 +1169,25 @@ class _KeyboardReader:
 
 RECENT_DUMP_LINES = 30
 
-# Dev convenience: seeded admin credentials written to .env on first
-# `abi dev up`. The Nexus user seed reads
-# NEXUS_USER_<EMAIL_PREFIX>_{EMAIL,PASSWORD} from the secret adapter
-# (dotenv) — pre-populating those skips the random-password path.
-DEFAULT_ADMIN_EMAIL = "admin@example.com"
-DEFAULT_ADMIN_PASSWORD = "admin"  # nosec B105 - dev-only, fixed local creds
-DEFAULT_API_KEY = "abi"  # nosec B105 - local-dev only, matches /token default
-
-
 def _ensure_default_admin_env() -> tuple[str, str]:
-    """Write the dev admin credentials to `.env` if not already set.
+    """Return the seeded admin's ``(email, password)``, generating the password.
 
-    Returns `(email, password)` so callers can display them. The Nexus seed
-    will pick these up via the dotenv secret adapter on first boot.
+    The password is random per project and stored in `.env`, where the Nexus
+    seed picks it up through the dotenv secret adapter on first boot. A value
+    an older CLI wrote (``admin``) is replaced.
     """
-    email_prefix = re.sub(r"[^A-Z0-9]", "_", DEFAULT_ADMIN_EMAIL.upper())
-    email_key = f"NEXUS_USER_{email_prefix}_EMAIL"
-    pw_key = f"NEXUS_USER_{email_prefix}_PASSWORD"
-
-    env_path = _project_root() / ".env"
-    existing: dict[str, str] = {}
-    if env_path.exists():
-        for raw in env_path.read_text().splitlines():
-            line = raw.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, _, v = line.partition("=")
-            existing[k.strip()] = v.strip()
-
-    appended: list[str] = []
-    if email_key not in existing:
-        appended.append(f"{email_key}={DEFAULT_ADMIN_EMAIL}")
-    if pw_key not in existing:
-        appended.append(f"{pw_key}={DEFAULT_ADMIN_PASSWORD}")
-
-    if appended:
-        with env_path.open("a", encoding="utf-8") as fh:
-            if env_path.stat().st_size > 0 and not env_path.read_text().endswith("\n"):
-                fh.write("\n")
-            fh.write("\n# `abi dev` default admin credentials (local-only)\n")
-            for line in appended:
-                fh.write(line + "\n")
-
-    return (
-        existing.get(email_key, DEFAULT_ADMIN_EMAIL),
-        existing.get(pw_key, DEFAULT_ADMIN_PASSWORD),
-    )
+    return ensure_admin_credentials(_project_root() / ".env")
 
 
 def _ensure_default_api_key_env() -> str:
-    """Write ``ABI_API_KEY=abi`` to `.env` if missing (local-dev only).
+    """Ensure `.env` holds a generated ``ABI_API_KEY`` (never the old ``abi``).
 
     Also ``setdefault`` into the current process so spawned children inherit
-    the key via ``os.environ.copy()``. Does not overwrite an existing value
-    in `.env` or the process environment. Production / remote deploys must
-    set ``ABI_API_KEY`` explicitly; this helper is only called from
-    ``abi dev up``.
+    the key via ``os.environ.copy()``. An explicit value in the process
+    environment wins. Only called from ``abi dev up``.
     """
-    env_path = _project_root() / ".env"
-    existing: dict[str, str] = {}
-    if env_path.exists():
-        for raw in env_path.read_text().splitlines():
-            line = raw.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, _, v = line.partition("=")
-            existing[k.strip()] = v.strip()
-
-    if "ABI_API_KEY" not in existing:
-        with env_path.open("a", encoding="utf-8") as fh:
-            if env_path.stat().st_size > 0 and not env_path.read_text().endswith("\n"):
-                fh.write("\n")
-            fh.write("\n# `abi dev` default API key (local-only)\n")
-            fh.write(f"ABI_API_KEY={DEFAULT_API_KEY}\n")
-
-    resolved = existing.get("ABI_API_KEY", DEFAULT_API_KEY)
-    os.environ.setdefault("ABI_API_KEY", resolved)
+    key = ensure_api_key(_project_root() / ".env")
+    os.environ.setdefault("ABI_API_KEY", key)
     return os.environ["ABI_API_KEY"]
 
 
@@ -1474,8 +1600,26 @@ def _validate_services(selected: tuple[str, ...]) -> list[str]:
             f"Unknown service(s): {', '.join(unknown)}. "
             f"Choose from: {', '.join(KNOWN_SERVICES)}."
         )
-    # Preserve canonical order (api → dagster → nexus-web → nats).
-    return [s for s in KNOWN_SERVICES if s in selected]
+    return [s for s in START_ORDER if s in selected]
+
+
+def _services_for(
+    services: tuple[str, ...], *, with_nats: bool, with_tracing: bool = False
+) -> list[str]:
+    """Services `abi dev up` starts. With NATS, dagster is left out unless asked
+    for: a second engine on the bus would serve every kernel service twice, and
+    module jobs replace its schedules. With tracing, jaeger is added."""
+    extra = (("nats",) if with_nats else ()) + (("jaeger",) if with_tracing else ())
+    if services:
+        return _validate_services((*services, *extra))
+    defaults = [s for s in ALL_SERVICES if not (with_nats and s == "dagster")]
+    return _validate_services((*defaults, *extra))
+
+
+def _services_to_stop(services: tuple[str, ...]) -> list[str]:
+    """Everything (nats included) unless a selection is given, consumers first."""
+    selected = _validate_services(services) if services else list(START_ORDER)
+    return list(reversed(selected))
 
 
 @click.group("dev")
@@ -1513,8 +1657,33 @@ def dev() -> None:
         "(engine boot phases are logged at DEBUG)."
     ),
 )
+@click.option(
+    "--with-nats",
+    "with_nats",
+    is_flag=True,
+    default=False,
+    help=(
+        "Run the engine in NATS mode: start nats first and give the api the "
+        "project config plus a generated `nats:` overlay (discovery, monitoring, "
+        "jobs). Dagster is left out unless selected with --service."
+    ),
+)
+@click.option(
+    "--with-tracing",
+    "with_tracing",
+    is_flag=True,
+    default=False,
+    help=(
+        "Start a native Jaeger (`jaeger` v2 on PATH) and have the engine export "
+        "OpenTelemetry spans to it; the System app's live traffic then reads them."
+    ),
+)
 def dev_up(
-    services: tuple[str, ...], detach: bool, log_level: str | None
+    services: tuple[str, ...],
+    detach: bool,
+    log_level: str | None,
+    with_nats: bool,
+    with_tracing: bool,
 ) -> None:
     """Start the selected dev services.
 
@@ -1525,10 +1694,11 @@ def dev_up(
     The api and dagster processes run at LOG_LEVEL=DEBUG so engine boot
     narrates itself; pass `--log-level INFO` (or lower) to quieten them.
     """
-    selected = _validate_services(services)
+    selected = _services_for(services, with_nats=with_nats, with_tracing=with_tracing)
     instance = _load_or_create_instance()
     ports: dict[str, int] = instance["ports"]
     _ensure_storage_layout()
+    config_overlay: Path | None = None
     # Pre-populate `.env` with the default admin credentials so the Nexus
     # seed adopts them instead of generating a random password. Done before
     # the api process spawns and reads .env via the dotenv adapter.
@@ -1538,8 +1708,25 @@ def dev_up(
     started: list[ServiceSpec] = []
     try:
         for name in selected:
-            spec = _start_service(name, ports, log_level, selected)
+            if (with_nats or with_tracing) and name in ("api", "dagster") and config_overlay is None:
+                # Written once nats/jaeger are up, with the ports they actually bound.
+                secret = ensure_nats_secret(_project_root() / ".env") if with_nats else None
+                config_overlay = _write_dev_overlay(ports, nats_secret=secret, tracing=with_tracing)
+            spec = _start_service(name, ports, log_level, selected, config_overlay)
             started.append(spec)
+            if name == "nats":
+                monitor = _nats_monitor_port(spec.port)
+                click.echo("nats: waiting for readiness...")
+                if not _wait_until_ready(monitor, max_wait=15.0, path="/healthz"):
+                    raise click.ClickException(
+                        "nats did not become ready in 15s; see `.abi/dev/logs/nats.log`."
+                    )
+            if name == "jaeger":
+                click.echo("jaeger: waiting for readiness...")
+                if not _wait_until_ready(spec.port, max_wait=30.0, path="/"):
+                    raise click.ClickException(
+                        "jaeger did not become ready in 30s; see `.abi/dev/logs/jaeger.log`."
+                    )
             # api & dagster connect to the oxigraph HTTP endpoint at engine
             # boot; block briefly until it answers so they don't race-crash.
             if name == "oxigraph" and any(
@@ -1562,6 +1749,16 @@ def dev_up(
             for spec in reversed(started):
                 _stop_service(spec.name, ports[spec.name])
         raise
+
+    if config_overlay is not None:
+        click.echo(f"Engine config + {config_overlay.relative_to(_project_root())}:")
+        if with_nats:
+            click.echo(
+                f"  NATS mode (discovery project {_discovery_project()!r}, "
+                f"monitoring http://{BROWSER_HOST}:{_nats_monitor_port(ports['nats'])})"
+            )
+        if with_tracing:
+            click.echo(f"  tracing to Jaeger: http://{BROWSER_HOST}:{ports['jaeger']}")
 
     if detach:
         click.echo()
@@ -1598,7 +1795,7 @@ def dev_up(
 )
 def dev_down(services: tuple[str, ...]) -> None:
     """Stop the selected dev services."""
-    selected = _validate_services(services)
+    selected = _services_to_stop(services)
     if not _instance_path().exists():
         click.echo("No dev instance allocated — nothing to stop.")
         return
@@ -1606,8 +1803,8 @@ def dev_down(services: tuple[str, ...]) -> None:
     # from before "nats" existed gets it backfilled rather than KeyError-ing.
     instance = _load_or_create_instance()
     ports: dict[str, int] = instance["ports"]
-    # Stop in reverse order so consumers (api) come down after their deps.
-    for name in reversed(selected):
+    # Consumers (api) come down before their dependencies (nats, oxigraph).
+    for name in selected:
         _stop_service(name, ports[name])
     click.echo("Done.")
 
@@ -1768,7 +1965,7 @@ def dev_nuke(yes: bool, start: bool, reset_env: bool) -> None:
     env_path = root / ".env"
     if reset_env and env_path.exists():
         # Find any NEXUS_USER_*_{EMAIL,PASSWORD} lines and the comment we
-        # appended in `_ensure_default_admin_env`.
+        # appended by older `_ensure_default_admin_env` versions.
         kept: list[str] = []
         drop_marker = "# `abi dev` default admin credentials"
         dropping = False

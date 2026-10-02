@@ -23,7 +23,7 @@ MAPS_CODE_MAP = f"""Web only (Maps has no FastAPI domain):
 - {_MAPS}/components/maps-*.tsx: one component per layer (earthquakes, wildfires, flights, ais, iss, news, presence, ...), maps-library.tsx, maps-section.tsx.
 - {_WEB}/app/api/maps/<feed>/route.ts and {_WEB}/app/api/maps/_lib.ts: Next.js route handlers that proxy public feeds (CORS, User-Agent, caching).
 - {_WEB}/stores/maps.ts and {_WEB}/components/shell/sidebar/maps-section.tsx: category toggles and sidebar.
-Agent: naas_abi/agents/MapsAgent.py and naas_abi/agents/tools/maps_tools.py."""
+Agent: naas_abi/agents/MapsAgent.py and naas_abi/tools/maps_tools.py."""
 
 MAPS_CAPABILITIES = """- Open a map layer from the library: public situation-awareness feeds (earthquakes, wildfires, temperature, GDACS hazards, air quality, weather alerts, tropical storms, volcanoes, flights, ships, ISS, news, conflict), basemaps, and Private "presence" (the workspace's devices and infrastructure).
 - Layers refresh from public feeds; some are proxied by Next.js routes under /api/maps/ for CORS and User-Agent rules.
@@ -88,8 +88,8 @@ class MapsAgent(IntentAgent):
 
     @staticmethod
     def get_tools() -> list:
-        from naas_abi.agents.tools.maps_tools import maps_tools
-        from naas_abi.agents.tools.nexus_source_tools import nexus_source_tools
+        from naas_abi.tools.maps_tools import maps_tools
+        from naas_abi.tools.nexus_source_tools import nexus_source_tools
 
         return maps_tools() + nexus_source_tools()
 

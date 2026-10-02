@@ -1,7 +1,7 @@
 import os
 import sys
 from io import StringIO
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
 import yaml
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
@@ -35,6 +35,9 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_DatasetServic
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
     DeployConfiguration,
+)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_DocumentService import (
+    DocumentServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_EmailService import (
     EmailAdapterConfiguration,
@@ -85,6 +88,9 @@ from rich.prompt import Prompt
 
 
 class ServicesConfiguration(BaseModel):
+    document: DocumentServiceConfiguration = Field(
+        default_factory=DocumentServiceConfiguration
+    )
     object_storage: ObjectStorageServiceConfiguration = (
         ObjectStorageServiceConfiguration(
             object_storage_adapter=ObjectStorageAdapterConfiguration(
@@ -224,17 +230,60 @@ class ApiConfiguration(BaseModel):
     port: int = 9879
 
 
+class DiscoveryConfiguration(BaseModel):
+    project: str = Field(default="default", pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    lease_seconds: float = Field(default=20, ge=1, le=300, allow_inf_nan=False)
+
+
+class NATSStreamingConfiguration(BaseModel):
+    chunk_bytes: int = Field(default=64 * 1024, ge=1024, le=4 * 1024 * 1024)
+    idle_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
+    max_sessions: int = Field(default=32, ge=1, le=1024)
+    max_upload_bytes: int | None = Field(default=None, gt=0)
+
+
+class NATSModelStreamingConfiguration(NATSStreamingConfiguration):
+    max_upload_bytes: int = Field(default=16 * 1024 * 1024, gt=0)
+    max_buffered_upload_bytes: int = Field(default=64 * 1024 * 1024, gt=0)
+
+
+class NATSModelConfiguration(BaseModel):
+    generation_timeout_seconds: float | None = Field(
+        default=None, gt=0, allow_inf_nan=False
+    )
+    streaming: NATSModelStreamingConfiguration = Field(
+        default_factory=NATSModelStreamingConfiguration
+    )
+
+
+class NATSJobsConfiguration(BaseModel):
+    """Engine-hosted module jobs (JetStream message schedules, NATS >= 2.14).
+
+    ``enabled: false`` keeps this process from hosting jobs, e.g. a one-off CLI
+    engine next to the API engine that hosts them.
+    ``interrupt_grace_seconds``: how long a timed-out or cancelled sync job may keep
+    running after ``ctx.cancelled`` is set before it is interrupted (``JobInterrupted``
+    raised in its thread). ``null`` never interrupts: the run then holds its slot
+    until the handler returns.
+    """
+
+    enabled: bool = True
+    interrupt_grace_seconds: float | None = Field(
+        default=5.0, ge=0, allow_inf_nan=False
+    )
+
+
 class NATSConfiguration(BaseModel):
     """Cross-cutting NATS exposure config -- not a domain service, so it lives
     at the top level next to ``api``/``deploy``/``global_config``, not nested
     under ``services:``.
 
-    Its mere presence (non-null) is what triggers exposure: at engine load
-    time, every loaded service that has a NATS primary adapter available gets
-    one started automatically, wrapping the same instance every in-process
-    caller already uses -- see ``EngineNATSLoader``. No per-service opt-in
-    flag; add a service to the exposed set by giving it a primary adapter,
-    not by touching this config.
+    A non-null block enables network domain boundaries. Loaded local owners
+    expose endpoints; engine modules and every owner's injected dependencies
+    use NATS-backed facades, even when owners share a process. The bus uses
+    this broker in NATS mode. Without this block, wiring remains in-process.
+    Process-local model registration is available only to modules, never as
+    an injected cross-domain dependency. See the network-boundaries ADR.
 
     See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
     ("Decisions locked in" -- Stage 1's JWT is deliberately minimal).
@@ -246,6 +295,15 @@ class NATSConfiguration(BaseModel):
 
     nats_url: str = "nats://127.0.0.1:4222"
     jwt_secret: str
+    discovery: DiscoveryConfiguration | None = None
+    object_storage_streaming: NATSStreamingConfiguration = Field(
+        default_factory=NATSStreamingConfiguration
+    )
+    models: NATSModelConfiguration = Field(default_factory=NATSModelConfiguration)
+    jobs: NATSJobsConfiguration = Field(default_factory=NATSJobsConfiguration)
+    # The broker's HTTP monitoring endpoint (``nats-server -m 8222``), read by the
+    # Nexus SysAdmin app (/varz, /connz, /jsz). It has no auth: keep it private.
+    monitoring_url: str | None = Field(default=None, pattern=r"^https?://")
 
 
 class OpencodeProviderConfiguration(BaseModel):
@@ -332,6 +390,64 @@ class GlobalConfig(BaseModel):
 # claim it as a private model field.
 _cached_configuration: "EngineConfiguration | None" = None
 
+# Path to a plain YAML file deep-merged over the selected config after templating,
+# e.g. the `nats:` block `abi dev up --with-nats` adds to a project's config.yaml.
+CONFIG_OVERLAY_ENV = "ABI_CONFIG_OVERLAY"
+
+
+def deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    """Mappings merge key by key; any other overlay value replaces the base one.
+
+    A mapping naming an ``adapter`` replaces the base one whole: an adapter's
+    ``config`` only makes sense for that adapter.
+    """
+    merged = dict(base)
+    for key, value in overlay.items():
+        if (
+            isinstance(value, dict)
+            and "adapter" not in value
+            and isinstance(merged.get(key), dict)
+        ):
+            merged[key] = deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _read_overlay(path: str | None) -> dict[str, Any] | None:
+    if not path:
+        return None
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"{CONFIG_OVERLAY_ENV} points to a missing file: {path}"
+        )
+    with open(path, "r") as file:
+        overlay = yaml.safe_load(file) or {}
+    if not isinstance(overlay, dict):
+        raise TypeError(f"{CONFIG_OVERLAY_ENV} must hold a YAML mapping: {path}")
+    return overlay
+
+
+class TelemetryConfiguration(BaseModel):
+    """OpenTelemetry tracing (needs ``naas-abi-core[otel]``).
+
+    Spans cover HTTP requests and every NATS call; W3C trace context travels in
+    NATS headers so one request is one trace across processes. Exported over
+    OTLP/HTTP to ``otlp_endpoint`` (e.g. ``http://jaeger:4318``), or to the
+    standard ``OTEL_EXPORTER_OTLP_*`` variables when unset. ``ui_url`` is the
+    trace viewer (e.g. Jaeger, ``http://localhost:16686``) the Nexus System app
+    links to.
+    """
+
+    enabled: bool = False
+    otlp_endpoint: str | None = Field(default=None, pattern=r"^https?://")
+    service_name: str = "abi-engine"
+    sample_ratio: float = Field(default=1.0, ge=0, le=1)
+    ui_url: str | None = Field(default=None, pattern=r"^https?://")
+    # Where the API reads recent spans for the System app's live traffic
+    # (Jaeger's query API, e.g. ``http://jaeger:16686`` inside compose). Defaults to ui_url.
+    query_url: str | None = Field(default=None, pattern=r"^https?://")
+
 
 class EngineConfiguration(BaseModel):
     api: ApiConfiguration
@@ -343,6 +459,7 @@ class EngineConfiguration(BaseModel):
     global_config: GlobalConfig
 
     nats: NATSConfiguration | None = None
+    telemetry: TelemetryConfiguration = Field(default_factory=TelemetryConfiguration)
 
     modules: list[ModuleConfig]
 
@@ -365,6 +482,24 @@ class EngineConfiguration(BaseModel):
     @model_validator(mode="after")
     def validate_modules(self) -> Self:
         self.ensure_default_modules()
+        if self.nats is not None:
+            bus = self.services.bus.bus_adapter
+            if "bus" in self.services.model_fields_set:
+                if bus.adapter != "nats_jetstream":
+                    raise ValueError(
+                        "NATS mode requires services.bus.bus_adapter.adapter=nats_jetstream; remove the explicit bus block to use NATS defaults"
+                    )
+                if (bus.config or {}).get(
+                    "nats_url", "nats://127.0.0.1:4222"
+                ) != self.nats.nats_url:
+                    raise ValueError("Bus and engine NATS URLs must match")
+            remote = [
+                entry.adapter == "nats_rpc" for entry in self.services.cache.adapters
+            ]
+            if any(remote) and not all(remote):
+                raise ValueError(
+                    "NATS mode cannot mix local and remote cache tiers; configure the full tier topology on its owning engine"
+                )
         return self
 
     @staticmethod
@@ -455,7 +590,9 @@ class EngineConfiguration(BaseModel):
         # the dotenv path here, which is bootstrap config and cannot itself depend
         # on a secret, so empty-rendered secrets are harmless.
         env = cls._build_jinja_env(base_dir)
-        raw_data = yaml.safe_load(StringIO(cls._render_yaml_template(env, yaml_content)))
+        raw_data = yaml.safe_load(
+            StringIO(cls._render_yaml_template(env, yaml_content))
+        )
         if not isinstance(raw_data, dict):
             return None
 
@@ -498,15 +635,22 @@ class EngineConfiguration(BaseModel):
         return None
 
     @classmethod
-    def from_yaml(cls, yaml_path: str) -> "EngineConfiguration":
+    def from_yaml(
+        cls, yaml_path: str, overlay: dict[str, Any] | None = None
+    ) -> "EngineConfiguration":
         with open(yaml_path, "r") as file:
             # Resolve {% include %} relative to the config file's directory.
             base_dir = os.path.dirname(os.path.abspath(yaml_path))
-            return cls.from_yaml_content(file.read(), base_dir=base_dir)
+            return cls.from_yaml_content(
+                file.read(), base_dir=base_dir, overlay=overlay
+            )
 
     @classmethod
     def from_yaml_content(
-        cls, yaml_content: str, base_dir: str | None = None
+        cls,
+        yaml_content: str,
+        base_dir: str | None = None,
+        overlay: dict[str, Any] | None = None,
     ) -> "EngineConfiguration":
         env = cls._build_jinja_env(base_dir)
         bootstrap_dotenv_adapter = cls._load_bootstrap_dotenv_adapter_from_yaml_content(
@@ -584,6 +728,8 @@ class EngineConfiguration(BaseModel):
         )
 
         data = yaml.safe_load(StringIO(templated_yaml))
+        if overlay:
+            data = deep_merge(data, overlay)
 
         logger.debug(f"Data: {data}")
 
@@ -631,9 +777,13 @@ class EngineConfiguration(BaseModel):
                 "Configuration file not found. Please create a config.yaml file or config.{env}.yaml file."
             )
 
-        logger.debug(f"Loading configuration from {config_file}")
+        overlay = _read_overlay(os.getenv(CONFIG_OVERLAY_ENV))
+        logger.debug(
+            f"Loading configuration from {config_file}"
+            + (f" with overlay {os.getenv(CONFIG_OVERLAY_ENV)}" if overlay else "")
+        )
 
-        loaded = cls.from_yaml(config_file)
+        loaded = cls.from_yaml(config_file, overlay=overlay)
         _cached_configuration = loaded
         return loaded
 

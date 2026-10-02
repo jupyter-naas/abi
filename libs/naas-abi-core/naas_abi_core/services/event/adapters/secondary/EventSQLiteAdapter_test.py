@@ -281,3 +281,26 @@ def test_events_persist_across_reopens(tmp_path):
         assert rows[0].payload == b"payload"
     finally:
         a2.close()
+
+
+# ---------------------------------------------------------------------------
+# list_event_types
+# ---------------------------------------------------------------------------
+
+
+def test_list_event_types_counts_each_type_with_its_latest_event(adapter):
+    adapter.append("urn:e1", "urn:Type:B", _ts(0), b"1")
+    adapter.append("urn:e2", "urn:Type:A", _ts(1), b"2")
+    adapter.append("urn:e3", "urn:Type:B", _ts(2), b"3")
+
+    summaries = adapter.list_event_types()
+
+    assert [(s.event_type, s.count, s.last_seq) for s in summaries] == [
+        ("urn:Type:A", 1, 2),
+        ("urn:Type:B", 2, 3),
+    ]
+    assert summaries[1].last_timestamp == _ts(2)
+
+
+def test_list_event_types_of_an_empty_log(adapter):
+    assert adapter.list_event_types() == []
