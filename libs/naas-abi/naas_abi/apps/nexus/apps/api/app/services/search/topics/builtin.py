@@ -267,7 +267,7 @@ ORDER BY DESC(COUNT(DISTINCT ?person)) LCASE(STR(?title))
 LIMIT {{ limit }}
 OFFSET {{ offset }}
 """,
-    detail_label="Card",
+    detail_label="Profile",
     result_rows=(
         TopicResultRowDef(
             id="people",
@@ -300,15 +300,32 @@ GROUP BY ?uri
     ),
     header_query=_PREFIXES
     + """
-SELECT ?title (COUNT(DISTINCT ?employee) AS ?people) (COUNT(DISTINCT ?consultant) AS ?consultants)
+SELECT ?title (COUNT(DISTINCT ?employee) AS ?people)
 WHERE {
   {{ uri }} rdfs:label ?title .
   OPTIONAL { ?a people:forOrganization {{ uri }} . ?employee people:hasActOfWorking ?a . }
-  OPTIONAL { ?c people:forClient {{ uri }} . ?consultant people:hasActOfWorking ?c . }
 }
 GROUP BY ?title
 LIMIT 1
 """,
+    # Consultants is a detail fact rather than a header variable, so a
+    # workspace can rewrite or drop it in Settings → Search.
+    detail_facts=(
+        TopicResultRowDef(
+            id="consultants",
+            label="Consultants",
+            query=_PREFIXES
+            + """
+SELECT ?uri (STR(COUNT(DISTINCT ?person)) AS ?value)
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?act people:forClient ?uri .
+  ?person people:hasActOfWorking ?act .
+}
+GROUP BY ?uri
+""",
+        ),
+    ),
     sections=(
         TopicSection(
             id="people",

@@ -270,6 +270,19 @@ class TestDetailFacts:
         with pytest.raises(SearchTopicValidationError, match="detail fact grade"):
             validate_topic(replace(person, detail_facts=(replace(GRADE, label=""),)))
 
+    async def test_organization_header_is_people_then_consultants(
+        self, service: SearchTopicService, store
+    ) -> None:
+        org = BUILTIN_TOPICS["organization"]
+        assert org.detail_label == "Profile"
+        assert "?consultants" not in org.header_query
+        assert [fact.id for fact in org.detail_facts] == ["consultants"]
+        orgs = await service.search(WS, "organization", "", store)
+        detail = await service.detail(WS, "organization", orgs.items[0].uri, store)
+        keys = [fact.key for fact in detail.facts]
+        assert keys[0] == "people"
+        assert "consultants" not in keys or keys.index("consultants") == len(keys) - 1
+
     async def test_configured_facts_follow_the_header_facts(
         self, service: SearchTopicService, store
     ) -> None:

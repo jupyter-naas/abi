@@ -173,7 +173,7 @@ class SearchTopic:
     image_query: str = ""
     # Metadata lines under each result (``row`` role), in order.
     result_rows: tuple[TopicResultRowDef, ...] = ()
-    # The tab that shows one individual: "Profile" for a person, "Card" for an organization.
+    # The tab that shows one individual ("Profile" for both built-in topics).
     detail_label: str = "Details"
     # Facts added to the detail header (``row`` role, ``{{ uris }}`` is the one
     # individual), in order, after the header query's own facts.
