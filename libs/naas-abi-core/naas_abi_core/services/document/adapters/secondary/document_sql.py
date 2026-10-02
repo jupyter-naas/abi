@@ -413,6 +413,16 @@ class DocumentSQL(ABC):
                 ).fetchall()
             )
 
+    def namespaces(self) -> list[str]:
+        with self.transaction() as connection:
+            return sorted(
+                row[0]
+                for row in connection.execute(
+                    f"SELECT DISTINCT namespace FROM {self.collections_table}",  # nosec B608
+                    (),
+                ).fetchall()
+            )
+
     @staticmethod
     def read_data(raw: Any) -> dict[str, Value]:
         return cast(

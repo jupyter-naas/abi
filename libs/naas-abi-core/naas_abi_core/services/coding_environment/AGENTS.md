@@ -18,6 +18,12 @@ Provision and manage coding workspaces through interchangeable providers.
 Implement every abstract method of `ICodingEnvironmentAdapter` in `CodingEnvironmentPorts.py`.
 Keep provider dependencies in secondary adapters and preserve typed domain errors.
 
+`list_all_environments()` is the platform admin view (the Nexus System app): every
+user's workspaces. Coder pages `GET /workspaces` with the admin token; in-memory and
+local-directory list every record; compose returns its one shared editor.
+`WorkspaceStatus` carries `owner`, `template` and `created_at` when the backend knows
+them (`""`/`None` otherwise); keep filling them in new adapters.
+
 ## Service API
 
 `CodingEnvironmentService(adapter)` delegates port operations and publishes domain events.
@@ -46,6 +52,11 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/coding_environment/ --im
 3. Add the relevant factory/configuration wiring.
 
 ## NATS RPC adapters
+
+A `NotImplementedError` in the wrapped adapter crosses NATS as the non-retryable
+code `UNIMPLEMENTED` and is raised again as `NotImplementedError` by the client.
+`adapters/secondary/CodingEnvironmentSecondaryAdapterNATSClient_broker_test.py` runs
+`list_all_environments` against a local `nats-server` (no Docker).
 
 `adapters/primary/coding_environment__primary_adapter__NATS.py` exposes the service's
 protobuf endpoints. `adapters/secondary/CodingEnvironmentSecondaryAdapterNATSClient.py` implements the outbound

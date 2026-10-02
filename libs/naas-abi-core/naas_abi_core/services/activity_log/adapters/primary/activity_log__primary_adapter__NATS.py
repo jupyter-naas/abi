@@ -40,7 +40,7 @@ from naas_abi_core.engine.nats_auth import (
 )
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
-from naas_abi_core.engine.nats_tracing import add_traced_service
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.activity_log.v1 import activity_log_pb2
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.services.activity_log.ActivityLogPort import (
@@ -56,7 +56,6 @@ from naas_abi_core.services.activity_log.adapters.activity_log_nats_contract imp
     SUBJECT_PREFIX,
 )
 from nats.micro.request import Request
-from nats.micro.service import Service
 
 __all__ = [
     "AUTH_HEADER",
@@ -79,6 +78,8 @@ def _event_to_pb(event: ActivityEvent) -> activity_log_pb2.ActivityEvent:
     if event.correlation_id is not None:
         pb.correlation_id = event.correlation_id
     pb.attributes.update(event.attributes)
+    if event.seq is not None:
+        pb.seq = event.seq
     return pb
 
 
@@ -89,6 +90,7 @@ def _pb_to_event(pb: activity_log_pb2.ActivityEvent) -> ActivityEvent:
         timestamp=pb.timestamp.ToDatetime(tzinfo=UTC),
         correlation_id=pb.correlation_id if pb.HasField("correlation_id") else None,
         attributes=json_format.MessageToDict(pb.attributes),
+        seq=pb.seq if pb.HasField("seq") else None,
     )
 
 
@@ -98,6 +100,9 @@ def _pb_to_query(pb: activity_log_pb2.ActivityLogQueryFilter) -> ActivityLogQuer
         since=pb.since.ToDatetime(tzinfo=UTC) if pb.HasField("since") else None,
         until=pb.until.ToDatetime(tzinfo=UTC) if pb.HasField("until") else None,
         limit=pb.limit if pb.HasField("limit") else None,
+        newest_first=pb.newest_first,
+        before_seq=pb.before_seq if pb.HasField("before_seq") else None,
+        after_seq=pb.after_seq if pb.HasField("after_seq") else None,
     )
 
 
@@ -133,7 +138,7 @@ class ActivityLogPrimaryAdapterNATS:
         self._adapter = adapter
         self._jwt_secret = jwt_secret
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
-        self._service: Service | None = None
+        self._service: TracedService | None = None
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``activity_log`` NATS service on ``nc``.

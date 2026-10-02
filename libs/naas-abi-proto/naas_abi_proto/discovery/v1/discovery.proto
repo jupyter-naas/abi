@@ -61,6 +61,13 @@ message GetModuleResponse { abi.common.v1.CallError error = 1; repeated Instance
 message ListModulesRequest { abi.common.v1.CallContext context = 1; uint32 limit = 2; string after_instance_id = 3; }
 message ListModulesResponse { abi.common.v1.CallError error = 1; repeated Instance instances = 2; string next_after_instance_id = 3; }
 
+// Platform administration: remove a registration now (a crashed or stuck
+// instance). Only the discovery owner's admin identities may evict. A live
+// instance's next renewal fails with LEASE_EXPIRED and it re-registers under a
+// new instance id; stop its process to keep it out.
+message EvictRequest { abi.common.v1.CallContext context = 1; string instance_id = 2; }
+message EvictResponse { abi.common.v1.CallError error = 1; Instance instance = 2; }
+
 // Private persistence envelope; never returned by discovery lookup RPCs.
 message RegistryRecord {
   Instance instance = 1;

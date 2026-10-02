@@ -79,3 +79,16 @@ def test_get_access_returns_embeddable_url_with_token() -> None:
     assert access.token is not None
     assert access.token in access.url
     assert access.url.startswith("https://code-server--main--dev--")
+
+
+def test_list_all_environments_spans_users_with_owner_and_template() -> None:
+    adapter = InMemoryAdapter()
+    adapter.provision(user_id="u-alice", template_id="tmpl-default", name="dev")
+    adapter.provision(user_id="u-bob", template_id="tmpl-default", name="dev")
+
+    environments = adapter.list_all_environments()
+
+    assert sorted(e.owner for e in environments) == ["u-alice", "u-bob"]
+    assert {e.template for e in environments} == {"tmpl-default"}
+    assert all(e.created_at for e in environments)
+    assert len(adapter.list_environments(user_id="u-alice")) == 1

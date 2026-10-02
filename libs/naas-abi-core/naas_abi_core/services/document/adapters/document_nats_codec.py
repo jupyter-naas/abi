@@ -33,6 +33,7 @@ ERRORS = {
     "STORAGE_ERROR": DocumentStorageError,
     "ADAPTER_ERROR": DocumentAdapterError,
     "INVALID_ARGUMENT": ValueError,
+    "PERMISSION_DENIED": PermissionError,
 }
 
 

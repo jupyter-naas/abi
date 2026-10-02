@@ -29,6 +29,8 @@ message ActivityEvent {
   // shapes" for why Struct is the right fit for this one field rather than
   // a typed message, while the rest of the contract stays fully typed.
   google.protobuf.Struct attributes = 5;
+  // Store-assigned, increasing per actor; unset on events being recorded.
+  optional int64 seq = 6;
 }
 
 // Named `filter`, not `query`, to avoid a name clash with the RPC method
@@ -40,6 +42,10 @@ message ActivityLogQueryFilter {
   optional google.protobuf.Timestamp since = 2;
   optional google.protobuf.Timestamp until = 3;
   optional int32 limit = 4;
+  // Paging: order by seq descending, and keep seq strictly below/above.
+  bool newest_first = 5;
+  optional int64 before_seq = 6;
+  optional int64 after_seq = 7;
 }
 
 message RecordRequest {

@@ -45,7 +45,42 @@ def resolve_recipients(
     return recipients
 
 
+class SentEmailsNotKept(NotImplementedError):
+    """The adapter hands mail off without keeping a copy (SMTP, SES, ...)."""
+
+
+class SentEmailNotFound(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class SentEmailSummary:
+    """A kept copy of a sent message, as listed."""
+
+    message_id: str
+    sent_at: str  # ISO 8601
+    size: int  # bytes of the RFC 5322 message
+    subject: str
+    to: str
+    sender: str
+
+
+@dataclass(frozen=True)
+class SentEmail:
+    summary: SentEmailSummary
+    raw: bytes  # the whole RFC 5322 message (.eml)
+
+
 class IEmailAdapter(ABC):
+    """Sends mail. ``send`` returns the id of the kept copy, or ``None``.
+
+    Keeping sent mail is optional: the filesystem adapter keeps every message
+    and implements ``list_sent`` / ``get_sent`` / ``delete_sent``; adapters
+    that hand mail to a provider (SMTP, SES, SendGrid, Outlook) keep nothing,
+    and those methods raise ``SentEmailsNotKept``. Deleting a kept copy never
+    recalls the message.
+    """
+
     @abstractmethod
     def send(
         self,
@@ -60,5 +95,19 @@ class IEmailAdapter(ABC):
         attachments: list[EmailAttachment] | None = None,
         to_emails: list[str] | str | None = None,
         cc_emails: list[str] | str | None = None,
-    ) -> None:
+    ) -> str | None:
         raise NotImplementedError()
+
+    def list_sent(
+        self, *, limit: int = 100, before: str | None = None
+    ) -> list[SentEmailSummary]:
+        """Kept messages, newest first; ``before`` continues after a message id."""
+        raise SentEmailsNotKept(f"{type(self).__name__} keeps no sent mail")
+
+    def get_sent(self, message_id: str) -> SentEmail:
+        """One kept message; ``SentEmailNotFound`` if there is none with this id."""
+        raise SentEmailsNotKept(f"{type(self).__name__} keeps no sent mail")
+
+    def delete_sent(self, message_id: str) -> None:
+        """Delete a kept copy (the message itself is not recalled)."""
+        raise SentEmailsNotKept(f"{type(self).__name__} keeps no sent mail")

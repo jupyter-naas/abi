@@ -3,9 +3,9 @@
 // SECONDARY port only (the durable event log), NOT the domain-level
 // IEventService. See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
 //
-// Scope of this v1 contract, deliberately: only the six IEventAdapter
-// methods below are covered -- `append`, `query`, `max_seq`, `get_cursor`,
-// `set_cursor`, `query_for_consumer`. Everything that lives on IEventService
+// Scope of this v1 contract, deliberately: only the IEventAdapter methods
+// below are covered -- `append`, `query`, `max_seq`, `get_cursor`,
+// `set_cursor`, `query_for_consumer`, `list_event_types`. Everything that lives on IEventService
 // instead is explicitly OUT of scope and has no RPC here at all:
 //   - `publish`/`subscribe` -- bus-backed, live pub/sub; `subscribe` returns
 //     a Thread and has no meaningful request/reply shape. EventService
@@ -35,6 +35,7 @@
 //   abi.svc.event.v1.get_cursor
 //   abi.svc.event.v1.set_cursor
 //   abi.svc.event.v1.query_for_consumer
+//   abi.svc.event.v1.list_event_types
 syntax = "proto3";
 
 package abi.event.v1;
@@ -131,6 +132,28 @@ message QueryForConsumerRequest {
 message QueryForConsumerResponse {
   oneof result {
     StoredEvents events = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// One event type in the log: how many events it holds and its latest one.
+message EventTypeSummary {
+  string event_type = 1;
+  int64 count = 2;
+  int64 last_seq = 3;
+  string last_timestamp = 4;
+}
+
+message EventTypeSummaries {
+  repeated EventTypeSummary types = 1;
+}
+
+message ListEventTypesRequest {
+  abi.common.v1.CallContext context = 1;
+}
+message ListEventTypesResponse {
+  oneof result {
+    EventTypeSummaries types = 1;
     abi.common.v1.CallError error = 2;
   }
 }

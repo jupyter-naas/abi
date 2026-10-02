@@ -46,7 +46,7 @@ from naas_abi_core.engine.nats_auth import (
 )
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
-from naas_abi_core.engine.nats_tracing import add_traced_service
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
 from naas_abi_core.services.vector_store.adapters.vector_store_nats_contract import (
@@ -69,7 +69,6 @@ from naas_abi_core.services.vector_store.ontologies.modules.VectorStoreEventOnto
     VectorStoreError,
 )
 from nats.micro.request import Request
-from nats.micro.service import Service
 
 __all__ = [
     "AUTH_HEADER",
@@ -145,7 +144,7 @@ class VectorStorePrimaryAdapterNATS:
         self._adapter = adapter
         self._jwt_secret = jwt_secret
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
-        self._service: Service | None = None
+        self._service: TracedService | None = None
 
     def _invoke(self, call, request):
         try:
@@ -240,6 +239,16 @@ class VectorStorePrimaryAdapterNATS:
             name="count_vectors",
             subject=f"{SUBJECT_PREFIX}.count_vectors",
             handler=self._handle_count_vectors,
+        )
+        await service.add_endpoint(
+            name="list_vectors",
+            subject=f"{SUBJECT_PREFIX}.list_vectors",
+            handler=self._handle_list_vectors,
+        )
+        await service.add_endpoint(
+            name="get_collection_info",
+            subject=f"{SUBJECT_PREFIX}.get_collection_info",
+            handler=self._handle_get_collection_info,
         )
         await service.add_endpoint(
             name="close",
@@ -536,6 +545,51 @@ class VectorStorePrimaryAdapterNATS:
     ) -> vector_store_pb2.CountVectorsResponse:
         count = self._adapter.count_vectors(req.collection_name)
         return vector_store_pb2.CountVectorsResponse(count=count)
+
+    async def _handle_list_vectors(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.ListVectorsRequest,
+            vector_store_pb2.ListVectorsResponse,
+            self._call_list_vectors,
+        )
+
+    def _call_list_vectors(
+        self, req: vector_store_pb2.ListVectorsRequest
+    ) -> vector_store_pb2.ListVectorsResponse:
+        page = self._adapter.list_vectors(
+            req.collection_name,
+            limit=req.limit or 100,
+            cursor=req.cursor if req.HasField("cursor") else None,
+            include_vectors=req.include_vectors,
+        )
+        return vector_store_pb2.ListVectorsResponse(
+            page=vector_store_pb2.VectorPage(
+                documents=[_document_to_pb(document) for document in page.documents],
+                next_cursor=page.next_cursor,
+            )
+        )
+
+    async def _handle_get_collection_info(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.GetCollectionInfoRequest,
+            vector_store_pb2.GetCollectionInfoResponse,
+            self._call_get_collection_info,
+        )
+
+    def _call_get_collection_info(
+        self, req: vector_store_pb2.GetCollectionInfoRequest
+    ) -> vector_store_pb2.GetCollectionInfoResponse:
+        info = self._adapter.get_collection_info(req.collection_name)
+        return vector_store_pb2.GetCollectionInfoResponse(
+            info=vector_store_pb2.CollectionInfo(
+                name=info.name,
+                dimension=info.dimension,
+                distance_metric=info.distance_metric,
+                size=info.size,
+            )
+        )
 
     async def _handle_close(self, request: Request) -> None:
         await self._handle(

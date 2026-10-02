@@ -29,3 +29,24 @@ def test_cache_keyvalue_lifecycle():
 
     with pytest.raises(CacheNotFoundError):
         cache.delete("key")
+
+
+from naas_abi_core.services.cache.tests.cache__secondary_adapter__generic_test import (
+    GenericCacheAdapterTest,
+)
+
+
+class TestCacheKeyValueAdapterContract(GenericCacheAdapterTest):
+    @pytest.fixture
+    def adapter(self):
+        return CacheKeyValueAdapter(KeyValueService(PythonAdapter()))
+
+
+def test_list_keys_ignores_other_keys_in_the_store():
+    kv = KeyValueService(PythonAdapter())
+    kv.set("cache:not-a-digest", b"{}")
+    kv.set("session:abc", b"x")
+    cache = CacheKeyValueAdapter(kv)
+    cache.set("real", CachedData(key="real", data="v", data_type=DataType.TEXT))
+
+    assert cache.list_keys("", limit=10).keys == ("real",)

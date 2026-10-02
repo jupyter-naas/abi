@@ -12,3 +12,18 @@ class EmailClient:
         return await self._transport.call(
             "abi.svc.email.v1.send", request, pb.SendResponse
         )
+
+    async def list_sent(self, request: pb.ListSentRequest) -> pb.ListSentResponse:
+        return await self._transport.call(
+            "abi.svc.email.v1.list_sent", request, pb.ListSentResponse
+        )
+
+    async def get_sent(self, request: pb.GetSentRequest) -> pb.GetSentResponse:
+        return await self._transport.call(
+            "abi.svc.email.v1.get_sent", request, pb.GetSentResponse
+        )
+
+    async def delete_sent(self, request: pb.DeleteSentRequest) -> pb.DeleteSentResponse:
+        return await self._transport.call(
+            "abi.svc.email.v1.delete_sent", request, pb.DeleteSentResponse
+        )

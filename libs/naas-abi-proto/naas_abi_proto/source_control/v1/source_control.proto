@@ -4,7 +4,7 @@
 // docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
 //
 // Scope of this v1 contract: every ISourceControlAdapter method is plain
-// request/response (no streaming/callback members on this port), so all 27
+// request/response (no streaming/callback members on this port), so all 28
 // methods are included here.
 //
 // A primary adapter serving this contract wraps the SourceControlService
@@ -17,6 +17,7 @@
 //   abi.svc.source_control.v1.ensure_user
 //   abi.svc.source_control.v1.ensure_repo
 //   abi.svc.source_control.v1.list_repos
+//   abi.svc.source_control.v1.delete_repo
 //   abi.svc.source_control.v1.add_collaborator
 //   abi.svc.source_control.v1.list_contents
 //   abi.svc.source_control.v1.get_file
@@ -93,6 +94,8 @@ message FileWrite {
     string text_content = 2;
     bytes binary_content = 3;
   }
+  // FileWrite.delete: remove ``path`` in the same commit (content is ignored).
+  bool delete = 4;
 }
 
 message Commit {
@@ -259,6 +262,18 @@ message ListReposResponse {
     Repos repos = 1;
     abi.common.v1.CallError error = 2;
   }
+}
+
+// ---------------------------------------------------------------------------
+// delete_repo (platform admin; irreversible)
+// ---------------------------------------------------------------------------
+
+message DeleteRepoRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+}
+message DeleteRepoResponse {
+  optional abi.common.v1.CallError error = 1;
 }
 
 // ---------------------------------------------------------------------------

@@ -126,3 +126,25 @@ class DescribeResponse(_message.Message):
     error: _common_pb2.CallError
     tiers: _containers.RepeatedScalarFieldContainer[str]
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., tiers: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class ListKeysRequest(_message.Message):
+    __slots__ = ("context", "prefix", "limit", "after")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PREFIX_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    AFTER_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    prefix: str
+    limit: int
+    after: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., prefix: _Optional[str] = ..., limit: _Optional[int] = ..., after: _Optional[str] = ...) -> None: ...
+
+class ListKeysResponse(_message.Message):
+    __slots__ = ("error", "keys", "next_after")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    KEYS_FIELD_NUMBER: _ClassVar[int]
+    NEXT_AFTER_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    keys: _containers.RepeatedScalarFieldContainer[str]
+    next_after: str
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., keys: _Optional[_Iterable[str]] = ..., next_after: _Optional[str] = ...) -> None: ...

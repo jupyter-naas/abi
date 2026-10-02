@@ -156,6 +156,11 @@ class _StubAdapter(ISourceControlAdapter):
     def list_repos(self) -> list[Repo]:
         return [self._to_repo(r) for r in self.repos.values()]
 
+    def delete_repo(self, *, repo_id: str) -> None:
+        if repo_id not in self.repos:
+            raise RepoNotFoundError(f"repo '{repo_id}' not found")
+        del self.repos[repo_id]
+
     def add_collaborator(
         self, *, repo_id: str, username: str, permission: str = "write"
     ) -> None:
@@ -1000,6 +1005,46 @@ def test_business_error_without_status_leaves_status_unset():
     )
     assert response.error.code == "REPO_NOT_FOUND"
     assert not response.error.HasField("status")
+
+
+def test_delete_repo_removes_it_then_reports_repo_not_found():
+    stub = _StubAdapter()
+    stub.ensure_repo(owner="alice", name="proj")
+    adapter = SourceControlPrimaryAdapterNATS(stub, SECRET)
+
+    deleted = _call(
+        adapter,
+        "delete_repo",
+        source_control_pb2.DeleteRepoRequest(repo_id="alice/proj"),
+        source_control_pb2.DeleteRepoResponse,
+    )
+    again = _call(
+        adapter,
+        "delete_repo",
+        source_control_pb2.DeleteRepoRequest(repo_id="alice/proj"),
+        source_control_pb2.DeleteRepoResponse,
+    )
+
+    assert not deleted.HasField("error")
+    assert "alice/proj" not in stub.repos
+    assert again.error.code == "REPO_NOT_FOUND"
+
+
+def test_not_implemented_maps_to_unimplemented_not_retryable():
+    class _NoDeleteAdapter(_StubAdapter):
+        def delete_repo(self, *, repo_id: str) -> None:
+            raise NotImplementedError("delete_repo is not supported here")
+
+    adapter = SourceControlPrimaryAdapterNATS(_NoDeleteAdapter(), SECRET)
+    response = _call(
+        adapter,
+        "delete_repo",
+        source_control_pb2.DeleteRepoRequest(repo_id="alice/proj"),
+        source_control_pb2.DeleteRepoResponse,
+    )
+
+    assert response.error.code == "UNIMPLEMENTED"
+    assert response.error.retryable is False
 
 
 def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():

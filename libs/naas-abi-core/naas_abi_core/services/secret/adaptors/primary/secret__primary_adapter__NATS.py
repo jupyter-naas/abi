@@ -28,7 +28,7 @@ from naas_abi_core.engine.nats_auth import (
 )
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
-from naas_abi_core.engine.nats_tracing import add_traced_service
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.secret.v1 import secret_pb2
 from naas_abi_core.services.secret.adaptors.secret_nats_contract import (
@@ -43,7 +43,6 @@ from naas_abi_core.services.secret.SecretPorts import (
     SecretAuthenticationError,
 )
 from nats.micro.request import Request
-from nats.micro.service import Service
 
 __all__ = [
     "AUTH_HEADER",
@@ -89,7 +88,7 @@ class SecretPrimaryAdapterNATS:
         self._adapter = adapter
         self._jwt_secret = jwt_secret
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
-        self._service: Service | None = None
+        self._service: TracedService | None = None
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``secret`` NATS service on ``nc``.

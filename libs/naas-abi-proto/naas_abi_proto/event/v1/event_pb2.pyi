@@ -155,3 +155,35 @@ class QueryForConsumerResponse(_message.Message):
     events: StoredEvents
     error: _common_pb2.CallError
     def __init__(self, events: _Optional[_Union[StoredEvents, _Mapping]] = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...
+
+class EventTypeSummary(_message.Message):
+    __slots__ = ("event_type", "count", "last_seq", "last_timestamp")
+    EVENT_TYPE_FIELD_NUMBER: _ClassVar[int]
+    COUNT_FIELD_NUMBER: _ClassVar[int]
+    LAST_SEQ_FIELD_NUMBER: _ClassVar[int]
+    LAST_TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
+    event_type: str
+    count: int
+    last_seq: int
+    last_timestamp: str
+    def __init__(self, event_type: _Optional[str] = ..., count: _Optional[int] = ..., last_seq: _Optional[int] = ..., last_timestamp: _Optional[str] = ...) -> None: ...
+
+class EventTypeSummaries(_message.Message):
+    __slots__ = ("types",)
+    TYPES_FIELD_NUMBER: _ClassVar[int]
+    types: _containers.RepeatedCompositeFieldContainer[EventTypeSummary]
+    def __init__(self, types: _Optional[_Iterable[_Union[EventTypeSummary, _Mapping]]] = ...) -> None: ...
+
+class ListEventTypesRequest(_message.Message):
+    __slots__ = ("context",)
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ...) -> None: ...
+
+class ListEventTypesResponse(_message.Message):
+    __slots__ = ("types", "error")
+    TYPES_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    types: EventTypeSummaries
+    error: _common_pb2.CallError
+    def __init__(self, types: _Optional[_Union[EventTypeSummaries, _Mapping]] = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...

@@ -18,16 +18,22 @@ class WorkspaceTemplate(_message.Message):
     def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., active_version_id: _Optional[str] = ...) -> None: ...
 
 class WorkspaceStatus(_message.Message):
-    __slots__ = ("id", "name", "phase", "agent_ready")
+    __slots__ = ("id", "name", "phase", "agent_ready", "owner", "template", "created_at")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     PHASE_FIELD_NUMBER: _ClassVar[int]
     AGENT_READY_FIELD_NUMBER: _ClassVar[int]
+    OWNER_FIELD_NUMBER: _ClassVar[int]
+    TEMPLATE_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     phase: str
     agent_ready: bool
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., phase: _Optional[str] = ..., agent_ready: bool = ...) -> None: ...
+    owner: str
+    template: str
+    created_at: str
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., phase: _Optional[str] = ..., agent_ready: bool = ..., owner: _Optional[str] = ..., template: _Optional[str] = ..., created_at: _Optional[str] = ...) -> None: ...
 
 class WorkspaceAccess(_message.Message):
     __slots__ = ("url", "token", "expires_at")
@@ -184,6 +190,20 @@ class WorkspaceStatuses(_message.Message):
     ENVIRONMENTS_FIELD_NUMBER: _ClassVar[int]
     environments: _containers.RepeatedCompositeFieldContainer[WorkspaceStatus]
     def __init__(self, environments: _Optional[_Iterable[_Union[WorkspaceStatus, _Mapping]]] = ...) -> None: ...
+
+class ListAllEnvironmentsRequest(_message.Message):
+    __slots__ = ("context",)
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ...) -> None: ...
+
+class ListAllEnvironmentsResponse(_message.Message):
+    __slots__ = ("environments", "error")
+    ENVIRONMENTS_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    environments: WorkspaceStatuses
+    error: _common_pb2.CallError
+    def __init__(self, environments: _Optional[_Union[WorkspaceStatuses, _Mapping]] = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...
 
 class GetStatusRequest(_message.Message):
     __slots__ = ("context", "workspace_id")

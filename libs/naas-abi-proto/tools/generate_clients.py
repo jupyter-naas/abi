@@ -89,6 +89,9 @@ class {cls}:
     def _scoped(self, request):
         if self._namespace is None:
             return request
+        if "namespace" not in request.DESCRIPTOR.fields_by_name:
+            # Platform-wide requests (e.g. namespaces) are not for a module's client.
+            raise PermissionError("A namespace-bound document client cannot make platform-wide requests")
         if request.namespace and request.namespace != self._namespace:
             raise ValueError("Request does not match the module namespace")
         cloned = type(request)()
@@ -124,6 +127,16 @@ class ABIClient:
 
     async def __aexit__(self, *exc) -> None:
         await self.close()
+
+    def get_job(self, module_id: str, name: str, *, project: str = "default"):
+        """A job of any module by name, engine modules included (not in discovery).
+
+        Nothing is checked until a trigger: an unknown job's runs stay QUEUED.
+        Prefer ``ModuleProxy.get_job`` for discovered modules.
+        """
+        from naas_abi_sdk.jobs import JobDescriptor, JobProxy
+
+        return JobProxy(self._transport, project, module_id, JobDescriptor(name))
 
     async def close(self) -> None:
         """Release this client's connection; never shut down a remote service."""

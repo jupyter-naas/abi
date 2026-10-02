@@ -23,6 +23,11 @@ class SourceControlClient:
             "abi.svc.source_control.v1.list_repos", request, pb.ListReposResponse
         )
 
+    async def delete_repo(self, request: pb.DeleteRepoRequest) -> pb.DeleteRepoResponse:
+        return await self._transport.call(
+            "abi.svc.source_control.v1.delete_repo", request, pb.DeleteRepoResponse
+        )
+
     async def add_collaborator(
         self, request: pb.AddCollaboratorRequest
     ) -> pb.AddCollaboratorResponse:

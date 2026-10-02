@@ -3,7 +3,13 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
-from .IVectorStorePort import IVectorStorePort, SearchResult, VectorDocument
+from .IVectorStorePort import (
+    CollectionInfo,
+    IVectorStorePort,
+    SearchResult,
+    VectorDocument,
+    VectorPage,
+)
 from .VectorStoreService import VectorStoreService
 
 
@@ -185,3 +191,30 @@ class TestVectorStoreService:
         
         mock_adapter.close.assert_called_once()
         assert not service._initialized
+
+    def test_list_documents_pages_through_the_adapter(self, service, mock_adapter):
+        page = VectorPage(documents=[], next_cursor="next")
+        mock_adapter.list_vectors.return_value = page
+
+        result = service.list_documents(
+            "docs", limit=5, cursor="start", include_vectors=True
+        )
+
+        assert result is page
+        mock_adapter.list_vectors.assert_called_once_with(
+            "docs", limit=5, cursor="start", include_vectors=True
+        )
+
+    def test_list_documents_validation(self, service, mock_adapter):
+        with pytest.raises(ValueError):
+            service.list_documents("docs", limit=0)
+        with pytest.raises(ValueError):
+            service.list_documents("docs", limit=10_001)
+        mock_adapter.list_vectors.assert_not_called()
+
+    def test_get_collection_info(self, service, mock_adapter):
+        info = CollectionInfo("docs", 4, "cosine", 2)
+        mock_adapter.get_collection_info.return_value = info
+
+        assert service.get_collection_info("docs") is info
+        mock_adapter.get_collection_info.assert_called_once_with("docs")

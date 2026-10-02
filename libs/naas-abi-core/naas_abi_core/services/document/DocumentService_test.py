@@ -133,6 +133,25 @@ def test_engine_root_cannot_use_an_implicit_storage_namespace(adapter):
     adapter.put.assert_not_called()
 
 
+def test_engine_root_lists_namespaces_and_binds_them_publicly(adapter):
+    adapter.namespaces.return_value = ["a.module", "b.module"]
+    root = DocumentService._for_engine(adapter)
+
+    assert root.namespaces() == ["a.module", "b.module"]
+    scoped = root.for_namespace("a.module")
+    scoped.collections()
+    adapter.collections.assert_called_once_with("a.module")
+    assert root._for_namespace("b.module").namespace == "b.module"
+
+
+def test_a_bound_service_cannot_list_or_switch_namespaces(service, adapter):
+    with pytest.raises(PermissionError):
+        service.namespaces()
+    with pytest.raises(PermissionError):
+        service.for_namespace("other.module")
+    adapter.namespaces.assert_not_called()
+
+
 def test_iterate_validates_the_query_once_not_once_per_page(
     service, adapter, monkeypatch
 ):

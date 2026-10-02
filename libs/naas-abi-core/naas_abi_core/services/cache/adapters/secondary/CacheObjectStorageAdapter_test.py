@@ -104,3 +104,19 @@ def test_large_json_payload_roundtrip(tmp_path) -> None:
     assert len(recovered["chunks"]) == 20
     assert len(recovered["vectors"]) == 20
     assert len(recovered["vectors"][0]) == 256
+
+
+import pytest
+from naas_abi_core.services.cache.tests.cache__secondary_adapter__generic_test import (
+    GenericCacheAdapterTest,
+)
+
+
+class TestCacheObjectStorageAdapterContract(GenericCacheAdapterTest):
+    @pytest.fixture
+    def adapter(self, tmp_path):
+        return _make_adapter(tmp_path)
+
+
+def test_list_keys_of_an_empty_cache(tmp_path):
+    assert _make_adapter(tmp_path).list_keys("", limit=10).keys == ()

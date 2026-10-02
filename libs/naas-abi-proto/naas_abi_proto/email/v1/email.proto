@@ -42,4 +42,58 @@ message SendRequest {
 message SendResponse {
   // Empty on success — the error, if any, is the whole signal.
   optional abi.common.v1.CallError error = 1;
+  // Id of the kept copy, for adapters that keep sent mail (filesystem).
+  optional string message_id = 2;
+}
+
+// Sent mail kept by the adapter (the filesystem adapter keeps every message;
+// SMTP, SES, SendGrid and Outlook keep none and answer SENT_EMAILS_NOT_KEPT).
+message SentEmailSummary {
+  string message_id = 1;
+  string sent_at = 2;  // ISO 8601
+  int64 size = 3;      // bytes of the RFC 5322 message
+  string subject = 4;
+  string to = 5;
+  string sender = 6;
+}
+
+message SentEmailSummaries {
+  repeated SentEmailSummary messages = 1;
+}
+
+message SentEmail {
+  SentEmailSummary summary = 1;
+  bytes raw = 2;  // the whole RFC 5322 message (.eml)
+}
+
+// Newest first; `before` is the message id to continue after.
+message ListSentRequest {
+  abi.common.v1.CallContext context = 1;
+  int32 limit = 2;
+  optional string before = 3;
+}
+message ListSentResponse {
+  oneof result {
+    SentEmailSummaries messages = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+message GetSentRequest {
+  abi.common.v1.CallContext context = 1;
+  string message_id = 2;
+}
+message GetSentResponse {
+  oneof result {
+    SentEmail message = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+message DeleteSentRequest {
+  abi.common.v1.CallContext context = 1;
+  string message_id = 2;
+}
+message DeleteSentResponse {
+  optional abi.common.v1.CallError error = 1;
 }

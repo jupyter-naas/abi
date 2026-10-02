@@ -51,6 +51,15 @@ class CodingEnvironmentClient:
             pb.ListEnvironmentsResponse,
         )
 
+    async def list_all_environments(
+        self, request: pb.ListAllEnvironmentsRequest
+    ) -> pb.ListAllEnvironmentsResponse:
+        return await self._transport.call(
+            "abi.svc.coding_environment.v1.list_all_environments",
+            request,
+            pb.ListAllEnvironmentsResponse,
+        )
+
     async def get_status(self, request: pb.GetStatusRequest) -> pb.GetStatusResponse:
         return await self._transport.call(
             "abi.svc.coding_environment.v1.get_status", request, pb.GetStatusResponse

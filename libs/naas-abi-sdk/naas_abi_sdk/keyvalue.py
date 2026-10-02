@@ -43,3 +43,13 @@ class KeyvalueClient:
         return await self._transport.call(
             "abi.svc.keyvalue.v1.exists", request, pb.ExistsResponse
         )
+
+    async def list_keys(self, request: pb.ListKeysRequest) -> pb.ListKeysResponse:
+        return await self._transport.call(
+            "abi.svc.keyvalue.v1.list_keys", request, pb.ListKeysResponse
+        )
+
+    async def get_ttl(self, request: pb.GetTtlRequest) -> pb.GetTtlResponse:
+        return await self._transport.call(
+            "abi.svc.keyvalue.v1.get_ttl", request, pb.GetTtlResponse
+        )

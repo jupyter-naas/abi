@@ -14,6 +14,26 @@ class VectorDocument:
 
 
 @dataclass
+class VectorPage:
+    """One page of a collection's documents, in a stable adapter-defined order.
+
+    ``next_cursor`` is opaque: pass it back as ``cursor`` to continue from the
+    first document of the next page; ``None`` means this was the last page.
+    """
+
+    documents: list[VectorDocument]
+    next_cursor: str | None = None
+
+
+@dataclass
+class CollectionInfo:
+    name: str
+    dimension: int | None
+    distance_metric: str | None
+    size: int
+
+
+@dataclass
 class SearchResult:
     id: str
     score: float
@@ -96,6 +116,23 @@ class IVectorStorePort(ABC):
     @abstractmethod
     def count_vectors(self, collection_name: str) -> int:
         pass
+
+    @abstractmethod
+    def list_vectors(
+        self,
+        collection_name: str,
+        limit: int = 100,
+        cursor: str | None = None,
+        include_vectors: bool = False,
+    ) -> VectorPage:
+        """Page through every document, metadata and payload included.
+
+        Without ``include_vectors`` each document's vector is an empty array.
+        """
+
+    @abstractmethod
+    def get_collection_info(self, collection_name: str) -> CollectionInfo:
+        """Dimension and distance metric (``None`` when unknown) and size."""
 
     @abstractmethod
     def close(self) -> None:

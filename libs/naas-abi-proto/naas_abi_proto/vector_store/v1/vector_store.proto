@@ -41,6 +41,8 @@
 //   abi.svc.vector_store.v1.update_vector
 //   abi.svc.vector_store.v1.delete_vectors
 //   abi.svc.vector_store.v1.count_vectors
+//   abi.svc.vector_store.v1.list_vectors
+//   abi.svc.vector_store.v1.get_collection_info
 //   abi.svc.vector_store.v1.close
 syntax = "proto3";
 
@@ -232,6 +234,53 @@ message CountVectorsRequest {
 message CountVectorsResponse {
   oneof result {
     int64 count = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// -----------------------------------------------------------------------
+// list_vectors
+// -----------------------------------------------------------------------
+// Pages through a collection in a stable, adapter-defined order. The cursor is
+// opaque: the reply's `next_cursor`, passed back, starts the next page; unset
+// means the last page. Without `include_vectors`, documents carry no vector.
+
+message ListVectorsRequest {
+  abi.common.v1.CallContext context = 1;
+  string collection_name = 2;
+  int32 limit = 3;
+  optional string cursor = 4;
+  bool include_vectors = 5;
+}
+message VectorPage {
+  repeated VectorDocument documents = 1;
+  optional string next_cursor = 2;
+}
+message ListVectorsResponse {
+  oneof result {
+    VectorPage page = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// -----------------------------------------------------------------------
+// get_collection_info
+// -----------------------------------------------------------------------
+
+message GetCollectionInfoRequest {
+  abi.common.v1.CallContext context = 1;
+  string collection_name = 2;
+}
+message CollectionInfo {
+  string name = 1;
+  // Unset when the backend cannot say (e.g. a Qdrant collection with named vectors).
+  optional int32 dimension = 2;
+  optional string distance_metric = 3;
+  int64 size = 4;
+}
+message GetCollectionInfoResponse {
+  oneof result {
+    CollectionInfo info = 1;
     abi.common.v1.CallError error = 2;
   }
 }

@@ -78,6 +78,22 @@ class VectorStoreClient:
             "abi.svc.vector_store.v1.count_vectors", request, pb.CountVectorsResponse
         )
 
+    async def list_vectors(
+        self, request: pb.ListVectorsRequest
+    ) -> pb.ListVectorsResponse:
+        return await self._transport.call(
+            "abi.svc.vector_store.v1.list_vectors", request, pb.ListVectorsResponse
+        )
+
+    async def get_collection_info(
+        self, request: pb.GetCollectionInfoRequest
+    ) -> pb.GetCollectionInfoResponse:
+        return await self._transport.call(
+            "abi.svc.vector_store.v1.get_collection_info",
+            request,
+            pb.GetCollectionInfoResponse,
+        )
+
     async def close(self, request: pb.CloseRequest) -> pb.CloseResponse:
         return await self._transport.call(
             "abi.svc.vector_store.v1.close", request, pb.CloseResponse

@@ -152,6 +152,41 @@ class GenericActivityLogSecondaryAdapterTest(ABC):
         assert len(results) == 1
         assert results[0].actor_id == actor
 
+    def test_events_read_back_carry_an_increasing_seq(self, adapter):
+        actor = f"user:{uuid4()}"
+        for i in range(3):
+            adapter.record(ActivityEvent(actor_id=actor, event_type="x", attributes={"i": i}))
+
+        seqs = [e.seq for e in adapter.query(actor)]
+
+        assert all(isinstance(s, int) for s in seqs)
+        assert seqs == sorted(seqs) and len(set(seqs)) == 3
+
+    def test_pages_newest_first_with_a_seq_cursor(self, adapter):
+        actor = f"user:{uuid4()}"
+        for i in range(5):
+            adapter.record(ActivityEvent(actor_id=actor, event_type="x", attributes={"i": i}))
+
+        first = adapter.query(actor, ActivityLogQuery(newest_first=True, limit=2))
+        second = adapter.query(
+            actor, ActivityLogQuery(newest_first=True, limit=2, before_seq=first[-1].seq)
+        )
+        rest = adapter.query(
+            actor, ActivityLogQuery(newest_first=True, before_seq=second[-1].seq)
+        )
+
+        assert [e.attributes["i"] for e in first + second + rest] == [4, 3, 2, 1, 0]
+
+    def test_after_seq_reads_one_event_by_seq(self, adapter):
+        actor = f"user:{uuid4()}"
+        for i in range(3):
+            adapter.record(ActivityEvent(actor_id=actor, event_type="x", attributes={"i": i}))
+        middle = adapter.query(actor)[1]
+
+        (found,) = adapter.query(actor, ActivityLogQuery(after_seq=middle.seq - 1, limit=1))
+
+        assert (found.seq, found.attributes) == (middle.seq, {"i": 1})
+
     def test_shutdown_is_idempotent(self, adapter):
         adapter.shutdown()
         adapter.shutdown()

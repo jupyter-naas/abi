@@ -36,6 +36,8 @@ class ModuleInstance:
     expires_at: float
     agents: tuple[AgentDescriptor, ...]
     jobs: tuple[Any, ...] = ()
+    # (module_id, contract_major) of each required module.
+    dependencies: tuple[tuple[str, int], ...] = ()
 
 
 def _instance(value: pb.Instance) -> ModuleInstance:
@@ -54,6 +56,7 @@ def _instance(value: pb.Instance) -> ModuleInstance:
             for a in d.agents
         ),
         _jobs(d),
+        tuple((x.module_id, x.contract_major) for x in d.dependencies),
     )
 
 
@@ -110,6 +113,17 @@ class DiscoveryClient:
         return tuple(
             _instance(i) for i in result.instances
         ), result.next_after_instance_id
+
+    async def evict(self, instance_id: str) -> ModuleInstance:
+        """Remove a registration now (platform admin identities only).
+
+        A live instance's next renewal fails with LEASE_EXPIRED and its session
+        registers again under a new instance id.
+        """
+        result = await self._call(
+            "evict", pb.EvictRequest(instance_id=instance_id), pb.EvictResponse
+        )
+        return _instance(result.instance)
 
 
 class ModuleProxy:

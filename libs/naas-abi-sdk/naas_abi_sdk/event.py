@@ -39,3 +39,10 @@ class EventClient:
         return await self._transport.call(
             "abi.svc.event.v1.query_for_consumer", request, pb.QueryForConsumerResponse
         )
+
+    async def list_event_types(
+        self, request: pb.ListEventTypesRequest
+    ) -> pb.ListEventTypesResponse:
+        return await self._transport.call(
+            "abi.svc.event.v1.list_event_types", request, pb.ListEventTypesResponse
+        )

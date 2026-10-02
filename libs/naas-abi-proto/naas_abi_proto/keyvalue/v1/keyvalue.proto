@@ -9,6 +9,8 @@
 //   abi.svc.keyvalue.v1.delete
 //   abi.svc.keyvalue.v1.delete_if_value_matches
 //   abi.svc.keyvalue.v1.exists
+//   abi.svc.keyvalue.v1.list_keys
+//   abi.svc.keyvalue.v1.get_ttl
 //
 // Scope of this v1 contract, deliberately: KeyValueService.lock() (a
 // client-side @contextmanager composed purely from set_if_not_exists /
@@ -110,5 +112,32 @@ message ExistsResponse {
     bool ok_value = 1;
     abi.common.v1.CallError error = 2;
   }
+  optional KVLockTimeoutDetail lock_timeout_detail = 3;
+}
+
+// A page of live keys starting with `prefix`, ascending, strictly after
+// `after`, at most `limit` (1..1000). `next_after` continues the listing.
+message ListKeysRequest {
+  abi.common.v1.CallContext context = 1;
+  string prefix = 2;
+  int32 limit = 3;
+  optional string after = 4;
+}
+message ListKeysResponse {
+  optional abi.common.v1.CallError error = 1;
+  repeated string keys = 2;
+  optional string next_after = 3;
+  optional KVLockTimeoutDetail lock_timeout_detail = 4;
+}
+
+// Whole seconds before `key` expires; `seconds` is absent when it never does.
+// KV_NOT_FOUND when the key does not exist.
+message GetTtlRequest {
+  abi.common.v1.CallContext context = 1;
+  string key = 2;
+}
+message GetTtlResponse {
+  optional abi.common.v1.CallError error = 1;
+  optional int64 seconds = 2;
   optional KVLockTimeoutDetail lock_timeout_detail = 3;
 }

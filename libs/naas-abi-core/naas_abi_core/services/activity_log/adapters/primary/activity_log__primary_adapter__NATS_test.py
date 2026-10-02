@@ -307,3 +307,33 @@ def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():
 def test_stop_without_start_is_a_noop():
     adapter = ActivityLogPrimaryAdapterNATS(_StubAdapter(), SECRET)
     asyncio.run(adapter.stop())  # must not raise
+
+
+def test_query_passes_paging_and_returns_seqs():
+    seen: list[ActivityLogQuery | None] = []
+
+    class _Recording(_StubAdapter):
+        def query(self, actor_id, query=None):
+            seen.append(query)
+            return [ActivityEvent(actor_id=actor_id, event_type="x", seq=7)]
+
+    adapter = ActivityLogPrimaryAdapterNATS(_Recording(), SECRET)
+    query_filter = activity_log_pb2.ActivityLogQueryFilter(
+        newest_first=True, before_seq=9, after_seq=2, limit=5
+    )
+    request = _FakeRequest(
+        data=activity_log_pb2.QueryRequest(
+            actor_id="user:1", filter=query_filter
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.activity_log.v1.query",
+    )
+
+    asyncio.run(adapter._handle_query(request))
+
+    response = activity_log_pb2.QueryResponse()
+    response.ParseFromString(request.responses[0])
+    (query,) = seen
+    assert query is not None
+    assert (query.newest_first, query.before_seq, query.after_seq, query.limit) == (True, 9, 2, 5)
+    assert response.events.events[0].seq == 7

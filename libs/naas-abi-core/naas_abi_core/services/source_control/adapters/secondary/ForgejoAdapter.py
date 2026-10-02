@@ -583,6 +583,10 @@ class ForgejoAdapter(ISourceControlAdapter):
         )
         return self._to_branch(branch)
 
+    def delete_repo(self, *, repo_id: str) -> None:
+        # 204 on success; a missing repo is a 404, mapped to RepoNotFoundError.
+        self._request("DELETE", f"/repos/{repo_id}")
+
     def delete_branch(self, *, repo_id: str, name: str) -> None:
         # The branch name may contain slashes (feature/x); Forgejo's route is a
         # wildcard, so it must stay raw (not percent-encoded).

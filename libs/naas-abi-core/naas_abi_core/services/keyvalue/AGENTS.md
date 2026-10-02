@@ -27,7 +27,14 @@ class IKeyValueAdapter:
     def delete(key: str) -> None                                     # raises KVNotFoundError
     def delete_if_value_matches(key: str, value: bytes) -> bool
     def exists(key: str) -> bool
+    def list_keys(prefix="", *, limit=100, after=None) -> KVKeyPage  # live keys, ascending
+    def get_ttl(key: str) -> int | None                              # seconds left; None: no expiry; raises KVNotFoundError
 ```
+
+`KVKeyPage(keys, next_after)`: pass `next_after` back as `after` (strictly after it).
+`limit` is 1..`MAX_KEYS_PER_PAGE` (1000); `paginate_keys` pages a full enumeration for
+adapters without an ordered index. PythonAdapter pages in SQL; RedisAdapter SCANs the
+prefix (glob-escaped), so it is O(keys under the prefix): for administration.
 
 Exceptions: `KVNotFoundError`, `KVLockTimeoutError` (from `KeyValueService.lock`).
 
@@ -40,6 +47,8 @@ set_if_not_exists(key, value, ttl=None) -> bool                # atomic; event o
 delete(key)                                                    # → KeyValueDeleted; raises KVNotFoundError
 delete_if_value_matches(key, value) -> bool                    # atomic; event only if matched
 exists(key) -> bool
+list_keys(prefix="", limit=100, after=None) -> KVKeyPage       # validates limit (ValueError)
+get_ttl(key) -> int | None                                     # raises KVNotFoundError
 lock(key, ttl=30, timeout=10.0, retry_delay=0.05)              # context manager; SET NX + CAD
 ```
 
@@ -89,7 +98,7 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/keyvalue/tests/kv__secon
 
 1. Implement every method of `IKeyValueAdapter` in `adapters/secondary/<Name>Adapter.py`.
 2. Honour the atomicity contract for `set_if_not_exists` and `delete_if_value_matches` — these are the primitives the rest of the codebase relies on for compare-and-swap.
-3. Run the generic contract tests against the new adapter (see `tests/kv__secondary_adapter__generic_test.py`).
+3. Subclass `tests/kv__secondary_adapter__generic_test.py::GenericKVSecondaryAdapterTest` (fixtures `adapter_class`, `adapter`) in the adapter's test: it covers listing, paging, expiry and TTL. PythonAdapter runs it in memory and on SQLite, RedisAdapter on `fakeredis` (and on a real server with `REDIS_URL`), the NATS client over a live `nats-server`.
 
 ## NATS RPC adapters
 

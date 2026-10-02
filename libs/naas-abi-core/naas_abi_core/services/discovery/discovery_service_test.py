@@ -266,3 +266,76 @@ def test_replicas_must_declare_identical_jobs():
             )
 
     asyncio.run(scenario())
+
+
+def test_platform_admins_evict_and_the_owner_must_register_again():
+    async def scenario():
+        service = DiscoveryService(
+            MemoryRegistry(), lease_seconds=20, clock=lambda: 0.0
+        )
+        stuck = registration("research", "r-1")
+        await service.register(stuck, "research")
+
+        evicted = await service.evict(pb.EvictRequest(instance_id="r-1"), "api")
+
+        assert evicted.instance.instance_id == "r-1"
+        assert evicted.instance.descriptor.module_id == "research"
+        listed = await service.list_modules(pb.ListModulesRequest(limit=10))
+        assert [i.instance_id for i in listed.instances] == []
+        # The evicted owner's lease is gone: it must register a fresh instance.
+        with pytest.raises(DiscoveryError, match="LEASE_EXPIRED"):
+            await service.renew(
+                pb.RenewRequest(instance_id="r-1", lease_token=stuck.lease_token),
+                "research",
+            )
+
+    asyncio.run(scenario())
+
+
+def test_only_admin_identities_evict():
+    async def scenario():
+        service = DiscoveryService(
+            MemoryRegistry(), clock=lambda: 0.0, admin_identities=("ops",)
+        )
+        await service.register(registration("research", "r-1"), "research")
+
+        for caller in ("research", "api", "engine"):
+            with pytest.raises(DiscoveryError, match="PERMISSION_DENIED"):
+                await service.evict(pb.EvictRequest(instance_id="r-1"), caller)
+        await service.evict(pb.EvictRequest(instance_id="r-1"), "ops")
+
+    asyncio.run(scenario())
+
+
+def test_default_admins_are_the_api_and_the_engine():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry(), clock=lambda: 0.0)
+        for i, caller in enumerate(("api", "engine")):
+            await service.register(registration("m", f"m-{i}"), "m")
+            await service.evict(pb.EvictRequest(instance_id=f"m-{i}"), caller)
+        with pytest.raises(DiscoveryError, match="PERMISSION_DENIED"):
+            await service.evict(pb.EvictRequest(instance_id="m-0"), "m")
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "instance_id,code",
+    [
+        ("missing", "INSTANCE_NOT_FOUND"),
+        ("", "INVALID_ARGUMENT"),
+        ("a/b", "INVALID_ARGUMENT"),
+    ],
+)
+def test_evicting_an_unknown_or_malformed_instance_is_refused(instance_id, code):
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry(), clock=lambda: 0.0)
+        with pytest.raises(DiscoveryError, match=code):
+            await service.evict(pb.EvictRequest(instance_id=instance_id), "api")
+
+    asyncio.run(scenario())
+
+
+def test_admin_identities_must_be_named():
+    with pytest.raises(ValueError):
+        DiscoveryService(MemoryRegistry(), admin_identities=("",))

@@ -36,6 +36,13 @@ class DocumentClient:
             pb.CollectionsResponse,
         )
 
+    async def namespaces(self, request: pb.NamespacesRequest) -> pb.NamespacesResponse:
+        return await self._transport.call(
+            "abi.svc.document.v1.namespaces",
+            self._scoped(request),
+            pb.NamespacesResponse,
+        )
+
     async def put(self, request: pb.PutRequest) -> pb.PutResponse:
         return await self._transport.call(
             "abi.svc.document.v1.put", self._scoped(request), pb.PutResponse
@@ -75,6 +82,11 @@ class DocumentClient:
     def _scoped(self, request):
         if self._namespace is None:
             return request
+        if "namespace" not in request.DESCRIPTOR.fields_by_name:
+            # Platform-wide requests (e.g. namespaces) are not for a module's client.
+            raise PermissionError(
+                "A namespace-bound document client cannot make platform-wide requests"
+            )
         if request.namespace and request.namespace != self._namespace:
             raise ValueError("Request does not match the module namespace")
         cloned = type(request)()

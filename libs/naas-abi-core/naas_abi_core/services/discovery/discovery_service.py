@@ -7,10 +7,10 @@ import math
 import re
 import secrets
 import time
+from collections.abc import Callable, Iterable
 from typing import TypeVar
 
 Result = TypeVar("Result")
-from collections.abc import Callable
 
 from naas_abi_core.services.discovery.discovery_ports import (
     RegistryPort,
@@ -35,6 +35,10 @@ def _name(value: str) -> bool:
 
 
 JOB_TRIGGER_KINDS = ("cron", "every", "event")
+
+# Service identities allowed to evict registrations: the Nexus API (System app)
+# and the engine. Stage 1 tokens name first-party processes (see nats_auth).
+DEFAULT_ADMIN_IDENTITIES = ("api", "engine")
 
 
 def _valid_job(job: pb.JobDescriptor) -> bool:
@@ -63,10 +67,15 @@ class DiscoveryService:
         *,
         lease_seconds: float = 20,
         clock: Callable[[], float] = time.time,
+        admin_identities: Iterable[str] = DEFAULT_ADMIN_IDENTITIES,
     ):
         if not math.isfinite(lease_seconds) or lease_seconds < 1:
             raise ValueError("lease_seconds must be finite and at least 1")
+        admins = frozenset(admin_identities)
+        if not all(admins) or not all(isinstance(a, str) for a in admins):
+            raise ValueError("admin identities must be non-empty names")
         self.registry, self.lease_seconds, self.clock = registry, lease_seconds, clock
+        self.admin_identities = admins
 
     async def _read(self) -> tuple[pb.RegistryState, int]:
         data, revision = await self.registry.read()
@@ -301,6 +310,35 @@ class DiscoveryService:
                     del state.records[i]
                     break
             return pb.UnregisterResponse()
+
+        return await self._mutate(apply)
+
+    async def evict(self, req: pb.EvictRequest, owner: str) -> pb.EvictResponse:
+        """Remove a registration whatever its lease. Admin identities only.
+
+        The evicted owner's next renewal fails with LEASE_EXPIRED; the SDK then
+        registers a fresh instance, so evicting a live process only restarts its
+        membership. It is meant for crashed or stuck registrations.
+        """
+        _require(
+            owner in self.admin_identities,
+            "PERMISSION_DENIED",
+            "Only platform administrators can evict registrations",
+        )
+        _require(
+            _name(req.instance_id), "INVALID_ARGUMENT", "Invalid instance identity"
+        )
+
+        def apply(state):
+            self._ready(state)
+            for i, record in enumerate(state.records):
+                if record.instance.instance_id == req.instance_id:
+                    evicted = pb.Instance()
+                    evicted.CopyFrom(record.instance)
+                    del state.records[i]
+                    self._ready(state)
+                    return pb.EvictResponse(instance=evicted)
+            raise DiscoveryError("INSTANCE_NOT_FOUND", req.instance_id)
 
         return await self._mutate(apply)
 

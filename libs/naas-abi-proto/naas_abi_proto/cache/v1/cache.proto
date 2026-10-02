@@ -1,6 +1,6 @@
 // NATS-RPC contract for the cache kernel domain.
 // Mirrors naas_abi_core/services/cache/CachePort.py::ICacheAdapter 1:1 -- the
-// raw 5-method adapter surface each cache tier wraps, not the multi-tier
+// raw adapter surface each cache tier wraps, not the multi-tier
 // CacheService/SingleTierCacheService orchestration built on top of it. See
 // docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
 //
@@ -10,7 +10,7 @@
 // tier's config is loaded -- including on the machine holding the NATS
 // client adapter for this contract -- and never touch ICacheAdapter itself.
 // There is nothing tier- or event-aware to put on the wire; this contract
-// only needs to mirror the raw adapter's 5 methods.
+// only needs to mirror the raw adapter's methods.
 //
 // Subjects (see "Protobuf contract shapes" in the RFC):
 //   abi.svc.cache.v1.get
@@ -18,6 +18,7 @@
 //   abi.svc.cache.v1.set_if_absent
 //   abi.svc.cache.v1.delete
 //   abi.svc.cache.v1.exists
+//   abi.svc.cache.v1.list_keys
 syntax = "proto3";
 
 package abi.cache.v1;
@@ -106,4 +107,19 @@ message DescribeRequest { abi.common.v1.CallContext context = 1; }
 message DescribeResponse {
   optional abi.common.v1.CallError error = 1;
   repeated string tiers = 2;
+}
+
+// A page of the tier's logical keys starting with `prefix`, ascending,
+// strictly after `after`, at most `limit` (1..1000); `next_after` continues.
+// Keys only: values stay behind `get`.
+message ListKeysRequest {
+  abi.common.v1.CallContext context = 1;
+  string prefix = 2;
+  int32 limit = 3;
+  optional string after = 4;
+}
+message ListKeysResponse {
+  optional abi.common.v1.CallError error = 1;
+  repeated string keys = 2;
+  optional string next_after = 3;
 }

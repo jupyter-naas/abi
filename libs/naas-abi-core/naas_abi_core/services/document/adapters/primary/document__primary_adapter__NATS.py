@@ -1,5 +1,11 @@
-"""Authenticated document RPCs; namespace scoping follows Stage 1 shared trust."""
+"""Authenticated document RPCs; namespace scoping follows Stage 1 shared trust.
 
+Every authenticated caller passes its namespace explicitly. Listing namespaces
+is platform administration: only ``admin_identities`` (the API and the engine
+by default) may call it; anyone else gets PERMISSION_DENIED.
+"""
+
+from collections.abc import Iterable
 from functools import partial
 
 import nats.micro
@@ -11,7 +17,7 @@ from naas_abi_core.engine.nats_auth import (
 )
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
-from naas_abi_core.engine.nats_tracing import add_traced_service
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.services.document.adapters.document_nats_codec import (
     ERRORS,
     decode_order,
@@ -34,16 +40,27 @@ OPERATIONS = {
     "delete": "Delete",
     "find": "Find",
     "count": "Count",
+    "namespaces": "Namespaces",
 }
 SUBJECT_PREFIX = "abi.svc.document.v1"
+# Operations across namespaces, and the service identities allowed to call them.
+ADMIN_OPERATIONS = frozenset({"namespaces"})
+ADMIN_IDENTITIES = frozenset({"api", "engine"})
 
 
 class DocumentPrimaryAdapterNATS:
-    def __init__(self, service: DocumentService, jwt_secret: str) -> None:
+    def __init__(
+        self,
+        service: DocumentService,
+        jwt_secret: str,
+        *,
+        admin_identities: Iterable[str] = ADMIN_IDENTITIES,
+    ) -> None:
         self._adapter = service
         self._jwt_secret = jwt_secret
+        self._admin_identities = frozenset(admin_identities)
         self._dispatch = DomainRPCDispatcher("document")
-        self._service: Service | None = None
+        self._service: Service | TracedService | None = None
 
     async def start(self, nc: nats.NATS) -> None:
         if self._service is not None:
@@ -68,7 +85,7 @@ class DocumentPrimaryAdapterNATS:
     async def _handle(self, request, *, operation: str) -> None:
         response_type = getattr(pb, OPERATIONS[operation] + "Response")
         try:
-            verify_service_token(
+            identity = verify_service_token(
                 (request.headers or {}).get("Nats-Auth-Token", ""), self._jwt_secret
             )
         except InvalidServiceTokenError:
@@ -77,6 +94,19 @@ class DocumentPrimaryAdapterNATS:
                 response_type(
                     error=common_pb2.CallError(
                         code="UNAUTHENTICATED", message="missing or invalid auth token"
+                    )
+                ),
+                response_type,
+            )
+            return
+        if operation in ADMIN_OPERATIONS and identity not in self._admin_identities:
+            await respond_protobuf(
+                request,
+                response_type(
+                    error=common_pb2.CallError(
+                        code="PERMISSION_DENIED",
+                        message=f"{operation} needs a platform service identity",
+                        retryable=False,
                     )
                 ),
                 response_type,
@@ -109,8 +139,10 @@ class DocumentPrimaryAdapterNATS:
         await respond_protobuf(request, result, response_type)
 
     def _call(self, operation: str, request):
-        service = self._adapter._for_namespace(request.namespace)
         response = getattr(pb, OPERATIONS[operation] + "Response")
+        if operation == "namespaces":
+            return response(namespaces=self._adapter.namespaces())
+        service = self._adapter._for_namespace(request.namespace)
         if operation == "ensure_collection":
             service.ensure_collection(decode_spec(request.spec))
         elif operation == "drop_collection":

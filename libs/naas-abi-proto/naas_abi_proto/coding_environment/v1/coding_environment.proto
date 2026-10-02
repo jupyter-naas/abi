@@ -3,7 +3,7 @@
 // ::ICodingEnvironmentAdapter 1:1. See
 // docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
 //
-// Scope of this v1 contract, deliberately: only the 10
+// Scope of this v1 contract, deliberately: only the 11
 // ICodingEnvironmentAdapter methods below are exposed. The following are
 // explicitly NOT part of this contract and have no endpoint here at all:
 //   - `wait_until_ready` -- a client-side polling loop built purely from
@@ -41,6 +41,7 @@
 //   abi.svc.coding_environment.v1.stop
 //   abi.svc.coding_environment.v1.delete
 //   abi.svc.coding_environment.v1.list_environments
+//   abi.svc.coding_environment.v1.list_all_environments
 //   abi.svc.coding_environment.v1.get_status
 //   abi.svc.coding_environment.v1.get_logs
 //   abi.svc.coding_environment.v1.get_access
@@ -61,6 +62,9 @@ message WorkspaceStatus {
   string name = 2;
   string phase = 3;  // one of CodingEnvironmentPorts.PHASE_* -- see file header
   bool agent_ready = 4;
+  string owner = 5;  // "" when the backend does not know it
+  string template = 6;
+  optional string created_at = 7;  // ISO 8601
 }
 
 message WorkspaceAccess {
@@ -153,6 +157,17 @@ message ListEnvironmentsResponse {
 }
 message WorkspaceStatuses {
   repeated WorkspaceStatus environments = 1;
+}
+
+// Every workspace across all users: the platform admin view.
+message ListAllEnvironmentsRequest {
+  abi.common.v1.CallContext context = 1;
+}
+message ListAllEnvironmentsResponse {
+  oneof result {
+    WorkspaceStatuses environments = 1;
+    abi.common.v1.CallError error = 2;
+  }
 }
 
 message GetStatusRequest {

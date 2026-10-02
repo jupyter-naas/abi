@@ -37,3 +37,15 @@ def test_scoped_client_preserves_request_and_rejects_rebinding():
         client.for_namespace("other")
     with pytest.raises(ValueError):
         asyncio.run(client.get(pb.GetRequest(namespace="other")))
+
+
+def test_a_bound_client_refuses_platform_wide_requests():
+    transport = AsyncMock()
+    bound = DocumentClient(transport).for_namespace("modules.writer")
+
+    with pytest.raises(PermissionError):
+        asyncio.run(bound.namespaces(pb.NamespacesRequest()))
+    transport.call.assert_not_called()
+
+    asyncio.run(DocumentClient(transport).namespaces(pb.NamespacesRequest()))
+    assert transport.call.call_args.args[0] == "abi.svc.document.v1.namespaces"
