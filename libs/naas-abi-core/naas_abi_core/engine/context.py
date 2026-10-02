@@ -1,6 +1,6 @@
 """Process-wide engine service references.
 
-Two services in this module are intentionally exposed as process-wide
+Three references in this module are intentionally exposed as process-wide
 singletons because they genuinely need to be reachable from anywhere —
 agents, background threads, library code that has no engine handle:
 
@@ -10,6 +10,10 @@ agents, background threads, library code that has no engine handle:
   module-scoped services like triple_store / cache / secrets which respect
   ``ModuleDependencies`` access control), so a global accessor doesn't
   weaken the dependency model.
+* **Agent checkpointer** — the engine's agent memory. Module factories build
+  agents with ``memory=None`` and no engine handle; this is how that default
+  reaches them. It is a LangGraph saver bound to the engine's own namespace,
+  not a module-scoped service handle, so module isolation is unchanged.
 
 Every other service stays behind ``EngineProxy`` so dependency declarations
 stay enforced. Do not add anything else here without a similar argument.
@@ -30,6 +34,7 @@ from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from langgraph.checkpoint.base import BaseCheckpointSaver
     from naas_abi_core.services.event.EventService import EventService
     from naas_abi_core.services.model_registry.ModelRegistryPort import (
         IModelRegistry,
@@ -148,3 +153,46 @@ def with_model_registry_override(
         yield
     finally:
         _model_registry_override.reset(token)
+
+
+# --------------------------------------------------------------------------- #
+# Agent checkpointer                                                           #
+# --------------------------------------------------------------------------- #
+
+
+_default_agent_checkpointer: BaseCheckpointSaver | None = None
+_agent_checkpointer_override: ContextVar[BaseCheckpointSaver | None] = ContextVar(
+    "agent_checkpointer_override", default=None
+)
+
+
+def set_default_agent_checkpointer(checkpointer: BaseCheckpointSaver | None) -> None:
+    """Bind (or clear) the memory of agents built with ``memory=None``.
+
+    Called by ``Engine.load()`` before modules load, and cleared again by
+    ``Engine.shutdown()``. Module code must not call this directly.
+    """
+    global _default_agent_checkpointer
+    _default_agent_checkpointer = checkpointer
+
+
+def get_default_agent_checkpointer() -> BaseCheckpointSaver | None:
+    """The engine's agent checkpointer, or ``None`` outside a loaded engine.
+
+    ``Agent`` reads it once, at construction; ``None`` keeps the standalone
+    fallback (``POSTGRES_URL``, else in memory).
+    """
+    override = _agent_checkpointer_override.get()
+    return override if override is not None else _default_agent_checkpointer
+
+
+@contextmanager
+def with_agent_checkpointer_override(
+    checkpointer: BaseCheckpointSaver | None,
+) -> Iterator[None]:
+    """Temporarily swap the agent checkpointer within this context (and async task)."""
+    token = _agent_checkpointer_override.set(checkpointer)
+    try:
+        yield
+    finally:
+        _agent_checkpointer_override.reset(token)

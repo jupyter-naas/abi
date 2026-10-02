@@ -3,12 +3,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from langgraph.checkpoint.base import BaseCheckpointSaver
     from naas_abi_core.engine.engine_loaders.EngineNATSDependencies import (
         EngineNATSDependencies,
     )
 
 from naas_abi_core import logger
 from naas_abi_core.engine.context import (
+    get_default_agent_checkpointer,
+    set_default_agent_checkpointer,
     set_default_event_service,
     set_default_model_registry,
 )
@@ -44,6 +47,8 @@ class Engine(IEngine):
     __nats_runtime_started: bool
     # Hosts the modules' jobs (NATS mode only); stopped first in shutdown().
     __job_loader: EngineJobLoader | None
+    # Memory of agents built with memory=None, bound by load() (see context.py).
+    __agent_checkpointer: BaseCheckpointSaver | None = None
 
     @property
     def configuration(self) -> EngineConfiguration:
@@ -114,6 +119,9 @@ class Engine(IEngine):
         )
         logger.debug("Engine services loaded")
 
+        # Before modules load: their factories build agents with memory=None.
+        self.__bind_agent_memory()
+
         # Config-gated: a no-op unless config.yaml has a top-level `nats:`
         # block. See EngineNATSLoader / EngineConfiguration.NATSConfiguration.
         if self.__configuration.nats is not None:
@@ -180,6 +188,33 @@ class Engine(IEngine):
             self.job_owners(), document_available=self.__services.document_available()
         )
 
+    def __bind_agent_memory(self) -> None:
+        """Agents built with memory=None checkpoint into the document service.
+
+        The engine's own root (the local adapter when this process owns the
+        service), never a NATS client view: checkpoints are full snapshots and
+        must not be bounded by the broker's payload limit. Without the service,
+        agents keep the standalone fallback (POSTGRES_URL, else in memory).
+        """
+        self.__agent_checkpointer = None
+        if self.__services.document_available():
+            try:
+                from naas_abi_core.services.agent.DocumentCheckpointSaver import (
+                    DocumentCheckpointSaver,
+                )
+            except ModuleNotFoundError as exc:
+                if (exc.name or "").split(".")[0] != "naas_abi_sdk":
+                    raise
+                logger.warning(
+                    "Agent memory is not in the document service: it needs "
+                    "naas-abi-sdk (naas-abi-core[nats])"
+                )
+            else:
+                self.__agent_checkpointer = DocumentCheckpointSaver.for_engine(
+                    self.__services.document
+                )
+        set_default_agent_checkpointer(self.__agent_checkpointer)
+
     @property
     def hosts_jobs(self) -> bool:
         """Whether this engine hosts jobs (NATS mode with ``nats.jobs.enabled``)."""
@@ -226,6 +261,10 @@ class Engine(IEngine):
         job_loader, self.__job_loader = self.__job_loader, None
         if job_loader is not None:
             job_loader.stop()
+        # Agents built from now on must not reach storage this engine releases.
+        memory, self.__agent_checkpointer = self.__agent_checkpointer, None
+        if memory is not None and get_default_agent_checkpointer() is memory:
+            set_default_agent_checkpointer(None)
         if not self.__nats_runtime_started:
             return
         self.__nats_runtime_started = False

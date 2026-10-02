@@ -23,8 +23,10 @@ their existing responsibilities.
 ## Port
 
 `IDocumentAdapter` is a runtime-checkable protocol with `ensure_collection`,
-`drop_collection`, `collections`, `put`, `get`, `delete`, `find`, `count`, and `close`.
-Every storage operation takes an explicit namespace; `close` releases resources.
+`drop_collection`, `collections`, `namespaces`, `put`, `get`, `delete`, `find`, `count`,
+and `close`. Every storage operation takes an explicit namespace; `namespaces()` lists
+the namespaces holding at least one collection (sorted, platform administration);
+`close` releases resources. Custom adapters without `namespaces` fail the boot check.
 Every adapter must implement every
 method. Domain exceptions are `CollectionNotFound`, `DocumentNotFound`,
 `VersionConflict`, and `UniqueViolation`. Driver, locking, and pool failures
@@ -82,6 +84,12 @@ security sandbox against hostile Python code with process access. Only the
 engine root created through `_for_engine` may bind namespaces; returned handles
 reject `_for_namespace` rebinding and retain the root's service wiring.
 The engine root only binds namespaces and cannot perform storage operations.
+
+Platform administration (the Nexus System app) uses the engine root directly:
+`services.document_admin` on the unlocked engine proxy (the platform module only;
+any other proxy raises `PermissionError`) returns it, with `namespaces()` and the
+public `for_namespace(ns)`. `_for_namespace` remains as an alias. Bound views
+raise `PermissionError` for both.
 Each module proxy retains its scoped handle, checking access on every retrieval
 and replacing the handle if the engine installs a different root service.
 
@@ -295,11 +303,22 @@ an explicit upstream route without re-exposing it.
 
 The canonical contract is `naas-abi-proto/naas_abi_proto/document/v1/document.proto`.
 Namespaces are explicit on the wire and convention-bound in module proxies, not
-per-module authorization under Stage 1 shared JWT trust. Server domain validation
+per-module authorization under Stage 1 shared JWT trust. Cross-namespace operations
+(`namespaces`) are authorized explicitly: only the primary's `admin_identities`
+(`api` and `engine` by default) may call them, others get `PERMISSION_DENIED`
+(`PermissionError` on the client). Server domain validation
 is authoritative. Never silently replay storage failures. Engine-owned backend
 resources must not be closed by a remote client.
 
 The adapter's tests reuse the full portable contract through a native nats-server.
 `examples/standalone_module/checkpoint_integration_test.py` verifies the optional
 SDK LangGraph saver can resume in another interpreter through these endpoints.
-No synchronous core Agent default or PostgreSQL checkpoint data is changed.
+
+Engine agent memory also lives here: `Engine.load()` binds the agent service's
+`DocumentCheckpointSaver` to namespace `naas_abi_core.services.agent` on the
+engine's own root (see `services/agent/AGENTS.md`). Its documents are identical
+to the SDK saver's: `langgraph_checkpoints_v2`, `langgraph_writes_v2` and the
+values in `langgraph_blobs_v2` / `langgraph_items_v2` / `langgraph_parts_v2`
+(schema 2, increments, no value above 256 KiB per document). Schema 1
+collections (`*_v1`) are still read. LangGraph's PostgreSQL tables are only
+read, by `abi agent migrate-memory`.

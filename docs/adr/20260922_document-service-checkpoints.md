@@ -1,6 +1,8 @@
 # LangGraph checkpoints through the document service
 
-Status: Accepted
+Status: Accepted. Amended by `20261002_engine-agent-memory-in-documents.md`:
+engine-hosted core agents checkpoint here too, and checkpoints are stored as
+increments (schema 2) instead of one full snapshot each.
 
 Date: 2026-09-22
 
