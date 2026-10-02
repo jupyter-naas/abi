@@ -104,3 +104,65 @@ def test_explicit_nats_config_still_exposes_services(monkeypatch):
     )
     engine.shutdown()
     close.assert_called_once()
+
+
+def test_core_without_the_sdk_imports_and_declares_jobs(tmp_path):
+    """naas-abi-core without [nats] has no naas-abi-sdk: modules with jobs must still load."""
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "api: {}\n"
+        "global_config: {ai_mode: cloud, skip_ontology_loading: true}\n"
+        "modules: []\n"
+        "services:\n"
+        "  secret: {secret_adapters: []}\n"
+        "  bus: {bus_adapter: {adapter: python_queue, config: {}}}\n"
+        "  kv: {kv_adapter: {adapter: python, config: {}}}\n"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            textwrap.dedent(
+                """
+                import importlib.abc
+                import sys
+                from pathlib import Path
+
+                BLOCKED = ("nats", "naas_abi_sdk", "naas_abi_proto")
+
+                class NoExtra(importlib.abc.MetaPathFinder):
+                    def find_spec(self, fullname, path=None, target=None):
+                        if fullname.split(".")[0] in BLOCKED:
+                            raise ModuleNotFoundError("not installed", name=fullname)
+
+                sys.meta_path.insert(0, NoExtra())
+                from naas_abi_core.engine.Engine import Engine
+                from naas_abi_core.module.jobs import Cron, JobDescriptor, job
+                from naas_abi_core.module.Module import BaseModule, ModuleConfiguration
+
+                class Reports(BaseModule):
+                    class Configuration(ModuleConfiguration):
+                        pass
+
+                    jobs = (JobDescriptor("explicit"),)
+
+                    @job(triggers=(Cron("0 0 6 * * *", time_zone="UTC"),))
+                    def nightly(self, ctx):
+                        return None
+
+                assert {j.name for j in Reports.jobs} == {"explicit", "nightly"}
+                engine = Engine(Path(sys.argv[1]).read_text())
+                engine.load()
+                engine.shutdown()
+                assert not any(m.split(".")[0] in BLOCKED for m in sys.modules)
+                """
+            ),
+            str(config),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
