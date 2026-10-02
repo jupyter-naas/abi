@@ -32,7 +32,7 @@ export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean;
             </p>
             {group.items.map((item) => {
               const fullHref = getWorkspacePath(currentWorkspaceId, item.href);
-              const isActive = pathname === fullHref || pathname.endsWith(item.href);
+              const isActive = pathname === fullHref || pathname.startsWith(`${fullHref}/`) || pathname.endsWith(item.href);
               const Icon = item.icon;
               return (
                 <Link

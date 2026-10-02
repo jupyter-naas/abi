@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   fetchWithSettingsCacheFallback,
-  isComponentsSettingsRoute,
+  isCachedSettingsRoute,
   isSettingsRoute,
   resetSettingsCacheSupport,
   settingsCacheSupported,
@@ -22,30 +22,32 @@ describe('isSettingsRoute', () => {
   });
 });
 
-describe('isComponentsSettingsRoute', () => {
-  it('matches the Components settings pages and their detail pages', () => {
-    for (const page of ['agents', 'ontologies', 'graphs', 'search', 'skills', 'apps', 'models', 'drives']) {
-      expect(isComponentsSettingsRoute(`/workspace/ws-1/settings/${page}`)).toBe(true);
+describe('isCachedSettingsRoute', () => {
+  it('matches the Components settings pages, Members and their detail pages', () => {
+    for (const page of ['agents', 'ontologies', 'graphs', 'search', 'skills', 'apps', 'models', 'drives', 'members']) {
+      expect(isCachedSettingsRoute(`/workspace/ws-1/settings/${page}`)).toBe(true);
     }
-    expect(isComponentsSettingsRoute('/workspace/ws-1/settings/agents/a1')).toBe(true);
+    expect(isCachedSettingsRoute('/workspace/ws-1/settings/agents/a1')).toBe(true);
   });
 
   it('ignores the other settings pages', () => {
-    expect(isComponentsSettingsRoute('/workspace/ws-1/settings/members')).toBe(false);
-    expect(isComponentsSettingsRoute('/workspace/ws-1/settings/secrets')).toBe(false);
-    expect(isComponentsSettingsRoute('/workspace/ws-1/settings/services/fuseki')).toBe(false);
-    expect(isComponentsSettingsRoute('/workspace/ws-1/settings/agentsx')).toBe(false);
-    expect(isComponentsSettingsRoute('/organizations/org-1/settings/users')).toBe(false);
+    expect(isCachedSettingsRoute('/workspace/ws-1/settings/theme')).toBe(false);
+    expect(isCachedSettingsRoute('/workspace/ws-1/settings/services')).toBe(false);
+    expect(isCachedSettingsRoute('/workspace/ws-1/settings/secrets')).toBe(false);
+    expect(isCachedSettingsRoute('/workspace/ws-1/settings/services/fuseki')).toBe(false);
+    expect(isCachedSettingsRoute('/workspace/ws-1/settings/agentsx')).toBe(false);
+    expect(isCachedSettingsRoute('/organizations/org-1/settings/users')).toBe(false);
   });
 });
 
 describe('shouldUseSettingsCache', () => {
-  it('opts in GET requests from Components settings pages only', () => {
+  it('opts in GET requests from cached settings pages only', () => {
     expect(shouldUseSettingsCache('/workspace/ws-1/settings/agents', undefined)).toBe(true);
     expect(shouldUseSettingsCache('/workspace/ws-1/settings/agents', 'get')).toBe(true);
     expect(shouldUseSettingsCache('/workspace/ws-1/settings/agents', 'PATCH')).toBe(false);
     expect(shouldUseSettingsCache('/workspace/ws-1/chat', 'GET')).toBe(false);
-    expect(shouldUseSettingsCache('/workspace/ws-1/settings/members', 'GET')).toBe(false);
+    expect(shouldUseSettingsCache('/workspace/ws-1/settings/members', 'GET')).toBe(true);
+    expect(shouldUseSettingsCache('/workspace/ws-1/settings/secrets', 'GET')).toBe(false);
     expect(shouldUseSettingsCache('/organizations/org-1/settings/users', 'GET')).toBe(false);
   });
 });

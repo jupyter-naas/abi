@@ -65,6 +65,26 @@ async def admin_me(
     return AdminMeResponse(is_superadmin=bool(current_user.is_superadmin))
 
 
+class ConfiguredService(BaseModel):
+    id: str
+    adapters: list[str]
+
+
+@router.get("/services", response_model=list[ConfiguredService])
+async def admin_services(_: User = Depends(require_superadmin)) -> list[ConfiguredService]:
+    """Platform services set in ``config.yaml`` with their adapters (Settings > Services).
+
+    Names only: adapter configs hold credentials and are never returned.
+    """
+    from naas_abi import ABIModule
+    from naas_abi.apps.nexus.apps.api.app.utils.configured_services import (
+        configured_services,
+    )
+
+    services = ABIModule.get_instance().engine.configuration.services
+    return [ConfiguredService(**service) for service in configured_services(services)]
+
+
 @router.get("/ping")
 async def admin_ping(_: User = Depends(require_superadmin)) -> dict[str, bool]:
     """403s for non-superadmins. Used by the admin page to gate access."""

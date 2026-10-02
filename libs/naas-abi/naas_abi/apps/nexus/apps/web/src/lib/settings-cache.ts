@@ -1,6 +1,6 @@
 /**
- * The Components settings pages (agents, skills, models...) read their API data through
- * the backend's 24h settings cache and show a Reload button to bypass it. The backend only
+ * The Components settings pages (agents, skills, models...) and Members read their API
+ * data through the backend's 24h settings cache and show a Reload button to bypass it. The backend only
  * caches GET requests that carry this header, and the web app only sends it from those
  * pages, so every other page always reads live data.
  */
@@ -13,18 +13,19 @@ export function isSettingsRoute(pathname: string): boolean {
   return SETTINGS_ROUTE.test(pathname);
 }
 
-// The "Components" group of the workspace settings nav (components/shell/settings-nav.tsx).
-const COMPONENTS_SETTINGS_ROUTE =
-  /^\/workspace\/[^/]+\/settings\/(?:agents|ontologies|graphs|search|skills|apps|models|drives)(?:\/|$)/;
+// The "Components" group of the workspace settings nav (components/shell/settings-nav.tsx),
+// plus Members.
+const CACHED_SETTINGS_ROUTE =
+  /^\/workspace\/[^/]+\/settings\/(?:agents|ontologies|graphs|search|skills|apps|models|drives|members)(?:\/|$)/;
 
-/** Components settings pages (and their detail pages): cached, with a Reload button. */
-export function isComponentsSettingsRoute(pathname: string): boolean {
-  return COMPONENTS_SETTINGS_ROUTE.test(pathname);
+/** Settings pages (and their detail pages) that are cached and have a Reload button. */
+export function isCachedSettingsRoute(pathname: string): boolean {
+  return CACHED_SETTINGS_ROUTE.test(pathname);
 }
 
 /** True when a request should opt in to the settings cache. */
 export function shouldUseSettingsCache(pathname: string, method: string | undefined): boolean {
-  return (method ?? 'GET').toUpperCase() === 'GET' && isComponentsSettingsRoute(pathname);
+  return (method ?? 'GET').toUpperCase() === 'GET' && isCachedSettingsRoute(pathname);
 }
 
 // Flips to false when the API rejects the header (e.g. an API older than the web app,
