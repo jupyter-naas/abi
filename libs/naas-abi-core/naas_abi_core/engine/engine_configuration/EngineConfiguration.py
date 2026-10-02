@@ -301,6 +301,9 @@ class NATSConfiguration(BaseModel):
     )
     models: NATSModelConfiguration = Field(default_factory=NATSModelConfiguration)
     jobs: NATSJobsConfiguration = Field(default_factory=NATSJobsConfiguration)
+    # The broker's HTTP monitoring endpoint (``nats-server -m 8222``), read by the
+    # Nexus SysAdmin app (/varz, /connz, /jsz). It has no auth: keep it private.
+    monitoring_url: str | None = Field(default=None, pattern=r"^https?://")
 
 
 class OpencodeProviderConfiguration(BaseModel):
