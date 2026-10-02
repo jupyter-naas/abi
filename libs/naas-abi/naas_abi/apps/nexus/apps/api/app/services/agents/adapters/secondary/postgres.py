@@ -67,6 +67,9 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
             logo_url=cls._opt_str(model.logo_url),
             enabled=bool(model.enabled),
             is_default=bool(model.is_default),
+            enabled_override=(
+                None if model.enabled_override is None else bool(model.enabled_override)
+            ),
             created_at=datetime.fromisoformat(str(model.created_at)),
             updated_at=datetime.fromisoformat(str(model.updated_at)),
         )
@@ -182,6 +185,8 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
             agent_model.logo_url = str(updates.logo_url)
         if updates.enabled is not None:
             agent_model.enabled = bool(updates.enabled)
+        if updates.enabled_override is not None:
+            agent_model.enabled_override = bool(updates.enabled_override)
         if updates.is_default is not None:
             new_default = bool(updates.is_default)
             if new_default:

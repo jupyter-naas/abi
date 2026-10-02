@@ -78,6 +78,7 @@ def _record(
     provider: str = "abi",
     enabled: bool = True,
     default: bool = False,
+    override: bool | None = None,
 ):
     now = datetime(2026, 10, 1)
     return AgentRecord(
@@ -95,6 +96,7 @@ def _record(
         created_at=now,
         updated_at=now,
         is_default=default,
+        enabled_override=override,
     )
 
 
@@ -219,3 +221,101 @@ def test_discovery_errors_mean_unknown_not_empty(monkeypatch):
     monkeypatch.setattr(factory, "get_remote_agent_directory", lambda: _Broken())
 
     assert asyncio.run(sync._discovered_remote_agents()) is None
+
+
+# A toggle in the UI is an explicit override: sync keeps it over the roster.
+
+
+def test_a_remote_agent_enabled_by_hand_stays_enabled_outside_the_roster(seed):
+    seed(["zen ZenAgent"])
+    agents = _Agents(
+        [
+            _record("zen", ZEN, default=True),
+            _record("r", RESEARCHER.key, provider=REMOTE_PROVIDER, enabled=True, override=True),
+        ]
+    )
+
+    assert _by_class(_sync(agents, [RESEARCHER]))[RESEARCHER.key].enabled is True
+
+
+def test_a_remote_agent_disabled_by_hand_stays_disabled(seed):
+    agents = _Agents(
+        [
+            _record("zen", ZEN, default=True),
+            _record("r", RESEARCHER.key, provider=REMOTE_PROVIDER, enabled=False, override=False),
+        ]
+    )
+
+    assert _by_class(_sync(agents, [RESEARCHER]))[RESEARCHER.key].enabled is False
+
+
+def test_an_override_still_needs_the_module_and_comes_back_with_it(seed):
+    seed(["zen ZenAgent"])
+    agents = _Agents(
+        [
+            _record("zen", ZEN, default=True),
+            _record("r", RESEARCHER.key, provider=REMOTE_PROVIDER, enabled=True, override=True),
+        ]
+    )
+
+    assert _by_class(_sync(agents, []))[RESEARCHER.key].enabled is False
+    assert _by_class(_sync(agents, [RESEARCHER]))[RESEARCHER.key].enabled is True
+
+
+def test_in_process_agents_keep_their_override_over_the_roster(seed):
+    other = "acme.reports.ReportAgent/ReportAgent"
+    seed(["zen ZenAgent", "acme.reports ReportAgent"])
+    agents = _Agents(
+        [
+            _record("zen", ZEN, default=True),
+            _record("rep", other, enabled=False, override=False),
+            _record("x", "acme.extra.ExtraAgent/ExtraAgent", enabled=True, override=True),
+        ]
+    )
+
+    result = _by_class(
+        asyncio.run(
+            sync._reconcile_workspace_agents(
+                agents,
+                SimpleNamespace(id="u-1"),
+                "ws",
+                list(agents.records.values()),
+                {ZEN: _ZenAgent, other: _ZenAgent, "acme.extra.ExtraAgent/ExtraAgent": _ZenAgent},
+                remote_agents=[],
+            )
+        )
+    )
+
+    assert result[other].enabled is False  # in the roster, but turned off by hand
+    assert result["acme.extra.ExtraAgent/ExtraAgent"].enabled is True  # not in it, turned on by hand
+    assert result[ZEN].enabled is True
+
+
+def test_toggling_enabled_in_the_ui_records_an_override(monkeypatch):
+    from naas_abi.apps.nexus.apps.api.app.services.agents.port import AgentUpdateInput
+
+    captured = []
+
+    class _Service:
+        async def get_agent(self, context, agent_id):
+            return _record(agent_id, RESEARCHER.key, provider=REMOTE_PROVIDER, enabled=False)
+
+        async def update_agent(self, context, agent_id, updates):
+            captured.append(updates)
+            return _record(agent_id, RESEARCHER.key, provider=REMOTE_PROVIDER, override=True)
+
+    async def allow(user_id, workspace_id):
+        return "owner"
+
+    monkeypatch.setattr(sync, "require_workspace_access", allow)
+    monkeypatch.setattr(sync, "request_context", lambda user: None)
+
+    asyncio.run(
+        sync.update_agent("r", AgentUpdateInput(enabled=True), SimpleNamespace(id="u-1"), _Service())
+    )
+    asyncio.run(
+        sync.update_agent("r", AgentUpdateInput(name="R"), SimpleNamespace(id="u-1"), _Service())
+    )
+
+    assert (captured[0].enabled, captured[0].enabled_override) == (True, True)
+    assert captured[1].enabled_override is None  # renaming is not a toggle
