@@ -86,3 +86,26 @@ def test_a_custom_api_key_is_kept(tmp_path: Path) -> None:
     env.write_text("ABI_API_KEY=configured-key\n")
 
     assert ensure_api_key(env) == "configured-key"
+
+
+def test_ensure_nats_secret_generates_once_and_keeps_it(tmp_path):
+    from naas_abi_cli.cli.admin_credentials import ensure_nats_secret
+
+    env = tmp_path / ".env"
+    env.write_text("OTHER=1\n")
+
+    first = ensure_nats_secret(env)
+    second = ensure_nats_secret(env)
+
+    assert first == second and len(first) >= 32
+    assert "OTHER=1" in env.read_text()
+    assert f"NATS_JWT_SECRET={first}" in env.read_text()
+
+
+def test_ensure_nats_secret_keeps_an_existing_value(tmp_path):
+    from naas_abi_cli.cli.admin_credentials import ensure_nats_secret
+
+    env = tmp_path / ".env"
+    env.write_text("NATS_JWT_SECRET=" + "k" * 40 + "\n")
+
+    assert ensure_nats_secret(env) == "k" * 40
