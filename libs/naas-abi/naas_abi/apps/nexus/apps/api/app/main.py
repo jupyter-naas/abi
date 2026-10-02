@@ -76,8 +76,18 @@ async def _sync_model_catalog() -> None:
             "✓ Model catalog synced at startup (%d override divergence warning(s))",
             len(warnings),
         )
+        # Settings pages opened while this ran may have cached the old catalog.
+        await asyncio.to_thread(_invalidate_settings_cache)
     except Exception:
         _log.exception("Background model catalog sync failed (non-fatal)")
+
+
+def _invalidate_settings_cache() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import (
+        invalidate_on_startup,
+    )
+
+    invalidate_on_startup()
 
 
 async def _sync_identity_graph() -> None:
@@ -266,6 +276,10 @@ async def _startup(app: FastAPI) -> None:
         await apply_configuration_seeds(getattr(app.state, "secret_service", None))
     finally:
         event_triggered_via.reset(via)
+
+    # An ABI restart clears the settings pages' 24h API cache (after seeds, which
+    # may have changed users, workspaces and organizations).
+    await asyncio.to_thread(_invalidate_settings_cache)
 
     # After seeds, so seeded users/workspaces are in the graph on first boot.
     asyncio.create_task(_sync_identity_graph())
@@ -490,8 +504,8 @@ def _configure_middleware(app: FastAPI) -> None:
         "allow_origins": cors_origins,
         "allow_credentials": True,
         "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        "allow_headers": ["Authorization", "Content-Type", "Accept", "X-Requested-With"],
-        "expose_headers": ["Content-Length", "Content-Range"],
+        "allow_headers": ["Authorization", "Content-Type", "Accept", "X-Requested-With", "X-Nexus-Cache"],
+        "expose_headers": ["Content-Length", "Content-Range", "X-Nexus-Cache"],
     }
     # In local development the web dev server can bind any free port (the allocator bumps
     # to the next port when one is still in TIME_WAIT after a restart), so accept any
@@ -499,6 +513,13 @@ def _configure_middleware(app: FastAPI) -> None:
     if settings.nexus_env == "local" or settings.environment == "development":
         cors_kwargs["allow_origin_regex"] = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
     logger.info(f"[CORS] Configured origins: {cors_origins} (regex: {cors_kwargs.get('allow_origin_regex')})")
+    # Settings pages' 24h API cache. Added before CORS so it sits inside it: cached
+    # answers still go out through CORS and get its headers.
+    from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import (
+        SettingsCacheMiddleware,
+    )
+
+    app.add_middleware(SettingsCacheMiddleware)
     app.add_middleware(CORSMiddleware, **cors_kwargs)
     app.add_middleware(SecurityHeadersMiddleware)
 

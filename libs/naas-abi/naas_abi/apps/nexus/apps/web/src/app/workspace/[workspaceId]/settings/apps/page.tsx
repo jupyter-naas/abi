@@ -2,16 +2,24 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
-import { AppWindow, Globe, Search, X, Tag, ExternalLink } from 'lucide-react';
+import { AppWindow, Globe, Tag, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppsStore, type AppItem } from '@/stores/apps';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  SettingsEmpty,
+  SettingsLoading,
+  SettingsPageHeader,
+  SettingsFilterSelect,
+  SettingsTableToolbar,
+  countLabel,
+  settingsTable,
+} from '@/components/settings/settings-ui';
 
-const CATEGORY_COLORS: Record<string, string> = {
-  application: 'bg-purple-500/10 text-purple-500',
-  alpha: 'bg-amber-500/10 text-amber-600',
-  ai: 'bg-blue-500/10 text-blue-500',
-  domain: 'bg-amber-500/10 text-amber-600',
-  core: 'bg-workspace-accent/10 text-workspace-accent',
+const CATEGORY_BADGE: Record<string, 'primary' | 'warning' | 'neutral'> = {
+  core: 'primary',
+  alpha: 'warning',
 };
 
 function AppLogo({ app }: { app: AppItem }) {
@@ -22,20 +30,20 @@ function AppLogo({ app }: { app: AppItem }) {
       <img
         src={app.avatar_url}
         alt={app.name}
-        className="h-9 w-9 rounded-lg object-cover"
+        className="h-9 w-9 object-cover"
         onError={() => setFailed(true)}
       />
     );
   }
   if (app.icon_emoji) {
     return (
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-xl">
+      <div className="flex h-9 w-9 items-center justify-center bg-muted text-xl">
         {app.icon_emoji}
       </div>
     );
   }
   return (
-    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
+    <div className="flex h-9 w-9 items-center justify-center bg-muted">
       <Globe size={18} className="text-muted-foreground" />
     </div>
   );
@@ -46,6 +54,8 @@ export default function AppsSettingsPage() {
   const workspaceId = params?.workspaceId as string | undefined;
   const [mounted, setMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const { apps, loading, fetchApps, toggleApp } = useAppsStore();
 
@@ -63,106 +73,99 @@ export default function AppsSettingsPage() {
     [apps]
   );
 
+  const categories = useMemo(
+    () => Array.from(new Set(installedApps.map((a) => a.category).filter(Boolean))).sort(),
+    [installedApps]
+  );
+
   const filteredApps = useMemo(() => {
-    const list = installedApps.slice().sort((a, b) => a.name.localeCompare(b.name));
-    if (!searchQuery.trim()) return list;
-    const q = searchQuery.toLowerCase();
-    return list.filter(
-      (a) =>
-        a.name.toLowerCase().includes(q) ||
-        (a.description ?? '').toLowerCase().includes(q)
-    );
-  }, [installedApps, searchQuery]);
+    const q = searchQuery.trim().toLowerCase();
+    return installedApps
+      .filter((a) => {
+        if (categoryFilter !== 'all' && a.category !== categoryFilter) return false;
+        if (statusFilter === 'enabled' && !a.enabled) return false;
+        if (statusFilter === 'disabled' && a.enabled) return false;
+        return !q || a.name.toLowerCase().includes(q) || (a.description ?? '').toLowerCase().includes(q);
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [installedApps, searchQuery, categoryFilter, statusFilter]);
+  const enabledCount = installedApps.filter((a) => a.enabled).length;
 
   if (!mounted) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <p className="text-muted-foreground">Loading apps...</p>
-      </div>
-    );
+    return <SettingsLoading label="Loading apps…" />;
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">Apps</h2>
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-              {filteredApps.length}
-            </span>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Enable or disable the marketplace apps available in this workspace
-          </p>
-        </div>
-      </div>
+      <SettingsPageHeader
+        title="Apps"
+        badge={`${enabledCount} enabled`}
+        description="Enable or disable the marketplace apps available in this workspace"
+      />
 
       {loading && installedApps.length === 0 ? (
-        <div className="flex items-center justify-center rounded-lg border border-dashed py-12 text-muted-foreground text-sm">
-          <AppWindow size={18} className="mr-2 animate-pulse" /> Loading apps...
-        </div>
+        <SettingsLoading label="Loading apps…" />
       ) : installedApps.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-          <AppWindow size={48} className="mb-4 text-muted-foreground/30" />
-          <h3 className="mb-2 font-medium">No apps installed</h3>
-          <p className="text-sm text-muted-foreground">
-            Install modules from the Marketplace to see their apps here.
-          </p>
-        </div>
+        <SettingsEmpty
+          icon={<AppWindow size={40} className="opacity-40" />}
+          title="No apps installed"
+          description="Install modules from the Marketplace to see their apps here."
+        />
       ) : (
-        <div>
-          {/* Search */}
-          <div className="mb-4 relative">
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <input
-              type="text"
-              placeholder="Search apps..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-lg border bg-background pl-10 pr-10 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X size={16} />
-              </button>
-            )}
-          </div>
+        <div className="space-y-4">
+          <SettingsTableToolbar
+            search={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="Search apps..."
+            filters={
+              <>
+                <SettingsFilterSelect
+                  label="Category"
+                  value={categoryFilter}
+                  onChange={setCategoryFilter}
+                  options={[
+                    { value: 'all', label: 'All categories' },
+                    ...categories.map((category) => ({ value: category, label: category })),
+                  ]}
+                  className="capitalize"
+                />
+                <SettingsFilterSelect
+                  label="Status"
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  options={[
+                    { value: 'all', label: 'All statuses' },
+                    { value: 'enabled', label: 'Enabled' },
+                    { value: 'disabled', label: 'Disabled' },
+                  ]}
+                />
+              </>
+            }
+            meta={`${countLabel(filteredApps.length, installedApps.length, 'app')} · ${enabledCount} enabled`}
+          />
 
-          <div className="rounded-lg border overflow-hidden">
-            <table className="w-full">
+          <div className={settingsTable.wrapper}>
+            <table className={settingsTable.table}>
               <thead>
-                <tr className="border-b bg-muted/50 text-left text-sm">
-                  <th className="p-3 font-medium">App</th>
-                  <th className="p-3 font-medium">Category</th>
-                  <th className="p-3 font-medium">Source</th>
-                  <th className="p-3 font-medium w-24">Enabled</th>
+                <tr className={settingsTable.headRow}>
+                  <th className={settingsTable.th}>App</th>
+                  <th className={settingsTable.th}>Category</th>
+                  <th className={settingsTable.th}>Source</th>
+                  <th className={cn(settingsTable.th, 'w-24')}>Enabled</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredApps.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                      {searchQuery
-                        ? `No apps match "${searchQuery}"`
-                        : 'No apps available'}
+                      No apps match the current search and filters
                     </td>
                   </tr>
                 ) : (
                   filteredApps.map((app) => (
-                    <tr
-                      key={app.app_id}
-                      className="border-b transition-colors hover:bg-muted/30"
-                    >
-                      <td className="p-3 align-top">
-                        <div className="flex items-center gap-3 min-h-[3.25rem]">
+                    <tr key={app.app_id} className={settingsTable.row}>
+                      <td className={cn(settingsTable.td, 'align-top')}>
+                        <div className="flex min-h-[3.25rem] items-center gap-3">
                           <AppLogo app={app} />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
@@ -180,47 +183,30 @@ export default function AppsSettingsPage() {
                               )}
                             </div>
                             <p
-                              className="text-xs text-muted-foreground line-clamp-2 min-h-[2rem]"
+                              className="line-clamp-2 min-h-[2rem] text-xs text-muted-foreground"
                               title={app.description || undefined}
                             >
-                              {app.description || ' '}
+                              {app.description || ' '}
                             </p>
                           </div>
                         </div>
                       </td>
-                      <td className="p-3">
-                        <span
-                          className={cn(
-                            'inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium',
-                            CATEGORY_COLORS[app.category] ??
-                              'bg-muted text-muted-foreground'
-                          )}
-                        >
+                      <td className={settingsTable.td}>
+                        <Badge variant={CATEGORY_BADGE[app.category] ?? 'neutral'}>
                           <Tag size={9} />
                           {app.category}
-                        </span>
+                        </Badge>
                       </td>
-                      <td className="p-3">
-                        <span className="text-sm text-muted-foreground truncate">
-                          {app.maintainer || app.module_name || app.module_path}
-                        </span>
+                      <td className={cn(settingsTable.td, 'truncate text-muted-foreground')}>
+                        {app.maintainer || app.module_name || app.module_path}
                       </td>
-                      <td className="p-3">
-                        <button
-                          onClick={() => toggleApp(app.app_id)}
-                          className={cn(
-                            'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-                            app.enabled ? 'bg-primary' : 'bg-muted'
-                          )}
+                      <td className={settingsTable.td}>
+                        <Checkbox
+                          checked={app.enabled}
+                          onCheckedChange={() => toggleApp(app.app_id)}
+                          aria-label={app.enabled ? 'Disable app' : 'Enable app'}
                           title={app.enabled ? 'Disable app' : 'Enable app'}
-                        >
-                          <span
-                            className={cn(
-                              'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-                              app.enabled ? 'translate-x-5' : 'translate-x-0.5'
-                            )}
-                          />
-                        </button>
+                        />
                       </td>
                     </tr>
                   ))

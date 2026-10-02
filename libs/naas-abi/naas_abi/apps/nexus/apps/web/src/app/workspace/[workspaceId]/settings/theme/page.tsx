@@ -12,6 +12,15 @@ import {
   Palette,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  SettingsEmpty,
+  SettingsField,
+  SettingsNotice,
+  SettingsPageHeader,
+  SettingsSection,
+} from '@/components/settings/settings-ui';
 import { getApiUrl } from '@/lib/config';
 import {
   useWorkspaceStore,
@@ -43,6 +52,7 @@ export default function ThemeSettingsPage() {
   const [logoUrl, setLogoUrl] = useState(theme.logoUrl || '');
   const [backgroundImageUrl, setBackgroundImageUrl] = useState(theme.backgroundImageUrl || '');
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Sync local state when workspace changes
@@ -55,11 +65,7 @@ export default function ThemeSettingsPage() {
   }, [workspace]);
 
   if (!workspace) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">No workspace selected</p>
-      </div>
-    );
+    return <SettingsEmpty title="No workspace selected" />;
   }
 
   const handleColorChange = (color: string) => {
@@ -85,17 +91,18 @@ export default function ThemeSettingsPage() {
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    setUploadError(null);
 
     // Validate file type
     const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
     if (!validTypes.includes(file.type)) {
-      alert('Please upload a valid image file (PNG, JPG, GIF, WEBP, or SVG)');
+      setUploadError('Please upload a valid image file (PNG, JPG, GIF, WEBP, or SVG)');
       return;
     }
 
     // Validate file size (5MB max)
     if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB');
+      setUploadError('File size must be less than 5MB');
       return;
     }
 
@@ -121,11 +128,11 @@ export default function ThemeSettingsPage() {
         updateWorkspaceTheme({ logoUrl: fullUrl });
       } else {
         const error = await response.json();
-        alert(`Upload failed: ${error.detail || 'Unknown error'}`);
+        setUploadError(`Upload failed: ${error.detail || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Upload error:', error);
-      alert('Failed to upload logo');
+      setUploadError('Failed to upload logo');
     } finally {
       setUploading(false);
       // Reset input
@@ -141,37 +148,22 @@ export default function ThemeSettingsPage() {
     setLogoUrl('');
   };
 
-  return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-semibold">Workspace Theme</h2>
-        <p className="mt-1 text-muted-foreground">
-          Customize the look and feel of your workspace
-        </p>
-      </div>
+  const selectedRing = 'ring-2 ring-foreground ring-offset-2 ring-offset-background';
+  const isCustomColor = !PRESET_COLORS.some((c) => c.value === theme.primaryColor);
 
-      {/* Preview */}
-      <div className="rounded-xl border bg-card p-6">
-        <h3 className="mb-4 text-sm font-medium text-muted-foreground uppercase tracking-wider">
-          Preview
-        </h3>
-        <div
-          className="flex items-center gap-4 rounded-lg p-4"
-          style={{ backgroundColor: theme.sidebarColor || '#111111' }}
-        >
-          {/* Logo preview */}
+  return (
+    <div className="space-y-6">
+      <SettingsPageHeader title="Workspace Theme" description="Customize the look and feel of your workspace" />
+
+      <SettingsSection title="Preview">
+        <div className="flex items-center gap-4 p-4" style={{ backgroundColor: theme.sidebarColor || '#111111' }}>
           <div
-            className="flex h-12 w-12 items-center justify-center rounded-xl text-white text-2xl overflow-hidden"
+            className="flex h-12 w-12 items-center justify-center overflow-hidden text-2xl text-white"
             style={{ backgroundColor: theme.logoUrl ? 'transparent' : theme.primaryColor }}
           >
             {theme.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={theme.logoUrl}
-                alt="Logo"
-                className="h-full w-full object-cover"
-              />
+              <img src={theme.logoUrl} alt="Logo" className="h-full w-full object-cover" />
             ) : (
               theme.logoEmoji || workspace.name.charAt(0)
             )}
@@ -181,43 +173,35 @@ export default function ThemeSettingsPage() {
             <p className="text-sm text-gray-400">{workspace.description}</p>
           </div>
         </div>
-      </div>
+      </SettingsSection>
 
-      {/* Logo Settings */}
-      <div className="rounded-xl border bg-card p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <ImageIcon size={18} className="text-muted-foreground" />
-          <h3 className="text-lg font-medium">Logo</h3>
-        </div>
-
-        <div className="space-y-4">
-          {/* Emoji selector */}
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Emoji Icon
-            </label>
+      <SettingsSection
+        title={
+          <span className="flex items-center gap-2">
+            <ImageIcon size={16} className="text-muted-foreground" />
+            Logo
+          </span>
+        }
+      >
+        <div className="space-y-5">
+          <SettingsField label="Emoji Icon">
             <div className="relative">
-              <button
-                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                className="flex items-center gap-3 rounded-lg border bg-background px-4 py-3 hover:bg-muted transition-colors"
-              >
+              <Button variant="secondary" className="h-12 gap-3 px-4" onClick={() => setShowEmojiPicker(!showEmojiPicker)}>
                 <span className="text-2xl">{theme.logoEmoji || '📁'}</span>
-                <span className="text-sm text-muted-foreground">
-                  Click to change emoji
-                </span>
-                <Smile size={16} className="ml-auto text-muted-foreground" />
-              </button>
+                <span className="font-normal text-muted-foreground">Click to change emoji</span>
+                <Smile size={16} className="ml-2 text-muted-foreground" />
+              </Button>
 
               {showEmojiPicker && (
-                <div className="absolute left-0 top-full z-50 mt-2 w-80 rounded-lg border bg-card p-4 shadow-lg">
-                  <div className="grid grid-cols-8 gap-2">
+                <div className="absolute left-0 top-full z-50 mt-2 w-80 border border-border bg-popover p-3 shadow-lg">
+                  <div className="grid grid-cols-8 gap-1">
                     {EMOJI_OPTIONS.map((emoji) => (
                       <button
                         key={emoji}
+                        type="button"
                         onClick={() => handleEmojiSelect(emoji)}
                         className={cn(
-                          'flex h-10 w-10 items-center justify-center rounded-lg text-xl transition-colors',
-                          'hover:bg-primary/10',
+                          'flex h-9 w-9 items-center justify-center text-xl transition-colors hover:bg-primary/10',
                           theme.logoEmoji === emoji && 'bg-primary/20 ring-2 ring-primary'
                         )}
                       >
@@ -228,208 +212,159 @@ export default function ThemeSettingsPage() {
                 </div>
               )}
             </div>
-          </div>
+          </SettingsField>
 
-          {/* Logo URL */}
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Logo Image
-            </label>
-            
-            {/* Upload button */}
-            <div className="mb-3">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="flex items-center gap-2 rounded-lg border bg-background px-4 py-2 text-sm hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {uploading ? (
-                  <>
-                    <RefreshCw size={16} className="animate-spin" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Upload size={16} />
-                    Upload Logo
-                  </>
-                )}
-              </button>
-              <p className="mt-1 text-xs text-muted-foreground">
-                PNG, JPG, GIF, WEBP, or SVG (max 5MB)
-              </p>
-            </div>
-
-            {/* Or URL input */}
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">
-                Or enter a URL
-              </label>
-              <div className="flex gap-2">
+          <SettingsField label="Logo Image" hint="The logo will be used instead of the emoji icon">
+            <div className="space-y-3">
+              <div>
                 <input
-                  type="url"
-                  value={logoUrl}
-                  onChange={(e) => handleLogoUrlChange(e.target.value)}
-                  placeholder="https://example.com/logo.png"
-                  className="flex-1 rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml"
+                  onChange={handleFileUpload}
+                  className="hidden"
                 />
-                {logoUrl && (
-                  <button
-                    onClick={() => handleLogoUrlChange('')}
-                    className="rounded-lg border px-3 py-2 hover:bg-muted"
-                  >
-                    <X size={16} />
-                  </button>
-                )}
+                <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                  {uploading ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={16} />
+                      Upload Logo
+                    </>
+                  )}
+                </Button>
+                <p className="mt-1 text-xs text-muted-foreground">PNG, JPG, GIF, WEBP, or SVG (max 5MB)</p>
+              </div>
+              {uploadError && <SettingsNotice tone="error">{uploadError}</SettingsNotice>}
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted-foreground">Or enter a URL</p>
+                <div className="flex gap-2">
+                  <Input
+                    type="url"
+                    value={logoUrl}
+                    onChange={(e) => handleLogoUrlChange(e.target.value)}
+                    placeholder="https://example.com/logo.png"
+                    className="flex-1"
+                  />
+                  {logoUrl && (
+                    <Button variant="secondary" size="icon" className="h-9 w-9" onClick={() => handleLogoUrlChange('')} title="Clear">
+                      <X size={16} />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
-            
-            <p className="mt-2 text-xs text-muted-foreground">
-              The logo will be used instead of the emoji icon
-            </p>
-          </div>
+          </SettingsField>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Desktop wallpaper
-            </label>
+          <SettingsField label="Desktop wallpaper" hint="URL of the image used as the Home canvas background">
             <div className="flex gap-2">
-              <input
+              <Input
                 type="url"
                 value={backgroundImageUrl}
                 onChange={(e) => handleBackgroundImageUrlChange(e.target.value)}
                 placeholder="https://example.com/hero.jpg"
-                className="flex-1 rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                className="flex-1"
               />
               {backgroundImageUrl && (
-                <button
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="h-9 w-9"
                   onClick={() => handleBackgroundImageUrlChange('')}
-                  className="rounded-lg border px-3 py-2 hover:bg-muted"
+                  title="Clear"
                 >
                   <X size={16} />
-                </button>
+                </Button>
               )}
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              URL of the image used as the Home canvas background
-            </p>
-          </div>
+          </SettingsField>
         </div>
-      </div>
+      </SettingsSection>
 
-      {/* Color Settings */}
-      <div className="rounded-xl border bg-card p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Palette size={18} className="text-muted-foreground" />
-          <h3 className="text-lg font-medium">Colors</h3>
-        </div>
-
+      <SettingsSection
+        title={
+          <span className="flex items-center gap-2">
+            <Palette size={16} className="text-muted-foreground" />
+            Colors
+          </span>
+        }
+      >
         <div className="space-y-6">
-          {/* Primary Color */}
-          <div>
-            <label className="block text-sm font-medium mb-3">
-              Primary Color
-            </label>
+          <SettingsField label="Primary Color" hint={`Current: ${theme.primaryColor}`}>
             <div className="flex flex-wrap gap-3">
               {PRESET_COLORS.map((color) => (
                 <button
                   key={color.value}
+                  type="button"
                   onClick={() => handleColorChange(color.value)}
                   className={cn(
-                    'group relative flex h-12 w-12 items-center justify-center rounded-xl transition-transform hover:scale-110',
-                    theme.primaryColor === color.value && 'ring-2 ring-white ring-offset-2 ring-offset-background'
+                    'flex h-10 w-10 items-center justify-center transition-transform hover:scale-110',
+                    theme.primaryColor === color.value && selectedRing
                   )}
                   style={{ backgroundColor: color.value }}
                   title={color.name}
                 >
-                  {theme.primaryColor === color.value && (
-                    <Check size={20} className="text-white" />
-                  )}
+                  {theme.primaryColor === color.value && <Check size={18} className="text-white" />}
                 </button>
               ))}
 
-              {/* Custom color picker */}
               <div className="relative">
                 <input
                   type="color"
                   value={customColor}
                   onChange={(e) => handleColorChange(e.target.value)}
-                  className="absolute inset-0 h-12 w-12 cursor-pointer opacity-0"
+                  className="absolute inset-0 h-10 w-10 cursor-pointer opacity-0"
+                  title="Custom color"
                 />
                 <div
                   className={cn(
-                    'flex h-12 w-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/50 transition-colors',
-                    !PRESET_COLORS.some((c) => c.value === theme.primaryColor) &&
-                      'ring-2 ring-white ring-offset-2 ring-offset-background'
+                    'flex h-10 w-10 items-center justify-center border-2 border-dashed border-muted-foreground/50',
+                    isCustomColor && selectedRing
                   )}
-                  style={{
-                    backgroundColor: !PRESET_COLORS.some((c) => c.value === theme.primaryColor)
-                      ? theme.primaryColor
-                      : 'transparent',
-                  }}
+                  style={{ backgroundColor: isCustomColor ? theme.primaryColor : 'transparent' }}
                 >
-                  {PRESET_COLORS.some((c) => c.value === theme.primaryColor) ? (
-                    <Brush size={16} className="text-muted-foreground" />
+                  {isCustomColor ? (
+                    <Check size={18} className="text-white" />
                   ) : (
-                    <Check size={20} className="text-white" />
+                    <Brush size={16} className="text-muted-foreground" />
                   )}
                 </div>
               </div>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Current: {theme.primaryColor}
-            </p>
-          </div>
+          </SettingsField>
 
-          {/* Accent Color */}
-          <div>
-            <label className="block text-sm font-medium mb-3">
-              Accent Color
-            </label>
+          <SettingsField label="Accent Color" hint={`Current: ${theme.accentColor || 'Not set'}`}>
             <div className="flex flex-wrap gap-3">
               {PRESET_COLORS.map((color) => (
                 <button
                   key={color.value}
+                  type="button"
                   onClick={() => updateWorkspaceTheme({ accentColor: color.value })}
                   className={cn(
-                    'group relative flex h-10 w-10 items-center justify-center rounded-lg transition-transform hover:scale-110',
-                    theme.accentColor === color.value && 'ring-2 ring-white ring-offset-2 ring-offset-background'
+                    'flex h-10 w-10 items-center justify-center transition-transform hover:scale-110',
+                    theme.accentColor === color.value && selectedRing
                   )}
                   style={{ backgroundColor: color.value }}
                   title={color.name}
                 >
-                  {theme.accentColor === color.value && (
-                    <Check size={16} className="text-white" />
-                  )}
+                  {theme.accentColor === color.value && <Check size={16} className="text-white" />}
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Current: {theme.accentColor || 'Not set'}
-            </p>
-          </div>
+          </SettingsField>
         </div>
-      </div>
+      </SettingsSection>
 
-      {/* Actions */}
-      <div className="flex items-center justify-between border-t pt-6">
-        <button
-          onClick={handleResetTheme}
-          className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm hover:bg-muted transition-colors"
-        >
+      <div className="flex items-center justify-between border-t border-border pt-6">
+        <Button variant="secondary" onClick={handleResetTheme}>
           <RefreshCw size={16} />
           Reset to Default
-        </button>
-        <p className="text-sm text-muted-foreground">
-          Changes are saved automatically
-        </p>
+        </Button>
+        <p className="text-sm text-muted-foreground">Changes are saved automatically</p>
       </div>
     </div>
   );

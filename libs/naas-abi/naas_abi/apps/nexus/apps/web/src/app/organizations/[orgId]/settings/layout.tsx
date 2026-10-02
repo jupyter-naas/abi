@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Building2, ChevronRight } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-is-mobile';
+import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { useWorkspaceStore } from '@/stores/workspace';
 import {
   orgSettingsIndexPath,
@@ -58,6 +59,11 @@ export default function OrganizationSettingsLayout({
   const router = useRouter();
   const params = useParams();
   const orgId = params.orgId as string;
+  const sectionHrefs = useMemo(
+    () => (orgId ? orgSettingsNav.map((item) => orgSettingsSectionPath(orgId, item.slug)) : []),
+    [orgId]
+  );
+  useDevRouteWarmup(sectionHrefs);
   const isMobile = useIsMobile();
   const { isDetail, sectionLabel } = parseOrgSettingsRoute(pathname);
   const showMobileList = isMobile && !isDetail;
@@ -191,7 +197,9 @@ export default function OrganizationSettingsLayout({
 
         {showMain && (
           <div className="org-settings-layout-main">
-            <div className="org-settings-layout-content">{children}</div>
+            <div className="org-settings-layout-content">
+              {children}
+            </div>
           </div>
         )}
       </div>

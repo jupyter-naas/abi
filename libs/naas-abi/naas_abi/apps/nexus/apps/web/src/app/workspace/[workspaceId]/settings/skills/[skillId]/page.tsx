@@ -3,6 +3,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input, Select, Textarea } from '@/components/ui/input';
+import {
+  SettingsField,
+  SettingsLoading,
+  SettingsNotice,
+  SettingsPageHeader,
+  SettingsSection,
+} from '@/components/settings/settings-ui';
 import { useSkillsStore, type SkillScope } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
 
@@ -74,116 +84,86 @@ export default function SkillEditorPage() {
   };
 
   if (!skill) {
-    return (
-      <div className="flex items-center gap-2 p-8 text-muted-foreground">
-        <Loader2 size={16} className="animate-spin" />
-        Loading skill...
-      </div>
-    );
+    return <SettingsLoading label="Loading skill…" />;
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
+      <SettingsPageHeader
+        leading={
+          <Button
+            variant="secondary"
+            size="icon"
+            className="h-9 w-9"
             onClick={() => router.push(`/workspace/${workspaceId}/settings/skills`)}
-            className="rounded-lg border p-2 hover:bg-muted"
             title="Back to skills"
           >
             <ArrowLeft size={16} />
-          </button>
-          <div>
-            <h2 className="text-lg font-semibold">{skill.name}</h2>
-            <p className="font-mono text-sm text-workspace-accent">/{skill.slug}</p>
-          </div>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={saving || !canModify}
-          className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          {saving && <Loader2 size={14} className="animate-spin" />}
-          {saved ? 'Saved' : 'Save'}
-        </button>
-      </div>
+          </Button>
+        }
+        title={skill.name}
+        description={<span className="font-mono text-primary">/{skill.slug}</span>}
+        actions={
+          <Button onClick={handleSave} disabled={saving || !canModify}>
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            {saved ? 'Saved' : 'Save'}
+          </Button>
+        }
+      />
 
-      {!canModify && (
-        <p className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
-          Only the creator can modify this private skill.
-        </p>
-      )}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {!canModify && <SettingsNotice>Only the creator can modify this private skill.</SettingsNotice>}
+      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
 
-      <div className="grid gap-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium">Name</label>
-            <input
+      <SettingsSection>
+        <div className="grid gap-4">
+          <div className="grid grid-cols-2 gap-4">
+            <SettingsField label="Name">
+              <Input type="text" value={name} onChange={(e) => setName(e.target.value)} disabled={!canModify} />
+            </SettingsField>
+            <SettingsField label="Slug">
+              <Input
+                type="text"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                disabled={!canModify}
+                className="font-mono"
+              />
+            </SettingsField>
+          </div>
+          <SettingsField label="Description">
+            <Input
               type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
               disabled={!canModify}
-              className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
             />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Slug</label>
-            <input
-              type="text"
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              disabled={!canModify}
-              className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium">Description</label>
-          <input
-            type="text"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            disabled={!canModify}
-            className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium">Prompt</label>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            disabled={!canModify}
-            rows={12}
-            className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
-          />
-        </div>
-        <div className="flex items-center gap-6">
-          <div>
-            <label className="mb-1 block text-sm font-medium">Visibility</label>
-            <select
-              value={scope}
-              onChange={(e) => setScope(e.target.value as SkillScope)}
-              disabled={!canModify}
-              className="rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
-            >
-              <option value="user">Private (only me)</option>
-              <option value="workspace">Workspace</option>
-              <option value="organization">Organization</option>
-            </select>
-          </div>
-          <label className="flex items-center gap-2 pt-5 text-sm">
-            <input
-              type="checkbox"
+          </SettingsField>
+          <SettingsField label="Prompt">
+            <Textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} disabled={!canModify} rows={12} />
+          </SettingsField>
+          <div className="flex items-end gap-6">
+            <SettingsField label="Visibility">
+              <Select
+                value={scope}
+                onChange={(e) => setScope(e.target.value as SkillScope)}
+                disabled={!canModify}
+                className="w-auto"
+              >
+                <option value="user">Private (only me)</option>
+                <option value="workspace">Workspace</option>
+                <option value="organization">Organization</option>
+              </Select>
+            </SettingsField>
+            <Checkbox
               checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
+              onCheckedChange={setEnabled}
               disabled={!canModify}
+              label="Enabled"
+              className="h-9"
             />
-            Enabled
-          </label>
+          </div>
         </div>
-      </div>
+      </SettingsSection>
     </div>
   );
 }

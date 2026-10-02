@@ -15,6 +15,14 @@ import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Play, Plus, RotateCcw, Save
 import { TopicIcon, TOPIC_ICONS } from '@/components/search/topic-icon';
 import { useConfirm, usePrompt } from '@/components/ui/dialogs';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Checkbox, radioClass } from '@/components/ui/checkbox';
+import { fieldClass } from '@/components/ui/input';
+import { SettingsReloadButton } from '@/components/settings/settings-reload';
+import {
+  SettingsEmpty, SettingsFilterSelect, SettingsLoading, SettingsNotice, SettingsPageHeader, SettingsTableToolbar, countLabel, settingsTable,
+} from '@/components/settings/settings-ui';
 import {
   blankTopic, searchHref,
   type PreviewResult, type QueryRole, type RoleContract, type SearchTopic, type TopicSection,
@@ -57,6 +65,9 @@ function SearchSettings() {
 
   const [toggling, setToggling] = useState<string | null>(null);
   const [tableError, setTableError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [groupFilter, setGroupFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   // Features and web engines: one switch each for the whole workspace.
   const toggleScope = async (scopeId: string, enabled: boolean) => {
     setToggling(scopeId); setTableError(null);
@@ -94,13 +105,16 @@ function SearchSettings() {
   if (selectedId) {
     return (
       <div className="space-y-6">
-        <button type="button" onClick={() => select(null)} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft size={14} /> All topics
-        </button>
+        <div className="flex items-center justify-between gap-2">
+          <Button variant="secondary" onClick={() => select(null)}>
+            <ArrowLeft size={16} /> All topics
+          </Button>
+          <SettingsReloadButton />
+        </div>
         {loading && !selected ? (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 size={14} className="animate-spin" /> Loading…</p>
+          <SettingsLoading />
         ) : !selected ? (
-          <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">There is no topic “{selectedId}” in this workspace.</p>
+          <SettingsEmpty title={<>There is no topic “{selectedId}” in this workspace.</>} />
         ) : (
           <TopicEditor
             key={`${selected.id}:${selected.source}`}
@@ -120,59 +134,110 @@ function SearchSettings() {
     );
   }
 
+  // One list for the table: topics, Nexus features and web engines, each with what the filters need.
+  const query = searchQuery.trim().toLowerCase();
+  const matches = (group: string, on: boolean, ...texts: string[]) =>
+    (groupFilter === 'all' || groupFilter === group) &&
+    (statusFilter === 'all' || (statusFilter === 'enabled') === on) &&
+    (!query || texts.some(text => text.toLowerCase().includes(query)));
+  const featureRows = FEATURE_SCOPES.map(scope => {
+    const available = featureOn(scope.feature);
+    return { scope, available, on: available && !disabledScopes.includes(scope.id) };
+  });
+  const engineRows = WEB_ENGINES.map(engine => {
+    const id = webEngineScopeId(engine.id);
+    return { engine, id, on: !disabledScopes.includes(id) };
+  });
+  const shownTopics = topics.filter(t => matches('Custom', t.enabled, t.plural_label, t.id));
+  const shownFeatures = featureRows.filter(r => matches('Workspace', r.on, r.scope.label, r.scope.id, r.scope.description));
+  const shownEngines = engineRows.filter(r => matches('Web', r.on, r.engine.label, r.id, r.engine.description));
+  const totalRows = topics.length + featureRows.length + engineRows.length;
+  const shownRows = shownTopics.length + shownFeatures.length + shownEngines.length;
+  const enabledRows = topics.filter(t => t.enabled).length + featureRows.filter(r => r.on).length + engineRows.filter(r => r.on).length;
+
   return (
     <div className="space-y-6">
       {prompt.dialog}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">Search</h2>
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">{topics.length + FEATURE_SCOPES.length + WEB_ENGINES.length}</span>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            What the search page of this workspace can look into. A disabled entry disappears from search for every
-            member. Topics read every graph this workspace can read, unless a topic is limited to some of them.
-          </p>
-        </div>
-        {canEdit && (
-          <button onClick={() => void createTopic()} className="flex shrink-0 items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-            <Plus size={16} /> New topic
-          </button>
-        )}
-      </div>
+      <SettingsPageHeader
+        title="Search"
+        badge={`${enabledRows} enabled`}
+        description="What the search page of this workspace can look into. A disabled entry disappears from search for every member. Topics read every graph this workspace can read, unless a topic is limited to some of them."
+        actions={
+          canEdit && (
+            <Button onClick={() => void createTopic()}>
+              <Plus size={16} /> New topic
+            </Button>
+          )
+        }
+      />
 
-      {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-500">{error}</div>}
-      {tableError && <div role="alert" className="whitespace-pre-line rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-500">{tableError}</div>}
-      {!canEdit && !loading && <p className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">Only workspace owners and admins can change search topics.</p>}
+      {error && <SettingsNotice tone="error"><span role="alert">{error}</span></SettingsNotice>}
+      {tableError && <SettingsNotice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></SettingsNotice>}
+      {!canEdit && !loading && <SettingsNotice>Only workspace owners and admins can change search topics.</SettingsNotice>}
 
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
-            <tr>
-              <th className="p-3 font-medium">Name</th>
-              <th className="p-3 font-medium">Group</th>
-              <th className="p-3 font-medium">Type</th>
-              <th className="p-3 text-right font-medium">Enabled</th>
+      <SettingsTableToolbar
+        search={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search topics, features and engines..."
+        filters={
+          <>
+            <SettingsFilterSelect
+              label="Group"
+              value={groupFilter}
+              onChange={setGroupFilter}
+              options={[
+                { value: 'all', label: 'All groups' },
+                { value: 'Custom', label: 'Custom' },
+                { value: 'Workspace', label: 'Workspace' },
+                { value: 'Web', label: 'Web' },
+              ]}
+            />
+            <SettingsFilterSelect
+              label="Status"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: 'all', label: 'All statuses' },
+                { value: 'enabled', label: 'Enabled' },
+                { value: 'disabled', label: 'Disabled' },
+              ]}
+            />
+          </>
+        }
+        meta={`${countLabel(shownRows, totalRows, 'entry', 'entries')} · ${enabledRows} enabled · ${topics.length} topic${topics.length === 1 ? '' : 's'}`}
+      />
+
+      <div className={settingsTable.wrapper}>
+        <table className={settingsTable.table}>
+          <thead>
+            <tr className={settingsTable.headRow}>
+              <th className={settingsTable.th}>Name</th>
+              <th className={settingsTable.th}>Group</th>
+              <th className={settingsTable.th}>Type</th>
+              <th className={cn(settingsTable.th, 'w-24')}>Enabled</th>
             </tr>
           </thead>
           <tbody>
             {loading && !topics.length && (
-              <tr><td colSpan={4} className="p-3 text-muted-foreground"><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
+              <tr><td colSpan={4} className={cn(settingsTable.td, 'text-muted-foreground')}><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
             )}
-            {topics.map(t => (
-              <tr key={t.id} onClick={() => select(t.id)} className="cursor-pointer border-b transition-colors last:border-0 hover:bg-muted/30">
-                <td className="p-3">
+            {!loading && shownRows === 0 && (
+              <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">No entries match the current search and filters</td></tr>
+            )}
+            {shownTopics.map(t => (
+              <tr key={t.id} onClick={() => select(t.id)} className={cn(settingsTable.row, 'cursor-pointer')}>
+                <td className={settingsTable.td}>
                   <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted"><TopicIcon name={t.icon} /></div>
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-muted"><TopicIcon name={t.icon} /></div>
                     <div className="min-w-0">
                       <div className={cn('font-medium', !t.enabled && 'text-muted-foreground')}>{t.plural_label}</div>
                       <div className="font-mono text-xs text-muted-foreground">{t.id}</div>
                     </div>
                   </div>
                 </td>
-                <td className="p-3"><GroupBadge group="Custom" /></td>
-                <td className="p-3 text-muted-foreground">{drafts.has(t.id) ? 'Draft' : SOURCE_LABEL[t.source]}</td>
-                <td className="p-3 text-right" onClick={e => e.stopPropagation()}>
+                <td className={settingsTable.td}><GroupBadge group="Custom" /></td>
+                <td className={cn(settingsTable.td, 'text-muted-foreground')}>{drafts.has(t.id) ? 'Draft' : SOURCE_LABEL[t.source]}</td>
+                <td className={settingsTable.td} onClick={e => e.stopPropagation()}>
                   <EnabledSwitch
                     label={t.plural_label}
                     on={t.enabled}
@@ -184,9 +249,7 @@ function SearchSettings() {
               </tr>
             ))}
 
-            {FEATURE_SCOPES.map(scope => {
-              const available = featureOn(scope.feature);
-              const on = available && !disabledScopes.includes(scope.id);
+            {shownFeatures.map(({ scope, available, on }) => {
               return (
                 <ScopeRow key={scope.id} icon={scope.icon} name={scope.label} id={scope.id} group="Workspace" type="Nexus feature"
                   description={available ? scope.description : `${scope.description} — the ${scope.label} feature is off in this workspace`}>
@@ -196,9 +259,7 @@ function SearchSettings() {
               );
             })}
 
-            {WEB_ENGINES.map(engine => {
-              const id = webEngineScopeId(engine.id);
-              const on = !disabledScopes.includes(id);
+            {shownEngines.map(({ engine, id, on }) => {
               return (
                 <ScopeRow key={id} icon={engine.icon} name={engine.label} id={id} group="Web" type="Web engine" description={`${engine.description} — the query leaves Nexus`}>
                   <EnabledSwitch label={engine.label} on={on} busy={toggling === id}
@@ -214,7 +275,7 @@ function SearchSettings() {
 }
 
 function GroupBadge({ group }: { group: 'Custom' | 'Workspace' | 'Web' }) {
-  return <span className="bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{group}</span>;
+  return <Badge variant="outline">{group}</Badge>;
 }
 
 /** A feature or web-engine row: nothing to edit but whether search may use it. */
@@ -222,19 +283,19 @@ function ScopeRow({ icon, name, id, group, type, description, children }: {
   icon: string; name: string; id: string; group: 'Workspace' | 'Web'; type: string; description: string; children: React.ReactNode;
 }) {
   return (
-    <tr className="border-b last:border-0">
-      <td className="p-3">
+    <tr className={settingsTable.row}>
+      <td className={settingsTable.td}>
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted"><TopicIcon name={icon} /></div>
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-muted"><TopicIcon name={icon} /></div>
           <div className="min-w-0">
             <div className="font-medium">{name}</div>
             <div className="truncate text-xs text-muted-foreground" title={description}>{description}</div>
           </div>
         </div>
       </td>
-      <td className="p-3"><GroupBadge group={group} /></td>
-      <td className="p-3 text-muted-foreground">{type}</td>
-      <td className="p-3 text-right"><span className="sr-only">{id}</span>{children}</td>
+      <td className={settingsTable.td}><GroupBadge group={group} /></td>
+      <td className={cn(settingsTable.td, 'text-muted-foreground')}>{type}</td>
+      <td className={settingsTable.td}><span className="sr-only">{id}</span>{children}</td>
     </tr>
   );
 }
@@ -262,19 +323,10 @@ function useWorkspaceGraphs(workspaceId: string): WorkspaceGraph[] | null {
 
 function EnabledSwitch({ label, on, busy, disabled, onChange }: { label: string; on: boolean; busy?: boolean; disabled?: boolean; onChange: () => void }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={`${label} enabled`}
-      disabled={disabled || busy}
-      onClick={onChange}
-      className={cn('relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-50',
-        on ? 'bg-workspace-accent' : 'bg-muted-foreground/30')}
-    >
-      <span className={cn('absolute h-4 w-4 rounded-full bg-white shadow transition-all', on ? 'left-[18px]' : 'left-0.5')} />
-      {busy && <Loader2 size={10} className="absolute left-1/2 -translate-x-1/2 animate-spin text-white" />}
-    </button>
+    <span className="inline-flex items-center gap-2">
+      <Checkbox checked={on} disabled={disabled || busy} onCheckedChange={onChange} aria-label={`${label} enabled`} />
+      {busy && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
+    </span>
   );
 }
 
@@ -332,7 +384,7 @@ function TopicEditor({ workspaceId, topic, topics, graphs, contract, canEdit, is
   };
 
   const disabled = !canEdit;
-  const input = 'w-full rounded-md border bg-background px-2 py-1.5 text-sm outline-none focus:border-[color:var(--workspace-accent,#22c55e)] disabled:opacity-70';
+  const input = cn(fieldClass, 'h-9');
 
   return (
     <div className="min-w-0 space-y-5">
@@ -341,28 +393,29 @@ function TopicEditor({ workspaceId, topic, topics, graphs, contract, canEdit, is
         <div className="flex items-center gap-2">
           <TopicIcon name={draft.icon} size={18} />
           <h3 className="text-base font-semibold">{draft.plural_label}</h3>
-          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px]">{SOURCE_LABEL[topic.source]}</span>
-          <a href={searchHref(workspaceId, { scope: topic.id })} className="inline-flex items-center gap-1 text-xs text-workspace-accent hover:underline"><Search size={12} /> Open in search</a>
+          <Badge>{SOURCE_LABEL[topic.source]}</Badge>
+          <a href={searchHref(workspaceId, { scope: topic.id })} className="inline-flex items-center gap-1 text-xs text-primary hover:underline"><Search size={12} /> Open in search</a>
         </div>
         {canEdit && (
           <div className="flex items-center gap-2">
             {topic.source !== 'builtin' && (
-              <button onClick={() => void reset()} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
+              <Button variant={topic.source === 'override' ? 'secondary' : 'destructive-ghost'} onClick={() => void reset()}>
                 {topic.source === 'override' ? <><RotateCcw size={14} /> Reset</> : <><Trash2 size={14} /> Delete</>}
-              </button>
+              </Button>
             )}
-            <button onClick={() => void save()} disabled={saving || (!dirty && !isDraft)}
-              className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+            <Button onClick={() => void save()} disabled={saving || (!dirty && !isDraft)}>
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
-            </button>
+            </Button>
           </div>
         )}
       </div>
-      {savedAt && !dirty && <p className="text-xs text-green-600" role="status">Saved.</p>}
+      {savedAt && !dirty && <SettingsNotice tone="success"><span role="status">Saved.</span></SettingsNotice>}
       {errors.length > 0 && (
-        <ul role="alert" className="list-disc space-y-0.5 rounded-lg border border-red-500/20 bg-red-500/10 p-3 pl-7 text-sm text-red-500">
-          {errors.map((e, i) => <li key={i}>{e}</li>)}
-        </ul>
+        <SettingsNotice tone="error">
+          <ul role="alert" className="list-disc space-y-0.5 pl-4">
+            {errors.map((e, i) => <li key={i}>{e}</li>)}
+          </ul>
+        </SettingsNotice>
       )}
 
       <fieldset disabled={disabled} className="grid gap-3 sm:grid-cols-2">
@@ -379,46 +432,45 @@ function TopicEditor({ workspaceId, topic, topics, graphs, contract, canEdit, is
         </Field>
         <div className="flex items-end gap-4">
           <Field label="Order"><input type="number" className={input} value={draft.order} onChange={e => set('order', Number(e.target.value) || 0)} /></Field>
-          <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" checked={draft.enabled} onChange={e => set('enabled', e.target.checked)} /> Enabled</label>
+          <Checkbox className="h-9" label="Enabled" checked={draft.enabled} onCheckedChange={v => set('enabled', v)} />
         </div>
       </fieldset>
 
       <fieldset disabled={disabled} className="space-y-2">
-        <legend className="mb-1 text-xs font-medium text-muted-foreground">Graphs</legend>
+        <legend className="mb-1 text-sm font-medium text-foreground">Graphs</legend>
         <label className="flex items-center gap-2 text-sm">
-          <input type="radio" checked={draft.graphs.length === 0} onChange={() => set('graphs', [])} />
+          <input type="radio" className={radioClass} checked={draft.graphs.length === 0} onChange={() => set('graphs', [])} />
           All graphs this workspace can read <span className="text-xs text-muted-foreground">(default)</span>
         </label>
         <label className="flex items-center gap-2 text-sm">
-          <input type="radio" checked={draft.graphs.length > 0}
+          <input type="radio" className={radioClass} checked={draft.graphs.length > 0}
             onChange={() => { if (!draft.graphs.length && graphs?.length) set('graphs', [graphs[0]!.uri]); }}
             disabled={!graphs?.length} />
           Only these graphs
         </label>
         {draft.graphs.length > 0 && (
-          <div className="ml-6 max-h-56 space-y-1 overflow-auto rounded-md border p-2">
+          <div className="ml-6 max-h-56 space-y-1 overflow-auto border border-border p-2">
             {(graphs || []).map(g => (
-              <label key={g.uri} className="flex items-center gap-2 text-sm" title={g.uri}>
-                <input
-                  type="checkbox"
+              <label key={g.uri} className="flex cursor-pointer items-center gap-2 text-sm" title={g.uri}>
+                <Checkbox
                   checked={draft.graphs.includes(g.uri)}
-                  onChange={e => {
-                    const next = e.target.checked ? [...draft.graphs, g.uri] : draft.graphs.filter(u => u !== g.uri);
+                  onCheckedChange={checked => {
+                    const next = checked ? [...draft.graphs, g.uri] : draft.graphs.filter(u => u !== g.uri);
                     if (next.length) set('graphs', next);
                   }}
                 />
                 <span className="truncate">{g.label}</span>
-                <span className="truncate font-mono text-[10px] text-muted-foreground">{g.uri}</span>
+                <span className="truncate font-mono text-micro text-muted-foreground">{g.uri}</span>
               </label>
             ))}
             {draft.graphs.filter(u => !graphs?.some(g => g.uri === u)).map(u => (
-              <p key={u} className="text-xs text-amber-600">{u} is not readable in this workspace: the topic skips it here.</p>
+              <p key={u} className="text-xs text-amber-600 dark:text-amber-400">{u} is not readable in this workspace: the topic skips it here.</p>
             ))}
           </div>
         )}
       </fieldset>
 
-      <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+      <div className="border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
         <p className="mb-1 font-medium text-foreground">How queries are filled in</p>
         <p>
           <code>{'{{ q }}'}</code> is the text typed in the search box (write it inside quotes), <code>{'{{ uri }}'}</code> the selected
@@ -441,12 +493,12 @@ function TopicEditor({ workspaceId, topic, topics, graphs, contract, canEdit, is
           <h4 className="text-sm font-semibold">Detail sections</h4>
           {canEdit && (
             <button type="button" onClick={() => set('sections', [...draft.sections, { id: `section_${draft.sections.length + 1}`, label: 'New section', empty_text: 'Nothing recorded.', link_topic: null, query: 'PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nSELECT ?title ?item\nWHERE {\n  {{ uri }} ?p ?item .\n  ?item rdfs:label ?title .\n}\nLIMIT {{ limit }}' }])}
-              className="flex items-center gap-1 text-xs text-workspace-accent hover:underline"><Plus size={12} /> Add section</button>
+              className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}><Plus size={14} /> Add section</button>
           )}
         </div>
         {draft.sections.length === 0 && <p className="text-sm text-muted-foreground">No sections: the detail shows the header only.</p>}
         {draft.sections.map((section, index) => (
-          <div key={index} className="space-y-3 rounded-lg border p-3">
+          <div key={index} className="space-y-3 border border-border bg-card p-3">
             <fieldset disabled={disabled} className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto]">
               <Field label="Id"><input className={cn(input, 'font-mono text-xs')} value={section.id} onChange={e => setSection(index, { id: e.target.value })} /></Field>
               <Field label="Label"><input className={input} value={section.label} onChange={e => setSection(index, { label: e.target.value })} /></Field>
@@ -509,7 +561,7 @@ function QueryEditor({ role, label, contract, value, onChange, disabled, workspa
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm font-medium">{label}</span>
         {contract && (
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-caption text-muted-foreground">
             needs {contract.required.map(v => `?${v}`).join(' ')} · may use {contract.optional.map(v => `?${v}`).join(' ')}
             {contract.extra_as_facts && ' · other variables show as facts'}
           </span>
@@ -521,28 +573,27 @@ function QueryEditor({ role, label, contract, value, onChange, disabled, workspa
         disabled={disabled}
         spellCheck={false}
         rows={Math.min(24, Math.max(6, value.split('\n').length + 1))}
-        className="w-full rounded-md border bg-muted/30 p-2 font-mono text-xs leading-relaxed outline-none focus:border-[color:var(--workspace-accent,#22c55e)] disabled:opacity-80"
+        className={cn(fieldClass, 'bg-muted/30 p-2 font-mono text-xs leading-relaxed disabled:opacity-80')}
         aria-label={label}
       />
       {canEdit && (
         <div className="flex flex-wrap items-center gap-2">
           {role === 'results' && (
             <input value={testQ} onChange={e => setTestQ(e.target.value)} placeholder="Test text for {{ q }} (empty lists all)"
-              className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1 text-xs outline-none" />
+              className={cn(fieldClass, 'h-8 min-w-0 flex-1 text-xs')} />
           )}
-          <button type="button" onClick={() => void run()} disabled={running || (role !== 'results' && !testUri.trim())}
-            title={role !== 'results' && !testUri.trim() ? 'Set a test individual first' : undefined}
-            className="flex items-center gap-1 rounded-md bg-secondary px-2 py-1 text-xs font-medium hover:bg-secondary/80 disabled:opacity-50">
-            {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} Test
-          </button>
+          <Button variant="secondary" size="sm" onClick={() => void run()} disabled={running || (role !== 'results' && !testUri.trim())}
+            title={role !== 'results' && !testUri.trim() ? 'Set a test individual first' : undefined}>
+            {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Test
+          </Button>
         </div>
       )}
-      {error && <pre role="alert" className="whitespace-pre-wrap rounded-md border border-red-500/20 bg-red-500/10 p-2 text-xs text-red-500">{error}</pre>}
+      {error && <pre role="alert" className="whitespace-pre-wrap border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">{error}</pre>}
       {preview && (
-        <div className="overflow-auto rounded-md border">
+        <div className="overflow-auto border border-border">
           <table className="w-full text-xs">
             <thead className="bg-muted/50">
-              <tr>{columns.map(c => <th key={c} className={cn('px-2 py-1 text-left font-mono font-medium', slots.has(c) ? 'text-workspace-accent' : 'text-muted-foreground')}>?{c}</th>)}</tr>
+              <tr>{columns.map(c => <th key={c} className={cn('px-2 py-1 text-left font-mono font-medium', slots.has(c) ? 'text-primary' : 'text-muted-foreground')}>?{c}</th>)}</tr>
             </thead>
             <tbody>
               {preview.rows.length === 0 && <tr><td className="px-2 py-2 text-muted-foreground">No rows.</td></tr>}
@@ -553,7 +604,7 @@ function QueryEditor({ role, label, contract, value, onChange, disabled, workspa
                     const pick = role === 'results' && c === 'uri' && cell && onPickUri;
                     return (
                       <td key={c} className="max-w-64 truncate px-2 py-1" title={cell?.value}>
-                        {pick ? <button type="button" className="text-workspace-accent hover:underline" onClick={() => onPickUri(cell.value)} title="Use as test individual">{cell.value}</button> : cell?.value}
+                        {pick ? <button type="button" className="text-primary hover:underline" onClick={() => onPickUri(cell.value)} title="Use as test individual">{cell.value}</button> : cell?.value}
                       </td>
                     );
                   })}
@@ -570,18 +621,17 @@ function QueryEditor({ role, label, contract, value, onChange, disabled, workspa
 function Field({ label, hint, wide, children }: { label: string; hint?: string; wide?: boolean; children: React.ReactNode }) {
   return (
     <label className={cn('block space-y-1', wide && 'sm:col-span-full')}>
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="text-sm font-medium text-foreground">{label}</span>
       {children}
-      {hint && <span className="block text-[11px] text-muted-foreground">{hint}</span>}
+      {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
     </label>
   );
 }
 
 function IconButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
   return (
-    <button type="button" aria-label={label} title={label} onClick={onClick} disabled={disabled}
-      className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30">
+    <Button variant="ghost" size="icon" className="h-9 w-9" aria-label={label} title={label} onClick={onClick} disabled={disabled}>
       {children}
-    </button>
+    </Button>
   );
 }

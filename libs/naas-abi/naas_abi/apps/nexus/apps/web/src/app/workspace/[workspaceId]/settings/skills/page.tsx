@@ -2,8 +2,23 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Plus, Search, X, Zap } from 'lucide-react';
+import { Plus, Trash2, XCircle, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useConfirm } from '@/components/ui/dialogs';
+import { Input, Select, Textarea } from '@/components/ui/input';
+import {
+  SettingsField,
+  SettingsNotice,
+  SettingsPageHeader,
+  SettingsFilterSelect,
+  SettingsSection,
+  SettingsTableToolbar,
+  countLabel,
+  settingsTable,
+} from '@/components/settings/settings-ui';
 import { useSkillsStore, type SkillScope } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
 
@@ -23,8 +38,12 @@ export default function SkillsSettingsPage() {
   const currentUserId = useAuthStore((s) => s.user?.id);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [scopeFilter, setScopeFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [showAddForm, setShowAddForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const { confirm: confirmDelete, dialog: confirmDialog } = useConfirm();
   const [newSkill, setNewSkill] = useState({
     name: '',
     slug: '',
@@ -44,14 +63,19 @@ export default function SkillsSettingsPage() {
 
   const filteredSkills = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return skills;
-    return skills.filter(
-      (s) =>
+    return skills.filter((s) => {
+      if (scopeFilter !== 'all' && s.scope !== scopeFilter) return false;
+      if (statusFilter === 'enabled' && !s.enabled) return false;
+      if (statusFilter === 'disabled' && s.enabled) return false;
+      return (
+        !q ||
         s.name.toLowerCase().includes(q) ||
         s.slug.toLowerCase().includes(q) ||
         s.description.toLowerCase().includes(q)
-    );
-  }, [skills, searchQuery]);
+      );
+    });
+  }, [skills, searchQuery, scopeFilter, statusFilter]);
+  const enabledCount = skills.filter((s) => s.enabled).length;
 
   const handleAddSkill = async () => {
     if (!newSkill.name.trim() || !newSkill.prompt.trim()) {
@@ -75,172 +99,167 @@ export default function SkillsSettingsPage() {
   };
 
   const handleToggleEnabled = async (id: string, enabled: boolean) => {
+    setActionError(null);
     try {
       await updateSkill(id, { enabled });
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to update skill');
+      setActionError(err instanceof Error ? err.message : 'Failed to update skill');
     }
   };
 
   const handleDelete = async (id: string, slug: string) => {
-    if (!confirm(`Delete skill "/${slug}"?`)) return;
+    const ok = await confirmDelete({ title: `Delete skill "/${slug}"?`, confirmLabel: 'Delete' });
+    if (!ok) return;
+    setActionError(null);
     try {
       await deleteSkill(id);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete skill');
+      setActionError(err instanceof Error ? err.message : 'Failed to delete skill');
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">Skills</h2>
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-              {filteredSkills.length}
-            </span>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Reusable prompts invocable in the chat with /&lt;slug&gt; — or type /create-skill in
-            the chat and the Skills agent writes and saves one for you
-          </p>
-        </div>
-        <button
-          onClick={() => setShowAddForm(true)}
-          className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          <Plus size={16} />
-          Add Skill
-        </button>
-      </div>
+      <SettingsPageHeader
+        title="Skills"
+        badge={`${enabledCount} enabled`}
+        description={
+          <>
+            Reusable prompts invocable in the chat with /&lt;slug&gt; — or type /create-skill in the chat and the
+            Skills agent writes and saves one for you
+          </>
+        }
+        actions={
+          <Button onClick={() => setShowAddForm(true)}>
+            <Plus size={16} />
+            Add Skill
+          </Button>
+        }
+      />
 
-      {/* Add Form */}
       {showAddForm && (
-        <div className="rounded-lg border bg-muted/30 p-4">
-          <h3 className="mb-4 font-medium">Add New Skill</h3>
+        <SettingsSection title="Add New Skill">
           <div className="grid gap-4">
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium">Name *</label>
-                <input
+              <SettingsField label="Name *">
+                <Input
                   type="text"
                   value={newSkill.name}
                   onChange={(e) => setNewSkill({ ...newSkill, name: e.target.value })}
                   placeholder="Weekly report"
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                 />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Slug</label>
-                <input
+              </SettingsField>
+              <SettingsField label="Slug">
+                <Input
                   type="text"
                   value={newSkill.slug}
                   onChange={(e) => setNewSkill({ ...newSkill, slug: e.target.value })}
                   placeholder="weekly-report (defaults from name)"
-                  className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                  className="font-mono"
                 />
-              </div>
+              </SettingsField>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Description</label>
-              <input
+            <SettingsField label="Description">
+              <Input
                 type="text"
                 value={newSkill.description}
                 onChange={(e) => setNewSkill({ ...newSkill, description: e.target.value })}
                 placeholder="One sentence describing what this skill does"
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
               />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Prompt *</label>
-              <textarea
+            </SettingsField>
+            <SettingsField label="Prompt *">
+              <Textarea
                 value={newSkill.prompt}
                 onChange={(e) => setNewSkill({ ...newSkill, prompt: e.target.value })}
                 placeholder="The reusable prompt the agent will apply when this skill is invoked"
                 rows={5}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
               />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Visibility</label>
-              <select
+            </SettingsField>
+            <SettingsField label="Visibility">
+              <Select
                 value={newSkill.scope}
                 onChange={(e) => setNewSkill({ ...newSkill, scope: e.target.value as SkillScope })}
-                className="rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                className="w-auto"
               >
                 <option value="user">Private (only me)</option>
                 <option value="workspace">Workspace</option>
                 <option value="organization">Organization</option>
-              </select>
-            </div>
-            {formError && <p className="text-sm text-destructive">{formError}</p>}
+              </Select>
+            </SettingsField>
+            {formError && <SettingsNotice tone="error">{formError}</SettingsNotice>}
             <div className="flex justify-end gap-2">
-              <button
+              <Button
+                variant="secondary"
                 onClick={() => {
                   setShowAddForm(false);
                   setFormError(null);
                 }}
-                className="rounded-lg border px-3 py-2 text-sm hover:bg-muted"
               >
                 Cancel
-              </button>
-              <button
-                onClick={handleAddSkill}
-                className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-              >
-                Add Skill
-              </button>
+              </Button>
+              <Button onClick={handleAddSkill}>Add Skill</Button>
             </div>
           </div>
-        </div>
+        </SettingsSection>
       )}
 
-      {/* Search */}
-      {skills.length > 0 && (
-        <div className="relative">
-          <Search
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
-          <input
-            type="text"
-            placeholder="Search skills..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-lg border bg-background py-2 pl-10 pr-10 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X size={16} />
-            </button>
-          )}
-        </div>
+      {actionError && (
+        <SettingsNotice tone="error" icon={<XCircle size={14} />}>
+          {actionError}
+        </SettingsNotice>
       )}
 
-      {/* Table */}
-      <div className="overflow-hidden rounded-lg border">
-        <table className="w-full">
+      <SettingsTableToolbar
+        search={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search skills..."
+        filters={
+          <>
+            <SettingsFilterSelect
+              label="Visibility"
+              value={scopeFilter}
+              onChange={setScopeFilter}
+              options={[
+                { value: 'all', label: 'All visibilities' },
+                ...(Object.keys(SCOPE_LABELS) as SkillScope[]).map((scope) => ({
+                  value: scope,
+                  label: SCOPE_LABELS[scope],
+                })),
+              ]}
+            />
+            <SettingsFilterSelect
+              label="Status"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: 'all', label: 'All statuses' },
+                { value: 'enabled', label: 'Enabled' },
+                { value: 'disabled', label: 'Disabled' },
+              ]}
+            />
+          </>
+        }
+        meta={`${countLabel(filteredSkills.length, skills.length, 'skill')} · ${enabledCount} enabled`}
+      />
+
+      <div className={settingsTable.wrapper}>
+        <table className={settingsTable.table}>
           <thead>
-            <tr className="border-b bg-muted/50 text-left text-sm">
-              <th className="p-3 font-medium">Skill</th>
-              <th className="p-3 font-medium">Command</th>
-              <th className="p-3 font-medium">Visibility</th>
-              <th className="p-3 font-medium">Last used</th>
-              <th className="w-24 p-3 font-medium">Enabled</th>
-              <th className="w-24 p-3 font-medium">Actions</th>
+            <tr className={settingsTable.headRow}>
+              <th className={settingsTable.th}>Skill</th>
+              <th className={settingsTable.th}>Command</th>
+              <th className={settingsTable.th}>Visibility</th>
+              <th className={settingsTable.th}>Last used</th>
+              <th className={cn(settingsTable.th, 'w-24')}>Enabled</th>
+              <th className={cn(settingsTable.th, 'w-24')}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredSkills.length === 0 ? (
               <tr>
                 <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                  {searchQuery
-                    ? `No skills match "${searchQuery}"`
+                  {skills.length > 0
+                    ? 'No skills match the current search and filters'
                     : 'No skills yet. Type /create-skill in the chat, or add one here.'}
                 </td>
               </tr>
@@ -250,57 +269,48 @@ export default function SkillsSettingsPage() {
                 return (
                   <tr
                     key={skill.id}
-                    onClick={() =>
-                      router.push(`/workspace/${workspaceId}/settings/skills/${skill.id}`)
-                    }
-                    className="cursor-pointer border-b transition-colors hover:bg-muted/30"
+                    onClick={() => router.push(`/workspace/${workspaceId}/settings/skills/${skill.id}`)}
+                    className={cn(settingsTable.row, 'cursor-pointer')}
                   >
-                    <td className="p-3">
+                    <td className={settingsTable.td}>
                       <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center bg-muted">
                           <Zap size={16} className="text-muted-foreground" />
                         </div>
                         <div className="min-w-0">
                           <p className="font-medium">{skill.name}</p>
                           {skill.description && (
-                            <p className="truncate text-xs text-muted-foreground">
-                              {skill.description}
-                            </p>
+                            <p className="truncate text-xs text-muted-foreground">{skill.description}</p>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className="p-3 font-mono text-sm text-workspace-accent">/{skill.slug}</td>
-                    <td className="p-3 text-sm">{SCOPE_LABELS[skill.scope]}</td>
-                    <td className="p-3 text-sm text-muted-foreground">
+                    <td className={cn(settingsTable.td, 'font-mono text-primary')}>/{skill.slug}</td>
+                    <td className={settingsTable.td}>
+                      <Badge variant="outline">{SCOPE_LABELS[skill.scope]}</Badge>
+                    </td>
+                    <td className={cn(settingsTable.td, 'text-muted-foreground')}>
                       {skill.lastUsedAt ? new Date(skill.lastUsedAt).toLocaleDateString() : '—'}
                     </td>
-                    <td className="p-3" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => handleToggleEnabled(skill.id, !skill.enabled)}
+                    <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={skill.enabled}
+                        onCheckedChange={(checked) => handleToggleEnabled(skill.id, checked)}
                         disabled={!canModify}
-                        className={cn(
-                          'relative h-5 w-9 rounded-full transition-colors disabled:opacity-50',
-                          skill.enabled ? 'bg-primary' : 'bg-muted-foreground/30'
-                        )}
+                        aria-label={skill.enabled ? 'Disable' : 'Enable'}
                         title={skill.enabled ? 'Disable' : 'Enable'}
-                      >
-                        <span
-                          className={cn(
-                            'absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all',
-                            skill.enabled ? 'left-[18px]' : 'left-0.5'
-                          )}
-                        />
-                      </button>
+                      />
                     </td>
-                    <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                    <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
                       {canModify && (
-                        <button
+                        <Button
+                          variant="destructive-ghost"
+                          size="icon"
                           onClick={() => handleDelete(skill.id, skill.slug)}
-                          className="rounded-md px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
+                          title="Delete"
                         >
-                          Delete
-                        </button>
+                          <Trash2 size={14} />
+                        </Button>
                       )}
                     </td>
                   </tr>
@@ -310,6 +320,7 @@ export default function SkillsSettingsPage() {
           </tbody>
         </table>
       </div>
+      {confirmDialog}
     </div>
   );
 }
