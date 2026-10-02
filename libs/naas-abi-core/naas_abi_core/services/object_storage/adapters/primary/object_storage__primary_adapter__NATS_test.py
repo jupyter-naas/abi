@@ -318,3 +318,26 @@ def test_domain_call_runs_off_the_event_loop_so_the_loop_stays_responsive():
     assert not response.HasField("error"), response.error
     assert response.content == b"slow-but-served"
     assert call_threads and call_threads[0] is not loop_thread
+
+
+def test_listing_a_file_maps_to_not_a_directory():
+    """The FS adapter raises NotADirectoryError for a file prefix; callers (Nexus
+    files) rely on it, so it must cross NATS as itself, not as INTERNAL."""
+
+    class _FileAdapter(_StubAdapter):
+        def list_objects(self, prefix, queue=None):
+            raise NotADirectoryError(f"Not a directory: {prefix}")
+
+    adapter = ObjectStoragePrimaryAdapterNATS(_FileAdapter(), SECRET)
+    request = _FakeRequest(
+        data=object_storage_pb2.ListObjectsRequest(prefix="drive/a.pdf").SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.object_storage.v1.list_objects",
+    )
+
+    asyncio.run(adapter._handle_list_objects(request))
+
+    response = object_storage_pb2.ListObjectsResponse()
+    response.ParseFromString(request.responses[0])
+    assert response.error.code == "NOT_A_DIRECTORY"
+    assert response.error.retryable is False
