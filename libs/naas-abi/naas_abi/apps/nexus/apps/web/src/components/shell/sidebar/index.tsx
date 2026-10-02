@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Files, Database, Code, Presentation, FileText, Table2, LayoutGrid, Store, Settings, Activity, Home, Blocks, MoreHorizontal,
+  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Files, Database, Code, Presentation, FileText, Table2, LayoutGrid, Store, Settings, Activity, Home, Blocks, MoreHorizontal, Server,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -725,6 +725,7 @@ export function Sidebar() {
       >
         {[
           { key: 'admin-events', href: '/admin/events', label: 'Events', description: 'Recent platform activity', icon: <Activity size={18} />, section: 'events' as SidebarSection, visible: isSuperadmin },
+          { key: 'admin-system', href: '/admin/system', label: 'System', description: 'Kernel services, modules and the NATS network', icon: <Server size={18} />, section: null as SidebarSection | null, visible: isSuperadmin },
           { key: 'infrastructure', href: '/settings/infrastructure', label: 'Infrastructure', description: 'Explore ABI layers, components and dependencies', icon: <Blocks size={18} />, section: 'infrastructure' as SidebarSection, visible: canSettingsWorkspace },
         ].filter((item) => item.visible).map((item) => {
           const base = getWorkspacePath(currentWorkspaceId, item.href);

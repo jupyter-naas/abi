@@ -19,3 +19,13 @@ def test_discovery_is_opt_in_and_has_bounded_defaults():
 def test_invalid_discovery_configuration_is_rejected(discovery):
     with pytest.raises(ValidationError):
         NATSConfiguration(jwt_secret="test-only", discovery=discovery)
+
+
+def test_monitoring_url_is_optional_and_must_be_http():
+    assert NATSConfiguration(jwt_secret="test-only").monitoring_url is None
+    config = NATSConfiguration(
+        jwt_secret="test-only", monitoring_url="http://nats:8222"
+    )
+    assert config.monitoring_url == "http://nats:8222"
+    with pytest.raises(ValidationError):
+        NATSConfiguration(jwt_secret="test-only", monitoring_url="nats://nats:4222")

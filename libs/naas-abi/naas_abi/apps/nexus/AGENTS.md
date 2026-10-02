@@ -563,6 +563,14 @@ The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so al
 
 - Migrate `chat-interface.tsx` to semantic CSS
 
+## System app (platform super admins)
+
+`/workspace/[id]/admin/system` (dock entry "System", visible when `is_superadmin`). Tabs: Overview, Services, Modules, NATS, Live traffic; the tab is the `?tab=` query. Live traffic is an SSE stream read with raw `fetch` and `getAuthHeader()` (like chat), started and stopped by the user.
+
+- API: `apps/api/app/services/sysadmin/` (hexagonal, see its `AGENTS.md`), mounted at `/api/admin/system/*` behind `require_superadmin` on the router. `main_public_routes_test.py` fails if a route there loses it.
+- Web: `apps/web/src/app/workspace/[workspaceId]/admin/system/`, the three-file route convention plus colocated modules (`system-api.ts`, `system-model.ts`, one component per tab) and jsdom render tests. Views poll every 10 s while visible; the footer Refresh reloads the active tab.
+- A source that is down (NATS mode off, discovery not configured, `nats.monitoring_url` unset or unreachable) never fails a whole view: the API returns the others plus a reason, or a 503 `{source, reason}` for NATS-only views, and the page shows that reason.
+
 ## Mobile list-detail pattern
 
 Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a **detail screen** with back navigation. Desktop keeps the two-column sidebar + content layout unchanged.

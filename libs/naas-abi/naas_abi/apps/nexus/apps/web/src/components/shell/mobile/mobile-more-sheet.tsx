@@ -2,7 +2,7 @@
 
 import { createPortal } from 'react-dom';
 import {
-  Search, BrainCircuit, Waypoints, Database, Map, Presentation, Store, Settings, Activity, X, Home, Blocks,
+  Search, BrainCircuit, Waypoints, Database, Map, Presentation, Store, Settings, Activity, X, Home, Blocks, Server,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -34,6 +34,7 @@ const MORE_ITEMS: MoreItem[] = [
   { id: 'marketplace', label: 'Marketplace', icon: <Store size={18} />, href: '/marketplace', section: 'marketplace', feature: 'marketplace' },
   { id: 'settings', label: 'Settings', icon: <Settings size={18} />, href: '/settings', section: 'settings', feature: 'settings.workspace' },
   { id: 'admin-events', label: 'Events', icon: <Activity size={18} />, href: '/admin/events', section: 'events', superadmin: true },
+  { id: 'admin-system', label: 'System', icon: <Server size={18} />, href: '/admin/system', section: null, superadmin: true },
   { id: 'infrastructure', label: 'Infrastructure', icon: <Blocks size={18} />, href: '/settings/infrastructure', section: 'infrastructure', feature: 'settings.workspace' },
 ];
 
