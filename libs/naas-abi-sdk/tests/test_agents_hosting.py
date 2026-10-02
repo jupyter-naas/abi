@@ -114,4 +114,10 @@ def test_document_memory_sets_up_the_checkpoint_collections():
 
     assert type(saver).__name__ == "DocumentCheckpointSaver"
     assert saver.agent_id == "acme.research.Researcher.v1"
-    assert created == ["langgraph_checkpoints_v1", "langgraph_writes_v1"]
+    assert created == [
+        "langgraph_checkpoints_v2",
+        "langgraph_writes_v2",
+        "langgraph_blobs_v2",
+        "langgraph_items_v2",
+        "langgraph_parts_v2",
+    ]

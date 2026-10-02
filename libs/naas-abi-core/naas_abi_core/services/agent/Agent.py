@@ -56,7 +56,10 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.types import Command
-from naas_abi_core.engine.context import get_default_event_service
+from naas_abi_core.engine.context import (
+    get_default_agent_checkpointer,
+    get_default_event_service,
+)
 from naas_abi_core.services.agent.context import (
     DOCUMENTS_RECURSION_LIMIT,
     SLIDES_RECURSION_LIMIT,
@@ -346,9 +349,15 @@ def compact_old_tool_messages(messages: list[AnyMessage]) -> list[AnyMessage]:
 def create_checkpointer() -> BaseCheckpointSaver:
     """Create a checkpointer based on environment configuration.
 
-    Returns a PostgreSQL-backed checkpointer if POSTGRES_URL is set,
-    otherwise returns an in-memory checkpointer.
+    Inside a loaded engine, returns the engine's agent checkpointer (the
+    Document Service, shared by every agent). Outside one, returns a
+    PostgreSQL-backed checkpointer if POSTGRES_URL is set, otherwise an
+    in-memory checkpointer.
     """
+    engine_checkpointer = get_default_agent_checkpointer()
+    if engine_checkpointer is not None:
+        return engine_checkpointer
+
     postgres_url = os.getenv("POSTGRES_URL")
 
     if postgres_url:
@@ -769,7 +778,8 @@ class Agent(Expose):
                 Should support tool binding.
             tools (list[Tool]): List of tools to make available to the agent.
             memory (BaseCheckpointSaver, optional): Component to save conversation state.
-                If None, will use PostgreSQL if POSTGRES_URL env var is set, otherwise in-memory.
+                If None, uses the engine's agent checkpointer (Document Service) when an
+                engine is loaded, else PostgreSQL if POSTGRES_URL is set, else in-memory.
         """
         if native_tools is None:
             native_tools = []

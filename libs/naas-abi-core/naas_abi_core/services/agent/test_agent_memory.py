@@ -80,6 +80,20 @@ class TestCreateCheckpointer:
             mock_postgres_class.assert_called_once_with(mock_connection)
             mock_postgres_saver.setup.assert_called_once()
 
+    def test_engine_checkpointer_wins_over_postgres_url(self):
+        """Inside a loaded engine, memory=None means the engine's document saver."""
+        from naas_abi_core.engine.context import with_agent_checkpointer_override
+
+        engine_memory = MagicMock(spec=BaseCheckpointSaver)
+        connect = MagicMock()
+        with (
+            patch.dict(os.environ, {"POSTGRES_URL": "postgresql://h/db"}),
+            patch("psycopg.Connection.connect", connect),
+            with_agent_checkpointer_override(engine_memory),
+        ):
+            assert create_checkpointer() is engine_memory
+        connect.assert_not_called()
+
     def test_create_checkpointer_postgres_import_error(self):
         """Test fallback to MemorySaver when PostgresSaver import fails."""
         test_url = "postgresql://user:pass@localhost:5432/testdb"

@@ -11,6 +11,13 @@ LangGraph support lives in langgraph.py and is opt-in via [langgraph]; never imp
 it from package __init__ or make it a base dependency. Only async graph execution
 is supported. Keep checkpoint schema versions and pending-write semantics explicit.
 Document module namespaces are a programming boundary, not authorization.
+The document schema is in langgraph_documents.py, shared with core's synchronous
+engine saver and the Nexus viewer: collections, ids, write plans (schema 2 stores
+increments: content-addressed blobs, list elements and chunks, parts above
+256 KiB), byte-bounded read batches, decoding, and schema 1 reads. Savers only do
+I/O. Stored documents depend on it, so change it only with a schema version.
+Keep it core-free and importable on Python 3.10; tests/test_langgraph_documents.py
+pins the ids. Never deserialize in the pure read helpers (the viewer relies on it).
 
 
 AgentProxy and AgentHost use document CAS for durable invocations and non-expiring
@@ -58,7 +65,9 @@ Cancellation is cooperative (`ctx.cancelled`). tests/test_jobs_integration.py ne
 
 `telemetry.py` is the one OpenTelemetry implementation (core reuses it): W3C trace
 context in NATS headers, CLIENT spans in `Transport.call`, CONSUMER spans for job
-runs, spans for agent submits and runs, `record_error` on error replies. Keep it
-stdlib plus optional OpenTelemetry API, and a no-op without a provider. Modules
+runs, spans for agent submits and runs, `record_error` on error replies, and the
+owner's SERVER span per transfer session (`serve_transfer`: open to close, expiry
+or stop; current only around the handler). Keep it stdlib plus optional
+OpenTelemetry API, and a no-op without a provider. Modules
 export spans when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (`[otel]` extra). See
 docs/adr/20261002_observability.md.
