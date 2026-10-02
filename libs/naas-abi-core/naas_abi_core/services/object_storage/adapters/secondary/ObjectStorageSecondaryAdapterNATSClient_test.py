@@ -127,6 +127,13 @@ def test_raise_for_error_maps_object_already_exists():
         )
 
 
+def test_raise_for_error_maps_not_a_directory():
+    with pytest.raises(NotADirectoryError, match="drive/a.pdf"):
+        _raise_for_error(
+            common_pb2.CallError(code="NOT_A_DIRECTORY", message="drive/a.pdf")
+        )
+
+
 def test_raise_for_error_maps_unknown_code_to_runtime_error():
     with pytest.raises(RuntimeError, match="INTERNAL"):
         _raise_for_error(common_pb2.CallError(code="INTERNAL", message="boom"))

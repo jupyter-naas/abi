@@ -81,6 +81,8 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
         raise Exceptions.ObjectNotFound(error.message)
     if error.code == "OBJECT_ALREADY_EXISTS":
         raise Exceptions.ObjectAlreadyExists(error.message)
+    if error.code == "NOT_A_DIRECTORY":
+        raise NotADirectoryError(error.message)
     raise RuntimeError(
         f"object_storage NATS RPC failed ({error.code}): {error.message}"
     )

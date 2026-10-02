@@ -282,6 +282,13 @@ class ObjectStoragePrimaryAdapterNATS:
                 retryable=False,
             )
             return
+        except NotADirectoryError as exc:
+            # Listing a prefix that is a file (local filesystem adapter). Callers
+            # rely on it in-process, so it crosses NATS as itself.
+            await self._respond_error(
+                request, response_cls, "NOT_A_DIRECTORY", str(exc), retryable=False
+            )
+            return
         except Exception:  # noqa: BLE001 - a handler must never crash the service
             logger.opt(exception=True).error(
                 f"ObjectStoragePrimaryAdapterNATS: unexpected error handling {request.subject!r}"
