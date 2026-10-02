@@ -62,7 +62,7 @@ export function TopicDetailView({ detail, loading, error, backHref, linkFor }: {
           ))}
         </dl>
       )}
-      <SparqlDisclosure sparql={detail.header_sparql} label="Header SPARQL" />
+      <SparqlDisclosure sparql={detail.header_sparql} />
 
       {detail.sections.map(section => <Section key={section.id} section={section} linkFor={linkFor} />)}
     </article>
@@ -82,13 +82,10 @@ function Section({ section, linkFor }: { section: TopicSectionResult; linkFor: (
   const compact = section.items.length > 0 && section.items.every(i => !i.subtitle && !i.snippet && !i.start && !i.end && !i.tags?.length);
   return (
     <section className="space-y-2 border-t pt-4">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">
-          {section.label}
-          {section.items.length > 0 && <span className="ml-2 text-xs font-normal text-muted-foreground">{section.items.length}</span>}
-        </h3>
-        <SparqlDisclosure sparql={section.sparql} />
-      </div>
+      <h3 className="text-sm font-semibold">
+        {section.label}
+        {section.items.length > 0 && <span className="ml-2 text-xs font-normal text-muted-foreground">{section.items.length}</span>}
+      </h3>
 
       {section.error ? (
         <p role="alert" className="text-sm text-red-500">This section could not be loaded: {section.error}</p>
@@ -144,6 +141,7 @@ function Section({ section, linkFor }: { section: TopicSectionResult; linkFor: (
           })}
         </ol>
       )}
+      <SparqlDisclosure sparql={section.sparql} />
     </section>
   );
 }
