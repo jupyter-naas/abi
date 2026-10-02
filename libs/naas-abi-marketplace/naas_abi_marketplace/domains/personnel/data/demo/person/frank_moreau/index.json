@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-10-02 17:30",
+  "person": {
+    "first_name": "Frank",
+    "last_name": "Moreau",
+    "full_name": "Frank Moreau"
+  },
+  "employer": "Demo",
+  "service_line": "Growth",
+  "grade": "Manager",
+  "roster": {
+    "employee_id": "E-10433",
+    "job_title": "Head of Growth",
+    "job_family": "Growth",
+    "hire_date": "2020-01-01",
+    "termination_date": "2022-12-31",
+    "status": "terminated"
+  },
+  "employments": [
+    {
+      "organization": "Demo",
+      "client": null,
+      "title": "Head of Growth",
+      "contract_type": "Permanent (CDI)",
+      "job_family": "Growth",
+      "remuneration_amount": 65000,
+      "remuneration_currency": "EUR"
+    }
+  ]
+}

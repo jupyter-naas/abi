@@ -7,7 +7,7 @@ from pathlib import Path
 from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import (
     load_default_entity,
 )
-from naas_abi_marketplace.domains.personnel.paths import DEMO_GRAPH_FILE
+from naas_abi_marketplace.domains.personnel.utils.paths import DEMO_GRAPH_FILE
 
 COCKPIT_ROOT = Path(__file__).resolve().parent
 PERSONNEL_ROOT = Path(__file__).resolve().parents[2]

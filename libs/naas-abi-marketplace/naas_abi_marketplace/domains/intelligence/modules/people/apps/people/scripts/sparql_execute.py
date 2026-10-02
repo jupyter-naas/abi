@@ -16,7 +16,7 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.profile_sparql import (
     SECTION_QUERY_NAMES,
 )
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     DEMO_GRAPH_FILE,
 )
 from rdflib import Graph

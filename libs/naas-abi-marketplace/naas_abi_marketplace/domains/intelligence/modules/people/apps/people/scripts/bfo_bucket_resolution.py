@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import naas_abi
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     ONTOLOGIES_DIR,
 )
 from rdflib import Graph

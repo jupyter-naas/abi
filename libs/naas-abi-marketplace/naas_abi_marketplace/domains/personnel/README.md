@@ -17,16 +17,19 @@ certifications, published profile - is people intelligence:
 ```
 personnel/
 ├── __init__.py                  # ABIModule, datastore_path = "personnel"; depends on people
-├── paths.py
+├── Makefile
 ├── agents/PersonnelAgent.py     # HR queries + employer-record pipelines
 ├── pipelines/
 │   ├── ActOfEmploymentPipeline.py   # an act of working, as the employer records it
 │   ├── PersonnelProfilePipeline.py  # employer, service line, grade
 │   └── utils/graph_builders.py      # PersonnelGraphContext(PeopleGraphContext)
 ├── workflows/DemoPersonnelGraphWorkflow.py
-├── graph/demo.py                # employer records over the people demo
+├── scripts/demo_graph.py        # employer records over the people demo
+├── data/demo/person/<slug>/index.json   # employer records (personnel only)
 ├── graphs/demo/personnel.ttl    # people instances + personnel records + both schemas
-├── utils/                       # IRI helpers used by the cockpit
+├── utils/
+│   ├── paths.py                 # module paths, demo inputs and graph
+│   └── individual_uri.py        # IRI helpers used by the cockpit
 ├── apps/cockpit/                # workforce analytics (embeds the people graph page)
 └── ontologies/
     ├── modules/PersonnelOntology.ttl         # imports PeopleOntology
@@ -101,9 +104,15 @@ survives someone whose employment has not been recorded.
 
 ## Demo graph + cockpit datasets
 
-The demo person files are the people module's. The personnel demo adds, for
-the organization each profile names, the acts of employment, service line and
-grade, and the employment records of any HR `roster` block.
+The people module's demo files hold what each fictional person publishes.
+This module's own files, `data/demo/person/<slug>/index.json` (same slugs), hold
+what their employer records about them, and only this module reads them:
+
+| Key | Becomes |
+|---|---|
+| `employer`, `service_line`, `grade` | `isEmployedBy`, the service line (with its employee roles), `hasGrade` |
+| `employments[]` | the people act of working named by `organization` / `client` / `title`, typed `ActOfEmployment`, with job position, contract and remuneration |
+| `roster` | employment record, job description, employment status |
 
 ```bash
 make demo-graph   # people demo + employer records -> graphs/demo/personnel.ttl

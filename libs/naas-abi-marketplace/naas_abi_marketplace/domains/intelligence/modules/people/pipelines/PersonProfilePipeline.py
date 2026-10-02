@@ -16,12 +16,12 @@ from typing import Annotated
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
-    module_graph_name,
-)
 from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.graph_builders import (
     PEOPLE,
     PeopleGraphContext,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
+    module_graph_name,
 )
 from pydantic import BaseModel, Field
 from rdflib import Graph, URIRef

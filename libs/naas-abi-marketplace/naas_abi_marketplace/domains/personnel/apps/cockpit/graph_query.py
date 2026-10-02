@@ -15,10 +15,12 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
 )
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.process_class_catalog import (
     PROCESS_SPECS,
-    SHARED_ONTOLOGY as PEOPLE_SHARED_ONTOLOGY,
     build_process_class_catalog,
 )
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.process_class_catalog import (
+    SHARED_ONTOLOGY as PEOPLE_SHARED_ONTOLOGY,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     ONTOLOGIES_DIR as PEOPLE_ONTOLOGIES_DIR,
 )
 from naas_abi_marketplace.domains.personnel.apps.cockpit.scripts.roster_builder import (
@@ -27,7 +29,7 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.scripts.roster_builder 
 from naas_abi_marketplace.domains.personnel.apps.cockpit.scripts.workforce_metrics import (
     build_workforce_metrics,
 )
-from naas_abi_marketplace.domains.personnel.paths import ONTOLOGIES_DIR
+from naas_abi_marketplace.domains.personnel.utils.paths import ONTOLOGIES_DIR
 from rdflib import Graph, Literal, URIRef
 
 # Career history, skills and studies are people queries; the roster and

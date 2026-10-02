@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from naas_abi_core.utils.validate_bfo_ontology import _collect_all_restrictions
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     ONTOLOGIES_DIR,
 )
 from rdflib import Graph, URIRef

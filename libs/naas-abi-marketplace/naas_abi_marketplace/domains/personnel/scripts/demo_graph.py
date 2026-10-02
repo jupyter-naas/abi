@@ -1,14 +1,17 @@
 """Build the personnel demo graph: the employer's records over the people demo.
 
-The demo person files are the people module's (``data/demo/person``). The
-people graph registers what they publish; this module adds what their employer
-records, for the organization each profile names:
+The people module's demo files (``intelligence/modules/people/data/demo/person``)
+hold what each fictional person publishes. This module's own files
+(``personnel/data/demo/person/<slug>/index.json``) hold what their employer
+records about the same people, and nothing else reads them:
 
-* that it employs the person, the service line and grade it gives them;
-* each of their acts of working for it, as an act of employment (employee
-  role, job position, contract);
-* when a file carries an HR ``roster`` block, the employment record, job
-  description and employment status it lists.
+* ``employer``, ``service_line``, ``grade``: who employs the person, in which
+  service line and at which grade;
+* ``employments``: which of their acts of working are acts of employment, with
+  the contract, job family and pay behind each. An entry names the act by the
+  ``organization``, ``client`` and ``title`` of the people record, so it adds to
+  that act rather than restating it;
+* ``roster``: the employment record, job description and employment status.
 
 ``build_overlay_graph`` returns only those records - what goes to the personnel
 named graph. ``write_demo_graph_file`` writes them together with the people
@@ -20,13 +23,19 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from naas_abi_marketplace.domains.intelligence.modules.people.graph.demo import (
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.graph_builders import (
+    ABI,
+    individual_uri,
+    slug,
+    utc_now,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.scripts.demo_graph import (
     build_instance_graph as build_people_instance_graph,
 )
-from naas_abi_marketplace.domains.intelligence.modules.people.graph.demo import (
+from naas_abi_marketplace.domains.intelligence.modules.people.scripts.demo_graph import (
     load_schema_graph as load_people_schema_graph,
 )
-from naas_abi_marketplace.domains.intelligence.modules.people.person_sources import (
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.person_sources import (
     load_person_sources,
 )
 from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
@@ -34,22 +43,17 @@ from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology
     EmploymentStatus,
     JobDescription,
 )
-from naas_abi_marketplace.domains.personnel.paths import (
-    DEMO_GRAPH_FILE,
-    DEMO_SOURCE_DIR,
-    ONTOLOGIES_DIR,
-    PERSONNEL_ROOT,
-)
 from naas_abi_marketplace.domains.personnel.pipelines.utils.graph_builders import (
     PERSONNEL,
     PersonnelGraphContext,
     bind_graph_prefixes,
 )
-from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.graph_builders import (
-    ABI,
-    individual_uri,
-    slug,
-    utc_now,
+from naas_abi_marketplace.domains.personnel.utils.paths import (
+    DEMO_GRAPH_FILE,
+    DEMO_SOURCE_DIR,
+    ONTOLOGIES_DIR,
+    PEOPLE_DEMO_SOURCE_DIR,
+    PERSONNEL_ROOT,
 )
 from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import XSD
@@ -70,7 +74,7 @@ def load_schema_graph() -> Graph:
 
 
 def sources_to_employees(payloads: list[dict]) -> list[dict]:
-    """Roster rows (one per person) from the HR ``roster`` block of each payload."""
+    """Roster rows (one per person) from the ``roster`` block of each personnel file."""
     seen: set[tuple[str, str]] = set()
     employees: list[dict] = []
     for payload in payloads:
@@ -162,49 +166,42 @@ def build_overlay_graph(
     *,
     creator: str = "demo_personnel_graph",
 ) -> Graph:
-    """The employer's records for every demo person, and nothing the people graph holds."""
+    """The employer's records for every personnel demo file, and nothing the people graph holds."""
     payloads = load_person_sources(source_dir or DEMO_SOURCE_DIR)
     context = PersonnelGraphContext(creator=creator)
     current_position: dict[str, str] = {}
 
     for payload in payloads:
-        profile = payload.get("profile") or {}
-        employer_label = profile.get("organization")
-        if not employer_label:
-            continue
         person_data = payload["person"]
         person = context.ensure_person(
             person_data["first_name"], person_data["last_name"]
         )
-        employer = context.ensure_org(employer_label)
+        employer = context.ensure_org(payload["employer"])
 
-        # Acts of working for the employer the profile names are acts of
-        # employment. Employment comes first, so the service line below can
-        # attach to the employee roles it creates.
-        for record in payload.get("records") or []:
-            if record.get("process_type") != "ActOfWorking":
-                continue
-            if record.get("organization") != employer_label:
-                continue
+        # Employment comes first, so the service line below can attach to the
+        # employee roles it creates.
+        for employment in payload.get("employments") or []:
             client = (
-                context.ensure_org(record["client"]) if record.get("client") else None
+                context.ensure_org(employment["client"])
+                if employment.get("client")
+                else None
             )
             context.add_employment(
                 person=person,
-                org=employer,
-                title=record["title"],
+                org=context.ensure_org(employment["organization"]),
+                title=employment["title"],
                 client=client,
-                contract_type=record.get("contract_type")
-                or record.get("employment_type"),
-                remuneration_amount=record.get("remuneration_amount"),
-                remuneration_currency=record.get("remuneration_currency") or "EUR",
+                contract_type=employment.get("contract_type"),
+                job_family=employment.get("job_family"),
+                remuneration_amount=employment.get("remuneration_amount"),
+                remuneration_currency=employment.get("remuneration_currency") or "EUR",
             )
             if context.last_position_uri:
                 current_position[person.label or ""] = context.last_position_uri
 
         context.set_employer(person, employer)
-        if profile.get("service_line"):
-            line = context.ensure_service_line(profile["service_line"], employer)
+        if payload.get("service_line"):
+            line = context.ensure_service_line(payload["service_line"], employer)
             context.graph.add(
                 (URIRef(line._uri), ABI.hasMemberPart, URIRef(person._uri))
             )
@@ -212,8 +209,8 @@ def build_overlay_graph(
                 URIRef(person._uri), PERSONNEL.hasEmployeeRole
             ):
                 context.graph.add((role, PERSONNEL.inServiceLine, URIRef(line._uri)))
-        if profile.get("grade"):
-            context.ensure_grade(profile["grade"], person)
+        if payload.get("grade"):
+            context.ensure_grade(payload["grade"], person)
 
     _add_employment_records(
         context,
@@ -226,6 +223,7 @@ def build_overlay_graph(
 def write_demo_graph_file(
     source_dir: Path | None = None,
     *,
+    people_source_dir: Path | None = None,
     output_path: Path | None = None,
     include_schema: bool = True,
     creator: str = "demo_personnel_graph",
@@ -236,7 +234,9 @@ def write_demo_graph_file(
     """
     schema = load_schema_graph() if include_schema else Graph()
     instances = Graph()
-    instances += build_people_instance_graph(source_dir, creator=creator)
+    instances += build_people_instance_graph(
+        people_source_dir or PEOPLE_DEMO_SOURCE_DIR, creator=creator
+    )
     instances += build_overlay_graph(source_dir, creator=creator)
 
     combined = Graph()

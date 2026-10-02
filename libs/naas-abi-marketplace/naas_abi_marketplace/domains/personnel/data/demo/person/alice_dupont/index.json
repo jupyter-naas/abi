@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-10-02 17:30",
+  "person": {
+    "first_name": "Alice",
+    "last_name": "Dupont",
+    "full_name": "Alice Dupont"
+  },
+  "employer": "Demo",
+  "service_line": "Operations",
+  "grade": "Partner",
+  "roster": {
+    "employee_id": "E-10429",
+    "job_title": "COO",
+    "job_family": "Executive",
+    "hire_date": "2023-04-01",
+    "termination_date": null,
+    "status": "active"
+  },
+  "employments": [
+    {
+      "organization": "Demo",
+      "client": null,
+      "title": "COO",
+      "contract_type": "Corporate officer mandate",
+      "job_family": "Executive",
+      "remuneration_amount": null,
+      "remuneration_currency": "EUR"
+    }
+  ]
+}

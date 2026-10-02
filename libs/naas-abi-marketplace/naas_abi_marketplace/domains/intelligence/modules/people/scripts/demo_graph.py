@@ -4,16 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
-    DEMO_GRAPH_FILE,
-    DEMO_SOURCE_DIR,
-    ONTOLOGIES_DIR,
-    PEOPLE_ROOT,
-)
-from naas_abi_marketplace.domains.intelligence.modules.people.person_sources import (
-    load_person_sources,
-    payload_to_profile_source_parameters,
-)
 from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfCertificationPipeline import (
     ActOfCertificationPipeline,
     ActOfCertificationPipelineConfiguration,
@@ -36,6 +26,16 @@ from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.profile_
 from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.graph_builders import (
     PeopleGraphContext,
     bind_graph_prefixes,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
+    DEMO_GRAPH_FILE,
+    DEMO_SOURCE_DIR,
+    ONTOLOGIES_DIR,
+    PEOPLE_ROOT,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.person_sources import (
+    load_person_sources,
+    payload_to_profile_source_parameters,
 )
 from rdflib import Graph
 

@@ -1,7 +1,9 @@
+# onto2py-source-sha256: d1268111a16e79d2329a020e21ac9ce57ca0f6b777f9b1bb405ffe0b8bc600dd
 from __future__ import annotations
 
 import contextlib
 import datetime
+import os
 import uuid
 from typing import (
     Annotated,
@@ -26,15 +28,7 @@ from naas_abi.ontologies.modules.ABIOntology import (
     Process,
     Quality,
     Role,
-)
-from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.processes.ActOfProfilingProcess import (
-    ActOfProfiling,
-)
-from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.processes.ActOfStudyingProcess import (
-    ActOfStudying,
-)
-from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.processes.ActOfWorkingProcess import (
-    ActOfWorking,
+    TemporalRegion,
 )
 from pydantic import BaseModel, Field, ValidationError
 from rdflib import Graph, Literal, Namespace, URIRef
@@ -324,6 +318,398 @@ class RDFEntity(BaseModel):
         return g
 
 
+class ActOfCertification(RDFEntity):
+    """
+    No CCO act of certification; the process is a direct subclass of CCO Planned Act. The act is not the certificate: it ends when the certification is awarded, whereas the Certification persists and may later expire.
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/people/ActOfCertification"
+    _name: ClassVar[str] = "Act of Certification"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "demonstrates_skill": "http://ontology.naas.ai/people/demonstratesSkill",
+        "develops_language_capability": "http://ontology.naas.ai/people/developsLanguageCapability",
+        "for_certifying_organization": "http://ontology.naas.ai/people/forCertifyingOrganization",
+        "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
+        "has_awarded_certification": "http://ontology.naas.ai/people/hasAwardedCertification",
+        "has_source_document": "http://ontology.naas.ai/people/hasSourceDocument",
+        "is_act_of_certification_of": "http://ontology.naas.ai/people/isActOfCertificationOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "occupiesTemporalRegion": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+        "occursIn": "http://ontology.naas.ai/abi/occursIn",
+        "realizes": "http://ontology.naas.ai/abi/realizes",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "demonstrates_skill",
+        "develops_language_capability",
+        "for_certifying_organization",
+        "hasParticipant",
+        "has_awarded_certification",
+        "has_source_document",
+        "is_act_of_certification_of",
+        "occupiesTemporalRegion",
+        "occursIn",
+        "realizes",
+    }
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now(datetime.timezone.utc)
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    demonstrates_skill: Optional[
+        Annotated[
+            List[Union[Skill, URIRef, str]],
+            Field(
+                description="Relates an act of certification to a skill the person demonstrates in the course of it."
+            ),
+        ]
+    ] = None
+    develops_language_capability: Optional[
+        Annotated[
+            List[Union[LanguageCapability, URIRef, str]],
+            Field(
+                description="Relates a planned act (an act of working, of studying or of certification) to a language capability exercised and developed in the course of it."
+            ),
+        ]
+    ] = None
+    for_certifying_organization: Optional[
+        Annotated[
+            List[Union[Organization, URIRef, str]],
+            Field(
+                description="Relates an act of certification to the organization that participates as the certifying body."
+            ),
+        ]
+    ] = None
+    hasParticipant: Optional[Annotated[List[Union[Person, URIRef, str]], Field()]] = (
+        None
+    )
+    has_awarded_certification: Optional[
+        Annotated[
+            List[Union[Certification, URIRef, str]],
+            Field(
+                description="Relates an act of certification to the certification it concretizes."
+            ),
+        ]
+    ] = None
+    has_source_document: Optional[
+        Annotated[
+            List[Union[ProfileDocument, URIRef, str]],
+            Field(
+                description="Relates a planned act to the profile document it was read from and registered against."
+            ),
+        ]
+    ] = None
+    is_act_of_certification_of: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(
+                description="Relates an act of certification to the person being certified."
+            ),
+        ]
+    ] = None
+    occupiesTemporalRegion: Optional[
+        Annotated[List[Union[TemporalRegion, URIRef, str]], Field()]
+    ] = None
+    occursIn: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    realizes: Optional[
+        Annotated[List[Union[CertificationCandidateRole, URIRef, str]], Field()]
+    ] = None
+
+
+class ActOfProfiling(RDFEntity):
+    """
+    Orchestration only. Episode triples are written by the working and studying pipelines; summary, certifications and social proof by the person profile pipeline.
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/people/ActOfProfiling"
+    _name: ClassVar[str] = "Act of Profiling"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "from_profile_document": "http://ontology.naas.ai/people/fromProfileDocument",
+        "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
+        "is_act_of_profiling_of": "http://ontology.naas.ai/people/isActOfProfilingOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "from_profile_document",
+        "hasParticipant",
+        "is_act_of_profiling_of",
+    }
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now(datetime.timezone.utc)
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    from_profile_document: Optional[
+        Annotated[
+            List[Union[ProfileDocument, URIRef, str]],
+            Field(
+                description="Relates an act of profiling to the profile document that was read as its source."
+            ),
+        ]
+    ] = None
+    hasParticipant: Optional[Annotated[List[Union[Person, URIRef, str]], Field()]] = (
+        None
+    )
+    is_act_of_profiling_of: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(
+                description="Relates an act of profiling to the person who is its subject."
+            ),
+        ]
+    ] = None
+
+
+class ActOfStudying(RDFEntity):
+    """
+    Act of Studying
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/people/ActOfStudying"
+    _name: ClassVar[str] = "Act of Studying"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "develops_language_capability": "http://ontology.naas.ai/people/developsLanguageCapability",
+        "develops_skill": "http://ontology.naas.ai/people/developsSkill",
+        "for_educational_organization": "http://ontology.naas.ai/people/forEducationalOrganization",
+        "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
+        "has_degree": "http://ontology.naas.ai/people/hasDegree",
+        "has_enrollment": "http://ontology.naas.ai/people/hasEnrollment",
+        "has_source_document": "http://ontology.naas.ai/people/hasSourceDocument",
+        "is_act_of_studying_of": "http://ontology.naas.ai/people/isActOfStudyingOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "occupiesTemporalRegion": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+        "occursIn": "http://ontology.naas.ai/abi/occursIn",
+        "realizes": "http://ontology.naas.ai/abi/realizes",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "develops_language_capability",
+        "develops_skill",
+        "for_educational_organization",
+        "hasParticipant",
+        "has_degree",
+        "has_enrollment",
+        "has_source_document",
+        "is_act_of_studying_of",
+        "occupiesTemporalRegion",
+        "occursIn",
+        "realizes",
+    }
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now(datetime.timezone.utc)
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    develops_language_capability: Optional[
+        Annotated[
+            List[Union[LanguageCapability, URIRef, str]],
+            Field(
+                description="Relates a planned act (an act of working, of studying or of certification) to a language capability exercised and developed in the course of it."
+            ),
+        ]
+    ] = None
+    develops_skill: Optional[
+        Annotated[
+            List[Union[Skill, URIRef, str]],
+            Field(
+                description="Relates a planned act (an act of working or of studying, for one) to a skill exercised and developed in the course of it."
+            ),
+        ]
+    ] = None
+    for_educational_organization: Optional[
+        Annotated[
+            List[Union[Organization, URIRef, str]],
+            Field(
+                description="Relates an act of studying to the educational organization that participates as the training provider."
+            ),
+        ]
+    ] = None
+    hasParticipant: Optional[Annotated[List[Union[Person, URIRef, str]], Field()]] = (
+        None
+    )
+    has_degree: Optional[
+        Annotated[
+            List[Union[AcademicDegree, URIRef, str]],
+            Field(
+                description="Relates an act of studying to the academic degree it concretizes."
+            ),
+        ]
+    ] = None
+    has_enrollment: Optional[
+        Annotated[
+            List[Union[EnrollmentRecord, URIRef, str]],
+            Field(
+                description="Relates an act of studying to the enrollment record it concretizes."
+            ),
+        ]
+    ] = None
+    has_source_document: Optional[
+        Annotated[
+            List[Union[ProfileDocument, URIRef, str]],
+            Field(
+                description="Relates a planned act to the profile document it was read from and registered against."
+            ),
+        ]
+    ] = None
+    is_act_of_studying_of: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(
+                description="Relates an act of studying to the person acquiring the curriculum."
+            ),
+        ]
+    ] = None
+    occupiesTemporalRegion: Optional[
+        Annotated[List[Union[TemporalRegion, URIRef, str]], Field()]
+    ] = None
+    occursIn: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    realizes: Optional[Annotated[List[Union[StudentRole, URIRef, str]], Field()]] = None
+
+
+class ActOfWorking(RDFEntity):
+    """
+    Act of Working
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/people/ActOfWorking"
+    _name: ClassVar[str] = "Act of Working"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "develops_language_capability": "http://ontology.naas.ai/people/developsLanguageCapability",
+        "develops_skill": "http://ontology.naas.ai/people/developsSkill",
+        "employment_type": "http://ontology.naas.ai/people/employment_type",
+        "for_client": "http://ontology.naas.ai/people/forClient",
+        "for_organization": "http://ontology.naas.ai/people/forOrganization",
+        "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
+        "has_source_document": "http://ontology.naas.ai/people/hasSourceDocument",
+        "is_act_of_working_of": "http://ontology.naas.ai/people/isActOfWorkingOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "occupiesTemporalRegion": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+        "occursIn": "http://ontology.naas.ai/abi/occursIn",
+        "realizes": "http://ontology.naas.ai/abi/realizes",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "develops_language_capability",
+        "develops_skill",
+        "for_client",
+        "for_organization",
+        "hasParticipant",
+        "has_source_document",
+        "is_act_of_working_of",
+        "occupiesTemporalRegion",
+        "occursIn",
+        "realizes",
+    }
+
+    # Data properties
+    employment_type: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Engagement type a source states for an act of working, e.g. 'Full-time', 'Freelance', 'Self-employed', 'Internship'. What was published, not the terms of a contract: a contract is an internal record of the employing organization, outside this vocabulary."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now(datetime.timezone.utc)
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    develops_language_capability: Optional[
+        Annotated[
+            List[Union[LanguageCapability, URIRef, str]],
+            Field(
+                description="Relates a planned act (an act of working, of studying or of certification) to a language capability exercised and developed in the course of it."
+            ),
+        ]
+    ] = None
+    develops_skill: Optional[
+        Annotated[
+            List[Union[Skill, URIRef, str]],
+            Field(
+                description="Relates a planned act (an act of working or of studying, for one) to a skill exercised and developed in the course of it."
+            ),
+        ]
+    ] = None
+    for_client: Optional[
+        Annotated[
+            List[Union[Organization, URIRef, str]],
+            Field(
+                description="Relates an act of working to the client organization the work was performed for, when the worker was staffed there by their employer (forOrganization) rather than working for the client directly."
+            ),
+        ]
+    ] = None
+    for_organization: Optional[
+        Annotated[
+            List[Union[Organization, URIRef, str]],
+            Field(
+                description="Relates an act of working to the organization that participates as employer."
+            ),
+        ]
+    ] = None
+    hasParticipant: Optional[Annotated[List[Union[Person, URIRef, str]], Field()]] = (
+        None
+    )
+    has_source_document: Optional[
+        Annotated[
+            List[Union[ProfileDocument, URIRef, str]],
+            Field(
+                description="Relates a planned act to the profile document it was read from and registered against."
+            ),
+        ]
+    ] = None
+    is_act_of_working_of: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(
+                description="Relates an act of working to the person performing the work."
+            ),
+        ]
+    ] = None
+    occupiesTemporalRegion: Optional[
+        Annotated[List[Union[TemporalRegion, URIRef, str]], Field()]
+    ] = None
+    occursIn: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    realizes: Optional[Annotated[List[Union[OccupationRole, URIRef, str]], Field()]] = (
+        None
+    )
+
+
 class EnrollmentRecord(GenericallyDependentContinuant, RDFEntity):
     """
     Enrollment Record
@@ -332,6 +718,7 @@ class EnrollmentRecord(GenericallyDependentContinuant, RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/people/EnrollmentRecord"
     _name: ClassVar[str] = "Enrollment Record"
     _property_uris: ClassVar[dict] = {
+        "activities_content": "http://ontology.naas.ai/people/activities_content",
         "completion_date": "http://ontology.naas.ai/people/completion_date",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
@@ -340,7 +727,9 @@ class EnrollmentRecord(GenericallyDependentContinuant, RDFEntity):
         "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "isConcretizedBy": "http://ontology.naas.ai/abi/isConcretizedBy",
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_enrollment_of": "http://ontology.naas.ai/people/isEnrollmentOf",
         "is_enrollment_record_of": "http://ontology.naas.ai/people/isEnrollmentRecordOf",
+        "is_sourced_from": "http://ontology.naas.ai/people/isSourcedFrom",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "program_name": "http://ontology.naas.ai/people/program_name",
     }
@@ -349,7 +738,9 @@ class EnrollmentRecord(GenericallyDependentContinuant, RDFEntity):
         "generically_depends_on",
         "isConcretizedBy",
         "is_concretized_by",
+        "is_enrollment_of",
         "is_enrollment_record_of",
+        "is_sourced_from",
     }
 
     # Data properties
@@ -374,6 +765,14 @@ class EnrollmentRecord(GenericallyDependentContinuant, RDFEntity):
             datetime.date,
             Field(
                 description="Date on which the course of study documented by this record ended. Absent while the person is still enrolled."
+            ),
+        ]
+    ] = None
+    activities_content: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Extracurricular activities and societies listed under an enrollment on the source profile."
             ),
         ]
     ] = None
@@ -410,11 +809,27 @@ class EnrollmentRecord(GenericallyDependentContinuant, RDFEntity):
             Field(description="c is concretized by b =Def b concretizes c"),
         ]
     ] = None
+    is_enrollment_of: Optional[
+        Annotated[
+            List[Union[ActOfStudying, URIRef, str]],
+            Field(
+                description="Relates an enrollment record to the act of studying that concretizes it."
+            ),
+        ]
+    ] = None
     is_enrollment_record_of: Optional[
         Annotated[
             List[Union[Person, URIRef, str]],
             Field(
                 description="Relates an enrollment record to the person on which it generically depends."
+            ),
+        ]
+    ] = None
+    is_sourced_from: Optional[
+        Annotated[
+            List[Union[ProfileDocument, URIRef, str]],
+            Field(
+                description="Relates an information content entity to the profile document it was read from."
             ),
         ]
     ] = None
@@ -433,12 +848,16 @@ class AcademicDegree(GenericallyDependentContinuant, RDFEntity):
         "genericallyDependsOn": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_degree_of": "http://ontology.naas.ai/people/isDegreeOf",
+        "is_sourced_from": "http://ontology.naas.ai/people/isSourcedFrom",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {
         "genericallyDependsOn",
         "generically_depends_on",
         "is_concretized_by",
+        "is_degree_of",
+        "is_sourced_from",
     }
 
     # Data properties
@@ -474,6 +893,22 @@ class AcademicDegree(GenericallyDependentContinuant, RDFEntity):
             Field(description="c is concretized by b =Def b concretizes c"),
         ]
     ] = None
+    is_degree_of: Optional[
+        Annotated[
+            List[Union[ActOfStudying, URIRef, str]],
+            Field(
+                description="Relates an academic degree to the act of studying that concretizes it."
+            ),
+        ]
+    ] = None
+    is_sourced_from: Optional[
+        Annotated[
+            List[Union[ProfileDocument, URIRef, str]],
+            Field(
+                description="Relates an information content entity to the profile document it was read from."
+            ),
+        ]
+    ] = None
 
 
 class Certification(GenericallyDependentContinuant, RDFEntity):
@@ -492,16 +927,22 @@ class Certification(GenericallyDependentContinuant, RDFEntity):
         "credential_url": "http://ontology.naas.ai/people/credential_url",
         "expiry_date": "http://ontology.naas.ai/people/expiry_date",
         "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "isConcretizedBy": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_awarded_certification_of": "http://ontology.naas.ai/people/isAwardedCertificationOf",
         "is_certification_of": "http://ontology.naas.ai/people/isCertificationOf",
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_sourced_from": "http://ontology.naas.ai/people/isSourcedFrom",
         "issue_date": "http://ontology.naas.ai/people/issue_date",
         "issued_by_organization": "http://ontology.naas.ai/people/issuedByOrganization",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {
         "generically_depends_on",
+        "isConcretizedBy",
+        "is_awarded_certification_of",
         "is_certification_of",
         "is_concretized_by",
+        "is_sourced_from",
         "issued_by_organization",
     }
 
@@ -575,6 +1016,17 @@ class Certification(GenericallyDependentContinuant, RDFEntity):
             ),
         ]
     ] = None
+    isConcretizedBy: Optional[
+        Annotated[List[Union[ActOfCertification, URIRef, str]], Field()]
+    ] = None
+    is_awarded_certification_of: Optional[
+        Annotated[
+            List[Union[ActOfCertification, URIRef, str]],
+            Field(
+                description="Relates a certification to the act of certification that concretizes it."
+            ),
+        ]
+    ] = None
     is_certification_of: Optional[
         Annotated[
             List[Union[Person, URIRef, str]],
@@ -587,6 +1039,14 @@ class Certification(GenericallyDependentContinuant, RDFEntity):
         Annotated[
             List[Union[Disposition, Process, Quality, Role, URIRef, str]],
             Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
+    is_sourced_from: Optional[
+        Annotated[
+            List[Union[ProfileDocument, URIRef, str]],
+            Field(
+                description="Relates an information content entity to the profile document it was read from."
+            ),
         ]
     ] = None
     issued_by_organization: Optional[
@@ -691,6 +1151,7 @@ class OccupationRole(Role, RDFEntity):
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "hasRealization": "http://ontology.naas.ai/abi/hasRealization",
+        "has_mission": "http://ontology.naas.ai/people/hasMission",
         "has_realization": "http://ontology.naas.ai/abi/hasRealization",
         "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
         "is_occupation_role_of": "http://ontology.naas.ai/people/isOccupationRoleOf",
@@ -700,6 +1161,7 @@ class OccupationRole(Role, RDFEntity):
     _object_properties: ClassVar[set[str]] = {
         "concretizes",
         "hasRealization",
+        "has_mission",
         "has_realization",
         "inheres_in",
         "is_occupation_role_of",
@@ -737,6 +1199,14 @@ class OccupationRole(Role, RDFEntity):
     ] = None
     hasRealization: Optional[
         Annotated[List[Union[ActOfWorking, URIRef, str]], Field()]
+    ] = None
+    has_mission: Optional[
+        Annotated[
+            List[Union[Mission, URIRef, str]],
+            Field(
+                description="Relates an occupation role to the mission it concretizes. Named sub-property of abi:concretizes: a role (SDC) concretizes a mission (GDC)."
+            ),
+        ]
     ] = None
     has_realization: Optional[
         Annotated[
@@ -1073,6 +1543,7 @@ class Skill(Quality, RDFEntity):
         "creator": "http://purl.org/dc/terms/creator",
         "inheresIn": "http://ontology.naas.ai/abi/inheresIn",
         "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
+        "is_skill_demonstrated_in": "http://ontology.naas.ai/people/isSkillDemonstratedIn",
         "is_skill_developed_in": "http://ontology.naas.ai/people/isSkillDevelopedIn",
         "is_skill_of": "http://ontology.naas.ai/people/isSkillOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
@@ -1083,6 +1554,7 @@ class Skill(Quality, RDFEntity):
         "concretizes",
         "inheresIn",
         "inheres_in",
+        "is_skill_demonstrated_in",
         "is_skill_developed_in",
         "is_skill_of",
         "participates_in",
@@ -1127,6 +1599,14 @@ class Skill(Quality, RDFEntity):
             ),
         ]
     ] = None
+    is_skill_demonstrated_in: Optional[
+        Annotated[
+            List[Union[ActOfCertification, URIRef, str]],
+            Field(
+                description="Relates a skill to an act of certification in which it is demonstrated."
+            ),
+        ]
+    ] = None
     is_skill_developed_in: Optional[
         Annotated[
             Union[URIRef, str],
@@ -1146,6 +1626,193 @@ class Skill(Quality, RDFEntity):
             List[Union[Process, URIRef, str]],
             Field(
                 description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"
+            ),
+        ]
+    ] = None
+
+
+class CertificationCandidateRole(Role, RDFEntity):
+    """
+    No CCO candidate-role class; minted in the people namespace. Kept apart from the occupation and student roles: a person is a candidate whether or not they were working or enrolled at the time.
+    """
+
+    _class_uri: ClassVar[str] = (
+        "http://ontology.naas.ai/people/CertificationCandidateRole"
+    )
+    _name: ClassVar[str] = "Certification Candidate Role"
+    _property_uris: ClassVar[dict] = {
+        "concretizes": "http://ontology.naas.ai/abi/concretizes",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "hasRealization": "http://ontology.naas.ai/abi/hasRealization",
+        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
+        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
+        "is_certification_candidate_role_of": "http://ontology.naas.ai/people/isCertificationCandidateRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "concretizes",
+        "hasRealization",
+        "has_realization",
+        "inheres_in",
+        "is_certification_candidate_role_of",
+    }
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    concretizes: Optional[
+        Annotated[
+            List[Union[GenericallyDependentContinuant, URIRef, str]],
+            Field(
+                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
+            ),
+        ]
+    ] = None
+    hasRealization: Optional[
+        Annotated[List[Union[ActOfCertification, URIRef, str]], Field()]
+    ] = None
+    has_realization: Optional[
+        Annotated[
+            List[Union[Process, URIRef, str]],
+            Field(description="b has realization c =Def c realizes b"),
+        ]
+    ] = None
+    inheres_in: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
+            ),
+        ]
+    ] = None
+    is_certification_candidate_role_of: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(
+                description="Relates a certification candidate role to the person in whom it inheres."
+            ),
+        ]
+    ] = None
+
+
+class Mission(GenericallyDependentContinuant, RDFEntity):
+    """
+    Deliberately a GDC and NOT a BFO function. A mission is stated, copied between systems and survives the person leaving the post, which a disposition inhering in the person could not. The WHY that inheres in the person is people:OccupationRole; the mission is what that role concretizes. rdfs:label carries the opening sentence; people:mission_content carries the full text.
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/people/Mission"
+    _name: ClassVar[str] = "Mission"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "genericallyDependsOn": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "isConcretizedBy": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_mission_carried_by": "http://ontology.naas.ai/people/isMissionCarriedBy",
+        "is_mission_of": "http://ontology.naas.ai/people/isMissionOf",
+        "is_sourced_from": "http://ontology.naas.ai/people/isSourcedFrom",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "mission_content": "http://ontology.naas.ai/people/mission_content",
+        "mission_context": "http://ontology.naas.ai/people/mission_context",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "genericallyDependsOn",
+        "generically_depends_on",
+        "isConcretizedBy",
+        "is_concretized_by",
+        "is_mission_carried_by",
+        "is_mission_of",
+        "is_sourced_from",
+    }
+
+    # Data properties
+    mission_context: Optional[
+        Annotated[
+            str,
+            Field(
+                description="The situation a mission was undertaken in: what the organization needed and why, stated as prose before the mission's own objectives and activities. Optional: a source that states only what was done, not the situation it responded to, leaves this unset."
+            ),
+        ]
+    ] = None
+    mission_content: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Full stated text of a mission: the objectives and activities listed under its opening sentence, one per line when the source enumerates them as discrete tasks. The opening sentence alone is carried by rdfs:label; the situation the mission responded to is carried by people:mission_context, not here."
+            ),
+        ]
+    ] = None
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Optional[
+        Annotated[
+            datetime.datetime,
+            Field(description="Date of creation of the resource."),
+        ]
+    ] = None
+    creator: Optional[
+        Annotated[
+            Any,
+            Field(description="An entity responsible for making the resource."),
+        ]
+    ] = None
+
+    # Object properties
+    genericallyDependsOn: Optional[
+        Annotated[List[Union[Person, URIRef, str]], Field()]
+    ] = None
+    generically_depends_on: Optional[
+        Annotated[
+            List[Union[MaterialEntity, URIRef, str]],
+            Field(
+                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
+            ),
+        ]
+    ] = None
+    isConcretizedBy: Optional[
+        Annotated[List[Union[OccupationRole, URIRef, str]], Field()]
+    ] = None
+    is_concretized_by: Optional[
+        Annotated[
+            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
+    is_mission_carried_by: Optional[
+        Annotated[
+            List[Union[Person, URIRef, str]],
+            Field(
+                description="Relates a mission to the person on which it generically depends."
+            ),
+        ]
+    ] = None
+    is_mission_of: Optional[
+        Annotated[
+            List[Union[OccupationRole, URIRef, str]],
+            Field(
+                description="Relates a mission to the occupation role that concretizes it while the person works in that capacity."
+            ),
+        ]
+    ] = None
+    is_sourced_from: Optional[
+        Annotated[
+            List[Union[ProfileDocument, URIRef, str]],
+            Field(
+                description="Relates an information content entity to the profile document it was read from."
             ),
         ]
     ] = None
@@ -1373,6 +2040,7 @@ class ProfileDocument(DocumentContentEntity, RDFEntity):
         "genericallyDependsOn": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_profile_document_for_profiling": "http://ontology.naas.ai/people/isProfileDocumentForProfiling",
         "is_profile_document_of": "http://ontology.naas.ai/people/isProfileDocumentOf",
         "is_source_document_of": "http://ontology.naas.ai/people/isSourceDocumentOf",
         "is_source_of": "http://ontology.naas.ai/people/isSourceOf",
@@ -1383,6 +2051,7 @@ class ProfileDocument(DocumentContentEntity, RDFEntity):
         "genericallyDependsOn",
         "generically_depends_on",
         "is_concretized_by",
+        "is_profile_document_for_profiling",
         "is_profile_document_of",
         "is_source_document_of",
         "is_source_of",
@@ -1427,6 +2096,14 @@ class ProfileDocument(DocumentContentEntity, RDFEntity):
             Field(description="c is concretized by b =Def b concretizes c"),
         ]
     ] = None
+    is_profile_document_for_profiling: Optional[
+        Annotated[
+            List[Union[ActOfProfiling, URIRef, str]],
+            Field(
+                description="Relates a profile document to an act of profiling that used it as input."
+            ),
+        ]
+    ] = None
     is_profile_document_of: Optional[
         Annotated[
             List[Union[Person, URIRef, str]],
@@ -1454,6 +2131,10 @@ class ProfileDocument(DocumentContentEntity, RDFEntity):
 
 
 # Rebuild models to resolve forward references
+ActOfCertification.model_rebuild()
+ActOfProfiling.model_rebuild()
+ActOfStudying.model_rebuild()
+ActOfWorking.model_rebuild()
 EnrollmentRecord.model_rebuild()
 AcademicDegree.model_rebuild()
 Certification.model_rebuild()
@@ -1463,6 +2144,8 @@ StudentRole.model_rebuild()
 LanguageCapability.model_rebuild()
 Interest.model_rebuild()
 Skill.model_rebuild()
+CertificationCandidateRole.model_rebuild()
+Mission.model_rebuild()
 Recommendation.model_rebuild()
 ProfileSummary.model_rebuild()
 ProfileDocument.model_rebuild()

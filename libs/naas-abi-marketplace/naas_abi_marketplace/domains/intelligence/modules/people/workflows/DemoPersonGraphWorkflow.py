@@ -14,12 +14,12 @@ from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
-from naas_abi_marketplace.domains.intelligence.modules.people.graph.demo import (
+from naas_abi_marketplace.domains.intelligence.modules.people.scripts.demo_graph import (
     build_instance_graph,
     schema_relative_paths,
     write_demo_graph_file,
 )
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     DEMO_GRAPH_FILE,
     DEMO_SOURCE_DIR,
     PEOPLE_ROOT,

@@ -11,7 +11,7 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
     infer_cockpit_bfo_bucket,
     load_bucket_inference_graph,
 )
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     ONTOLOGIES_DIR,
 )
 from rdflib import OWL, RDF, RDFS, Graph, URIRef

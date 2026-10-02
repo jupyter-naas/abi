@@ -17,11 +17,11 @@ from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreSe
 from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.graph_builders import (
     ABI,
 )
-from naas_abi_marketplace.domains.personnel.paths import module_graph_name
 from naas_abi_marketplace.domains.personnel.pipelines.utils.graph_builders import (
     PERSONNEL,
     PersonnelGraphContext,
 )
+from naas_abi_marketplace.domains.personnel.utils.paths import module_graph_name
 from pydantic import Field
 from rdflib import Graph, URIRef
 

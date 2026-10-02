@@ -16,9 +16,11 @@ A loadable module of the `intelligence` bucket, next to
 ```
 people/
 ├── __init__.py                  # ABIModule: datastore intelligence/people, graph …/graph/people
-├── paths.py
+├── Makefile
 ├── agents/PeopleAgent.py
-├── person_sources.py            # reads data/demo/person/*/index.json
+├── utils/
+│   ├── paths.py                 # module paths, demo inputs and graph
+│   └── person_sources.py        # reads data/demo/person/*/index.json
 ├── pipelines/
 │   ├── ActOfWorkingPipeline.py      # a job, anywhere
 │   ├── ActOfStudyingPipeline.py     # a course of study
@@ -27,8 +29,8 @@ people/
 │   ├── profile_from_source.py       # one published source, all of the above
 │   └── utils/graph_builders.py      # PeopleGraphContext: the RDF writer
 ├── workflows/DemoPersonGraphWorkflow.py
-├── graph/demo.py
-├── data/demo/person/<slug>/index.json   # fictional demo sources
+├── scripts/demo_graph.py        # builds graphs/demo/people.ttl from data/demo/person
+├── data/demo/person/<slug>/index.json   # fictional demo sources (published facts only)
 ├── graphs/demo/people.ttl               # generated instance graph
 ├── apps/people/                 # People Search: directory, profiles, person graph view
 │   └── graph_page/              # the 7-bucket person graph (also embedded by the personnel cockpit)

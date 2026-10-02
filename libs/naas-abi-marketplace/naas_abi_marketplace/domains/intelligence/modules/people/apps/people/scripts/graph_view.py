@@ -36,7 +36,7 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
     load_queries,
     strip_named_graph,
 )
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     DEMO_GRAPH_FILE,
 )
 from rdflib import Graph, Literal, URIRef

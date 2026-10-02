@@ -8,7 +8,7 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.graph_query import (
     graph_page_payload,
     query_source_rows,
 )
-from naas_abi_marketplace.domains.personnel.paths import DEMO_GRAPH_FILE
+from naas_abi_marketplace.domains.personnel.utils.paths import DEMO_GRAPH_FILE
 from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import XSD
 

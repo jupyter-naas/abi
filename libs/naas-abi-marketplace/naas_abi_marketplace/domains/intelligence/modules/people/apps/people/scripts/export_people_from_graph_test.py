@@ -15,7 +15,7 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.config
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
     export_people_from_graph as export,
 )
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     DEMO_GRAPH_FILE,
 )
 from rdflib import Graph

@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from naas_abi_marketplace.domains.personnel.graph.demo import build_overlay_graph
-from naas_abi_marketplace.domains.personnel.paths import DEMO_SOURCE_DIR
+from naas_abi_marketplace.domains.personnel.scripts.demo_graph import (
+    build_overlay_graph,
+)
+from naas_abi_marketplace.domains.personnel.utils.paths import (
+    DEMO_SOURCE_DIR,
+    PEOPLE_DEMO_SOURCE_DIR,
+)
 from naas_abi_marketplace.domains.personnel.workflows.DemoPersonnelGraphWorkflow import (
     DemoPersonnelGraphWorkflow,
     DemoPersonnelGraphWorkflowConfiguration,
     DemoPersonnelGraphWorkflowParameters,
 )
 from rdflib import Graph, URIRef
-from rdflib.namespace import RDF
+from rdflib.namespace import RDF, RDFS
 
 PEOPLE_ACT_OF_WORKING = URIRef("http://ontology.naas.ai/people/ActOfWorking")
 ACT_OF_EMPLOYMENT = URIRef("http://ontology.naas.ai/personnel/ActOfEmployment")
@@ -59,3 +65,28 @@ def test_every_employee_role_is_the_role_an_act_of_working_realizes(
     occupation = URIRef("http://ontology.naas.ai/people/OccupationRole")
     for role in graph.subjects(RDF.type, EMPLOYEE_ROLE):
         assert (role, RDF.type, occupation) in graph
+
+
+def test_personnel_demo_covers_the_people_demo() -> None:
+    people = {p.parent.name for p in PEOPLE_DEMO_SOURCE_DIR.glob("*/index.json")}
+    personnel = {p.parent.name for p in DEMO_SOURCE_DIR.glob("*/index.json")}
+    assert personnel and personnel <= people
+
+
+def test_employer_records_live_only_in_personnel_files() -> None:
+    hr_keys = {"service_line", "grade", "roster", "employments"}
+    for path in PEOPLE_DEMO_SOURCE_DIR.glob("*/index.json"):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        assert not hr_keys & (set(payload) | set(payload.get("profile") or {})), path
+    for path in DEMO_SOURCE_DIR.glob("*/index.json"):
+        assert hr_keys <= set(json.loads(path.read_text(encoding="utf-8"))), path
+
+
+def test_overlay_reads_the_grade_from_the_personnel_file() -> None:
+    overlay = build_overlay_graph(DEMO_SOURCE_DIR)
+    grades = {
+        str(label)
+        for g in overlay.subjects(RDF.type, GRADE)
+        for label in overlay.objects(g, RDFS.label)
+    }
+    assert "Partner" in grades

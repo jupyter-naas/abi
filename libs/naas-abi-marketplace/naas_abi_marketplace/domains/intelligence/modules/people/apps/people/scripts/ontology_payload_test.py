@@ -6,7 +6,7 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
     build_ontology_payload,
     load_people_schema_graph,
 )
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     ONTOLOGIES_DIR,
 )
 from rdflib import OWL, Graph, URIRef

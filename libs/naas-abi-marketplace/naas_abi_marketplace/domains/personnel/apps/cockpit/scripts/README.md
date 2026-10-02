@@ -43,11 +43,12 @@ server still starts and the pages render empty.
 
 ### `person_sources.py`
 
-Loads the committed demo inputs from the people module's `data/demo/person/<slug>/index.json` and
-shapes them for the pipelines:
+Loads the committed demo inputs and shapes them for the pipelines: the
+published person files from the people module's `data/demo/person/<slug>/index.json`,
+the employer records from the personnel module's own `data/demo/person/<slug>/index.json`.
 
 - `load_person_sources(dir)` — read every `<slug>/index.json`
-- `sources_to_employees(payloads)` — HR roster rows from an optional `roster` block (none of the demo files carry one today, so no employment records are minted — see `roster_builder.py`)
+- `sources_to_employees(payloads)` — HR roster rows from the `roster` block of each personnel file
 - `sources_to_profile_urls(payloads)` — full name → profile URL
 - `sources_to_experiences(payloads)` — `ActOfWorking` / `ActOfStudying` records
 

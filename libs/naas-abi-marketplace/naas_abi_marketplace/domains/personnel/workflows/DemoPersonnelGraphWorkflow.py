@@ -17,12 +17,12 @@ from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
-from naas_abi_marketplace.domains.personnel.graph.demo import (
+from naas_abi_marketplace.domains.personnel.scripts.demo_graph import (
     build_overlay_graph,
     schema_relative_paths,
     write_demo_graph_file,
 )
-from naas_abi_marketplace.domains.personnel.paths import (
+from naas_abi_marketplace.domains.personnel.utils.paths import (
     DEMO_GRAPH_FILE,
     DEMO_SOURCE_DIR,
     PERSONNEL_ROOT,
@@ -60,8 +60,19 @@ class DemoPersonnelGraphWorkflowParameters(WorkflowParameters):
         str | None,
         Field(
             description=(
-                "Directory of demo person folders (each with index.json). "
-                "Defaults to the people module's data/demo/person."
+                "Directory of personnel demo folders (each with index.json: "
+                "employer, service line, grade, roster, employments). "
+                "Defaults to this module's data/demo/person."
+            ),
+        ),
+    ] = None
+    people_source_dir: Annotated[
+        str | None,
+        Field(
+            description=(
+                "When mode=demo, directory of people demo folders whose instances "
+                "go into the output too. Defaults to the people module's "
+                "data/demo/person."
             ),
         ),
     ] = None
@@ -95,6 +106,9 @@ class DemoPersonnelGraphWorkflow(Workflow[DemoPersonnelGraphWorkflowParameters])
         if parameters.mode == "demo":
             output, schema_triples, instance_triples = write_demo_graph_file(
                 source,
+                people_source_dir=Path(parameters.people_source_dir)
+                if parameters.people_source_dir
+                else None,
                 output_path=Path(parameters.output_path)
                 if parameters.output_path
                 else None,

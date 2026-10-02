@@ -39,7 +39,7 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.text import (
     search_text,
 )
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     DEMO_GRAPH_FILE,
     PEOPLE_ROOT,
 )

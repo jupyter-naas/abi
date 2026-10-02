@@ -11,7 +11,7 @@ import textwrap
 from functools import lru_cache
 from typing import Any
 
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     ONTOLOGIES_DIR,
 )
 from rdflib import RDF, RDFS, Graph, URIRef

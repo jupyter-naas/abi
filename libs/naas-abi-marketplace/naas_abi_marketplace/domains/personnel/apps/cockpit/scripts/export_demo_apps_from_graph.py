@@ -16,6 +16,9 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.graph_payload import (
+    build_graph_page_payload,
+)
 from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import (
     load_config,
     load_default_entity,
@@ -23,9 +26,6 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import (
 from naas_abi_marketplace.domains.personnel.apps.cockpit.data_store import (
     publish_data_tree,
     runtime_storage_prefix,
-)
-from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.graph_payload import (
-    build_graph_page_payload,
 )
 from naas_abi_marketplace.domains.personnel.apps.cockpit.graph_query import (
     graph_page_roster,
@@ -47,7 +47,7 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import (
 from naas_abi_marketplace.domains.personnel.apps.cockpit.processes_payload import (
     build_processes_page_payload,
 )
-from naas_abi_marketplace.domains.personnel.paths import PERSONNEL_ROOT
+from naas_abi_marketplace.domains.personnel.utils.paths import PERSONNEL_ROOT
 from rdflib import Graph
 
 SCHEMA = "1.0"

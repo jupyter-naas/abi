@@ -4,21 +4,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     DEMO_SOURCE_DIR as PEOPLE_DEMO_SOURCE_DIR,
 )
 
-PERSONNEL_ROOT = Path(__file__).resolve().parent
+__all__ = ["PEOPLE_DEMO_SOURCE_DIR"]
+
+PERSONNEL_ROOT = Path(__file__).resolve().parents[1]
 ONTOLOGIES_DIR = PERSONNEL_ROOT / "ontologies"
 COCKPIT_ROOT = PERSONNEL_ROOT / "apps" / "cockpit"
 COCKPIT_DATA_ROOT = (
     COCKPIT_ROOT / "data"
 )  # structure reference copy; app reads ObjectStorage
 
-# Demo inputs (fictional person JSON) are the people module's: personnel reads
-# the same files and adds what an employer records (service line, grade, the
-# employee role behind an act of working).
-DEMO_SOURCE_DIR = PEOPLE_DEMO_SOURCE_DIR
+# Demo inputs. The people module's files hold what each fictional person
+# publishes; personnel's own files hold what their employer records about the
+# same people (service line, grade, roster, contracts, pay) and are read by this
+# module only.
+DEMO_SOURCE_DIR = PERSONNEL_ROOT / "data" / "demo" / "person"
 
 # Demo graph (TTL): the people instances plus the personnel records on top, and
 # both schemas - what the cockpit's export scripts read.

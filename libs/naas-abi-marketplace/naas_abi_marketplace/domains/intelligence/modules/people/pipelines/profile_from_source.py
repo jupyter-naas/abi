@@ -13,9 +13,6 @@ from typing import Annotated, Literal
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
-    module_graph_name,
-)
 from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfCertificationPipeline import (
     ActOfCertificationPipeline,
     ActOfCertificationPipelineConfiguration,
@@ -42,6 +39,9 @@ from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.PersonPr
 )
 from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.graph_builders import (
     PeopleGraphContext,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
+    module_graph_name,
 )
 from pydantic import AliasChoices, BaseModel, Field
 from rdflib import Graph, URIRef

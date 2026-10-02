@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import json
 
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
-    DEMO_SOURCE_DIR,
-)
-from naas_abi_marketplace.domains.intelligence.modules.people.person_sources import (
-    load_person_sources,
-    payload_to_profile_source_parameters,
-)
 from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.profile_from_source import (
     ProfileFromSourcePipeline,
     ProfileFromSourcePipelineConfiguration,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
+    DEMO_SOURCE_DIR,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.person_sources import (
+    load_person_sources,
+    payload_to_profile_source_parameters,
 )
 from rdflib import URIRef
 from rdflib.namespace import RDF

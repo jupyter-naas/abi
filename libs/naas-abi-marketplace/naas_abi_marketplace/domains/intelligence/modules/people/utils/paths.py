@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-PEOPLE_ROOT = Path(__file__).resolve().parent
+PEOPLE_ROOT = Path(__file__).resolve().parents[1]
 ONTOLOGIES_DIR = PEOPLE_ROOT / "ontologies"
 
 # Demo inputs (fictional person JSON).

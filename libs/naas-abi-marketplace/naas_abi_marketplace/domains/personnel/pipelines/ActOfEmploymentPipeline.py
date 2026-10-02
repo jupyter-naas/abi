@@ -14,10 +14,10 @@ from typing import Annotated
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from naas_abi_marketplace.domains.personnel.paths import module_graph_name
 from naas_abi_marketplace.domains.personnel.pipelines.utils.graph_builders import (
     PersonnelGraphContext,
 )
+from naas_abi_marketplace.domains.personnel.utils.paths import module_graph_name
 from pydantic import Field
 from rdflib import Graph, URIRef
 

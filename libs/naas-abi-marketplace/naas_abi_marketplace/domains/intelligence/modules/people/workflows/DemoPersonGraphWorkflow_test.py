@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     DEMO_SOURCE_DIR,
 )
 from naas_abi_marketplace.domains.intelligence.modules.people.workflows.DemoPersonGraphWorkflow import (
@@ -35,7 +35,7 @@ def test_demo_mode_default_output_path_exists_after_run(
 ) -> None:
     target = tmp_path / "graphs" / "demo" / "people.ttl"
     monkeypatch.setattr(
-        "naas_abi_marketplace.domains.intelligence.modules.people.graph.demo.DEMO_GRAPH_FILE",
+        "naas_abi_marketplace.domains.intelligence.modules.people.scripts.demo_graph.DEMO_GRAPH_FILE",
         target,
     )
     workflow = DemoPersonGraphWorkflow(DemoPersonGraphWorkflowConfiguration())

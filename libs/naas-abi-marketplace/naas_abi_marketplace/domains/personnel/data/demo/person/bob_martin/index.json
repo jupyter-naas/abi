@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-10-02 17:30",
+  "person": {
+    "first_name": "Bob",
+    "last_name": "Martin",
+    "full_name": "Bob Martin"
+  },
+  "employer": "Demo",
+  "service_line": "Strategy",
+  "grade": "Partner",
+  "roster": {
+    "employee_id": "E-10428",
+    "job_title": "CEO",
+    "job_family": "Executive",
+    "hire_date": "2023-04-01",
+    "termination_date": null,
+    "status": "active"
+  },
+  "employments": [
+    {
+      "organization": "Demo",
+      "client": null,
+      "title": "CEO",
+      "contract_type": "Permanent (CDI)",
+      "job_family": "Executive",
+      "remuneration_amount": 120000,
+      "remuneration_currency": "EUR"
+    }
+  ]
+}

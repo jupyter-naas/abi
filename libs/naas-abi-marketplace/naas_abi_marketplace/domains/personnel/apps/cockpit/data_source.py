@@ -18,7 +18,7 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.data_store import (
     storage_has_datasets,
 )
 from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import DATA_ROOT
-from naas_abi_marketplace.domains.personnel.paths import (
+from naas_abi_marketplace.domains.personnel.utils.paths import (
     cockpit_storage_prefix,
     module_datastore_path,
     module_graph_name,
@@ -26,7 +26,7 @@ from naas_abi_marketplace.domains.personnel.paths import (
 
 
 def demo_graph_path() -> Path:
-    from naas_abi_marketplace.domains.personnel.paths import DEMO_GRAPH_FILE
+    from naas_abi_marketplace.domains.personnel.utils.paths import DEMO_GRAPH_FILE
 
     return DEMO_GRAPH_FILE
 

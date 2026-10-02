@@ -2,8 +2,9 @@
 
 The JSON files are the committed source of truth for the demo graph: each
 folder holds one person, their published ``profile`` block, and their process
-records (``ActOfWorking`` / ``ActOfStudying``). An HR ``roster`` block, when a
-file carries one, is internal and read by the personnel module, not here.
+records (``ActOfWorking`` / ``ActOfStudying``). What an employer records about
+them (service line, grade, contract, roster) is not here: it is the personnel
+module's own demo data.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-from naas_abi_marketplace.domains.intelligence.modules.people.paths import (
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     DEMO_SOURCE_DIR,
 )
 
