@@ -13,8 +13,17 @@ from fastapi.responses import StreamingResponse
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     require_superadmin,
 )
+from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.primary.sysadmin__primary_adapter__jobs import (
+    jobs_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.primary.sysadmin__primary_adapter__resources import (
+    resources_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.primary.sysadmin__primary_adapter__schemas import (
     to_json,
+)
+from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.primary.sysadmin__primary_adapter__traces import (
+    traces_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.factory import (
     get_sysadmin_service,
@@ -25,6 +34,9 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.service import SysAdminS
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.traffic import TrafficHub, event_json
 
 router = APIRouter(dependencies=[Depends(require_superadmin)])
+router.include_router(resources_router, prefix="/resources")
+router.include_router(jobs_router, prefix="/jobs")
+router.include_router(traces_router, prefix="/traces")
 
 KEEPALIVE_SECONDS = 15.0
 BATCH_SIZE = 200

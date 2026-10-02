@@ -18,6 +18,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
+from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary import otlp_json
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import SourceUnavailable
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.traffic import TrafficEvent
 
@@ -35,33 +36,13 @@ STATUS_ERROR = 2
 MAX_SEEN = 20_000
 
 
-def _value(value: dict[str, Any]) -> Any:
-    for key in ("stringValue", "boolValue", "doubleValue"):
-        if key in value:
-            return value[key]
-    if "intValue" in value:
-        return _int(value["intValue"])  # int64 travels as a string in OTLP JSON
-    return None
-
-
-def _attributes(items: Any) -> dict[str, Any]:
-    return {item.get("key"): _value(item.get("value") or {}) for item in items or ()}
-
-
-def _int(value: Any) -> int | None:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def _event(span: dict[str, Any], caller: str) -> TrafficEvent | None:
-    tags = _attributes(span.get("attributes"))
-    kind = _int(span.get("kind"))
-    start_ns = _int(span.get("startTimeUnixNano")) or 0
-    end_ns = _int(span.get("endTimeUnixNano")) or start_ns
-    failed = _int((span.get("status") or {}).get("code")) == STATUS_ERROR
-    base = {
+    tags = otlp_json.attributes(span.get("attributes"))
+    kind = otlp_json.int_value(span.get("kind"))
+    start_ns = otlp_json.int_value(span.get("startTimeUnixNano")) or 0
+    end_ns = otlp_json.int_value(span.get("endTimeUnixNano")) or start_ns
+    failed = otlp_json.int_value((span.get("status") or {}).get("code")) == STATUS_ERROR
+    base: dict[str, Any] = {
         "at": start_ns / 1e9,
         "caller": caller,
         "latency_ms": round((end_ns - start_ns) / 1e6, 3),
@@ -78,8 +59,8 @@ def _event(span: dict[str, Any], caller: str) -> TrafficEvent | None:
                 subject=str(tags.get("messaging.destination.name") or ""),
                 service=service,
                 method=f"transfer.{operation}",
-                request_bytes=_int(tags.get("abi.transfer.bytes_sent")) or 0,
-                reply_bytes=_int(tags.get("abi.transfer.bytes_received")),
+                request_bytes=otlp_json.int_value(tags.get("abi.transfer.bytes_sent")) or 0,
+                reply_bytes=otlp_json.int_value(tags.get("abi.transfer.bytes_received")),
                 **base,
             )
         return TrafficEvent(
@@ -87,8 +68,8 @@ def _event(span: dict[str, Any], caller: str) -> TrafficEvent | None:
             subject=str(tags.get("messaging.destination.name") or ""),
             service=service,
             method=str(tags.get("rpc.method") or ""),
-            request_bytes=_int(tags.get("messaging.message.body.size")) or 0,
-            reply_bytes=_int(tags.get("abi.reply.body.size")),
+            request_bytes=otlp_json.int_value(tags.get("messaging.message.body.size")) or 0,
+            reply_bytes=otlp_json.int_value(tags.get("abi.reply.body.size")),
             **base,
         )
     if kind == SPAN_KIND_CONSUMER and tags.get("abi.job.name"):
@@ -104,21 +85,11 @@ def _event(span: dict[str, Any], caller: str) -> TrafficEvent | None:
     return None
 
 
-def _spans(response: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
-    """(service.name, span) pairs from a ``/api/v3/traces`` response."""
-    pairs = []
-    result = (response or {}).get("result") or {}
-    for resource_spans in result.get("resourceSpans") or ():
-        resource = _attributes((resource_spans.get("resource") or {}).get("attributes"))
-        caller = str(resource.get("service.name") or "")
-        for scope_spans in resource_spans.get("scopeSpans") or ():
-            pairs.extend((caller, span) for span in scope_spans.get("spans") or ())
-    return pairs
-
-
 def span_events(response: dict[str, Any]) -> list[TrafficEvent]:
     """Traffic rows from a Jaeger ``/api/v3/traces`` response, oldest first."""
-    events = [e for caller, span in _spans(response) if (e := _event(span, caller))]
+    events = [
+        e for caller, span in otlp_json.service_spans(response) if (e := _event(span, caller))
+    ]
     return sorted(events, key=lambda e: e.at)
 
 
@@ -218,7 +189,7 @@ class JaegerSpanTap:
                     "query.search_depth": self._limit,
                 },
             )
-            for caller, span in _spans(body):
+            for caller, span in otlp_json.service_spans(body):
                 key = (str(span.get("traceId")), str(span.get("spanId")))
                 if key in self._seen:
                     continue

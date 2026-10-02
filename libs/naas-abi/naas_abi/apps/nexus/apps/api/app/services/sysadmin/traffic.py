@@ -103,7 +103,7 @@ class Viewer:
 
     def drain(self, limit: int) -> list[TrafficEvent]:
         """What is already queued, up to ``limit``, without waiting."""
-        batch = []
+        batch: list[TrafficEvent] = []
         while self._events and len(batch) < limit:
             batch.append(self._events.popleft())
         return batch

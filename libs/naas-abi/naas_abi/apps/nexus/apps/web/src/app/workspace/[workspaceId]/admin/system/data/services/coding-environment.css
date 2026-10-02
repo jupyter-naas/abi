@@ -1,0 +1,62 @@
+/* data/services — coding environments */
+
+.data-codenv-root {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.data-codenv-count {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.data-codenv-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.data-codenv-status,
+.data-codenv-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.data-codenv-owner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.data-codenv-owner .data-avatar {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+}
+
+.data-codenv-owner-name {
+  overflow: hidden;
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--foreground-hex);
+}
+
+.data-codenv-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.data-codenv-owner-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

@@ -1,6 +1,7 @@
 """The span tap against a real Jaeger v2 (skipped without the `jaeger` binary)."""
 
 import asyncio
+import contextlib
 import shutil
 import socket
 import subprocess
@@ -57,13 +58,14 @@ def _port():
         return sock.getsockname()[1]
 
 
-@pytest.fixture
-def jaeger(tmp_path):
+@contextlib.contextmanager
+def run_jaeger(directory):
+    """A memstore Jaeger v2: yields (query url, OTLP HTTP url); skips without the binary."""
     binary = shutil.which("jaeger")
     if binary is None:
         pytest.skip("jaeger is not installed")
     query, grpc, otlp = _port(), _port(), _port()
-    config = tmp_path / "jaeger.yaml"
+    config = directory / "jaeger.yaml"
     config.write_text(CONFIG.format(query=query, grpc=grpc, otlp=otlp))
     process = subprocess.Popen(
         [binary, "--config", str(config)],
@@ -87,6 +89,12 @@ def jaeger(tmp_path):
         except subprocess.TimeoutExpired:  # Jaeger drains slowly on SIGTERM
             process.kill()
             process.wait(timeout=5)
+
+
+@pytest.fixture
+def jaeger(tmp_path):
+    with run_jaeger(tmp_path) as urls:
+        yield urls
 
 
 def test_calls_and_transfers_recorded_by_abi_show_up_as_traffic(jaeger, monkeypatch):

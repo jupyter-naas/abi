@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type Mounted } from './system-render';
 import { TrafficView } from './system-traffic';
 import type { TrafficEvent } from './system-traffic-model';
@@ -71,16 +71,31 @@ describe('TrafficView', () => {
 });
 
 describe('TrafficView trace links', () => {
-  it('links trace ids to the trace viewer when one is configured', async () => {
+  it('opens trace ids in the Traces tab when tracing is on', async () => {
+    const onOpenTrace = vi.fn();
     mounted = await mount(TrafficView, {
       events: [base],
       filters: { kind: 'all', text: '', errorsOnly: false },
       onFilters: () => {},
       traceUiUrl: 'http://localhost:16686',
+      onOpenTrace,
     });
     const link = mounted.host.querySelector('a[data-trace]');
 
-    expect(link?.getAttribute('href')).toBe('http://localhost:16686/trace/4bf92f3577b34da6a3ce929d0e0e4736');
-    expect(link?.getAttribute('target')).toBe('_blank');
+    expect(link?.getAttribute('href')).toBe('?tab=traces&trace=4bf92f3577b34da6a3ce929d0e0e4736');
+    expect(link?.getAttribute('target')).toBeNull();
+    await mounted.click(link);
+    expect(onOpenTrace).toHaveBeenCalledWith('4bf92f3577b34da6a3ce929d0e0e4736');
+  });
+
+  it('shows the short id without a link when tracing is off', async () => {
+    mounted = await mount(TrafficView, {
+      events: [base],
+      filters: { kind: 'all', text: '', errorsOnly: false },
+      onFilters: () => {},
+    });
+
+    expect(mounted.host.querySelector('a[data-trace]')).toBeNull();
+    expect(mounted.host.textContent).toContain('4bf92f35');
   });
 });
