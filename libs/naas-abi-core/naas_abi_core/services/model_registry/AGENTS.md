@@ -90,6 +90,8 @@ only bootstrap registration/validation to its local owner. `list_registered_mode
 returns `(canonical_id, model)` entries for complete catalog publication.
 EngineNATSLoader exposes the primary; EngineNATSDependencies injects the client.
 Never expose that client as a primary or route registration through inference RPCs.
+Each provider call runs in a `model <operation> <canonical id>` span (identity,
+input counts and reported token usage only: never messages, texts or options).
 
 Contracts: `naas-abi-proto/naas_abi_proto/model_registry/v1/model_registry.proto`.
 SDK optional model codec/proxies stay core-free; core's NATS extra installs them.

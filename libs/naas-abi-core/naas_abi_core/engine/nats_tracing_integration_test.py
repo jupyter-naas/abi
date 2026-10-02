@@ -172,3 +172,99 @@ def test_a_chunked_upload_is_one_span_with_its_totals(broker, monkeypatch, tmp_p
     assert put.attributes["abi.transfer.bytes_sent"] >= 300_000
     assert put.attributes["abi.transfer.messages"] >= 5
     assert get.attributes["abi.transfer.bytes_received"] >= 300_000
+
+
+def test_a_remote_model_call_is_one_trace_through_the_engine(broker, monkeypatch):
+    """SDK model proxy -> transfer -> engine session span -> model span."""
+    from langchain_core.language_models.fake_chat_models import FakeListChatModel
+    from naas_abi_core.engine.nats_auth import issue_service_token
+    from naas_abi_core.models.Model import ChatModel
+    from naas_abi_core.services.model_registry.adapters.primary.model_registry_nats import (
+        ModelRegistryNATS,
+    )
+    from naas_abi_core.services.model_registry.ModelRegistryService import (
+        ModelRegistryService,
+    )
+    from naas_abi_sdk import ABIClient
+    from naas_abi_sdk.services.model_registry import (
+        ModelRegistryService as RemoteRegistry,
+    )
+    from naas_abi_sdk.transport import RPCError
+
+    class BrokenModel(FakeListChatModel):
+        async def _agenerate(self, *args, **kwargs):
+            raise RuntimeError("private provider details")
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = provider.get_tracer("test")
+    monkeypatch.setattr(telemetry, "_tracer", lambda: tracer)
+
+    async def scenario():
+        owner = ModelRegistryService()
+        owner.register(
+            "chat",
+            ChatModel(
+                model_id="fake",
+                provider="test",
+                model=FakeListChatModel(responses=["answer"]),
+            ),
+        )
+        owner.register(
+            "broken",
+            ChatModel(
+                model_id="broken", provider="test", model=BrokenModel(responses=[""])
+            ),
+        )
+        nc = await nats.connect(broker)
+        primary = ModelRegistryNATS(owner, SECRET)
+        try:
+            await primary.start(nc)
+            token = issue_service_token("module", SECRET)
+            async with ABIClient(broker, token) as client:
+                registry = RemoteRegistry(client.model_registry)
+                chat = (await registry.get_chat_model("chat")).model
+                broken = (await registry.get_chat_model("broken")).model
+                with tracer.start_as_current_span("agent turn"):
+                    assert (await chat.ainvoke("hello")).content == "answer"
+                    with pytest.raises(RPCError) as failure:
+                        await broken.ainvoke("hello")
+            # The caller still only sees the sanitized error.
+            assert failure.value.code == "MODEL_ERROR"
+            assert "private" not in str(failure.value)
+        finally:
+            await primary.stop()
+            await nc.close()
+
+    asyncio.run(scenario())
+
+    finished = exporter.get_finished_spans()
+    root = next(s for s in finished if s.name == "agent turn")
+    turn = [s for s in finished if s.context.trace_id == root.context.trace_id]
+    clients = {s.context.span_id: s for s in turn if s.kind is SpanKind.CLIENT}
+    servers = {s.name: s for s in turn if s.kind is SpanKind.SERVER}
+    models = {s.name: s for s in turn if s.name.startswith("model ")}
+    assert [s.name for s in clients.values()] == ["model_registry/transfer.chat"] * 2
+    assert all(s.parent.span_id == root.context.span_id for s in clients.values())
+    assert set(models) == {"model chat chat", "model chat broken"}
+    (served,) = set(servers)
+    assert served == "model_registry/transfer.chat"
+    sessions = [s for s in turn if s.kind is SpanKind.SERVER]
+    assert len(sessions) == 2
+    assert all(s.parent.span_id in clients for s in sessions)
+    ok, failed = sorted(sessions, key=lambda s: s.status.status_code.value)
+    assert ok.status.status_code is StatusCode.UNSET
+    assert ok.attributes["abi.caller"] == "module"
+    assert ok.attributes["abi.transfer.end"] == "closed"
+    assert models["model chat chat"].parent.span_id == ok.context.span_id
+    assert models["model chat broken"].parent.span_id == failed.context.span_id
+    assert models["model chat chat"].attributes["abi.model.provider"] == "test"
+    # The real cause is on the engine span, in the caller's trace.
+    assert failed.status.status_code is StatusCode.ERROR
+    assert failed.attributes["abi.error_code"] == "MODEL_ERROR"
+    assert [e.attributes["exception.message"] for e in failed.events] == [
+        "private provider details"
+    ]
+    failed_client = clients[failed.parent.span_id]
+    assert failed_client.status.status_code is StatusCode.ERROR

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import os
-from collections.abc import Iterator, MutableMapping
+from collections.abc import Iterator, Mapping, MutableMapping
 from typing import Any
 
 TRACER_NAME = "naas_abi"
@@ -50,6 +50,51 @@ class TransferTrace:
             self.span.record_exception(error)
             self.span.set_status(Status(StatusCode.ERROR, type(error).__name__))
         self.span.end()
+
+
+class ServedTransfer(TransferTrace):
+    """The owner's SERVER span for a transfer session it serves (``serve_transfer``).
+
+    It lives from ``open`` until the session ends (close, idle expiry, stop), so it
+    is ended explicitly, once. It is current only around the domain handler
+    (``activate``). Totals are the owner's view: chunk data received and sent.
+    """
+
+    @contextlib.contextmanager
+    def activate(self) -> Iterator[None]:
+        """Make the span current, e.g. for the handler's task and its threads."""
+        if self.span is None:
+            yield
+            return
+        from opentelemetry import trace
+
+        # Failures are recorded by ``fail`` with their ABI code, not here.
+        with trace.use_span(
+            self.span, record_exception=False, set_status_on_exception=False
+        ):
+            yield
+
+    def fail(self, error: BaseException, code: str, message: str = "") -> None:
+        """Record the real failure here; the caller only gets the sanitized code."""
+        if self.span is None or not self.span.is_recording():
+            return
+        from opentelemetry.trace import Status, StatusCode
+
+        self.span.record_exception(error)
+        self.span.set_attribute("abi.error_code", code)
+        self.span.set_status(
+            Status(StatusCode.ERROR, f"{code}: {message}" if message else code)
+        )
+
+    def end(self, how: str, *, cancelled: bool = False) -> None:
+        """End the span once: ``how`` the session ended, and whether its handler
+        was still running (and is being cancelled)."""
+        if self.span is None:
+            return
+        self.span.set_attribute("abi.transfer.end", how)
+        self.span.set_attribute("abi.transfer.cancelled", cancelled)
+        self.finish()
+        self.span = None
 
 
 def _api() -> Any | None:
@@ -169,6 +214,34 @@ def transfer_span(prefix: str, operation: str) -> Iterator[TransferTrace]:
     transfer.finish()
 
 
+def serve_transfer(
+    prefix: str,
+    operation: str,
+    headers: Mapping[str, str] | None,
+    *,
+    attributes: dict[str, Any] | None = None,
+) -> ServedTransfer:
+    """Start the SERVER span of a transfer session opened on ``prefix``.
+
+    Continues the trace in the ``open`` request's headers (the caller's transfer
+    span) and has the same name. Not current: see ``ServedTransfer``.
+    """
+    api = _api()
+    if api is None:
+        return ServedTransfer()
+    trace, propagate = api
+    service, _ = describe_subject(f"{prefix}.{operation}")
+    extra = {"abi.transfer.operation": operation, **(attributes or {})}
+    return ServedTransfer(
+        _tracer().start_span(
+            f"{service}/transfer.{operation}",
+            context=propagate.extract(dict(headers or {})),
+            kind=trace.SpanKind.SERVER,
+            attributes=_attributes(prefix, extra),
+        )
+    )
+
+
 @contextlib.contextmanager
 def server_span(
     subject: str,
@@ -203,6 +276,18 @@ def internal_span(name: str, attributes: dict[str, Any] | None = None) -> Iterat
         return
     with _tracer().start_as_current_span(name, attributes=attributes or {}) as span:
         yield span
+
+
+def current_trace_id() -> str:
+    """The current span's trace id (32 hex), or ``""`` without tracing."""
+    api = _api()
+    if api is None:
+        return ""
+    trace, _ = api
+    context = trace.get_current_span().get_span_context()
+    if not context.is_valid:
+        return ""
+    return format(context.trace_id, "032x")
 
 
 def record_error(code: str, message: str = "") -> None:

@@ -198,3 +198,70 @@ def test_a_transfer_driven_from_several_tasks_still_ends_cleanly(spans):
         == trace_id
         == second["traceparent"].split("-")[1]
     )
+
+
+def test_current_trace_id_is_empty_outside_a_span_and_hex_inside(spans):
+    assert telemetry.current_trace_id() == ""
+    with telemetry.internal_span("work") as span:
+        assert telemetry.current_trace_id() == format(
+            span.get_span_context().trace_id, "032x"
+        )
+
+
+def test_a_served_transfer_continues_the_callers_transfer_span(spans):
+    headers: dict[str, str] = {}
+    with telemetry.transfer_span("abi.svc.model_registry.v1.transfer", "chat") as t:
+        t.inject(headers)
+    served = telemetry.serve_transfer(
+        "abi.svc.model_registry.v1.transfer",
+        "chat",
+        headers,
+        attributes={"abi.caller": "api"},
+    )
+    with served.activate(), telemetry.internal_span("model chat gpt"):
+        pass
+    served.messages, served.bytes_received, served.bytes_sent = 5, 100, 40
+    served.end("closed")
+    served.end("expired")  # a session ends once, whoever notices last
+
+    client, child, server = spans.get_finished_spans()
+    assert server.name == "model_registry/transfer.chat"
+    assert server.kind is SpanKind.SERVER
+    assert server.context.trace_id == client.context.trace_id
+    assert server.parent.span_id == client.context.span_id
+    assert child.parent.span_id == server.context.span_id
+    assert server.attributes["rpc.service"] == "model_registry"
+    assert server.attributes["abi.transfer.operation"] == "chat"
+    assert server.attributes["abi.caller"] == "api"
+    assert server.attributes["abi.transfer.end"] == "closed"
+    assert server.attributes["abi.transfer.cancelled"] is False
+    assert server.attributes["abi.transfer.messages"] == 5
+    assert server.attributes["abi.transfer.bytes_received"] == 100
+    assert server.attributes["abi.transfer.bytes_sent"] == 40
+    assert server.status.status_code is StatusCode.UNSET
+
+
+def test_a_served_transfer_keeps_the_real_failure_engine_side(spans):
+    served = telemetry.serve_transfer("abi.svc.x.v1.transfer", "get", {})
+    with served.activate():
+        pass
+    served.fail(RuntimeError("private details"), "INTERNAL", "Streaming failed")
+    served.end("closed")
+    served.fail(RuntimeError("after the end"), "INTERNAL")
+
+    (span,) = spans.get_finished_spans()
+    assert span.status.status_code is StatusCode.ERROR
+    assert span.attributes["abi.error_code"] == "INTERNAL"
+    (event,) = span.events
+    assert event.name == "exception"
+    assert event.attributes["exception.message"] == "private details"
+
+
+def test_a_served_transfer_is_inert_without_opentelemetry(monkeypatch):
+    monkeypatch.setattr(telemetry, "_api", lambda: None)
+    served = telemetry.serve_transfer("abi.svc.x.v1.transfer", "get", None)
+    with served.activate():
+        pass
+    served.fail(RuntimeError("x"), "INTERNAL")
+    served.end("expired", cancelled=True)
+    assert served.span is None
