@@ -71,6 +71,11 @@ close()
 
 Distance metrics supported: `cosine`, `euclidean`, `l2`, `dot`, `l1`.
 
+`SearchResult.score` for `cosine` (and `dot`) is a similarity on every
+adapter: higher is better, 1 for the same direction. That is what
+`score_threshold` assumes. `SqliteVecAdapter` converts sqlite-vec's cosine
+distance (`1 - distance`); L1/L2 scores stay distances.
+
 ## Available Adapters (`adapters/`)
 
 | Adapter | Backend / Notes |
@@ -95,6 +100,7 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/vector_store/VectorStore
 uv run pytest libs/naas-abi-core/naas_abi_core/services/vector_store/IVectorStorePort_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/vector_store/adapters/QdrantAdapter_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/vector_store/adapters/QdrantInMemoryAdapter_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/vector_store/adapters/SqliteVecAdapter_test.py
 ```
 
 ## Adding a new adapter

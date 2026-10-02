@@ -242,7 +242,10 @@ class QdrantAdapter(IVectorStorePort):
             raise RuntimeError("Adapter not initialized")
 
         collection_info = self.client.get_collection(collection_name=collection_name)
-        return collection_info.indexed_vectors_count or 0
+        # ``points_count`` is what is stored. ``indexed_vectors_count`` only
+        # counts vectors already in the HNSW index, which stays 0 until a
+        # collection passes the server's indexing threshold.
+        return collection_info.points_count or 0
 
     def close(self) -> None:
         if self.client:

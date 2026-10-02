@@ -23,6 +23,9 @@ from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
 )
+from naas_abi_core.services.tool_registry.ToolRegistryService import (
+    ToolRegistryService,
+)
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 
@@ -52,6 +55,7 @@ class IEngine:
         __model_registry: ModelRegistryService | None
         __coding_environment: CodingEnvironmentService | None
         __source_control: SourceControlService | None
+        __tool_registry: ToolRegistryService | None
 
         def __init__(
             self,
@@ -70,6 +74,7 @@ class IEngine:
             coding_environment: CodingEnvironmentService | None = None,
             source_control: SourceControlService | None = None,
             document: DocumentService | None = None,
+            tool_registry: ToolRegistryService | None = None,
         ):
             self.__object_storage = object_storage
             self.__dataset = dataset
@@ -86,6 +91,7 @@ class IEngine:
             self.__model_registry = model_registry
             self.__coding_environment = coding_environment
             self.__source_control = source_control
+            self.__tool_registry = tool_registry
 
         @property
         def kv(self) -> KeyValueService:
@@ -132,10 +138,16 @@ class IEngine:
             )
             return self.__vector_store
 
+        def vector_store_available(self) -> bool:
+            return self.__vector_store is not None
+
         @property
         def secret(self) -> Secret:
             assert self.__secret is not None, "Secret service is not initialized"
             return self.__secret
+
+        def secret_available(self) -> bool:
+            return self.__secret is not None
 
         @property
         def bus(self) -> BusService:
@@ -198,10 +210,20 @@ class IEngine:
             return self.__source_control
 
         @property
+        def tool_registry(self) -> ToolRegistryService:
+            assert self.__tool_registry is not None, (
+                "Tool registry service is not initialized"
+            )
+            return self.__tool_registry
+
+        def tool_registry_available(self) -> bool:
+            return self.__tool_registry is not None
+
+        @property
         def all(
             self,
         ) -> list[
-            ObjectStorageService | None | DatasetService | DocumentService | TripleStoreService | VectorStoreService | Secret | BusService | KeyValueService | EmailService | CacheService | EventService | ActivityLogService | ModelRegistryService | CodingEnvironmentService | SourceControlService
+            ObjectStorageService | None | DatasetService | DocumentService | TripleStoreService | VectorStoreService | Secret | BusService | KeyValueService | EmailService | CacheService | EventService | ActivityLogService | ModelRegistryService | CodingEnvironmentService | SourceControlService | ToolRegistryService
         ]:
             return [
                 self.__object_storage,
@@ -219,6 +241,7 @@ class IEngine:
                 self.__model_registry,
                 self.__coding_environment,
                 self.__source_control,
+                self.__tool_registry,
             ]
 
         def wire_services(self) -> None:
