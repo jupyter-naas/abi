@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { formatBytes, formatMs } from './system-format';
 import type { Tone } from './system-model';
 import {
@@ -31,12 +32,29 @@ function clock(at: number): string {
   return `${date.toLocaleTimeString([], { hour12: false })}.${String(date.getMilliseconds()).padStart(3, '0')}`;
 }
 
-function TraceCell({ traceId, uiUrl }: { traceId: string; uiUrl: string | null }) {
+function TraceCell({
+  traceId,
+  tracing,
+  onOpen,
+}: {
+  traceId: string;
+  tracing: boolean;
+  onOpen?: (traceId: string) => void;
+}) {
   if (!traceId) return <>–</>;
-  const href = traceLink(uiUrl, traceId);
+  const href = traceLink(tracing, traceId);
   if (!href) return <>{traceId.slice(0, 8)}</>;
   return (
-    <a className="system-link" data-trace href={href} target="_blank" rel="noreferrer">
+    <a
+      className="system-link"
+      data-trace
+      href={href}
+      onClick={(event) => {
+        if (!onOpen || event.metaKey || event.ctrlKey) return;
+        event.preventDefault();
+        onOpen(traceId);
+      }}
+    >
       {traceId.slice(0, 8)}
     </a>
   );
@@ -48,11 +66,13 @@ export function TrafficView({
   filters,
   onFilters,
   traceUiUrl = null,
+  onOpenTrace,
 }: {
   events: TrafficEvent[];
   filters: TrafficFilters;
   onFilters: (filters: TrafficFilters) => void;
   traceUiUrl?: string | null;
+  onOpenTrace?: (traceId: string) => void;
 }) {
   const shown = filterTraffic(events, filters);
   const summary = summarizeTraffic(shown);
@@ -152,7 +172,7 @@ export function TrafficView({
                       <Status tone={statusTone(e.status)} label={e.error_code ? `${e.status} ${e.error_code}` : e.status} />
                     </td>
                     <td className="system-mono" title={e.trace_id || undefined}>
-                      <TraceCell traceId={e.trace_id} uiUrl={traceUiUrl} />
+                      <TraceCell traceId={e.trace_id} tracing={traceUiUrl !== null} onOpen={onOpenTrace} />
                     </td>
                   </tr>
                 ))}
@@ -175,6 +195,8 @@ type StreamState =
 
 /** Live NATS traffic: runs a tap on the API only while this tab streams. */
 export function SystemTraffic() {
+  const router = useRouter();
+  const pathname = usePathname();
   const [stream, setStream] = useState<StreamState>({ state: 'idle' });
   const [events, setEvents] = useState<TrafficEvent[]>([]);
   const [dropped, setDropped] = useState(0);
@@ -260,7 +282,13 @@ export function SystemTraffic() {
         NATS bus (fallback), the API receives every reply while this runs; stop it when you are done.
       </p>
       {stream.state === 'unavailable' && <SourceNote label="Live traffic" reason={stream.reason} />}
-      <TrafficView events={events} filters={filters} onFilters={setFilters} traceUiUrl={traceUiUrl} />
+      <TrafficView
+        events={events}
+        filters={filters}
+        onFilters={setFilters}
+        traceUiUrl={traceUiUrl}
+        onOpenTrace={(traceId) => router.push(`${pathname}?tab=traces&trace=${encodeURIComponent(traceId)}`)}
+      />
     </div>
   );
 }

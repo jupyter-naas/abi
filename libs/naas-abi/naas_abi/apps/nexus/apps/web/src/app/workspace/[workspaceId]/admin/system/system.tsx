@@ -8,6 +8,9 @@ import { Header } from '@/components/shell/header';
 import { usePlatformStatusStore } from '@/stores/platform-status';
 import type { Loaded } from './system-api';
 import { useSuperadminAccess } from './system-access';
+import { DataExplorer } from './data/explorer';
+import { JobsTab } from './jobs/jobs';
+import { TracesTab } from './traces/traces';
 import { SystemModules } from './system-modules';
 import { SystemNats } from './system-nats';
 import { SystemOverview } from './system-overview';
@@ -90,7 +93,7 @@ function SystemApp() {
 
   return (
     <div className="system-page">
-      <Header title="System" subtitle="Kernel services, modules and the NATS network" />
+      <Header title="System" subtitle="Kernel services, their data, modules and the NATS network" />
       <nav className="system-tabs" aria-label="System views">
         {SYSTEM_TABS.map((t) => (
           <button
@@ -104,9 +107,12 @@ function SystemApp() {
           </button>
         ))}
       </nav>
-      <div className="system-body">
+      <div className={['data', 'jobs', 'traces'].includes(tab) ? 'system-body system-body-flush' : 'system-body'}>
         {tab === 'overview' && <View state={overview} render={(data) => <SystemOverview overview={data} />} />}
         {tab === 'services' && <View state={services} render={(data) => <SystemServices view={data} />} />}
+        {tab === 'data' && <DataExplorer nonce={nonce} />}
+        {tab === 'jobs' && <JobsTab nonce={nonce} />}
+        {tab === 'traces' && <TracesTab nonce={nonce} />}
         {tab === 'modules' && <View state={modules} render={(data) => <SystemModules view={data} />} />}
         {tab === 'nats' && <SystemNats server={server} connections={connections} jetstream={jetstream} />}
         {tab === 'traffic' && <SystemTraffic />}

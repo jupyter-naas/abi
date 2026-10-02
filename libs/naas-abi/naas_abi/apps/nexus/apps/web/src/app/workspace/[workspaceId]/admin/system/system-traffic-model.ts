@@ -105,9 +105,10 @@ export function summarizeTraffic(events: TrafficEvent[]): TrafficSummaryRow[] {
 }
 
 /** Link to a trace in the configured viewer (Jaeger: ``<ui>/trace/<id>``). */
-export function traceLink(uiUrl: string | null | undefined, traceId: string): string | null {
-  if (!uiUrl || !traceId) return null;
-  return `${uiUrl.replace(/\/+$/, '')}/trace/${traceId}`;
+/** The trace in the System app's own viewer (Traces tab), when tracing is on. */
+export function traceLink(tracing: boolean, traceId: string): string | null {
+  if (!tracing || !traceId) return null;
+  return `?tab=traces&trace=${encodeURIComponent(traceId)}`;
 }
 
 const SOURCE_NAMES: Record<string, string> = { traces: 'traces', nats: 'the NATS bus' };

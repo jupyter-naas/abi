@@ -1,0 +1,99 @@
+/* data/services — bus (JetStream streams and messages) */
+
+.data-bus-subjects {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.data-bus-subject {
+  max-width: 220px;
+  overflow: hidden;
+  padding: 1px 6px;
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--foreground-hex);
+  background-color: var(--muted-bg-hex);
+}
+
+.data-row-summary .data-bus-subjects {
+  flex-wrap: nowrap;
+}
+
+.data-bus-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--muted-foreground-hex);
+}
+
+.data-bus-summary {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+
+.data-bus-preview {
+  display: flex;
+  flex-direction: column;
+}
+
+.data-bus-preview > .data-notice {
+  margin-bottom: var(--space-3);
+}
+
+.data-bus-envelope {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--background-hex);
+}
+
+.data-bus-envelope-subject {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.data-bus-envelope-subject .data-mono {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  word-break: break-all;
+}
+
+.data-bus-envelope-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.data-bus-envelope-facts dt {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground-hex);
+}
+
+.data-bus-envelope-facts dd {
+  margin: 3px 0 0;
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-bus-redacted {
+  color: var(--muted-foreground-hex);
+}

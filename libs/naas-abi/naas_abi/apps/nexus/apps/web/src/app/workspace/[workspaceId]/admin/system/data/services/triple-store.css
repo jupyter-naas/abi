@@ -1,0 +1,175 @@
+/* data/services — Knowledge graph (triple_store) */
+
+.data-triple-store-iri {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted-foreground-hex);
+}
+
+.data-triple-store-meter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  width: 100%;
+}
+
+.data-triple-store-meter-track {
+  flex: 1;
+  max-width: 72px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background-color: var(--muted-bg-hex);
+}
+
+.data-triple-store-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 9999px;
+  background-color: var(--color-primary);
+  opacity: 0.8;
+}
+
+.data-triple-store-meter .data-num {
+  min-width: 56px;
+  text-align: right;
+  color: var(--foreground-hex);
+}
+
+.data-triple-store-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.data-triple-store-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--background-hex);
+}
+
+.data-triple-store-stats > div {
+  padding: 10px 12px;
+}
+
+.data-triple-store-stats > div + div {
+  border-left: 1px solid var(--border-hex);
+}
+
+.data-triple-store-stats dt {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground-hex);
+}
+
+.data-triple-store-stats dd {
+  margin: 4px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.data-triple-store-rankings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+}
+
+.data-triple-store-ranked {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.data-triple-store-ranked .data-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.data-triple-store-ranked-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.data-triple-store-ranked-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.data-triple-store-ranked-label {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--data-iri, var(--foreground-hex));
+}
+
+.data-triple-store-ranked-item .data-num {
+  position: relative;
+  z-index: 1;
+  color: var(--foreground-hex);
+}
+
+.data-triple-store-ranked-bar {
+  position: absolute;
+  inset: 0;
+}
+
+.data-triple-store-ranked-bar > span {
+  display: block;
+  height: 100%;
+  background-color: var(--color-primary-subtle, #34D3991A);
+}
+
+.data-triple-store-query {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+}
+
+.data-triple-store-query .data-mono {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground-hex);
+}
+
+@media (max-width: 767px) {
+  .data-triple-store-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .data-triple-store-stats > div:nth-child(3) {
+    border-left: none;
+  }
+
+  .data-triple-store-meter-track {
+    display: none;
+  }
+}

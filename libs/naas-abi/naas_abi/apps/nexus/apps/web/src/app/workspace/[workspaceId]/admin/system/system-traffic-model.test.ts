@@ -76,10 +76,10 @@ describe('traffic model', () => {
 });
 
 describe('traceLink', () => {
-  it('opens the trace in the configured viewer', () => {
-    expect(traceLink('http://localhost:16686/', 'abc')).toBe('http://localhost:16686/trace/abc');
-    expect(traceLink(null, 'abc')).toBeNull();
-    expect(traceLink('http://localhost:16686', '')).toBeNull();
+  it('opens the trace in the Traces tab when tracing is on', () => {
+    expect(traceLink(true, 'abc')).toBe('?tab=traces&trace=abc');
+    expect(traceLink(false, 'abc')).toBeNull();
+    expect(traceLink(true, '')).toBeNull();
   });
 });
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import Counter
+from collections.abc import Awaitable
 from typing import Any, TypeVar
 
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import (
@@ -42,7 +43,7 @@ T = TypeVar("T")
 NO_TELEMETRY = TelemetryInfo(enabled=False, service_name="", ui_url=None)
 
 
-async def _attempt(source: str, call: Any, fallback: T) -> tuple[T, SourceStatus]:
+async def _attempt(source: str, call: Awaitable[T], fallback: T) -> tuple[T, SourceStatus]:
     try:
         return await call, SourceStatus(True)
     except SourceUnavailable as exc:
