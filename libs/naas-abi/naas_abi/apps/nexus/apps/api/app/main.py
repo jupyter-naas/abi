@@ -76,8 +76,18 @@ async def _sync_model_catalog() -> None:
             "✓ Model catalog synced at startup (%d override divergence warning(s))",
             len(warnings),
         )
+        # Settings pages opened while this ran may have cached the old catalog.
+        await asyncio.to_thread(_invalidate_settings_cache)
     except Exception:
         _log.exception("Background model catalog sync failed (non-fatal)")
+
+
+def _invalidate_settings_cache() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import (
+        invalidate_on_startup,
+    )
+
+    invalidate_on_startup()
 
 
 async def _sync_identity_graph() -> None:
@@ -266,6 +276,10 @@ async def _startup(app: FastAPI) -> None:
         await apply_configuration_seeds(getattr(app.state, "secret_service", None))
     finally:
         event_triggered_via.reset(via)
+
+    # An ABI restart clears the settings pages' 24h API cache (after seeds, which
+    # may have changed users, workspaces and organizations).
+    await asyncio.to_thread(_invalidate_settings_cache)
 
     # After seeds, so seeded users/workspaces are in the graph on first boot.
     asyncio.create_task(_sync_identity_graph())

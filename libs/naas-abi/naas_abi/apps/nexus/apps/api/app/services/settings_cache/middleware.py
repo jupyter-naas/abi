@@ -14,6 +14,10 @@ Invalidation uses two generation counters stored in the cache itself:
 * a per-user one, bumped by ``POST /api/settings-cache/refresh`` (the Reload button),
   which drops only the caller's entries.
 
+The global one is also bumped when the API starts (``invalidate_on_startup``): an ABI
+restart is the only event that clears the whole cache on its own. Rebuilding or
+restarting the web app does not.
+
 The cache is best effort: any cache failure falls through to the live endpoint.
 Pure ASGI, and registered inside CORS so cached answers still carry CORS headers.
 """
@@ -79,6 +83,38 @@ def default_cache_resolver() -> Any:
 
         _FALLBACK_CACHE = CacheFactory.CacheFS_find_storage(subpath="nexus/settings-api")
     return _FALLBACK_CACHE
+
+
+def _read_generation(cache: Any, key: str) -> int:
+    try:
+        value = cache.get(key)
+    except (CacheNotFoundError, CacheExpiredError):
+        return 0
+    return int((value or {}).get("v", 0))
+
+
+def _store_json(cache: Any, key: str, value: dict[str, Any]) -> None:
+    cache.set_json(key, value)  # cold tier (durable)
+    if cache.hot_available():
+        cache.hot.set_json(key, value)  # hot tier (fast reads)
+
+
+def _bump_generation(cache: Any, key: str) -> None:
+    _store_json(cache, key, {"v": _read_generation(cache, key) + 1})
+
+
+def invalidate_all(cache: Any) -> None:
+    """Drop every cached settings answer, for every user."""
+    _bump_generation(cache, _GLOBAL_GENERATION_KEY)
+
+
+def invalidate_on_startup(cache_resolver: Callable[[], Any] = default_cache_resolver) -> None:
+    """Called when the API starts: answers cached before a restart are never served."""
+    try:
+        invalidate_all(cache_resolver())
+        logger.info("Settings cache invalidated on startup")
+    except Exception as exc:  # noqa: BLE001 - never block startup on the cache
+        logger.warning("Settings cache: startup invalidation failed: %s", exc)
 
 
 def default_user_resolver(headers: Headers) -> str | None:
@@ -227,17 +263,11 @@ class SettingsCacheMiddleware:
         return f"{_KEY_PREFIX}:entry:{global_gen}:{user_gen}:{digest}"
 
     async def _generation(self, key: str) -> int:
-        cache = self.cache_resolver()
-        try:
-            value = await run_in_threadpool(cache.get, key)
-        except (CacheNotFoundError, CacheExpiredError):
-            return 0
-        return int((value or {}).get("v", 0))
+        return await run_in_threadpool(_read_generation, self.cache_resolver(), key)
 
     async def _bump(self, key: str) -> None:
         try:
-            current = await self._generation(key)
-            await self._write(key, {"v": current + 1}, raise_errors=True)
+            await run_in_threadpool(_bump_generation, self.cache_resolver(), key)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Settings cache: could not invalidate %s: %s", key, exc)
 
@@ -251,19 +281,10 @@ class SettingsCacheMiddleware:
             logger.warning("Settings cache read failed, serving live: %s", exc)
             return None
 
-    async def _write(self, key: str, value: dict[str, Any], raise_errors: bool = False) -> None:
-        cache = self.cache_resolver()
-
-        def _store() -> None:
-            cache.set_json(key, value)  # cold tier (durable)
-            if cache.hot_available():
-                cache.hot.set_json(key, value)  # hot tier (fast reads)
-
+    async def _write(self, key: str, value: dict[str, Any]) -> None:
         try:
-            await run_in_threadpool(_store)
+            await run_in_threadpool(_store_json, self.cache_resolver(), key, value)
         except Exception as exc:  # noqa: BLE001
-            if raise_errors:
-                raise
             logger.warning("Settings cache write failed: %s", exc)
 
     @staticmethod

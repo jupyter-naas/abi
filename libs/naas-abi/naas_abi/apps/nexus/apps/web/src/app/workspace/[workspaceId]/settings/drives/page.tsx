@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle, Folder, HardDrive, Loader2, Power, Server, type LucideIcon } from 'lucide-react';
+import { Folder, HardDrive, Loader2, Server, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
 import {
   SettingsEmpty,
@@ -205,7 +205,7 @@ export default function DrivesSettingsPage() {
               <tr className={settingsTable.headRow}>
                 <th className={settingsTable.th}>Drive</th>
                 <th className={cn(settingsTable.th, 'w-40')}>Access</th>
-                <th className={cn(settingsTable.th, 'w-32')}>Status</th>
+                <th className={cn(settingsTable.th, 'w-24')}>Enabled</th>
               </tr>
             </thead>
             <tbody>
@@ -236,22 +236,19 @@ export default function DrivesSettingsPage() {
                       <Badge variant="outline">{drive.access}</Badge>
                     </td>
                     <td className={settingsTable.td}>
-                      {drive.enabled ? (
-                        <Badge variant="primary">
-                          <CheckCircle size={12} />
-                          Enabled
-                        </Badge>
-                      ) : (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => void turnOn(drive)}
-                          disabled={turningOn !== null}
-                        >
-                          {busy ? <Loader2 size={14} className="animate-spin" /> : <Power size={14} />}
-                          Turn on
-                        </Button>
-                      )}
+                      {/* Enabled drives stay on (checked, locked); admins can tick a drive that is off. */}
+                      <span className="inline-flex items-center gap-2">
+                        <Checkbox
+                          checked={drive.enabled}
+                          onCheckedChange={(checked) => {
+                            if (checked) void turnOn(drive);
+                          }}
+                          disabled={drive.enabled || !drive.flag || !isWorkspaceAdmin || turningOn !== null}
+                          aria-label={`${drive.name} enabled`}
+                          title={drive.enabled ? `${drive.name} is enabled and stays on` : `Turn on ${drive.name}`}
+                        />
+                        {busy && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
+                      </span>
                     </td>
                   </tr>
                 );

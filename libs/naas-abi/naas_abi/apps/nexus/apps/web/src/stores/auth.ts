@@ -45,7 +45,11 @@ export interface AuthState {
 }
 
 import { getApiUrl } from '@/lib/config';
-import { SETTINGS_CACHE_HEADER, shouldUseSettingsCache } from '@/lib/settings-cache';
+import {
+  SETTINGS_CACHE_HEADER,
+  fetchWithSettingsCacheFallback,
+  shouldUseSettingsCache,
+} from '@/lib/settings-cache';
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -446,20 +450,20 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
   // Prepend API_BASE if URL is relative
   const fullUrl = url.startsWith('http') ? url : `${apiBase}${url}`;
 
-  const makeRequest = (tok: string | null) => {
-    const headers = new Headers(options.headers);
-    if (tok) headers.set('Authorization', `Bearer ${tok}`);
-    // Settings pages read through the backend's 24h settings cache (see lib/settings-cache).
-    if (
-      typeof window !== 'undefined' &&
-      fullUrl.startsWith(apiBase) &&
-      !headers.has(SETTINGS_CACHE_HEADER) &&
-      shouldUseSettingsCache(window.location.pathname, options.method)
-    ) {
-      headers.set(SETTINGS_CACHE_HEADER, '1');
-    }
-    return fetch(fullUrl, { ...options, headers });
-  };
+  // Settings pages read through the backend's 24h settings cache (see lib/settings-cache).
+  const wantSettingsCache =
+    typeof window !== 'undefined' &&
+    fullUrl.startsWith(apiBase) &&
+    !new Headers(options.headers).has(SETTINGS_CACHE_HEADER) &&
+    shouldUseSettingsCache(window.location.pathname, options.method);
+
+  const makeRequest = (tok: string | null) =>
+    fetchWithSettingsCacheFallback(wantSettingsCache, (useCache) => {
+      const headers = new Headers(options.headers);
+      if (tok) headers.set('Authorization', `Bearer ${tok}`);
+      if (useCache) headers.set(SETTINGS_CACHE_HEADER, '1');
+      return fetch(fullUrl, { ...options, headers });
+    });
 
   // Surface in-flight activity to the UI (e.g. ApiStatusIndicator pulses while busy).
   const { useNetworkActivityStore } = await import('./network-activity');

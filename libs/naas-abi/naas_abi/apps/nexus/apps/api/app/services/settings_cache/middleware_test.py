@@ -9,6 +9,7 @@ from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import 
     CACHE_HEADER,
     REFRESH_PATH,
     SettingsCacheMiddleware,
+    invalidate_all,
 )
 from naas_abi_core.services.cache.adapters.secondary.CacheFSAdapter import CacheFSAdapter
 from naas_abi_core.services.cache.CacheService import TIER_COLD, CacheService
@@ -213,3 +214,29 @@ def test_cached_answers_still_carry_cors_headers(tmp_path) -> None:
     assert hit.headers[CACHE_HEADER] == "HIT"
     assert hit.headers["access-control-allow-origin"] == "http://web.test"
     assert CACHE_HEADER.lower() in hit.headers["access-control-expose-headers"].lower()
+
+
+def test_invalidate_all_drops_every_entry(tmp_path) -> None:
+    """Called when ABI starts, so a restart never serves answers from before it."""
+    cache = CacheService(adapters=[(TIER_COLD, CacheFSAdapter(str(tmp_path)))])
+    calls = {"n": 0}
+    app = FastAPI()
+
+    @app.get("/api/agents/")
+    def list_agents():
+        calls["n"] += 1
+        return {"n": calls["n"]}
+
+    app.add_middleware(
+        SettingsCacheMiddleware,
+        cache_resolver=lambda: cache,
+        user_resolver=lambda headers: "alice",
+    )
+    client = TestClient(app)
+    client.get("/api/agents/", headers={CACHE_HEADER: "1"})
+    assert client.get("/api/agents/", headers={CACHE_HEADER: "1"}).headers[CACHE_HEADER] == "HIT"
+
+    invalidate_all(cache)
+
+    assert client.get("/api/agents/", headers={CACHE_HEADER: "1"}).headers[CACHE_HEADER] == "MISS"
+    assert calls["n"] == 2

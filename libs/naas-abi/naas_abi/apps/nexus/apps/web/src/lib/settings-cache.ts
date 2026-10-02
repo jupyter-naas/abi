@@ -16,3 +16,36 @@ export function isSettingsRoute(pathname: string): boolean {
 export function shouldUseSettingsCache(pathname: string, method: string | undefined): boolean {
   return (method ?? 'GET').toUpperCase() === 'GET' && isSettingsRoute(pathname);
 }
+
+// Flips to false when the API rejects the header (e.g. an API older than the web app,
+// whose CORS rules do not allow it). Settings pages then read live data for the session.
+let supported = true;
+
+export function settingsCacheSupported(): boolean {
+  return supported;
+}
+
+export function resetSettingsCacheSupport(): void {
+  supported = true;
+}
+
+/**
+ * Send a request with the cache header when wanted; if it fails at the network level
+ * (a CORS preflight rejection surfaces as "Failed to fetch"), retry once without it and
+ * stop sending the header for the rest of the session.
+ */
+export async function fetchWithSettingsCacheFallback(
+  wantCache: boolean,
+  send: (useCache: boolean) => Promise<Response>
+): Promise<Response> {
+  const useCache = wantCache && supported;
+  if (!useCache) return send(false);
+  try {
+    return await send(true);
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+    supported = false;
+    console.warn('Settings cache header rejected by the API; reading live data instead.');
+    return send(false);
+  }
+}
