@@ -1,7 +1,7 @@
 import os
 import sys
 from io import StringIO
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
 import yaml
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
@@ -387,6 +387,43 @@ class GlobalConfig(BaseModel):
 # claim it as a private model field.
 _cached_configuration: "EngineConfiguration | None" = None
 
+# Path to a plain YAML file deep-merged over the selected config after templating,
+# e.g. the `nats:` block `abi dev up --with-nats` adds to a project's config.yaml.
+CONFIG_OVERLAY_ENV = "ABI_CONFIG_OVERLAY"
+
+
+def deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    """Mappings merge key by key; any other overlay value replaces the base one.
+
+    A mapping naming an ``adapter`` replaces the base one whole: an adapter's
+    ``config`` only makes sense for that adapter.
+    """
+    merged = dict(base)
+    for key, value in overlay.items():
+        if (
+            isinstance(value, dict)
+            and "adapter" not in value
+            and isinstance(merged.get(key), dict)
+        ):
+            merged[key] = deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _read_overlay(path: str | None) -> dict[str, Any] | None:
+    if not path:
+        return None
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"{CONFIG_OVERLAY_ENV} points to a missing file: {path}"
+        )
+    with open(path, "r") as file:
+        overlay = yaml.safe_load(file) or {}
+    if not isinstance(overlay, dict):
+        raise TypeError(f"{CONFIG_OVERLAY_ENV} must hold a YAML mapping: {path}")
+    return overlay
+
 
 class EngineConfiguration(BaseModel):
     api: ApiConfiguration
@@ -573,15 +610,22 @@ class EngineConfiguration(BaseModel):
         return None
 
     @classmethod
-    def from_yaml(cls, yaml_path: str) -> "EngineConfiguration":
+    def from_yaml(
+        cls, yaml_path: str, overlay: dict[str, Any] | None = None
+    ) -> "EngineConfiguration":
         with open(yaml_path, "r") as file:
             # Resolve {% include %} relative to the config file's directory.
             base_dir = os.path.dirname(os.path.abspath(yaml_path))
-            return cls.from_yaml_content(file.read(), base_dir=base_dir)
+            return cls.from_yaml_content(
+                file.read(), base_dir=base_dir, overlay=overlay
+            )
 
     @classmethod
     def from_yaml_content(
-        cls, yaml_content: str, base_dir: str | None = None
+        cls,
+        yaml_content: str,
+        base_dir: str | None = None,
+        overlay: dict[str, Any] | None = None,
     ) -> "EngineConfiguration":
         env = cls._build_jinja_env(base_dir)
         bootstrap_dotenv_adapter = cls._load_bootstrap_dotenv_adapter_from_yaml_content(
@@ -659,6 +703,8 @@ class EngineConfiguration(BaseModel):
         )
 
         data = yaml.safe_load(StringIO(templated_yaml))
+        if overlay:
+            data = deep_merge(data, overlay)
 
         logger.debug(f"Data: {data}")
 
@@ -706,9 +752,13 @@ class EngineConfiguration(BaseModel):
                 "Configuration file not found. Please create a config.yaml file or config.{env}.yaml file."
             )
 
-        logger.debug(f"Loading configuration from {config_file}")
+        overlay = _read_overlay(os.getenv(CONFIG_OVERLAY_ENV))
+        logger.debug(
+            f"Loading configuration from {config_file}"
+            + (f" with overlay {os.getenv(CONFIG_OVERLAY_ENV)}" if overlay else "")
+        )
 
-        loaded = cls.from_yaml(config_file)
+        loaded = cls.from_yaml(config_file, overlay=overlay)
         _cached_configuration = loaded
         return loaded
 
