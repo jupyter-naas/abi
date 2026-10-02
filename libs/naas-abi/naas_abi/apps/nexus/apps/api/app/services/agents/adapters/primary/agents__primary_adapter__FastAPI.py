@@ -691,7 +691,8 @@ async def _reconcile_workspace_agents(
     * **Backfill** a missing ``module_path`` on existing records.
     * **Align** ``enabled`` to the workspace roster on every sync: the
       ``agents:`` seed when present, otherwise the engine default only, plus
-      Abi and Axi when loaded (see ``_roster_alignment``).
+      Abi and Axi when loaded (see ``_roster_alignment``). An agent a user
+      toggled by hand (``enabled_override``) keeps that choice instead.
     * **Remote agents** (``remote_agents``, from NATS discovery) get rows with
       ``provider="remote"`` and ``class_name="<module_id>/<Agent>"``. They are
       enabled while their module is READY, restricted by an ``agents:`` roster,
@@ -851,13 +852,22 @@ async def _reconcile_workspace_agents(
 
     aligned: list[AgentRecord] = []
     for agent in reconciled:
+        override = agent.enabled_override
         if agent.provider == REMOTE_PROVIDER and agent.class_name:
             if remote_agents is None:
                 aligned.append(agent)
                 continue
-            should_enable = _remote_agent_enabled(
-                agent.class_name, remote_by_class_name, seeded_class_names
-            )
+            # A remote agent needs its module, whatever was chosen by hand.
+            if agent.class_name not in remote_by_class_name:
+                should_enable = False
+            elif override is not None:
+                should_enable = override
+            else:
+                should_enable = _remote_agent_enabled(
+                    agent.class_name, remote_by_class_name, seeded_class_names
+                )
+        elif override is not None and agent.class_name:
+            should_enable = override
         elif not align_enabled_to_roster or not agent.class_name:
             aligned.append(agent)
             continue
@@ -1019,6 +1029,8 @@ async def update_agent(
             system_prompt=updates.system_prompt,
             model_id=updates.model,
             enabled=updates.enabled,
+            # A toggle by hand wins over the workspace roster on later syncs.
+            enabled_override=updates.enabled,
             is_default=updates.is_default,
         ),
     )
