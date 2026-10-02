@@ -7,12 +7,15 @@ import { useOrganizationStore } from '@/stores/organization';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
+import { Checkbox } from '@/components/ui/checkbox';
+import { buttonVariants } from '@/components/ui/button';
+import { SettingsNotice } from '@/components/settings/settings-ui';
 import '../components/org-settings-components.css';
 import './branding.css';
 
 // Form styling aligned with reference login: clear labels, generous input padding, primary focus ring
 const inputClass =
-  'w-full rounded-lg border border-input bg-muted/30 px-4 py-3 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20';
+  'h-9 w-full border border-input bg-background px-3 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/30';
 const labelClass = 'mb-2 block text-sm font-medium text-foreground';
 
 function ColorInput({
@@ -36,7 +39,7 @@ function ColorInput({
           type="color"
           value={value || '#000000'}
           onChange={(e) => onChange(e.target.value)}
-          className="h-10 w-10 shrink-0 cursor-pointer rounded-lg border border-input bg-background p-0.5"
+          className="h-10 w-10 shrink-0 cursor-pointer border border-input bg-background p-0.5"
         />
         <input
           type="text"
@@ -83,6 +86,7 @@ export default function BrandingPage() {
   const [loading, setLoading] = useState(false);
   const [uploadingSquare, setUploadingSquare] = useState(false);
   const [uploadingRect, setUploadingRect] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileSquareRef = useRef<HTMLInputElement>(null);
   const fileRectRef = useRef<HTMLInputElement>(null);
   const API_BASE = getApiUrl();
@@ -178,14 +182,15 @@ export default function BrandingPage() {
           </a>
         }
       />
+      {uploadError && <SettingsNotice tone="error">{uploadError}</SettingsNotice>}
 
       {/* Logo — first and prominent */}
-      <div className="space-y-6 rounded-xl border bg-card p-6">
+      <div className="space-y-6 border bg-card p-6">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Logo
         </h3>
         {(logoUrl || logoRectangleUrl) ? (
-          <div className="flex flex-wrap items-center gap-6 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 p-6">
+          <div className="flex flex-wrap items-center gap-6 border border-dashed border-muted-foreground/30 bg-muted/20 p-6">
             {logoRectangleUrl && (
               <div>
                 <p className="mb-2 text-xs text-muted-foreground">Rectangle</p>
@@ -197,13 +202,13 @@ export default function BrandingPage() {
               <div>
                 <p className="mb-2 text-xs text-muted-foreground">Square</p>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={logoUrl} alt="Square logo" className="h-16 w-16 rounded-xl object-contain" />
+                <img src={logoUrl} alt="Square logo" className="h-16 w-16 object-contain" />
               </div>
             )}
           </div>
         ) : (
-          <div className="flex items-center gap-4 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/10 p-6">
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-muted text-2xl">
+          <div className="flex items-center gap-4 border border-dashed border-muted-foreground/30 bg-muted/10 p-6">
+            <div className="flex h-16 w-16 items-center justify-center bg-muted text-2xl">
               {logoEmoji || org?.name?.charAt(0) || '🏢'}
             </div>
             <p className="text-sm text-muted-foreground">Add a square or rectangle logo URL below to see a live preview.</p>
@@ -220,8 +225,9 @@ export default function BrandingPage() {
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file || !org) return;
+              setUploadError(null);
               if (file.size > 5 * 1024 * 1024) {
-                alert('File too large (max 5MB)');
+                setUploadError('File too large (max 5MB)');
                 e.currentTarget.value = '';
                 return;
               }
@@ -240,7 +246,7 @@ export default function BrandingPage() {
                 // Refresh store so other views get the new URL
                 await fetchOrganizations();
               } catch (err: any) {
-                alert(err?.message || 'Upload failed');
+                setUploadError(err?.message || 'Upload failed');
               } finally {
                 setUploadingSquare(false);
                 e.currentTarget.value = '';
@@ -255,8 +261,9 @@ export default function BrandingPage() {
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file || !org) return;
+              setUploadError(null);
               if (file.size > 5 * 1024 * 1024) {
-                alert('File too large (max 5MB)');
+                setUploadError('File too large (max 5MB)');
                 e.currentTarget.value = '';
                 return;
               }
@@ -274,7 +281,7 @@ export default function BrandingPage() {
                 if (full) setLogoRectangleUrl(full);
                 await fetchOrganizations();
               } catch (err: any) {
-                alert(err?.message || 'Upload failed');
+                setUploadError(err?.message || 'Upload failed');
               } finally {
                 setUploadingRect(false);
                 e.currentTarget.value = '';
@@ -286,10 +293,7 @@ export default function BrandingPage() {
           <button
             onClick={() => fileSquareRef.current?.click()}
             disabled={uploadingSquare || !org}
-            className={cn(
-              'rounded-lg border bg-muted/30 px-3 py-2 text-xs font-medium transition-colors',
-              'hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50'
-            )}
+            className={buttonVariants({ variant: 'secondary', size: 'sm' })}
             title="Upload square logo"
           >
             {uploadingSquare ? 'Uploading square…' : 'Upload square logo'}
@@ -297,10 +301,7 @@ export default function BrandingPage() {
           <button
             onClick={() => fileRectRef.current?.click()}
             disabled={uploadingRect || !org}
-            className={cn(
-              'rounded-lg border bg-muted/30 px-3 py-2 text-xs font-medium transition-colors',
-              'hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50'
-            )}
+            className={buttonVariants({ variant: 'secondary', size: 'sm' })}
             title="Upload rectangle logo"
           >
             {uploadingRect ? 'Uploading rectangle…' : 'Upload rectangle logo'}
@@ -346,7 +347,7 @@ export default function BrandingPage() {
       </div>
 
       {/* Brand colours — reference: primary = buttons/links, accent = hover */}
-      <div className="space-y-6 rounded-xl border bg-card p-6">
+      <div className="space-y-6 border bg-card p-6">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Brand colours
         </h3>
@@ -396,7 +397,7 @@ export default function BrandingPage() {
       </div>
 
       {/* Login page — background */}
-      <div className="space-y-6 rounded-xl border bg-card p-6">
+      <div className="space-y-6 border bg-card p-6">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Login page — background
         </h3>
@@ -421,16 +422,16 @@ export default function BrandingPage() {
           </div>
         </div>
         {loginBgImageUrl && (
-          <div className="rounded-lg border border-dashed border-muted-foreground/30 p-2">
+          <div className=" border border-dashed border-muted-foreground/30 p-2">
             <p className="mb-1 text-xs text-muted-foreground">Preview</p>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={loginBgImageUrl} alt="Background" className="h-24 w-full rounded object-cover" />
+            <img src={loginBgImageUrl} alt="Background" className="h-24 w-full object-cover" />
           </div>
         )}
       </div>
 
       {/* Login page — card and inputs */}
-      <div className="space-y-6 rounded-xl border bg-card p-6">
+      <div className="space-y-6 border bg-card p-6">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Login page — card and inputs
         </h3>
@@ -497,16 +498,16 @@ export default function BrandingPage() {
               value={loginBorderRadius}
               onChange={(e) => setLoginBorderRadius(e.target.value)}
               placeholder="0"
-              className="w-20 rounded-lg border border-input bg-muted/30 px-3 py-2.5 text-center text-sm outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-20 border border-input bg-muted/30 px-3 py-2.5 text-center text-sm outline-none focus:ring-2 focus:ring-primary/20"
             />
             <span className="text-sm text-muted-foreground">px</span>
           </div>
-          <p className="text-xs text-muted-foreground">0 = sharp corners, 16 = rounded corners</p>
+          <p className="text-xs text-muted-foreground">0 = sharp corners, 16 = corners</p>
         </div>
       </div>
 
       {/* Workspace Theme */}
-      <div className="space-y-6 rounded-xl border bg-card p-6">
+      <div className="space-y-6 border bg-card p-6">
         <div>
           <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             Default Workspace Theme
@@ -540,22 +541,22 @@ export default function BrandingPage() {
                   }
                 }}
                 className={cn(
-                  'relative flex flex-col items-start gap-3 rounded-xl border p-4 text-left transition-all',
-                  'hover:border-blue-500/50 hover:bg-muted/50',
+                  'relative flex flex-col items-start gap-3 border p-4 text-left transition-all',
+                  'hover:border-primary/50 hover:bg-muted/50',
                   isSelected
-                    ? 'border-blue-500 bg-blue-500/5'
+                    ? 'border-primary bg-primary/5'
                     : 'border-border bg-card'
                 )}
               >
                 {isSelected && (
                   <div className="absolute right-3 top-3">
-                    <Check size={16} className="text-blue-500" />
+                    <Check size={16} className="text-primary" />
                   </div>
                 )}
                 <div
                   className={cn(
-                    'flex h-10 w-10 items-center justify-center rounded-lg',
-                    isSelected ? 'bg-blue-500/10 text-blue-500' : 'bg-muted text-muted-foreground'
+                    'flex h-10 w-10 items-center justify-center ',
+                    isSelected ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
                   )}
                 >
                   <Icon size={20} />
@@ -568,7 +569,7 @@ export default function BrandingPage() {
             );
           })}
         </div>
-        <div className="rounded-lg border border-border bg-muted/30 p-4">
+        <div className=" border border-border bg-muted/30 p-4">
           <p className="text-sm text-muted-foreground">
             Theme changes are saved automatically. Navigate to a workspace in this organization to see the theme applied.
           </p>
@@ -576,7 +577,7 @@ export default function BrandingPage() {
       </div>
 
       {/* Footer */}
-      <div className="space-y-6 rounded-xl border bg-card p-6">
+      <div className="space-y-6 border bg-card p-6">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Footer
         </h3>
@@ -593,24 +594,14 @@ export default function BrandingPage() {
         </div>
         <div className="space-y-4">
           <label className="flex cursor-pointer items-center gap-3">
-            <input
-              type="checkbox"
-              checked={showTermsFooter}
-              onChange={(e) => setShowTermsFooter(e.target.checked)}
-              className="h-4 w-4 rounded border-input"
-            />
+            <Checkbox checked={showTermsFooter} onCheckedChange={setShowTermsFooter} />
             <div>
               <p className="text-sm font-medium">Show Terms & Privacy</p>
               <p className="text-xs text-muted-foreground">By signing in, you agree to our Terms of Service and Privacy Policy</p>
             </div>
           </label>
           <label className="flex cursor-pointer items-center gap-3">
-            <input
-              type="checkbox"
-              checked={showPoweredBy}
-              onChange={(e) => setShowPoweredBy(e.target.checked)}
-              className="h-4 w-4 rounded border-input"
-            />
+            <Checkbox checked={showPoweredBy} onCheckedChange={setShowPoweredBy} />
             <div>
               <p className="text-sm font-medium">Show &quot;Powered by NEXUS&quot;</p>
               <p className="text-xs text-muted-foreground">Attribution below the login card</p>
@@ -624,12 +615,7 @@ export default function BrandingPage() {
         <button
           onClick={handleSave}
           disabled={loading}
-          className={cn(
-            'flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-colors',
-            saved
-              ? 'bg-primary/20 text-primary'
-              : 'bg-primary text-primary-foreground hover:opacity-90'
-          )}
+          className={cn(buttonVariants(), saved && 'bg-primary/10 text-primary hover:bg-primary/10')}
         >
           <Save size={16} />
           {saved ? 'Saved!' : loading ? 'Saving...' : 'Save changes'}

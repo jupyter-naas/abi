@@ -110,14 +110,14 @@ export function YamlEditor() {
         <div className="flex items-center gap-2">
           <button
             onClick={handleReset}
-            className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-muted-foreground hover:bg-secondary"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground hover:bg-secondary"
           >
             <RotateCcw size={14} />
             Reset
           </button>
           <button
             onClick={handleSave}
-            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            className="flex items-center gap-2 bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
             {saved ? <Check size={14} /> : <Save size={14} />}
             {saved ? 'Saved!' : 'Save'}
@@ -126,13 +126,13 @@ export function YamlEditor() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-4 py-2 text-sm text-destructive">
+        <div className="flex items-center gap-2 bg-destructive/10 px-4 py-2 text-sm text-destructive">
           <AlertCircle size={16} />
           {error}
         </div>
       )}
 
-      <div className="rounded-xl border bg-zinc-900 p-4">
+      <div className=" border bg-zinc-900 p-4">
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
