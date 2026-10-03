@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import re
 from collections.abc import AsyncIterator
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, cast
 
 from naas_abi_proto.triple_store.v1 import triple_store_pb2 as pb
-from nats.errors import NoRespondersError
 
+from naas_abi_sdk.services._streams import each, open_stream
 from naas_abi_sdk.services.errors import domain_error
-from naas_abi_sdk.transfer import open_transfer
 from naas_abi_sdk.transport import RPCError
 
 TRANSFER_PREFIX = "abi.svc.triple_store.v1.transfer"
@@ -169,36 +168,15 @@ class TripleStoreService:
         async with self._frames("export", metadata) as frames:
             if frames is None:  # an engine without the transfer endpoint
                 if graph_name is None:
-                    yield self._each(list(await self.get()))
+                    yield each(list(await self.get()))
                     return
                 async with self.query_stream(_graph_export_query(graph_name)) as result:
                     yield result.triples
                 return
             yield self._triples(frames)
 
-    @asynccontextmanager
-    async def _frames(self, operation: str, metadata: bytes):
-        transport = self._client._transport
-        async with AsyncExitStack() as stack:
-            try:
-                transfer = await stack.enter_async_context(
-                    open_transfer(transport, TRANSFER_PREFIX, operation, metadata)
-                )
-                await transfer.start()
-            except NoRespondersError:
-                yield None
-                return
-            except RPCError as exc:
-                raise domain_error(exc) from exc
-            yield self._mapping_errors(transfer.frames())
-
-    @staticmethod
-    async def _mapping_errors(frames: AsyncIterator[bytes]) -> AsyncIterator[bytes]:
-        try:
-            async for frame in frames:
-                yield frame
-        except RPCError as exc:
-            raise domain_error(exc) from exc
+    def _frames(self, operation: str, metadata: bytes):
+        return open_stream(self._client, TRANSFER_PREFIX, operation, metadata)
 
     @staticmethod
     async def _rows(frames: AsyncIterator[bytes]) -> AsyncIterator[dict]:
@@ -216,20 +194,15 @@ class TripleStoreService:
             for triple in _decode_triples(frame, bnodes):
                 yield triple
 
-    @staticmethod
-    async def _each(items: list) -> AsyncIterator[Any]:
-        for item in items:
-            yield item
-
     def _stream_of(self, result) -> QueryStream:
         if result.type == "ASK":
             return QueryStream("ASK", ask_answer=bool(result.askAnswer))
         if result.type in ("CONSTRUCT", "DESCRIBE"):
-            return QueryStream(result.type, triples=self._each(list(result.graph)))
+            return QueryStream(result.type, triples=each(list(result.graph)))
         return QueryStream(
             "SELECT",
             vars=[str(v) for v in result.vars or ()],
-            rows=self._each(
+            rows=each(
                 [
                     {str(k): v for k, v in row.items() if v is not None}
                     for row in result.bindings

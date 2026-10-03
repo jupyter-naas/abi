@@ -18,7 +18,8 @@ mapping -- one endpoint per port method, no exclusions.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from functools import partial
 from typing import Any, TypeVar
 
 import nats
@@ -37,6 +38,7 @@ from naas_abi_core.engine.nats_rpc import (
     respond_protobuf,
 )
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
+from naas_abi_core.engine.nats_transfer import TransferHost, thread_frames
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.dataset.v1 import dataset_pb2
 from naas_abi_core.services.dataset.adapters.dataset_nats_contract import (
@@ -44,6 +46,11 @@ from naas_abi_core.services.dataset.adapters.dataset_nats_contract import (
     SERVICE_NAME,
     SERVICE_VERSION,
     SUBJECT_PREFIX,
+    TRANSFER_PREFIX,
+)
+from naas_abi_core.services.dataset.adapters.dataset_stream_codec import (
+    encode_header,
+    row_frames,
 )
 from naas_abi_core.services.dataset.DatasetPort import (
     ColumnSpec,
@@ -215,6 +222,15 @@ class DatasetPrimaryAdapterNATS:
         self._jwt_secret = jwt_secret
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
+        # Streamed reads (docs/adr/20261003_nats-streamed-results.md).
+        self._transfer = TransferHost(
+            TRANSFER_PREFIX,
+            jwt_secret,
+            self._transfer_frames,
+            operations=("query",),
+            chunk_bytes=1024 * 1024,
+            error_mapper=self._transfer_error,
+        )
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``dataset`` NATS service on ``nc``.
@@ -283,9 +299,11 @@ class DatasetPrimaryAdapterNATS:
             handler=self._handle_drop,
         )
         self._service = service
+        await self._transfer.start(nc)
 
     async def stop(self) -> None:
         """Deregister the service, draining its subscriptions."""
+        await self._transfer.stop()
         service = self._service
         self._service = None
         try:
@@ -293,6 +311,40 @@ class DatasetPrimaryAdapterNATS:
                 await service.stop()
         finally:
             self._dispatch.close()
+
+    # ------------------------------------------------------------------
+    # Streamed reads: one transfer session per query, produced on its own
+    # thread one frame at a time (dataset_stream_codec.py).
+    # ------------------------------------------------------------------
+
+    def _transfer_frames(
+        self, operation: str, metadata: bytes, source: object
+    ) -> AsyncIterator[bytes]:
+        request = dataset_pb2.QueryRequest.FromString(metadata)
+        return thread_frames(partial(self._produce_query, request))
+
+    def _produce_query(
+        self, request: dataset_pb2.QueryRequest, emit: Callable[[bytes], bool]
+    ) -> None:
+        snapshot_id = request.snapshot_id if request.HasField("snapshot_id") else None
+        with self._adapter.query_stream(
+            request.sql, namespace=request.namespace, snapshot_id=snapshot_id
+        ) as result:
+            if not emit(encode_header(result.columns)):
+                return
+            for frame in row_frames(result.rows):
+                if not emit(frame):
+                    return
+
+    @staticmethod
+    def _transfer_error(exc: Exception) -> tuple[str, str] | None:
+        if isinstance(exc, DatasetSchemaError):
+            return "DATASET_SCHEMA_ERROR", str(exc)
+        if isinstance(exc, DatasetSnapshotNotFoundError):
+            return "DATASET_SNAPSHOT_NOT_FOUND", str(exc)
+        if isinstance(exc, DatasetNotFoundError):
+            return "DATASET_NOT_FOUND", str(exc)
+        return None
 
     # ------------------------------------------------------------------
     # Shared request handling: auth, decode, dispatch, encode.

@@ -258,7 +258,17 @@ class _PrimaryAdapterServer:
 
 
 @pytest.fixture(scope="session")
-def nats_url():
+def nats_url(tmp_path_factory):
+    # A local nats-server when there is one (no Docker needed), else a container.
+    from naas_abi_core.engine.nats_test_server import (
+        native_nats_server,
+        nats_server_binary,
+    )
+
+    if nats_server_binary() is not None:
+        with native_nats_server(tmp_path_factory.mktemp("nats")) as url:
+            yield url
+        return
     try:
         # Imported here, not at module level: testcontainers is a dev-only
         # dependency, absent from environments that don't run
@@ -340,6 +350,40 @@ def test_wrong_secret_surfaces_as_runtime_error(nats_url, tmp_path):
     try:
         with pytest.raises(RuntimeError, match="UNAUTHENTICATED"):
             client.inlined_row_count("does-not-matter")
+    finally:
+        client.close()
+        server.stop()
+
+
+@pytest.mark.integration
+def test_query_stream_reads_rows_over_transfer_frames(nats_url, tmp_path, monkeypatch):
+    from naas_abi_core.services.dataset.DatasetPort import ColumnSpec, DatasetSpec
+
+    wrapped = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'datasets.sqlite'}",
+        data_path=str(tmp_path / "datasets"),
+    )
+    wrapped.create(
+        DatasetSpec(name="events", columns=(ColumnSpec(name="id", type="integer"),))
+    )
+    wrapped.write("events", [{"id": n} for n in range(30_000)])
+    # A stream that works proves the client used the transfer endpoint.
+    monkeypatch.setattr(
+        wrapped, "query", lambda *a, **k: (_ for _ in ()).throw(AssertionError("unary"))
+    )
+    server = _PrimaryAdapterServer(nats_url, JWT_SECRET, wrapped)
+    server.start()
+    client = DatasetSecondaryAdapterNATSClient(
+        nats_url=nats_url, jwt_secret=JWT_SECRET, service_identity="api"
+    )
+    try:
+        with client.query_stream("SELECT id FROM events ORDER BY id") as result:
+            assert result.columns == ["id"]
+            assert [int(row["id"]) for row in result.rows] == list(range(30_000))
+        with client.query_stream("SELECT id FROM events") as early:
+            next(iter(early.rows))  # leaving early releases the session
+        with client.query_stream("SELECT count(*) AS n FROM events") as counted:
+            assert [int(row["n"]) for row in counted.rows] == [30_000]
     finally:
         client.close()
         server.stop()

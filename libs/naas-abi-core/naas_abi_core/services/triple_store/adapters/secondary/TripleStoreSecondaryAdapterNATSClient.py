@@ -30,14 +30,11 @@ whatever ``CallError.code`` comes back.
 
 from __future__ import annotations
 
-import time
 from collections.abc import Iterator
-from contextlib import contextmanager
-from typing import Any, TypeVar, cast
+from contextlib import AbstractContextManager, contextmanager
 
 import rdflib
 from google.protobuf.message import Message
-from naas_abi_core import logger
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
@@ -58,10 +55,6 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     QueryStream,
     Triple,
 )
-from naas_abi_proto.transfer.v1 import transfer_pb2 as transfer_pb
-from naas_abi_sdk.telemetry import TransferTrace, transfer_span
-from naas_abi_sdk.transfer import transfer_subject
-from nats.errors import NoRespondersError
 from rdflib import Graph, URIRef, Variable
 from rdflib.term import Identifier
 from rdflib.util import from_n3
@@ -180,9 +173,6 @@ def _raise_for_error(
             )
         raise Exceptions.RequestError(operation="unknown", message=error.message)
     raise RuntimeError(f"triple_store NATS RPC failed ({error.code}): {error.message}")
-
-
-_TransferReply = TypeVar("_TransferReply", bound=Message)
 
 
 class TripleStoreSecondaryAdapterNATSClient(NatsRPCClient, ITripleStorePort):
@@ -318,80 +308,15 @@ class TripleStoreSecondaryAdapterNATSClient(NatsRPCClient, ITripleStorePort):
                 triple for frame in frames for triple in decode_triples(frame, bnodes)
             )
 
-    @contextmanager
     def _stream(
         self, operation: str, metadata: bytes
-    ) -> Iterator[Iterator[bytes] | None]:
-        # One span for the whole stream (totals as attributes), not one per frame.
-        with transfer_span(TRANSFER_PREFIX, operation) as trace:
-            nc = self._run_coro(self._ensure_connection_async())
-            try:
-                opened = self._transfer_call(
-                    transfer_pb.OpenRequest(
-                        operation=operation,
-                        metadata=metadata,
-                        chunk_bytes=min(1024 * 1024, nc.max_payload // 2),
-                    ),
-                    transfer_pb.OpenResponse,
-                    trace,
-                )
-            except NoRespondersError:
-                yield None
-                return
-            try:
-                self._transfer_call(
-                    transfer_pb.StartRequest(id=opened.id),
-                    transfer_pb.StartResponse,
-                    trace,
-                )
-                yield self._frames(opened.id, trace)
-            finally:
-                try:
-                    self._transfer_call(
-                        transfer_pb.CloseRequest(id=opened.id),
-                        transfer_pb.CloseResponse,
-                        trace,
-                    )
-                except Exception as exc:  # noqa: BLE001 - idle expiry releases it
-                    logger.warning("Stream cleanup failed: {}", type(exc).__name__)
-
-    def _frames(self, transfer_id: str, trace: TransferTrace) -> Iterator[bytes]:
-        sequence, frame = 0, bytearray()
-        while True:
-            reply = self._transfer_call(
-                transfer_pb.ReadRequest(id=transfer_id, sequence=sequence),
-                transfer_pb.ReadResponse,
-                trace,
-            )
-            if reply.sequence != sequence:
-                raise RuntimeError("triple_store stream sequence mismatch")
-            if reply.done:
-                if frame:
-                    raise RuntimeError("triple_store stream ended mid-frame")
-                return
-            if reply.pending:
-                time.sleep(0.02)
-                continue
-            sequence += 1
-            frame.extend(reply.data)
-            if reply.frame_end:
-                yield bytes(frame)
-                frame.clear()
-
-    def _transfer_call(
-        self, request: Message, response_cls: type[_TransferReply], trace: TransferTrace
-    ) -> _TransferReply:
-        operation = type(request).__name__.removesuffix("Request").lower()
-        request.context.CopyFrom(self._context())  # type: ignore[attr-defined]
-        response = self._call(
-            transfer_subject(TRANSFER_PREFIX, operation, getattr(request, "id", "")),
-            request,
-            response_cls,
-            transfer=trace,
+    ) -> AbstractContextManager[Iterator[bytes] | None]:
+        return self._transfer_stream(
+            TRANSFER_PREFIX,
+            operation,
+            metadata,
+            lambda error: _raise_for_error(error, None),
         )
-        if response.HasField("error"):
-            _raise_for_error(cast(Any, response).error, None)
-        return response
 
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
         request = triple_store_pb2.QueryViewRequest(

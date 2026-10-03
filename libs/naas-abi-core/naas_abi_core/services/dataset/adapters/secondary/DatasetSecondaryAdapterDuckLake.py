@@ -9,7 +9,8 @@ import random
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
@@ -25,6 +26,7 @@ from naas_abi_core.services.dataset.DatasetPort import (
     DatasetSpec,
     IDatasetPort,
     QueryResult,
+    RowStream,
     WriteMode,
 )
 
@@ -48,6 +50,7 @@ DUCKDB_TYPES = {
 }
 
 _T = TypeVar("_T")
+FETCH_ROWS = 1000  # rows per fetch when streaming a query result
 logger = logging.getLogger(__name__)
 
 
@@ -367,6 +370,12 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
     def _run_query(self, con: Any, sql: str, namespace: str) -> QueryResult:
         con.execute(f"USE {self._qualified_schema(namespace)}")
         result = con.execute(sql)
+        columns, json_columns = self._describe(result)
+        rows = [self._row(raw, columns, json_columns) for raw in result.fetchall()]
+        return QueryResult(columns=columns, rows=rows)
+
+    @staticmethod
+    def _describe(result: Any) -> tuple[builtins.list[str], set[int]]:
         description = result.description or []
         columns = [str(column[0]) for column in description]
         json_columns = {
@@ -374,14 +383,54 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             for index, column in enumerate(description)
             if str(column[1]).upper() == "JSON"
         }
-        rows = [
-            {
-                column: self._cell(value, index in json_columns)
-                for index, (column, value) in enumerate(zip(columns, raw))
-            }
-            for raw in result.fetchall()
-        ]
-        return QueryResult(columns=columns, rows=rows)
+        return columns, json_columns
+
+    def _row(
+        self, raw: Any, columns: builtins.list[str], json_columns: set[int]
+    ) -> dict[str, Any]:
+        return {
+            column: self._cell(value, index in json_columns)
+            for index, (column, value) in enumerate(zip(columns, raw))
+        }
+
+    @contextmanager
+    def query_stream(
+        self,
+        sql: str,
+        *,
+        namespace: str = "default",
+        snapshot_id: int | None = None,
+    ) -> Iterator[RowStream]:
+        """Fetch rows ``FETCH_ROWS`` at a time on the stream's own cursor
+        (docs/adr/20261003_nats-streamed-results.md). Like ``query``, this
+        never replays the SQL."""
+        if snapshot_id is None:
+            connection = self._get_read_connection()
+        else:
+            if not self._snapshot_exists(snapshot_id):
+                raise DatasetSnapshotNotFoundError(snapshot_id)
+            connection = self._get_snapshot_connection(snapshot_id)
+        cursor = connection.cursor()
+        try:
+            try:
+                cursor.execute(f"USE {self._qualified_schema(namespace)}")
+                result = cursor.execute(sql)
+            except Exception as exc:
+                self._retire_if_stale(exc, connection)
+                raise
+            columns, json_columns = self._describe(result)
+            yield RowStream(
+                columns=columns, rows=self._fetched(result, columns, json_columns)
+            )
+        finally:
+            cursor.close()
+
+    def _fetched(
+        self, result: Any, columns: builtins.list[str], json_columns: set[int]
+    ) -> Iterator[dict[str, Any]]:
+        while batch := result.fetchmany(FETCH_ROWS):
+            for raw in batch:
+                yield self._row(raw, columns, json_columns)
 
     def list_snapshots(self) -> builtins.list[DatasetSnapshotInfo]:
         def read(con: Any) -> builtins.list[DatasetSnapshotInfo]:
@@ -532,27 +581,36 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             try:
                 return operation(cursor)
             except duckdb.Error as exc:
-                # Another process may flush and drop a cached inline table. Retire
-                # this connection for subsequent calls without interrupting cursors
-                # already using it. Do not replay arbitrary SQL: query() allows writes.
-                retire = False
-                if isinstance(exc, duckdb.CatalogException) and (
-                    "Failed to read inlined data from DuckLake" in str(exc)
-                    and "does not exist" in str(exc)
-                ) or "database has been invalidated" in str(exc):
-                    retire = True
-                if retire:
-                    with self._read_connection_lock:
-                        if self._read_connection is connection:
-                            self._read_connection = None
-                    with self._snapshot_connection_lock:
-                        self._snapshot_connections.clear()
-                    if attempt == 0 and "database has been invalidated" in str(exc):
-                        continue
+                # Do not replay arbitrary SQL: query() allows writes.
+                if (
+                    self._retire_if_stale(exc, connection)
+                    and attempt == 0
+                    and "database has been invalidated" in str(exc)
+                ):
+                    continue
                 raise
             finally:
                 cursor.close()
         raise RuntimeError("unreachable")  # pragma: no cover
+
+    def _retire_if_stale(self, exc: Exception, connection: Any) -> bool:
+        """Another process may flush and drop a cached inline table. Retire this
+        connection for subsequent calls without interrupting cursors already
+        using it. Returns whether it was retired."""
+        import duckdb
+
+        if not (
+            isinstance(exc, duckdb.CatalogException)
+            and "Failed to read inlined data from DuckLake" in str(exc)
+            and "does not exist" in str(exc)
+        ) and "database has been invalidated" not in str(exc):
+            return False
+        with self._read_connection_lock:
+            if self._read_connection is connection:
+                self._read_connection = None
+        with self._snapshot_connection_lock:
+            self._snapshot_connections.clear()
+        return True
 
     def _write_transaction(self, operation: Callable[[Any], _T]) -> tuple[_T, int]:
         if self._sqlite_write_lock is not None:

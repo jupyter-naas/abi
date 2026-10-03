@@ -503,3 +503,36 @@ class TestObjectStoreDataPath:
         )
         adapter.write("plain", [{"id": 1}])
         assert adapter.query("SELECT id FROM plain").rows == [{"id": 1}]
+
+
+def test_query_stream_fetches_rows_in_batches_not_through_query(tmp_path, monkeypatch):
+    from naas_abi_core.services.dataset.adapters.secondary import (
+        DatasetSecondaryAdapterDuckLake as module,
+    )
+
+    adapter = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'datasets.sqlite'}",
+        data_path=str(tmp_path / "datasets"),
+    )
+    adapter.create(
+        DatasetSpec(
+            name="events",
+            columns=(
+                ColumnSpec(name="id", type="integer"),
+                ColumnSpec(name="payload", type="json"),
+            ),
+        )
+    )
+    adapter.write("events", [{"id": n, "payload": {"n": n}} for n in range(2500)])
+    monkeypatch.setattr(module, "FETCH_ROWS", 1000)
+    monkeypatch.setattr(
+        adapter,
+        "query",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("materialized")),
+    )
+
+    with adapter.query_stream("SELECT id, payload FROM events ORDER BY id") as result:
+        assert result.columns == ["id", "payload"]
+        rows = iter(result.rows)
+        assert next(rows) == {"id": 0, "payload": {"n": 0}}
+        assert sum(1 for _ in rows) == 2499
