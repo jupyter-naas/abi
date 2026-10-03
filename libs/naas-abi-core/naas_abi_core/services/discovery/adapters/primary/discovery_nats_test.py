@@ -21,10 +21,13 @@ def test_authentication_precedes_domain_mutations_and_binds_caller():
             headers={},
             reply="reply",
             respond=AsyncMock(),
+            _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
         )
         await primary._handle("register", msg)
         assert (
-            pb.RegisterResponse.FromString(msg.respond.call_args.args[0]).error.code
+            pb.RegisterResponse.FromString(
+                msg._client.publish.call_args.args[1]
+            ).error.code
             == "UNAUTHENTICATED"
         )
         service.register.assert_not_awaited()
@@ -56,9 +59,10 @@ def test_evict_is_an_authenticated_admin_mutation():
                 headers={"Nats-Auth-Token": issue_service_token(identity, SECRET)},
                 reply="reply",
                 respond=AsyncMock(),
+                _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
             )
             await primary._handle("evict", msg)
-            return pb.EvictResponse.FromString(msg.respond.call_args.args[0])
+            return pb.EvictResponse.FromString(msg._client.publish.call_args.args[1])
 
         assert OPERATIONS["evict"][2] is True
         assert (await evict_as("research")).error.code == "PERMISSION_DENIED"

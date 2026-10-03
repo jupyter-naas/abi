@@ -14,6 +14,7 @@ from naas_abi_core.services.discovery.discovery_service import (
     DiscoveryService,
 )
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
+from naas_abi_sdk.messages import reply
 from nats.aio.client import Client
 from nats.aio.msg import Msg
 from nats.aio.subscription import Subscription
@@ -105,4 +106,4 @@ class DiscoveryNATS:
                 "Discovery response exceeds limit",
             )
         if msg.reply:
-            await msg.respond(response.SerializeToString())
+            await reply(msg, response.SerializeToString())

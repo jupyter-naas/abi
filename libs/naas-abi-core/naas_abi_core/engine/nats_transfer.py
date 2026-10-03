@@ -27,6 +27,7 @@ from naas_abi_core.engine.nats_auth import (
     verify_service_token,
 )
 from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
+from naas_abi_sdk.messages import reply
 from naas_abi_sdk.telemetry import ServedTransfer, serve_transfer
 
 OPERATIONS = {
@@ -290,7 +291,7 @@ class TransferHost:
                 "Transfer request capacity reached",
             )
             if msg.reply:
-                await msg.respond(response.SerializeToString())
+                await reply(msg, response.SerializeToString())
             return
         task = asyncio.create_task(self._handle(operation, msg))
         self.tasks.add(task)
@@ -332,7 +333,7 @@ class TransferHost:
         except Exception as exc:  # noqa: BLE001 - sanitize errors at transport boundary
             response.error.code, response.error.message = self._error(exc)
         if msg.reply:
-            await msg.respond(response.SerializeToString())
+            await reply(msg, response.SerializeToString())
 
     async def _produce(self, session):
         async def consume():

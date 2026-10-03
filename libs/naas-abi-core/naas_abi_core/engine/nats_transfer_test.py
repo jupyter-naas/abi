@@ -182,10 +182,13 @@ class _Caller:
             headers=self.headers,
             reply="inbox",
             respond=AsyncMock(),
+            _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
         )
         await self.host._handle(operation, msg)
         self.calls += 1
-        return OPERATIONS[operation][1].FromString(msg.respond.call_args.args[0])
+        return OPERATIONS[operation][1].FromString(
+            msg._client.publish.call_args.args[1]
+        )
 
     async def run(self, operation, upload=b""):
         """open, write, start, read until done or failed, close."""

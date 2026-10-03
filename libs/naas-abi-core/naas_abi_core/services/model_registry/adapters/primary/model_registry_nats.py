@@ -25,6 +25,7 @@ from naas_abi_core.services.model_registry.ModelRegistryPort import (
     ProviderNotConfiguredError,
 )
 from naas_abi_proto.model_registry.v1 import model_registry_pb2 as pb
+from naas_abi_sdk.messages import reply
 from naas_abi_sdk.model_codec import (
     decode_json,
     decode_message,
@@ -193,7 +194,7 @@ class ModelRegistryNATS:
             response = OPERATIONS[operation][1]()
             response.error.code = "RESOURCE_EXHAUSTED"
             response.error.message = "Model request capacity reached"
-            await msg.respond(response.SerializeToString())
+            await reply(msg, response.SerializeToString())
             return
         task = asyncio.create_task(self._handle(operation, msg))
         self.tasks.add(task)
@@ -277,7 +278,7 @@ class ModelRegistryNATS:
             )
             payload = response.SerializeToString()
         if msg.reply:
-            await msg.respond(payload)
+            await reply(msg, payload)
 
     def _resolve(self, ref):
         if ref.kind not in ("", "chat", "embedding"):
