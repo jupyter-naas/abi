@@ -212,12 +212,14 @@ def test_a_sub_agent_invoked_directly_continues_its_supervisors_thread(transcrip
     assert "I am Bob" in engine["helper"][1]
 
 
-def test_another_top_level_agent_on_the_thread_behaves_as_today(transcripts):
-    # Today the second agent resumes routing to the first agent's node, which
-    # its graph lacks, and the turn ends without calling a model. Preserved
-    # as is: changing it is a routing decision, not a storage one.
+def test_another_top_level_agent_takes_over_the_thread(transcripts):
+    # The second agent ignores the first agent's routing (not in its graph)
+    # and answers with the thread's history. Agent_routing_test.py covers
+    # the routing cases.
     today, engine = transcripts(another_agent_takes_over_the_thread)
     assert engine == today
+    assert engine["outputs"] == ["noted", "Bob"]
+    assert engine["second"] == [["my name is Bob", "noted", "what is my name?"]]
 
 
 def test_intent_agents_use_the_engine_memory_too(tmp_path):
