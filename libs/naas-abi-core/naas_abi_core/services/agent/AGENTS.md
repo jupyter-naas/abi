@@ -109,6 +109,12 @@ in order: the engine's agent checkpointer when an engine is loaded, else a share
   supervisor's graph and checkpointer; a sub-agent invoked directly continues its
   supervisor's thread. Do not split the scope per agent or module without
   replacing that. SDK agents keep their own module namespace.
+- Restored routing is checked against the running graph: `current_active_agent`
+  and `supervisor_agent` from the thread are adopted only when they name this
+  agent or one of its sub-agents, at any depth (a deeper one is reached through
+  the direct sub-agent that holds it). A thread another agent left (Nexus keeps
+  one thread per conversation when the user switches agents) starts with the
+  agent now running. `Agent_routing_test.py` covers these cases.
 - Documents are those of `naas_abi_sdk.langgraph.DocumentCheckpointSaver`
   (`naas_abi_sdk.langgraph_documents`, schema 2): change the schema there, for
   both savers; the savers only do I/O. Each step stores what changed (values
@@ -145,6 +151,7 @@ Propagate across async tasks / raw threads with `contextvars.copy_context()`.
 
 ```bash
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_routing_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_events_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_hooks_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/IntentAgent_test.py

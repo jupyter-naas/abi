@@ -1110,6 +1110,24 @@ class Agent(Expose):
                 state["messages"][::-1], lambda m: isinstance(m, HumanMessage)
             )
 
+    def _path_to(self, name: str, _seen: set[int] | None = None) -> list[Agent] | None:
+        """Sub-agents from a direct one down to the agent ``name``, or None
+        when ``name`` is not in this agent's graph."""
+        seen = _seen if _seen is not None else {id(self)}
+        for agent in self._agents:
+            if id(agent) in seen:
+                continue
+            seen.add(id(agent))
+            if Agent.validate_name(agent.name) == name:
+                return [agent]
+            below = agent._path_to(name, seen)
+            if below is not None:
+                return [agent, *below]
+        return None
+
+    def _in_tree(self, name: str) -> bool:
+        return name == self._name or self._path_to(name) is not None
+
     def current_active_agent(self, state: ABIAgentState) -> Command:
         """Goto the current active agent.
 
@@ -1125,11 +1143,26 @@ class Agent(Expose):
         # of a new HTTP turn, where the agent tree was freshly duplicated with a
         # blank AgentSharedState. This is what makes a prior handoff survive
         # across requests instead of falling back to the supervisor every turn.
+        #
+        # The thread is not always this agent's: Nexus keeps one thread per
+        # conversation when the user switches agents, and every engine agent
+        # shares one checkpointer. Only adopt names from this agent's tree;
+        # routing to another agent's node ends the turn without a model call.
         persisted_active = state.get("current_active_agent")
         if persisted_active is not None and self._state.current_active_agent is None:
-            self._state.set_current_active_agent(persisted_active)
+            if self._in_tree(persisted_active):
+                self._state.set_current_active_agent(persisted_active)
+            else:
+                logger.debug(
+                    f"Ignoring active agent '{persisted_active}' from the thread: "
+                    f"not in '{self._name}' graph"
+                )
         persisted_supervisor = state.get("supervisor_agent")
-        if persisted_supervisor is not None and self._state.supervisor_agent is None:
+        if (
+            persisted_supervisor is not None
+            and self._state.supervisor_agent is None
+            and self._in_tree(persisted_supervisor)
+        ):
             self._state.set_supervisor_agent(persisted_supervisor)
 
         # Log the current active agent
@@ -1187,11 +1220,13 @@ class Agent(Expose):
                 and isinstance(last_human_message.content, str)
                 else ""
             )
-            active_agent = pd.find(
-                self._agents,
-                lambda a: Agent.validate_name(a.name) == active_name,
-            )
-            retain = True
+            path = self._path_to(active_name)
+            active_agent = path[-1] if path else None
+            retain = path is not None
+            if path is None:
+                logger.debug(
+                    f"Active agent '{active_name}' is not in '{self._name}' graph"
+                )
             retain_fn = (
                 getattr(type(active_agent), "retains_active_turn", None)
                 if active_agent is not None
@@ -1207,10 +1242,12 @@ class Agent(Expose):
                         exc_info=True,
                     )
                     retain = True
-            if retain:
+            if retain and path is not None:
                 logger.debug(f"⏩ Continuing conversation with: '{active_name}'")
                 # self._notify_agent_routing(active_name)
-                return Command(goto=active_name)
+                # Go through the direct sub-agent that holds it: a deeper agent
+                # is a node of that sub-agent's graph, not of this one.
+                return Command(goto=path[0].name)
             logger.debug(
                 f"↩️  Releasing sticky agent '{active_name}' back to '{self._name}'"
             )
