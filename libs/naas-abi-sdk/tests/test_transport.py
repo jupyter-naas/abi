@@ -228,3 +228,18 @@ def test_an_engine_without_overflow_still_refuses_a_large_request():
 
     assert raised.value.code == "PAYLOAD_TOO_LARGE"
     service.assert_not_called()
+
+
+def test_the_brokers_limit_is_the_only_limit():
+    # A broker configured above 8 MiB carries a 10 MiB call in one message.
+    rpc, nc = transport(kv.SetResponse().SerializeToString())
+    nc.max_payload = 16 * 1024 * 1024
+    asyncio.run(
+        rpc.call(
+            "set",
+            kv.SetRequest(key="k", value=b"x" * (10 * 1024 * 1024)),
+            kv.SetResponse,
+        )
+    )
+    (subject, payload), _ = nc.request.call_args
+    assert subject == "set" and len(payload) > 10 * 1024 * 1024

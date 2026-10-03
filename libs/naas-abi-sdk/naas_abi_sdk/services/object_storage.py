@@ -94,7 +94,7 @@ class ObjectStorageService(ServiceProxy):
                     )
                 except NoRespondersError:
                     nc = await self._client._transport.connect()
-                    limit = min(nc.max_payload, 8 * 1024 * 1024)
+                    limit = nc.max_payload
                     content = await asyncio.to_thread(read_legacy_upload, stream, limit)
                     await self._request(
                         "put_object", prefix=prefix, key=key, content=content

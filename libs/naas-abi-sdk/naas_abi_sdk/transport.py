@@ -22,7 +22,6 @@ from naas_abi_sdk.telemetry import (
 )
 
 Response = TypeVar("Response", bound=Message)
-MAX_PAYLOAD = 8 * 1024 * 1024
 
 
 class RPCError(RuntimeError):
@@ -125,7 +124,7 @@ class Transport:
             return await self.call(subject, request, response_type, transfer=trace)
 
         nc = await self.connect()
-        limit = min(nc.max_payload, MAX_PAYLOAD)
+        limit = nc.max_payload
         upload = None
         if _message_size(payload, headers) > limit and overflow.possible(limit):
             try:
@@ -161,7 +160,7 @@ class Transport:
     ) -> Response:
         async def send():
             nc = await self.connect()
-            if _message_size(payload, headers) > min(nc.max_payload, MAX_PAYLOAD):
+            if _message_size(payload, headers) > nc.max_payload:
                 raise RPCError("PAYLOAD_TOO_LARGE", "Request exceeds broker limit")
             try:
                 return await nc.request(

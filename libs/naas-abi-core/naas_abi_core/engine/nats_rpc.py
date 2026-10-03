@@ -43,7 +43,6 @@ from nats.aio.client import Client as NATSClient
 from nats.errors import MaxPayloadError, NoRespondersError
 from nats.micro.request import ERROR_CODE_HEADER, ERROR_HEADER, Request
 
-MAX_RPC_PAYLOAD = 8 * 1024 * 1024
 _TOKEN_RENEWAL_MARGIN = timedelta(minutes=5)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
 
@@ -135,13 +134,15 @@ async def respond_protobuf(
     code = _error_code(response)
     if code:
         record_error(code, _call_error(response).message)
+    headers = {ERROR_CODE_REPLY_HEADER: code} if code else None
     try:
-        if len(payload) > MAX_RPC_PAYLOAD:
+        # The broker's max_payload is the only limit. It counts the header
+        # block, which nats-py's own check does not; a violation closes the
+        # connection every primary in this process shares.
+        limit = _broker_limit(request)
+        if limit is not None and message_size(payload, headers) > limit:
             raise MaxPayloadError()
-        if code:
-            await request.respond(payload, headers={ERROR_CODE_REPLY_HEADER: code})
-        else:
-            await request.respond(payload)
+        await request.respond(payload, headers=headers)
     except MaxPayloadError:
         if await _respond_overflow(request, payload):
             return
@@ -159,6 +160,21 @@ async def respond_protobuf(
             error_response.SerializeToString(),
             headers={ERROR_CODE_REPLY_HEADER: "PAYLOAD_TOO_LARGE"},
         )
+
+
+def message_size(payload: bytes, headers: dict[str, str] | None) -> int:
+    """Bytes NATS counts against max_payload: the body and the header block."""
+    if not headers:
+        return len(payload)
+    block = "".join(f"{key}: {value}\r\n" for key, value in headers.items())
+    return len(payload) + len(f"NATS/1.0\r\n{block}\r\n".encode())
+
+
+def _broker_limit(request: Request) -> int | None:
+    """The max_payload of the connection a request arrived on."""
+    client = getattr(getattr(request, "_msg", None), "_client", None)
+    limit = getattr(client, "max_payload", None)
+    return limit if isinstance(limit, int) and limit > 0 else None
 
 
 async def _respond_overflow(request: Request, payload: bytes) -> bool:
@@ -510,7 +526,7 @@ class NatsRPCClient:
         refused: NatsRPCPayloadTooLargeError,
     ) -> str:
         nc = await self._ensure_connection_async()
-        limit = min(nc.max_payload, MAX_RPC_PAYLOAD)
+        limit = nc.max_payload
         if not overflow.possible(limit):
             raise refused
         try:
@@ -615,7 +631,7 @@ class NatsRPCClient:
         header_size = len(b"NATS/1.0\r\n\r\n") + sum(
             len(f"{key}: {value}\r\n".encode()) for key, value in headers.items()
         )
-        limit = min(nc.max_payload, MAX_RPC_PAYLOAD)
+        limit = nc.max_payload
         if len(payload) + header_size > limit:
             raise NatsRPCPayloadTooLargeError(
                 f"Request exceeds {limit} bytes including headers; "
