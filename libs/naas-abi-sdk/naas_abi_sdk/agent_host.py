@@ -16,6 +16,7 @@ from google.protobuf.message import DecodeError
 from naas_abi_proto.agent.v1 import agent_pb2 as pb
 from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 
+from naas_abi_sdk import overflow
 from naas_abi_sdk.agent import TERMINAL, agent_subject
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
@@ -155,7 +156,10 @@ class AgentHost:
         response_cls = getattr(pb, operation.title() + "Response")
         response = response_cls()
         try:
-            if len(msg.data) > 128 * 1024:
+            # An overflow upload is above the broker limit, so above this cap too.
+            if len(msg.data) > 128 * 1024 or overflow.REQUEST_HEADER in (
+                msg.headers or {}
+            ):
                 raise _error("PAYLOAD_TOO_LARGE", "Agent request exceeds 128 KiB")
             req = cls.FromString(msg.data)
             if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", req.invocation_id):

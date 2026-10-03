@@ -25,6 +25,7 @@ from naas_abi_core.services.model_registry.ModelRegistryPort import (
     ProviderNotConfiguredError,
 )
 from naas_abi_proto.model_registry.v1 import model_registry_pb2 as pb
+from naas_abi_sdk import overflow
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.model_codec import (
     decode_json,
@@ -214,7 +215,10 @@ class ModelRegistryNATS:
             caller = verify_service_token(
                 (msg.headers or {}).get("Nats-Auth-Token", ""), self.secret
             )
-            if len(msg.data) > self.max_payload:
+            # An overflow upload is above the broker limit, so above this cap too.
+            if len(msg.data) > self.max_payload or overflow.REQUEST_HEADER in (
+                msg.headers or {}
+            ):
                 raise ValueError("Model request exceeds 512 KiB limit")
             request = request_type.FromString(msg.data)
             timeout = min(

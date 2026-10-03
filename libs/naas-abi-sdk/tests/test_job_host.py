@@ -75,9 +75,20 @@ class Msg:
         self.calls.append(("in_progress",))
 
 
+class _Connection:
+    """Enough of a broker connection to size messages (claim checks)."""
+
+    max_payload = 1024 * 1024
+
+
+class _Transport:
+    async def connect(self):
+        return _Connection()
+
+
 def _host(documents=None, **kwargs):
     return JobHost(
-        transport=None,
+        transport=_Transport(),
         documents=documents or Documents(),
         module_id=MODULE,
         project=PROJECT,
@@ -369,6 +380,8 @@ def test_manual_triggers_carry_the_callers_trace(monkeypatch):
             return SimpleNamespace(seq=3)
 
     class _NC:
+        max_payload = 1024 * 1024
+
         def jetstream(self):
             return _JS()
 

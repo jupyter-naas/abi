@@ -372,3 +372,43 @@ def test_long_timeout_is_not_hit_by_fast_jobs(broker):
             await host.close()
 
     assert asyncio.run(scenario())["status"] == "SUCCEEDED"
+
+
+def test_triggers_and_events_above_the_broker_limit_reach_the_job(broker):
+    # nats-server defaults to a 1 MB max_payload: both payloads are claim checks.
+    from naas_abi_sdk.bus import BusClient
+
+    docs = Documents()
+    manual = JobDescriptor("big_manual")
+    on_event = JobDescriptor("big_event", triggers=(OnEvent("evt.itest.big"),))
+    blob = "x" * (3 * 1024 * 1024)
+
+    async def measure(ctx):
+        data = ctx.payload.get("data", ctx.payload)
+        return {"length": len(data["blob"])}
+
+    async def scenario():
+        host = _host(broker, docs, [(manual, measure), (on_event, measure)])
+        await host.start()
+        try:
+            transport = Transport(broker, "t")
+            run = await JobProxy(transport, PROJECT, MODULE, manual, docs).trigger(
+                {"blob": blob}
+            )
+            first = await run.wait(timeout=8, poll_seconds=0.05)
+            await BusClient(transport).publish(
+                "evt.itest", "big", json.dumps({"blob": blob}).encode()
+            )
+            await _until(
+                lambda: any(r["status"] == "SUCCEEDED" for r in docs.runs("big_event"))
+            )
+            await transport.close()
+            return first
+        finally:
+            await host.close()
+
+    first = asyncio.run(scenario())
+
+    assert first["status"] == "SUCCEEDED" and first["result"] == {"length": len(blob)}
+    bridged = next(r for r in docs.runs("big_event") if r["status"] == "SUCCEEDED")
+    assert bridged["result"] == {"length": len(blob)}

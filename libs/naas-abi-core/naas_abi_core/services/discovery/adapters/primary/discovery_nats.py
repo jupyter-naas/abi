@@ -14,6 +14,7 @@ from naas_abi_core.services.discovery.discovery_service import (
     DiscoveryService,
 )
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
+from naas_abi_sdk import overflow
 from naas_abi_sdk.messages import reply
 from nats.aio.client import Client
 from nats.aio.msg import Msg
@@ -65,7 +66,10 @@ class DiscoveryNATS:
             owner = verify_service_token(
                 (msg.headers or {}).get("Nats-Auth-Token", ""), self.secret
             )
-            if len(msg.data) > self.max_payload:
+            # An overflow upload is above the broker limit, so above this cap too.
+            if len(msg.data) > self.max_payload or overflow.REQUEST_HEADER in (
+                msg.headers or {}
+            ):
                 raise DiscoveryError(
                     "PAYLOAD_TOO_LARGE", "Discovery request exceeds limit"
                 )
