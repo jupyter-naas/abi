@@ -489,16 +489,23 @@ class JobProxy:
         return self.descriptor.name
 
     async def trigger(self, payload: dict[str, Any] | None = None) -> JobRun:
+        from naas_abi_sdk import claim_check  # needs nats; keep jobs.py nats-free
+
         nc = await self.transport.connect()
         subject = job_subjects(self.project, self.module_id, self.name).trigger
+        stream = stream_name(self.project)
         headers = {TRIGGER_HEADER: "manual", "Nats-TTL": "168h"}
         # The run continues this trace (the host reads traceparent off the message).
         with client_span(subject, headers):
-            ack = await nc.jetstream().publish(
-                subject,
+            # A payload above the broker limit travels as a claim check.
+            body, sent_headers = await claim_check.prepare(
+                nc,
                 json.dumps(payload or {}).encode(),
-                headers=headers,
-                stream=stream_name(self.project),
+                headers,
+                reserve=claim_check.stream_header_reserve(stream),
+            )
+            ack = await nc.jetstream().publish(
+                subject, body, headers=sent_headers, stream=stream
             )
         return JobRun(
             self.transport,

@@ -280,20 +280,32 @@ class JobHost:
             )
 
     async def bridge_event(self, js: Any, descriptor: JobDescriptor, msg: Any) -> None:
-        """Republish a core-NATS event as a durable trigger (deduplicated per event)."""
+        """Republish a core-NATS event as a durable trigger (deduplicated per event).
+
+        Either side may be above the broker limit: the event is read back from
+        its claim check, and the trigger (wrapped, so larger) is sent as one.
+        """
+        from naas_abi_sdk import claim_check
+
+        nc = await self.transport.connect()
+        raw = await claim_check.resolve(nc, msg)
         try:
-            data: Any = json.loads(msg.data) if msg.data else None
+            data: Any = json.loads(raw) if raw else None
         except (ValueError, UnicodeDecodeError):
-            data = msg.data.decode(errors="replace")
-        await js.publish(
-            self._subjects(descriptor).trigger,
+            data = raw.decode(errors="replace")
+        stream = stream_name(self.project)
+        body, headers = await claim_check.prepare(
+            nc,
             json.dumps({"subject": msg.subject, "data": data}).encode(),
-            headers={
+            {
                 TRIGGER_HEADER: "event",
                 "Nats-Msg-Id": f"{descriptor.name}:{msg.subject}",
                 "Nats-TTL": EVENT_TRIGGER_TTL,
             },
-            stream=stream_name(self.project),
+            reserve=claim_check.stream_header_reserve(stream),
+        )
+        await js.publish(
+            self._subjects(descriptor).trigger, body, headers=headers, stream=stream
         )
 
     # --- cancellation ------------------------------------------------------------------------
@@ -392,10 +404,15 @@ class JobHost:
         trigger = {"kind": headers.get(TRIGGER_HEADER, "manual")}
         if headers.get("Nats-Scheduler"):
             trigger["scheduler"] = headers["Nats-Scheduler"]
+        from naas_abi_sdk import claim_check
+
+        data = msg.data
+        if claim_check.carries_reference(msg):
+            data = await claim_check.resolve(await self.transport.connect(), msg)
         try:
-            payload = json.loads(msg.data) if msg.data else {}
+            payload = json.loads(data) if data else {}
         except (ValueError, UnicodeDecodeError):
-            payload = {"raw": msg.data.decode(errors="replace")}
+            payload = {"raw": data.decode(errors="replace")}
         if not isinstance(payload, dict):
             payload = {"value": payload}
         context = JobContext(run_id, descriptor.name, attempt, trigger, payload)

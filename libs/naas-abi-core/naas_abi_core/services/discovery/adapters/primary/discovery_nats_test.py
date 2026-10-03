@@ -72,3 +72,26 @@ def test_evict_is_an_authenticated_admin_mutation():
         assert (await evict_as("api")).error.code == "INSTANCE_NOT_FOUND"
 
     asyncio.run(scenario())
+
+
+def test_an_overflow_uploaded_request_is_refused_as_too_large():
+    # Discovery does not read overflow uploads: such a request arrives with an
+    # empty body and must not be parsed as an empty (valid) request.
+    async def scenario():
+        service = AsyncMock()
+        primary = DiscoveryNATS(service, SECRET, "test")
+        msg = SimpleNamespace(
+            data=b"",
+            headers={
+                "Nats-Auth-Token": issue_service_token("caller", SECRET),
+                "Abi-Overflow-Request": f"{'a' * 32}:upload",
+            },
+            reply="reply",
+            _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
+        )
+        await primary._handle("register", msg)
+        response = pb.RegisterResponse.FromString(msg._client.publish.call_args.args[1])
+        assert response.error.code == "PAYLOAD_TOO_LARGE"
+        service.register.assert_not_awaited()
+
+    asyncio.run(scenario())

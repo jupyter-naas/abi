@@ -32,6 +32,13 @@ proxies on model lookup. ModelConnection keeps NATS I/O on the resolving loop;
 sync callers must use another thread. Stream IDs are caller-bound, ephemeral,
 sequence-checked handles; never retry inference or cursor reads automatically.
 
+`messages.py` sizes messages as the broker does (body and header block) and
+`reply()` answers without echoing the request's headers; use it instead of
+`Msg.respond`. `claim_check.py` carries published, queued and job-trigger
+messages above the broker limit through a JetStream object store
+(docs/adr/20261003_nats-claim-check.md); `BusClient` subscriptions resolve them
+in place. Every raw NATS send is listed in core's
+`engine/nats_send_sites_test.py`: a new one must go through these helpers.
 `overflow.py` is the client side of RPC overflow (payloads above the broker
 limit as transfer/v1 frames, docs/adr/20261003_nats-rpc-overflow.md), used by
 `Transport` and core's `NatsRPCClient`. A call says `Abi-Overflow: 1` before an

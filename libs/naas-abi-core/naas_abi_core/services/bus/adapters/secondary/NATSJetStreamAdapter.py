@@ -11,11 +11,18 @@ import nats.js.errors
 from naas_abi_core.engine.nats_naming import connection_name
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
 from naas_abi_core.utils.Logger import logger
+from naas_abi_sdk import claim_check
 from nats.aio.client import Client as NATSClient
 from nats.aio.msg import Msg
 from nats.js import JetStreamContext
 
 _DEFAULT_TIMEOUT_SECONDS = 10.0
+
+
+def _send_timeout(payload: bytes) -> float:
+    # A message above the broker limit is stored first (claim check): allow
+    # for its size, at a conservative 4 MiB/s.
+    return _DEFAULT_TIMEOUT_SECONDS + len(payload) / (4 * 1024 * 1024)
 
 
 class NATSJetStreamAdapter(IBusAdapter):
@@ -255,11 +262,16 @@ class NATSJetStreamAdapter(IBusAdapter):
         """Publish once; a failed flush does not prove the message was not sent."""
         subject = self._subject(topic, routing_key)
         with self.__publish_lock:
-            self._run_coro(self._do_publish_async(subject, payload))
+            self._run_coro(
+                self._do_publish_async(subject, payload), timeout=_send_timeout(payload)
+            )
 
     async def _do_publish_async(self, subject: str, payload: bytes) -> None:
         nc, _js = await self._ensure_connection_async()
-        await nc.publish(subject, payload)
+        # Above the broker limit (headers counted) the payload travels as a
+        # claim check; subscribers read it back (naas_abi_sdk.claim_check).
+        body, headers = await claim_check.prepare(nc, payload)
+        await nc.publish(subject, body, headers=headers)
         # Core NATS publish only buffers the frame; flush so the message is
         # genuinely on the wire by the time the synchronous caller gets
         # control back, matching the "block until it completes" contract of
@@ -294,7 +306,7 @@ class NATSJetStreamAdapter(IBusAdapter):
 
         async def _on_message(msg: Msg) -> None:
             try:
-                callback(msg.data)
+                callback(await claim_check.resolve(nc, msg))
             except StopIteration:
                 stop_event.set()
             except Exception:  # noqa: BLE001
@@ -330,12 +342,20 @@ class NATSJetStreamAdapter(IBusAdapter):
         """Append once; a lost acknowledgement can hide a successful durable write."""
         subject = self._subject(topic, routing_key)
         with self.__publish_lock:
-            self._run_coro(self._do_enqueue_async(topic, subject, payload))
+            self._run_coro(
+                self._do_enqueue_async(topic, subject, payload),
+                timeout=_send_timeout(payload),
+            )
 
     async def _do_enqueue_async(self, topic: str, subject: str, payload: bytes) -> None:
-        _nc, js = await self._ensure_connection_async()
+        nc, js = await self._ensure_connection_async()
         stream_name = await self._ensure_stream_async(js, topic)
-        await js.publish(subject, payload, stream=stream_name)
+        # JetStream adds its own header: a body that just fits would make the
+        # server close the connection, so that header is reserved too.
+        body, headers = await claim_check.prepare(
+            nc, payload, reserve=claim_check.stream_header_reserve(stream_name)
+        )
+        await js.publish(subject, body, stream=stream_name, headers=headers)
 
     def dequeue(
         self, topic: str, routing_key: str, callback: Callable[[bytes], None]
@@ -377,7 +397,7 @@ class NATSJetStreamAdapter(IBusAdapter):
 
                 for msg in msgs:
                     try:
-                        callback(msg.data)
+                        callback(await claim_check.resolve(nc, msg))
                         await msg.ack()
                     except StopIteration:
                         await msg.ack()
