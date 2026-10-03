@@ -6,6 +6,9 @@ from __future__ import annotations
 # evaluated in the class bodies below; use ``builtins.list`` there.
 import builtins
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal
 
@@ -174,6 +177,17 @@ class QueryResult(BaseModel):
     rows: list[dict[str, Any]] = Field(default_factory=list)
 
 
+@dataclass
+class RowStream:
+    """A query result read incrementally (docs/adr/20261003_nats-streamed-results.md).
+
+    ``rows`` is a single-use iterator, valid inside the ``query_stream`` block.
+    """
+
+    columns: list[str]
+    rows: Iterator[dict[str, Any]] = field(default_factory=lambda: iter(()))
+
+
 class IDatasetPort(ABC):
     @abstractmethod
     def create(self, spec: DatasetSpec) -> DatasetInfo:
@@ -214,6 +228,22 @@ class IDatasetPort(ABC):
         snapshot_id: int | None = None,
     ) -> QueryResult:
         """Run SQL against datasets in ``namespace``. Tables are registered by dataset name."""
+
+    @contextmanager
+    def query_stream(
+        self,
+        sql: str,
+        *,
+        namespace: str = "default",
+        snapshot_id: int | None = None,
+    ) -> Iterator[RowStream]:
+        """Run SQL and read its rows incrementally, inside the block.
+
+        This default reads ``query``; adapters that can fetch in batches
+        override it to keep memory bounded.
+        """
+        result = self.query(sql, namespace=namespace, snapshot_id=snapshot_id)
+        yield RowStream(columns=result.columns, rows=iter(result.rows))
 
     @abstractmethod
     def flush(self, name: str, *, namespace: str = "default") -> QueryResult:

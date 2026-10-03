@@ -322,3 +322,35 @@ def test_export_fallback_refuses_a_graph_name_that_is_not_an_iri(graph_name):
 
     with pytest.raises(ValueError):
         _graph_export_query(graph_name)
+
+
+def test_dataset_query_stream_reads_rows_frame_by_frame():
+    from naas_abi_sdk.services import FACTORIES
+
+    header = dataset.QueryResult(columns=["id", "name"]).SerializeToString()
+    batch = dataset.QueryResult()
+    for n in range(3):
+        batch.rows.add().update({"id": n, "name": f"row {n}"})
+    transport = StreamTransport([header, batch.SerializeToString()])
+    service = FACTORIES["dataset"](SimpleNamespace(_transport=transport))
+
+    async def scenario():
+        async with service.query_stream(
+            "SELECT id, name FROM t", namespace="acme"
+        ) as result:
+            assert result.columns == ["id", "name"]
+            return [row async for row in result.rows]
+
+    assert asyncio.run(scenario()) == [
+        {"id": 0.0, "name": "row 0"},
+        {"id": 1.0, "name": "row 1"},
+        {"id": 2.0, "name": "row 2"},
+    ]
+    ((operation, metadata),) = transport.opened
+    request = dataset.QueryRequest.FromString(metadata)
+    assert (operation, request.sql, request.namespace) == (
+        "query",
+        "SELECT id, name FROM t",
+        "acme",
+    )
+    assert transport.closed == [f"{'a' * 32}:s"]

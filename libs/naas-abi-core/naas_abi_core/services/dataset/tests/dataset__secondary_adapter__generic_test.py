@@ -402,3 +402,41 @@ class DatasetSecondaryAdapterContract(ABC):
         with pytest.raises(DatasetNotFoundError):
             adapter.describe("github_commits", namespace="acme")
         assert adapter.list(namespace="acme") == []
+
+    # --- streamed reads (docs/adr/20261003_nats-streamed-results.md)
+
+    def test_query_stream_reads_the_rows_query_returns(self, adapter: IDatasetPort):
+        adapter.create(self._spec())
+        adapter.write(
+            "github_commits",
+            [
+                {
+                    "sha": f"{n:05d}",
+                    "project_id": f"p{n % 3}",
+                    "author_date": "2026-08-02",
+                    "additions": n,
+                    "deletions": None if n % 7 == 0 else 1,
+                }
+                for n in range(2500)  # more than one fetch batch and one frame
+            ],
+            namespace="acme",
+        )
+        sql = "SELECT sha, additions, deletions FROM github_commits ORDER BY sha"
+
+        with adapter.query_stream(sql, namespace="acme") as result:
+            assert result.columns == ["sha", "additions", "deletions"]
+            streamed = list(result.rows)
+
+        assert streamed == adapter.query(sql, namespace="acme").rows
+        assert len(streamed) == 2500
+
+    def test_query_stream_of_a_missing_table_raises_before_any_row(
+        self, adapter: IDatasetPort
+    ):
+        with (
+            pytest.raises(Exception),
+            adapter.query_stream(
+                "SELECT * FROM no_such_table", namespace="acme"
+            ) as result,
+        ):
+            list(result.rows)

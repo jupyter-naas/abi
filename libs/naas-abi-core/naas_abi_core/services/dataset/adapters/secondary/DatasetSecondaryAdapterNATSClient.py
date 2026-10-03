@@ -28,6 +28,8 @@ from __future__ import annotations
 # evaluated in this class body below (methods after ``list``); use
 # ``builtins.list`` there -- same workaround as DatasetPort.py/DatasetService.py.
 import builtins
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC
 from typing import Any
 
@@ -37,6 +39,11 @@ from naas_abi_core.proto.dataset.v1 import dataset_pb2
 from naas_abi_core.services.dataset.adapters.dataset_nats_contract import (
     AUTH_HEADER,
     SUBJECT_PREFIX,
+    TRANSFER_PREFIX,
+)
+from naas_abi_core.services.dataset.adapters.dataset_stream_codec import (
+    decode_header,
+    decode_rows,
 )
 from naas_abi_core.services.dataset.DatasetPort import (
     ColumnSpec,
@@ -53,6 +60,7 @@ from naas_abi_core.services.dataset.DatasetPort import (
     PartitionSpec,
     PartitionTransform,
     QueryResult,
+    RowStream,
     WriteMode,
 )
 
@@ -293,6 +301,43 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
         if response.HasField("error"):
             _raise_for_error(response.error)
         return _pb_to_query_result(response.query_result)
+
+    @contextmanager
+    def query_stream(
+        self,
+        sql: str,
+        *,
+        namespace: str = "default",
+        snapshot_id: int | None = None,
+    ) -> Iterator[RowStream]:
+        """Rows fetched as the caller iterates, over a transfer stream
+        (docs/adr/20261003_nats-streamed-results.md); the unary ``query`` on an
+        engine without it. Leaving the block closes the session."""
+        request = dataset_pb2.QueryRequest(sql=sql, namespace=namespace)
+        if snapshot_id is not None:
+            request.snapshot_id = snapshot_id
+
+        def raise_error(error: Any) -> None:
+            if error.code == "DATASET_SCHEMA_ERROR":
+                raise DatasetSchemaError(error.message)
+            if error.code == "DATASET_SNAPSHOT_NOT_FOUND" and snapshot_id is not None:
+                raise DatasetSnapshotNotFoundError(snapshot_id)
+            raise RuntimeError(f"dataset stream failed ({error.code}): {error.message}")
+
+        with self._transfer_stream(
+            TRANSFER_PREFIX, "query", request.SerializeToString(), raise_error
+        ) as frames:
+            if frames is None:
+                result = self.query(sql, namespace=namespace, snapshot_id=snapshot_id)
+                yield RowStream(columns=result.columns, rows=iter(result.rows))
+                return
+            header = next(frames, None)
+            if header is None:
+                raise RuntimeError("dataset stream ended without its header")
+            yield RowStream(
+                columns=decode_header(header),
+                rows=(row for frame in frames for row in decode_rows(frame)),
+            )
 
     def flush(self, name: str, *, namespace: str = "default") -> QueryResult:
         request = dataset_pb2.FlushRequest(

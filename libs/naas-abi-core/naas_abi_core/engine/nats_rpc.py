@@ -7,9 +7,11 @@ effect did not happen; callers must reconcile uncertain outcomes before retrying
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from concurrent.futures import TimeoutError as FutureTimeoutError
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from threading import Event as ThreadingEvent
 from threading import RLock, Thread
@@ -26,6 +28,7 @@ from naas_abi_core.engine.nats_auth import (
 from naas_abi_core.engine.nats_naming import connection_name, rpc_client_role
 from naas_abi_core.engine.nats_transfer import TransferError
 from naas_abi_core.proto.common.v1 import common_pb2
+from naas_abi_proto.transfer.v1 import transfer_pb2 as transfer_pb
 from naas_abi_sdk import overflow
 from naas_abi_sdk.telemetry import (
     TransferTrace,
@@ -33,7 +36,9 @@ from naas_abi_sdk.telemetry import (
     record_error,
     record_overflow,
     record_reply,
+    transfer_span,
 )
+from naas_abi_sdk.transfer import transfer_subject
 from nats.aio.client import Client as NATSClient
 from nats.errors import MaxPayloadError, NoRespondersError
 from nats.micro.request import ERROR_CODE_HEADER, ERROR_HEADER, Request
@@ -179,6 +184,31 @@ async def _respond_overflow(request: Request, payload: bytes) -> bool:
         },
     )
     return True
+
+
+def _stream_frames(
+    exchange: Callable[[Any, Any], Any], transfer_id: str
+) -> Iterator[bytes]:
+    sequence, frame = 0, bytearray()
+    while True:
+        reply = exchange(
+            transfer_pb.ReadRequest(id=transfer_id, sequence=sequence),
+            transfer_pb.ReadResponse,
+        )
+        if reply.sequence != sequence:
+            raise NatsRPCError("INTERNAL", "Stream sequence mismatch")
+        if reply.done:
+            if frame:
+                raise NatsRPCError("INTERNAL", "Stream ended mid-frame")
+            return
+        if reply.pending:
+            time.sleep(0.02)
+            continue
+        sequence += 1
+        frame.extend(reply.data)
+        if reply.frame_end:
+            yield bytes(frame)
+            frame.clear()
 
 
 def _announced_size(headers: Any) -> int:
@@ -507,6 +537,65 @@ class NatsRPCClient:
             if exc.code == "PAYLOAD_TOO_LARGE":
                 raise NatsRPCPayloadTooLargeError(str(exc)) from exc
             raise NatsRPCError(exc.code, str(exc)) from exc
+
+    # ------------------------------------------------------------------
+    # Streamed reads: a domain's transfer/v1 stream, read as the caller
+    # iterates (docs/adr/20261003_nats-streamed-results.md).
+    # ------------------------------------------------------------------
+
+    @contextmanager
+    def _transfer_stream(
+        self,
+        prefix: str,
+        operation: str,
+        metadata: bytes,
+        raise_error: Callable[[Any], None],
+    ) -> Iterator[Iterator[bytes] | None]:
+        """Yield the frames of one stream, or ``None`` when no host answers the
+        open (an engine without it: use the unary call). ``raise_error`` raises
+        the domain's exception for an error reply. Leaving closes the session."""
+        # One span for the whole stream (totals as attributes), not one per frame.
+        with transfer_span(prefix, operation) as trace:
+            nc = self._run_coro(self._ensure_connection_async())
+
+            def exchange(request: Any, response_cls: Any) -> Any:
+                name = type(request).__name__.removesuffix("Request").lower()
+                request.context.CopyFrom(self._context())
+                response = self._call(
+                    transfer_subject(prefix, name, getattr(request, "id", "")),
+                    request,
+                    response_cls,
+                    transfer=trace,
+                )
+                if response.HasField("error"):
+                    raise_error(response.error)
+                return response
+
+            try:
+                opened = exchange(
+                    transfer_pb.OpenRequest(
+                        operation=operation,
+                        metadata=metadata,
+                        chunk_bytes=min(1024 * 1024, nc.max_payload // 2),
+                    ),
+                    transfer_pb.OpenResponse,
+                )
+            except NoRespondersError:
+                yield None
+                return
+            try:
+                exchange(
+                    transfer_pb.StartRequest(id=opened.id), transfer_pb.StartResponse
+                )
+                yield _stream_frames(exchange, opened.id)
+            finally:
+                try:
+                    exchange(
+                        transfer_pb.CloseRequest(id=opened.id),
+                        transfer_pb.CloseResponse,
+                    )
+                except Exception as exc:  # noqa: BLE001 - idle expiry releases it
+                    logger.warning(f"Stream cleanup failed: {type(exc).__name__}")
 
     def _close_overflow(self, chunk: overflow.Call, transfer_id: str) -> None:
         try:

@@ -32,6 +32,7 @@ class IDatasetPort:
     def list(*, namespace=None) -> list[DatasetInfo]
     def write(name, rows, *, namespace="default", mode="append"|"replace"|"upsert", snapshot_id=None) -> DatasetInfo
     def query(sql, *, namespace="default", snapshot_id=None) -> QueryResult
+    def query_stream(sql, *, namespace="default", snapshot_id=None) -> ContextManager[RowStream]
     def compact(name, *, namespace="default") -> QueryResult
     def flush(name, *, namespace="default") -> QueryResult
     def inlined_row_count(name, *, namespace="default") -> int
@@ -186,6 +187,19 @@ Every connection attaches with `AUTOMATIC_MIGRATION`, so the adapter initializes
 ```bash
 uv run pytest naas_abi_core/services/dataset naas_abi_core/engine/engine_configuration/EngineConfiguration_DatasetService_test.py -q
 ```
+
+## Streamed queries
+
+`query_stream` yields a `RowStream` (`columns`, lazy `rows`) read once inside
+the `with` (docs/adr/20261003_nats-streamed-results.md). The port's default
+reads `query`; DuckLake fetches `FETCH_ROWS` at a time on the stream's own
+cursor; over NATS the primary hosts `transfer/v1` sessions on
+`abi.svc.dataset.v1.transfer` (operation `query`, frames in
+`adapters/dataset_stream_codec.py`: a `QueryResult` with the columns, then
+`QueryResult`s with rows only), each produced on its own thread, and the core
+client and SDK facade fetch frames as they iterate (unary `query` against an
+older engine). Rows cross the wire as `Struct`s, like the unary reply: numbers
+arrive as doubles.
 
 ## NATS RPC adapters
 

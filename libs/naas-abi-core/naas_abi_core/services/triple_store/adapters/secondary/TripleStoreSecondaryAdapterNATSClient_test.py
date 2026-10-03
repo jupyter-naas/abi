@@ -400,36 +400,14 @@ class _PrimaryAdapterServer:
 @pytest.fixture(scope="session")
 def nats_url(tmp_path_factory):
     # A local nats-server when there is one (no Docker needed), else a container.
-    import shutil
-    import socket
-    import subprocess
+    from naas_abi_core.engine.nats_test_server import (
+        native_nats_server,
+        nats_server_binary,
+    )
 
-    binary = shutil.which("nats-server")
-    if binary is not None:
-        with socket.socket() as sock:
-            sock.bind(("127.0.0.1", 0))
-            port = sock.getsockname()[1]
-        log = tmp_path_factory.mktemp("nats") / "nats.log"
-        with log.open("w") as out:
-            process = subprocess.Popen(
-                [binary, "-a", "127.0.0.1", "-p", str(port)],
-                stdout=out,
-                stderr=subprocess.STDOUT,
-            )
-        try:
-            deadline = time.time() + 5
-            while time.time() < deadline:
-                try:
-                    with socket.create_connection(("127.0.0.1", port), timeout=0.1):
-                        break
-                except OSError:
-                    time.sleep(0.02)
-            else:
-                pytest.fail("nats-server did not become ready")
-            yield f"nats://127.0.0.1:{port}"
-        finally:
-            process.terminate()
-            process.wait(timeout=5)
+    if nats_server_binary() is not None:
+        with native_nats_server(tmp_path_factory.mktemp("nats")) as url:
+            yield url
         return
     try:
         # Imported here, not at module level: testcontainers is a dev-only

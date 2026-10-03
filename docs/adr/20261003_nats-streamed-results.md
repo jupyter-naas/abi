@@ -65,3 +65,16 @@ queries, and document `find` pages.
 - Results arrive in backend order, not sorted, unless the query asks for it.
 - Callers move to the streaming API one by one; `get()` and `query()` keep
   their behaviour (bounded by RPC overflow).
+
+## Status of the rollout
+
+- Triple store: `query_stream` and `export`, every layer (above).
+- Dataset: `query_stream(sql, namespace, snapshot_id)` yields a `RowStream`
+  (`columns`, lazy `rows`). DuckLake fetches 1,000 rows at a time on the
+  stream's own cursor; the wire is `abi.svc.dataset.v1.transfer` operation
+  `query`, a `QueryResult` with the columns, then `QueryResult`s with rows only
+  (`Struct`s, numbers as doubles, as the unary reply). Core client and SDK
+  facade, with the unary fallback.
+- Not yet: streamed dataset writes (an iterator of rows committed once; large
+  write batches go through RPC overflow meanwhile), vector listing, event and
+  activity queries, byte-bounded document `find` pages.

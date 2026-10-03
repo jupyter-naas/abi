@@ -3,6 +3,8 @@ from __future__ import annotations
 # ``list`` is a port method name, so it shadows the builtin for annotations
 # evaluated in the class bodies below; use ``builtins.list`` there.
 import builtins
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from naas_abi_core import logger
@@ -12,6 +14,7 @@ from naas_abi_core.services.dataset.DatasetPort import (
     DatasetSpec,
     IDatasetPort,
     QueryResult,
+    RowStream,
     WriteMode,
 )
 from naas_abi_core.services.dataset.ontologies.classes.ontology_naas_ai.abi.dataset.DatasetCatalogPressure import (
@@ -74,6 +77,19 @@ class DatasetService(ServiceBase, IDatasetPort):
         snapshot_id: int | None = None,
     ) -> QueryResult:
         return self.__adapter.query(sql, namespace=namespace, snapshot_id=snapshot_id)
+
+    @contextmanager
+    def query_stream(
+        self,
+        sql: str,
+        *,
+        namespace: str = "default",
+        snapshot_id: int | None = None,
+    ) -> Iterator[RowStream]:
+        with self.__adapter.query_stream(
+            sql, namespace=namespace, snapshot_id=snapshot_id
+        ) as result:
+            yield result
 
     def compact(self, name: str, *, namespace: str = "default") -> QueryResult:
         return self.__adapter.compact(name, namespace=namespace)
