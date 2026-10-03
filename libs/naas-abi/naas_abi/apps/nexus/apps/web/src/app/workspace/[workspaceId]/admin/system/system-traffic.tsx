@@ -10,6 +10,7 @@ import {
   liveSourceLabel,
   summarizeTraffic,
   traceLink,
+  tracesLinkable,
   type TrafficEvent,
   type TrafficFilters,
 } from './system-traffic-model';
@@ -65,13 +66,13 @@ export function TrafficView({
   events,
   filters,
   onFilters,
-  traceUiUrl = null,
+  tracing = false,
   onOpenTrace,
 }: {
   events: TrafficEvent[];
   filters: TrafficFilters;
   onFilters: (filters: TrafficFilters) => void;
-  traceUiUrl?: string | null;
+  tracing?: boolean;
   onOpenTrace?: (traceId: string) => void;
 }) {
   const shown = filterTraffic(events, filters);
@@ -172,7 +173,7 @@ export function TrafficView({
                       <Status tone={statusTone(e.status)} label={e.error_code ? `${e.status} ${e.error_code}` : e.status} />
                     </td>
                     <td className="system-mono" title={e.trace_id || undefined}>
-                      <TraceCell traceId={e.trace_id} tracing={traceUiUrl !== null} onOpen={onOpenTrace} />
+                      <TraceCell traceId={e.trace_id} tracing={tracing} onOpen={onOpenTrace} />
                     </td>
                   </tr>
                 ))}
@@ -202,7 +203,7 @@ export function SystemTraffic() {
   const [dropped, setDropped] = useState(0);
   const [paused, setPaused] = useState(false);
   const [filters, setFilters] = useState<TrafficFilters>({ kind: 'all', text: '', errorsOnly: false });
-  const [traceUiUrl, setTraceUiUrl] = useState<string | null>(null);
+  const [tracing, setTracing] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const pausedRef = useRef(false);
   pausedRef.current = paused;
@@ -247,7 +248,7 @@ export function SystemTraffic() {
   useEffect(() => {
     let cancelled = false;
     loadSystem<TelemetryInfo>('/telemetry').then((loaded) => {
-      if (!cancelled && loaded.ok && loaded.data.enabled) setTraceUiUrl(loaded.data.ui_url);
+      if (!cancelled && loaded.ok) setTracing(tracesLinkable(loaded.data));
     });
     return () => {
       cancelled = true;
@@ -286,7 +287,7 @@ export function SystemTraffic() {
         events={events}
         filters={filters}
         onFilters={setFilters}
-        traceUiUrl={traceUiUrl}
+        tracing={tracing}
         onOpenTrace={(traceId) => router.push(`${pathname}?tab=traces&trace=${encodeURIComponent(traceId)}`)}
       />
     </div>

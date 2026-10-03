@@ -80,6 +80,28 @@ def test_telemetry_comes_from_the_engine_configuration():
     assert build_sysadmin_service(_engine(None)).telemetry.enabled is False
 
 
+@pytest.mark.parametrize(
+    ("urls", "readable"),
+    [
+        ({"query_url": "http://jaeger:16686"}, True),
+        ({"ui_url": "http://localhost:16686"}, True),
+        ({}, False),
+    ],
+)
+def test_telemetry_says_whether_the_traces_tab_can_read_traces(urls, readable):
+    # Live traffic links trace ids to the Traces tab, which reads them through
+    # query_url (else ui_url): ui_url alone must not decide it.
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        TelemetryConfiguration,
+    )
+
+    engine = _engine(None)
+    engine.configuration.telemetry = TelemetryConfiguration(enabled=True, **urls)
+
+    assert build_sysadmin_service(engine).telemetry.traces_readable is readable
+    assert build_sysadmin_service(_engine(None)).telemetry.traces_readable is False
+
+
 def test_live_traffic_prefers_traces_and_falls_back_to_nats():
     from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.jaeger_traffic_tap import (
         JaegerSpanTap,

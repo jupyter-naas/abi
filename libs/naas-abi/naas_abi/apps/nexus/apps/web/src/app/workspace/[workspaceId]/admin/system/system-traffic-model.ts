@@ -104,11 +104,15 @@ export function summarizeTraffic(events: TrafficEvent[]): TrafficSummaryRow[] {
     .sort((a, b) => b.calls - a.calls || a.key.localeCompare(b.key));
 }
 
-/** Link to a trace in the configured viewer (Jaeger: ``<ui>/trace/<id>``). */
 /** The trace in the System app's own viewer (Traces tab), when tracing is on. */
 export function traceLink(tracing: boolean, traceId: string): string | null {
   if (!tracing || !traceId) return null;
   return `?tab=traces&trace=${encodeURIComponent(traceId)}`;
+}
+
+/** Trace ids link to the Traces tab when it can read traces (``query_url``, else ``ui_url``). */
+export function tracesLinkable(telemetry: { enabled: boolean; traces_readable: boolean }): boolean {
+  return telemetry.enabled && telemetry.traces_readable;
 }
 
 const SOURCE_NAMES: Record<string, string> = { traces: 'traces', nats: 'the NATS bus' };

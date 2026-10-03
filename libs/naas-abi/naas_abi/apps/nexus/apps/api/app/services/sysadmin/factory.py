@@ -136,7 +136,12 @@ def telemetry_info(configuration: Any) -> TelemetryInfo:
     telemetry = getattr(configuration, "telemetry", None)
     if telemetry is None or not getattr(telemetry, "enabled", False):
         return TelemetryInfo(enabled=False, service_name="", ui_url=None)
-    return TelemetryInfo(True, telemetry.service_name, telemetry.ui_url)
+    return TelemetryInfo(
+        True,
+        telemetry.service_name,
+        telemetry.ui_url,
+        traces_readable=_trace_query_url(configuration) is not None,
+    )
 
 
 def build_sysadmin_service(engine: Any) -> SysAdminService:

@@ -77,7 +77,7 @@ describe('TrafficView trace links', () => {
       events: [base],
       filters: { kind: 'all', text: '', errorsOnly: false },
       onFilters: () => {},
-      traceUiUrl: 'http://localhost:16686',
+      tracing: true,
       onOpenTrace,
     });
     const link = mounted.host.querySelector('a[data-trace]');

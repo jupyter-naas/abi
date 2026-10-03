@@ -197,7 +197,12 @@ def test_traffic_stream_is_superadmin_only():
 def test_telemetry_view():
     body = _client().get("/api/admin/system/telemetry").json()
 
-    assert body == {"enabled": False, "service_name": "", "ui_url": None}
+    assert body == {
+        "enabled": False,
+        "service_name": "",
+        "ui_url": None,
+        "traces_readable": False,
+    }
 
 
 def test_the_real_traffic_hub_dependency_runs_on_the_event_loop(monkeypatch):
