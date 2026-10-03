@@ -461,3 +461,73 @@ def test_nats_configuration_rejects_conflicting_bus_and_cache_topologies():
                 }
             },
         )
+
+
+# --- RPC overflow host (docs/adr/20261003_nats-rpc-overflow.md)
+
+
+def _overflow_loader(monkeypatch, run_coro, **overflow):
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        NATSRPCOverflowConfiguration,
+    )
+
+    config = SimpleNamespace(
+        nats=NATSConfiguration(
+            jwt_secret="x" * 32,
+            rpc_overflow=NATSRPCOverflowConfiguration(**overflow),
+        )
+    )
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.run_coro", run_coro)
+    return EngineNATSLoader(config)
+
+
+def test_expose_overflow_starts_and_installs_one_host_next_to_the_primaries(
+    monkeypatch,
+):
+    from naas_abi_core.engine import nats_overflow
+    from naas_abi_core.engine.nats_overflow import OverflowHost
+
+    run_coro = MagicMock(side_effect=lambda coro, *a, **k: coro.close())
+    loader = _overflow_loader(monkeypatch, run_coro, max_value_bytes=1024 * 1024)
+
+    started = loader.expose_overflow([object()])
+    try:
+        (host,) = started
+        assert isinstance(host, OverflowHost)
+        assert host.max_value_bytes == 1024 * 1024
+        assert nats_overflow.current() is host
+        run_coro.assert_called_once()
+    finally:
+        nats_overflow.uninstall(started[0])
+
+
+@pytest.mark.parametrize(
+    "primaries,enabled",
+    [([], True), ([object()], False)],
+    ids=["no-primary", "disabled"],
+)
+def test_expose_overflow_is_a_noop_without_primaries_or_when_disabled(
+    monkeypatch, primaries, enabled
+):
+    from naas_abi_core.engine import nats_overflow
+
+    run_coro = MagicMock(side_effect=lambda coro, *a, **k: coro.close())
+    loader = _overflow_loader(monkeypatch, run_coro, enabled=enabled)
+
+    assert loader.expose_overflow(primaries) == []
+    assert nats_overflow.current() is None
+    run_coro.assert_not_called()
+
+
+def test_expose_overflow_keeps_the_old_limit_when_the_broker_is_too_small(monkeypatch):
+    from naas_abi_core.engine import nats_overflow
+
+    def refuse(coro, *args, **kwargs):
+        coro.close()
+        raise ValueError("Broker payload is too small for transfers")
+
+    loader = _overflow_loader(monkeypatch, MagicMock(side_effect=refuse))
+
+    assert loader.expose_overflow([object()]) == []
+    assert nats_overflow.current() is None

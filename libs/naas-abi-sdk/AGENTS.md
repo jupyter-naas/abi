@@ -32,7 +32,11 @@ proxies on model lookup. ModelConnection keeps NATS I/O on the resolving loop;
 sync callers must use another thread. Stream IDs are caller-bound, ephemeral,
 sequence-checked handles; never retry inference or cursor reads automatically.
 
-`transfer.py` owns shared chunk framing and session cleanup. Object facades stream
+`overflow.py` is the client side of RPC overflow (payloads above the broker
+limit as transfer/v1 frames, docs/adr/20261003_nats-rpc-overflow.md), used by
+`Transport` and core's `NatsRPCClient`. A call says `Abi-Overflow: 1` before an
+engine may park its reply; never drop that header or download without the
+announced size. `transfer.py` owns shared chunk framing and session cleanup. Object facades stream
 bounded reads; model proxies assemble logical protobuf frames. Preserve owner-loop
 execution, sequence checks, caller binding and no automatic replay. Per-exchange
 RPC timeouts must not impose a total model-generation deadline.

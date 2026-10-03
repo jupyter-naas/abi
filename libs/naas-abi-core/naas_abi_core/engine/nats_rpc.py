@@ -17,17 +17,25 @@ from typing import Any, Self, TypeVar, cast
 
 from google.protobuf.message import Message
 from naas_abi_core import logger
-from naas_abi_core.engine.nats_auth import DEFAULT_TTL, issue_service_token
+from naas_abi_core.engine import nats_overflow
+from naas_abi_core.engine.nats_auth import (
+    DEFAULT_TTL,
+    InvalidServiceTokenError,
+    issue_service_token,
+)
 from naas_abi_core.engine.nats_naming import connection_name, rpc_client_role
+from naas_abi_core.engine.nats_transfer import TransferError
 from naas_abi_core.proto.common.v1 import common_pb2
+from naas_abi_sdk import overflow
 from naas_abi_sdk.telemetry import (
     TransferTrace,
     client_span,
     record_error,
+    record_overflow,
     record_reply,
 )
 from nats.aio.client import Client as NATSClient
-from nats.errors import MaxPayloadError
+from nats.errors import MaxPayloadError, NoRespondersError
 from nats.micro.request import ERROR_CODE_HEADER, ERROR_HEADER, Request
 
 MAX_RPC_PAYLOAD = 8 * 1024 * 1024
@@ -48,10 +56,49 @@ class NatsRPCError(RuntimeError):
 
 
 class NatsRPCPayloadTooLargeError(NatsRPCError):
-    """Use streaming or a storage reference instead of replaying this call."""
+    """Use streaming or a storage reference instead of replaying this call.
 
-    def __init__(self, message: str) -> None:
+    ``unsent``: refused before anything left this process (the client's own
+    size check), so the call can still go through the overflow upload.
+    """
+
+    def __init__(self, message: str, *, unsent: bool = False) -> None:
+        self.unsent = unsent
         super().__init__("PAYLOAD_TOO_LARGE", message)
+
+
+class RequestPayloadError(Exception):
+    """An overflowed request body the primary could not read; reply with it."""
+
+    def __init__(self, code: str, message: str) -> None:
+        self.code = code
+        self.message = message
+        super().__init__(f"{code}: {message}")
+
+
+async def request_payload(request: Request) -> bytes:
+    """The request's protobuf body, read from its overflow upload when it has one.
+
+    Primaries call this instead of reading ``request.data`` (see
+    docs/adr/20261003_nats-rpc-overflow.md).
+    """
+    headers = request.headers or {}
+    transfer_id = headers.get(overflow.REQUEST_HEADER)
+    if not transfer_id:
+        return request.data
+    host = nats_overflow.current()
+    if host is None:
+        raise RequestPayloadError(
+            "UNAVAILABLE", "This process cannot read overflowed requests"
+        )
+    try:
+        return await host.fetch(transfer_id, headers)
+    except TransferError as exc:
+        raise RequestPayloadError(exc.code, str(exc)) from exc
+    except TimeoutError as exc:
+        raise RequestPayloadError(
+            "DEADLINE_EXCEEDED", "Reading the overflowed request timed out"
+        ) from exc
 
 
 def _call_error(response: Message) -> common_pb2.CallError:
@@ -91,6 +138,8 @@ async def respond_protobuf(
         else:
             await request.respond(payload)
     except MaxPayloadError:
+        if await _respond_overflow(request, payload):
+            return
         error_response = response_cls()
         _call_error(error_response).CopyFrom(
             common_pb2.CallError(
@@ -105,6 +154,46 @@ async def respond_protobuf(
             error_response.SerializeToString(),
             headers={ERROR_CODE_REPLY_HEADER: "PAYLOAD_TOO_LARGE"},
         )
+
+
+async def _respond_overflow(request: Request, payload: bytes) -> bool:
+    """Park a reply that does not fit, for a client that can read it."""
+    headers = request.headers or {}
+    host = nats_overflow.current()
+    if (
+        host is None
+        or headers.get(overflow.ACCEPT_HEADER) != "1"
+        or not host.accepts(len(payload))
+    ):
+        return False
+    try:
+        transfer_id = await host.park(headers, payload)
+    except (TransferError, InvalidServiceTokenError) as exc:
+        logger.warning(f"Could not park an overflowing reply: {exc}")
+        return False
+    await request.respond(
+        b"",
+        headers={
+            overflow.REPLY_HEADER: transfer_id,
+            overflow.SIZE_HEADER: str(len(payload)),
+        },
+    )
+    return True
+
+
+def _announced_size(headers: Any) -> int:
+    # Only bounds the wait; _download_async rejects a malformed size itself.
+    try:
+        return max(0, int(headers.get(overflow.SIZE_HEADER, "")))
+    except ValueError:
+        return 0
+
+
+class _Reply:
+    """A reassembled overflow reply, shaped like a NATS message."""
+
+    def __init__(self, data: bytes, headers: dict[str, str] | None) -> None:
+        self.data, self.headers = data, headers
 
 
 class NatsRPCClient:
@@ -279,34 +368,154 @@ class NatsRPCClient:
     ) -> _ResponseT:
         payload = request.SerializeToString()
         with self._call_lock:
-            headers = {self._auth_header: self._current_token()}
+            token = self._current_token()
+        headers = {self._auth_header: token}
         # The span starts in the calling thread, whose context holds the parent
         # (e.g. a request handler); the trace travels in the headers.
-        with client_span(subject, headers, size=len(payload), transfer=transfer):
-            msg = self._run_coro(
-                asyncio.wait_for(
+        with client_span(
+            subject, headers, size=len(payload), transfer=transfer
+        ) as span:
+            if transfer is not None:  # a transfer's own chunk: always small
+                return self._rpc_parse(
+                    self._rpc_request(subject, payload, headers), response_cls, transfer
+                )
+            headers[overflow.ACCEPT_HEADER] = "1"
+            trace = TransferTrace(span)
+            chunk = self._chunk_call(token, trace)
+            upload = None
+            try:
+                try:
+                    msg = self._rpc_request(subject, payload, headers)
+                except NatsRPCPayloadTooLargeError as exc:
+                    if not exc.unsent:
+                        raise
+                    upload = self._run_coro(
+                        self._upload_async(chunk, payload, exc),
+                        timeout=self._overflow_timeout(len(payload)),
+                    )
+                    msg = self._rpc_request(
+                        subject, b"", {**headers, overflow.REQUEST_HEADER: upload}
+                    )
+                reply_headers = msg.headers or {}
+                if overflow.REPLY_HEADER in reply_headers and not (
+                    ERROR_HEADER in reply_headers or ERROR_CODE_HEADER in reply_headers
+                ):
+                    record_reply(len(msg.data or b""))
+                    data = self._run_coro(
+                        self._download_async(chunk, reply_headers),
+                        timeout=self._overflow_timeout(_announced_size(reply_headers)),
+                    )
+                    msg = _Reply(data, None)
+                return self._rpc_parse(msg, response_cls, None)
+            finally:
+                if upload is not None:
+                    self._close_overflow(chunk, upload)
+                record_overflow(trace)
+
+    def _rpc_request(
+        self, subject: str, payload: bytes, headers: dict[str, str]
+    ) -> Any:
+        return self._run_coro(
+            asyncio.wait_for(
+                self._do_request_async(subject, payload, headers),
+                timeout=self._timeout_seconds,
+            )
+        )
+
+    @staticmethod
+    def _rpc_parse(
+        msg: Any, response_cls: type[_ResponseT], transfer: TransferTrace | None
+    ) -> _ResponseT:
+        record_reply(len(msg.data or b""), transfer=transfer)
+        reply_headers = msg.headers or {}
+        if ERROR_HEADER in reply_headers or ERROR_CODE_HEADER in reply_headers:
+            code = reply_headers.get(ERROR_CODE_HEADER, "UNKNOWN")
+            record_error(code)
+            raise NatsRPCError(
+                code, reply_headers.get(ERROR_HEADER, "remote service error")
+            )
+
+        response = response_cls()
+        response.ParseFromString(msg.data)
+        if response.HasField("error"):
+            error = _call_error(response)
+            record_error(error.code, error.message)
+            if error.code == "PAYLOAD_TOO_LARGE":
+                raise NatsRPCPayloadTooLargeError(error.message)
+        return response
+
+    # ------------------------------------------------------------------
+    # Overflow: payloads above the broker limit travel as transfer frames
+    # (naas_abi_sdk.overflow, docs/adr/20261003_nats-rpc-overflow.md).
+    # ------------------------------------------------------------------
+
+    def _chunk_call(self, token: str, trace: TransferTrace) -> overflow.Call:
+        """One overflow exchange, counted on the call's span (``trace``)."""
+
+        async def call(subject: str, request: Any, response_cls: Any) -> Any:
+            request.context.CopyFrom(self._context())
+            payload = request.SerializeToString()
+            headers = {self._auth_header: token}
+            with client_span(subject, headers, size=len(payload), transfer=trace):
+                msg = await asyncio.wait_for(
                     self._do_request_async(subject, payload, headers),
                     timeout=self._timeout_seconds,
                 )
-            )
-
-            record_reply(len(msg.data or b""), transfer=transfer)
-            reply_headers = msg.headers or {}
-            if ERROR_HEADER in reply_headers or ERROR_CODE_HEADER in reply_headers:
-                code = reply_headers.get(ERROR_CODE_HEADER, "UNKNOWN")
-                record_error(code)
-                raise NatsRPCError(
-                    code, reply_headers.get(ERROR_HEADER, "remote service error")
-                )
-
-            response = response_cls()
-            response.ParseFromString(msg.data)
+            record_reply(len(msg.data or b""), transfer=trace)
+            response = response_cls.FromString(msg.data)
             if response.HasField("error"):
-                error = _call_error(response)
-                record_error(error.code, error.message)
-                if error.code == "PAYLOAD_TOO_LARGE":
-                    raise NatsRPCPayloadTooLargeError(error.message)
+                raise NatsRPCError(response.error.code, response.error.message)
             return response
+
+        return call
+
+    def _overflow_timeout(self, size: int) -> float:
+        # Each exchange has its own deadline; this only bounds the sync wait.
+        return self._timeout_seconds * (size // overflow.MIN_CHUNK_BYTES + 4)
+
+    async def _upload_async(
+        self,
+        chunk: overflow.Call,
+        payload: bytes,
+        refused: NatsRPCPayloadTooLargeError,
+    ) -> str:
+        nc = await self._ensure_connection_async()
+        limit = min(nc.max_payload, MAX_RPC_PAYLOAD)
+        if not overflow.possible(limit):
+            raise refused
+        try:
+            return await overflow.upload(
+                chunk, payload, chunk_bytes=overflow.chunk_size(limit)
+            )
+        except NoRespondersError:  # an engine without overflow
+            raise refused from None
+        except overflow.OverflowRefused as exc:
+            raise NatsRPCPayloadTooLargeError(str(exc)) from exc
+
+    async def _download_async(self, chunk: overflow.Call, reply_headers: Any) -> bytes:
+        transfer_id = reply_headers[overflow.REPLY_HEADER]
+        try:
+            size = int(reply_headers.get(overflow.SIZE_HEADER, ""))
+        except ValueError:
+            await overflow.close(chunk, transfer_id)
+            raise NatsRPCError(
+                "INTERNAL", "Overflowed reply without a valid size"
+            ) from None
+        try:
+            return await overflow.download(chunk, transfer_id, size)
+        except overflow.OverflowRefused as exc:
+            if exc.code == "PAYLOAD_TOO_LARGE":
+                raise NatsRPCPayloadTooLargeError(str(exc)) from exc
+            raise NatsRPCError(exc.code, str(exc)) from exc
+
+    def _close_overflow(self, chunk: overflow.Call, transfer_id: str) -> None:
+        try:
+            self._run_coro(
+                overflow.close(chunk, transfer_id),
+                timeout=self._timeout_seconds + 1.0,
+            )
+        except Exception:  # noqa: BLE001 - idle expiry releases it
+            logger.opt(exception=True).warning("Could not close an overflow upload")
 
     async def _do_request_async(
         self, subject: str, payload: bytes, headers: dict[str, str]
@@ -321,7 +530,8 @@ class NatsRPCClient:
         if len(payload) + header_size > limit:
             raise NatsRPCPayloadTooLargeError(
                 f"Request exceeds {limit} bytes including headers; "
-                "use streaming or a storage reference."
+                "use streaming or a storage reference.",
+                unsent=True,
             )
         try:
             return await nc.request(
@@ -329,5 +539,6 @@ class NatsRPCClient:
             )
         except MaxPayloadError as exc:
             raise NatsRPCPayloadTooLargeError(
-                "Request exceeds the server payload limit; use streaming or a storage reference."
+                "Request exceeds the server payload limit; use streaming or a storage reference.",
+                unsent=True,
             ) from exc

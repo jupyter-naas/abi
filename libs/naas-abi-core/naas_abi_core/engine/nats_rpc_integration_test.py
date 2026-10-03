@@ -5,6 +5,7 @@ import shutil
 import socket
 import subprocess
 import time
+from contextlib import contextmanager
 from threading import Event
 from unittest.mock import Mock
 
@@ -26,8 +27,8 @@ SECRET = "rpc-integration-test-secret-32-bytes"
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture(params=[1024, 8 * 1024 * 1024], ids=["small-server-cap", "8MiB"])
-def broker(request, tmp_path):
+@contextmanager
+def nats_server(tmp_path, max_payload):
     binary = shutil.which("nats-server")
     if binary is None:
         pytest.skip("nats-server is not installed")
@@ -35,7 +36,7 @@ def broker(request, tmp_path):
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     config = tmp_path / "nats.conf"
-    config.write_text(f"max_payload: {request.param}\n")
+    config.write_text(f"max_payload: {max_payload}\n")
     with (tmp_path / "nats.log").open("w") as log:
         process = subprocess.Popen(
             [
@@ -65,10 +66,16 @@ def broker(request, tmp_path):
                     time.sleep(0.01)
             else:
                 pytest.fail("nats-server did not become ready")
-            yield f"nats://127.0.0.1:{port}", request.param
+            yield f"nats://127.0.0.1:{port}", max_payload
         finally:
             process.terminate()
             process.wait(timeout=5)
+
+
+@pytest.fixture(params=[1024, 8 * 1024 * 1024], ids=["small-server-cap", "8MiB"])
+def broker(request, tmp_path):
+    with nats_server(tmp_path, request.param) as started:
+        yield started
 
 
 def test_oversized_requests_and_replies_fail_then_connection_remains_usable(broker):
@@ -162,6 +169,62 @@ def test_timeout_does_not_duplicate_a_completed_remote_write(broker):
         finally:
             release.set()
             await asyncio.to_thread(client.close)
+            await primary.stop()
+            await nc.close()
+
+    asyncio.run(scenario())
+
+
+@pytest.fixture(params=[64 * 1024, 8 * 1024 * 1024], ids=["64KiB", "8MiB"])
+def overflow_broker(request, tmp_path):
+    with nats_server(tmp_path, request.param) as started:
+        yield started
+
+
+def test_values_above_the_broker_limit_overflow_both_ways(overflow_broker):
+    """docs/adr/20261003_nats-rpc-overflow.md, over a real broker."""
+    import os
+
+    from naas_abi_core.engine import nats_overflow
+    from naas_abi_core.engine.nats_auth import issue_service_token
+    from naas_abi_core.engine.nats_overflow import OverflowHost
+    from naas_abi_proto.keyvalue.v1 import keyvalue_pb2
+    from naas_abi_sdk.transport import Transport
+
+    url, limit = overflow_broker
+    value = os.urandom(3 * limit)
+
+    async def scenario():
+        nc = await nats.connect(url)
+        backend = Mock(spec=IKeyValueAdapter)
+        backend.get.return_value = value
+        primary = KeyValuePrimaryAdapterNATS(backend, SECRET)
+        host = OverflowHost(SECRET)
+        client = KeyValueSecondaryAdapterNATSClient(url, SECRET, "test")
+        transport = Transport(url, issue_service_token("sdk", SECRET), timeout=10)
+        try:
+            await primary.start(nc)
+            await host.start(nc)
+            nats_overflow.install(host)
+            await nc.flush()
+
+            assert await asyncio.to_thread(client.get, "large-reply") == value
+            await asyncio.to_thread(client.set, "large-request", value)
+            assert backend.set.call_args.args[:2] == ("large-request", value)
+            reply = await transport.call(
+                "abi.svc.keyvalue.v1.get",
+                keyvalue_pb2.GetRequest(key="large-reply"),
+                keyvalue_pb2.GetResponse,
+            )
+            assert reply.value == value
+
+            await asyncio.sleep(0.1)  # closes are acknowledged before retiring
+            assert host.sessions == {}
+            assert (host.parked_bytes, host.buffered_upload_bytes) == (0, 0)
+        finally:
+            await transport.close()
+            await asyncio.to_thread(client.close)
+            await host.stop()
             await primary.stop()
             await nc.close()
 

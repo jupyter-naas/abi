@@ -276,3 +276,223 @@ def test_simultaneous_first_requests_share_completed_connection(monkeypatch):
         factory.assert_called_once()
 
     asyncio.run(scenario())
+
+
+# --- overflow: payloads above the broker limit (docs/adr/20261003_nats-rpc-overflow.md)
+
+OWNER = "b" * 32
+
+
+class FakeOverflowHost:
+    """Stands in for the process's OverflowHost on the primary side."""
+
+    def __init__(self, upload=b"", error=None):
+        self.upload, self.error = upload, error
+        self.parked = []
+
+    def accepts(self, size):
+        return True
+
+    async def park(self, headers, data):
+        self.parked.append(data)
+        return f"{OWNER}:parked"
+
+    async def fetch(self, transfer_id, headers):
+        if self.error is not None:
+            raise self.error
+        return self.upload
+
+
+@pytest.fixture
+def overflow_host():
+    from naas_abi_core.engine import nats_overflow
+
+    host = FakeOverflowHost()
+    nats_overflow.install(host)
+    yield host
+    nats_overflow.uninstall(host)
+
+
+def primary_request(data, **headers):
+    return SimpleNamespace(
+        data=data,
+        headers={"Nats-Auth-Token": issue_service_token("test", SECRET), **headers},
+        subject="abi.test",
+        respond=AsyncMock(),
+    )
+
+
+def test_primary_parks_an_oversized_reply_for_a_client_that_accepts_it(
+    primary, overflow_host
+):
+    response_cls = response_class(primary)
+    reply = response_cls()
+    if response_cls is keyvalue_pb2.GetResponse:
+        reply.value = b"x" * (9 * 1024 * 1024)
+    else:
+        reply.error.error.message = "x" * (9 * 1024 * 1024)
+    request = primary_request(
+        keyvalue_pb2.GetRequest(key="k").SerializeToString(), **{"Abi-Overflow": "1"}
+    )
+
+    asyncio.run(
+        primary._handle(
+            request, keyvalue_pb2.GetRequest, response_cls, Mock(return_value=reply)
+        )
+    )
+
+    assert overflow_host.parked == [reply.SerializeToString()]
+    request.respond.assert_awaited_once_with(
+        b"",
+        headers={
+            "Abi-Overflow-Reply": f"{OWNER}:parked",
+            "Abi-Overflow-Size": str(len(reply.SerializeToString())),
+        },
+    )
+
+
+def test_primary_keeps_payload_too_large_for_a_client_without_overflow(
+    primary, overflow_host
+):
+    response_cls = response_class(primary)
+    reply = keyvalue_pb2.GetResponse(value=b"x" * (9 * 1024 * 1024))
+    request = primary_request(keyvalue_pb2.GetRequest(key="k").SerializeToString())
+
+    asyncio.run(
+        primary._handle(
+            request, keyvalue_pb2.GetRequest, response_cls, Mock(return_value=reply)
+        )
+    )
+
+    assert overflow_host.parked == []
+    response = response_cls.FromString(request.respond.call_args.args[0])
+    assert error_of(response).code == "PAYLOAD_TOO_LARGE"
+
+
+def test_primary_reads_an_uploaded_request_before_dispatch(primary, overflow_host):
+    overflow_host.upload = keyvalue_pb2.GetRequest(key="uploaded").SerializeToString()
+    response_cls = response_class(primary)
+    operation = Mock(return_value=response_cls())
+    request = primary_request(b"", **{"Abi-Overflow-Request": f"{OWNER}:up"})
+
+    asyncio.run(
+        primary._handle(request, keyvalue_pb2.GetRequest, response_cls, operation)
+    )
+
+    assert operation.call_args.args[0].key == "uploaded"
+
+
+def test_primary_reports_an_upload_it_cannot_read(primary, overflow_host):
+    from naas_abi_core.engine.nats_transfer import TransferError
+
+    overflow_host.error = TransferError("NOT_FOUND", "Transfer expired or closed")
+    response_cls = response_class(primary)
+    operation = Mock(return_value=response_cls())
+    request = primary_request(b"", **{"Abi-Overflow-Request": f"{OWNER}:gone"})
+
+    asyncio.run(
+        primary._handle(request, keyvalue_pb2.GetRequest, response_cls, operation)
+    )
+
+    operation.assert_not_called()
+    response = response_cls.FromString(request.respond.call_args.args[0])
+    assert error_of(response).code == "NOT_FOUND"
+    assert not error_of(response).retryable
+
+
+class OverflowOwner:
+    """The broker's overflow subjects, owned by a host holding one parked reply."""
+
+    def __init__(self, parked=b"", chunk=1024):
+        from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
+
+        self.pb, self.parked, self.chunk = pb, parked, chunk
+        self.uploads, self.closed, self.offset = {}, [], 0
+
+    def reply(self, subject, payload):
+        pb, operation = self.pb, subject.rsplit(".", 1)[1]
+        if operation == "open":
+            self.uploads[f"{OWNER}:up"] = bytearray()
+            response = pb.OpenResponse(id=f"{OWNER}:up", chunk_bytes=self.chunk)
+        elif operation == "write":
+            request = pb.WriteRequest.FromString(payload)
+            self.uploads[request.id].extend(request.data)
+            response = pb.WriteResponse()
+        elif operation == "read":
+            request = pb.ReadRequest.FromString(payload)
+            data = self.parked[self.offset : self.offset + self.chunk]
+            self.offset += len(data)
+            response = pb.ReadResponse(
+                data=data, frame_end=True, done=not data, sequence=request.sequence
+            )
+        else:
+            self.closed.append(pb.CloseRequest.FromString(payload).id)
+            response = pb.CloseResponse()
+        return SimpleNamespace(data=response.SerializeToString(), headers=None)
+
+
+def test_client_downloads_an_overflowed_reply(client):
+    value = bytes(range(256)) * 40
+    parked = keyvalue_pb2.GetResponse(value=value).SerializeToString()
+    owner = OverflowOwner(parked)
+    service_headers = []
+
+    async def request(subject, payload, timeout=None, headers=None):
+        if subject.startswith("abi.rpc.overflow."):
+            return owner.reply(subject, payload)
+        service_headers.append(headers)
+        return SimpleNamespace(
+            data=b"",
+            headers={
+                "Abi-Overflow-Reply": f"{OWNER}:parked",
+                "Abi-Overflow-Size": str(len(parked)),
+            },
+        )
+
+    connection(client, side_effect=request)
+
+    assert call(client).value == value
+    assert owner.closed == [f"{OWNER}:parked"]
+    assert service_headers[0]["Abi-Overflow"] == "1"
+
+
+def test_client_uploads_a_request_above_the_broker_limit(client):
+    owner = OverflowOwner()
+    received = []
+
+    async def request(subject, payload, timeout=None, headers=None):
+        if subject.startswith("abi.rpc.overflow."):
+            return owner.reply(subject, payload)
+        received.append((payload, headers))
+        return SimpleNamespace(data=b"", headers=None)
+
+    nc = connection(client, side_effect=request)
+    nc.max_payload = 4096
+
+    client._call(
+        "abi.test", keyvalue_pb2.GetRequest(key="k" * 10_000), keyvalue_pb2.GetResponse
+    )
+
+    ((payload, headers),) = received
+    assert payload == b"" and headers["Abi-Overflow-Request"] == f"{OWNER}:up"
+    uploaded = keyvalue_pb2.GetRequest.FromString(bytes(owner.uploads[f"{OWNER}:up"]))
+    assert uploaded.key == "k" * 10_000
+    assert owner.closed == [f"{OWNER}:up"]
+
+
+def test_client_without_an_overflow_owner_keeps_payload_too_large(client):
+    async def request(subject, payload, timeout=None, headers=None):
+        if subject.startswith("abi.rpc.overflow."):
+            raise NoRespondersError()
+        raise AssertionError("the service must not be called")
+
+    nc = connection(client, side_effect=request)
+    nc.max_payload = 4096
+    from naas_abi_core.engine.nats_rpc import NatsRPCPayloadTooLargeError
+
+    with pytest.raises(NatsRPCPayloadTooLargeError):
+        client._call(
+            "abi.test",
+            keyvalue_pb2.GetRequest(key="k" * 10_000),
+            keyvalue_pb2.GetResponse,
+        )

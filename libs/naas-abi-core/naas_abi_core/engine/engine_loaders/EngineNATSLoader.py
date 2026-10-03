@@ -129,6 +129,30 @@ class EngineNATSLoader:
     def __init__(self, configuration: EngineConfiguration):
         self.__configuration = configuration
 
+    def expose_overflow(self, primaries: list[object]) -> list[object]:
+        """Start this process's RPC overflow host when it exposes primaries.
+
+        Replies above the broker limit are parked there and uploaded requests
+        read from there (docs/adr/20261003_nats-rpc-overflow.md). Returns the
+        started host, stopped at shutdown with the primaries.
+        """
+        nats_config = self.__configuration.nats
+        if nats_config is None or not primaries or not nats_config.rpc_overflow.enabled:
+            return []
+        from naas_abi_core.engine import nats_overflow
+
+        options = nats_config.rpc_overflow.model_dump(exclude={"enabled"})
+        host = nats_overflow.OverflowHost(nats_config.jwt_secret, **options)
+        nc = nats_runtime.get_connection(nats_config.nats_url)
+        try:
+            nats_runtime.run_coro(host.start(nc))
+        except ValueError as exc:  # a broker limit too small for transfer chunks
+            logger.warning(f"EngineNATSLoader: RPC overflow is off: {exc}")
+            return []
+        nats_overflow.install(host)
+        logger.debug("EngineNATSLoader: RPC overflow host started")
+        return [host]
+
     def expose_services(self, services: IEngine.Services) -> list[object]:
         """Start a NATS primary adapter for every loaded service that has one.
 

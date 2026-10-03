@@ -1,11 +1,15 @@
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from typing import ClassVar
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from naas_abi_proto.common.v1 import common_pb2
 from naas_abi_proto.dataset.v1 import dataset_pb2
 from naas_abi_proto.keyvalue.v1 import keyvalue_pb2 as kv
+from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
+from nats.errors import NoRespondersError
+from overflow_fakes import OWNER, FakeHost
 
 from naas_abi_sdk.transport import RPCError, Transport
 
@@ -28,7 +32,10 @@ def test_roundtrip_preserves_bytes_and_does_not_mutate_request():
     assert not request.HasField("context")
     sent = kv.GetRequest.FromString(nc.request.call_args.args[1])
     assert sent.context.trace_id and sent.context.timeout_ms == 20
-    assert nc.request.call_args.kwargs["headers"] == {"Nats-Auth-Token": "issued-token"}
+    assert nc.request.call_args.kwargs["headers"] == {
+        "Nats-Auth-Token": "issued-token",
+        "Abi-Overflow": "1",  # can read a reply above the broker limit
+    }
 
 
 @pytest.mark.parametrize("error", [TimeoutError(), ConnectionError("lost")])
@@ -118,3 +125,106 @@ def test_closed_client_cannot_reconnect():
             await rpc.connect()
 
     asyncio.run(close())
+
+
+# --- overflow: payloads above the broker limit (docs/adr/20261003_nats-rpc-overflow.md)
+
+
+class OverflowBroker:
+    """A broker whose overflow subjects reach FakeHost and the rest a service."""
+
+    OPERATIONS: ClassVar[dict[str, type]] = {
+        "open": pb.OpenRequest,
+        "write": pb.WriteRequest,
+        "read": pb.ReadRequest,
+        "close": pb.CloseRequest,
+    }
+
+    def __init__(self, host, service, max_payload=8 * 1024 * 1024, overflow=True):
+        self.host, self.service, self.overflow = host, service, overflow
+        self.max_payload = max_payload
+        self.sent = []
+
+    async def request(self, subject, payload, headers=None, timeout=None):
+        self.sent.append((subject, payload, dict(headers or {})))
+        if subject.startswith("abi.rpc.overflow."):
+            if not self.overflow:
+                raise NoRespondersError()
+            request = self.OPERATIONS[subject.rsplit(".", 1)[1]].FromString(payload)
+            reply = await self.host.call(subject, request, None)
+            return SimpleNamespace(data=reply.SerializeToString(), headers=None)
+        return self.service(payload, headers or {})
+
+
+def overflow_transport(broker):
+    rpc = Transport("nats://unused", "issued-token", timeout=1)
+    rpc.connect = AsyncMock(return_value=broker)
+    return rpc
+
+
+def test_an_overflowed_reply_is_downloaded_and_decoded():
+    value = bytes(range(256)) * 40
+    reply = kv.GetResponse(value=value).SerializeToString()
+    host = FakeHost(parked=reply, chunk_bytes=1024)
+    broker = OverflowBroker(
+        host,
+        lambda payload, headers: SimpleNamespace(
+            data=b"",
+            headers={
+                "Abi-Overflow-Reply": f"{OWNER}:3",
+                "Abi-Overflow-Size": str(len(reply)),
+            },
+        ),
+    )
+
+    result = asyncio.run(
+        overflow_transport(broker).call(
+            "abi.svc.keyvalue.v1.get", kv.GetRequest(key="k"), kv.GetResponse
+        )
+    )
+
+    assert result.value == value
+    assert host.closed == [f"{OWNER}:3"]
+    assert all(h["Nats-Auth-Token"] == "issued-token" for _, _, h in broker.sent)
+
+
+def test_a_request_above_the_broker_limit_is_uploaded_before_the_call():
+    received = []
+
+    def service(payload, headers):
+        received.append((payload, headers))
+        return SimpleNamespace(data=kv.SetResponse().SerializeToString(), headers=None)
+
+    host = FakeHost(chunk_bytes=1024)
+    broker = OverflowBroker(host, service, max_payload=4096)
+    request = kv.SetRequest(key="k", value=b"x" * 10_000)
+
+    asyncio.run(
+        overflow_transport(broker).call(
+            "abi.svc.keyvalue.v1.set", request, kv.SetResponse
+        )
+    )
+
+    ((payload, headers),) = received
+    transfer_id = headers["Abi-Overflow-Request"]
+    assert payload == b""
+    sent = kv.SetRequest.FromString(bytes(host.uploads[transfer_id]))
+    assert (sent.key, sent.value) == ("k", b"x" * 10_000)
+    assert host.closed == [transfer_id]  # released once the call returned
+
+
+def test_an_engine_without_overflow_still_refuses_a_large_request():
+    service = Mock()
+    broker = OverflowBroker(FakeHost(), service, max_payload=4096, overflow=False)
+
+    with pytest.raises(RPCError) as raised:
+        asyncio.run(
+            overflow_transport(broker).call(
+                "abi.svc.keyvalue.v1.set",
+                kv.SetRequest(value=b"x" * 10_000),
+                kv.SetResponse,
+            )
+        )
+
+    assert raised.value.code == "PAYLOAD_TOO_LARGE"
+    service.assert_not_called()
