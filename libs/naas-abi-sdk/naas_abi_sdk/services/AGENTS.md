@@ -11,3 +11,9 @@ DTOs in models.py are generated from protobuf descriptors. Regenerate with
 methods use core source signatures at generation time only. Cover behavior with
 conversion tests and the isolated ergonomic module demo. Unsupported framework
 operations must fail explicitly. Do not replay failed mutations.
+
+`TripleStoreService.query_stream` and `export` are async context managers over
+the engine's `transfer/v1` streams (docs/adr/20261003_nats-streamed-results.md):
+`rows` and `triples` are async iterators read once inside the block, frames are
+fetched as they are iterated, and an engine without the stream endpoint falls
+back to the unary `query`/`get`.

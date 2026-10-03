@@ -351,3 +351,50 @@ def test_transfers_are_untraced_without_opentelemetry(monkeypatch):
 
     data, error = asyncio.run(scenario())
     assert data == b"payload" and not error.code
+
+
+# --- thread_frames: a stream produced on one dedicated thread
+
+
+def test_thread_frames_keep_the_producer_on_one_thread_and_stop_when_abandoned():
+    from naas_abi_core.engine.nats_transfer import thread_frames
+
+    threads, emitted, finished = set(), [], threading.Event()
+
+    def produce(emit):
+        try:
+            for n in range(100):
+                threads.add(threading.get_ident())
+                if not emit(str(n).encode()):
+                    return
+                emitted.append(n)
+        finally:
+            finished.set()  # the backend's context manager exits on its thread
+
+    async def scenario():
+        frames = thread_frames(produce, max_queued=2)
+        received = [await frames.__anext__() for _ in range(3)]
+        await frames.aclose()
+        return received
+
+    assert asyncio.run(scenario()) == [b"0", b"1", b"2"]
+    assert finished.wait(2)
+    assert len(threads) == 1 and threading.get_ident() not in threads
+    assert len(emitted) < 10  # back-pressure: it stopped soon after the reader left
+
+
+def test_thread_frames_raise_the_producers_error_after_its_frames():
+    from naas_abi_core.engine.nats_transfer import thread_frames
+
+    def produce(emit):
+        emit(b"first")
+        raise TransferError("REQUEST_ERROR", "backend aborted")
+
+    async def scenario():
+        received = []
+        with pytest.raises(TransferError, match="backend aborted"):
+            async for frame in thread_frames(produce):
+                received.append(frame)
+        return received
+
+    assert asyncio.run(scenario()) == [b"first"]

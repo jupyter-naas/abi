@@ -1,9 +1,16 @@
+import re
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
+from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 import rdflib
 from rdflib import Graph, URIRef
+from rdflib.term import Node
+
+Triple = tuple[Node, Node, Node]
 
 
 class Exceptions:
@@ -79,6 +86,54 @@ class OntologyEvent(Enum):
     DELETE = "DELETE"
 
 
+@dataclass
+class QueryStream:
+    """A SPARQL result read incrementally (docs/adr/20261003_nats-streamed-results.md).
+
+    ``result_type`` is rdflib's: SELECT, ASK, CONSTRUCT or DESCRIBE. ``rows``
+    (SELECT: variable name -> term, unbound variables absent) and ``triples``
+    (CONSTRUCT/DESCRIBE) are single-use iterators, valid inside the
+    ``query_stream`` block only; the one that does not apply is empty.
+    """
+
+    result_type: str
+    vars: list[str] = field(default_factory=list)
+    ask_answer: bool | None = None
+    rows: Iterator[dict[str, Node]] = field(default_factory=lambda: iter(()))
+    triples: Iterator[Triple] = field(default_factory=lambda: iter(()))
+
+    @classmethod
+    def from_result(cls, result: Any) -> "QueryStream":
+        """Read a materialized result; some adapters return a bare bool (ASK)
+        or a bare Graph (CONSTRUCT/DESCRIBE) instead of an rdflib Result."""
+        if isinstance(result, bool):
+            return cls("ASK", ask_answer=result)
+        if isinstance(result, Graph):
+            return cls("CONSTRUCT", triples=iter(result))
+        if result.type == "ASK":
+            return cls("ASK", ask_answer=bool(result.askAnswer))
+        if result.type in ("CONSTRUCT", "DESCRIBE"):
+            return cls(result.type, triples=iter(result.graph or ()))
+        return cls(
+            "SELECT",
+            vars=[str(var) for var in result.vars or ()],
+            rows=(
+                {str(var): term for var, term in row.items() if term is not None}
+                for row in result.bindings
+            ),
+        )
+
+
+_IRI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:[^\s<>\"{}|^`\\]*")
+
+
+def graph_export_query(graph_name: URIRef) -> str:
+    """The CONSTRUCT reading every triple of one named graph."""
+    if not _IRI.fullmatch(str(graph_name)):
+        raise ValueError(f"Not an absolute IRI: {str(graph_name)!r}")
+    return f"CONSTRUCT {{ ?s ?p ?o }} WHERE {{ GRAPH <{graph_name}> {{ ?s ?p ?o }} }}"
+
+
 class ITripleStorePort(ABC):
     @abstractmethod
     def insert(self, triples: Graph, graph_name: URIRef):
@@ -140,6 +195,24 @@ class ITripleStorePort(ABC):
     @abstractmethod
     def list_graphs(self) -> list[URIRef]:
         pass
+
+    # Streaming reads (docs/adr/20261003_nats-streamed-results.md). These
+    # defaults read the materialized result; adapters that can stream from
+    # their backend override them.
+
+    @contextmanager
+    def query_stream(self, query: str) -> Iterator[QueryStream]:
+        """Run a SPARQL query and read its result incrementally, inside the block."""
+        yield QueryStream.from_result(self.query(query))
+
+    @contextmanager
+    def export(self, graph_name: URIRef | None = None) -> Iterator[Iterator[Triple]]:
+        """Every triple of one named graph, or of the store as ``get()`` returns it."""
+        if graph_name is None:
+            yield iter(self.get())
+            return
+        with self.query_stream(graph_export_query(graph_name)) as result:
+            yield result.triples
 
 
 class ITripleStoreService(ABC):
@@ -335,6 +408,20 @@ class ITripleStoreService(ABC):
         Returns:
             list[URIRef]: Distinct named graph URIs.
         """
+
+    @abstractmethod
+    def query_stream(self, query: str) -> AbstractContextManager[QueryStream]:
+        """Run a SPARQL query and read its result incrementally.
+
+        Constant memory where the backend streams; read ``rows`` or ``triples``
+        inside the ``with`` block (docs/adr/20261003_nats-streamed-results.md).
+        """
+
+    @abstractmethod
+    def export(
+        self, graph_name: URIRef | None = None
+    ) -> AbstractContextManager[Iterator[Triple]]:
+        """Read every triple of one named graph (or of the store, as ``get()``)."""
 
     @abstractmethod
     def load_schema(self, filepath: str):

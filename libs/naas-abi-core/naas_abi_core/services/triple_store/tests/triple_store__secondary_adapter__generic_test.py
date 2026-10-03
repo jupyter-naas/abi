@@ -160,3 +160,58 @@ class GenericTripleStoreSecondaryAdapterTest(ABC):
 
         listed_graphs_after_drop = adapter.list_graphs()
         assert graph_name not in listed_graphs_after_drop
+
+    # --- streamed reads (docs/adr/20261003_nats-streamed-results.md)
+
+    def _streamed_graph(self, adapter):
+        marker = uuid.uuid4().hex
+        graph_name = URIRef(f"http://test.example.org/stream/{marker}")
+        ex = f"http://test.example.org/{marker}/"
+        g = Graph()
+        g.add((URIRef(ex + "a"), URIRef(ex + "label"), Literal("Alice", lang="en")))
+        g.add((URIRef(ex + "a"), URIRef(ex + "age"), Literal(42)))
+        g.add((URIRef(ex + "b"), URIRef(ex + "label"), Literal('tab\there "quoted"')))
+        adapter.insert(g, graph_name)
+        return graph_name, g, ex
+
+    def test_query_stream_reads_select_rows_like_query(
+        self, adapter, supports_named_graphs: bool
+    ):
+        if not supports_named_graphs:
+            pytest.skip("Adapter does not support named graphs")
+        graph_name, g, ex = self._streamed_graph(adapter)
+        sparql = (
+            f"SELECT ?s ?label ?age WHERE {{ GRAPH <{graph_name}> {{"
+            f" ?s <{ex}label> ?label OPTIONAL {{ ?s <{ex}age> ?age }} }} }} ORDER BY ?s"
+        )
+        try:
+            with adapter.query_stream(sparql) as result:
+                assert result.result_type == "SELECT"
+                assert result.vars == ["s", "label", "age"]
+                rows = list(result.rows)
+            assert rows == [
+                {
+                    "s": URIRef(ex + "a"),
+                    "label": Literal("Alice", lang="en"),
+                    "age": Literal(42),
+                },
+                {"s": URIRef(ex + "b"), "label": Literal('tab\there "quoted"')},
+            ]
+        finally:
+            adapter.remove(g, graph_name)
+
+    def test_query_stream_answers_ask_and_export_reads_one_graph(
+        self, adapter, supports_named_graphs: bool
+    ):
+        if not supports_named_graphs:
+            pytest.skip("Adapter does not support named graphs")
+        graph_name, g, ex = self._streamed_graph(adapter)
+        try:
+            with adapter.query_stream(
+                f"ASK {{ GRAPH <{graph_name}> {{ ?s <{ex}age> 42 }} }}"
+            ) as asked:
+                assert (asked.result_type, asked.ask_answer) == ("ASK", True)
+            with adapter.export(graph_name) as triples:
+                assert set(triples) == set(g)
+        finally:
+            adapter.remove(g, graph_name)
