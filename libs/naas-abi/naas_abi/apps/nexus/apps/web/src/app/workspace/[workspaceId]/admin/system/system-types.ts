@@ -146,6 +146,7 @@ export interface TelemetryInfo {
   enabled: boolean;
   service_name: string;
   ui_url: string | null;
+  traces_readable: boolean;
 }
 
 export interface Overview {

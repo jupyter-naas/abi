@@ -244,11 +244,15 @@ class KernelService:
 
 @dataclass(frozen=True)
 class TelemetryInfo:
-    """Tracing as configured for this engine (``telemetry:``); ``ui_url`` opens traces."""
+    """Tracing as configured for this engine (``telemetry:``); ``ui_url`` opens traces.
+
+    ``traces_readable``: the Traces tab can read traces (``query_url``, else
+    ``ui_url``), so trace ids can link to it."""
 
     enabled: bool
     service_name: str
     ui_url: str | None
+    traces_readable: bool = False
 
 
 @dataclass(frozen=True)

@@ -3,6 +3,7 @@ import {
   appendTraffic,
   liveSourceLabel,
   traceLink,
+  tracesLinkable,
   filterTraffic,
   parseSseFrames,
   summarizeTraffic,
@@ -80,6 +81,14 @@ describe('traceLink', () => {
     expect(traceLink(true, 'abc')).toBe('?tab=traces&trace=abc');
     expect(traceLink(false, 'abc')).toBeNull();
     expect(traceLink(true, '')).toBeNull();
+  });
+});
+
+describe('tracesLinkable', () => {
+  it('links trace ids whenever the Traces tab can read traces, ui_url or not', () => {
+    expect(tracesLinkable({ enabled: true, traces_readable: true })).toBe(true);
+    expect(tracesLinkable({ enabled: true, traces_readable: false })).toBe(false);
+    expect(tracesLinkable({ enabled: false, traces_readable: true })).toBe(false);
   });
 });
 
