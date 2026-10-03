@@ -17,6 +17,7 @@ from naas_abi_proto.agent.v1 import agent_pb2 as pb
 from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 
 from naas_abi_sdk.agent import TERMINAL, agent_subject
+from naas_abi_sdk.messages import reply
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
 from naas_abi_sdk.services.models import CollectionSpec
 from naas_abi_sdk.telemetry import internal_span, server_span
@@ -189,8 +190,11 @@ class AgentHost:
                     fragment = await self.documents.get(
                         self.events_collection, f"{key}:{req.sequence}:{req.part}"
                     )
-                    await msg.respond(
-                        pb.EventResponse(data=fragment.data["data"]).SerializeToString()
+                    await reply(
+                        msg,
+                        pb.EventResponse(
+                            data=fragment.data["data"]
+                        ).SerializeToString(),
                     )
                     return
                 if operation == "cancel" and doc.data["status"] not in TERMINAL:
@@ -233,7 +237,7 @@ class AgentHost:
             )
             payload = response.SerializeToString()
         if msg.reply:
-            await msg.respond(payload)
+            await reply(msg, payload)
 
     async def _view(self, data: dict, after: int = 0) -> pb.Invocation:
         now = asyncio.get_running_loop().time()

@@ -66,9 +66,10 @@ def test_provider_errors_are_sanitized_and_mapped():
                 headers={"Nats-Auth-Token": issue_service_token("caller", secret)},
                 reply="reply",
                 respond=AsyncMock(),
+                _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
             )
             await primary._handle("chat", msg)
-            response = pb.ChatResponse.FromString(msg.respond.call_args.args[0])
+            response = pb.ChatResponse.FromString(msg._client.publish.call_args.args[1])
             assert response.error.code == code
             assert "private provider details" not in response.error.message
 
