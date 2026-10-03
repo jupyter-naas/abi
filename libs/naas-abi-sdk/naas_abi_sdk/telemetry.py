@@ -190,6 +190,16 @@ def record_reply(size: int, *, transfer: TransferTrace | None = None) -> None:
         span.set_attribute("abi.reply.body.size", size)
 
 
+def record_overflow(overflow: TransferTrace) -> None:
+    """Totals of an RPC's overflow exchanges (payloads above the broker limit),
+    on the call's own CLIENT span. Nothing when the call did not overflow."""
+    if overflow.span is None or not overflow.messages:
+        return
+    overflow.span.set_attribute("abi.overflow.messages", overflow.messages)
+    overflow.span.set_attribute("abi.overflow.bytes_sent", overflow.bytes_sent)
+    overflow.span.set_attribute("abi.overflow.bytes_received", overflow.bytes_received)
+
+
 @contextlib.contextmanager
 def transfer_span(prefix: str, operation: str) -> Iterator[TransferTrace]:
     """A ``TransferTrace`` for a chunked transfer on ``prefix`` (e.g.

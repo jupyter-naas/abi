@@ -27,7 +27,11 @@ from naas_abi_core.engine.nats_auth import (
     verify_service_token,
 )
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
-from naas_abi_core.engine.nats_rpc import respond_protobuf
+from naas_abi_core.engine.nats_rpc import (
+    RequestPayloadError,
+    request_payload,
+    respond_protobuf,
+)
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.secret.v1 import secret_pb2
@@ -161,7 +165,12 @@ class SecretPrimaryAdapterNATS:
 
         parsed_request = request_cls()
         try:
-            parsed_request.ParseFromString(request.data)
+            parsed_request.ParseFromString(await request_payload(request))
+        except RequestPayloadError as exc:
+            await self._respond_error(
+                request, response_cls, exc.code, exc.message, retryable=False
+            )
+            return
         except DecodeError:
             await self._respond_error(
                 request,

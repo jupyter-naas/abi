@@ -256,6 +256,24 @@ class NATSModelConfiguration(BaseModel):
     )
 
 
+class NATSRPCOverflowConfiguration(BaseModel):
+    """RPC payloads above the broker limit travel as transfer frames instead of
+    failing with PAYLOAD_TOO_LARGE (docs/adr/20261003_nats-rpc-overflow.md).
+
+    ``enabled: false`` keeps PAYLOAD_TOO_LARGE for every call over the limit.
+    Budgets are per process: parked replies are held in memory, uploaded
+    requests are spooled to temporary disk.
+    """
+
+    enabled: bool = True
+    max_value_bytes: int = Field(default=256 * 1024 * 1024, gt=0)
+    max_parked_bytes: int = Field(default=1024 * 1024 * 1024, gt=0)
+    max_buffered_upload_bytes: int = Field(default=1024 * 1024 * 1024, gt=0)
+    chunk_bytes: int = Field(default=1024 * 1024, ge=1024, le=4 * 1024 * 1024)
+    idle_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
+    max_sessions: int = Field(default=64, ge=1, le=1024)
+
+
 class NATSJobsConfiguration(BaseModel):
     """Engine-hosted module jobs (JetStream message schedules, NATS >= 2.14).
 
@@ -300,6 +318,9 @@ class NATSConfiguration(BaseModel):
         default_factory=NATSStreamingConfiguration
     )
     models: NATSModelConfiguration = Field(default_factory=NATSModelConfiguration)
+    rpc_overflow: NATSRPCOverflowConfiguration = Field(
+        default_factory=NATSRPCOverflowConfiguration
+    )
     jobs: NATSJobsConfiguration = Field(default_factory=NATSJobsConfiguration)
     # The broker's HTTP monitoring endpoint (``nats-server -m 8222``), read by the
     # Nexus SysAdmin app (/varz, /connz, /jsz). It has no auth: keep it private.

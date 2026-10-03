@@ -10,12 +10,14 @@ from typing import Any, TypeVar, cast
 
 from google.protobuf.message import Message
 from nats.aio.client import Client
-from nats.errors import MaxPayloadError
+from nats.errors import MaxPayloadError, NoRespondersError
 
+from naas_abi_sdk import overflow
 from naas_abi_sdk.telemetry import (
     TransferTrace,
     client_span,
     record_error,
+    record_overflow,
     record_reply,
 )
 
@@ -94,10 +96,58 @@ class Transport:
         headers = {"Nats-Auth-Token": token}
         payload = outgoing.SerializeToString()
         # The span covers the whole exchange; the trace travels in the headers.
-        with client_span(subject, headers, size=len(payload), transfer=transfer):
-            return await self._exchange(
-                subject, payload, headers, response_type, transfer
+        with client_span(
+            subject, headers, size=len(payload), transfer=transfer
+        ) as span:
+            if transfer is not None:  # a transfer's own chunk: always small
+                return await self._exchange(
+                    subject, payload, headers, response_type, transfer
+                )
+            headers[overflow.ACCEPT_HEADER] = "1"
+            return await self._overflowing(
+                subject, payload, headers, response_type, TransferTrace(span)
             )
+
+    async def _overflowing(
+        self,
+        subject: str,
+        payload: bytes,
+        headers: dict[str, str],
+        response_type: type[Response],
+        trace: TransferTrace,
+    ) -> Response:
+        """Upload a request above the broker limit first; download a parked reply.
+
+        The overflow's chunk exchanges count on this call's span (``trace``).
+        """
+
+        async def chunk(subject: str, request: Message, response_type: type) -> Any:
+            return await self.call(subject, request, response_type, transfer=trace)
+
+        nc = await self.connect()
+        limit = min(nc.max_payload, MAX_PAYLOAD)
+        upload = None
+        if _message_size(payload, headers) > limit and overflow.possible(limit):
+            try:
+                upload = await overflow.upload(
+                    chunk, payload, chunk_bytes=overflow.chunk_size(limit)
+                )
+            except NoRespondersError as exc:  # an engine without overflow
+                raise RPCError(
+                    "PAYLOAD_TOO_LARGE", "Request exceeds broker limit"
+                ) from exc
+            except overflow.OverflowRefused as exc:
+                raise RPCError(exc.code, str(exc)) from exc
+            headers = {**headers, overflow.REQUEST_HEADER: upload}
+            payload = b""
+        try:
+            return await self._exchange(
+                subject, payload, headers, response_type, download=chunk
+            )
+        finally:
+            if upload is not None:
+                await overflow.close(chunk, upload)
+            record_overflow(trace)
 
     async def _exchange(
         self,
@@ -106,12 +156,12 @@ class Transport:
         headers: dict[str, str],
         response_type: type[Response],
         transfer: TransferTrace | None = None,
+        *,
+        download: overflow.Call | None = None,
     ) -> Response:
         async def send():
             nc = await self.connect()
-            header_block = "".join(f"{k}: {v}\r\n" for k, v in headers.items())
-            size = len(payload) + len(f"NATS/1.0\r\n{header_block}\r\n".encode())
-            if size > min(nc.max_payload, MAX_PAYLOAD):
+            if _message_size(payload, headers) > min(nc.max_payload, MAX_PAYLOAD):
                 raise RPCError("PAYLOAD_TOO_LARGE", "Request exceeds broker limit")
             try:
                 return await nc.request(
@@ -129,7 +179,11 @@ class Transport:
             code = h.get("Nats-Service-Error-Code", "UNKNOWN")
             record_error(code)
             raise RPCError(code, h.get("Nats-Service-Error", "Remote error"))
-        response = response_type.FromString(reply.data)
+        data = reply.data
+        if download is not None and overflow.REPLY_HEADER in h:
+            data = await _download(download, h)
+            record_reply(len(data))
+        response = response_type.FromString(data)
         if response.HasField("error"):
             error = cast(Any, response).error
             while "error" in error.DESCRIPTOR.fields_by_name:
@@ -137,3 +191,21 @@ class Transport:
             record_error(error.code, error.message)
             raise RPCError(error.code, error.message, response=response)
         return response
+
+
+def _message_size(payload: bytes, headers: dict[str, str]) -> int:
+    # NATS counts the HPUB header block as part of the message size.
+    header_block = "".join(f"{k}: {v}\r\n" for k, v in headers.items())
+    return len(payload) + len(f"NATS/1.0\r\n{header_block}\r\n".encode())
+
+
+async def _download(call: overflow.Call, headers: Any) -> bytes:
+    try:
+        size = int(headers.get(overflow.SIZE_HEADER, ""))
+    except ValueError:
+        await overflow.close(call, headers[overflow.REPLY_HEADER])
+        raise RPCError("INTERNAL", "Overflowed reply without a valid size") from None
+    try:
+        return await overflow.download(call, headers[overflow.REPLY_HEADER], size)
+    except overflow.OverflowRefused as exc:
+        raise RPCError(exc.code, str(exc)) from exc

@@ -16,7 +16,11 @@ from naas_abi_core.engine.nats_auth import (
     verify_service_token,
 )
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
-from naas_abi_core.engine.nats_rpc import respond_protobuf
+from naas_abi_core.engine.nats_rpc import (
+    RequestPayloadError,
+    request_payload,
+    respond_protobuf,
+)
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.services.document.adapters.document_nats_codec import (
     ERRORS,
@@ -114,7 +118,7 @@ class DocumentPrimaryAdapterNATS:
             return
         try:
             parsed = getattr(pb, OPERATIONS[operation] + "Request").FromString(
-                request.data
+                await request_payload(request)
             )
             result = await self._dispatch.call(partial(self._call, operation), parsed)
         except Exception as exc:  # noqa: BLE001 - translate failures at the RPC boundary
@@ -124,6 +128,8 @@ class DocumentPrimaryAdapterNATS:
             )
             if isinstance(exc, DecodeError):
                 code = "INVALID_ARGUMENT"
+            if isinstance(exc, RequestPayloadError):
+                code = exc.code
             # Backend details may contain connection credentials or document contents.
             if code in ("INTERNAL", "STORAGE_ERROR", "ADAPTER_ERROR"):
                 logger.warning(

@@ -137,9 +137,11 @@ class Engine(IEngine):
             dependencies = self.__nats_dependencies.build(self.__services)
             self.__services.wire_services(dependencies)
             self.__nats_runtime_started = True
-            self.__nats_primary_adapters = EngineNATSLoader(
-                self.__configuration
-            ).expose_services(self.__services)
+            nats_loader = EngineNATSLoader(self.__configuration)
+            self.__nats_primary_adapters = nats_loader.expose_services(self.__services)
+            self.__nats_primary_adapters += nats_loader.expose_overflow(
+                self.__nats_primary_adapters
+            )
 
         logger.debug("Loading engine modules")
         self.__modules = self.__engine_module_loader.load_modules(self, module_names)
