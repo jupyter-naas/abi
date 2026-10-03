@@ -27,7 +27,11 @@ def git_repo(tmp_path):
 
 @pytest.fixture
 def workspace_adapter(tmp_path):
-    return LocalDirectoryAdapter(workspaces_root=str(tmp_path / "workspaces"))
+    adapter = LocalDirectoryAdapter(workspaces_root=str(tmp_path / "workspaces"))
+    yield adapter
+    # Provisioning starts a sidecar process; it outlives the test otherwise.
+    for environment in adapter.list_all_environments():
+        adapter.stop(workspace_id=environment.id)
 
 
 def test_provision_clone_and_sidecar(
