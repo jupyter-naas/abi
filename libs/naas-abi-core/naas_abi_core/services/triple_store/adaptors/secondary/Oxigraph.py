@@ -35,19 +35,42 @@ License: MIT
 
 import logging
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 import rdflib
 import requests
+from naas_abi_core.services.triple_store.adaptors.secondary.base import sparql_stream
 from naas_abi_core.services.triple_store.resolve import resolve_local_http_url
 from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStorePort,
     OntologyEvent,
+    QueryStream,
+    Triple,
+    graph_export_query,
 )
 from rdflib import BNode, Graph, URIRef
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_OXIGRAPH_URL = "http://localhost:7878"
+
+
+_UPDATE_KEYWORDS = (
+    "INSERT",
+    "DELETE",
+    "CREATE",
+    "DROP",
+    "CLEAR",
+    "LOAD",
+    "COPY",
+    "MOVE",
+    "ADD",
+)
+
+
+def _is_update(query: str) -> bool:
+    return query.strip().upper().startswith(_UPDATE_KEYWORDS)
 
 
 class Oxigraph(ITripleStorePort):
@@ -381,21 +404,7 @@ class Oxigraph(ITripleStorePort):
             ...     print(f"Person: {row.person}, Name: {row.name}")
         """
         # Determine if this is a query or update
-        query_upper = query.strip().upper()
-        is_update = any(
-            query_upper.startswith(cmd)
-            for cmd in [
-                "INSERT",
-                "DELETE",
-                "CREATE",
-                "DROP",
-                "CLEAR",
-                "LOAD",
-                "COPY",
-                "MOVE",
-                "ADD",
-            ]
-        )
+        is_update = _is_update(query)
 
         if is_update:
             # SPARQL Update
@@ -508,6 +517,42 @@ class Oxigraph(ITripleStorePort):
             return graph  # type: ignore
         else:
             raise ValueError(f"Unexpected content type: {content_type}")
+
+    @contextmanager
+    def query_stream(self, query: str) -> Iterator[QueryStream]:
+        """Read a query's result as Oxigraph writes it: TSV rows or N-Triples,
+        parsed line by line (docs/adr/20261003_nats-streamed-results.md)."""
+        if _is_update(query):
+            with super().query_stream(query) as result:
+                yield result
+            return
+        response = requests.post(
+            self.query_endpoint,
+            headers={
+                "Content-Type": "application/sparql-query",
+                "Accept": sparql_stream.ACCEPT,
+            },
+            data=query.encode("utf-8"),
+            timeout=self.timeout,
+            stream=True,
+        )
+        try:
+            response.raise_for_status()
+            yield sparql_stream.read_query_response(
+                response, operation="query", endpoint=self.query_endpoint
+            )
+        finally:
+            response.close()
+
+    @contextmanager
+    def export(self, graph_name: URIRef | None = None) -> Iterator[Iterator[Triple]]:
+        query = (
+            graph_export_query(graph_name)
+            if graph_name is not None
+            else "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }"  # the default graph, as get()
+        )
+        with self.query_stream(query) as result:
+            yield result.triples
 
     def query_view(self, view: str, query: str) -> rdflib.query.Result:  # type: ignore
         """

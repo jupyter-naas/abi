@@ -144,10 +144,14 @@ if TYPE_CHECKING:
 
 import rdflib
 import requests
+from naas_abi_core.services.triple_store.adaptors.secondary.base import sparql_stream
 from naas_abi_core.services.triple_store.TripleStorePorts import (
     Exceptions,
     ITripleStorePort,
     OntologyEvent,
+    QueryStream,
+    Triple,
+    graph_export_query,
 )
 from rdflib import BNode, Graph, URIRef
 
@@ -482,23 +486,32 @@ class ApacheJenaTDB2(ITripleStorePort):
                 return response
             raise AssertionError("unreachable: update retry loop must return or raise")
 
-    def _post_query(self, sparql: str) -> requests.Response:
+    def _post_query(
+        self,
+        sparql: str,
+        *,
+        accept: str = "application/sparql-results+json,application/n-triples,text/turtle",
+        stream: bool = False,
+    ) -> requests.Response:
         """POST to the SPARQL query endpoint, retrying on transient 500/503.
 
         Read queries are not serialised by the write lock — Fuseki/TDB2 allows
-        concurrent readers.
+        concurrent readers. With ``stream`` the body is left unread: a retry only
+        ever happens before the caller has read anything.
         """
         for attempt in range(self.max_retries + 1):
             response = self._session.post(
                 self.query_endpoint,
                 headers={
                     "Content-Type": "application/sparql-query",
-                    "Accept": "application/sparql-results+json,application/n-triples,text/turtle",
+                    "Accept": accept,
                 },
                 data=sparql.encode("utf-8"),
                 timeout=self.timeout,
+                stream=stream,
             )
             if response.status_code in self._RETRYABLE_STATUS_CODES and attempt < self.max_retries:
+                response.close()
                 delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
                 logger.warning(
                     "Fuseki query returned HTTP %d (attempt %d/%d); retrying in %.2fs",
@@ -710,6 +723,38 @@ class ApacheJenaTDB2(ITripleStorePort):
         select_result.vars = [Variable(var) for var in vars]
         select_result.bindings = results
         return select_result
+
+    @contextmanager
+    def query_stream(self, query: str) -> Generator[QueryStream, None, None]:
+        """Read a query's result as Fuseki writes it: TSV rows or N-Triples,
+        parsed line by line (docs/adr/20261003_nats-streamed-results.md).
+
+        Fuseki can answer 200 and abort mid-response; the iterator then raises
+        ``Exceptions.RequestError`` after the rows it already yielded.
+        """
+        if self.__is_update_query(query):
+            with super().query_stream(query) as result:
+                yield result
+            return
+        response = self._post_query(query, accept=sparql_stream.ACCEPT, stream=True)
+        try:
+            yield sparql_stream.read_query_response(
+                response, operation="query", endpoint=self.query_endpoint
+            )
+        finally:
+            response.close()
+
+    @contextmanager
+    def export(
+        self, graph_name: URIRef | None = None
+    ) -> Generator[Generator[Triple, None, None], None, None]:
+        query = (
+            graph_export_query(graph_name)
+            if graph_name is not None
+            else "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }"  # as get()
+        )
+        with self.query_stream(query) as result:
+            yield (triple for triple in result.triples)
 
     def query_view(self, view: str, query: str) -> Any:
         return self.query(query)

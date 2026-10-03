@@ -35,7 +35,19 @@ class ITripleStorePort:
     def clear_graph(graph_name: URIRef)          # raises GraphNotFoundError
     def drop_graph(graph_name: URIRef)           # raises GraphNotFoundError
     def list_graphs() -> list[URIRef]
+    # Streamed reads (non-abstract: the defaults read query()/get())
+    def query_stream(query: str) -> ContextManager[QueryStream]
+    def export(graph_name: URIRef | None = None) -> ContextManager[Iterator[Triple]]
 ```
+
+Streamed reads (docs/adr/20261003_nats-streamed-results.md): `QueryStream` has
+`result_type`, `vars`, `ask_answer`, and lazy `rows` (dicts, unbound variables
+absent) or `triples`. Read them once, inside the `with`. Adapters that can
+stream override the defaults: Oxigraph and ApacheJenaTDB2 (TSV and N-Triples
+parsed line by line in `adaptors/secondary/base/sparql_stream.py`; a backend
+aborting mid-response raises `RequestError` from the iterator), OxigraphEmbedded
+(pyoxigraph's lazy results: open and read on ONE thread, another thread touching
+them aborts the process), and the NATS client.
 
 ## Service API (`TripleStoreService.py`)
 
@@ -50,6 +62,8 @@ create_graph(graph_name)                                 # → publishes GraphCr
 clear_graph(graph_name)                                  # → publishes GraphCleared
 drop_graph(graph_name)                                   # → publishes GraphDropped
 list_graphs() -> list[URIRef]
+query_stream(sparql) -> ContextManager[QueryStream]     # → TripleStoreError on failure
+export(graph_name=None) -> ContextManager[Iterator[Triple]]
 
 subscribe(topic=(s|None, p|None, o|None), callback, event_type=None, graph_name="*")
 load_schema(filepath, schema_cache=None)                 # → publishes SchemaLoaded
@@ -90,6 +104,11 @@ python -m naas_abi_core.services.triple_store.oxigraph_server \
 ```
 
 Endpoints: `POST /query`, `POST /update`, `GET /store`, `POST /store?default` (bulk insert), `DELETE /store?default` (bulk delete).
+
+`/query` and `GET /store` stream their response (chunked) from one dedicated
+thread per request; a syntax error is still a 400, an error after the first
+bytes truncates the body. `adaptors/secondary/Oxigraph_http_test.py` runs the
+generic contract against it in-process.
 
 ## Tests
 
@@ -137,6 +156,12 @@ instead of becoming an empty success. Overflowed values are held whole in
 memory; results that should not be require streaming or a storage reference. No RPC is automatically replayed after transport failure:
 a timeout can hide a completed operation. Reconcile its outcome before retrying.
 `close()` releases only the client's transport, including for vector storage.
+
+Streamed reads go through `transfer/v1` sessions on
+`abi.svc.triple_store.v1.transfer` (operations `query` and `export`, frames in
+`adapters/triple_store_stream_codec.py`): the primary produces each stream on
+its own thread (`nats_transfer.thread_frames`), the client fetches frames as the
+caller iterates, and falls back to the unary call against an older engine.
 
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.

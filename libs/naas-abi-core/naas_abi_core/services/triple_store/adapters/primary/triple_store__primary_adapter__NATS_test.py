@@ -776,12 +776,21 @@ def test_start_is_idempotent(monkeypatch):
 
     monkeypatch.setattr(primary_module.nats.micro, "add_service", _fake_add_service)
 
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    # Enough of a connection for the streamed-reads transfer host.
+    nc = SimpleNamespace(
+        max_payload=1024 * 1024, subscribe=AsyncMock(), flush=AsyncMock()
+    )
     adapter = TripleStorePrimaryAdapterNATS(_StubPort(), SECRET)
-    asyncio.run(adapter.start(object()))
+    asyncio.run(adapter.start(nc))
     first_call_count = len(calls)
-    asyncio.run(adapter.start(object()))  # second call must be a no-op
+    transfer_subscriptions = nc.subscribe.await_count
+    asyncio.run(adapter.start(nc))  # second call must be a no-op
     assert len(calls) == first_call_count
     assert first_call_count == 11  # one endpoint per ITripleStorePort method
+    assert nc.subscribe.await_count == transfer_subscriptions > 0
 
 
 @pytest.mark.parametrize(

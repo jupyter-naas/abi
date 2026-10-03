@@ -9,8 +9,12 @@ handler runs inside it, and its real failure is recorded there, never replied.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import math
+import queue
 import tempfile
+import threading
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Any
@@ -73,6 +77,60 @@ async def stream_thread(function, *args):
     if cancelled:
         raise asyncio.CancelledError()
     return result
+
+
+async def thread_frames(
+    produce: Callable[[Callable[[bytes], bool]], None], *, max_queued: int = 2
+) -> AsyncIterator[bytes]:
+    """Yield the frames ``produce(emit)`` emits, running it on its own thread.
+
+    One dedicated thread for the whole stream, from opening the backend to
+    closing it: some backends bind a result to the thread that created it
+    (pyoxigraph aborts the process otherwise), so pool threads, which change
+    between calls, cannot be used. ``emit`` waits while ``max_queued`` frames
+    are unread and returns ``False`` once the reader is gone; ``produce`` must
+    then return, which closes the backend. An exception from ``produce`` is
+    raised to the reader after the frames emitted before it.
+    """
+    frames: queue.Queue = queue.Queue(maxsize=max_queued)
+    stopped = threading.Event()
+
+    def put(item: tuple) -> bool:
+        while not stopped.is_set():
+            try:
+                frames.put(item, timeout=0.2)
+                return True
+            except queue.Full:
+                continue
+        return False
+
+    def run() -> None:
+        try:
+            produce(lambda frame: put(("frame", frame)))
+        except BaseException as exc:  # noqa: BLE001 - delivered to the reader
+            put(("error", exc))
+            return
+        put(("end", None))
+
+    # The producer's spans nest under the caller's (the transfer session's).
+    context = contextvars.copy_context()
+    threading.Thread(
+        target=context.run, args=(run,), name="nats-transfer-stream", daemon=True
+    ).start()
+    try:
+        while True:
+            try:
+                kind, value = await asyncio.to_thread(frames.get, True, 0.2)
+            except queue.Empty:
+                continue
+            if kind == "frame":
+                yield value
+            elif kind == "error":
+                raise value
+            else:
+                return
+    finally:
+        stopped.set()
 
 
 class TransferHost:

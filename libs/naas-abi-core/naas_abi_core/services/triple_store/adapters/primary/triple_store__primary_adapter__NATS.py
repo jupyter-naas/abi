@@ -38,7 +38,8 @@ constructed directly over a raw ``ITripleStorePort`` (e.g. in tests).
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from functools import partial
 from typing import TypeVar
 
 import nats
@@ -57,6 +58,7 @@ from naas_abi_core.engine.nats_rpc import (
     respond_protobuf,
 )
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
+from naas_abi_core.engine.nats_transfer import TransferHost, thread_frames
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
 from naas_abi_core.services.triple_store.adapters.triple_store_nats_contract import (
@@ -64,6 +66,12 @@ from naas_abi_core.services.triple_store.adapters.triple_store_nats_contract imp
     SERVICE_NAME,
     SERVICE_VERSION,
     SUBJECT_PREFIX,
+    TRANSFER_PREFIX,
+)
+from naas_abi_core.services.triple_store.adapters.triple_store_stream_codec import (
+    encode_header,
+    row_frames,
+    triple_frames,
 )
 from naas_abi_core.services.triple_store.TripleStorePorts import (
     Exceptions,
@@ -208,6 +216,15 @@ class TripleStorePrimaryAdapterNATS:
         self._jwt_secret = jwt_secret
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
+        # Streamed reads (docs/adr/20261003_nats-streamed-results.md).
+        self._transfer = TransferHost(
+            TRANSFER_PREFIX,
+            jwt_secret,
+            self._transfer_frames,
+            operations=("query", "export"),
+            chunk_bytes=1024 * 1024,
+            error_mapper=self._transfer_error,
+        )
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``triple_store`` NATS service on ``nc``.
@@ -281,9 +298,11 @@ class TripleStorePrimaryAdapterNATS:
             handler=self._handle_list_graphs,
         )
         self._service = service
+        await self._transfer.start(nc)
 
     async def stop(self) -> None:
         """Deregister the service, draining its subscriptions."""
+        await self._transfer.stop()
         service = self._service
         self._service = None
         try:
@@ -291,6 +310,52 @@ class TripleStorePrimaryAdapterNATS:
                 await service.stop()
         finally:
             self._dispatch.close()
+
+    # ------------------------------------------------------------------
+    # Streamed reads: one transfer session per stream, produced on its own
+    # thread one frame at a time (triple_store_stream_codec.py).
+    # ------------------------------------------------------------------
+
+    def _transfer_frames(
+        self, operation: str, metadata: bytes, source: object
+    ) -> AsyncIterator[bytes]:
+        if operation == "query":
+            query = triple_store_pb2.QueryRequest.FromString(metadata).query
+            return thread_frames(partial(self._produce_query, query))
+        name = metadata.decode("utf-8")
+        return thread_frames(
+            partial(self._produce_export, URIRef(name) if name else None)
+        )
+
+    def _produce_query(self, query: str, emit: Callable[[bytes], bool]) -> None:
+        with self._adapter.query_stream(query) as result:
+            if not emit(encode_header(result)):
+                return
+            if result.result_type == "SELECT":
+                frames = row_frames(result.rows)
+            elif result.result_type in ("CONSTRUCT", "DESCRIBE"):
+                frames = triple_frames(result.triples)
+            else:
+                return
+            for frame in frames:
+                if not emit(frame):
+                    return
+
+    def _produce_export(
+        self, graph_name: URIRef | None, emit: Callable[[bytes], bool]
+    ) -> None:
+        with self._adapter.export(graph_name) as triples:
+            for frame in triple_frames(triples):
+                if not emit(frame):
+                    return
+
+    @staticmethod
+    def _transfer_error(exc: Exception) -> tuple[str, str] | None:
+        if isinstance(exc, Exceptions.RequestError):
+            return "REQUEST_ERROR", str(exc)
+        if isinstance(exc, Exceptions.GraphNotFoundError):
+            return "GRAPH_NOT_FOUND", str(exc)
+        return None
 
     # ------------------------------------------------------------------
     # Shared request handling: auth, decode, dispatch, encode.
