@@ -182,7 +182,7 @@ class TransferHost:
         self.packet_bytes = 0
 
     async def start(self, nc):
-        self.packet_bytes = min(nc.max_payload, 8 * 1024 * 1024)
+        self.packet_bytes = nc.max_payload  # the broker's limit, the only one
         self.chunk_bytes = min(self.chunk_bytes, self.packet_bytes // 2)
         if self.chunk_bytes < 1024:
             raise ValueError("Broker payload is too small for transfers")

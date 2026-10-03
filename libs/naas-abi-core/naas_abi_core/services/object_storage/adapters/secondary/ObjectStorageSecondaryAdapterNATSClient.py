@@ -232,7 +232,7 @@ class ObjectStorageSecondaryAdapterNATSClient(NatsRPCClient, IObjectStorageAdapt
             opened = self._open_transfer("put", prefix, key, transfer)
         except NoRespondersError:
             nc = self._run_coro(self._ensure_connection_async())
-            limit = min(nc.max_payload, 8 * 1024 * 1024)
+            limit = nc.max_payload
             content = read_legacy_upload(stream, limit)
             self._put_unary(prefix, key, content)
             return

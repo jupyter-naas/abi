@@ -319,6 +319,8 @@ def primary_request(data, **headers):
         headers={"Nats-Auth-Token": issue_service_token("test", SECRET), **headers},
         subject="abi.test",
         respond=AsyncMock(),
+        # The connection it arrived on, as nats.micro's Request carries it.
+        _msg=SimpleNamespace(_client=SimpleNamespace(max_payload=8 * 1024 * 1024)),
     )
 
 
@@ -496,3 +498,60 @@ def test_client_without_an_overflow_owner_keeps_payload_too_large(client):
             keyvalue_pb2.GetRequest(key="k" * 10_000),
             keyvalue_pb2.GetResponse,
         )
+
+
+# --- the broker's max_payload is the only limit (no hard-coded 8 MiB)
+
+
+def test_client_sends_up_to_the_brokers_limit_without_overflow(client):
+    nc = connection(
+        client,
+        return_value=SimpleNamespace(
+            data=keyvalue_pb2.GetResponse().SerializeToString(), headers=None
+        ),
+    )
+    nc.max_payload = 16 * 1024 * 1024  # a broker configured above 8 MiB
+
+    client._call(
+        "abi.test",
+        keyvalue_pb2.GetRequest(key="k" * (10 * 1024 * 1024)),
+        keyvalue_pb2.GetResponse,
+    )
+
+    (subject, payload), _ = nc.request.call_args
+    assert subject == "abi.test" and len(payload) > 10 * 1024 * 1024
+
+
+def test_primary_counts_reply_headers_against_the_brokers_limit(primary):
+    # NATS counts headers in the message size and closes the connection on a
+    # violation; nats-py only checks the body. An error reply's body that fits
+    # but whose Abi-Error-Code header does not must never be published as is.
+    response_cls = response_class(primary)
+    limit = 4096
+    published = []
+
+    async def respond(data, headers=None):
+        block = "".join(f"{k}: {v}\r\n" for k, v in (headers or {}).items())
+        size = len(data) + (len(f"NATS/1.0\r\n{block}\r\n") if headers else 0)
+        assert size <= limit, "a message over the broker limit closes the connection"
+        published.append(response_cls.FromString(data))
+
+    request = SimpleNamespace(
+        data=keyvalue_pb2.GetRequest(key="k").SerializeToString(),
+        headers={"Nats-Auth-Token": issue_service_token("test", SECRET)},
+        subject="abi.test",
+        respond=respond,
+        _msg=SimpleNamespace(_client=SimpleNamespace(max_payload=limit)),
+    )
+    reply = response_cls()
+    error = error_of(reply)
+    error.code, error.message = "INTERNAL", "x" * (limit - 40)
+    assert len(reply.SerializeToString()) <= limit  # the body alone fits
+
+    asyncio.run(
+        primary._handle(
+            request, keyvalue_pb2.GetRequest, response_cls, Mock(return_value=reply)
+        )
+    )
+
+    assert [error_of(r).code for r in published] == ["PAYLOAD_TOO_LARGE"]
