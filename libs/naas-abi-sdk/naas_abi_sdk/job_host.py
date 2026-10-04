@@ -501,11 +501,15 @@ class JobHost:
             self.backoff_base_seconds * 2 ** (attempt - 1), self.max_backoff_seconds
         )
 
-    async def _save(self, run_id: str, fields: dict[str, Any]) -> None:
+    async def _save(
+        self, run_id: str, fields: dict[str, Any], *, only_running: bool = False
+    ) -> None:
         for _ in range(3):
             try:
                 existing = await self.documents.get(self.collection, run_id)
             except DocumentNotFound:
+                if only_running:
+                    return
                 try:
                     await self.documents.put(
                         self.collection,
@@ -516,6 +520,8 @@ class JobHost:
                     return
                 except VersionConflict:
                     continue
+            if only_running and existing.data.get("status") != "RUNNING":
+                return
             try:
                 await self.documents.put(
                     self.collection,
@@ -538,7 +544,9 @@ class JobHost:
             await asyncio.sleep(self.heartbeat_seconds)
             try:
                 await self._save(
-                    context.run_id, {"logs": list(context.logs), "heartbeat_at": _now()}
+                    context.run_id,
+                    {"logs": list(context.logs), "heartbeat_at": _now()},
+                    only_running=True,
                 )
             except Exception:
                 logger.warning(
@@ -689,9 +697,6 @@ class JobHost:
             else:
                 result = self._result(work.result())
                 status = "SKIPPED" if context.skipped is not None else "SUCCEEDED"
-            # Stop progress writes before publishing the final state.
-            progress.cancel()
-            await asyncio.gather(progress, return_exceptions=True)
             if (
                 status not in ("SUCCEEDED", "SKIPPED", "CANCELLED")
                 and attempt < descriptor.max_attempts
@@ -714,6 +719,9 @@ class JobHost:
                 await self._save(run_id, fields)
             else:
                 await self._save_completion(run_id, fields, heartbeat)
+            # Persist liveness until completion is durable, then stop before redelivery.
+            progress.cancel()
+            await asyncio.gather(progress, return_exceptions=True)
             if status == "RETRYING":
                 await msg.nak(delay=self._backoff(attempt))
             else:
