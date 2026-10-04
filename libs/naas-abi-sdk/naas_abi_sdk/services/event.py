@@ -3,13 +3,21 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from naas_abi_sdk.services._codec import ServiceProxy
+from naas_abi_proto.event.v1 import event_pb2 as pb
+
+from naas_abi_sdk.services._codec import ServiceProxy, message
+from naas_abi_sdk.services._streams import open_stream
 from naas_abi_sdk.services.models import StoredEvent
+from naas_abi_sdk.transport import RPCError
+
+TRANSFER_PREFIX = "abi.svc.event.v1.transfer"
 
 
 @dataclass
@@ -96,6 +104,56 @@ class EventService(ServiceProxy):
             search=search,
         )
         return self._restore(rows, event_class)
+
+    @asynccontextmanager
+    async def query_stream(
+        self,
+        event_class=None,
+        since_seq: int | None = None,
+        until_seq: int | None = None,
+        since_timestamp: str | None = None,
+        until_timestamp: str | None = None,
+        filter: dict | None = None,
+        limit: int | None = None,
+        newest_first: bool = False,
+        search: str | None = None,
+    ) -> AsyncIterator[AsyncIterator[Any]]:
+        """``query``, restored as the caller iterates, inside the block
+        (docs/adr/20261003_nats-streamed-results.md). The highest ``seq`` is
+        pinned when the block opens: events appended while it is read are not
+        included. Leaving the block closes the session."""
+        event_type = _type(event_class)
+        upper = await self._request("max_seq", event_type=event_type)
+        if until_seq is not None:
+            upper = min(upper, until_seq)
+        request = message(
+            pb.QueryRequest,
+            {
+                "event_type": event_type,
+                "since_seq": since_seq,
+                "until_seq": upper,
+                "since_timestamp": since_timestamp,
+                "until_timestamp": until_timestamp,
+                "json_filter": filter,
+                "limit": limit,
+                "newest_first": newest_first,
+                "search": search,
+            },
+        )
+        async with open_stream(
+            self._client, TRANSFER_PREFIX, "query", request.SerializeToString()
+        ) as frames:
+            if frames is None:
+                raise RPCError("UNAVAILABLE", "No engine streams events")
+            yield self._restored(frames, event_class)
+
+    async def _restored(
+        self, frames: AsyncIterator[bytes], event_class
+    ) -> AsyncIterator[Any]:
+        async for frame in frames:
+            rows = pb.StoredEvents.FromString(frame).events
+            for item in self._restore(rows, event_class):
+                yield item
 
     async def query_for_consumer(
         self,

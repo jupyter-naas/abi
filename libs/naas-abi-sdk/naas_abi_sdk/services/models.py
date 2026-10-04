@@ -28,6 +28,7 @@ class ActivityEvent:
     )
     correlation_id: str | None = None
     attributes: dict[str, Any] | None = None
+    seq: int | None = None
 
 
 @dataclass
@@ -36,6 +37,9 @@ class ActivityLogQuery:
     since: datetime | None = None
     until: datetime | None = None
     limit: int | None = None
+    newest_first: bool = False
+    before_seq: int | None = None
+    after_seq: int | None = None
 
 
 @dataclass
@@ -51,6 +55,9 @@ class WorkspaceStatus:
     name: str = ""
     phase: str = ""
     agent_ready: bool = False
+    owner: str = ""
+    template: str = ""
+    created_at: str | None = None
 
 
 @dataclass

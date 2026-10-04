@@ -22,8 +22,10 @@ event/
 ├── EventFilter.py          # build_where (SQL pushdown) + matches (in-memory eval)
 ├── benchmark.py + BENCHMARK.md
 ├── README.md               # user guide (publishing, subscribing, filter DSL)
+├── adapters/event_stream_codec.py   # StoredEvent <-> protobuf, stream frames
 ├── adapters/secondary/
 │   └── EventSQLiteAdapter.py
+├── tests/event__secondary_adapter__generic_test.py   # contract for every adapter
 └── ontologies/
     ├── modules/EventOntology.{ttl,py}    # RDFEntity, Process, LogProcess (canonical bases)
     └── classes/                          # auto-generated event classes
@@ -37,7 +39,8 @@ event/
 append(event_id, event_type, timestamp, payload: bytes) -> StoredEvent
 query(event_type, since_seq, until_seq,
       since_timestamp, until_timestamp,
-      json_filter, limit) -> list[StoredEvent]
+      json_filter, limit, newest_first, search) -> list[StoredEvent]
+query_stream(...same arguments...)   # context manager -> Iterator[StoredEvent]
 max_seq(event_type=None) -> int
 get_cursor(consumer_id, event_type) -> int
 set_cursor(consumer_id, event_type, last_seq) -> None
@@ -54,6 +57,11 @@ publish(event) -> StoredEvent
 query(event_class=None, since_seq=None, until_seq=None,
       since_timestamp=None, until_timestamp=None,
       filter=None, limit=None) -> list[Any]
+
+query_stream(event_class=None, ...same as query...)   # with ... as events
+query_stored_stream(event_type=None, ...same as query_stored...)
+# Read as the caller iterates; events appended after the block opened are
+# not included. Over NATS, one transfer stream instead of paged RPCs.
 
 iter_query(event_class, since_seq=None, since_timestamp=None,
            until_timestamp=None, filter=None, limit=None,
@@ -114,6 +122,10 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/event/EventService_test.
 uv run pytest libs/naas-abi-core/naas_abi_core/services/event/adapters/secondary/EventSQLiteAdapter_test.py
 ```
 
+`tests/event__secondary_adapter__generic_test.py` holds the contract every
+adapter must pass (streamed queries, filter errors); the SQLite and NATS
+client tests subclass it, so the NATS run covers the transfer path.
+
 ## Adding a new adapter
 
 1. Implement `IEventAdapter` in `adapters/secondary/<Name>Adapter.py`. All five methods.
@@ -144,6 +156,26 @@ instead of becoming an empty success. Overflowed values are held whole in
 memory; results that should not be require streaming or a storage reference. No RPC is automatically replayed after transport failure:
 a timeout can hide a completed operation. Reconcile its outcome before retrying.
 `close()` releases only the client's transport, including for vector storage.
+
+A malformed filter raises `FilterError` (a `ValueError`) on every adapter: the
+primary answers non-retryable `INVALID_FILTER`, and the client raises
+`FilterError` again.
+
+### Streamed queries
+
+`IEventAdapter.query_stream(...)` reads what `query` returns, as the caller
+iterates, inside the `with` (docs/adr/20261003_nats-streamed-results.md). The
+highest `seq` (of `event_type` when given) is pinned when the block opens:
+events appended while it is read are not included, so the stream always ends.
+The port's default reads `STREAM_PAGE` (500) events at a time by keyset on
+`seq` (`since_seq`, or `until_seq` for `newest_first`), honouring `limit`; the
+SQLite adapter holds its lock per page only. Over NATS the primary hosts
+`transfer/v1` sessions on `abi.svc.event.v1.transfer` (operation `query`,
+metadata a `QueryRequest`, frames `StoredEvents` batches of about 256 KiB built
+in `adapters/event_stream_codec.py`); the core client pins `max_seq` before
+opening and has no unary fallback. `query_for_consumer` is not streamed: its
+cursor advances with the read, so a stream would commit before delivery;
+`iter_query_for_consumer` keeps its batched calls.
 
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.

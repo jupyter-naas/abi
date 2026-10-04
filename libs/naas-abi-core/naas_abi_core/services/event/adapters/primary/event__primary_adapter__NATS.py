@@ -25,8 +25,9 @@ this primary adapter has no bus access and registers endpoints only for
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import TypeVar
+from collections.abc import AsyncIterator, Callable
+from functools import partial
+from typing import Any, TypeVar
 
 import nats
 import nats.micro
@@ -46,6 +47,7 @@ from naas_abi_core.engine.nats_rpc import (
     respond_protobuf,
 )
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
+from naas_abi_core.engine.nats_transfer import TransferHost, thread_frames
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.event.v1 import event_pb2
 from naas_abi_core.services.event.adapters.event_nats_contract import (
@@ -53,13 +55,18 @@ from naas_abi_core.services.event.adapters.event_nats_contract import (
     SERVICE_NAME,
     SERVICE_VERSION,
     SUBJECT_PREFIX,
+    TRANSFER_PREFIX,
 )
+from naas_abi_core.services.event.adapters.event_stream_codec import (
+    event_frames,
+    event_to_pb,
+)
+from naas_abi_core.services.event.EventFilter import FilterError
 from naas_abi_core.services.event.EventPort import (
     EventNotFoundError,
     EventTypeSummary,
     IEventAdapter,
     InvalidEventError,
-    StoredEvent,
 )
 
 __all__ = [
@@ -72,16 +79,6 @@ __all__ = [
 
 _RequestT = TypeVar("_RequestT", bound=Message)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
-
-
-def _event_to_pb(event: StoredEvent) -> event_pb2.StoredEvent:
-    return event_pb2.StoredEvent(
-        id=event.id,
-        event_type=event.event_type,
-        seq=event.seq,
-        timestamp=event.timestamp,
-        payload=event.payload,
-    )
 
 
 def _type_to_pb(summary: EventTypeSummary) -> event_pb2.EventTypeSummary:
@@ -118,6 +115,27 @@ def _struct_to_json_filter(
     return json_format.MessageToDict(struct)
 
 
+def _query_arguments(req: event_pb2.QueryRequest) -> dict[str, Any]:
+    """``IEventAdapter.query`` arguments from a wire ``QueryRequest``."""
+    return {
+        "event_type": req.event_type if req.HasField("event_type") else None,
+        "since_seq": req.since_seq if req.HasField("since_seq") else None,
+        "until_seq": req.until_seq if req.HasField("until_seq") else None,
+        "since_timestamp": (
+            req.since_timestamp if req.HasField("since_timestamp") else None
+        ),
+        "until_timestamp": (
+            req.until_timestamp if req.HasField("until_timestamp") else None
+        ),
+        "json_filter": _struct_to_json_filter(
+            req.HasField("json_filter"), req.json_filter
+        ),
+        "limit": req.limit if req.HasField("limit") else None,
+        "newest_first": req.newest_first,
+        "search": req.search if req.HasField("search") else None,
+    }
+
+
 class EventPrimaryAdapterNATS:
     """Serves the event durable-log port over NATS RPC (request/reply).
 
@@ -142,6 +160,15 @@ class EventPrimaryAdapterNATS:
         self._jwt_secret = jwt_secret
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
+        # Streamed queries (docs/adr/20261003_nats-streamed-results.md).
+        self._transfer = TransferHost(
+            TRANSFER_PREFIX,
+            jwt_secret,
+            self._transfer_frames,
+            operations=("query",),
+            chunk_bytes=1024 * 1024,
+            error_mapper=self._transfer_error,
+        )
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``event`` NATS service on ``nc``.
@@ -195,9 +222,11 @@ class EventPrimaryAdapterNATS:
             handler=self._handle_list_event_types,
         )
         self._service = service
+        await self._transfer.start(nc)
 
     async def stop(self) -> None:
         """Deregister the service, draining its subscriptions."""
+        await self._transfer.stop()
         service = self._service
         self._service = None
         try:
@@ -262,6 +291,11 @@ class EventPrimaryAdapterNATS:
                 request, response_cls, "INVALID_EVENT", str(exc), retryable=False
             )
             return
+        except FilterError as exc:
+            await self._respond_error(
+                request, response_cls, "INVALID_FILTER", str(exc), retryable=False
+            )
+            return
         except Exception:  # noqa: BLE001 - a handler must never crash the service
             logger.opt(exception=True).error(
                 f"EventPrimaryAdapterNATS: unexpected error handling {request.subject!r}"
@@ -317,7 +351,7 @@ class EventPrimaryAdapterNATS:
             timestamp=req.timestamp,
             payload=req.payload,
         )
-        return event_pb2.AppendResponse(event=_event_to_pb(stored))
+        return event_pb2.AppendResponse(event=event_to_pb(stored))
 
     async def _handle_query(self, request: Request) -> None:
         await self._handle(
@@ -328,26 +362,35 @@ class EventPrimaryAdapterNATS:
         )
 
     def _call_query(self, req: event_pb2.QueryRequest) -> event_pb2.QueryResponse:
-        rows = self._adapter.query(
-            event_type=req.event_type if req.HasField("event_type") else None,
-            since_seq=req.since_seq if req.HasField("since_seq") else None,
-            until_seq=req.until_seq if req.HasField("until_seq") else None,
-            since_timestamp=req.since_timestamp
-            if req.HasField("since_timestamp")
-            else None,
-            until_timestamp=req.until_timestamp
-            if req.HasField("until_timestamp")
-            else None,
-            json_filter=_struct_to_json_filter(
-                req.HasField("json_filter"), req.json_filter
-            ),
-            limit=req.limit if req.HasField("limit") else None,
-            newest_first=req.newest_first,
-            search=req.search if req.HasField("search") else None,
-        )
+        rows = self._adapter.query(**_query_arguments(req))
         return event_pb2.QueryResponse(
-            events=event_pb2.StoredEvents(events=[_event_to_pb(row) for row in rows])
+            events=event_pb2.StoredEvents(events=[event_to_pb(row) for row in rows])
         )
+
+    # ------------------------------------------------------------------
+    # Streamed queries: one transfer session per query, produced on its own
+    # thread one frame at a time (event_stream_codec.py).
+    # ------------------------------------------------------------------
+
+    def _transfer_frames(
+        self, operation: str, metadata: bytes, source: Any
+    ) -> AsyncIterator[bytes]:
+        request = event_pb2.QueryRequest.FromString(metadata)
+        return thread_frames(partial(self._produce_query, request))
+
+    def _produce_query(
+        self, request: event_pb2.QueryRequest, emit: Callable[[bytes], bool]
+    ) -> None:
+        with self._adapter.query_stream(**_query_arguments(request)) as events:
+            for frame in event_frames(events):
+                if not emit(frame):
+                    return
+
+    @staticmethod
+    def _transfer_error(exc: Exception) -> tuple[str, str] | None:
+        if isinstance(exc, FilterError):
+            return "INVALID_FILTER", str(exc)
+        return None
 
     async def _handle_max_seq(self, request: Request) -> None:
         await self._handle(
@@ -411,7 +454,7 @@ class EventPrimaryAdapterNATS:
             ),
         )
         return event_pb2.QueryForConsumerResponse(
-            events=event_pb2.StoredEvents(events=[_event_to_pb(row) for row in rows])
+            events=event_pb2.StoredEvents(events=[event_to_pb(row) for row in rows])
         )
 
     async def _handle_list_event_types(self, request: Request) -> None:

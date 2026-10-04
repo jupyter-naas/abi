@@ -30,6 +30,9 @@ to agree on a header name.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 from google.protobuf import struct_pb2
 
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
@@ -38,7 +41,13 @@ from naas_abi_core.proto.event.v1 import event_pb2
 from naas_abi_core.services.event.adapters.event_nats_contract import (
     AUTH_HEADER,
     SUBJECT_PREFIX,
+    TRANSFER_PREFIX,
 )
+from naas_abi_core.services.event.adapters.event_stream_codec import (
+    decode_events,
+    pb_to_event,
+)
+from naas_abi_core.services.event.EventFilter import FilterError
 from naas_abi_core.services.event.EventPort import (
     EventNotFoundError,
     EventTypeSummary,
@@ -46,16 +55,6 @@ from naas_abi_core.services.event.EventPort import (
     InvalidEventError,
     StoredEvent,
 )
-
-
-def _pb_to_event(pb: event_pb2.StoredEvent) -> StoredEvent:
-    return StoredEvent(
-        id=pb.id,
-        event_type=pb.event_type,
-        seq=pb.seq,
-        timestamp=pb.timestamp,
-        payload=pb.payload,
-    )
 
 
 # mypy --follow-untyped-imports can't resolve google.protobuf's
@@ -73,6 +72,38 @@ def _json_filter_to_struct(
     return struct
 
 
+def _query_request(
+    event_type: str | None,
+    since_seq: int | None,
+    until_seq: int | None,
+    since_timestamp: str | None,
+    until_timestamp: str | None,
+    json_filter: dict | None,
+    limit: int | None,
+    newest_first: bool,
+    search: str | None,
+) -> event_pb2.QueryRequest:
+    request = event_pb2.QueryRequest(newest_first=newest_first)
+    if event_type is not None:
+        request.event_type = event_type
+    if since_seq is not None:
+        request.since_seq = since_seq
+    if until_seq is not None:
+        request.until_seq = until_seq
+    if since_timestamp is not None:
+        request.since_timestamp = since_timestamp
+    if until_timestamp is not None:
+        request.until_timestamp = until_timestamp
+    struct = _json_filter_to_struct(json_filter)
+    if struct is not None:
+        request.json_filter.CopyFrom(struct)
+    if limit is not None:
+        request.limit = limit
+    if search is not None:
+        request.search = search
+    return request
+
+
 def _raise_for_error(error: common_pb2.CallError) -> None:
     """Raise the exception matching ``error.code``.
 
@@ -87,6 +118,8 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
         raise EventNotFoundError(error.message)
     if error.code == "INVALID_EVENT":
         raise InvalidEventError(error.message)
+    if error.code == "INVALID_FILTER":
+        raise FilterError(error.message)
     raise RuntimeError(f"event NATS RPC failed ({error.code}): {error.message}")
 
 
@@ -127,7 +160,7 @@ class EventSecondaryAdapterNATSClient(NatsRPCClient, IEventAdapter):
         )
         if response.HasField("error"):
             _raise_for_error(response.error)
-        return _pb_to_event(response.event)
+        return pb_to_event(response.event)
 
     def query(
         self,
@@ -141,34 +174,64 @@ class EventSecondaryAdapterNATSClient(NatsRPCClient, IEventAdapter):
         newest_first: bool = False,
         search: str | None = None,
     ) -> list[StoredEvent]:
-        request = event_pb2.QueryRequest(
-            context=self._context(),
-            newest_first=newest_first,
+        request = _query_request(
+            event_type,
+            since_seq,
+            until_seq,
+            since_timestamp,
+            until_timestamp,
+            json_filter,
+            limit,
+            newest_first,
+            search,
         )
-        if event_type is not None:
-            request.event_type = event_type
-        if since_seq is not None:
-            request.since_seq = since_seq
-        if until_seq is not None:
-            request.until_seq = until_seq
-        if since_timestamp is not None:
-            request.since_timestamp = since_timestamp
-        if until_timestamp is not None:
-            request.until_timestamp = until_timestamp
-        struct = _json_filter_to_struct(json_filter)
-        if struct is not None:
-            request.json_filter.CopyFrom(struct)
-        if limit is not None:
-            request.limit = limit
-        if search is not None:
-            request.search = search
-
+        request.context.CopyFrom(self._context())
         response = self._call(
             f"{SUBJECT_PREFIX}.query", request, event_pb2.QueryResponse
         )
         if response.HasField("error"):
             _raise_for_error(response.error)
-        return [_pb_to_event(pb) for pb in response.events.events]
+        return [pb_to_event(pb) for pb in response.events.events]
+
+    @contextmanager
+    def query_stream(
+        self,
+        event_type: str | None = None,
+        since_seq: int | None = None,
+        until_seq: int | None = None,
+        since_timestamp: str | None = None,
+        until_timestamp: str | None = None,
+        json_filter: dict | None = None,
+        limit: int | None = None,
+        newest_first: bool = False,
+        search: str | None = None,
+    ) -> Iterator[Iterator[StoredEvent]]:
+        """Events fetched as the caller iterates, over a transfer stream
+        (docs/adr/20261003_nats-streamed-results.md). The highest ``seq`` is
+        pinned here, before the stream opens, so an event appended after the
+        block opened is never included. Leaving the block closes the session."""
+        upper = self.max_seq(event_type=event_type)
+        if until_seq is not None:
+            upper = min(upper, until_seq)
+        request = _query_request(
+            event_type,
+            since_seq,
+            upper,
+            since_timestamp,
+            until_timestamp,
+            json_filter,
+            limit,
+            newest_first,
+            search,
+        )
+        with self._transfer_stream(
+            TRANSFER_PREFIX, "query", request.SerializeToString(), _raise_for_error
+        ) as frames:
+            if frames is None:
+                raise RuntimeError(
+                    "event NATS RPC failed (UNAVAILABLE): no engine streams events"
+                )
+            yield (event for frame in frames for event in decode_events(frame))
 
     def max_seq(self, event_type: str | None = None) -> int:
         request = event_pb2.MaxSeqRequest(context=self._context())
@@ -230,7 +293,7 @@ class EventSecondaryAdapterNATSClient(NatsRPCClient, IEventAdapter):
         )
         if response.HasField("error"):
             _raise_for_error(response.error)
-        return [_pb_to_event(pb) for pb in response.events.events]
+        return [pb_to_event(pb) for pb in response.events.events]
 
     def list_event_types(self) -> list[EventTypeSummary]:
         request = event_pb2.ListEventTypesRequest(context=self._context())
