@@ -604,10 +604,19 @@ def test_sqlite_catalog_survives_concurrent_reads_and_writes(tmp_path):
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"read: {exc}")
 
+    def monitor(ns: str) -> None:
+        # The catalog monitor job reads inlined row counts while writes go on.
+        while time.monotonic() < stop:
+            try:
+                adapter.inlined_row_count("t", namespace=ns)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"inlined_row_count: {exc}")
+
     threads = [threading.Thread(target=write, args=(ns,)) for ns in "abc"]
     threads += [
         threading.Thread(target=read, args=(ns,)) for ns in "abc" for _ in range(2)
     ]
+    threads += [threading.Thread(target=monitor, args=(ns,)) for ns in "ab"]
     for thread in threads:
         thread.start()
     for thread in threads:
@@ -615,3 +624,32 @@ def test_sqlite_catalog_survives_concurrent_reads_and_writes(tmp_path):
 
     assert errors == []
     assert adapter.describe("t", namespace="a").name == "t"  # not locked afterwards
+
+
+def test_inlined_row_count_waits_for_a_write_on_a_sqlite_catalog(tmp_path):
+    """Every catalog access holds the catalog lock: a read outside it that
+    overlapped a write left DuckDB holding a SQLite lock for good."""
+    import threading
+
+    adapter = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'catalog.sqlite'}",
+        data_path=str(tmp_path / "data"),
+    )
+    adapter.create(
+        DatasetSpec(
+            name="t",
+            columns=(ColumnSpec(name="id", type="string"),),
+            primary_key=("id",),
+        )
+    )
+    adapter.write("t", [{"id": "1"}], mode="upsert")
+    counts: list[int] = []
+
+    with adapter._catalog_lock.exclusive():
+        reader = threading.Thread(target=lambda: counts.append(adapter.inlined_row_count("t")))
+        reader.start()
+        reader.join(timeout=0.3)
+        assert reader.is_alive(), "inlined_row_count read the catalog during a write"
+
+    reader.join(timeout=10)
+    assert not reader.is_alive() and len(counts) == 1  # runs once the write is done
