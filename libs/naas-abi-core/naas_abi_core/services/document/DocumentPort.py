@@ -121,6 +121,9 @@ class Document:
 
 @dataclass(frozen=True)
 class Page:
+    """One page of ``find``. Only ``cursor is None`` means the end: a page cut
+    by ``max_bytes`` can be short and still have a next page."""
+
     items: list[Document]
     cursor: str | None
 
@@ -181,6 +184,11 @@ def validate_data(data: dict[str, Value], spec: CollectionSpec | None = None) ->
 def validate_version(version: int | None) -> None:
     if version is not None and (type(version) is not int or version < 0):
         raise ValueError("if_version must be a nonnegative integer or None")
+
+
+def validate_max_bytes(max_bytes: int | None) -> None:
+    if max_bytes is not None and (type(max_bytes) is not int or max_bytes < 1):
+        raise ValueError("max_bytes must be a positive integer or None")
 
 
 def validate_query(
@@ -260,7 +268,15 @@ class IDocumentAdapter(Protocol):
         order_by: OrderBy,
         limit: int,
         cursor: str | None,
-    ) -> Page: ...
+        *,
+        max_bytes: int | None = None,
+    ) -> Page:
+        """At most ``limit`` items. With ``max_bytes``, the page stops before
+        the item that would take its estimated size (stored document plus a
+        small overhead) past it, always holding at least one item; a cut page
+        carries a cursor."""
+        ...
+
     def count(
         self, namespace: str, collection: str, where: Sequence[Predicate]
     ) -> int: ...

@@ -10,6 +10,7 @@ from naas_abi_core.services.document.DocumentPort import (
     Predicate,
     Value,
     validate_data,
+    validate_max_bytes,
     validate_name,
     validate_query,
     validate_version,
@@ -138,10 +139,20 @@ class DocumentService(ServiceBase):
         order_by: OrderBy = None,
         limit: int = 100,
         cursor: str | None = None,
+        max_bytes: int | None = None,
     ) -> Page:
+        """A page of at most ``limit`` items, cut earlier by ``max_bytes``
+        (see ``IDocumentAdapter.find``); follow ``cursor`` until it is None."""
         where = validate_query(where, order_by, limit)
+        validate_max_bytes(max_bytes)
         return self.__adapter.find(
-            self.namespace, validate_name(collection), where, order_by, limit, cursor
+            self.namespace,
+            validate_name(collection),
+            where,
+            order_by,
+            limit,
+            cursor,
+            max_bytes=max_bytes,
         )
 
     def iterate(
@@ -151,15 +162,23 @@ class DocumentService(ServiceBase):
         where: Iterable[Predicate] = (),
         order_by: OrderBy = None,
         batch: int = 500,
+        max_bytes: int | None = None,
     ) -> Iterator[Document]:
         # where/collection are validated once here rather than by find() on
         # every page, since neither changes across pages of the same query.
         where = validate_query(where, order_by, batch)
+        validate_max_bytes(max_bytes)
         collection = validate_name(collection)
         cursor = None
         while True:
             page = self.__adapter.find(
-                self.namespace, collection, where, order_by, batch, cursor
+                self.namespace,
+                collection,
+                where,
+                order_by,
+                batch,
+                cursor,
+                max_bytes=max_bytes,
             )
             yield from page.items
             cursor = page.cursor

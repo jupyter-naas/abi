@@ -123,9 +123,16 @@ class DocumentService(ServiceProxy):
         order_by: OrderBy = None,
         limit: int = 100,
         cursor: str | None = None,
+        max_bytes: int | None = None,
     ) -> Page:
+        """At most ``limit`` items; with ``max_bytes`` the engine stops the page
+        before the item that would take it past that size (always at least one
+        item), and it caps every page to fit the broker. Follow ``cursor``
+        until it is None: a short page is not the end."""
         if type(limit) is not int or not 1 <= limit <= 1000:
             raise ValueError("Page size must be between 1 and 1000")
+        if max_bytes is not None and (type(max_bytes) is not int or max_bytes < 1):
+            raise ValueError("max_bytes must be a positive integer or None")
         result = await self._call(
             "find",
             pb.FindRequest(
@@ -136,6 +143,7 @@ class DocumentService(ServiceProxy):
                 else None,
                 limit=limit,
                 cursor=cursor,
+                max_bytes=max_bytes,
             ),
         )
         return Page(
@@ -150,6 +158,7 @@ class DocumentService(ServiceProxy):
         where: Iterable[Predicate] = (),
         order_by: OrderBy = None,
         batch: int = 500,
+        max_bytes: int | None = None,
     ) -> AsyncIterator[Document]:
         predicates = tuple(where)
         cursor = None
@@ -160,6 +169,7 @@ class DocumentService(ServiceProxy):
                 order_by=order_by,
                 limit=batch,
                 cursor=cursor,
+                max_bytes=max_bytes,
             )
             for doc in page.items:
                 yield doc

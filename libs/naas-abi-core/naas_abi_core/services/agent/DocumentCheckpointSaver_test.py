@@ -68,6 +68,7 @@ class InProcessTransport:
         self.server = DocumentPrimaryAdapterNATS(root, "s" * 32)
         self.max_payload = max_payload
         self.largest = 0
+        self.page_bytes: int | None = None  # the engine's find budget, if any
 
     def _check(self, message) -> None:
         size = message.ByteSize()
@@ -77,8 +78,10 @@ class InProcessTransport:
 
     async def call(self, subject, request, response_type):
         self._check(request)
+        operation = subject.rsplit(".", 1)[1]
+        budget = {"page_bytes": self.page_bytes} if operation == "find" else {}
         try:
-            response = self.server._call(subject.rsplit(".", 1)[1], request)
+            response = self.server._call(operation, request, **budget)
         except Exception as exc:
             code = next(
                 (code for code, cls in ERRORS.items() if isinstance(exc, cls)),
@@ -429,3 +432,51 @@ def test_each_turn_writes_what_is_new_not_the_history(
     early, late = sum(sizes[5:10]) / 5, sum(sizes[25:30]) / 5
     # Schema 1 grew from 20 KB to 268 KB per turn over this conversation.
     assert late <= 1.3 * early, sizes
+
+
+class OnePerPage:
+    """A document service whose pages hold one item, as a tight byte budget
+    cuts them."""
+
+    def __init__(self, documents: DocumentService) -> None:
+        self._documents = documents
+
+    def __getattr__(self, name: str):
+        return getattr(self._documents, name)
+
+    def find(self, collection, **kwargs):
+        return self._documents.find(collection, **{**kwargs, "max_bytes": 1})
+
+    def iterate(self, collection, **kwargs):
+        return self._documents.iterate(collection, **{**kwargs, "max_bytes": 1})
+
+
+def stored_refs(root, count: int) -> list[str]:
+    documents = root.for_namespace("module.agent")
+    for n in range(count):
+        documents.put(
+            BLOBS,
+            f"k{n}",
+            {"agent_id": "agent", "thread_id": "t", "ref": f"r{n}", "value": n},
+        )
+    return [f"r{n}" for n in range(count)]
+
+
+def test_engine_fetch_reads_every_page_when_pages_are_cut(root):
+    saver = engine_saver(root)
+    refs = stored_refs(root, 5)
+    saver.documents = OnePerPage(saver.documents)  # type: ignore[assignment]
+
+    fetched = saver._fetch("t", BLOBS, refs)
+
+    assert sorted(d["value"] for d in fetched) == list(range(5))
+
+
+def test_sdk_fetch_reads_every_page_when_pages_are_cut(root):
+    saver = sdk_saver(root)
+    refs = stored_refs(root, 5)
+    saver.transport.page_bytes = 1  # type: ignore[attr-defined]
+
+    fetched = asyncio.run(saver._fetch("t", BLOBS, refs))
+
+    assert sorted(d["value"] for d in fetched) == list(range(5))

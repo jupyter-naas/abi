@@ -303,10 +303,13 @@ class DocumentResources:
         found: list[dict[str, Any]] = []
         for collection, refs in batches(wanted):
             try:
-                page = view.find(collection, where=[*scope, ("ref", "in", refs)], limit=len(refs))
+                # Every page: one can be cut short by the engine's byte budget.
+                documents = view.iterate(
+                    collection, where=[*scope, ("ref", "in", refs)], batch=len(refs)
+                )
+                found.extend(d.data for d in documents)
             except (CollectionNotFound, ValueError):
                 continue
-            found.extend(d.data for d in page.items)
         return found
 
     def _values(self, view: Any, roots: list[dict[str, Any]]) -> dict[str, Any]:

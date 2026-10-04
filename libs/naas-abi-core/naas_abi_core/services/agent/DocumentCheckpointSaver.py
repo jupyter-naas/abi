@@ -153,16 +153,19 @@ class DocumentCheckpointSaver(BaseCheckpointSaver):
 
     def _fetch(self, thread_id: str, collection: str, refs: list[str]) -> list[Any]:
         wanted: list[Value] = [*refs]
-        page = self.documents.find(
-            collection,
-            where=[
-                ("agent_id", "eq", self.agent_id),
-                ("thread_id", "eq", thread_id),
-                ("ref", "in", wanted),
-            ],
-            limit=len(refs),
-        )
-        return [document.data for document in page.items]
+        # Every page: one can be cut short by the engine's byte budget.
+        return [
+            document.data
+            for document in self.documents.iterate(
+                collection,
+                where=[
+                    ("agent_id", "eq", self.agent_id),
+                    ("thread_id", "eq", thread_id),
+                    ("ref", "in", wanted),
+                ],
+                batch=len(refs),
+            )
+        ]
 
     def _load(self, data: dict[str, Any]) -> CheckpointTuple:
         legacy = data.get("_schema") == 1

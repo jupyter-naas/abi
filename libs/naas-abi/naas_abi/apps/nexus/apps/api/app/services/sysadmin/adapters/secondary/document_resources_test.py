@@ -392,3 +392,35 @@ def test_a_schema_2_view_reads_split_values_and_lists_value_collections_plainly(
     assert view["messages"][1]["truncated"] == len(huge)
     parts = run(documents.list(f"acme.agents/{PARTS}")).entries
     assert len(parts) == 3 and "summary" in parts[0].attributes
+
+
+class _OnePerPage:
+    """A document view whose pages hold one item, as a tight byte budget cuts them."""
+
+    def __init__(self, view):
+        self._view = view
+
+    def __getattr__(self, name):
+        return getattr(self._view, name)
+
+    def find(self, collection, **kwargs):
+        return self._view.find(collection, **{**kwargs, "max_bytes": 1})
+
+    def iterate(self, collection, **kwargs):
+        return self._view.iterate(collection, **{**kwargs, "max_bytes": 1})
+
+
+def test_value_reads_follow_every_page_when_pages_are_cut(root):
+    from naas_abi_sdk.langgraph_documents import BLOBS
+
+    view = root.for_namespace("acme.agents")
+    view.ensure_collection(CollectionSpec(name=BLOBS))
+    refs = [f"b{n}" for n in range(5)]
+    for n, ref in enumerate(refs):
+        view.put(BLOBS, f"k{n}", {"agent_id": "a", "thread_id": "t", "ref": ref, "value": n})
+
+    found = DocumentResources(root)._fetch(
+        _OnePerPage(view), {"agent_id": "a", "thread_id": "t"}, [(ref, 10) for ref in refs]
+    )
+
+    assert sorted(d["value"] for d in found) == list(range(5))

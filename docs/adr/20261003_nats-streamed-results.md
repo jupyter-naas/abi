@@ -88,4 +88,10 @@ queries, and document `find` pages.
   `abi.svc.vector_store.v1.transfer` operation `list_vectors`, metadata a
   `ListVectorsRequest`, frames `VectorPage`s of documents only (about
   256 KiB). `search` stays unary: backends return top-k whole.
-- Not yet: event and activity queries, byte-bounded document `find` pages.
+- Document `find`: pages are bounded by size as well as count, not streamed
+  (keyset cursors already resume at any item). `max_bytes` on the port,
+  service, NATS clients and SDK; the NATS primary also caps every page at a
+  quarter of the broker limit (estimated from the stored JSON), so replies fit
+  without overflow. A cut page carries a cursor, only an absent cursor means
+  the end, and a single larger document comes back alone.
+- Not yet: event and activity queries.

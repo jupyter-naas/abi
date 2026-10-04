@@ -235,7 +235,7 @@ class DeleteResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...
 
 class FindRequest(_message.Message):
-    __slots__ = ("context", "namespace", "collection", "where", "order_by", "limit", "cursor")
+    __slots__ = ("context", "namespace", "collection", "where", "order_by", "limit", "cursor", "max_bytes")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     COLLECTION_FIELD_NUMBER: _ClassVar[int]
@@ -243,6 +243,7 @@ class FindRequest(_message.Message):
     ORDER_BY_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
     CURSOR_FIELD_NUMBER: _ClassVar[int]
+    MAX_BYTES_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     namespace: str
     collection: str
@@ -250,7 +251,8 @@ class FindRequest(_message.Message):
     order_by: OrderBy
     limit: int
     cursor: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., namespace: _Optional[str] = ..., collection: _Optional[str] = ..., where: _Optional[_Iterable[_Union[Predicate, _Mapping]]] = ..., order_by: _Optional[_Union[OrderBy, _Mapping]] = ..., limit: _Optional[int] = ..., cursor: _Optional[str] = ...) -> None: ...
+    max_bytes: int
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., namespace: _Optional[str] = ..., collection: _Optional[str] = ..., where: _Optional[_Iterable[_Union[Predicate, _Mapping]]] = ..., order_by: _Optional[_Union[OrderBy, _Mapping]] = ..., limit: _Optional[int] = ..., cursor: _Optional[str] = ..., max_bytes: _Optional[int] = ...) -> None: ...
 
 class FindResponse(_message.Message):
     __slots__ = ("error", "items", "cursor")
