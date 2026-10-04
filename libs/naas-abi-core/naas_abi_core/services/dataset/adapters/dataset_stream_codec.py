@@ -2,7 +2,7 @@
 
 Shared by the NATS primary and client; no new protobuf messages. The first
 frame is a ``QueryResult`` with the columns only, then each frame is a
-``QueryResult`` with rows only (``Struct``s, as the unary ``query`` reply).
+``QueryResult`` with rows only, as JSON rows (dataset_row_codec.py).
 """
 
 from __future__ import annotations
@@ -10,8 +10,11 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator
 from typing import Any
 
-from google.protobuf import json_format
 from naas_abi_core.proto.dataset.v1 import dataset_pb2
+from naas_abi_core.services.dataset.adapters.dataset_row_codec import (
+    encode_row,
+    query_result_from_pb,
+)
 
 FRAME_BYTES = 256 * 1024
 
@@ -29,18 +32,15 @@ def row_frames(
 ) -> Iterator[bytes]:
     batch, size = dataset_pb2.QueryResult(), 0
     for row in rows:
-        struct = batch.rows.add()
-        struct.update(row)
-        size += struct.ByteSize()
+        encoded = encode_row(row)
+        batch.json_rows.append(encoded)
+        size += len(encoded)
         if size >= frame_bytes:
             yield batch.SerializeToString()
             batch, size = dataset_pb2.QueryResult(), 0
-    if batch.rows:
+    if batch.json_rows:
         yield batch.SerializeToString()
 
 
 def decode_rows(frame: bytes) -> list[dict[str, Any]]:
-    return [
-        json_format.MessageToDict(row)
-        for row in dataset_pb2.QueryResult.FromString(frame).rows
-    ]
+    return query_result_from_pb(dataset_pb2.QueryResult.FromString(frame)).rows

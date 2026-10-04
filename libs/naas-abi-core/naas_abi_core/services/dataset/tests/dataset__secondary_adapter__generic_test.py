@@ -440,3 +440,42 @@ class DatasetSecondaryAdapterContract(ABC):
             ) as result,
         ):
             list(result.rows)
+
+    def test_integers_round_trip_exactly_and_stay_integers(self, adapter: IDatasetPort):
+        big = 2**60 + 1  # not representable as a double
+        adapter.create(
+            DatasetSpec(
+                name="measures",
+                namespace="acme",
+                columns=(
+                    ColumnSpec(name="id", type="bigint"),
+                    ColumnSpec(name="count", type="integer"),
+                    ColumnSpec(name="ratio", type="double"),
+                    ColumnSpec(name="payload", type="json"),
+                ),
+            )
+        )
+        adapter.write(
+            "measures",
+            [
+                {
+                    "id": big,
+                    "count": 42,
+                    "ratio": 1.0,
+                    "payload": {"n": 42, "big": big, "f": 1.5},
+                }
+            ],
+            namespace="acme",
+        )
+        sql = "SELECT id, count, ratio, payload FROM measures"
+
+        (row,) = adapter.query(sql, namespace="acme").rows
+        with adapter.query_stream(sql, namespace="acme") as result:
+            (streamed,) = list(result.rows)
+
+        for got in (row, streamed):
+            assert got["id"] == big and type(got["id"]) is int
+            assert got["count"] == 42 and type(got["count"]) is int
+            assert got["ratio"] == 1.0 and type(got["ratio"]) is float
+            assert got["payload"] == {"n": 42, "big": big, "f": 1.5}
+            assert type(got["payload"]["n"]) is int

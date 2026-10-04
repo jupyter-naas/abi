@@ -198,8 +198,7 @@ cursor; over NATS the primary hosts `transfer/v1` sessions on
 `adapters/dataset_stream_codec.py`: a `QueryResult` with the columns, then
 `QueryResult`s with rows only), each produced on its own thread, and the core
 client and SDK facade fetch frames as they iterate (unary `query` against an
-older engine). Rows cross the wire as `Struct`s, like the unary reply: numbers
-arrive as doubles.
+older engine). Frames carry JSON rows, like the unary reply (below).
 
 ## NATS RPC adapters
 
@@ -218,6 +217,18 @@ instead of becoming an empty success. Overflowed values are held whole in
 memory; results that should not be require streaming or a storage reference. No RPC is automatically replayed after transport failure:
 a timeout can hide a completed operation. Reconcile its outcome before retrying.
 `close()` releases only the client's transport, including for vector storage.
+
+Rows cross the wire as UTF-8 JSON objects (`json_rows`, codec in
+`adapters/dataset_row_codec.py`): integers stay integers, exact at any size,
+JSON columns keep their nested types, dates become ISO strings, `Decimal` a
+number and bytes base64. `google.protobuf.Struct` (`rows`) stored every number
+as a double (42 came back as 42.0, integers above 2^53 rounded); it stays for
+peers that predate `json_rows`: a reply carries Struct rows unless the request
+sets `accept_json_rows`, and writes carry both encodings, because an older
+server ignores `json_rows` and would write nothing (a `replace` would empty
+the dataset). The server reads `json_rows` when present. Drop Struct rows from
+writes once every engine reads `json_rows`. The SDK mirrors the codec in
+`naas_abi_sdk/services/_dataset_rows.py`.
 
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.

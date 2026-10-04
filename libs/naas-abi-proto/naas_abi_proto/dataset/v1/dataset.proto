@@ -105,7 +105,13 @@ message DatasetSnapshotInfoList {
 
 message QueryResult {
   repeated string columns = 1;
+  // google.protobuf.Struct numbers are doubles: integers come back as floats
+  // and lose precision above 2^53. Only for callers that did not set
+  // accept_json_rows (and from servers that predate json_rows).
   repeated google.protobuf.Struct rows = 2;
+  // Each row as a UTF-8 JSON object, exact for integers. Filled instead of
+  // `rows` when the request set accept_json_rows.
+  repeated bytes json_rows = 3;
 }
 
 // -----------------------------------------------------------------------
@@ -202,6 +208,11 @@ message WriteRequest {
   // Unset means "no optimistic-concurrency check" (IDatasetPort.write's
   // snapshot_id=None default).
   optional int64 snapshot_id = 6;
+  // The rows as UTF-8 JSON objects, exact for integers. When non-empty the
+  // server reads these and ignores `rows`. Senders fill `rows` too: a server
+  // that predates json_rows ignores this field and would otherwise write
+  // nothing (or, with mode replace, empty the dataset).
+  repeated bytes json_rows = 7;
 }
 message WriteResponse {
   oneof result {
@@ -221,6 +232,8 @@ message QueryRequest {
   // Unset means "query the current snapshot" (IDatasetPort.query's
   // snapshot_id=None default).
   optional int64 snapshot_id = 4;
+  // Answer with QueryResult.json_rows (exact integers) instead of Struct rows.
+  bool accept_json_rows = 5;
 }
 message QueryResponse {
   oneof result {
@@ -237,6 +250,7 @@ message FlushRequest {
   abi.common.v1.CallContext context = 1;
   string name = 2;
   string namespace = 3;
+  bool accept_json_rows = 4;  // see QueryRequest
 }
 message FlushResponse {
   oneof result {
@@ -269,6 +283,7 @@ message CompactRequest {
   abi.common.v1.CallContext context = 1;
   string name = 2;
   string namespace = 3;
+  bool accept_json_rows = 4;  // see QueryRequest
 }
 message CompactResponse {
   oneof result {
