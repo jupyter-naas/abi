@@ -10,12 +10,16 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
 
+from google.protobuf.message import DecodeError
 from naas_abi_proto.agent.v1 import agent_pb2 as pb
 from nats.errors import Error as NATSError
 
 from naas_abi_sdk.transport import RPCError
 
 TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"}
+# With pushed RunUpdates, read Status only after this long without one (a lost
+# update, or an owner that died); without them, Status is polled every 0.1 s.
+QUIET_SECONDS = 5.0
 
 
 def agent_subject(project: str, instance_id: str, name: str, operation: str) -> str:
@@ -79,6 +83,9 @@ class InvocationHandle:
         self.owner_instance_id = ""
         self._last_status: InvocationStatus | None = None
         self._result_cache: str | None = None
+        # The submitter's subscription to the owner's RunUpdates, if any.
+        self._updates: Any = None
+        self._read_first = True
 
     async def _output(self, sequence: int, parts: int) -> str:
         content = bytearray()
@@ -133,6 +140,11 @@ class InvocationHandle:
     async def events(
         self, *, after_sequence: int = 0, timeout: float | None = None
     ) -> AsyncIterator[dict[str, Any]]:
+        """The run's events, then its end (an error for a failed run).
+
+        A submitting handle reads the events the owner pushes to its inbox and
+        reads Status only to fill a gap, after QUIET_SECONDS of silence, and
+        once at the end (the authoritative result). Any other handle polls."""
         if timeout is not None and (not math.isfinite(timeout) or timeout <= 0):
             raise ValueError("timeout must be finite and positive")
         deadline = (
@@ -141,42 +153,88 @@ class InvocationHandle:
             else float("inf")
         )
         cursor = after_sequence
-        while True:
-            remaining = deadline - asyncio.get_running_loop().time()
-            if remaining <= 0:
-                raise RPCError(
-                    "WAIT_TIMEOUT",
-                    f"Invocation {self.invocation_id} may still be running; use status() or cancel()",
-                )
-            try:
-                status = await asyncio.wait_for(
-                    self.status(after_sequence=cursor), remaining
-                )
-            except asyncio.TimeoutError as exc:
-                raise RPCError(
-                    "WAIT_TIMEOUT",
-                    f"Invocation {self.invocation_id}: status request timed out",
-                ) from exc
-            for event in status.events:
-                cursor = event["sequence"]
-                yield event
-            if status.status in TERMINAL:
-                if cursor < status.last_sequence:
-                    continue
-                if status.status != "SUCCEEDED":
+        read = self._read_first or self._updates is None
+        try:
+            while True:
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
                     raise RPCError(
-                        status.error_code or status.status,
-                        status.error_message or status.status,
+                        "WAIT_TIMEOUT",
+                        f"Invocation {self.invocation_id} may still be running; use status() or cancel()",
                     )
-                return
-            if not status.owner_available:
-                raise RPCError(
-                    "OWNER_UNAVAILABLE",
-                    f"Invocation {self.invocation_id} has no registered owner; execution outcome is unknown and is not replayed",
+                if not read:
+                    update = await self._next_update(min(QUIET_SECONDS, remaining))
+                    if update is None or not update.HasField("event"):
+                        read = True  # silence, the end, or an unreadable update
+                        continue
+                    pushed = update.event
+                    if pushed.sequence <= cursor:
+                        continue
+                    if pushed.sequence != cursor + 1:
+                        read = True  # an update was lost
+                        continue
+                    data = (
+                        await self._output(pushed.sequence, pushed.parts)
+                        if pushed.parts
+                        else pushed.data
+                    )
+                    cursor = pushed.sequence
+                    yield {"sequence": cursor, "event": pushed.event, "data": data}
+                    continue
+                try:
+                    status = await asyncio.wait_for(
+                        self.status(after_sequence=cursor), remaining
+                    )
+                except asyncio.TimeoutError as exc:
+                    raise RPCError(
+                        "WAIT_TIMEOUT",
+                        f"Invocation {self.invocation_id}: status request timed out",
+                    ) from exc
+                for event in status.events:
+                    cursor = event["sequence"]
+                    yield event
+                if status.events and cursor < status.last_sequence:
+                    continue  # one page of events; read the next
+                if status.status in TERMINAL:
+                    if cursor < status.last_sequence:
+                        continue
+                    if status.status != "SUCCEEDED":
+                        raise RPCError(
+                            status.error_code or status.status,
+                            status.error_message or status.status,
+                        )
+                    return
+                if not status.owner_available:
+                    raise RPCError(
+                        "OWNER_UNAVAILABLE",
+                        f"Invocation {self.invocation_id} has no registered owner; execution outcome is unknown and is not replayed",
+                    )
+                if self._updates is not None:
+                    read = False
+                    continue
+                await asyncio.sleep(
+                    min(0.1, max(0, deadline - asyncio.get_running_loop().time()))
                 )
-            await asyncio.sleep(
-                min(0.1, max(0, deadline - asyncio.get_running_loop().time()))
-            )
+        finally:
+            await self._stop_updates()
+
+    async def _next_update(self, timeout: float) -> pb.RunUpdate | None:
+        try:
+            msg = await self._updates.next_msg(timeout=timeout)
+        except asyncio.TimeoutError:
+            return None
+        try:
+            return pb.RunUpdate.FromString(msg.data)
+        except DecodeError:
+            return None
+
+    async def _stop_updates(self) -> None:
+        updates, self._updates = self._updates, None
+        if updates is not None:
+            try:
+                await updates.unsubscribe()
+            except (NATSError, OSError):
+                pass
 
     async def result(self, *, timeout: float | None = None) -> str:
         async for _ in self.events(timeout=timeout):
@@ -240,6 +298,10 @@ class AgentProxy:
         if not isinstance(prompt, str):
             raise TypeError("prompt must be text")
         handle = self.invocation(invocation_id or str(uuid4()))
+        # Subscribed before submitting, so no update can come before it.
+        connection = await self.module.client.transport.connect()
+        inbox = connection.new_inbox()
+        handle._updates = await connection.subscribe(inbox)
         try:
             response = await self._rpc(
                 "submit",
@@ -250,16 +312,24 @@ class AgentProxy:
                     mode="stream" if stream else "invoke",
                     deadline_seconds=deadline_seconds or 0,
                     output_format=2,
+                    updates_inbox=inbox,
                 ),
                 pb.SubmitResponse,
             )
         except (NATSError, asyncio.TimeoutError, OSError) as exc:
+            await handle._stop_updates()
             raise SubmissionUncertain(handle) from exc
         except RPCError as exc:
+            await handle._stop_updates()
             if exc.code in ("UNAVAILABLE", "INTERNAL", "PAYLOAD_TOO_LARGE"):
                 raise SubmissionUncertain(handle) from exc
             raise
+        except BaseException:
+            await handle._stop_updates()
+            raise
         handle.owner_instance_id = response.invocation.owner_instance_id
+        # A resubmission of a finished run gets no updates: read it at once.
+        handle._read_first = response.invocation.status in TERMINAL
         return handle
 
     async def invoke(

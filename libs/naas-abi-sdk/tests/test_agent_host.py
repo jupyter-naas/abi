@@ -301,3 +301,179 @@ def test_active_stream_outlives_inactivity_budget():
         ] == "SUCCEEDED"
 
     asyncio.run(scenario())
+
+
+def test_records_carry_their_times_in_collections_named_by_project():
+    from naas_abi_sdk.agent_host import (
+        agent_events_collection,
+        agent_runs_collection,
+    )
+
+    async def scenario():
+        docs, handler = Documents(), Handler()
+        owner = host(docs, handler)
+        assert owner.runs_collection == agent_runs_collection("default")
+        assert owner.events_collection == agent_events_collection("default")
+        await owner._submit("agent", "key", "caller", request())
+        running = (await docs.get(owner.runs_collection, "key")).data
+        assert datetime.fromisoformat(running["submitted_at"]).tzinfo is not None
+        assert "finished_at" not in running and "trace_id" in running
+        run = owner.runs["key"]
+        handler.finish.set()
+        await run.task
+        done = (await docs.get(owner.runs_collection, "key")).data
+        assert done["status"] == "SUCCEEDED"
+        assert done["finished_at"] >= done["submitted_at"]
+
+    asyncio.run(scenario())
+
+
+def _rpc(owner, operation, message):
+    sent = []
+
+    async def publish(subject, data, headers=None):
+        sent.append(data)
+
+    msg = SimpleNamespace(
+        subject=f"abi.agent.default.owner.x.v1.{operation}",
+        data=message.SerializeToString(),
+        headers={"Nats-Auth-Token": "token"},
+        reply="_INBOX.1",
+        _client=SimpleNamespace(max_payload=1 << 20, publish=publish),
+    )
+    owner.session.client.transport = SimpleNamespace(
+        connect=AsyncMock(return_value=SimpleNamespace(max_payload=1 << 20))
+    )
+    return msg, sent
+
+
+def test_platform_admins_may_cancel_another_callers_run():
+    from naas_abi_sdk.agent_host import _hash
+
+    async def scenario():
+        docs, handler = Documents(), Handler()
+        owner = host(docs, handler)
+        key = _hash("agent", "id")
+        await owner._submit("agent", key, "caller", request())
+        cancel = pb.CancelRequest(invocation_id="id", output_format=2)
+
+        # Another caller is refused.
+        owner._authorize = AsyncMock(return_value=("someone", False))
+        msg, sent = _rpc(owner, "cancel", cancel)
+        await owner._handle_operation("agent", "cancel", msg)
+        assert pb.CancelResponse.FromString(sent[0]).error.code == "PERMISSION_DENIED"
+
+        # A platform admin (discovery's admin identities) may cancel it.
+        task = owner.runs[key].task
+        owner._authorize = AsyncMock(return_value=("api", True))
+        msg, sent = _rpc(owner, "cancel", cancel)
+        await owner._handle_operation("agent", "cancel", msg)
+        response = pb.CancelResponse.FromString(sent[0])
+        assert not response.HasField("error"), response.error
+        await task
+        assert (await docs.get(owner.runs_collection, key)).data[
+            "status"
+        ] == "CANCELLED"
+
+        # Admin rights cover cancelling only, not reading someone's output.
+        status = pb.StatusRequest(invocation_id="id", output_format=2)
+        msg, sent = _rpc(owner, "status", status)
+        await owner._handle_operation("agent", "status", msg)
+        assert pb.StatusResponse.FromString(sent[0]).error.code == "PERMISSION_DENIED"
+
+    asyncio.run(scenario())
+
+
+class Wire:
+    """The owner's connection, recording what it publishes."""
+
+    max_payload = 1024 * 1024
+
+    def __init__(self, fail=False):
+        self.published, self.fail = [], fail
+
+    async def publish(self, subject, payload=b"", **kwargs):
+        if self.fail:
+            raise ConnectionError("broker gone")
+        self.published.append((subject, pb.RunUpdate.FromString(payload)))
+
+
+class Streaming:
+    def __init__(self):
+        self.go = asyncio.Event()
+
+    async def stream_invoke(self, prompt, context):
+        yield {"event": "message", "data": "small"}
+        await self.go.wait()
+        yield {"event": "message", "data": "x" * 40_000}  # above the inline bound
+
+
+def watched(documents, handler, wire):
+    owner = host(documents, handler)
+    owner.session.client.transport = SimpleNamespace(
+        connect=AsyncMock(return_value=wire)
+    )
+    return owner
+
+
+def streaming_request(inbox, id="id"):
+    req = request(id)
+    req.mode, req.updates_inbox = "stream", inbox
+    return req
+
+
+def test_owner_pushes_committed_events_then_the_terminal_status():
+    async def scenario():
+        docs, wire, handler = Documents(), Wire(), Streaming()
+        owner = watched(docs, handler, wire)
+        await owner._submit("agent", "key", "caller", streaming_request("_INBOX.a.1"))
+        # A second submit of the same invocation watches it too.
+        await owner._submit("agent", "key", "caller", streaming_request("_INBOX.b.2"))
+        handler.go.set()
+        await asyncio.gather(*(r.task for r in owner.runs.values()))
+
+        assert {subject for subject, _ in wire.published} == {
+            "_INBOX.a.1",
+            "_INBOX.b.2",
+        }
+        updates = [u for subject, u in wire.published if subject == "_INBOX.a.1"]
+        events = [u.event for u in updates if u.HasField("event")]
+        assert [(e.sequence, e.event) for e in events] == [
+            (1, "message"),
+            (2, "message"),
+            (3, "done"),
+        ]
+        assert (events[0].data, events[0].parts) == ("small", 0)
+        assert (events[1].data, events[1].parts) == ("", 5)  # read with EventRequest
+        end = updates[-1]
+        assert not end.HasField("event")
+        assert (end.status, end.last_sequence) == ("SUCCEEDED", 3)
+        # By then a status read reports the end, not FINALIZING.
+        doc = await docs.get(owner.runs_collection, "key")
+        assert (await owner._view(doc.data, 3)).status == "SUCCEEDED"
+
+    asyncio.run(scenario())
+
+
+def test_updates_go_only_to_an_inbox():
+    async def scenario():
+        owner = watched(Documents(), Handler(), Wire())
+        with pytest.raises(RPCError, match="INVALID_ARGUMENT"):
+            await owner._submit(
+                "agent", "key", "caller", streaming_request("abi.svc.secret.v1.get")
+            )
+
+    asyncio.run(scenario())
+
+
+def test_a_failed_push_never_fails_the_run():
+    async def scenario():
+        docs, handler = Documents(), Streaming()
+        handler.go.set()
+        owner = watched(docs, handler, Wire(fail=True))
+        await owner._submit("agent", "key", "caller", streaming_request("_INBOX.a.1"))
+        await asyncio.gather(*(r.task for r in owner.runs.values()))
+        doc = await docs.get(owner.runs_collection, "key")
+        assert doc.data["status"] == "SUCCEEDED"
+
+    asyncio.run(scenario())

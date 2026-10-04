@@ -85,6 +85,7 @@ class DiscoveryNATS:
             )
             if caller is not None:
                 response.caller_identity = caller
+                response.caller_admin = caller in self.service.admin_identities
         except InvalidServiceTokenError:
             response.error.code, response.error.message = (
                 "UNAUTHENTICATED",

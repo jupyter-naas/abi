@@ -49,6 +49,13 @@ REVIEWED = {
         1,
         "discovery registry snapshot: at most 512 KiB (DiscoveryService, KV max_value_size)",
     ),
+    "naas-abi-sdk/naas_abi_sdk/agent_host.py": (
+        1,
+        (
+            "RunUpdate to a submitter's inbox: event data inline only up to "
+            "min(32 KiB, a quarter of the broker limit), else its part count"
+        ),
+    ),
     "naas-abi-sdk/naas_abi_sdk/bus.py": (
         2,
         "bus publish/enqueue: claim_check.prepare (JetStream header reserved)",

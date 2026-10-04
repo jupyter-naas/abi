@@ -46,7 +46,7 @@ class Invocation(_message.Message):
     def __init__(self, invocation_id: _Optional[str] = ..., thread_id: _Optional[str] = ..., status: _Optional[str] = ..., result: _Optional[str] = ..., error_code: _Optional[str] = ..., error_message: _Optional[str] = ..., owner_instance_id: _Optional[str] = ..., owner_available: bool = ..., events: _Optional[_Iterable[_Union[AgentEvent, _Mapping]]] = ..., last_sequence: _Optional[int] = ..., result_parts: _Optional[int] = ...) -> None: ...
 
 class SubmitRequest(_message.Message):
-    __slots__ = ("context", "invocation_id", "thread_id", "prompt", "mode", "deadline_seconds", "output_format")
+    __slots__ = ("context", "invocation_id", "thread_id", "prompt", "mode", "deadline_seconds", "output_format", "updates_inbox")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_ID_FIELD_NUMBER: _ClassVar[int]
     THREAD_ID_FIELD_NUMBER: _ClassVar[int]
@@ -54,6 +54,7 @@ class SubmitRequest(_message.Message):
     MODE_FIELD_NUMBER: _ClassVar[int]
     DEADLINE_SECONDS_FIELD_NUMBER: _ClassVar[int]
     OUTPUT_FORMAT_FIELD_NUMBER: _ClassVar[int]
+    UPDATES_INBOX_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     invocation_id: str
     thread_id: str
@@ -61,7 +62,18 @@ class SubmitRequest(_message.Message):
     mode: str
     deadline_seconds: int
     output_format: int
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., invocation_id: _Optional[str] = ..., thread_id: _Optional[str] = ..., prompt: _Optional[str] = ..., mode: _Optional[str] = ..., deadline_seconds: _Optional[int] = ..., output_format: _Optional[int] = ...) -> None: ...
+    updates_inbox: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., invocation_id: _Optional[str] = ..., thread_id: _Optional[str] = ..., prompt: _Optional[str] = ..., mode: _Optional[str] = ..., deadline_seconds: _Optional[int] = ..., output_format: _Optional[int] = ..., updates_inbox: _Optional[str] = ...) -> None: ...
+
+class RunUpdate(_message.Message):
+    __slots__ = ("event", "status", "last_sequence")
+    EVENT_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    LAST_SEQUENCE_FIELD_NUMBER: _ClassVar[int]
+    event: AgentEvent
+    status: str
+    last_sequence: int
+    def __init__(self, event: _Optional[_Union[AgentEvent, _Mapping]] = ..., status: _Optional[str] = ..., last_sequence: _Optional[int] = ...) -> None: ...
 
 class SubmitResponse(_message.Message):
     __slots__ = ("error", "invocation")
