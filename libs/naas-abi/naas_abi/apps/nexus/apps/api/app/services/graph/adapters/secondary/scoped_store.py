@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import lru_cache
 from threading import Lock
 from typing import Any, cast
@@ -13,6 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphQuerySpecError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.sparql_safe import sparql_iri
+from naas_abi_core.services.triple_store.TripleStorePorts import QueryStream
 from pyparsing import ParseResults
 from rdflib import Graph, URIRef
 from rdflib.plugins.sparql.parser import parseQuery
@@ -99,39 +102,58 @@ class WorkspaceGraphStore:
         self.cache_namespace = "workspace-graphs-v1-" + scope.cache_key
 
     def query(self, query: str) -> Result | Graph:
-        kind, offset = query_shape(query)
-        if not self._graphs:
-            result = Result(
-                {
-                    "SelectQuery": "SELECT",
-                    "AskQuery": "ASK",
-                    "ConstructQuery": "CONSTRUCT",
-                }[kind]
-            )
+        kind, scoped = self._scoped(query)
+        if scoped is None:
+            result = Result(kind)
             result.vars = []
             result.bindings = []
             result.askAnswer = False
             result.graph = Graph()
             return result
+        return cast(Result | Graph, self._store.query(scoped))
+
+    @contextmanager
+    def query_stream(self, query: str) -> Iterator[QueryStream]:
+        """``query``, read incrementally (TripleStoreService.query_stream)."""
+        kind, scoped = self._scoped(query)
+        if scoped is None:
+            yield QueryStream(kind, ask_answer=False if kind == "ASK" else None)
+            return
+        with self._store.query_stream(scoped) as result:
+            yield result
+
+    @contextmanager
+    def export(self, graph_name: URIRef) -> Iterator[Iterator[Any]]:
+        """One readable named graph's triples, read lazily (TripleStoreService.export)."""
+        self.scope.require(self.scope.workspace_id, [str(graph_name)])
+        if str(graph_name) not in self._graphs:
+            yield iter(())
+            return
+        with self._store.export(URIRef(graph_name)) as triples:
+            yield triples
+
+    def _scoped(self, query: str) -> tuple[str, str | None]:
+        """The result type and ``query`` limited to the readable graphs, or
+        ``None`` when no readable graph can match (an empty result)."""
+        shape, offset = query_shape(query)
+        kind = {
+            "SelectQuery": "SELECT",
+            "AskQuery": "ASK",
+            "ConstructQuery": "CONSTRUCT",
+        }[shape]
+        if not self._graphs:
+            return kind, None
         named = _graphs_from_values_clause(query)
         if named is not None:
             active = sorted(self._graphs.intersection(named))
             if not active:
-                result = Result("SELECT")
-                result.vars = []
-                result.bindings = []
-                result.askAnswer = False
-                result.graph = Graph()
-                return result
+                return "SELECT", None
         else:
             active = sorted(self._graphs)
         dataset = "\n".join(
             "FROM " + sparql_iri(g) + "\nFROM NAMED " + sparql_iri(g) for g in active
         )
-        return cast(
-            Result | Graph,
-            self._store.query(query[:offset] + dataset + "\n" + query[offset:]),
-        )
+        return kind, query[:offset] + dataset + "\n" + query[offset:]
 
     def list_graphs(self) -> list[URIRef]:
         return [URIRef(g) for g in sorted(self._graphs)]

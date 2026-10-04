@@ -11,6 +11,7 @@ from collections.abc import Callable, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import replace
 from datetime import timedelta
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphAnalysisData,
     GraphDetailData,
     GraphEdgeData,
+    GraphExportData,
     GraphInfoData,
     GraphKpisData,
     GraphNetworkData,
@@ -52,10 +54,13 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     NetworkSchemaEdgeData,
     NetworkSchemaNodeData,
 )
+from naas_abi.apps.nexus.apps.api.app.services.graph.query.sparql_safe import sparql_iri
 from naas_abi.ontologies.modules.NexusPlatformOntology import KnowledgeGraph, KnowledgeGraphRole
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_transfer import thread_frames
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
+from naas_abi_core.services.triple_store.adapters.triple_store_stream_codec import nt_line
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from rdflib import OWL, RDF, RDFS, XSD, Graph, Literal, Namespace, URIRef
 from rdflib.query import ResultRow
@@ -2656,76 +2661,26 @@ class GraphService:
         )
 
     @workspace_graph_operation()
-    async def export_graph_as_ttl(
+    async def export_graph(
         self,
         workspace_id: str,
         graph_uri: str,
-        batch_size: int = 10000,
         format: str = "turtle",
-    ) -> tuple[str, int, int]:
-        """Export all triples from *graph_uri* as Turtle with bound namespaces.
+    ) -> GraphExportData:
+        """Export one named graph as ``turtle``, ``nt`` or ``xml`` (RDF/XML).
 
-        Fetches triples in batches of *batch_size*, incrementing OFFSET until
-        fewer than *batch_size* triples are returned (end of graph).
-
-        Returns (serialized_content, total_triple_count, named_individual_count).
+        The counts are read first (COUNT queries); the document is produced as
+        ``chunks`` is iterated, from the store's ``export`` on one thread (some
+        backends bind a result to the thread that opened it). N-Triples and
+        Turtle stream one triple per line; RDF/XML needs the whole graph.
         """
-        return await asyncio.to_thread(
-            self._export_graph_as_ttl_sync, graph_uri, batch_size, format
-        )
-
-    def _export_graph_as_ttl_sync(
-        self,
-        graph_uri: str,
-        batch_size: int = 10000,
-        format: str = "turtle",
-    ) -> tuple[str, int, int]:
         store = self._get_triple_store()
-        g = Graph()
-        g.bind("rdf", RDF)
-        g.bind("rdfs", RDFS)
-        g.bind("owl", OWL)
-        g.bind("xsd", XSD)
-        g.bind("bfo", Namespace("http://purl.obolibrary.org/obo/"))
-
-        try:
-            base_uri = ABIModule.get_instance().configuration.nexus_config.ontology_base_uri
-            g.bind("abi", Namespace(base_uri))
-        except Exception:
-            pass
-
-        total_count = 0
-        offset = 0
-
-        while True:
-            query = f"""
-            CONSTRUCT {{ ?s ?p ?o }}
-            WHERE {{
-                GRAPH <{graph_uri}> {{
-                    ?s ?p ?o .
-                }}
-            }}
-            LIMIT {int(batch_size)}
-            OFFSET {int(offset)}
-            """
-            result = store.query(query)
-            batch_count = 0
-            if isinstance(result, Graph):
-                for triple in result:
-                    g.add(triple)  # type: ignore[arg-type]
-                    batch_count += 1
-            else:
-                for triple in result:
-                    g.add(triple)  # type: ignore[arg-type]
-                    batch_count += 1
-
-            total_count += batch_count
-            if batch_count < batch_size:
-                break
-            offset += batch_size
-
-        named_individual_count = len(set(g.subjects(RDF.type, OWL.NamedIndividual)))
-        return g.serialize(format=format), total_count, named_individual_count
+        triple_count, individuals = await asyncio.to_thread(_export_counts, store, graph_uri)
+        return GraphExportData(
+            triple_count=triple_count,
+            named_individual_count=individuals,
+            chunks=thread_frames(partial(_produce_export, store, graph_uri, format)),
+        )
 
     async def analyze_graph_file(
         self,
@@ -3858,3 +3813,72 @@ class GraphService:
                         rows.append(built)
 
         return rows
+
+
+# ── Graph export ─────────────────────────────────────────────────────────────
+
+EXPORT_CHUNK_BYTES = 64 * 1024
+
+
+def _export_namespaces() -> dict[str, str]:
+    namespaces = {
+        "rdf": str(RDF),
+        "rdfs": str(RDFS),
+        "owl": str(OWL),
+        "xsd": str(XSD),
+        "bfo": "http://purl.obolibrary.org/obo/",
+    }
+    try:
+        namespaces["abi"] = ABIModule.get_instance().configuration.nexus_config.ontology_base_uri
+    except Exception:
+        pass
+    return namespaces
+
+
+def _export_counts(store: Any, graph_uri: str) -> tuple[int, int]:
+    graph = sparql_iri(graph_uri)
+
+    def count(query: str) -> int:
+        for row in store.query(query):
+            return int(row[0])
+        return 0
+
+    return (
+        count(f"SELECT (COUNT(*) AS ?n) WHERE {{ GRAPH {graph} {{ ?s ?p ?o }} }}"),
+        count(
+            f"SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE {{ GRAPH {graph} "
+            f"{{ ?s a <{OWL.NamedIndividual}> }} }}"
+        ),
+    )
+
+
+def _produce_export(
+    store: Any, graph_uri: str, format: str, emit: Callable[[bytes], bool]
+) -> None:
+    """Emit the export in chunks of about ``EXPORT_CHUNK_BYTES``; stop as soon
+    as ``emit`` reports the reader gone, which closes the store's export."""
+    namespaces = _export_namespaces()
+    if format == "xml":
+        graph = Graph()
+        for prefix, uri in namespaces.items():
+            graph.bind(prefix, Namespace(uri))
+        with store.export(URIRef(graph_uri)) as triples:
+            for triple in triples:
+                graph.add(triple)
+        emit(graph.serialize(format="xml").encode("utf-8"))
+        return
+    buffer = bytearray()
+    if format == "turtle":
+        # N-Triples lines are valid Turtle; the prefixes serve editors.
+        for prefix, uri in namespaces.items():
+            buffer += f"@prefix {prefix}: <{uri}> .\n".encode()
+        buffer += b"\n"
+    with store.export(URIRef(graph_uri)) as triples:
+        for triple in triples:
+            buffer += nt_line(triple).encode("utf-8")
+            if len(buffer) >= EXPORT_CHUNK_BYTES:
+                if not emit(bytes(buffer)):
+                    return
+                buffer.clear()
+    if buffer:
+        emit(bytes(buffer))

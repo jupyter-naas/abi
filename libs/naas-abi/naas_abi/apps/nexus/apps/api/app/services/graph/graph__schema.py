@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -37,6 +38,17 @@ class GraphQueryTimeoutError(Exception):
 
 
 # ── Domain data ───────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class GraphExportData:
+    """A named graph's export: counts known up front, the document streamed.
+
+    ``chunks`` is single-use and reads the store as it is iterated."""
+
+    triple_count: int
+    named_individual_count: int
+    chunks: AsyncIterator[bytes]
 
 
 @dataclass(frozen=True)
