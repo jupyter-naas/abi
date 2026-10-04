@@ -7,6 +7,7 @@ from threading import Thread
 import naas_abi_core.services.triple_store.adapters.secondary.TripleStoreSecondaryAdapterNATSClient as _client_module
 import nats
 import pytest
+from naas_abi_core.engine.nats_rpc import NatsRPCError
 import rdflib
 from naas_abi_core import logger
 from naas_abi_core.proto.common.v1 import common_pb2
@@ -609,3 +610,28 @@ def test_leaving_a_stream_early_releases_its_session(streaming_client):
     # A second stream still gets a session: the first one was closed.
     with streaming_client.query_stream("ASK {}") as asked:
         assert asked.ask_answer is True
+
+
+@pytest.mark.integration
+def test_get_reads_the_store_over_the_export_stream(streaming_client):
+    # _StreamingPort.get() fails: the client must read the export stream.
+    graph = streaming_client.get()
+
+    assert len(graph) == 5_000
+    assert len({s for s, _, _ in graph}) == 1  # blank node identity kept
+
+
+@pytest.mark.integration
+def test_streams_without_a_transfer_host_fail_clearly(nats_url):
+    client = TripleStoreSecondaryAdapterNATSClient(
+        nats_url=nats_url, jwt_secret=JWT_SECRET, service_identity="api"
+    )
+    try:
+        with pytest.raises(NatsRPCError, match="UNAVAILABLE"):
+            with client.export() as triples:
+                list(triples)
+        with pytest.raises(NatsRPCError, match="UNAVAILABLE"):
+            with client.query_stream("ASK {}"):
+                pass
+    finally:
+        client.close()

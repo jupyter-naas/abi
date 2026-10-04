@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -8,7 +7,7 @@ from typing import Any, cast
 
 from naas_abi_proto.triple_store.v1 import triple_store_pb2 as pb
 
-from naas_abi_sdk.services._streams import each, open_stream
+from naas_abi_sdk.services._streams import open_stream
 from naas_abi_sdk.services.errors import domain_error
 from naas_abi_sdk.transport import RPCError
 
@@ -34,15 +33,6 @@ class QueryStream:
     ask_answer: bool | None = None
     rows: AsyncIterator[dict] = field(default_factory=_nothing)
     triples: AsyncIterator[tuple] = field(default_factory=_nothing)
-
-
-_IRI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:[^\s<>\"{}|^`\\]*")
-
-
-def _graph_export_query(graph_name) -> str:
-    if not _IRI.fullmatch(str(graph_name)):
-        raise ValueError(f"Not an absolute IRI: {str(graph_name)!r}")
-    return f"CONSTRUCT {{ ?s ?p ?o }} WHERE {{ GRAPH <{graph_name}> {{ ?s ?p ?o }} }}"
 
 
 class _Sink:
@@ -105,7 +95,12 @@ class TripleStoreService:
         )
 
     async def get(self):
-        return _graph((await self._call("get")).triples_nt)
+        """The whole store, read over the export stream: no RPC size cap."""
+        graph = _rdf().Graph()
+        async with self.export() as triples:
+            async for triple in triples:
+                graph.add(triple)
+        return graph
 
     async def get_subject_graph(self, subject: str, graph_name: str = "*"):
         return _graph(
@@ -148,9 +143,6 @@ class TripleStoreService:
     async def query_stream(self, query: str) -> AsyncIterator[QueryStream]:
         metadata = pb.QueryRequest(query=query).SerializeToString()
         async with self._frames("query", metadata) as frames:
-            if frames is None:  # an engine without the transfer endpoint
-                yield self._stream_of(await self.query(query))
-                return
             header = pb.QueryResult.FromString(await anext(frames))
             result = QueryStream(header.result_type)
             if header.result_type == "ASK":
@@ -166,17 +158,18 @@ class TripleStoreService:
     async def export(self, graph_name=None) -> AsyncIterator[AsyncIterator[tuple]]:
         metadata = str(graph_name).encode() if graph_name is not None else b""
         async with self._frames("export", metadata) as frames:
-            if frames is None:  # an engine without the transfer endpoint
-                if graph_name is None:
-                    yield each(list(await self.get()))
-                    return
-                async with self.query_stream(_graph_export_query(graph_name)) as result:
-                    yield result.triples
-                return
             yield self._triples(frames)
 
-    def _frames(self, operation: str, metadata: bytes):
-        return open_stream(self._client, TRANSFER_PREFIX, operation, metadata)
+    @asynccontextmanager
+    async def _frames(
+        self, operation: str, metadata: bytes
+    ) -> AsyncIterator[AsyncIterator[bytes]]:
+        async with open_stream(
+            self._client, TRANSFER_PREFIX, operation, metadata
+        ) as frames:
+            if frames is None:
+                raise RPCError("UNAVAILABLE", "No triple store engine hosts streams")
+            yield frames
 
     @staticmethod
     async def _rows(frames: AsyncIterator[bytes]) -> AsyncIterator[dict]:
@@ -193,22 +186,6 @@ class TripleStoreService:
         async for frame in frames:
             for triple in _decode_triples(frame, bnodes):
                 yield triple
-
-    def _stream_of(self, result) -> QueryStream:
-        if result.type == "ASK":
-            return QueryStream("ASK", ask_answer=bool(result.askAnswer))
-        if result.type in ("CONSTRUCT", "DESCRIBE"):
-            return QueryStream(result.type, triples=each(list(result.graph)))
-        return QueryStream(
-            "SELECT",
-            vars=[str(v) for v in result.vars or ()],
-            rows=each(
-                [
-                    {str(k): v for k, v in row.items() if v is not None}
-                    for row in result.bindings
-                ]
-            ),
-        )
 
     async def create_graph(self, graph_name) -> None:
         await self._call("create_graph", graph_name=str(graph_name))

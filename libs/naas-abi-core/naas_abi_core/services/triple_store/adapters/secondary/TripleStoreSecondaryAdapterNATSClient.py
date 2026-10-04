@@ -31,11 +31,11 @@ whatever ``CallError.code`` comes back.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import AbstractContextManager, contextmanager
+from contextlib import contextmanager
 
 import rdflib
 from google.protobuf.message import Message
-from naas_abi_core.engine.nats_rpc import NatsRPCClient
+from naas_abi_core.engine.nats_rpc import NatsRPCClient, NatsRPCError
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
 from naas_abi_core.services.triple_store.adapters.triple_store_nats_contract import (
@@ -230,13 +230,13 @@ class TripleStoreSecondaryAdapterNATSClient(NatsRPCClient, ITripleStorePort):
             _raise_for_error(response.error, self._detail_or_none(response))
 
     def get(self) -> Graph:
-        request = triple_store_pb2.GetRequest(context=self._context())
-        response = self._call(
-            f"{SUBJECT_PREFIX}.get", request, triple_store_pb2.GetResponse
-        )
-        if response.HasField("error"):
-            _raise_for_error(response.error, self._detail_or_none(response))
-        return _nt_to_graph(response.triples_nt)
+        """The whole store, read over the export stream: no RPC size cap and no
+        serialized copy next to the graph."""
+        graph = Graph()
+        with self.export() as triples:
+            for triple in triples:
+                graph.add(triple)
+        return graph
 
     def handle_view_event(
         self,
@@ -277,9 +277,6 @@ class TripleStoreSecondaryAdapterNATSClient(NatsRPCClient, ITripleStorePort):
     def query_stream(self, query: str) -> Iterator[QueryStream]:
         metadata = triple_store_pb2.QueryRequest(query=query).SerializeToString()
         with self._stream("query", metadata) as frames:
-            if frames is None:  # an engine without the transfer endpoint
-                yield QueryStream.from_result(self.query(query))
-                return
             header = next(frames, None)
             if header is None:
                 raise RuntimeError("triple_store stream ended without its header")
@@ -299,24 +296,24 @@ class TripleStoreSecondaryAdapterNATSClient(NatsRPCClient, ITripleStorePort):
     def export(self, graph_name: URIRef | None = None) -> Iterator[Iterator[Triple]]:
         metadata = str(graph_name).encode("utf-8") if graph_name is not None else b""
         with self._stream("export", metadata) as frames:
-            if frames is None:
-                with super().export(graph_name) as triples:
-                    yield triples
-                return
             bnodes: dict = {}
             yield (
                 triple for frame in frames for triple in decode_triples(frame, bnodes)
             )
 
-    def _stream(
-        self, operation: str, metadata: bytes
-    ) -> AbstractContextManager[Iterator[bytes] | None]:
-        return self._transfer_stream(
+    @contextmanager
+    def _stream(self, operation: str, metadata: bytes) -> Iterator[Iterator[bytes]]:
+        with self._transfer_stream(
             TRANSFER_PREFIX,
             operation,
             metadata,
             lambda error: _raise_for_error(error, None),
-        )
+        ) as frames:
+            if frames is None:
+                raise NatsRPCError(
+                    "UNAVAILABLE", "No triple store engine hosts streams"
+                )
+            yield frames
 
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
         request = triple_store_pb2.QueryViewRequest(

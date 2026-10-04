@@ -232,15 +232,17 @@ def test_cache_reads_hot_then_cold_writes_cold_and_deletes_all_tiers():
 
 def test_rdf_graph_and_query_values():
     rdf = pytest.importorskip("rdflib")
-    from naas_abi_proto.triple_store.v1 import triple_store_pb2 as pb
 
     from naas_abi_sdk.services.triple_store import TripleStoreService
 
     client = AsyncMock()
-    client.get.return_value = pb.GetResponse(triples_nt=b'<urn:s> <urn:p> "hello" .\n')
+    # get() reads the whole store over the export stream.
+    client._transport = StreamTransport([b'<urn:s> <urn:p> "hello" .\n'])
     service = TripleStoreService(client)
     graph = asyncio.run(service.get())
     assert list(graph.objects()) == [rdf.Literal("hello")]
+    assert client._transport.opened == [("export", b"")]
+    client.get.assert_not_awaited()
     asyncio.run(service.insert(graph, rdf.URIRef("urn:graph")))
     request = client.insert.call_args.args[0]
     assert request.graph_name == "urn:graph"
@@ -350,32 +352,30 @@ def test_export_reads_n_triples_frames_with_shared_blank_nodes():
     assert transport.opened == [("export", b"urn:graph")]
 
 
-def test_query_stream_falls_back_to_query_on_an_engine_without_streams():
+def test_streams_fail_clearly_on_an_engine_without_them():
     pytest.importorskip("rdflib")
-    from naas_abi_proto.triple_store.v1 import triple_store_pb2 as pb
-
+    from naas_abi_sdk.services import FACTORIES
     from naas_abi_sdk.services.triple_store import TripleStoreService
 
-    client = AsyncMock()
-    client._transport = StreamTransport([], no_responders=True)
-    client.query.return_value = pb.QueryResponse(
-        success=pb.QueryResult(result_type="ASK", ask_answer=True)
-    )
-    service = TripleStoreService(client)
+    transport = StreamTransport([], no_responders=True)
+    triples = TripleStoreService(SimpleNamespace(_transport=transport))
+    datasets = FACTORIES["dataset"](SimpleNamespace(_transport=transport))
 
-    async def scenario():
-        async with service.query_stream("ASK {}") as result:
-            return result.ask_answer
+    async def query():
+        async with triples.query_stream("ASK {}"):
+            pass
 
-    assert asyncio.run(scenario()) is True
+    async def export():
+        async with triples.export():
+            pass
 
+    async def rows():
+        async with datasets.query_stream("SELECT 1"):
+            pass
 
-@pytest.mark.parametrize("graph_name", ["http://x/a b", "http://x/>", "relative"])
-def test_export_fallback_refuses_a_graph_name_that_is_not_an_iri(graph_name):
-    from naas_abi_sdk.services.triple_store import _graph_export_query
-
-    with pytest.raises(ValueError):
-        _graph_export_query(graph_name)
+    for scenario in (query, export, rows, triples.get):
+        with pytest.raises(RPCError, match="UNAVAILABLE"):
+            asyncio.run(scenario())
 
 
 def test_dataset_query_stream_reads_rows_frame_by_frame():

@@ -12,7 +12,7 @@ from naas_abi_proto.dataset.v1 import dataset_pb2 as pb
 
 from naas_abi_sdk.services._codec import decode, message
 from naas_abi_sdk.services._dataset import DatasetService as _GeneratedDatasetService
-from naas_abi_sdk.services._streams import each, open_stream
+from naas_abi_sdk.services._streams import open_stream
 from naas_abi_sdk.services.errors import domain_error
 from naas_abi_sdk.services.models import DatasetInfo
 from naas_abi_sdk.transport import RPCError
@@ -80,12 +80,8 @@ class DatasetService(_GeneratedDatasetService):
         async with open_stream(
             self._client, TRANSFER_PREFIX, "query", request.SerializeToString()
         ) as frames:
-            if frames is None:  # an engine without the transfer endpoint
-                result = await self.query(
-                    sql, namespace=namespace, snapshot_id=snapshot_id
-                )
-                yield RowStream(list(result.columns), each(list(result.rows)))
-                return
+            if frames is None:
+                raise RPCError("UNAVAILABLE", "No engine hosts dataset streams")
             header = pb.QueryResult.FromString(await anext(frames))
             yield RowStream(list(header.columns), _rows(frames))
 
