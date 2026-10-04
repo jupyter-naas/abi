@@ -1,0 +1,7 @@
+{
+  "files": {
+    "modules/OrganizationOntology.ttl": "43ccff05541bed9a4ce5ea7952a404dad0e86a6d30d0bd8f9c32e01db328e461",
+    "processes/OrganizationAllianceProcess.ttl": "985e89650c3d419f187463db0ad8f9b8a8ab2a08960716ad7bf2dec4eff5db57",
+    "processes/OrganizationRestructuringProcess.ttl": "d2101e881652bfc0c8e4a900069dbed00124f058fe024e826778ce5b6636b1f8"
+  }
+}

@@ -241,3 +241,26 @@ def test_module_codegen_retries_failed_file(tmp_path):
     calls: list[str] = []
     onto2py_module(root, generate=_fake_generate(calls))
     assert len(calls) == 3
+
+
+def test_consolidates_into_the_only_module_ontology_when_names_differ(tmp_path):
+    # Folder "demos", ontology "DemoOntology.ttl" (organizations / OrganizationOntology).
+    root = _module(tmp_path)
+    root = root.rename(tmp_path / "demos")
+    (root / "ontologies" / "modules" / "NotAnOntology.ttl").write_text(
+        PREFIXES + 'demo:Loose rdfs:label "loose" .\n'
+    )
+    target = consolidate_processes(root)
+
+    assert target.name == "DemoOntology.ttl"
+    assert not (root / "ontologies" / "modules" / "DemosOntology.ttl").exists()
+    assert REGION_START in target.read_text()
+
+
+def test_several_module_ontologies_fall_back_to_the_derived_name(tmp_path):
+    root = _module(tmp_path)
+    (root / "ontologies" / "modules" / "Other.ttl").write_text(
+        PREFIXES + "demo:Other a owl:Ontology .\n"
+    )
+    root = root.rename(tmp_path / "demos")
+    assert consolidate_processes(root).name == "DemosOntology.ttl"

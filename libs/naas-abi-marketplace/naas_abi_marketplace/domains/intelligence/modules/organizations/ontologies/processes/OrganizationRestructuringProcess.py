@@ -1,5 +1,7 @@
+# onto2py-source-sha256: 4a8c6bcc1b44ab6892d7236f0cba868cf8e434dbf2b23d2cdf693e7398782bf9
 from __future__ import annotations
 
+import contextlib
 import datetime
 import os
 import uuid
@@ -61,17 +63,13 @@ class RDFEntity(BaseModel):
         """Extract a SPARQL binding value from a ResultRow-like object."""
         if hasattr(row, key):
             return getattr(row, key)
-        try:
+        with contextlib.suppress(LookupError, TypeError):
             return row[key]  # type: ignore[index]
-        except Exception:
-            pass
 
         labels = getattr(row, "labels", None)
         if labels and key in labels:
-            try:
+            with contextlib.suppress(LookupError, TypeError):
                 return row[key]  # type: ignore[index]
-            except Exception:
-                pass
 
         if isinstance(row, (list, tuple)):
             idx = 0 if key == "p" else 1
@@ -328,7 +326,7 @@ class ActOfOrganizationalMerger(RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
@@ -372,7 +370,7 @@ class ActOfOrganizationalAcquisition(RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
@@ -421,7 +419,7 @@ class ActOfSubsidiaryEstablishment(RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
@@ -450,7 +448,7 @@ class OrganizationMerger(RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
@@ -476,7 +474,7 @@ class OrganizationAcquisition(RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),

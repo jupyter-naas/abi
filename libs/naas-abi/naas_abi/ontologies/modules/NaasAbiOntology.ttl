@@ -8,12 +8,16 @@
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix dc: <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
 
 <http://ontology.naas.ai/abi/NaasAbiOntology> a owl:Ontology ;
   abi:pythonPackage "naas_abi" ;
   abi:ontologyResource "ontologies/modules/NaasAbiOntology.ttl" ;
   abi:pythonResource "ontologies/modules/NaasAbiOntology.py" ;
   dc:title "Naas Abi Ontology"@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
+  dc11:date "2026-10-04"^^xsd:date ;
   rdfs:comment "Generated from ontologies/processes/*.ttl by onto2py consolidation."@en .
 
 # >>> onto2py:consolidated-processes >>>

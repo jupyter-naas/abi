@@ -1,3 +1,4 @@
+# onto2py-source-sha256: 7b5df8690416d8a90dadaa90a837a1f74956ed97c0295c6e96b360e5e640c741
 from __future__ import annotations
 
 import contextlib
@@ -27,9 +28,6 @@ from naas_abi.ontologies.modules.ABIOntology import (
     Process,
     Quality,
     Role,
-)
-from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfEmploymentProcess import (
-    ActOfEmployment,
 )
 from pydantic import BaseModel, Field, ValidationError
 from rdflib import Graph, Literal, Namespace, URIRef
@@ -383,6 +381,47 @@ class EmployeeRole(RDFEntity):
     ] = None
 
 
+class ActOfEmployment(RDFEntity):
+    """
+    Everything the act of working states (organization, client, site, temporal region, occupation role, mission, skills, profile document) is inherited and stays in the people graph. The act of employment adds the employer's records: the employee role and the contract.
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/ActOfEmployment"
+    _name: ClassVar[str] = "Act of Employment"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "has_contract": "http://ontology.naas.ai/personnel/hasContract",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "realizes": "http://ontology.naas.ai/abi/realizes",
+    }
+    _object_properties: ClassVar[set[str]] = {"has_contract", "realizes"}
+
+    # Data properties
+    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    created: Annotated[
+        Optional[datetime.datetime],
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now(datetime.timezone.utc)
+    creator: Annotated[
+        Optional[Any],
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    has_contract: Optional[
+        Annotated[
+            List[Union[EmploymentContract, URIRef, str]],
+            Field(
+                description="Relates an act of employment to the employment contract it concretizes."
+            ),
+        ]
+    ] = None
+    realizes: Optional[Annotated[List[Union[EmployeeRole, URIRef, str]], Field()]] = (
+        None
+    )
+
+
 class EmploymentRecord(GenericallyDependentContinuant, RDFEntity):
     """
     Generically dependent on the person: the same record can be copied between systems without ceasing to be the record of that person. Concretized by the Act of Working that the relationship consists in.
@@ -588,6 +627,7 @@ class EmploymentContract(GenericallyDependentContinuant, RDFEntity):
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/EmploymentContract"
     _name: ClassVar[str] = "Employment Contract"
     _property_uris: ClassVar[dict] = {
+        "contract_type": "http://ontology.naas.ai/personnel/contract_type",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "genericallyDependsOn": "http://ontology.naas.ai/abi/genericallyDependsOn",
@@ -595,6 +635,7 @@ class EmploymentContract(GenericallyDependentContinuant, RDFEntity):
         "isConcretizedBy": "http://ontology.naas.ai/abi/isConcretizedBy",
         "is_about_job_description": "http://ontology.naas.ai/personnel/isAboutJobDescription",
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_contract_of": "http://ontology.naas.ai/personnel/isContractOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {
@@ -603,9 +644,18 @@ class EmploymentContract(GenericallyDependentContinuant, RDFEntity):
         "isConcretizedBy",
         "is_about_job_description",
         "is_concretized_by",
+        "is_contract_of",
     }
 
     # Data properties
+    contract_type: Optional[
+        Annotated[
+            str,
+            Field(
+                description="Engagement type of an employment contract as the employer records it, e.g. 'Permanent', 'Fixed-term', 'Freelance'. The published counterpart is people:employment_type, stated on the act of working."
+            ),
+        ]
+    ] = None
     label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
     created: Optional[
         Annotated[
@@ -647,6 +697,14 @@ class EmploymentContract(GenericallyDependentContinuant, RDFEntity):
         Annotated[
             List[Union[Disposition, Process, Quality, Role, URIRef, str]],
             Field(description="c is concretized by b =Def b concretizes c"),
+        ]
+    ] = None
+    is_contract_of: Optional[
+        Annotated[
+            List[Union[ActOfEmployment, URIRef, str]],
+            Field(
+                description="Relates an employment contract to the act of employment that concretizes it."
+            ),
         ]
     ] = None
 
@@ -1036,6 +1094,7 @@ class JobDescription(DocumentContentEntity, RDFEntity):
 
 # Rebuild models to resolve forward references
 EmployeeRole.model_rebuild()
+ActOfEmployment.model_rebuild()
 EmploymentRecord.model_rebuild()
 JobPosition.model_rebuild()
 EmploymentContract.model_rebuild()

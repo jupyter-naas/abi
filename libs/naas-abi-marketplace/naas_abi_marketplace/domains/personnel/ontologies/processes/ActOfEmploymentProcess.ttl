@@ -30,7 +30,8 @@ personnel:ActOfEmploymentProcess a owl:Ontology ;
   # contract in the personnel graph.
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
   owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
-  owl:imports <http://ontology.naas.ai/people/ActOfWorkingProcess> ;
+  # People processes are consolidated into PeopleOntology: import it, never a slice.
+  owl:imports <http://ontology.naas.ai/people/PeopleOntology> ;
   rdfs:seeAlso <http://ontology.naas.ai/personnel/PersonnelOntology> ;
   rdfs:member "bpl-processes/personnel" ;
   abi:pythonPackage "naas_abi_marketplace.domains.personnel" ;

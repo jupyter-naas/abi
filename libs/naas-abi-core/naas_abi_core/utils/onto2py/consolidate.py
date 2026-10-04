@@ -209,6 +209,30 @@ def module_ontology_name(module_root: Path) -> str:
     return "".join(p[:1].upper() + p[1:] for p in parts if p) + "Ontology"
 
 
+_ONTOLOGY_DECL_RE = re.compile(r"\ba\s+owl:Ontology\b|owl#Ontology>")
+
+
+def module_ontology_path(module_root: Path) -> Path:
+    """The module ontology a module's processes consolidate into.
+
+    ``modules/<Name>Ontology.ttl`` (from the folder name) when it exists.
+    Otherwise the module's only ``modules/*.ttl`` declaring ``owl:Ontology``,
+    so a folder whose name differs from its ontology's (``organizations`` and
+    ``OrganizationOntology.ttl``) merges into it rather than starting a second
+    one. Otherwise the derived name, which is then created.
+    """
+    modules = module_root / "ontologies" / "modules"
+    derived = modules / f"{module_ontology_name(module_root)}.ttl"
+    if derived.exists() or not modules.is_dir():
+        return derived
+    candidates = [
+        path
+        for path in sorted(modules.glob("*.ttl"))
+        if _ONTOLOGY_DECL_RE.search(path.read_text(encoding="utf-8"))
+    ]
+    return candidates[0] if len(candidates) == 1 else derived
+
+
 def _python_package(module_root: Path) -> str:
     """Dotted package of ``module_root``, from the outermost ``__init__.py``."""
     parts = [module_root.name]
@@ -261,8 +285,8 @@ def build_consolidated(
     if not process_files:
         return None
 
-    name = module_ontology_name(module_root)
-    target = module_root / "ontologies" / "modules" / f"{name}.ttl"
+    target = module_ontology_path(module_root)
+    name = target.stem
     slices = [parse_ttl(p) for p in process_files]
     slice_iris = [s.ontology_iri for s in slices if s.ontology_iri]
 

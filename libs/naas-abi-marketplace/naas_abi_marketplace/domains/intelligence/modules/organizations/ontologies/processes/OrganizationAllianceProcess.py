@@ -1,5 +1,7 @@
+# onto2py-source-sha256: 7c658af752dcdf7f65289a4e7e38811dc60a5284bca4aad8739f5fbee70220c0
 from __future__ import annotations
 
+import contextlib
 import datetime
 import os
 import uuid
@@ -61,17 +63,13 @@ class RDFEntity(BaseModel):
         """Extract a SPARQL binding value from a ResultRow-like object."""
         if hasattr(row, key):
             return getattr(row, key)
-        try:
+        with contextlib.suppress(LookupError, TypeError):
             return row[key]  # type: ignore[index]
-        except Exception:
-            pass
 
         labels = getattr(row, "labels", None)
         if labels and key in labels:
-            try:
+            with contextlib.suppress(LookupError, TypeError):
                 return row[key]  # type: ignore[index]
-            except Exception:
-                pass
 
         if isinstance(row, (list, tuple)):
             idx = 0 if key == "p" else 1
@@ -328,7 +326,7 @@ class ActOfPartnership(RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
@@ -366,7 +364,7 @@ class ActOfJointVenture(RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
@@ -404,7 +402,7 @@ class ActOfMarketingAlliance(RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
@@ -442,7 +440,7 @@ class ActOfResearchCollaboration(RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
@@ -480,7 +478,7 @@ class ActOfTechnologyLicensing(RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
@@ -518,7 +516,7 @@ class ActOfDistributionAgreement(RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
@@ -556,7 +554,7 @@ class StrategicAlliance(RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
@@ -594,7 +592,7 @@ class Partnership(StrategicAlliance, RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
@@ -632,7 +630,7 @@ class JointVenture(StrategicAlliance, RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
@@ -670,7 +668,7 @@ class MarketingAlliance(StrategicAlliance, RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
@@ -708,7 +706,7 @@ class ResearchCollaboration(StrategicAlliance, RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
@@ -746,7 +744,7 @@ class TechnologyLicensing(StrategicAlliance, RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
@@ -784,7 +782,7 @@ class DistributionAgreement(StrategicAlliance, RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
