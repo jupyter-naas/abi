@@ -12,13 +12,16 @@ results). A backend value with no JSON form takes a portable one:
 
 Writes accept the same values, plus ``date``/``datetime`` objects for date
 and timestamp columns; NaN and infinities are refused, since they have no
-JSON form. Every adapter holds to this (tests/dataset__secondary_adapter__generic_test.py).
+JSON form. Timestamps are stored in UTC: a value with an offset (a
+``datetime`` or an ISO-8601 string, ``Z`` included) is converted, a naive one
+is taken as UTC (``timestamp_value``); they read back without an offset. Every adapter holds to this (tests/dataset__secondary_adapter__generic_test.py).
 """
 
 from __future__ import annotations
 
 import base64
 import math
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -45,3 +48,23 @@ def row_value(value: Any) -> Any:
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return str(value)
+
+
+def timestamp_value(value: Any) -> Any:
+    """A timestamp column's value as stored: UTC, without an offset.
+
+    A ``datetime`` or ISO-8601 string with an offset is converted; a naive
+    value is taken as UTC and kept; anything else is left for the backend to
+    cast or refuse.
+    """
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return value
+        if parsed.tzinfo is None:
+            return value
+        value = parsed
+    if isinstance(value, datetime) and value.tzinfo is not None:
+        return value.astimezone(UTC).replace(tzinfo=None)
+    return value

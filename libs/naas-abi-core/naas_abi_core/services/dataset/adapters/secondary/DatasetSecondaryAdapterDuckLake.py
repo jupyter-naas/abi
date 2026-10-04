@@ -17,7 +17,11 @@ from itertools import islice
 from pathlib import Path
 from typing import Any, TypeVar
 
-from naas_abi_core.services.dataset.DatasetValues import is_finite, row_value
+from naas_abi_core.services.dataset.DatasetValues import (
+    is_finite,
+    row_value,
+    timestamp_value,
+)
 from naas_abi_core.services.dataset.DatasetPort import (
     DatasetAlreadyExistsError,
     DatasetInfo,
@@ -880,6 +884,8 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
                 )
             values = dict(row)
             for column in spec.columns:
+                if column.type == "timestamp":
+                    values[column.name] = timestamp_value(values[column.name])
                 if not is_finite(values[column.name]):
                     raise DatasetSchemaError(
                         f"Row {index} column {column.name!r} is not a finite number"

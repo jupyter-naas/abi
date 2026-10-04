@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from naas_abi_core.services.dataset.DatasetPort import (
@@ -655,3 +655,35 @@ class DatasetSecondaryAdapterContract(ABC):
             )
 
         assert self._totals(adapter) == (1, 0)
+
+    @pytest.mark.parametrize("streamed", [False, True])
+    def test_timestamps_with_an_offset_are_stored_in_utc(
+        self, adapter: IDatasetPort, streamed: bool
+    ):
+        adapter.create(
+            DatasetSpec(
+                name="visits",
+                namespace="acme",
+                columns=(
+                    ColumnSpec(name="n", type="integer"),
+                    ColumnSpec(name="seen_at", type="timestamp"),
+                ),
+            )
+        )
+        paris = timezone(timedelta(hours=2))
+        rows = [
+            {"n": 1, "seen_at": datetime(2026, 10, 4, 12, 30, tzinfo=paris)},
+            {"n": 2, "seen_at": "2026-10-04T12:30:00+02:00"},
+            {"n": 3, "seen_at": "2026-10-04T10:30:00Z"},
+            {"n": 4, "seen_at": datetime(2026, 10, 4, 10, 30)},  # naive: UTC
+        ]
+        if streamed:
+            adapter.write_stream("visits", iter(rows), namespace="acme")
+        else:
+            adapter.write("visits", rows, namespace="acme")
+
+        got = adapter.query(
+            "SELECT n, seen_at FROM visits ORDER BY n", namespace="acme"
+        )
+
+        assert [row["seen_at"] for row in got.rows] == ["2026-10-04T10:30:00"] * 4
