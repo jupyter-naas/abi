@@ -48,8 +48,8 @@ from naas_abi_core.services.dataset.adapters.dataset_nats_contract import (
     TRANSFER_PREFIX,
 )
 from naas_abi_core.services.dataset.adapters.dataset_row_codec import (
+    decode_rows,
     query_result_to_pb,
-    write_rows_from_pb,
 )
 from naas_abi_core.services.dataset.adapters.dataset_stream_codec import (
     encode_header,
@@ -560,7 +560,7 @@ class DatasetPrimaryAdapterNATS:
         mode = _PB_TO_WRITE_MODE.get(req.mode, "append")
         info = self._adapter.write(
             req.name,
-            write_rows_from_pb(req),
+            decode_rows(req.rows),
             namespace=req.namespace,
             mode=mode,
             snapshot_id=snapshot_id,
@@ -580,9 +580,7 @@ class DatasetPrimaryAdapterNATS:
         result = self._adapter.query(
             req.sql, namespace=req.namespace, snapshot_id=snapshot_id
         )
-        return dataset_pb2.QueryResponse(
-            query_result=query_result_to_pb(result, json_rows=req.accept_json_rows)
-        )
+        return dataset_pb2.QueryResponse(query_result=query_result_to_pb(result))
 
     async def _handle_flush(self, request: Request) -> None:
         await self._handle(
@@ -594,9 +592,7 @@ class DatasetPrimaryAdapterNATS:
 
     def _call_flush(self, req: dataset_pb2.FlushRequest) -> dataset_pb2.FlushResponse:
         result = self._adapter.flush(req.name, namespace=req.namespace)
-        return dataset_pb2.FlushResponse(
-            query_result=query_result_to_pb(result, json_rows=req.accept_json_rows)
-        )
+        return dataset_pb2.FlushResponse(query_result=query_result_to_pb(result))
 
     async def _handle_inlined_row_count(self, request: Request) -> None:
         await self._handle(
@@ -624,9 +620,7 @@ class DatasetPrimaryAdapterNATS:
         self, req: dataset_pb2.CompactRequest
     ) -> dataset_pb2.CompactResponse:
         result = self._adapter.compact(req.name, namespace=req.namespace)
-        return dataset_pb2.CompactResponse(
-            query_result=query_result_to_pb(result, json_rows=req.accept_json_rows)
-        )
+        return dataset_pb2.CompactResponse(query_result=query_result_to_pb(result))
 
     async def _handle_list_snapshots(self, request: Request) -> None:
         await self._handle(

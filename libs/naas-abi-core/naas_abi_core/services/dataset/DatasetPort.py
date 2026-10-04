@@ -173,6 +173,8 @@ class DatasetSnapshotInfo(BaseModel):
 
 
 class QueryResult(BaseModel):
+    """``rows`` hold the same portable values on every adapter (DatasetValues.py)."""
+
     columns: list[str]
     rows: list[dict[str, Any]] = Field(default_factory=list)
 
@@ -181,7 +183,8 @@ class QueryResult(BaseModel):
 class RowStream:
     """A query result read incrementally (docs/adr/20261003_nats-streamed-results.md).
 
-    ``rows`` is a single-use iterator, valid inside the ``query_stream`` block.
+    ``rows`` is a single-use iterator, valid inside the ``query_stream`` block,
+    holding the values of DatasetValues.py.
     """
 
     columns: list[str]

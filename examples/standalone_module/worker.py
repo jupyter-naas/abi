@@ -13,6 +13,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+from naas_abi_proto.dataset.rows import decode_row, encode_row
 from naas_abi_sdk import RPCError
 from naas_abi_sdk.catalog import OPERATIONS
 from naas_abi_sdk.module import (
@@ -233,15 +234,13 @@ class ABIModule(BaseModule):
             i.name == "demo"
             for i in (await self.call("dataset", "list")).datasets.items
         )
-        await call("write", rows=[{"id": 1, "value": "created"}], mode=1)
-        await call("write", rows=[{"id": 1, "value": "updated"}], mode=3)
+        await call("write", rows=[encode_row({"id": 1, "value": "created"})], mode=1)
+        await call("write", rows=[encode_row({"id": 1, "value": "updated"})], mode=3)
         result = await self.call(
             "dataset", "query", sql="SELECT * FROM demo", namespace="default"
         )
-        assert (
-            len(result.query_result.rows) == 1
-            and result.query_result.rows[0]["value"] == "updated"
-        )
+        rows = [decode_row(row) for row in result.query_result.rows]
+        assert len(rows) == 1 and rows[0]["value"] == "updated"
         assert (await call("inlined_row_count")).count >= 0
         await call("flush")
         await call("compact")

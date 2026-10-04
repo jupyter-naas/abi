@@ -62,8 +62,6 @@ for domain, (_, names) in DOMAINS.items():
         public = "ActivityLogQuery" if name == "ActivityLogQueryFilter" else name
         models += f"\n\n@dataclass\nclass {public}:\n"
         for f in desc.fields:
-            if name == "QueryResult" and f.name == "json_rows":
-                continue  # wire encoding of rows; the codec decodes it into rows
             if f.message_type:
                 full = f.message_type.full_name
                 typ = {
@@ -73,6 +71,9 @@ for domain, (_, names) in DOMAINS.items():
                 }.get(full, f.message_type.name)
             elif f.enum_type:
                 typ = "str"
+            elif name == "QueryResult" and f.name == "rows":
+                # JSON objects on the wire; the codec decodes them.
+                typ = "dict[str, Any]"
             else:
                 typ = {
                     1: "float",

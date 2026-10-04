@@ -9,8 +9,8 @@ from typing import Any
 
 from google.protobuf import json_format
 from google.protobuf.message import Message
+from naas_abi_proto.dataset.rows import decode_row, encode_row
 
-from naas_abi_sdk.services._dataset_rows import decode_rows, encode_row, struct_row
 from naas_abi_sdk.services.errors import domain_error
 from naas_abi_sdk.services.models import DTO_TYPES, QueryResult
 from naas_abi_sdk.transport import RPCError
@@ -77,7 +77,9 @@ def decode(value):
     if name == "abi.vector_store.v1.VectorData":
         return list(value.values)
     if name == "abi.dataset.v1.QueryResult":
-        return QueryResult(columns=list(value.columns), rows=decode_rows(value))
+        return QueryResult(
+            columns=list(value.columns), rows=[decode_row(row) for row in value.rows]
+        )
     data = {}
     for field in value.DESCRIPTOR.fields:
         if field.name == "error" or field.name.endswith("_detail"):
@@ -133,12 +135,8 @@ class ServiceProxy:
                 }
                 for f in values["files"]
             ]
-        if self.domain == "dataset" and operation in ("query", "flush", "compact"):
-            values["accept_json_rows"] = True
         if self.domain == "dataset" and operation == "write":
-            rows = values.pop("rows")
-            values["json_rows"] = [encode_row(row) for row in rows]
-            values["rows"] = [struct_row(row) for row in rows]
+            values["rows"] = [encode_row(row) for row in values["rows"]]
         if self.domain == "email":
             for key in ("to_emails", "cc_emails"):
                 if isinstance(values.get(key), str):

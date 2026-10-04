@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
+from naas_abi_core.services.dataset.DatasetValues import is_finite, row_value
 from naas_abi_core.services.dataset.DatasetPort import (
     DatasetAlreadyExistsError,
     DatasetInfo,
@@ -512,7 +513,10 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             columns = [str(column[0]) for column in result.description or []]
             return QueryResult(
                 columns=columns,
-                rows=[dict(zip(columns, row)) for row in result.fetchall()],
+                rows=[
+                    {column: row_value(value) for column, value in zip(columns, row)}
+                    for row in result.fetchall()
+                ],
             )
 
         result, _ = self._write_transaction(operation)
@@ -738,6 +742,10 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
                 )
             values = dict(row)
             for column in spec.columns:
+                if not is_finite(values[column.name]):
+                    raise DatasetSchemaError(
+                        f"Row {index} column {column.name!r} is not a finite number"
+                    )
                 if column.type == "json" and values[column.name] is not None:
                     values[column.name] = self._normalize_json(
                         values[column.name], column.name, index
@@ -890,10 +898,6 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
 
     @staticmethod
     def _cell(value: Any, is_json: bool) -> Any:
-        if value is None:
-            return None
         if is_json and isinstance(value, str):
             return json.loads(value)
-        if hasattr(value, "isoformat"):
-            return value.isoformat()
-        return value
+        return row_value(value)
