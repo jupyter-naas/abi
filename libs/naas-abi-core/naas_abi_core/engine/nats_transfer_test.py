@@ -401,3 +401,30 @@ def test_thread_frames_raise_the_producers_error_after_its_frames():
         return received
 
     assert asyncio.run(scenario()) == [b"first"]
+
+
+def test_a_failed_chunk_from_the_sessions_caller_fails_its_span(spans):
+    from opentelemetry.trace import SpanKind, StatusCode
+
+    async def handler(operation, metadata, source):
+        yield b"never"
+
+    async def scenario():
+        host = TransferHost(PREFIX, SECRET, handler, operations=("put",))
+        owner, stranger = _Caller(host, _headers()), _Caller(host, _headers("other"))
+        opened = await owner("open", pb.OpenRequest(operation="put"))
+        denied = await stranger("write", pb.WriteRequest(id=opened.id, data=b"x"))
+        conflict = await owner(
+            "write", pb.WriteRequest(id=opened.id, sequence=7, data=b"x")
+        )
+        await owner("close", pb.CloseRequest(id=opened.id))
+        await host.stop()
+        return denied.error.code, conflict.error.code
+
+    assert asyncio.run(scenario()) == ("PERMISSION_DENIED", "CONFLICT")
+    (server,) = [s for s in spans.get_finished_spans() if s.kind is SpanKind.SERVER]
+    # The owner's bad chunk fails the session; a stranger's request does not.
+    assert server.status.status_code is StatusCode.ERROR
+    assert server.attributes["abi.error_code"] == "CONFLICT"
+    (event,) = server.events
+    assert event.attributes["exception.type"].endswith("TransferError")
