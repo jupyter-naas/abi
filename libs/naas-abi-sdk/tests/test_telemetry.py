@@ -265,3 +265,57 @@ def test_a_served_transfer_is_inert_without_opentelemetry(monkeypatch):
     served.fail(RuntimeError("x"), "INTERNAL")
     served.end("expired", cancelled=True)
     assert served.span is None
+
+
+SECRET = "sk-or-v1-0123456789abcdef0123456789abcdef"
+
+
+def _assert_scrubbed(span):
+    assert span.status.status_code is StatusCode.ERROR
+    assert SECRET not in (span.status.description or "")
+    (event,) = [e for e in span.events if e.name == "exception"]
+    assert SECRET not in event.attributes["exception.message"]
+    assert SECRET not in event.attributes["exception.stacktrace"]
+    assert "[REDACTED]" in event.attributes["exception.message"]
+    assert "[REDACTED]" in event.attributes["exception.stacktrace"]
+    return event
+
+
+@pytest.mark.parametrize(
+    "opened",
+    [
+        lambda: telemetry.client_span("abi.svc.kv.v1.get", {}),
+        lambda: telemetry.server_span("abi.svc.kv.v1.get", {}),
+        lambda: telemetry.internal_span("model chat m"),
+    ],
+)
+def test_failures_escaping_a_span_are_recorded_without_secrets(spans, opened):
+    with pytest.raises(PermissionError), opened():
+        raise PermissionError(f"401 Unauthorized: invalid key {SECRET}")
+
+    (span,) = spans.get_finished_spans()
+    event = _assert_scrubbed(span)
+    assert event.attributes["exception.type"] == "PermissionError"
+    assert span.status.description.startswith("PermissionError: 401 Unauthorized")
+
+
+def test_transfers_record_failures_without_secrets(spans):
+    with (
+        pytest.raises(RuntimeError),
+        telemetry.transfer_span("abi.svc.x.v1.transfer", "get"),
+    ):
+        raise RuntimeError(f"Authorization: Bearer {SECRET}")
+    served = telemetry.serve_transfer("abi.svc.x.v1.transfer", "get", {})
+    served.fail(RuntimeError(f"api_key={SECRET}"), "INTERNAL", f"failed {SECRET}")
+    served.end("closed")
+
+    for span in spans.get_finished_spans():
+        _assert_scrubbed(span)
+
+
+def test_error_codes_and_messages_are_scrubbed(spans):
+    with telemetry.server_span("abi.svc.kv.v1.get", {}):
+        telemetry.record_error("UNAUTHENTICATED", f"bad token {SECRET}")
+
+    (span,) = spans.get_finished_spans()
+    assert span.status.description == "UNAUTHENTICATED: bad token [REDACTED]"

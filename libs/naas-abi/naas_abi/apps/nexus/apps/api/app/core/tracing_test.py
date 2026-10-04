@@ -33,6 +33,10 @@ def _client():
     async def boom():
         raise RuntimeError("boom")
 
+    @app.get("/api/leak")
+    async def leak():
+        raise RuntimeError("upstream said: invalid key sk-or-v1-0123456789abcdef0123456789")
+
     @app.get("/health")
     async def health():
         return {"status": "healthy"}
@@ -70,3 +74,14 @@ def test_health_checks_are_not_traced(spans):
     _client().get("/health")
 
     assert spans.get_finished_spans() == ()
+
+
+def test_failures_are_recorded_without_secrets(spans):
+    _client().get("/api/leak")
+
+    (span,) = spans.get_finished_spans()
+    assert span.status.status_code is StatusCode.ERROR
+    (event,) = [e for e in span.events if e.name == "exception"]
+    for text in (event.attributes["exception.message"], event.attributes["exception.stacktrace"]):
+        assert "sk-or-v1-0123456789abcdef0123456789" not in text
+        assert "[REDACTED]" in text
