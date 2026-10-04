@@ -115,7 +115,7 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
           onClick={() => toggleNode(node.id)}
           className="shrink-0 rounded p-1 hover:bg-workspace-accent-10"><ChevronRight size={12} className={cn(open && 'rotate-90')} /></button>
           : <span className="w-5 shrink-0" />}
-        {node.term ? renderTerm(node.term, JSON.stringify(itemPath)) : <button type="button" data-ontology-tree-item={JSON.stringify(itemPath)} onClick={() => toggleNode(node.id)} className="flex min-w-0 flex-1 items-center px-2 py-1 text-xs leading-[18px] text-muted-foreground" title="Parent declared outside this selection"><OntologyTopicIcon subject={iconSubjects.get(node.id) || { name: node.name }} className="ontology-sidebar-topic-icon" /><span className="min-w-0 truncate">{node.name}</span><span className="ml-1 shrink-0 text-xs">(parent)</span></button>}
+        {node.term && !node.term.referenced ? renderTerm(node.term, JSON.stringify(itemPath)) : <button type="button" data-ontology-tree-item={JSON.stringify(itemPath)} onClick={() => toggleNode(node.id)} className="flex min-w-0 flex-1 items-center px-2 py-1 text-xs leading-[18px] text-muted-foreground" title={node.term ? `${node.name}\n${node.term.id}\nReferenced by the selection, declared in an import` : 'Parent declared outside this selection'}><OntologyTopicIcon subject={iconSubjects.get(node.id) || { name: node.name }} className="ontology-sidebar-topic-icon" /><span className="min-w-0 truncate">{node.name}</span><span className="ml-1 shrink-0 text-xs">{node.term ? '(referenced)' : '(parent)'}</span></button>}
       </div>
       {open && node.children.length > 0 && <ul>{node.children.map(child => renderNode(child, depth + 1, itemPath, indent))}</ul>}
     </li>;
@@ -155,7 +155,7 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
     <div className="flex flex-wrap gap-1" aria-label="Sidebar view">
       {(['alphabetical', 'hierarchy', ...(classesInScope ? ['bfo' as const] : []), ...(systemMode ? ['buckets' as const] : [])] as const).map(value => <button key={value} type="button" aria-pressed={layout === value} onClick={() => { setLayout(value); if (bucketsView !== (value === 'buckets')) setQuery(''); }}
         className={cn('rounded-md px-2 py-1 text-xs', layout === value ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-muted-foreground hover:bg-muted')}>
-        {value === 'alphabetical' ? 'A–Z' : value === 'hierarchy' ? 'Hierarchy' : value === 'bfo' ? '7 Buckets' : '7 buckets'}</button>)}
+        {value === 'alphabetical' ? 'A–Z' : value === 'hierarchy' ? 'Hierarchy' : value === 'bfo' ? 'BFO 7 Buckets' : '7 buckets'}</button>)}
     </div>
     {loading ? <p role="status" className="text-xs text-muted-foreground">Loading terms…</p>
       : error ? <div role="alert" className="text-xs text-destructive">{error} <button type="button" onClick={() => { if (workspaceId) void load(workspaceId, refresh, true); }} className="underline">Retry</button></div>

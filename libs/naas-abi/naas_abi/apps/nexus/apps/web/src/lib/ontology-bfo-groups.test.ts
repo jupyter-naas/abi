@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { groupClassesByBfoBucket } from './ontology-bfo-groups';
-import type { DictionaryTerm } from './ontology-dictionary-tree';
+import type { DictionaryNode, DictionaryTerm } from './ontology-dictionary-tree';
 
 const BFO = 'http://purl.obolibrary.org/obo/';
 const quality: DictionaryTerm = { id: `${BFO}BFO_0000019`, name: 'quality', type: 'entity' };
@@ -58,4 +58,41 @@ test('each bucket nests its classes under parents from the same bucket only', ()
     ['Organization', []],
     ['Person', []],
   ]);
+});
+
+test('classes nest under their nearest same-bucket ancestor reached through imports', () => {
+  const CCO = 'https://www.commoncoreontologies.org/';
+  const process: DictionaryTerm = { id: 'abi:Process', name: 'process', type: 'entity',
+    equivalents: [{ id: `${BFO}BFO_0000015`, name: 'process' }], bfoBucket: `${BFO}BFO_0000015`, bfoAncestors: [`${BFO}BFO_0000015`, `${BFO}BFO_0000003`] };
+  const study: DictionaryTerm = { id: 'people:ActOfStudying', name: 'Act of Studying', type: 'entity',
+    parents: [{ id: `${CCO}ont00000228`, name: 'Planned Act' }], bfoBucket: `${BFO}BFO_0000015`,
+    bfoAncestors: [`${CCO}ont00000228`, `${CCO}ont00000005`, `${BFO}BFO_0000015`, `${BFO}BFO_0000003`] };
+  const material: DictionaryTerm = { id: 'abi:MaterialEntity', name: 'material entity', type: 'entity',
+    equivalents: [{ id: `${BFO}BFO_0000040`, name: 'material entity' }], bfoBucket: `${BFO}BFO_0000040`, bfoAncestors: [`${BFO}BFO_0000040`, `${BFO}BFO_0000004`] };
+  // abi:Person and CCO Person are equivalent: neither may become the other's parent.
+  const pers: DictionaryTerm = { id: 'abi:Person', name: 'Person', type: 'entity', equivalents: [{ id: `${CCO}ont00001262`, name: 'Person' }],
+    bfoBucket: `${BFO}BFO_0000040`, bfoAncestors: [`${CCO}ont00001262`, `${CCO}ont00000562`, `${BFO}BFO_0000040`] };
+  const ccoPerson: DictionaryTerm = { id: `${CCO}ont00001262`, name: 'CCO Person', type: 'entity',
+    bfoBucket: `${BFO}BFO_0000040`, bfoAncestors: [`${CCO}ont00000562`, `${BFO}BFO_0000040`, 'abi:Person'] };
+  const all = [process, study, material, pers, ccoPerson];
+  const groups = groupClassesByBfoBucket(all, all);
+  const shape = (nodes: DictionaryNode[]): unknown => nodes.map(node => [node.name, shape(node.children)]);
+  const tree = (type: string) => shape(groups.find(group => group.bucket.type === type)!.tree);
+  assert.deepEqual(tree('Process'), [['process', [['Act of Studying', []]]]]);
+  assert.deepEqual(tree('Material Entity'), [['material entity', [['CCO Person', []], ['Person', []]]]]);
+});
+
+test('classes the selection only references are grouped, flagged referenced', () => {
+  const site: DictionaryTerm = { id: 'abi:Site', name: 'site', type: 'entity', equivalents: [{ id: `${BFO}BFO_0000029`, name: 'site' }], bfoBucket: `${BFO}BFO_0000029` };
+  const study: DictionaryTerm = { id: 'people:ActOfStudying', name: 'Act of Studying', type: 'entity', bfoBucket: `${BFO}BFO_0000015`,
+    relations: [
+      { property: { id: 'abi:occursIn', name: 'occurs in' }, kind: 'restriction', sources: [],
+        target: { id: 'cco:ont00000270', name: 'Educational Facility', bfoBucket: `${BFO}BFO_0000040`, bfoAncestors: [`${BFO}BFO_0000040`] } },
+      { property: { id: 'abi:occursIn', name: 'occurs in' }, kind: 'restriction', sources: [], target: { id: 'abi:Site', name: 'site' } },
+    ] };
+  const groups = groupClassesByBfoBucket([study], [study, site]);
+  const material = groups.find(group => group.bucket.type === 'Material Entity')!;
+  assert.deepEqual(material.terms.map(term => [term.name, term.referenced]), [['Educational Facility', true]]);
+  // Declared targets are not duplicated: they are listed when selected.
+  assert.deepEqual(groups.find(group => group.bucket.type === 'Site')!.terms, []);
 });

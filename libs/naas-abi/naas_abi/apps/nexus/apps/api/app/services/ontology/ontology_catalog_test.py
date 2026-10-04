@@ -96,6 +96,14 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(buckets["urn:ActOfWorking"], "http://purl.obolibrary.org/obo/BFO_0000015")
             self.assertEqual(buckets["urn:Human"], "http://purl.obolibrary.org/obo/BFO_0000040")
             self.assertIsNone(buckets["urn:Orphan"])
+            # Ancestors run through the same imports, nearest first: the
+            # bucket view nests classes under them.
+            ancestors = {item["id"]: item["bfoAncestors"] for item in data["items"] if item["type"] == "entity"}
+            self.assertEqual(ancestors["urn:ActOfWorking"][0], "https://www.commoncoreontologies.org/ont00000228")
+            self.assertIn("http://purl.obolibrary.org/obo/BFO_0000015", ancestors["urn:ActOfWorking"])
+            self.assertEqual(ancestors["urn:Human"][0], "https://www.commoncoreontologies.org/ont00001262")
+            self.assertIn("http://purl.obolibrary.org/obo/BFO_0000040", ancestors["urn:Human"])
+            self.assertEqual(ancestors["urn:Orphan"], [])  # unresolved: direct parents only
 
     async def test_referenced_classes_get_label_and_bucket_from_imports(self):
         # cco:ont00000468 (Office Building) is only declared in the bundled CCO
@@ -117,6 +125,7 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(office["id"], "https://www.commoncoreontologies.org/ont00000468")
             self.assertEqual(office["name"], "Office Building")
             self.assertEqual(office["bfoBucket"], "http://purl.obolibrary.org/obo/BFO_0000040")
+            self.assertIn("http://purl.obolibrary.org/obo/BFO_0000040", office["bfoAncestors"])
             self.assertEqual(desk["bfoBucket"], "http://purl.obolibrary.org/obo/BFO_0000040")
 
             # Known buckets are served from the cache, without walking the graph again.

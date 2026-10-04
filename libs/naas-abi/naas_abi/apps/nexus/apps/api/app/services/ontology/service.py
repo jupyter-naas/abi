@@ -419,6 +419,29 @@ def _bfo_bucket(graph: Graph, class_iri: str) -> str | None:
 _BFO_ENTITY_ROOT = f"{_BFO_NS}BFO_0000001"
 
 
+def _class_ancestors(graph: Graph, class_iri: str) -> list[str]:
+    """Every class above ``class_iri`` through subClassOf and equivalentClass, nearest first.
+
+    Equivalents count as ancestors, so abi:Person reaches BFO material entity
+    through CCO Person, and abi:MaterialEntity (equivalent to it) can be shown
+    as its parent even though no subClassOf links the two ABI classes.
+    """
+    start = URIRef(class_iri)
+    queue = [start]
+    seen: set[URIRef] = set()
+    ancestors: list[str] = []
+    while queue:
+        current = queue.pop(0)
+        if current in seen:
+            continue
+        seen.add(current)
+        if current != start:
+            ancestors.append(str(current))
+        for predicate in (RDFS.subClassOf, OWL.equivalentClass):
+            queue.extend(o for o in graph.objects(current, predicate) if isinstance(o, URIRef))
+    return ancestors
+
+
 def _bfo_bucket_cache_key(class_iri: str) -> str:
     return f"bfo_bucket:{class_iri}"
 
@@ -461,18 +484,27 @@ class _ImportResolver:
         return None
 
     def bucket(self, iri: str, preferred: list[str]) -> str | None:
+        return self.classify(iri, preferred)[0]
+
+    def classify(self, iri: str, preferred: list[str]) -> tuple[str | None, list[str]]:
+        """(nearest BFO bucket, ancestors) of ``iri``; specific buckets are cached."""
         key = _bfo_bucket_cache_key(iri)
         try:
-            return str(_bfo_bucket_cache.get(key)["bucket"])
+            cached = _bfo_bucket_cache.get(key)
+            # Entries written before ancestors were stored are resolved again.
+            if "ancestors" in cached:
+                return str(cached["bucket"]), [str(a) for a in cached["ancestors"]]
         except Exception:
             pass
-        entity = None
+        entity: tuple[str | None, list[str]] = (None, [])
         for graph in self._ordered(preferred):
             found = _bfo_bucket(graph, iri)
             if found and found != _BFO_ENTITY_ROOT:
-                _bfo_bucket_cache.set_json(key, {"bucket": found})
-                return found
-            entity = entity or found
+                ancestors = _class_ancestors(graph, iri)
+                _bfo_bucket_cache.set_json(key, {"bucket": found, "ancestors": ancestors})
+                return found, ancestors
+            if found and not entity[0]:
+                entity = (found, _class_ancestors(graph, iri))
         return entity
 
 
@@ -754,14 +786,14 @@ class OntologyService:
         for item in declarations:
             preferred = [source["path"] for source in item["sources"]]
             if item["type"] == "entity":
-                item["bfoBucket"] = resolver.bucket(item["id"], preferred)
+                item["bfoBucket"], item["bfoAncestors"] = resolver.classify(item["id"], preferred)
             for link, is_class in _dictionary_links(item):
                 if link["id"] in declared:
                     continue
                 if link["name"] == _local_name(link["id"]):
                     link["name"] = resolver.label(link["id"], preferred) or link["name"]
                 if is_class:
-                    link["bfoBucket"] = resolver.bucket(link["id"], preferred)
+                    link["bfoBucket"], link["bfoAncestors"] = resolver.classify(link["id"], preferred)
         return {
             "items": [item for item in declarations if item["type"] != "ontology"],
             "ontologies": [item for item in declarations if item["type"] == "ontology"],
