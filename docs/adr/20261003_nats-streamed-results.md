@@ -81,5 +81,11 @@ queries, and document `find` pages.
   host spools the upload to disk and the primary feeds it line by line to the
   adapter; the one reply frame is the `WriteResponse`. DuckLake stages the rows
   in batches to a local Parquet file, so transaction retries replay the file.
-- Not yet: vector listing, event and activity queries, byte-bounded document
-  `find` pages.
+- Vector store: `list_vectors_stream(collection_name, include_vectors)`
+  (service and SDK: `list_documents_stream`) yields every document in
+  `list_vectors` order. The port's default walks `list_vectors` pages of 500,
+  so every backend streams in bounded memory without an override. Over NATS:
+  `abi.svc.vector_store.v1.transfer` operation `list_vectors`, metadata a
+  `ListVectorsRequest`, frames `VectorPage`s of documents only (about
+  256 KiB). `search` stays unary: backends return top-k whole.
+- Not yet: event and activity queries, byte-bounded document `find` pages.

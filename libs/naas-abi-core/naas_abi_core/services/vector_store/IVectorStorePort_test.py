@@ -271,3 +271,81 @@ class GenericVectorStoreAdapterTest(ABC):
         assert info.dimension == test_dimension
         assert info.distance_metric == "euclidean"
         assert info.size == len(sample_documents)
+
+    # ------------------------------------------------------------------
+    # Streaming a whole collection (list_vectors_stream).
+    # ------------------------------------------------------------------
+
+    def _store_many(self, adapter, collection_name, dimension, count=1_100):
+        rng = np.random.default_rng(7)
+        documents = [
+            VectorDocument(
+                id=f"many_{i:05d}",
+                vector=rng.standard_normal(dimension).astype(np.float32),
+                metadata={"index": i},
+                payload={"text": f"row {i}"},
+            )
+            for i in range(count)
+        ]
+        for start in range(0, count, 250):  # small requests, whatever the adapter
+            adapter.store_vectors(collection_name, documents[start : start + 250])
+        return documents
+
+    def test_list_vectors_stream_reads_every_document_in_list_order(
+        self, adapter, test_collection_name, test_dimension
+    ):
+        adapter.initialize()
+        adapter.create_collection(test_collection_name, test_dimension)
+        documents = self._store_many(adapter, test_collection_name, test_dimension)
+
+        with adapter.list_vectors_stream(
+            test_collection_name, include_vectors=True
+        ) as stream:
+            streamed = list(stream)
+
+        assert [d.id for d in streamed] == self._walk(
+            adapter, test_collection_name, limit=100
+        )
+        assert len(streamed) == len(documents)
+        by_id = {d.id: d for d in streamed}
+        np.testing.assert_array_almost_equal(
+            by_id["many_00042"].vector, documents[42].vector, decimal=5
+        )
+        assert by_id["many_00042"].metadata == {"index": 42}
+        assert by_id["many_00042"].payload == {"text": "row 42"}
+
+    def test_list_vectors_stream_carries_vectors_only_on_request(
+        self, adapter, test_collection_name, test_dimension, sample_documents
+    ):
+        adapter.initialize()
+        adapter.create_collection(test_collection_name, test_dimension)
+        adapter.store_vectors(test_collection_name, sample_documents)
+
+        with adapter.list_vectors_stream(test_collection_name) as stream:
+            light = list(stream)
+
+        assert sorted(d.id for d in light) == sorted(d.id for d in sample_documents)
+        assert all(d.vector.size == 0 for d in light)
+
+    def test_list_vectors_stream_of_an_empty_collection(
+        self, adapter, test_collection_name, test_dimension
+    ):
+        adapter.initialize()
+        adapter.create_collection(test_collection_name, test_dimension)
+
+        with adapter.list_vectors_stream(test_collection_name) as stream:
+            assert list(stream) == []
+
+    def test_leaving_a_list_vectors_stream_early_releases_it(
+        self, adapter, test_collection_name, test_dimension
+    ):
+        adapter.initialize()
+        adapter.create_collection(test_collection_name, test_dimension)
+        self._store_many(adapter, test_collection_name, test_dimension)
+
+        with adapter.list_vectors_stream(test_collection_name) as stream:
+            first = [next(stream) for _ in range(3)]
+
+        assert len({d.id for d in first}) == 3
+        with adapter.list_vectors_stream(test_collection_name) as stream:
+            assert sum(1 for _ in stream) == 1_100

@@ -1,8 +1,12 @@
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+
+STREAM_PAGE = 500  # documents per list_vectors call when streaming by default
 
 
 @dataclass
@@ -129,6 +133,35 @@ class IVectorStorePort(ABC):
 
         Without ``include_vectors`` each document's vector is an empty array.
         """
+
+    @contextmanager
+    def list_vectors_stream(
+        self, collection_name: str, *, include_vectors: bool = False
+    ) -> Iterator[Iterator[VectorDocument]]:
+        """Every document of the collection, in ``list_vectors`` order, read
+        lazily inside the block (docs/adr/20261003_nats-streamed-results.md).
+        Read it once; leaving the block releases it.
+
+        This default walks ``list_vectors`` pages of ``STREAM_PAGE`` documents,
+        so memory holds one page and no lock is held between pages; adapters
+        override it only when they can do better.
+        """
+
+        def documents() -> Iterator[VectorDocument]:
+            cursor = None
+            while True:
+                page = self.list_vectors(
+                    collection_name,
+                    limit=STREAM_PAGE,
+                    cursor=cursor,
+                    include_vectors=include_vectors,
+                )
+                yield from page.documents
+                if page.next_cursor is None:
+                    return
+                cursor = page.next_cursor
+
+        yield documents()
 
     @abstractmethod
     def get_collection_info(self, collection_name: str) -> CollectionInfo:

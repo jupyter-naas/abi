@@ -41,15 +41,21 @@ connection, never the shared store connection underneath the server.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import numpy as np
-from naas_abi_core.engine.nats_rpc import NatsRPCClient
+from naas_abi_core.engine.nats_rpc import NatsRPCClient, NatsRPCError
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
 from naas_abi_core.services.vector_store.adapters.vector_store_nats_contract import (
     AUTH_HEADER,
     SUBJECT_PREFIX,
+    TRANSFER_PREFIX,
+)
+from naas_abi_core.services.vector_store.adapters.vector_store_stream_codec import (
+    decode_frame,
 )
 from naas_abi_core.services.vector_store.IVectorStorePort import (
     CollectionInfo,
@@ -333,6 +339,32 @@ class VectorStoreSecondaryAdapterNATSClient(NatsRPCClient, IVectorStorePort):
             documents=[_pb_to_document(document) for document in page.documents],
             next_cursor=page.next_cursor if page.HasField("next_cursor") else None,
         )
+
+    @contextmanager
+    def list_vectors_stream(
+        self, collection_name: str, *, include_vectors: bool = False
+    ) -> Iterator[Iterator[VectorDocument]]:
+        """Documents fetched as the caller iterates, over a transfer stream
+        (docs/adr/20261003_nats-streamed-results.md). Leaving the block closes
+        the session."""
+        request = vector_store_pb2.ListVectorsRequest(
+            collection_name=collection_name, include_vectors=include_vectors
+        )
+        with self._transfer_stream(
+            TRANSFER_PREFIX,
+            "list_vectors",
+            request.SerializeToString(),
+            _raise_for_error,
+        ) as frames:
+            if frames is None:
+                raise NatsRPCError(
+                    "UNAVAILABLE", "No vector_store engine streams listings"
+                )
+            yield (
+                _pb_to_document(document)
+                for frame in frames
+                for document in decode_frame(frame)
+            )
 
     def get_collection_info(self, collection_name: str) -> CollectionInfo:
         request = vector_store_pb2.GetCollectionInfoRequest(

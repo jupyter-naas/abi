@@ -145,6 +145,19 @@ memory; results that should not be require streaming or a storage reference. No 
 a timeout can hide a completed operation. Reconcile its outcome before retrying.
 `close()` releases only the client's transport, including for vector storage.
 
+Streamed listing: `list_vectors_stream(collection_name, include_vectors=False)`
+on the port (service: `list_documents_stream`) yields every document lazily, in
+`list_vectors` order, inside a `with` block. The port's default walks
+`list_vectors` pages of `STREAM_PAGE` (500) documents, so every backend streams
+in bounded memory without an override, and no adapter lock is held between
+pages. Over NATS the primary hosts `transfer/v1` sessions on
+`abi.svc.vector_store.v1.transfer` (operation `list_vectors`, metadata a
+`ListVectorsRequest`); each frame is a `VectorPage` of documents only, closed at
+about 256 KiB (`adapters/vector_store_stream_codec.py`), produced on one thread.
+The core client and the SDK facade (`list_documents_stream`, async) read frames
+as they iterate; without a streaming engine they raise `UNAVAILABLE` (no unary
+fallback). `search` is not streamed: backends return the top `k` whole.
+
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
 The latter uses a local `nats-server` executable without Docker.

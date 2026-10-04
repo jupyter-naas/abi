@@ -797,3 +797,49 @@ def test_new_endpoints_require_a_token():
     response = vector_store_pb2.ListVectorsResponse()
     response.ParseFromString(request.responses[0])
     assert response.error.code == "UNAUTHENTICATED"
+
+
+# ---------------------------------------------------------------------------
+# Streamed listing: the transfer operation's frames.
+# ---------------------------------------------------------------------------
+
+
+def test_list_vectors_transfer_frames_carry_every_document_in_bounded_pages():
+    from naas_abi_core.services.vector_store.adapters.QdrantInMemoryAdapter import (
+        QdrantInMemoryAdapter,
+    )
+    from naas_abi_core.services.vector_store.adapters.vector_store_stream_codec import (
+        decode_frame,
+    )
+
+    store = QdrantInMemoryAdapter(storage_path=":memory:")
+    store.initialize()
+    store.create_collection("docs", 256)
+    store.store_vectors(
+        "docs",
+        [
+            VectorDocument(
+                id=f"d{i:04d}",
+                vector=np.full(256, i, dtype=np.float32),
+                metadata={"i": i},
+            )
+            for i in range(1_200)
+        ],
+    )
+    primary = VectorStorePrimaryAdapterNATS(store, SECRET)
+    metadata = vector_store_pb2.ListVectorsRequest(
+        collection_name="docs", include_vectors=True
+    ).SerializeToString()
+
+    async def frames():
+        return [
+            frame
+            async for frame in primary._transfer_frames("list_vectors", metadata, None)
+        ]
+
+    collected = asyncio.run(frames())
+
+    assert len(collected) > 1 and all(len(f) < 512 * 1024 for f in collected)
+    documents = [d for frame in collected for d in decode_frame(frame)]
+    assert len(documents) == 1_200 and len({d.id for d in documents}) == 1_200
+    assert all(len(d.vector.values) == 256 for d in documents)
