@@ -424,3 +424,33 @@ def test_value_reads_follow_every_page_when_pages_are_cut(root):
     )
 
     assert sorted(d["value"] for d in found) == list(range(5))
+
+
+def test_collections_carry_their_declared_fields_and_indexes(documents, root):
+    from naas_abi_core.services.document.DocumentPort import FieldSpec
+
+    root.for_namespace("acme.module").ensure_collection(
+        CollectionSpec(
+            name="people",
+            fields=(
+                FieldSpec(name="email", type="string", unique=True),
+                FieldSpec(name="age", type="int", indexed=True),
+            ),
+            unique_together=(("first", "last"),),
+        )
+    )
+    collections = {e.name: e for e in run(documents.list("acme.module")).entries}
+
+    people = collections["people"].attributes
+    assert people["declared_fields"] == "2"
+    assert json.loads(people["spec"]) == {
+        "fields": [
+            {"name": "email", "type": "string", "indexed": False, "unique": True},
+            {"name": "age", "type": "int", "indexed": True, "unique": False},
+        ],
+        "unique_together": [["first", "last"]],
+    }
+    plain = collections["records"].attributes
+    assert plain["declared_fields"] == "0"
+    assert json.loads(plain["spec"]) == {"fields": [], "unique_together": []}
+    assert run(documents.stat("acme.module/people")).attributes["declared_fields"] == "2"

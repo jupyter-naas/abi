@@ -143,3 +143,27 @@ export function validateDocumentId(name: string): string | null {
 }
 
 export const DOCUMENT_TEMPLATE = '{\n  "name": "",\n  "status": "draft"\n}\n';
+
+/** A collection's declared fields and unique groups (``spec`` attribute). */
+export interface CollectionSpecView {
+  fields: { name: string; type: string; indexed: boolean; unique: boolean }[];
+  unique_together: string[][];
+}
+
+export function collectionSpec(entry: { attributes: Record<string, string> }): CollectionSpecView | null {
+  try {
+    const value = JSON.parse(entry.attributes.spec ?? '') as CollectionSpecView;
+    return Array.isArray(value.fields) ? { fields: value.fields, unique_together: value.unique_together ?? [] } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** One line per declared field ("email: string, unique") and unique group. */
+export function describeSpec(spec: CollectionSpecView): string[] {
+  const lines = spec.fields.map((f) => {
+    const traits = [f.unique ? 'unique' : '', f.indexed ? 'indexed' : ''].filter(Boolean);
+    return `${f.name}: ${f.type}${traits.length ? `, ${traits.join(', ')}` : ''}`;
+  });
+  return [...lines, ...spec.unique_together.map((group) => `unique together: ${group.join(' + ')}`)];
+}

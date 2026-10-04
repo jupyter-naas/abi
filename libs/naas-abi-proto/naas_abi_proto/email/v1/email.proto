@@ -55,6 +55,7 @@ message SentEmailSummary {
   string subject = 4;
   string to = 5;
   string sender = 6;
+  string snippet = 7;  // the start of the text body, on one line
 }
 
 message SentEmailSummaries {

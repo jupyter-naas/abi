@@ -357,6 +357,7 @@ class TestEmailSecondaryAdapterNATSClient(GenericEmailSecondaryAdapterTest):
         adapter.delete_sent(first)
 
         assert [m.message_id for m in listed] == [second, first]
+        assert [m.snippet for m in listed] == ["2", "1"]
         assert [m.subject for m in older] == ["one"]
         assert message_from_bytes(got.raw)["To"] == "alice@example.com"
         with pytest.raises(SentEmailNotFound):

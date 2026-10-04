@@ -1,6 +1,6 @@
 import { authFetch } from '@/stores/auth';
 import { query, type Failure, type Fetch, type Result } from '../data/data-api';
-import type { JobsOverview, RunDetail, RunsPage } from './jobs-types';
+import type { JobFailures, JobsOverview, RunDetail, RunsPage } from './jobs-types';
 
 export const JOBS_API = '/api/admin/system/jobs';
 
@@ -19,6 +19,8 @@ export interface JobsApi {
   run(moduleId: string, runId: string): Promise<Result<RunDetail>>;
   trigger(moduleId: string, job: string, payload: Record<string, unknown>): Promise<Result<{ run_id: string; key: string }>>;
   cancel(moduleId: string, runId: string): Promise<Result<{ ok: boolean }>>;
+  /** Runs that failed since ``since`` (ISO); the last day without one. */
+  failures(since?: string | null): Promise<Result<JobFailures>>;
 }
 
 async function call<T>(fetcher: Fetch, path: string, init?: RequestInit): Promise<Result<T>> {
@@ -71,5 +73,6 @@ export function createJobsApi(fetcher: Fetch = authFetch): JobsApi {
         body: JSON.stringify({ payload }),
       }),
     cancel: (moduleId, runId) => call(fetcher, `/runs/${seg(moduleId)}/${seg(runId)}/cancel`, { method: 'POST' }),
+    failures: (since) => call(fetcher, `/failures${query({ since })}`),
   };
 }

@@ -69,3 +69,11 @@ export interface RunsPage {
   runs: RunSummary[];
   next: string | null;
 }
+
+/** Runs that failed or timed out since ``since`` (the Jobs notification). */
+export interface JobFailures {
+  since: string;
+  count: number;
+  more: boolean;
+  runs: RunSummary[];
+}

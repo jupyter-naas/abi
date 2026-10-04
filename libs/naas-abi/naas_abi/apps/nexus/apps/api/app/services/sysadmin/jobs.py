@@ -18,6 +18,7 @@ Location = Literal["engine", "remote"]
 
 ACTIVE_STATUSES = ("RUNNING", "RETRYING")
 TERMINAL_STATUSES = ("SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED")
+FAILED_STATUSES = ("FAILED", "TIMED_OUT")
 
 
 class JobNotFound(Exception):
@@ -195,3 +196,17 @@ class JobsOverview:
 class RunsPage:
     runs: tuple[JobRun, ...]
     next: str | None
+
+
+@dataclass(frozen=True)
+class Failures:
+    """Runs that failed or timed out since ``since``, newest first; ``more``
+    when there were more than were read."""
+
+    since: str
+    runs: tuple[JobRun, ...]
+    more: bool = False
+
+    @property
+    def count(self) -> int:
+        return len(self.runs)

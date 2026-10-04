@@ -36,6 +36,15 @@ class DocumentClient:
             pb.CollectionsResponse,
         )
 
+    async def collection_spec(
+        self, request: pb.CollectionSpecRequest
+    ) -> pb.CollectionSpecResponse:
+        return await self._transport.call(
+            "abi.svc.document.v1.collection_spec",
+            self._scoped(request),
+            pb.CollectionSpecResponse,
+        )
+
     async def namespaces(self, request: pb.NamespacesRequest) -> pb.NamespacesResponse:
         return await self._transport.call(
             "abi.svc.document.v1.namespaces",

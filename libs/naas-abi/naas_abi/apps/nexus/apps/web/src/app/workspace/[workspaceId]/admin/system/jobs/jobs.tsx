@@ -11,9 +11,9 @@ import './jobs.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { ChevronRight, RefreshCw, Search, Workflow } from 'lucide-react';
+import { AlertTriangle, ChevronRight, RefreshCw, Search, Workflow } from 'lucide-react';
 import type { Failure } from '../data/data-api';
-import { plural } from '../data/data-model';
+import { absoluteTime, plural } from '../data/data-model';
 import { Hint, IconTile, Kbd, Notice } from '../data/data-ui';
 import { ToastStack, useToasts } from '../data/toasts';
 import { createTracesApi, type TracesApi } from '../traces/traces-api';
@@ -27,7 +27,7 @@ import {
   splitKey,
   type JobsLocation,
 } from './jobs-model';
-import type { JobView, JobsOverview, RunDetail, RunSummary } from './jobs-types';
+import type { JobFailures, JobView, JobsOverview, RunDetail, RunSummary } from './jobs-types';
 import { JobDetail } from './job-detail';
 import { JobsTable } from './jobs-table';
 import { CancelDialog, TriggerDialog } from './run-dialogs';
@@ -61,14 +61,53 @@ interface TriggerRequest {
   rerun: boolean;
 }
 
+/** Runs that failed since the admin last looked: the tab's notification. */
+function FailuresBanner({
+  failures,
+  onShow,
+  onSeen,
+}: {
+  failures: JobFailures;
+  onShow: () => void;
+  onSeen?: () => void;
+}) {
+  const jobs = [...new Set(failures.runs.map((r) => r.job))];
+  const named = jobs.slice(0, 3).join(', ') + (jobs.length > 3 ? ` and ${jobs.length - 3} more` : '');
+  return (
+    <div data-failures>
+      <Notice tone="danger">
+        <AlertTriangle size={14} aria-hidden="true" />
+        <span>
+          {plural(failures.count, 'run', 'runs')}
+          {failures.more ? '+' : ''} failed{failures.since ? ` since ${absoluteTime(failures.since)}` : ''} · {named}
+        </span>
+        <span className="data-spacer" />
+        <button type="button" className="data-button" onClick={onShow}>
+          Show failed runs
+        </button>
+        {onSeen && (
+          <button type="button" className="data-button" onClick={onSeen}>
+            Mark as seen
+          </button>
+        )}
+      </Notice>
+    </div>
+  );
+}
+
 export function JobsTab({
   api: injected,
   tracesApi: injectedTraces,
   nonce = 0,
+  failures = null,
+  onFailuresSeen,
 }: {
   api?: JobsApi;
   tracesApi?: TracesApi;
   nonce?: number;
+  /** Runs that failed since the admin last looked (the System app polls them). */
+  failures?: JobFailures | null;
+  onFailuresSeen?: () => void;
 }) {
   const api = useMemo(() => injected ?? createJobsApi(), [injected]);
   const tracesApi = useMemo(() => injectedTraces ?? createTracesApi(), [injectedTraces]);
@@ -333,6 +372,13 @@ export function JobsTab({
             )}
           </div>
           <div className="data-browser">
+            {failures && failures.count > 0 && (
+              <FailuresBanner
+                failures={failures}
+                onShow={() => go({ view: 'runs', job: null, statuses: FAILED })}
+                onSeen={onFailuresSeen}
+              />
+            )}
             {overviewFailure && <Notice tone="danger">{overviewFailure.reason}</Notice>}
             {down.map(([source, status]) => (
               <Notice key={source} tone="warn">

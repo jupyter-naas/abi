@@ -496,6 +496,76 @@ class JobRunStoreContract:
             assert exc.run_id == run_id
 
 
+# --- agent runs (agents.py) -----------------------------------------------------------
+
+
+class AgentRunStoreContract:
+    """fixture ``store``: seeded with ``fixtures.agent_runs()`` and ``agent_events()``."""
+
+    MODULES = ["acme.agents", "acme.other"]
+
+    @staticmethod
+    def _ids(runs):
+        return [r.run_id for r in runs]
+
+    def test_lists_runs_newest_first_across_modules(self, store):
+        runs = asyncio.run(store.list_runs(self.MODULES))
+
+        assert self._ids(runs) == ["r4", "r3", "r2", "r1"]
+        assert self._ids(asyncio.run(store.list_runs(self.MODULES, limit=2))) == ["r4", "r3"]
+
+    def test_filters_by_agent_status_and_time(self, store):
+        def ids(**kwargs):
+            return self._ids(asyncio.run(store.list_runs(self.MODULES, **kwargs)))
+
+        assert ids(agent="Writer") == ["r3"]
+        assert ids(statuses=["RUNNING", "ACCEPTED"]) == ["r4"]
+        assert ids(statuses=["FAILED", "CANCELLED"]) == ["r3", "r1"]
+        assert ids(before="2026-10-02T10:00:00+00:00") == ["r2", "r1"]
+        assert self._ids(asyncio.run(store.list_runs(["acme.other"]))) == ["r3"]
+        assert asyncio.run(store.list_runs(["no.such.module"])) == []
+
+    def test_gets_a_run(self, store):
+        run = asyncio.run(store.get_run("acme.agents", "r2"))
+
+        assert (run.agent, run.invocation_id, run.status, run.thread_id) == (
+            "Researcher",
+            "inv-2",
+            "SUCCEEDED",
+            "t-2",
+        )
+        assert (run.caller, run.owner, run.trace_id, run.events) == ("api", "i-1", "c" * 32, 3)
+        assert run.duration_ms == 12500 and run.key == "acme.agents/r2"
+        failed = asyncio.run(store.get_run("acme.other", "r3"))
+        assert (failed.error_code, failed.error_message) == (
+            "AGENT_FAILED",
+            "Agent execution failed; inspect provider logs",
+        )
+
+    def test_reads_a_runs_events_in_order_with_bounded_text(self, store):
+        from naas_abi.apps.nexus.apps.api.app.services.sysadmin.agents import EVENT_PREVIEW
+
+        events = asyncio.run(store.events("acme.agents", "r2"))
+
+        assert [(e.sequence, e.event) for e in events] == [
+            (1, "message"),
+            (2, "message"),
+            (3, "done"),
+        ]
+        assert (events[0].preview, events[0].truncated) == ("Looking it up", False)
+        assert len(events[1].preview) == EVENT_PREVIEW and events[1].truncated
+        assert len(asyncio.run(store.events("acme.agents", "r2", limit=2))) == 2
+        assert asyncio.run(store.events("acme.other", "r3")) == []
+
+    def test_unknown_runs_are_not_found(self, store):
+        from naas_abi.apps.nexus.apps.api.app.services.sysadmin.agents import AgentRunNotFound
+
+        for module, run_id in (("acme.agents", "r99"), ("no.such.module", "r1")):
+            exc = _expect(AgentRunNotFound, lambda m=module, r=run_id: store.get_run(m, r))
+            assert exc.run_id == run_id
+            _expect(AgentRunNotFound, lambda m=module, r=run_id: store.events(m, r))
+
+
 # --- traces (traces.py) ----------------------------------------------------------------
 
 

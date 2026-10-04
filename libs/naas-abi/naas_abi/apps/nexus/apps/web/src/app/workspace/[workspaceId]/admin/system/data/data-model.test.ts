@@ -93,3 +93,16 @@ describe('data model', () => {
     expect(dayLabel(null, now)).toBe('Unknown time');
   });
 });
+
+describe('ttlSeconds', () => {
+  it('reads an expiry as seconds, empty as none and anything else as invalid', async () => {
+    const { ttlSeconds } = await import('./data-model');
+
+    expect(ttlSeconds('', 'hours')).toBeUndefined();
+    expect(ttlSeconds('  ', 'hours')).toBeUndefined();
+    expect(ttlSeconds('2', 'hours')).toBe(7200);
+    expect(ttlSeconds('90', 'seconds')).toBe(90);
+    expect(ttlSeconds('1', 'days')).toBe(86400);
+    for (const bad of ['0', '-1', '1.5', 'soon']) expect(ttlSeconds(bad, 'minutes')).toBeNull();
+  });
+});

@@ -320,9 +320,10 @@ export function DataExplorer({
             request={editor}
             view={view}
             writeFormat={x.service.capabilities.write_format}
+            expiry={Boolean(x.service.capabilities.expiry)}
             onClose={() => setEditor(null)}
-            onSave={async (id, body, confirm) => {
-              const result = await x.write(id, body, confirm);
+            onSave={async (id, body, confirm, options) => {
+              const result = await x.write(id, body, confirm, options);
               if (result.ok) {
                 setEditor(null);
                 push({ tone: 'success', title: editor.mode === 'edit' ? 'Saved' : `Created ${result.data.name}`, detail: 'Recorded in the audit log' });

@@ -233,3 +233,26 @@ def test_cancel_only_running_runs_and_audit_it():
     assert exc.value.status == "SUCCEEDED"
     with pytest.raises(RunNotFound):
         run(service.cancel("u1", "acme.jobs", "nightly:99"))
+
+
+def test_failures_since_a_time_newest_first():
+    service = _service()
+
+    recent = asyncio.run(service.failures(since="2026-10-02T00:00:00+00:00"))
+    assert [r.run_id for r in recent.runs] == ["report:1"] and recent.count == 1
+    assert recent.since == "2026-10-02T00:00:00+00:00"
+    everything = asyncio.run(service.failures(since="2026-09-01T00:00:00+00:00"))
+    assert [r.run_id for r in everything.runs] == ["report:1", "nightly:2"]
+    assert everything.count == 2 and everything.more is False
+
+
+def test_failures_default_to_the_last_day():
+    failures = asyncio.run(_service().failures())
+
+    assert failures.since == "2026-10-01T09:05:00+00:00"
+    assert [r.run_id for r in failures.runs] == ["report:1"]
+
+
+def test_failures_need_the_run_store():
+    with pytest.raises(SourceUnavailable):
+        asyncio.run(_service(runs=SourceUnavailable("runs", "down")).failures())

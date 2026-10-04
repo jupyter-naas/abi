@@ -12,7 +12,9 @@ import {
   checkpointKind,
   checkpointTitle,
   collectionPurpose,
+  collectionSpec,
   deriveColumnKeys,
+  describeSpec,
   documentFields,
   documentLevel,
   namespaceKind,
@@ -30,6 +32,19 @@ function count(value: string | undefined): number | null {
 }
 
 /** A count from an attribute, or a dash when the API did not report it. */
+/** The fields a collection declares (types, indexes, uniqueness) on one line. */
+function DeclaredFields({ entry }: { entry: ResourceEntry }) {
+  const spec = collectionSpec(entry);
+  if (!spec || (!spec.fields.length && !spec.unique_together.length)) {
+    return <span className="data-muted">none declared</span>;
+  }
+  return (
+    <span className="data-mono data-document-fields" title={describeSpec(spec).join('\n')}>
+      {spec.fields.map((f) => f.name).join(', ') || `${spec.unique_together.length} unique groups`}
+    </span>
+  );
+}
+
 function Count({ value }: { value: string | undefined }) {
   const n = count(value);
   return <span className="data-num">{n === null ? '—' : formatCount(n)}</span>;
@@ -184,6 +199,12 @@ function level(depth: number, parent: string, entries?: ResourceEntry[]): Level 
           width: '104px',
           align: 'end',
           render: (e) => <Count value={e.attributes.documents} />,
+        },
+        {
+          id: 'fields',
+          label: 'Declared fields',
+          width: 'minmax(160px, 1fr)',
+          render: (e) => <DeclaredFields entry={e} />,
         },
       ],
       emptyTitle: 'No collections in this namespace',

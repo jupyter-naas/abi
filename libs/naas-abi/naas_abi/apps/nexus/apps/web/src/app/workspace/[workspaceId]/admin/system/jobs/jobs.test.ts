@@ -50,6 +50,7 @@ function fakeApi() {
     }),
     trigger: vi.fn((moduleId: string, name: string) => ok({ run_id: `${name}:9`, key: `${moduleId}/${name}:9` })),
     cancel: vi.fn(() => ok({ ok: true })),
+    failures: vi.fn(() => ok({ since: '', count: 0, more: false, runs: [] })),
   };
   return { api, details };
 }
@@ -179,5 +180,39 @@ describe('JobsTab', () => {
     await mounted!.click(button('Failed'));
     await mounted!.flush();
     expect(api.runs).toHaveBeenLastCalledWith(expect.objectContaining({ statuses: ['FAILED', 'TIMED_OUT'] }));
+  });
+});
+
+
+describe('JobsTab failure notification', () => {
+  it('lists runs that failed since the admin last looked, and marks them seen', async () => {
+    const { api } = fakeApi();
+    const onFailuresSeen = vi.fn();
+    const failed = run({ key: 'ops.billing/sync:4', module_id: 'ops.billing', job: 'sync', run_id: 'sync:4', status: 'FAILED' });
+    mounted = await mount(JobsTab, {
+      api,
+      tracesApi,
+      failures: { since: '2026-10-01T09:00:00+00:00', count: 2, more: false, runs: [failed, failed] },
+      onFailuresSeen,
+    });
+    await mounted.flush();
+
+    const banner = document.querySelector('[data-failures]');
+    expect(banner?.textContent).toContain('2 runs failed');
+    expect(banner?.textContent).toContain('sync');
+
+    await mounted.click(button('Show failed runs', banner ?? document));
+    expect(api.runs).toHaveBeenLastCalledWith(expect.objectContaining({ statuses: ['FAILED', 'TIMED_OUT'] }));
+
+    await mounted.click(button('Mark as seen', banner ?? document));
+    expect(onFailuresSeen).toHaveBeenCalled();
+  });
+
+  it('shows no banner without failures', async () => {
+    const { api } = fakeApi();
+    mounted = await mount(JobsTab, { api, tracesApi, failures: { since: '', count: 0, more: false, runs: [] } });
+    await mounted.flush();
+
+    expect(document.querySelector('[data-failures]')).toBeNull();
   });
 });

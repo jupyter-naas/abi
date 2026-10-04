@@ -265,3 +265,55 @@ describe('DataExplorer', () => {
     expect(q('[role="dialog"]')?.textContent).toContain('PUBLIC_HOST');
   });
 });
+
+describe('expiring entries', () => {
+  async function withKeyValue() {
+    const { api, data } = fakeApi();
+    data.keyvalue = {};
+    const kv: ResourceServiceInfo = { name: 'keyvalue', available: true, reason: '', capabilities: caps({ expiry: true }) };
+    api.services = vi.fn(() => Promise.resolve({ ok: true as const, data: { services: [...SERVICES, kv] } }));
+    await open(api);
+    await mounted!.click(q('[data-data-service="keyvalue"]'));
+    await mounted!.flush();
+    return { api, data };
+  }
+
+  async function choose(selector: string, value: string) {
+    const { act } = await import('react');
+    const select = q(selector) as HTMLSelectElement;
+    await act(async () => {
+      select.value = value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+
+  it('creates a key that expires after the time chosen', async () => {
+    const { api, data } = await withKeyValue();
+    // New keys open the code editor; the value does not matter here.
+
+    await mounted!.click(button('New key'));
+    await mounted!.type(q('[aria-label="Name"]'), 'session:1');
+    await mounted!.type(q('[aria-label="Expires after"]'), '2');
+    await choose('[aria-label="Expiry unit"]', 'hours');
+    await mounted!.click(button('Create'));
+    await mounted!.flush();
+
+    expect(api.write).toHaveBeenLastCalledWith('keyvalue', 'session:1', '', undefined, { ttlSeconds: 7200 });
+    expect('session:1' in data.keyvalue).toBe(true);
+  });
+
+  it('creates keys without an expiry by default, and never asks on other services', async () => {
+    const { api } = await withKeyValue();
+
+    await mounted!.click(button('New key'));
+    await mounted!.type(q('[aria-label="Name"]'), 'plain');
+    await mounted!.click(button('Create'));
+    await mounted!.flush();
+    expect(api.write).toHaveBeenLastCalledWith('keyvalue', 'plain', '', undefined, {});
+
+    await mounted!.click(q('[data-data-service="secret"]'));
+    await mounted!.flush();
+    await mounted!.click(button('New secret'));
+    expect(q('[aria-label="Expires after"]')).toBeNull();
+  });
+});

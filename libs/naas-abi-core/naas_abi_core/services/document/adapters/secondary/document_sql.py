@@ -419,6 +419,10 @@ class DocumentSQL(ABC):
                 ).fetchall()
             )
 
+    def collection_spec(self, namespace: str, collection: str) -> CollectionSpec:
+        with self.transaction() as connection:
+            return self.require_collection(connection, namespace, collection)
+
     def namespaces(self) -> list[str]:
         with self.transaction() as connection:
             return sorted(
@@ -616,7 +620,8 @@ class DocumentSQL(ABC):
                     f"SELECT id, {size} FROM {self.documents_table} WHERE namespace = {self.p} AND collection = {self.p} AND ({condition}) ORDER BY {ordering} LIMIT {self.p}",  # nosec B608
                     params,
                 ).fetchall()
-                kept, used = [], 0
+                kept: list[str] = []
+                used = 0
                 for id_, length in sized:
                     weight = length + len(id_) + DOCUMENT_OVERHEAD
                     if len(kept) == limit or (kept and used + weight > max_bytes):

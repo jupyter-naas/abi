@@ -19,6 +19,7 @@ Views of a running deployment for platform super admins: kernel services (config
 - `resources_service.py`: `ResourceAdminService`. Reads are plain. Create, replace, delete and reveal are audited: a `requested` record is written first and nothing changes if it cannot be (`AuditUnavailable`, 503); `succeeded` or `failed` (exception type only) follows. Replace and delete need the id typed back as `confirm` (409 otherwise). Uploads and downloads are size-bounded.
 - One adapter per kernel service in `adapters/secondary/<service>_resources.py`, each tested with `ServiceResourcesContract` (writable data; knobs `base`, `child`, `encode`, `assert_shown`, `sized`, `extra_names` for structured values) or `ReadOnlyResourcesContract` (logs, registries) on a real in-process backend:
   - `object_storage` (paths, folders; a page classifies only its own entries), `secret` (masked until reveal, sizes never disclosed, writes reach every secret adapter), `keyvalue` (raw values, TTL kept on replace), `cache` (never unpickled; binary and pickle show sizes only), `document` (namespace / collection / document, tagged JSON, version-checked deletes; LangGraph saver collections decoded by `langgraph_checkpoints.py`, see below), `vector_store` (collections / documents, JSON with vector), `triple_store` (graphs as Turtle; the schema graph is read-only), `dataset` (namespace / table, CSV), `source_control` (owner / repo / path on the default branch; each write is one commit), `coding_environment` (environments and templates), `event` and `activity_log` (read-only, newest first), `model_registry` (read-only), `email` (create = send; kept mail where the adapter keeps it), `bus` (JetStream streams and messages; `KV_` streams are not deletable) and `discovery` (instances; delete = evict).
+  - `ResourceCapabilities.expiry`: the service takes `ttl_seconds` on write (`ExpiringResources`); only keyvalue does. The PUT route takes it as a query parameter and refuses it (405) for other services.
   - Core was extended where a service could not enumerate or administer its data (key listing for keyvalue and cache, raw cache entries, document namespaces and the unlocked proxy's `document_admin`, vector paging and collection info, event types, activity paging, kept sent mail, repository deletion, all coding environments, discovery eviction), through every adapter and the NATS contracts. See ADR 20261002_sysadmin-service-data.md.
 - Richer browsing for the web explorer:
   - Listing entries may carry `attributes["summary"]` (one line under the name) plus cheap typed attributes for columns.
@@ -64,6 +65,14 @@ Views of a running deployment for platform super admins: kernel services (config
   - `POST /{module}/{job}/trigger`
   - `POST /runs/{module}/{run}/cancel`
 - Job hosts record `fired_at` (when JetStream stored the trigger) and `trace_id` (the run's CONSUMER span) on every run.
+- `GET /failures?since=` lists runs FAILED or TIMED_OUT since a time (default: the last day; at most `MAX_FAILURES` read, `more` when capped): the web polls it every minute for a badge on the Jobs tab and a banner in it, counted since the admin last marked them seen (kept per browser).
+
+## Agent runs (Agents tab)
+
+- `agents.py`: values (`AgentRun`, `AgentEvent`, `AgentRunsPage`) and ports: `AgentRunStore` (records, events) and `AgentControl` (cancel). Errors: `AgentRunNotFound`, `AgentRunNotCancellable`.
+- `agents_service.py`: `AgentsAdminService` pages runs across the modules discovery lists with agents (or one module named by the caller, no discovery needed), returns one run with its first `MAX_EVENTS` events (`EVENT_PREVIEW` characters each) and trace link, and cancels ACCEPTED/RUNNING runs through `run_audited` (service `agents`, operation `cancel`).
+- Adapters: `document_agent_runs.py` reads what SDK agent hosts write in each module's namespace (`agent_runs_collection(project)` / `agent_events_collection(project)`, `naas_abi_sdk.agent_host`), newest first by `submitted_at`; `nats_agent_control.py` sends the cancel to the owner instance's agent subject with the API's token (the host lets discovery's admin identities cancel any caller's run, never read its output); `in_memory_agents.py` holds the fakes. `AgentRunStoreContract` in `contracts.py`, seeded from `tests/fixtures.py`.
+- HTTP: `adapters/primary/sysadmin__primary_adapter__agents.py`, mounted at `/api/admin/system/agents`: `GET /runs`, `GET /runs/{module}/{run}`, `POST /runs/{module}/{run}/cancel`.
 
 ## Traces (Traces tab)
 

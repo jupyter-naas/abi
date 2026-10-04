@@ -10,7 +10,7 @@ nothing happens if it cannot be (``AuditUnavailable``); ``succeeded`` or
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import SourceUnavailable
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import (
@@ -20,6 +20,7 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import (
     AuditRecord,
     AuditUnavailable,
     ConfirmationRequired,
+    ExpiringResources,
     InvalidResource,
     ResourceDetail,
     ResourceEntry,
@@ -131,8 +132,11 @@ class ResourceAdminService:
         content: bytes,
         *,
         confirm: str | None = None,
+        ttl_seconds: int | None = None,
     ) -> ResourceEntry:
         source = self._source(service)
+        if ttl_seconds is not None and not source.capabilities.expiry:
+            raise UnsupportedOperation(service, "expiry")
         if len(content) > self.upload_limit:
             raise ResourceTooLarge(service, resource_id, len(content), self.upload_limit)
         try:
@@ -151,7 +155,12 @@ class ResourceAdminService:
             if confirm != resource_id:
                 raise ConfirmationRequired(service, resource_id, "replace")
             action = AdminAction(actor_id, service, "replace", resource_id)
-        return await self._audited(action, lambda: source.write(resource_id, content))
+        if ttl_seconds is None:
+            return await self._audited(action, lambda: source.write(resource_id, content))
+        expiring = cast(ExpiringResources, source)  # capabilities.expiry was checked
+        return await self._audited(
+            action, lambda: expiring.write(resource_id, content, ttl_seconds=ttl_seconds)
+        )
 
     async def delete(
         self, actor_id: str, service: str, resource_id: str, *, confirm: str | None

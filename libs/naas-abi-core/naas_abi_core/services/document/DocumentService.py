@@ -89,6 +89,10 @@ class DocumentService(ServiceBase):
     def collections(self) -> list[str]:
         return self.__adapter.collections(self.namespace)
 
+    def collection_spec(self, collection: str) -> CollectionSpec:
+        """Declared fields and unique groups. Raises ``CollectionNotFound``."""
+        return self.__adapter.collection_spec(self.namespace, validate_name(collection))
+
     def put(
         self,
         collection: str,

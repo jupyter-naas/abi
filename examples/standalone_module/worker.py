@@ -561,6 +561,8 @@ class ABIModule(BaseModule):
             "document", "ensure_collection", spec=pb.CollectionSpec(name="exercise")
         )
         assert "exercise" in (await self.call("document", "collections")).collections
+        spec = await self.call("document", "collection_spec", collection="exercise")
+        assert spec.spec.name == "exercise"
         first = await self.call(
             "document",
             "put",

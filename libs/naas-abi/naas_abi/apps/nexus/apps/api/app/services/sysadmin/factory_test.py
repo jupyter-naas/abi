@@ -237,3 +237,43 @@ def test_job_owners_include_kernel_dataset_jobs_in_nats_mode():
         modules={}, configuration=NS(nats=None), services=NS(dataset_available=lambda: True)
     )
     assert "naas_abi_core.dataset" not in job_owners(no_nats)
+
+
+def test_agents_without_nats_name_what_is_off():
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.factory import build_agents_admin
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import SourceUnavailable
+
+    engine = NS(modules={}, configuration=NS(nats=None, telemetry=None), services=NS())
+    admin = build_agents_admin(engine, audit_engine=lambda: None)
+
+    with pytest.raises(SourceUnavailable, match="NATS mode is off") as raised:
+        asyncio.run(admin.runs(module="acme.agents"))
+    assert raised.value.source == "agent_runs"
+    with pytest.raises(SourceUnavailable) as raised:
+        asyncio.run(admin.modules())
+    assert raised.value.source == "discovery"
+
+
+def test_agents_in_nats_mode_read_the_engine_documents_and_discovery():
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.document_agent_runs import (
+        DocumentAgentRunStore,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.nats_agent_control import (
+        NatsAgentControl,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.factory import build_agents_admin
+    from naas_abi_sdk.agent_host import agent_runs_collection
+
+    nats = NS(
+        nats_url="nats://localhost:4222",
+        jwt_secret="s" * 32,
+        discovery=NS(project="zen"),
+        monitoring_url=None,
+    )
+    engine = NS(modules={}, configuration=NS(nats=nats, telemetry=None), services=NS())
+
+    admin = build_agents_admin(engine, audit_engine=lambda: None)
+
+    assert isinstance(admin._runs, DocumentAgentRunStore)
+    assert admin._runs.runs_collection == agent_runs_collection("zen")
+    assert isinstance(admin._control, NatsAgentControl) and admin._control.project == "zen"

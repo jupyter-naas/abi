@@ -73,6 +73,7 @@ def _summary_to_pb(summary: SentEmailSummary) -> email_pb2.SentEmailSummary:
         subject=summary.subject,
         to=summary.to,
         sender=summary.sender,
+        snippet=summary.snippet,
     )
 
 

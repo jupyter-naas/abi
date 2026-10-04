@@ -106,6 +106,18 @@ export function absoluteTime(iso: string | null | undefined): string {
 }
 
 /** Seconds as "45 s", "12 min", "3 h 5 min", "2 d". */
+export const TTL_UNITS = { seconds: 1, minutes: 60, hours: 3600, days: 86400 } as const;
+export type TtlUnit = keyof typeof TTL_UNITS;
+
+/** An expiry typed as an amount and a unit: ``undefined`` when empty (no
+ * expiry), ``null`` when not a positive whole number, else seconds. */
+export function ttlSeconds(amount: string, unit: TtlUnit): number | null | undefined {
+  const text = amount.trim();
+  if (!text) return undefined;
+  if (!/^\d+$/.test(text) || Number(text) <= 0) return null;
+  return Number(text) * TTL_UNITS[unit];
+}
+
 export function formatDuration(seconds: number): string {
   if (seconds < 60) return `${Math.max(0, Math.round(seconds))} s`;
   if (seconds < 3600) return `${Math.round(seconds / 60)} min`;

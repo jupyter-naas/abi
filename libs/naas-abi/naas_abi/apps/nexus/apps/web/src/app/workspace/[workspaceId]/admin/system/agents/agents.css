@@ -1,0 +1,54 @@
+/* The Agents tab reuses the Jobs tab's run list and panel; only its columns differ. */
+.agents-list .runs-head,
+.agents-list .runs-row {
+  grid-template-columns: 112px minmax(140px, 1fr) minmax(120px, 0.8fr) minmax(96px, 0.6fr) 120px 88px;
+}
+
+.agents-caller {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agents-events-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 16px 0 8px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground-hex);
+}
+
+.agents-events {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agents-event {
+  border: 1px solid var(--border-hex);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.agents-event-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.agents-event-text {
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--font-size-xs);
+}

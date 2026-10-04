@@ -1,10 +1,20 @@
-export type SystemTab = 'overview' | 'services' | 'data' | 'jobs' | 'modules' | 'nats' | 'traffic' | 'traces';
+export type SystemTab =
+  | 'overview'
+  | 'services'
+  | 'data'
+  | 'jobs'
+  | 'agents'
+  | 'modules'
+  | 'nats'
+  | 'traffic'
+  | 'traces';
 
 export const SYSTEM_TABS: { id: SystemTab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'services', label: 'Services' },
   { id: 'data', label: 'Data' },
   { id: 'jobs', label: 'Jobs' },
+  { id: 'agents', label: 'Agents' },
   { id: 'modules', label: 'Modules' },
   { id: 'nats', label: 'NATS' },
   { id: 'traffic', label: 'Live traffic' },

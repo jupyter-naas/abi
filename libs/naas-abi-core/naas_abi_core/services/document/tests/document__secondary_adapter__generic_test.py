@@ -272,6 +272,42 @@ class DocumentSecondaryAdapterContract(ABC):
         adapter.ensure_collection("module", CollectionSpec(name="records"))
         return adapter
 
+    def test_a_collection_spec_reads_back_as_declared_and_merged(self, docs):
+        docs.ensure_collection(
+            "module",
+            CollectionSpec(
+                name="people",
+                fields=(
+                    FieldSpec(name="email", type="string", unique=True),
+                    FieldSpec(name="age", type="int", indexed=True),
+                ),
+                unique_together=(("first", "last"),),
+            ),
+        )
+        docs.ensure_collection(
+            "module",
+            CollectionSpec(
+                name="people", fields=(FieldSpec(name="note", type="json"),)
+            ),
+        )
+
+        spec = docs.collection_spec("module", "people")
+
+        assert spec.name == "people"
+        assert {f.name: (f.type, f.indexed, f.unique) for f in spec.fields} == {
+            "email": ("string", False, True),
+            "age": ("int", True, False),
+            "note": ("json", False, False),
+        }
+        assert spec.unique_together == (("first", "last"),)
+        assert docs.collection_spec("module", "records") == CollectionSpec(
+            name="records"
+        )
+        with pytest.raises(CollectionNotFound):
+            docs.collection_spec("module", "absent")
+        with pytest.raises(CollectionNotFound):
+            docs.collection_spec("another", "people")
+
     @pytest.mark.parametrize("value", ROUND_TRIP_VALUES)
     def test_every_value_round_trips(self, docs, value):
         written = docs.put("module", "records", "id", {"value": value}, None)

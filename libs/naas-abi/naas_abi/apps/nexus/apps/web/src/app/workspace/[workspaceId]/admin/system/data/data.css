@@ -2660,3 +2660,11 @@
     max-width: 100%;
   }
 }
+
+/* The editor's expiry for services that take one (key-value). */
+.data-editor-expiry {
+  display: grid;
+  grid-template-columns: auto 120px 120px;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}

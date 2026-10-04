@@ -29,6 +29,7 @@ from naas_abi_core.services.document.adapters.document_nats_codec import (
     decode_spec,
     decode_where,
     encode_document,
+    encode_spec,
 )
 from naas_abi_core.services.document.DocumentService import DocumentService
 from naas_abi_proto.common.v1 import common_pb2
@@ -40,6 +41,7 @@ OPERATIONS = {
     "ensure_collection": "EnsureCollection",
     "drop_collection": "DropCollection",
     "collections": "Collections",
+    "collection_spec": "CollectionSpec",
     "put": "Put",
     "get": "Get",
     "delete": "Delete",
@@ -164,6 +166,10 @@ class DocumentPrimaryAdapterNATS:
             service.drop_collection(request.collection)
         elif operation == "collections":
             return response(collections=service.collections())
+        elif operation == "collection_spec":
+            return response(
+                spec=encode_spec(service.collection_spec(request.collection))
+            )
         elif operation == "put":
             doc = service.put(
                 request.collection,

@@ -255,6 +255,7 @@ class SentEmailSummary:
     subject: str = ""
     to: str = ""
     sender: str = ""
+    snippet: str = ""
 
 
 @dataclass

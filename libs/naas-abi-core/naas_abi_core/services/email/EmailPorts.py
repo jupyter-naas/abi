@@ -63,6 +63,9 @@ class SentEmailSummary:
     subject: str
     to: str
     sender: str
+    # The start of the text body on one line (HTML without tags when there is
+    # no text part); empty when the adapter does not read bodies to list.
+    snippet: str = ""
 
 
 @dataclass(frozen=True)

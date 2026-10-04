@@ -56,20 +56,22 @@ class SendResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., message_id: _Optional[str] = ...) -> None: ...
 
 class SentEmailSummary(_message.Message):
-    __slots__ = ("message_id", "sent_at", "size", "subject", "to", "sender")
+    __slots__ = ("message_id", "sent_at", "size", "subject", "to", "sender", "snippet")
     MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
     SENT_AT_FIELD_NUMBER: _ClassVar[int]
     SIZE_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     TO_FIELD_NUMBER: _ClassVar[int]
     SENDER_FIELD_NUMBER: _ClassVar[int]
+    SNIPPET_FIELD_NUMBER: _ClassVar[int]
     message_id: str
     sent_at: str
     size: int
     subject: str
     to: str
     sender: str
-    def __init__(self, message_id: _Optional[str] = ..., sent_at: _Optional[str] = ..., size: _Optional[int] = ..., subject: _Optional[str] = ..., to: _Optional[str] = ..., sender: _Optional[str] = ...) -> None: ...
+    snippet: str
+    def __init__(self, message_id: _Optional[str] = ..., sent_at: _Optional[str] = ..., size: _Optional[int] = ..., subject: _Optional[str] = ..., to: _Optional[str] = ..., sender: _Optional[str] = ..., snippet: _Optional[str] = ...) -> None: ...
 
 class SentEmailSummaries(_message.Message):
     __slots__ = ("messages",)

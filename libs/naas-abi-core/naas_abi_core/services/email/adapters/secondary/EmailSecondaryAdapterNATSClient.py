@@ -75,6 +75,7 @@ def _pb_to_summary(pb: email_pb2.SentEmailSummary) -> SentEmailSummary:
         subject=pb.subject,
         to=pb.to,
         sender=pb.sender,
+        snippet=pb.snippet,
     )
 
 

@@ -121,6 +121,36 @@ describe('document view', () => {
     expect(documentView.deleteWarning!(entry)).toContain('1,234 documents');
   });
 
+  it('shows the fields and indexes each collection declares', async () => {
+    const level = documentView.level!(1, 'acme.module');
+    const fields = level.columns!.find((c) => c.id === 'fields')!;
+    const spec = {
+      fields: [
+        { name: 'email', type: 'string', indexed: false, unique: true },
+        { name: 'age', type: 'int', indexed: true, unique: false },
+      ],
+      unique_together: [['first', 'last']],
+    };
+    const people = container('acme.module/people', 'people', {
+      documents: '3',
+      declared_fields: '2',
+      spec: JSON.stringify(spec),
+    });
+    mounted = await mount(Node, { node: fields.render(people) });
+
+    expect(mounted.host.textContent).toContain('email');
+    expect(mounted.host.textContent).toContain('age');
+    const title = mounted.host.querySelector('[title]')?.getAttribute('title') ?? '';
+    expect(title).toContain('email: string, unique');
+    expect(title).toContain('age: int, indexed');
+    expect(title).toContain('unique together: first + last');
+    await mounted.unmount();
+
+    const plain = container('acme.module/records', 'records', { documents: '1', declared_fields: '0', spec: '{"fields":[],"unique_together":[]}' });
+    mounted = await mount(Node, { node: fields.render(plain) });
+    expect(mounted.host.textContent).toContain('none declared');
+  });
+
   it('shows documents as key/value chips, with version and derived columns', async () => {
     const entries = [doc('a', { title: 'Alpha', status: 'done', n: 1 }), doc('b', { title: 'Beta', status: 'open', n: 2 })];
     const level = (documentView.level as (d: number, p: string, e?: ResourceEntry[]) => ReturnType<NonNullable<typeof documentView.level>>)(

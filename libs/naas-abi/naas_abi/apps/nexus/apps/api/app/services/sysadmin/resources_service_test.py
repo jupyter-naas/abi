@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.in_memory_resources import (
@@ -167,3 +168,25 @@ def test_uploads_and_downloads_are_bounded(admin):
 def test_masked_values_cannot_be_downloaded(admin):
     with pytest.raises(UnsupportedOperation):
         run(admin.download("secret", "OPENAI_API_KEY"))
+
+
+def test_an_expiry_reaches_only_services_that_support_it(objects, audit):
+    class Expiring(InMemoryResources):
+        def __init__(self):
+            super().__init__("keyvalue")
+            self.capabilities = dataclasses.replace(self.capabilities, expiry=True)
+            self.ttls = {}
+
+        async def write(self, resource_id, content, *, ttl_seconds=None):
+            self.ttls[resource_id] = ttl_seconds
+            return await super().write(resource_id, content)
+
+    keyvalue = Expiring()
+    service = ResourceAdminService({"object_storage": objects, "keyvalue": keyvalue}, audit)
+
+    run(service.write("u1", "keyvalue", "k", b"v", ttl_seconds=60))
+    run(service.write("u1", "keyvalue", "plain", b"v"))
+    assert keyvalue.ttls == {"k": 60, "plain": None}
+    with pytest.raises(UnsupportedOperation):
+        run(service.write("u1", "object_storage", "c.txt", b"v", ttl_seconds=60))
+    assert "c.txt" not in objects.items

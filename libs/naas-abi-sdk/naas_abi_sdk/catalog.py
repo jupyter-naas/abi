@@ -40,6 +40,7 @@ OPERATIONS = {
         "ensure_collection",
         "drop_collection",
         "collections",
+        "collection_spec",
         "namespaces",
         "put",
         "get",
