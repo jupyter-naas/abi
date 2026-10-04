@@ -340,6 +340,7 @@ class EngineNATSLoader:
                 event_publisher=lambda event: _publish_owner_event(
                     services.vector_store, event
                 ),
+                prepare=services.vector_store.initialize,
             )
             nats_runtime.run_coro(primary_vector_store.start(nc))
             started.append(primary_vector_store)

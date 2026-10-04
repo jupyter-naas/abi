@@ -843,3 +843,28 @@ def test_list_vectors_transfer_frames_carry_every_document_in_bounded_pages():
     documents = [d for frame in collected for d in decode_frame(frame)]
     assert len(documents) == 1_200 and len({d.id for d in documents}) == 1_200
     assert all(len(d.vector.values) == 256 for d in documents)
+
+
+def test_the_owner_prepares_its_adapter_before_serving_a_call():
+    # An engine's adapter may need initialize() (SqliteVec does); remote
+    # callers must not depend on something in-process touching it first.
+    from naas_abi_core.services.vector_store.adapters.SqliteVecAdapter import (
+        SqliteVecAdapter,
+    )
+
+    store = SqliteVecAdapter(":memory:")
+    adapter = VectorStorePrimaryAdapterNATS(store, SECRET, prepare=store.initialize)
+    request = _FakeRequest(
+        data=vector_store_pb2.CreateCollectionRequest(
+            collection_name="docs", dimension=4, distance_metric="cosine"
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.create_collection",
+    )
+
+    asyncio.run(adapter._handle_create_collection(request))
+
+    response = vector_store_pb2.CreateCollectionResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert store.list_collections() == ["docs"]
