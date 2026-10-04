@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-import io
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
@@ -890,16 +889,15 @@ async def export_graph(
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> StreamingResponse:
-    """Export all triples from a named graph.
+    """Export all triples from a named graph, streamed as they are read.
 
-    Fetches triples in batches of 10 000 and loops until the graph is fully
-    exhausted, then returns the serialized document in the requested format.
-    Supported formats: ttl (Turtle), owl (RDF/XML), nt (N-Triples).
+    The count headers are computed first. Supported formats: ttl (Turtle),
+    owl (RDF/XML, built in memory), nt (N-Triples).
     """
     graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
     rdflib_format, media_type, ext = _EXPORT_FORMAT_META.get(format, _EXPORT_FORMAT_META["ttl"])
     try:
-        content, triple_count, named_individual_count = await graph_service.export_graph_as_ttl(
+        export = await graph_service.export_graph(
             workspace_id=workspace_id,
             graph_uri=graph_uri,
             format=rdflib_format,
@@ -915,12 +913,12 @@ async def export_graph(
     filename = f"{graph_name}{ext}"
 
     return StreamingResponse(
-        io.BytesIO(content.encode("utf-8")),
+        export.chunks,
         media_type=media_type,
         headers={
             "Content-Disposition": content_disposition("attachment", filename),
-            "X-Triple-Count": str(triple_count),
-            "X-Named-Individual-Count": str(named_individual_count),
+            "X-Triple-Count": str(export.triple_count),
+            "X-Named-Individual-Count": str(export.named_individual_count),
             "Access-Control-Expose-Headers": "X-Triple-Count, X-Named-Individual-Count, Content-Disposition",
         },
     )

@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import contextmanager
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.triple_store_resources import (
@@ -11,6 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.contracts import (
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import (
     InvalidResource,
     ResourceNotFound,
+    ResourceTooLarge,
     UnsupportedOperation,
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.tests import fixtures
@@ -118,6 +120,43 @@ def test_download_is_the_full_graph_as_turtle(service):
     data = run(resources.download(GRAPHS + "alpha", max_bytes=1 << 20))
 
     assert len(Graph().parse(data=data, format="turtle")) == 5
+
+
+class EndlessExport:
+    """The real service, but a graph whose export never ends."""
+
+    def __init__(self, inner) -> None:
+        self.inner = inner
+        self.read = 0
+        self.queries: list[str] = []
+
+    @contextmanager
+    def export(self, graph_name=None):
+        def triples():
+            while True:
+                self.read += 1
+                yield (URIRef(f"{SUBJECT}/{self.read}"), URIRef(PREDICATE), Literal("x" * 100))
+
+        yield triples()
+
+    def query(self, sparql):
+        self.queries.append(sparql)
+        return self.inner.query(sparql)
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+
+def test_download_stops_reading_once_over_the_limit(service):
+    store = EndlessExport(service)
+    resources = TripleStoreResources(store)
+
+    with pytest.raises(ResourceTooLarge) as raised:
+        run(resources.download(GRAPHS + "alpha", max_bytes=10_000))
+
+    assert raised.value.size > 10_000 and raised.value.limit == 10_000
+    assert store.read < 100  # about 70 lines of 150 bytes, never the whole graph
+    assert not any("?s ?p ?o" in q for q in store.queries)  # no materialized SELECT
 
 
 def test_the_schema_graph_is_read_only(service):

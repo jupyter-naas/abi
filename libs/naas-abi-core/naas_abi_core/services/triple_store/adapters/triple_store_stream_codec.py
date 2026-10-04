@@ -62,13 +62,18 @@ def decode_rows(frame: bytes) -> list[dict[str, Node]]:
     ]
 
 
+def nt_line(triple: Triple) -> str:
+    """One triple as an N-Triples line, newline included (also valid Turtle)."""
+    return _nt_row(triple)
+
+
 def triple_frames(
     triples: Iterable[Triple], frame_bytes: int = FRAME_BYTES
 ) -> Iterator[bytes]:
     lines: list[str] = []
     size = 0
     for triple in triples:
-        line = _nt_row(triple)
+        line = nt_line(triple)
         lines.append(line)
         size += len(line)
         if size >= frame_bytes:

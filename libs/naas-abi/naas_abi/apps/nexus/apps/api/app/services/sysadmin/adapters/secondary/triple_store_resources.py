@@ -286,11 +286,16 @@ class TripleStoreResources:
         return ResourceDetail(entry, content, view)
 
     def _download(self, resource_id: str, max_bytes: int) -> bytes:
+        """The graph as N-Triples (valid Turtle), read from the store's export
+        and refused as soon as it passes ``max_bytes``."""
         graph = self._existing(resource_id)
-        data = self._triples(graph, None).serialize(format="turtle").encode()
-        if len(data) > max_bytes:
-            raise ResourceTooLarge(SERVICE, resource_id, len(data), max_bytes)
-        return data
+        data = bytearray()
+        with self._store.export(graph) as triples:
+            for s, p, o in triples:
+                data += f"{ntriples_term(s)} {ntriples_term(p)} {ntriples_term(o)} .\n".encode()
+                if len(data) > max_bytes:
+                    raise ResourceTooLarge(SERVICE, resource_id, len(data), max_bytes)
+        return bytes(data)
 
     def _write(self, resource_id: str, content: bytes) -> ResourceEntry:
         graph = _iri(resource_id)
