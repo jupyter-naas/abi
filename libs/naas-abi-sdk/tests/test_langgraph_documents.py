@@ -4,9 +4,12 @@ import pytest
 
 pytest.importorskip("langgraph.checkpoint.base")
 
+from dataclasses import dataclass
+
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.base import ERROR, empty_checkpoint
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from pydantic import BaseModel, SecretBytes, SecretStr
 
 from naas_abi_sdk.langgraph_documents import (
     BLOBS,
@@ -272,3 +275,161 @@ def test_next_version_keeps_the_thread_version_type(current, expected_type):
     assert type(following) is expected_type
     if current is not None:
         assert following > current
+
+
+# --- secrets ---------------------------------------------------------------------------
+
+
+def _holds(documents, needle: bytes) -> bool:
+    """Whether any planned document carries ``needle``, at any depth."""
+
+    def walk(value):
+        if isinstance(value, (bytes, bytearray)):
+            return needle in value
+        if isinstance(value, str):
+            return needle.decode() in value
+        if isinstance(value, dict):
+            return any(walk(v) for v in value.values())
+        if isinstance(value, (list, tuple)):
+            return any(walk(v) for v in value)
+        return False
+
+    return any(walk(d) for d in documents)
+
+
+class Credentials(BaseModel):
+    user: str
+    key: SecretStr
+
+
+@dataclass(frozen=True)
+class Connection:
+    dsn: SecretStr
+
+
+def test_secrets_are_never_written_and_read_back_redacted(schema):
+    from langchain_core.messages import ToolMessage
+
+    from naas_abi_sdk.langgraph_documents import REDACTED_SECRET
+
+    secret = "hunter2-must-not-be-stored"
+    tool = ToolMessage(
+        "connected",
+        tool_call_id="c1",
+        artifact={"creds": Credentials(user="u", key=SecretStr(secret))},
+    )
+    checkpoint = snapshot(
+        "1f0000000-0000-6000-8000-000000000001",
+        messages=[HumanMessage("hi", id="h"), tool],
+        credentials=SecretStr(secret),
+        nested={
+            "list": [SecretBytes(secret.encode())],
+            "conn": Connection(SecretStr(secret)),
+        },
+    )
+    plan = schema.checkpoint_plan(
+        ROOT, checkpoint, {"step": 0, "token": SecretStr(secret)}
+    )
+    writes = schema.write_plan(
+        plan.config, [("credentials", SecretStr(secret))], "task"
+    )
+
+    assert not _holds([p.data for p in [*plan.puts, *writes]], secret.encode())
+    restored, _ = restore(schema, plan, stored(plan))
+    values = restored.checkpoint["channel_values"]
+    assert values["credentials"].get_secret_value() == REDACTED_SECRET
+    assert values["nested"]["list"][0].get_secret_value() == REDACTED_SECRET.encode()
+    assert values["nested"]["conn"].dsn.get_secret_value() == REDACTED_SECRET
+    # LangGraph stores a message as its model_dump(): a nested model is a dict.
+    creds = values["messages"][1].artifact["creds"]
+    assert (creds["user"], creds["key"].get_secret_value()) == ("u", REDACTED_SECRET)
+    assert restored.metadata["token"].get_secret_value() == REDACTED_SECRET
+
+
+def test_values_without_secrets_are_not_copied():
+    from naas_abi_sdk.langgraph_documents import redact_secrets
+
+    messages = conversation(2)
+    value = {"messages": messages, "n": 1, "tags": ("a", "b"), "seen": {1, 2}}
+
+    assert redact_secrets(value) is value
+    assert redact_secrets(messages[0]) is messages[0]
+
+
+# --- retention -------------------------------------------------------------------------
+
+
+def test_retention_keeps_the_newest_root_checkpoints_and_the_subgraphs_they_ran():
+    from naas_abi_sdk.langgraph_documents import Retained, kept_checkpoints
+
+    stored_checkpoints = [
+        Retained("", "c1", None),
+        Retained("", "c2", None),
+        Retained("", "c3", None),
+        Retained("tools:t1", "s1", "c1"),  # a subgraph run under c1
+        Retained("tools:t3", "s3", "c3"),
+        Retained("tools:t3", "s3b", "c3"),
+        Retained("tools:t3|inner:t9", "g3", "c3"),  # nested deeper, same root
+    ]
+
+    assert kept_checkpoints(stored_checkpoints, keep_last=1) == {
+        ("", "c3"),
+        ("tools:t3", "s3"),
+        ("tools:t3", "s3b"),
+        ("tools:t3|inner:t9", "g3"),
+    }
+    assert ("", "c2") in kept_checkpoints(stored_checkpoints, keep_last=2)
+    assert ("tools:t1", "s1") not in kept_checkpoints(stored_checkpoints, keep_last=2)
+    assert len(kept_checkpoints(stored_checkpoints, keep_last=10)) == len(
+        stored_checkpoints
+    )
+
+
+def test_retention_keeps_each_unlinked_namespace_newest():
+    from naas_abi_sdk.langgraph_documents import Retained, kept_checkpoints
+
+    stored_checkpoints = [
+        Retained("child:1", "a1", None),
+        Retained("child:1", "a2", None),
+        Retained("child:2", "b1", None),
+    ]
+
+    assert kept_checkpoints(stored_checkpoints, keep_last=1) == {
+        ("child:1", "a2"),
+        ("child:2", "b1"),
+    }
+    with pytest.raises(ValueError, match="keep_last"):
+        kept_checkpoints(stored_checkpoints, keep_last=0)
+
+
+def test_retained_reads_the_root_parent_from_the_metadata(schema):
+    child = {"configurable": {"thread_id": "t-1", "checkpoint_ns": "tools:t1"}}
+    plan = schema.checkpoint_plan(
+        child,
+        snapshot("1f0000000-0000-6000-8000-000000000009"),
+        {"parents": {"": "c7"}},
+    )
+    root_plan = schema.checkpoint_plan(
+        ROOT, snapshot("1f0000000-0000-6000-8000-000000000010"), {"parents": {}}
+    )
+
+    assert schema.retained(plan.puts[-1].data, {}) == (
+        "tools:t1",
+        "1f0000000-0000-6000-8000-000000000009",
+        "c7",
+    )
+    assert schema.retained(root_plan.puts[-1].data, {}).root_parent is None
+
+
+def test_created_before_reads_datetimes_and_rpc_text():
+    from datetime import datetime, timezone
+
+    from naas_abi_sdk.langgraph_documents import created_before
+
+    cutoff = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+    assert created_before(datetime(2026, 10, 4, 11, 59, tzinfo=timezone.utc), cutoff)
+    assert created_before(datetime(2026, 10, 4, 11, 59), cutoff)  # noqa: DTZ001 - naive is UTC
+    assert created_before("2026-10-04T11:59:00+00:00", cutoff)
+    assert created_before("2026-10-04T11:59:00Z", cutoff)
+    assert not created_before("2026-10-04T12:00:01+00:00", cutoff)
+    assert not created_before("", cutoff) and not created_before(None, cutoff)

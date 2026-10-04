@@ -150,3 +150,97 @@ def migrate_memory(
         **summary.as_dict(),
     }
     click.echo(json.dumps(report, indent=2))
+
+
+@agent.command("prune-memory")
+@click.option(
+    "--keep-last",
+    type=click.IntRange(min=1),
+    default=20,
+    show_default=True,
+    help="Checkpoints kept per thread, with the subgraph steps they ran.",
+)
+@click.option(
+    "--namespace",
+    default=None,
+    help="Document namespace (default: the engine's agent memory).",
+)
+@click.option(
+    "--agent-id", default=None, help="Checkpoint scope (default: the engine's)."
+)
+@click.option(
+    "--thread",
+    "threads",
+    multiple=True,
+    help="Only this thread ID (repeatable); default: every thread.",
+)
+@click.option(
+    "--min-age",
+    type=click.IntRange(min=0),
+    default=60,
+    show_default=True,
+    help="Seconds: younger stored values are kept (a run may still need them).",
+)
+@click.option("--apply", is_flag=True, help="Delete; else only report.")
+def prune_memory(
+    keep_last: int,
+    namespace: str | None,
+    agent_id: str | None,
+    threads: tuple[str, ...],
+    min_age: int,
+    apply: bool,
+):
+    """Delete old agent memory, keeping each thread's newest checkpoints.
+
+    Older checkpoints (schema 2 and 1), their pending writes, and every stored
+    value no kept checkpoint references are deleted; the conversation itself
+    stays whole in the kept ones. A dry run unless --apply. Values younger
+    than --min-age are kept. Run it while the threads are idle (stop the
+    engines to be sure), as for deleting a thread.
+    """
+    from datetime import timedelta
+
+    from naas_abi_core.services.agent.DocumentCheckpointSaver import (
+        ENGINE_MEMORY_ID,
+        ENGINE_MEMORY_NAMESPACE,
+        DocumentCheckpointSaver,
+    )
+    from naas_abi_core.services.document.DocumentPort import CollectionNotFound
+
+    namespace = namespace or ENGINE_MEMORY_NAMESPACE
+    agent_id = agent_id or ENGINE_MEMORY_ID
+    saver = DocumentCheckpointSaver(_documents(namespace), agent_id=agent_id)
+    try:
+        thread_ids = [*threads] or saver.thread_ids()  # `list` is a command here
+    except CollectionNotFound:  # no agent memory in this namespace yet
+        thread_ids = []
+    reports = [
+        saver.prune(
+            thread_id,
+            keep_last=keep_last,
+            apply=apply,
+            grace=timedelta(seconds=min_age),
+        )
+        for thread_id in thread_ids
+    ]
+    totals = {
+        name: sum(getattr(report, name) for report in reports)
+        for name in ("kept", "checkpoints", "writes", "values")
+    }
+    click.echo(
+        json.dumps(
+            {
+                "mode": "applied" if apply else "dry-run",
+                "target": {"namespace": namespace, "agent_id": agent_id},
+                "keep_last": keep_last,
+                "threads": len(thread_ids),
+                **totals,
+                "pruned": [
+                    report.as_dict()
+                    for report in reports
+                    if report.checkpoints or report.writes or report.values
+                ],
+            },
+            indent=2,
+        )
+    )

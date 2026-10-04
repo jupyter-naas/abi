@@ -127,6 +127,27 @@ in order: the engine's agent checkpointer when an engine is loaded, else a share
 - Concurrent turns on one thread fork from the same parent; the newest checkpoint
   becomes the head (as with PostgresSaver). Checkpoint documents are create-only
   and values content-addressed, so nothing is overwritten. There is no run lease.
+- Retention: `prune(thread_id, keep_last=N)` (`aprune` async, on both savers;
+  rules in `langgraph_documents.kept_checkpoints`) keeps a thread's newest N
+  root-namespace checkpoints and the subgraph steps they ran (a child namespace,
+  one per sub-agent task, goes with the root checkpoint in its
+  `metadata["parents"][""]`, so an interrupted sub-agent still resumes), and
+  deletes older checkpoints (schema 2 and 1), their pending writes and every
+  value document no kept checkpoint or write references. Values younger than
+  `grace` (1 minute) are kept; nothing is deleted before the kept references
+  are known, and checkpoints go first. Stop the thread's runs first, as for
+  `delete_thread`: each turn re-reads its head (exact references), so a saver's
+  remembered references never point at a pruned value. `abi agent
+  prune-memory` (dry run; `--apply`; `--keep-last`, default 20; `--thread`;
+  `--min-age`; `--namespace`/`--agent-id`) runs it over a scope.
+- Secrets are never stored: values are serialized through
+  `langgraph_documents.RedactingSerializer`, so a `SecretStr`/`SecretBytes`
+  anywhere in state, writes, tool artifacts or metadata is stored (and read
+  back) as one holding `REDACTED_SECRET`. Engine and SDK agent state holds no
+  secret (messages, system prompt, routing); a graph that needs a credential
+  across steps keeps its name and resolves it from the secret service when it
+  uses it. Documents written before this keep their values until pruned or
+  deleted.
 - Migration into schema 2: `abi agent migrate-memory` (dry run; `--apply` to
   write; `--thread` to select; `--from postgres` with `$POSTGRES_URL` or
   `--source-url`, or `--from documents-v1`; `--namespace`/`--agent-id` for
