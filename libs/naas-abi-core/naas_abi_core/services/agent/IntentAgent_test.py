@@ -1,5 +1,6 @@
+import os
+
 import pytest
-from langchain_openai import ChatOpenAI
 from naas_abi_core.services.agent.IntentAgent import (
     Agent,
     AgentConfiguration,
@@ -8,10 +9,23 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentType,
 )
 
+# These check intent mapping end to end against OpenAI (embeddings and the
+# model's entity filter): similarity thresholds only mean something with real
+# embeddings. An OpenRouter key (sk-or-...) cannot reach OpenAI.
+_OPENAI_KEY = os.environ.get("OPENAI_API_KEY", "")
+requires_openai = pytest.mark.skipif(
+    not _OPENAI_KEY or _OPENAI_KEY.startswith("sk-or-"),
+    reason="needs a real OpenAI API key (OPENAI_API_KEY)",
+)
+
 
 @pytest.fixture
 def agent():
+    from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+
     model = ChatOpenAI(model="gpt-4.1")
+    # Without an engine there is no model registry to resolve a default.
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
     subagent_chatgpt = Agent(
         name="ChatGPT",
         description="ChatGPT agent",
@@ -71,6 +85,7 @@ def agent():
         name="Test Agent",
         description="A test agent",
         chat_model=model,
+        embedding_model=embeddings,
         tools=[],
         agents=[subagent_chatgpt, subagent_perplexity],
         intents=intents,
@@ -79,6 +94,7 @@ def agent():
     return agent
 
 
+@requires_openai
 def test_intent_agent(agent):
     test = agent.invoke("test")
     assert test == "This is a test intent", test
@@ -100,6 +116,7 @@ def test_intent_agent(agent):
     assert "00 11 22 33 44 55".lower() not in result.lower(), result
 
 
+@requires_openai
 def test_direct_intent(agent):
     result = agent.invoke("Hello")
     assert "Hello, what can I do for you?" == result, result
@@ -108,6 +125,7 @@ def test_direct_intent(agent):
     assert "You're welcome, can I help you with anything else?" == result, result
 
 
+@requires_openai
 def test_request_human_validation(agent):
     result = agent.invoke("Search news about ai")
 
@@ -116,6 +134,7 @@ def test_request_human_validation(agent):
     assert "chatgpt" in result.lower() or "perplexity" in result.lower(), result
 
 
+@requires_openai
 def test_request_help_tool(agent):
     """Test AGENT intent mapping for chatgpt"""
     result = agent.invoke("@Knowledge_Graph_Builder hello")

@@ -1,9 +1,13 @@
 """Tests for Agent memory configuration with PostgreSQL support."""
 
 import os
+from typing import Any
 from unittest.mock import ANY, MagicMock, patch
 
 import pytest
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 from naas_abi_core.services.agent.Agent import (
@@ -12,6 +16,23 @@ from naas_abi_core.services.agent.Agent import (
     _reset_shared_checkpointer_for_tests,
     create_checkpointer,
 )
+
+
+class Replying(BaseChatModel):
+    """A chat model that always answers ``reply`` (Agent requires a real
+    ``BaseChatModel``; a ``MagicMock`` is refused)."""
+
+    reply: str = "Test response"
+
+    @property
+    def _llm_type(self) -> str:
+        return "replying"
+
+    def bind_tools(self, tools: Any, **kwargs: Any) -> "Replying":
+        return self
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(self.reply))])
 
 
 @pytest.fixture(autouse=True)
@@ -148,10 +169,7 @@ class TestAgentMemoryConfiguration:
 
     @pytest.fixture
     def mock_chat_model(self):
-        """Create a mock chat model."""
-        model = MagicMock()
-        model.bind_tools = MagicMock(return_value=model)
-        return model
+        return Replying()
 
     def test_agent_uses_provided_memory(self, mock_chat_model):
         """Test that Agent uses explicitly provided memory."""
@@ -168,7 +186,7 @@ class TestAgentMemoryConfiguration:
 
     def test_agent_creates_memory_when_none_provided(self, mock_chat_model):
         """Test that Agent creates memory based on environment when None is provided."""
-        with patch("abi.services.agent.Agent.create_checkpointer") as mock_create:
+        with patch("naas_abi_core.services.agent.Agent.create_checkpointer") as mock_create:
             mock_checkpointer = MagicMock(spec=BaseCheckpointSaver)
             mock_create.return_value = mock_checkpointer
 
@@ -184,7 +202,7 @@ class TestAgentMemoryConfiguration:
 
     def test_agent_default_memory_creation(self, mock_chat_model):
         """Test that Agent creates memory automatically when not provided."""
-        with patch("abi.services.agent.Agent.create_checkpointer") as mock_create:
+        with patch("naas_abi_core.services.agent.Agent.create_checkpointer") as mock_create:
             mock_checkpointer = MagicMock(spec=BaseCheckpointSaver)
             mock_create.return_value = mock_checkpointer
 
@@ -202,16 +220,7 @@ class TestAgentPostgresIntegration:
 
     @pytest.fixture
     def mock_chat_model(self):
-        """Create a mock chat model that simulates real behavior."""
-        model = MagicMock()
-        model.bind_tools = MagicMock(return_value=model)
-
-        # Mock invoke to return a proper message
-        from langchain_core.messages import AIMessage
-
-        model.invoke = MagicMock(return_value=AIMessage(content="Test response"))
-
-        return model
+        return Replying(reply="Test response")
 
     @pytest.mark.integration
     def test_agent_with_postgres_preserves_state(self, mock_chat_model):
