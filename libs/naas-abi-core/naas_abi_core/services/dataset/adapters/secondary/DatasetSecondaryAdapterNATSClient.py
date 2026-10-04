@@ -351,9 +351,7 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
             TRANSFER_PREFIX, "query", request.SerializeToString(), raise_error
         ) as frames:
             if frames is None:
-                result = self.query(sql, namespace=namespace, snapshot_id=snapshot_id)
-                yield RowStream(columns=result.columns, rows=iter(result.rows))
-                return
+                raise NatsRPCError("UNAVAILABLE", "No dataset engine hosts streams")
             header = next(frames, None)
             if header is None:
                 raise RuntimeError("dataset stream ended without its header")
