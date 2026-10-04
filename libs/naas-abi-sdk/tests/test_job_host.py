@@ -3,6 +3,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from naas_abi_sdk.job_host import JobHost
 from naas_abi_sdk.jobs import (
     TRIGGER_HEADER,
@@ -281,7 +283,6 @@ def test_event_bridge_turns_an_event_into_a_trigger():
     assert json.loads(payload) == {"subject": "evt.abc.ev-42", "data": {"key": "a.csv"}}
     assert headers == {
         TRIGGER_HEADER: "event",
-        "Nats-Msg-Id": "on_put:evt.abc.ev-42",
         "Nats-TTL": "24h",
     }
 
@@ -545,7 +546,7 @@ def test_a_host_triggers_its_own_jobs_once_per_idempotency_key():
     assert len(js.published) == 2
     subject, headers = js.published[0]
     assert subject == job_subjects(PROJECT, MODULE, "ingest").trigger
-    assert headers["Nats-Msg-Id"] == "ingest:r1" and headers[TRIGGER_HEADER] == "manual"
+    assert bool(headers["Nats-Msg-Id"]) and headers[TRIGGER_HEADER] == "manual"
     assert "Nats-Msg-Id" not in js.published[1][1]
     with pytest.raises(ValueError):
         asyncio.run(host.trigger("someone_elses_job"))
@@ -719,7 +720,9 @@ def test_a_run_records_its_heartbeats():
     assert run["heartbeat_at"] > run["started_at"]
 
 
-def _seed_running(docs, n, last_seen, *, attempt=1, max_attempts=1, field="heartbeat_at"):
+def _seed_running(
+    docs, n, last_seen, *, attempt=1, max_attempts=1, field="heartbeat_at"
+):
     run_id = f"sync:{n}"
     docs.data[(runs_collection(PROJECT), run_id)] = Document(
         id=run_id,
@@ -792,3 +795,243 @@ def test_a_lost_run_updated_meanwhile_is_left_alone():
 
     assert asyncio.run(host.reap_lost_runs(now=now)) == 0
     assert docs.run("sync:1")["status"] == "RUNNING"
+
+
+@pytest.mark.parametrize("event_ids", [None, ("event-1", "event-2")])
+def test_event_dedup_is_scoped_to_modules_and_individual_events(event_ids):
+    js = _DedupJetStream()
+    hosts = [_host(), _host()]
+    hosts[1].module_id = "acme.other"
+
+    async def scenario():
+        for host in hosts:
+            for n in range(2):
+                msg = SimpleNamespace(
+                    subject="evt.review.put",
+                    data=json.dumps({"n": n}).encode(),
+                    headers={"Nats-Msg-Id": event_ids[n]} if event_ids else {},
+                )
+                await host.bridge_event(js, JobDescriptor("on_put"), msg)
+                if event_ids:
+                    await host.bridge_event(js, JobDescriptor("on_put"), msg)
+
+    asyncio.run(scenario())
+    assert len(js.published) == 4
+
+
+@pytest.mark.parametrize("blocked", [False, True])
+def test_progress_write_failure_does_not_stop_acknowledgement_renewal(blocked, caplog):
+    class FailingProgress(Documents):
+        async def put(self, collection, id, data, **kwargs):
+            if data["status"] == "RUNNING" and "logs" in data:
+                if blocked:
+                    await asyncio.Event().wait()
+                raise RuntimeError("store unavailable")
+            return await super().put(collection, id, data, **kwargs)
+
+    docs = FailingProgress()
+    msg = Msg()
+
+    async def handler(ctx):
+        await asyncio.sleep(0.1)
+        return "done"
+
+    _run(_host(docs, heartbeat_seconds=0.01), JobDescriptor("long"), handler, msg)
+    assert msg.calls.count(("in_progress",)) >= 5
+    assert docs.run("long:7")["status"] == "SUCCEEDED"
+    if not blocked:
+        assert "Job progress persistence failed" in caplog.text
+
+
+def test_heartbeat_failure_stops_and_retries_the_handler(caplog):
+    stopped = []
+
+    class FailedRenewal(Msg):
+        async def in_progress(self):
+            raise RuntimeError("broker unavailable")
+
+    async def handler(ctx):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            stopped.append(True)
+
+    docs = Documents()
+    msg = FailedRenewal()
+    _run(
+        _host(docs, heartbeat_seconds=0.01),
+        JobDescriptor("long", max_attempts=2),
+        handler,
+        msg,
+    )
+    assert stopped == [True]
+    assert docs.run("long:7")["status"] == "RETRYING"
+    assert msg.calls == [("nak", 5)]
+    assert "Job acknowledgement heartbeat failed" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "outcome,retire", [("success", "ack"), ("failure", "term"), ("retry", "nak")]
+)
+def test_completion_is_saved_before_retiring_delivery(outcome, retire):
+    docs = Documents()
+
+    class CheckedRetirement(Msg):
+        async def ack(self):
+            assert docs.run("ingest:7")["status"] == "SUCCEEDED"
+            await super().ack()
+
+        async def term(self):
+            assert docs.run("ingest:7")["status"] == "FAILED"
+            await super().term()
+
+        async def nak(self, delay=None):
+            assert docs.run("ingest:7")["status"] == "RETRYING"
+            await super().nak(delay)
+
+    async def handler(ctx):
+        if outcome != "success":
+            raise RuntimeError("failed")
+        return 42
+
+    msg = CheckedRetirement()
+    _run(
+        _host(docs),
+        JobDescriptor("ingest", max_attempts=2 if outcome == "retry" else 1),
+        handler,
+        msg,
+    )
+    assert msg.calls[-1][0] == retire
+
+
+def test_completion_outage_keeps_the_result_and_heartbeat_while_retrying():
+    class CompletionOutage(Documents):
+        failures = 3
+
+        async def put(self, collection, id, data, **kwargs):
+            if data["status"] == "SUCCEEDED" and self.failures:
+                self.failures -= 1
+                raise RuntimeError("store unavailable")
+            return await super().put(collection, id, data, **kwargs)
+
+    docs = CompletionOutage()
+    msg = Msg()
+    calls = []
+
+    async def handler(ctx):
+        calls.append(True)
+        return {"answer": 42}
+
+    _run(_host(docs, heartbeat_seconds=0.01), JobDescriptor("ingest"), handler, msg)
+    assert calls == [True]
+    assert msg.calls.count(("in_progress",)) >= 2
+    assert msg.calls[-1] == ("ack",)
+    assert docs.run("ingest:7")["result"] == {"answer": 42}
+
+
+@pytest.mark.parametrize(
+    "status", ["SUCCEEDED", "SKIPPED", "CANCELLED", "FAILED", "TIMED_OUT"]
+)
+def test_retirement_outage_redelivery_keeps_completion_without_reexecuting(status):
+    docs = Documents()
+    _seed(docs, "ingest", 7, status, datetime.now(timezone.utc))
+    snapshot = dict(docs.run("ingest:7"))
+
+    class FailedRetirement(Msg):
+        async def ack(self):
+            raise RuntimeError("broker unavailable")
+
+        async def term(self):
+            raise RuntimeError("broker unavailable")
+
+    async def handler(ctx):
+        pytest.fail("Completed delivery must not execute again")
+
+    host = _host(docs)
+    with pytest.raises(RuntimeError, match="broker unavailable"):
+        _run(host, JobDescriptor("ingest"), handler, FailedRetirement())
+    msg = Msg(attempt=2)
+    _run(host, JobDescriptor("ingest"), handler, msg)
+    assert docs.run("ingest:7") == snapshot
+    assert msg.calls == [
+        ("ack",) if status in ("SUCCEEDED", "SKIPPED", "CANCELLED") else ("term",)
+    ]
+
+
+def test_cas_exhaustion_does_not_silently_allow_execution():
+    class ConflictingDocuments(Documents):
+        async def put(self, *args, **kwargs):
+            raise VersionConflict("VERSION_CONFLICT", "contended")
+
+    async def handler(ctx):
+        pytest.fail("A run must be saved before it starts")
+
+    msg = Msg()
+    with pytest.raises(VersionConflict):
+        _run(_host(ConflictingDocuments()), JobDescriptor("ingest"), handler, msg)
+    assert msg.calls == []
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_retirement_failure_after_execution_preserves_the_saved_result(failed):
+    docs = Documents()
+    executions = []
+
+    class FailedRetirement(Msg):
+        async def ack(self):
+            raise RuntimeError("ack unavailable")
+
+        async def term(self):
+            raise RuntimeError("term unavailable")
+
+    async def handler(ctx):
+        executions.append(True)
+        if failed:
+            raise ValueError("handler failed")
+        return {"answer": 42}
+
+    host = _host(docs)
+    with pytest.raises(RuntimeError):
+        _run(host, JobDescriptor("ingest"), handler, FailedRetirement())
+    snapshot = dict(docs.run("ingest:7"))
+    assert snapshot["status"] == ("FAILED" if failed else "SUCCEEDED")
+    if not failed:
+        assert snapshot["result"] == {"answer": 42}
+    _run(host, JobDescriptor("ingest"), handler, Msg(attempt=2))
+    assert executions == [True]
+    assert docs.run("ingest:7") == snapshot
+
+
+def test_shutdown_during_completion_outage_leaves_delivery_unacknowledged():
+    class CompletionOutage(Documents):
+        async def put(self, collection, id, data, **kwargs):
+            if data["status"] == "SUCCEEDED":
+                host._closing = True
+                raise RuntimeError("store unavailable")
+            return await super().put(collection, id, data, **kwargs)
+
+    docs = CompletionOutage()
+    host = _host(docs)
+    msg = Msg()
+
+    async def handler(ctx):
+        return 42
+
+    with pytest.raises(RuntimeError, match="store unavailable"):
+        _run(host, JobDescriptor("ingest"), handler, msg)
+    assert msg.calls == []
+    assert not host._running and not host._work
+
+
+def test_manual_idempotency_keys_do_not_suppress_other_modules_jobs():
+    js = _DedupJetStream()
+    hosts = [_publishing_host(js), _publishing_host(js)]
+    hosts[1].module_id = "acme.other"
+
+    async def scenario():
+        for host in hosts:
+            await host.trigger("ingest", idempotency_key="same")
+            await host.trigger("ingest", idempotency_key="same")
+
+    asyncio.run(scenario())
+    assert len(js.published) == 2
