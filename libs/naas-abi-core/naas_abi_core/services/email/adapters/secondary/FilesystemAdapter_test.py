@@ -100,6 +100,48 @@ class TestFilesystemAdapterKeptMail:
         assert first[0].size == (tmp_path / f"{ids[2]}.eml").stat().st_size
         assert first[0].sent_at.endswith("+00:00")
 
+    def test_listing_carries_a_one_line_snippet_of_the_body(
+        self, tmp_path: Path
+    ) -> None:
+        from naas_abi_core.services.email.adapters.secondary.FilesystemAdapter import (
+            SNIPPET_CHARS,
+        )
+
+        adapter = FilesystemAdapter(directory=str(tmp_path))
+        adapter.send(
+            to_email="a@example.com",
+            subject="text",
+            text_body="Hello Alice,\n\n  the report   is ready. " + "x" * 400,
+            from_email="n@example.com",
+        )
+        adapter.send(
+            to_email="a@example.com",
+            subject="html",
+            text_body="",
+            html_body="<p>Hi <b>Bob</b>,</p><p>see&nbsp;you</p>",
+            from_email="n@example.com",
+        )
+
+        html, text = adapter.list_sent()
+
+        assert text.snippet.startswith("Hello Alice, the report is ready. xxx")
+        assert len(text.snippet) == SNIPPET_CHARS
+        assert html.snippet == "Hi Bob, see you"
+        assert adapter.get_sent(text.message_id).summary.snippet == text.snippet
+
+    def test_a_message_too_large_to_parse_has_no_snippet(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import naas_abi_core.services.email.adapters.secondary.FilesystemAdapter as module
+
+        monkeypatch.setattr(module, "SNIPPET_MAX_BYTES", 100)
+        adapter = FilesystemAdapter(directory=str(tmp_path))
+        _send(adapter, "big")
+
+        (listed,) = adapter.list_sent()
+
+        assert listed.snippet == "" and listed.subject == "big"
+
     def test_get_and_delete_a_kept_message(self, tmp_path: Path) -> None:
         adapter = FilesystemAdapter(directory=str(tmp_path))
         message_id = _send(adapter, "Hello")

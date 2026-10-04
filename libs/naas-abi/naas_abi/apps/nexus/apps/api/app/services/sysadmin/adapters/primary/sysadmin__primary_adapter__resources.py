@@ -169,11 +169,16 @@ async def write_entry(
     request: Request,
     id: str = Query(..., min_length=1),
     confirm: str | None = None,
+    ttl_seconds: int | None = Query(None, ge=1, le=10 * 365 * 24 * 3600),
     user: User = Depends(get_current_user_required),
     admin: ResourceAdminService = Depends(get_resource_admin),
 ) -> Any:
     content = await _body(request, admin.upload_limit)
-    return to_json(await _call(admin.write(user.id, service, id, content, confirm=confirm)))
+    return to_json(
+        await _call(
+            admin.write(user.id, service, id, content, confirm=confirm, ttl_seconds=ttl_seconds)
+        )
+    )
 
 
 @resources_router.delete("/{service}/entry", status_code=204)

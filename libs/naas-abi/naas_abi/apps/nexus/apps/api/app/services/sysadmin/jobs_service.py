@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
     ACTIVE_STATUSES,
+    FAILED_STATUSES,
+    Failures,
     JobCatalog,
     JobControl,
     JobDefinition,
@@ -46,6 +48,9 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources_service import
 )
 
 RECENT_RUNS = 20
+# Failures read for the notification badge, and how far back by default.
+MAX_FAILURES = 200
+FAILURES_WINDOW = timedelta(days=1)
 
 
 def _parse(value: str | None) -> datetime | None:
@@ -228,6 +233,19 @@ class JobsAdminService:
         )
         next_cursor = found[-1].started_at if len(found) == limit and found else None
         return RunsPage(tuple(found), next_cursor)
+
+    async def failures(self, *, since: str | None = None) -> Failures:
+        """Runs that failed or timed out since ``since`` (default: the last day),
+        newest first: what the Jobs tab's notification counts."""
+        start = _parse(since) or self._clock() - FAILURES_WINDOW
+        store = self._store()
+        module_ids = sorted({d.module_id for d in await self._definitions({})})
+        found = await store.list_runs(
+            module_ids, statuses=list(FAILED_STATUSES), limit=MAX_FAILURES
+        )
+        recent = tuple(r for r in found if (_parse(r.started_at) or start) >= start)
+        capped = len(found) == MAX_FAILURES and len(recent) == len(found)
+        return Failures(_iso(start) or "", recent, more=capped)
 
     async def run(self, module_id: str, run_id: str) -> tuple[JobRun, str | None]:
         found = await self._store().get_run(module_id, run_id)

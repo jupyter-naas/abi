@@ -3,8 +3,8 @@
 Wraps ``KeyValueService`` (sync; calls run in a worker thread). Keys come from
 ``list_keys`` in ascending order and the cursor is the last key listed. Keys may
 contain ``/`` but stay flat: there are no containers. Values are raw bytes,
-previewed as text when they are UTF-8. Replacing a value keeps the key's
-remaining TTL.
+previewed as text when they are UTF-8. A write may set an expiry
+(``ttl_seconds``); without one, replacing a value keeps the key's remaining TTL.
 
 Listed entries carry what the web shows on a row: size, ``encoding`` (``json``,
 ``text`` or ``binary``), a one-line ``summary`` of the value, and the expiry
@@ -74,7 +74,7 @@ def _clip(text: str) -> str:
 
 class KeyValueResources:
     service = SERVICE
-    capabilities = ResourceCapabilities(browse=True, create=True, search=True)
+    capabilities = ResourceCapabilities(browse=True, create=True, search=True, expiry=True)
 
     def __init__(self, kv: Any) -> None:
         self._kv = kv
@@ -171,13 +171,15 @@ class KeyValueResources:
             raise ResourceTooLarge(SERVICE, key, len(value), max_bytes)
         return value
 
-    def _write(self, key: str, content: bytes) -> ResourceEntry:
+    def _write(self, key: str, content: bytes, ttl_seconds: int | None) -> ResourceEntry:
         if not key:
             raise InvalidResource(SERVICE, "a key cannot be empty")
-        try:
-            ttl = self._kv.get_ttl(key)
-        except KVNotFoundError:
-            ttl = None
+        ttl = ttl_seconds
+        if ttl is None:  # a replaced value keeps its expiry
+            try:
+                ttl = self._kv.get_ttl(key)
+            except KVNotFoundError:
+                ttl = None
         self._kv.set(key, content, ttl)
         return self._stat(key)
 
@@ -202,8 +204,10 @@ class KeyValueResources:
     async def download(self, resource_id: str, *, max_bytes: int) -> bytes:
         return await asyncio.to_thread(self._download, resource_id, max_bytes)
 
-    async def write(self, resource_id: str, content: bytes) -> ResourceEntry:
-        return await asyncio.to_thread(self._write, resource_id, content)
+    async def write(
+        self, resource_id: str, content: bytes, *, ttl_seconds: int | None = None
+    ) -> ResourceEntry:
+        return await asyncio.to_thread(self._write, resource_id, content, ttl_seconds)
 
     async def delete(self, resource_id: str) -> None:
         await asyncio.to_thread(self._delete, resource_id)

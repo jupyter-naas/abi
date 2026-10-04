@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import html
 import re
 import threading
 import time
 import uuid
 from datetime import UTC, datetime
-from email.parser import BytesHeaderParser
+from email.message import EmailMessage
+from email.parser import BytesHeaderParser, BytesParser
 from email.policy import default as default_policy
 from pathlib import Path
 
@@ -21,6 +23,30 @@ from naas_abi_core.services.email.EmailPorts import (
 # ``<epoch ms>-<uuid4 hex>``: sorts by send time, and is a safe file name.
 _MESSAGE_ID = re.compile(r"[0-9]+-[0-9a-f]{32}")
 _SUFFIX = ".eml"
+# Listing reads each message's body for its snippet, up to this size.
+SNIPPET_MAX_BYTES = 1024 * 1024
+SNIPPET_CHARS = 160
+_BLOCK_TAG = re.compile(r"(?i)<\s*(?:br|/?p|/?div|/?li|/?tr|/?h[1-6])\b[^>]*>")
+_HIDDEN = re.compile(r"(?is)<(style|script)\b.*?</\1\s*>")
+_TAG = re.compile(r"<[^>]+>")
+
+
+def _snippet(message: EmailMessage) -> str:
+    """The start of the text body on one line; the HTML body without its tags
+    when there is no text."""
+    for kind in ("plain", "html"):
+        part = message.get_body(preferencelist=(kind,))
+        if part is None:
+            continue
+        text = str(part.get_content())
+        if kind == "html":
+            text = html.unescape(
+                _TAG.sub("", _BLOCK_TAG.sub(" ", _HIDDEN.sub(" ", text)))
+            )
+        line = " ".join(text.split())
+        if line:
+            return line[:SNIPPET_CHARS]
+    return ""
 
 
 class FilesystemAdapter(IEmailAdapter):
@@ -82,16 +108,23 @@ class FilesystemAdapter(IEmailAdapter):
         return path
 
     def _summary(self, message_id: str, path: Path) -> SentEmailSummary:
+        size = path.stat().st_size
+        snippet = ""
         with path.open("rb") as handle:
-            headers = BytesHeaderParser(policy=default_policy).parse(handle)
+            if size <= SNIPPET_MAX_BYTES:
+                headers = BytesParser(policy=default_policy).parse(handle)
+                snippet = _snippet(headers)  # type: ignore[arg-type]
+            else:  # a large message (attachments): its headers only
+                headers = BytesHeaderParser(policy=default_policy).parse(handle)
         millis = int(message_id.split("-", 1)[0])
         return SentEmailSummary(
             message_id=message_id,
             sent_at=datetime.fromtimestamp(millis / 1000, tz=UTC).isoformat(),
-            size=path.stat().st_size,
+            size=size,
             subject=str(headers.get("Subject", "")),
             to=str(headers.get("To", "")),
             sender=str(headers.get("From", "")),
+            snippet=snippet,
         )
 
     def list_sent(

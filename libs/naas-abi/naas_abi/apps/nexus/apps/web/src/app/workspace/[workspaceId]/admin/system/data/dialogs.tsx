@@ -3,8 +3,8 @@
 /** Destructive confirmation and the value editor (create or replace). */
 import { useState } from 'react';
 import { AlertTriangle, Eye, EyeOff, FileUp, Pencil, Plus, Trash2, UploadCloud } from 'lucide-react';
-import type { Failure, Result } from './data-api';
-import { childId, confirmed, formatBytes } from './data-model';
+import type { Failure, Result, WriteOptions } from './data-api';
+import { TTL_UNITS, childId, confirmed, formatBytes, ttlSeconds, type TtlUnit } from './data-model';
 import type { ResourceEntry } from './data-types';
 import { CopyButton, Kbd, Notice } from './data-ui';
 import { Modal } from './modal';
@@ -128,13 +128,21 @@ export function EditorDialog({
   request,
   view,
   writeFormat,
+  expiry = false,
   onSave,
   onClose,
 }: {
   request: EditorRequest;
   view: ServiceView;
   writeFormat: string;
-  onSave: (id: string, body: Blob | string, confirm?: string) => Promise<Result<ResourceEntry>>;
+  /** The service takes an expiry on create (``capabilities.expiry``). */
+  expiry?: boolean;
+  onSave: (
+    id: string,
+    body: Blob | string,
+    confirm?: string,
+    options?: WriteOptions,
+  ) => Promise<Result<ResourceEntry>>;
   onClose: () => void;
 }) {
   const editing = request.mode === 'edit';
@@ -148,6 +156,8 @@ export function EditorDialog({
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [shown, setShown] = useState(!spec.secret);
+  const [ttlAmount, setTtlAmount] = useState('');
+  const [ttlUnit, setTtlUnit] = useState<TtlUnit>('minutes');
   const compact = typeof spec.compact === 'function' ? spec.compact(request.entry) : Boolean(spec.compact);
 
   const id = editing ? (request.entry?.id ?? '') : childId(request.parent, name || (file?.name ?? ''));
@@ -155,10 +165,13 @@ export function EditorDialog({
   const nameError = !editing && name ? (spec.validateName?.(name) ?? null) : null;
   const valueError = tab === 'write' && text ? (spec.validate?.(text) ?? null) : null;
   const hasName = editing || Boolean(name.trim() || (tab === 'upload' && file));
+  const asksExpiry = expiry && !editing;
+  const ttl = asksExpiry ? ttlSeconds(ttlAmount, ttlUnit) : undefined;
   const ready =
     hasName &&
     !nameError &&
     !valueError &&
+    ttl !== null &&
     !busy &&
     (tab === 'write' || file !== null) &&
     (mustConfirm === null || confirmed(typed, mustConfirm));
@@ -168,7 +181,8 @@ export function EditorDialog({
     setBusy(true);
     setFailure(null);
     const body: Blob | string = tab === 'upload' && file ? file : text;
-    const result = await onSave(id, body, mustConfirm ? typed : undefined);
+    const options = asksExpiry ? (ttl ? { ttlSeconds: ttl } : {}) : undefined;
+    const result = await onSave(id, body, mustConfirm ? typed : undefined, options);
     setBusy(false);
     if (result.ok) return;
     if (result.status === 409 && result.confirm) {
@@ -296,6 +310,35 @@ export function EditorDialog({
         </label>
       )}
       {valueError && <p className="data-field-error">{valueError}</p>}
+      {asksExpiry && (
+        <div className="data-editor-expiry">
+          <label className="data-confirm-label" htmlFor="data-editor-expiry">
+            Expires after
+          </label>
+          <input
+            id="data-editor-expiry"
+            className={`data-input${ttl === null ? ' data-input-invalid' : ''}`}
+            value={ttlAmount}
+            placeholder="never"
+            inputMode="numeric"
+            onChange={(e) => setTtlAmount(e.target.value)}
+            aria-label="Expires after"
+          />
+          <select
+            className="data-input"
+            value={ttlUnit}
+            onChange={(e) => setTtlUnit(e.target.value as TtlUnit)}
+            aria-label="Expiry unit"
+          >
+            {Object.keys(TTL_UNITS).map((unit) => (
+              <option key={unit} value={unit}>
+                {unit}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {ttl === null && <p className="data-field-error">The expiry must be a whole number above zero.</p>}
       {mustConfirm && (
         <ConfirmInput id={mustConfirm} verb="replace its value" value={typed} onChange={setTyped} />
       )}

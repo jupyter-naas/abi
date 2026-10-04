@@ -156,6 +156,24 @@ class CollectionsResponse(_message.Message):
     collections: _containers.RepeatedScalarFieldContainer[str]
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., collections: _Optional[_Iterable[str]] = ...) -> None: ...
 
+class CollectionSpecRequest(_message.Message):
+    __slots__ = ("context", "namespace", "collection")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    COLLECTION_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    namespace: str
+    collection: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., namespace: _Optional[str] = ..., collection: _Optional[str] = ...) -> None: ...
+
+class CollectionSpecResponse(_message.Message):
+    __slots__ = ("error", "spec")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    SPEC_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    spec: CollectionSpec
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., spec: _Optional[_Union[CollectionSpec, _Mapping]] = ...) -> None: ...
+
 class NamespacesRequest(_message.Message):
     __slots__ = ("context",)
     CONTEXT_FIELD_NUMBER: _ClassVar[int]

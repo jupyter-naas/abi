@@ -471,3 +471,79 @@ def otlp_response():
             ]
         }
     }
+
+
+def agent_runs():
+    """Newest first across modules: r4 (running), r3, r2, r1."""
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.agents import AgentRun
+
+    return [
+        AgentRun(
+            "acme.agents",
+            "r1",
+            "Researcher",
+            "inv-1",
+            "CANCELLED",
+            thread_id="t-1",
+            caller="orchestrator",
+            owner="i-1",
+            submitted_at="2026-10-01T09:00:00+00:00",
+            finished_at="2026-10-01T09:00:05+00:00",
+            error_code="CANCELLED",
+            error_message="Execution stopped; completed side effects are not undone",
+            events=1,
+        ),
+        AgentRun(
+            "acme.agents",
+            "r2",
+            "Researcher",
+            "inv-2",
+            "SUCCEEDED",
+            thread_id="t-2",
+            caller="api",
+            owner="i-1",
+            submitted_at="2026-10-02T09:00:00+00:00",
+            finished_at="2026-10-02T09:00:12.500000+00:00",
+            trace_id="c" * 32,
+            events=3,
+        ),
+        AgentRun(
+            "acme.other",
+            "r3",
+            "Writer",
+            "inv-3",
+            "FAILED",
+            thread_id="t-3",
+            caller="api",
+            owner="w-1",
+            submitted_at="2026-10-02T10:00:00+00:00",
+            finished_at="2026-10-02T10:00:01+00:00",
+            error_code="AGENT_FAILED",
+            error_message="Agent execution failed; inspect provider logs",
+        ),
+        AgentRun(
+            "acme.agents",
+            "r4",
+            "Researcher",
+            "inv-4",
+            "RUNNING",
+            thread_id="t-4",
+            caller="orchestrator",
+            owner="i-2",
+            submitted_at="2026-10-02T11:00:00+00:00",
+            events=1,
+        ),
+    ]
+
+
+def agent_events():
+    """Each run's events in order, as (event, text)."""
+    return {
+        ("acme.agents", "r1"): [("message", "Starting")],
+        ("acme.agents", "r2"): [
+            ("message", "Looking it up"),
+            ("message", "x" * 1500),
+            ("done", "[DONE]"),
+        ],
+        ("acme.agents", "r4"): [("message", "Working")],
+    }

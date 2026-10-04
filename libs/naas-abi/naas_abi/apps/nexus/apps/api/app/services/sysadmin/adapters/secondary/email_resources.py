@@ -6,7 +6,8 @@ Wraps the engine's ``EmailService`` (sync; calls run in a worker thread).
   for it is only a label. When the adapter keeps a copy (filesystem adapter),
   the entry returned is that copy; otherwise the message is sent and nothing
   can be read back (an entry with no actions).
-- Sent mail is listed newest first, read as headers plus the text body, and
+- Sent mail is listed newest first (each row summarized by the start of its
+  body, the adapter's ``snippet``), read as headers plus the text body, and
   downloaded as the raw ``.eml``. Deleting removes the kept copy only; the
   message is not recalled. There is no replace: a sent message is final.
 - Adapters that keep nothing (SMTP, SES, SendGrid, Outlook) list nothing: the
@@ -139,7 +140,14 @@ class EmailResources:
 
     @staticmethod
     def _entry(summary: Any) -> ResourceEntry:
-        attributes = {"to": summary.to, "from": summary.sender, "summary": f"To {summary.to}"}
+        snippet = getattr(summary, "snippet", "") or ""
+        attributes = {
+            "to": summary.to,
+            "from": summary.sender,
+            "snippet": snippet,
+            # The body's first line, like an inbox; the recipient when empty.
+            "summary": snippet or f"To {summary.to}",
+        }
         return ResourceEntry(
             summary.message_id,
             summary.subject or "(no subject)",

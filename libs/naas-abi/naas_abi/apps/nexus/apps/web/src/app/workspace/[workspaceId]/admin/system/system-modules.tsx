@@ -1,15 +1,55 @@
 'use client';
 
-import { Fragment, useState } from 'react';
+import './data/data.css';
+
+import { Fragment, useMemo, useState } from 'react';
+import { Trash2 } from 'lucide-react';
+import { createDataApi, type DataApi } from './data/data-api';
+import type { ResourceEntry } from './data/data-types';
+import { DeleteDialog } from './data/dialogs';
 import { formatExpiry } from './system-format';
 import { groupRemoteModules, moduleTone } from './system-model';
 import type { ModulesView } from './system-types';
 import { Chips, JobList, RowToggle, Section, SourceNotes, Status, toggled } from './system-ui';
 
-/** Modules loaded in the engine, and module instances registered in NATS discovery. */
-export function SystemModules({ view }: { view: ModulesView }) {
+/** A discovery instance as the Data tab names it (``<module>/<instance>``). */
+function instanceEntry(moduleId: string, instanceId: string): ResourceEntry {
+  return {
+    id: `${moduleId}/${instanceId}`,
+    name: instanceId,
+    kind: 'item',
+    actions: ['read', 'delete'],
+    size: null,
+    modified: null,
+    attributes: {},
+  };
+}
+
+/** Modules loaded in the engine, and module instances registered in NATS discovery.
+ * An instance can be evicted (crashed or stuck registrations): typed confirmation,
+ * audited by the API like a Data tab delete. */
+export function SystemModules({
+  view,
+  api: injected,
+  onChanged,
+}: {
+  view: ModulesView;
+  api?: DataApi;
+  onChanged?: () => void;
+}) {
+  const api = useMemo(() => injected ?? createDataApi(), [injected]);
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const [evicting, setEvicting] = useState<ResourceEntry | null>(null);
   const groups = groupRemoteModules(view.remote);
+
+  const evict = async (typed: string) => {
+    if (!evicting) return null;
+    const result = await api.remove('discovery', evicting.id, typed);
+    if (!result.ok) return result;
+    setEvicting(null);
+    onChanged?.();
+    return null;
+  };
 
   return (
     <div className="system-tab-body">
@@ -99,6 +139,7 @@ export function SystemModules({ view }: { view: ModulesView }) {
                                   <th>Version</th>
                                   <th>Contract</th>
                                   <th>Lease expiry</th>
+                                  <th aria-label="Actions" />
                                 </tr>
                               </thead>
                               <tbody>
@@ -109,6 +150,17 @@ export function SystemModules({ view }: { view: ModulesView }) {
                                     <td className="system-mono">{instance.package_version}</td>
                                     <td>v{instance.contract_major}</td>
                                     <td>{formatExpiry(instance.expires_at)}</td>
+                                    <td className="system-num">
+                                      <button
+                                        type="button"
+                                        className="data-button data-button-danger-ghost"
+                                        aria-label={`Evict ${instance.instance_id}`}
+                                        title="Remove this registration (crashed or stuck instances)"
+                                        onClick={() => setEvicting(instanceEntry(group.module_id, instance.instance_id))}
+                                      >
+                                        <Trash2 size={13} aria-hidden="true" /> Evict
+                                      </button>
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -124,6 +176,16 @@ export function SystemModules({ view }: { view: ModulesView }) {
           </div>
         )}
       </Section>
+      {evicting && (
+        <DeleteDialog
+          entry={evicting}
+          noun="instance"
+          verb="Evict"
+          warning="Its registration is removed from discovery. A live process registers again under a new instance id on its next heartbeat, so evicting is for crashed or stuck registrations; runs it owns are not stopped."
+          onConfirm={evict}
+          onClose={() => setEvicting(null)}
+        />
+      )}
     </div>
   );
 }

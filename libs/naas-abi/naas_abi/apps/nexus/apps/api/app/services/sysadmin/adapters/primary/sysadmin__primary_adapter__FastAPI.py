@@ -13,6 +13,9 @@ from fastapi.responses import StreamingResponse
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     require_superadmin,
 )
+from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.primary.sysadmin__primary_adapter__agents import (
+    agents_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.primary.sysadmin__primary_adapter__jobs import (
     jobs_router,
 )
@@ -36,6 +39,7 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.traffic import TrafficHu
 router = APIRouter(dependencies=[Depends(require_superadmin)])
 router.include_router(resources_router, prefix="/resources")
 router.include_router(jobs_router, prefix="/jobs")
+router.include_router(agents_router, prefix="/agents")
 router.include_router(traces_router, prefix="/traces")
 
 KEEPALIVE_SECONDS = 15.0

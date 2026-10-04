@@ -7,6 +7,8 @@ export interface ResourceCapabilities {
   reveal: boolean;
   write_format: string;
   search: boolean;
+  /** Items can be written with an expiry (``ttl_seconds``). */
+  expiry?: boolean;
 }
 
 export interface ResourceServiceInfo {

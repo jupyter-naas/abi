@@ -23,13 +23,24 @@ export interface ListOptions {
   limit?: number;
 }
 
+/** For services with ``capabilities.expiry``: the item expires that long after. */
+export interface WriteOptions {
+  ttlSeconds?: number;
+}
+
 export interface DataApi {
   services(): Promise<Result<{ services: ResourceServiceInfo[] }>>;
   list(service: string, parent: string, options?: ListOptions): Promise<Result<ResourcePage>>;
   read(service: string, id: string): Promise<Result<ResourceDetail>>;
   reveal(service: string, id: string): Promise<Result<ResourceDetail>>;
   download(service: string, id: string): Promise<Result<Blob>>;
-  write(service: string, id: string, body: Blob | string, confirm?: string): Promise<Result<ResourceEntry>>;
+  write(
+    service: string,
+    id: string,
+    body: Blob | string,
+    confirm?: string,
+    options?: WriteOptions,
+  ): Promise<Result<ResourceEntry>>;
   remove(service: string, id: string, confirm: string): Promise<Result<null>>;
   history(service: string, id: string): Promise<Result<{ entries: AuditEntry[] }>>;
   recent(service?: string): Promise<Result<{ entries: AuditEntry[] }>>;
@@ -114,8 +125,13 @@ export function createDataApi(fetcher: Fetch = authFetch): DataApi {
       call<ResourceDetail>(fetcher, `${at(service)}/reveal${query({ id })}`, { method: 'POST' }, json),
     download: (service, id) =>
       call<Blob>(fetcher, `${at(service)}/download${query({ id })}`, undefined, (res) => res.blob()),
-    write: (service, id, body, confirm) =>
-      call<ResourceEntry>(fetcher, `${at(service)}/entry${query({ id, confirm })}`, { method: 'PUT', body }, json),
+    write: (service, id, body, confirm, options) =>
+      call<ResourceEntry>(
+        fetcher,
+        `${at(service)}/entry${query({ id, confirm, ttl_seconds: options?.ttlSeconds })}`,
+        { method: 'PUT', body },
+        json,
+      ),
     remove: (service, id, confirm) =>
       call<null>(fetcher, `${at(service)}/entry${query({ id, confirm })}`, { method: 'DELETE' }, async () => null),
     history: (service, id) =>

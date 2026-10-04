@@ -2,7 +2,7 @@
 
 /** Explorer state and the calls behind it. Components render; this hook decides. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DataApi, Failure, Result } from './data-api';
+import type { DataApi, Failure, Result, WriteOptions } from './data-api';
 import { ROOT_CRUMB, appendPage, filterEntries, openOnPath, type Crumb, type Location } from './data-model';
 import type { AuditEntry, ResourceDetail, ResourceEntry, ResourceServiceInfo } from './data-types';
 
@@ -45,7 +45,7 @@ export interface Explorer {
   reveal: (seconds: number) => Promise<Failure | null>;
   hide: () => void;
   download: (id: string) => Promise<Result<Blob>>;
-  write: (id: string, body: Blob | string, confirm?: string) => Promise<Result<ResourceEntry>>;
+  write: (id: string, body: Blob | string, confirm?: string, options?: WriteOptions) => Promise<Result<ResourceEntry>>;
   remove: (id: string, confirm: string) => Promise<Result<null>>;
   history: (id: string) => Promise<Result<{ entries: AuditEntry[] }>>;
 }
@@ -250,9 +250,11 @@ export function useExplorer(api: DataApi, initial: Location, nonce = 0): Explore
     setRevealedUntil(Date.now());
   };
 
-  const write = async (id: string, body: Blob | string, confirm?: string) => {
+  const write = async (id: string, body: Blob | string, confirm?: string, options?: WriteOptions) => {
     if (!service) return { ok: false, status: 0, reason: 'No service selected' } as Failure;
-    const result = await api.write(service.name, id, body, confirm);
+    const result = options
+      ? await api.write(service.name, id, body, confirm, options)
+      : await api.write(service.name, id, body, confirm);
     if (result.ok) {
       setReloads((n) => n + 1);
       // Some writes leave nothing to read (mail sent through an adapter that keeps no copy).

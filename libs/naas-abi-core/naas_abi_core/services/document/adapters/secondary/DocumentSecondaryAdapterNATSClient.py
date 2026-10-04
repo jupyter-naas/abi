@@ -6,6 +6,7 @@ from naas_abi_core.engine.nats_rpc import NatsRPCClient
 from naas_abi_core.services.document.adapters.document_nats_codec import (
     ERRORS,
     decode_document,
+    decode_spec,
     encode_spec,
     encode_where,
 )
@@ -51,6 +52,15 @@ class DocumentSecondaryAdapterNATSClient(NatsRPCClient):
             "drop_collection",
             pb.DropCollectionRequest(namespace=namespace, collection=collection),
             pb.DropCollectionResponse,
+        )
+
+    def collection_spec(self, namespace: str, collection: str) -> CollectionSpec:
+        return decode_spec(
+            self._request(
+                "collection_spec",
+                pb.CollectionSpecRequest(namespace=namespace, collection=collection),
+                pb.CollectionSpecResponse,
+            ).spec
         )
 
     def collections(self, namespace: str) -> list[str]:

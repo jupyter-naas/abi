@@ -175,3 +175,14 @@ def test_a_key_expiring_while_listed_is_skipped():
     kv.get = gone
 
     assert [e.id for e in asyncio.run(resources.list()).entries] == ["alpha", "gamma"]
+
+
+def test_a_key_can_be_written_with_an_expiry():
+    kv = _kv()
+    resources = KeyValueResources(kv)
+
+    assert resources.capabilities.expiry
+    created = asyncio.run(resources.write("cache:x", b"v", ttl_seconds=60))
+    assert 0 < int(created.attributes["expires_in_seconds"]) <= 60
+    asyncio.run(resources.write("cache:x", b"w", ttl_seconds=3600))
+    assert 60 < kv.get_ttl("cache:x") <= 3600 and kv.get("cache:x") == b"w"

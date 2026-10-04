@@ -147,3 +147,10 @@
     border-top: 1px solid var(--border-hex);
   }
 }
+
+/* A collection's declared fields, on one line (all of them in the tooltip). */
+.data-document-fields {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

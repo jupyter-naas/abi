@@ -1,7 +1,8 @@
 """Module jobs over HTTP: /api/admin/system/jobs. Super admins only.
 
 Reads: the overview (jobs, schedules, next ticks, recent runs, queue depth), run
-pages across jobs, and one run with its logs and trace link. Actions: trigger a
+pages across jobs, one run with its logs and trace link, and the runs that failed
+since a time (the Jobs tab's notification). Actions: trigger a
 job and cancel a running run, both audited before they happen.
 """
 
@@ -153,6 +154,21 @@ async def runs(
         )
     )
     return {"runs": [run_summary(r) for r in page.runs], "next": page.next}
+
+
+@jobs_router.get("/failures")
+async def failures(
+    since: str | None = Query(None, description="ISO time; default: the last day"),
+    admin: JobsAdminService = Depends(get_jobs_admin),
+) -> Any:
+    """Runs that failed or timed out since ``since``: the Jobs tab's notification."""
+    found = await _call(admin.failures(since=since or None))
+    return {
+        "since": found.since,
+        "count": found.count,
+        "more": found.more,
+        "runs": [run_summary(r) for r in found.runs],
+    }
 
 
 @jobs_router.get("/runs/{module_id}/{run_id}")

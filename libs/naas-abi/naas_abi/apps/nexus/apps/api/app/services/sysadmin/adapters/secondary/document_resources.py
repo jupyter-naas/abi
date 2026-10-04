@@ -12,8 +12,11 @@ are ``{"$t": "datetime" | "bytes", "$v": ...}`` and user keys starting with ``$`
 are escaped. What a read shows can be written back unchanged.
 
 Listing costs: a namespace page lists each namespace's collections (one query
-per namespace), a collection page counts each collection (one ``COUNT`` per
-collection), and a document page reads nothing beyond the page itself. Document
+per namespace), a collection page counts each collection and reads its declared
+spec (one ``COUNT`` and one catalog read per collection: ``declared_fields`` and
+``spec``, the fields with their type, index and uniqueness, and the unique
+groups, as compact JSON), and a document page reads nothing beyond the page
+itself. Document
 entries carry a one-line ``summary`` and ``fields``: their top-level scalar
 values as compact JSON, so the web can show them as table columns.
 
@@ -230,7 +233,9 @@ class DocumentResources:
         )
 
     def _collection_entry(self, namespace: str, collection: str) -> ResourceEntry:
-        documents = self._root.for_namespace(namespace).count(collection)
+        view = self._root.for_namespace(namespace)
+        documents = view.count(collection)
+        spec = view.collection_spec(collection)
         return ResourceEntry(
             f"{_segment(namespace)}/{_segment(collection)}",
             collection,
@@ -239,6 +244,14 @@ class DocumentResources:
             attributes={
                 "documents": str(documents),
                 "summary": _count(documents, "document", "documents"),
+                "declared_fields": str(len(spec.fields)),
+                "spec": json.dumps(
+                    {
+                        "fields": [f.model_dump() for f in spec.fields],
+                        "unique_together": [list(g) for g in spec.unique_together],
+                    },
+                    separators=(",", ":"),
+                ),
             },
         )
 

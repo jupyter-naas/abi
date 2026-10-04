@@ -152,7 +152,21 @@ def test_read_gives_an_email_view_with_both_bodies(kept):
     assert view["attachments"] == []
 
 
-def test_listing_summarizes_the_recipient(kept):
+def test_listing_summarizes_each_message_by_its_body_start(kept):
     entries = asyncio.run(EmailResources(kept, default_from=FROM).list("")).entries
+    bodies = {name: value.decode() for name, value in fixtures.SEED_ITEMS.items()}
 
-    assert all(e.attributes["summary"] == "To ops@example.com" for e in entries)
+    for entry in entries:
+        assert entry.attributes["snippet"] == bodies[entry.name]
+        assert entry.attributes["summary"] == bodies[entry.name]
+        assert entry.attributes["to"] == "ops@example.com"
+
+
+def test_a_message_without_a_body_is_summarized_by_its_recipient(tmp_path):
+    service = EmailService(FilesystemAdapter(directory=str(tmp_path / "mail")))
+    service.send(to_email="ops@example.com", subject="empty", text_body="", from_email=FROM)
+
+    (entry,) = asyncio.run(EmailResources(service, default_from=FROM).list("")).entries
+
+    assert entry.attributes["summary"] == "To ops@example.com"
+    assert entry.attributes["snippet"] == ""

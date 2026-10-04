@@ -93,6 +93,8 @@ class ResourceCapabilities:
     write_format: str = ""
     # list() filters by ``query`` on the server; otherwise the web filters loaded pages.
     search: bool = False
+    # Items can be written with an expiry: write() takes ``ttl_seconds``.
+    expiry: bool = False
 
 
 @dataclass(frozen=True)
@@ -190,6 +192,16 @@ class ServiceResources(Protocol):
         ...
 
     async def delete(self, resource_id: str) -> None: ...
+
+
+class ExpiringResources(ServiceResources, Protocol):
+    """A service with ``capabilities.expiry``: items can be written to expire."""
+
+    async def write(
+        self, resource_id: str, content: bytes, *, ttl_seconds: int | None = None
+    ) -> ResourceEntry:
+        """Create or replace an item, expiring ``ttl_seconds`` later when given."""
+        ...
 
 
 # --- audit -----------------------------------------------------------------------------

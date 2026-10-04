@@ -97,6 +97,7 @@ def test_lists_services_with_availability(client):
         "reveal": True,
         "write_format": "",
         "search": False,
+        "expiry": False,
     }
     assert services["vector_store"]["available"] is False
     assert services["vector_store"]["reason"] == "not a dependency"
@@ -246,3 +247,19 @@ def test_search_is_passed_only_to_services_that_support_it(admin, objects):
     client.get(f"{BASE}/object_storage/entries", params={"query": "doc"})
 
     assert calls == [{}, {"query": "doc"}]
+
+
+def test_an_expiry_on_a_service_without_one_is_refused(client):
+    response = client.put(
+        f"{BASE}/object_storage/entry",
+        params={"id": "new.txt", "ttl_seconds": 60},
+        content=b"hello",
+    )
+
+    assert response.status_code == 405
+    assert (
+        client.put(
+            f"{BASE}/object_storage/entry", params={"id": "new.txt", "ttl_seconds": 0}, content=b"x"
+        ).status_code
+        == 422
+    )

@@ -41,6 +41,12 @@ message CollectionsRequest {
 }
 message CollectionsResponse { abi.common.v1.CallError error = 1; repeated string collections = 2; }
 
+// A collection's declared fields and unique groups (COLLECTION_NOT_FOUND otherwise).
+message CollectionSpecRequest {
+  abi.common.v1.CallContext context = 1; string namespace = 2; string collection = 3;
+}
+message CollectionSpecResponse { abi.common.v1.CallError error = 1; CollectionSpec spec = 2; }
+
 // Platform administration across module namespaces: namespaces holding at least
 // one collection. Only platform identities may call it (PERMISSION_DENIED otherwise).
 message NamespacesRequest { abi.common.v1.CallContext context = 1; }

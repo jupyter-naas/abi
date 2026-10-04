@@ -93,6 +93,7 @@ def client(control, audit):
     [
         ("GET", ""),
         ("GET", "/runs"),
+        ("GET", "/failures"),
         ("GET", "/runs/acme.jobs/nightly:3"),
         ("POST", "/runs/acme.jobs/sync:9/cancel"),
         ("POST", "/acme.jobs/nightly/trigger"),
@@ -231,3 +232,13 @@ def test_unavailable_sources_and_audit(control):
     trigger = client.post(f"{BASE}/acme.jobs/nightly/trigger", json={})
     assert trigger.status_code == 503 and trigger.json()["detail"]["source"] == "audit"
     assert control.triggered == []
+
+
+def test_failures_since_a_time(client):
+    body = client.get(f"{BASE}/failures", params={"since": "2026-09-01T00:00:00+00:00"}).json()
+
+    assert body["since"] == "2026-09-01T00:00:00+00:00"
+    assert body["count"] == 2 and body["more"] is False
+    assert [r["run_id"] for r in body["runs"]] == ["report:1", "nightly:2"]
+    assert set(body["runs"][0]) == RUN_KEYS
+    assert client.get(f"{BASE}/failures").json()["count"] == 1  # the last day

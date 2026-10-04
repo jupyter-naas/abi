@@ -54,11 +54,13 @@ CONNECTION_NAME = "nexus-api-sysadmin"
 TAP_CONNECTION_NAME = "nexus-api-traffic-tap"
 DATA_CONNECTION_NAME = "nexus-api-sysadmin-data"
 JOBS_CONNECTION_NAME = "nexus-api-jobs"
+AGENTS_CONNECTION_NAME = "nexus-api-agents"
 TRACING_OFF = "telemetry is not enabled (telemetry.query_url)"
 
 _service: SysAdminService | None = None
 _resource_admin: ResourceAdminService | None = None
 _jobs_admin: Any = None
+_agents_admin: Any = None
 _hubs: Any = None
 _trace_store: TraceStore | SourceUnavailable | None = None
 
@@ -438,6 +440,66 @@ def get_jobs_admin() -> Any:
             ABIModule.get_instance().engine, lambda: database.async_engine
         )
     return _jobs_admin
+
+
+# --- agent runs ------------------------------------------------------------------------
+
+
+def build_agents_admin(engine: Any, audit_engine: Callable[[], Any]) -> Any:
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.agents_service import (
+        AgentsAdminService,
+    )
+
+    configuration = engine.configuration
+    nats = getattr(configuration, "nats", None)
+    project = jobs_project(configuration)
+    if nats is None:
+        off = "NATS mode is off: remote agents run on NATS"
+        registry: Any = SourceUnavailable("discovery", off)
+        runs: Any = SourceUnavailable("agent_runs", off)
+        control: Any = SourceUnavailable("agents", off)
+    else:
+        transports = _PerLoop(lambda: _transport(nats, AGENTS_CONNECTION_NAME))
+        if nats.discovery is not None:
+
+            def discovery_client() -> Any:
+                from naas_abi_sdk.discovery import DiscoveryClient
+
+                return DiscoveryClient(transports.get(), project)
+
+            registry = DiscoveryModuleRegistry(discovery_client)
+        else:
+            registry = SourceUnavailable("discovery", "nats.discovery is not configured")
+        runs = _resource_source(
+            "agent_runs",
+            lambda: _adapter("document_agent_runs", "DocumentAgentRunStore")(
+                lambda: engine.services.document_admin, project
+            ),
+        )
+        control = _resource_source(
+            "agents",
+            lambda: _adapter("nats_agent_control", "NatsAgentControl")(transports.get, project),
+        )
+    return AgentsAdminService(
+        registry=registry,
+        runs=runs,
+        control=control,
+        audit=_adapter("sql_audit_log", "SqlAdminAuditLog")(audit_engine),
+        trace_ui_url=telemetry_info(configuration).ui_url,
+    )
+
+
+def get_agents_admin() -> Any:
+    """FastAPI dependency: one per API process, built on first use."""
+    global _agents_admin
+    if _agents_admin is None:
+        from naas_abi import ABIModule
+        from naas_abi.apps.nexus.apps.api.app.core import database
+
+        _agents_admin = build_agents_admin(
+            ABIModule.get_instance().engine, lambda: database.async_engine
+        )
+    return _agents_admin
 
 
 def build_trace_store(configuration: Any) -> TraceStore | SourceUnavailable:
