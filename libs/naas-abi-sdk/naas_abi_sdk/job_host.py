@@ -4,6 +4,8 @@ One durable pull consumer per job is shared by every replica, so each trigger
 reaches one replica; ``max_ack_pending`` bounds concurrency across replicas.
 Delivery is at-least-once: a crash or missed ack redelivers the trigger.
 Finished run records are pruned (``JobRetention``); active ones never are.
+A run whose host stopped on its last attempt is never redelivered, so the
+host's upkeep fails it once its heartbeats stop (``reap_lost_runs``).
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ import contextlib
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from naas_abi_sdk.jobs import (
@@ -122,6 +124,7 @@ class JobHost:
         close_grace_seconds: float = 10.0,
         close_cancel_seconds: float = 15.0,
         retention: JobRetention | None = DEFAULT_RETENTION,
+        lost_after_seconds: float = 300.0,
     ):
         self.transport, self.documents = transport, documents
         self.module_id, self.project = module_id, project
@@ -138,6 +141,7 @@ class JobHost:
         self.close_grace_seconds = close_grace_seconds
         self.close_cancel_seconds = close_cancel_seconds
         self.retention = retention
+        self.lost_after_seconds = lost_after_seconds
         self.collection = runs_collection(project)
         self._running: dict[str, JobContext] = {}
         self._work: dict[str, asyncio.Task] = {}
@@ -204,8 +208,8 @@ class JobHost:
             self._subscriptions.append(
                 await nc.subscribe(cancel_subject, cb=self._on_cancel)
             )
-        if self.retention is not None and self.handlers:
-            self._loops.append(asyncio.create_task(self._retain()))
+        if self.handlers:
+            self._loops.append(asyncio.create_task(self._upkeep()))
 
     async def close(self) -> None:
         self._closing = True
@@ -370,16 +374,62 @@ class JobHost:
             self.transport, self.project, self.module_id, descriptor, self.documents
         ).trigger(payload, idempotency_key=idempotency_key)
 
-    # --- retention ---------------------------------------------------------------------
+    # --- upkeep: lost runs and retention ---------------------------------------------------
 
-    async def _retain(self) -> None:
-        assert self.retention is not None
+    async def _upkeep(self) -> None:
+        interval = (self.retention or DEFAULT_RETENTION).interval.total_seconds()
         while not self._closing:
-            try:
-                await self.prune()
-            except Exception:  # a store hiccup must not stop the next pass
-                logger.warning("Job run retention failed; retrying", exc_info=True)
-            await asyncio.sleep(self.retention.interval.total_seconds())
+            for upkeep in (self.reap_lost_runs, self.prune):
+                try:
+                    await upkeep()
+                except Exception:  # a store hiccup must not stop the next pass
+                    logger.warning("Job run upkeep failed; retrying", exc_info=True)
+            await asyncio.sleep(interval)
+
+    async def reap_lost_runs(self, now: datetime | None = None) -> int:
+        """Fail the runs lost with their host; returns how many.
+
+        A RUNNING run on its last attempt whose heartbeats stopped more than
+        ``lost_after_seconds`` ago is never redelivered (``max_deliver``), so
+        nothing else would ever finish its record. Runs with attempts left are
+        JetStream's: their redelivery updates the record.
+        """
+        now = now or datetime.now(timezone.utc)
+        cutoff = (now - timedelta(seconds=self.lost_after_seconds)).isoformat()
+        reaped = 0
+        for name in self.handlers:
+            page = await self.documents.find(
+                self.collection,
+                where=[("job", "eq", name), ("status", "eq", "RUNNING")],
+                limit=1000,
+            )
+            for doc in page.items:
+                run = doc.data
+                last_seen = run.get("heartbeat_at") or run.get("started_at") or ""
+                if (
+                    doc.id in self._running
+                    or run.get("attempt", 1) < run.get("max_attempts", 1)
+                    or not last_seen
+                    or last_seen >= cutoff
+                ):
+                    continue
+                try:
+                    await self.documents.put(
+                        self.collection,
+                        doc.id,
+                        {
+                            **run,
+                            "status": "FAILED",
+                            "error": f"Lost: no heartbeat since {last_seen} "
+                            "(its host stopped before the run finished)",
+                            "finished_at": now.isoformat(),
+                        },
+                        if_version=doc.version,
+                    )
+                    reaped += 1
+                except (DocumentNotFound, VersionConflict):
+                    continue  # its host is alive after all, or another replica reaped it
+        return reaped
 
     async def prune(self, now: datetime | None = None) -> int:
         """One retention pass over this host's jobs; returns the runs deleted.
@@ -478,7 +528,9 @@ class JobHost:
         while True:
             await asyncio.sleep(self.heartbeat_seconds)
             await msg.in_progress()
-            await self._save(context.run_id, {"logs": list(context.logs)})
+            await self._save(
+                context.run_id, {"logs": list(context.logs), "heartbeat_at": _now()}
+            )
 
     @staticmethod
     def _result(value: Any) -> Any:
@@ -544,6 +596,7 @@ class JobHost:
                 "instance": self.instance_id,
                 "fired_at": _fired_at(msg),
                 "started_at": _now(),
+                "heartbeat_at": _now(),
                 "trace_id": current_trace_id(),
                 "error": "",
             },

@@ -705,3 +705,90 @@ def test_retention_work_per_pass_is_bounded():
     assert asyncio.run(host.prune(now=now)) == 10
     assert asyncio.run(host.prune(now=now)) == 5
     assert docs.ids() == []
+
+
+def test_a_run_records_its_heartbeats():
+    docs = Documents()
+
+    async def handler(ctx):
+        await asyncio.sleep(0.12)
+
+    _run(_host(docs, heartbeat_seconds=0.03), JobDescriptor("long"), handler, Msg())
+
+    run = docs.run("long:7")
+    assert run["heartbeat_at"] > run["started_at"]
+
+
+def _seed_running(docs, n, last_seen, *, attempt=1, max_attempts=1, field="heartbeat_at"):
+    run_id = f"sync:{n}"
+    docs.data[(runs_collection(PROJECT), run_id)] = Document(
+        id=run_id,
+        data={
+            "job": "sync",
+            "run_id": run_id,
+            "status": "RUNNING",
+            "attempt": attempt,
+            "max_attempts": max_attempts,
+            "started_at": last_seen.isoformat(),
+            field: last_seen.isoformat(),
+        },
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+        version=1,
+    )
+
+
+def test_a_run_lost_with_its_host_on_its_last_attempt_is_failed():
+    docs = QueryDocuments()
+    now = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+    _seed_running(docs, 1, now - timedelta(minutes=30))  # lost: nothing redelivers it
+    _seed_running(docs, 2, now - timedelta(minutes=1))  # alive elsewhere
+    # Attempts left: JetStream redelivers it, the next attempt updates the record.
+    _seed_running(docs, 3, now - timedelta(minutes=30), max_attempts=3)
+    # Recorded before heartbeats were: its start time is its last sign of life.
+    _seed_running(docs, 4, now - timedelta(minutes=30), field="started_at")
+    _seed_running(docs, 5, now - timedelta(minutes=30))  # running on this host
+    host = JobHost(
+        _Transport(),
+        docs,
+        MODULE,
+        PROJECT,
+        {"sync": (JobDescriptor("sync"), None)},
+        lost_after_seconds=300,
+    )
+    host._running["sync:5"] = object()
+
+    assert asyncio.run(host.reap_lost_runs(now=now)) == 2
+
+    for lost in ("sync:1", "sync:4"):
+        run = docs.run(lost)
+        assert run["status"] == "FAILED"
+        assert run["finished_at"] == now.isoformat()
+        assert "no heartbeat since" in run["error"]
+    for alive in ("sync:2", "sync:3", "sync:5"):
+        assert docs.run(alive)["status"] == "RUNNING"
+
+
+def test_a_lost_run_updated_meanwhile_is_left_alone():
+    docs = QueryDocuments()
+    now = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+    _seed_running(docs, 1, now - timedelta(minutes=30))
+    host = JobHost(
+        _Transport(), docs, MODULE, PROJECT, {"sync": (JobDescriptor("sync"), None)}
+    )
+    original_find = docs.find
+
+    async def find_then_heartbeat(*args, **kwargs):
+        page = await original_find(*args, **kwargs)
+        # Its host sends a heartbeat between the read and the write.
+        await docs.put(
+            runs_collection(PROJECT),
+            "sync:1",
+            {**docs.run("sync:1"), "heartbeat_at": now.isoformat()},
+        )
+        return page
+
+    docs.find = find_then_heartbeat
+
+    assert asyncio.run(host.reap_lost_runs(now=now)) == 0
+    assert docs.run("sync:1")["status"] == "RUNNING"

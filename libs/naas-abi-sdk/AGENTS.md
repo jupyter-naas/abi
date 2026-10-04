@@ -81,7 +81,9 @@ A module triggers its own jobs through its bound host (`trigger_job` for sync
 code, `atrigger_job` for async; `JobsNotHosted` outside a running host), with an
 optional `idempotency_key` (`Nats-Msg-Id` dedup). `ctx.skip(reason)` records a
 run as SKIPPED; hosts prune finished runs (`JobRetention`: skipped after 1 h,
-others after 7 days, 1,000 per job). `OnEvent(filter=...)` drops events before a
+others after 7 days, 1,000 per job) and fail runs lost with a crashed host
+(`reap_lost_runs`: RUNNING on the last attempt, no heartbeat for 5 min).
+`OnEvent(filter=...)` drops events before a
 trigger is published; `event_filter.py` mirrors core's `EventFilter.matches`,
 change them together.
 
