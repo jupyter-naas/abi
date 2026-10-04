@@ -10,6 +10,7 @@ engine's synchronous saver in naas_abi_core.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping, Sequence
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from langgraph.checkpoint.base import (
@@ -26,17 +27,25 @@ from naas_abi_proto.document.values import decode_data, encode_data, encode_valu
 
 from naas_abi_sdk.document import DocumentClient
 from naas_abi_sdk.langgraph_documents import (
+    BLOBS,
     CHECKPOINT_PAGE,
     CHECKPOINTS,
     COLLECTIONS,
+    ITEMS,
     LEGACY_CHECKPOINTS,
     LEGACY_PAGE,
     LEGACY_WRITES,
     NEWEST_FIRST,
+    PARTS,
+    RETENTION_GRACE,
     WRITE_PAGE,
     WRITES,
     CheckpointDocuments,
     Put,
+    Retained,
+    RetentionReport,
+    created_before,
+    kept_checkpoints,
     next_version,
     resolution,
 )
@@ -195,9 +204,23 @@ class DocumentCheckpointSaver(BaseCheckpointSaver):
                 return found
             cursor = result.cursor
 
-    async def _load(self, data: Mapping[str, Any]) -> CheckpointTuple:
+    async def _resolve(
+        self, thread_id: str, roots: Sequence[Mapping[str, Any]]
+    ) -> dict[str, Any]:
+        """Every document ``roots`` reference, by ref, read in bounded batches."""
+        flow = resolution(roots)
+        try:
+            collection, refs = next(flow)
+            while True:
+                collection, refs = flow.send(
+                    await self._fetch(thread_id, collection, refs)
+                )
+        except StopIteration as done:
+            return done.value
+
+    async def _writes(self, data: Mapping[str, Any]) -> list[dict[str, Any]]:
         legacy = data.get("_schema") == 1
-        writes = [
+        return [
             decode_data(d.data)
             async for d in self._scan(
                 LEGACY_WRITES if legacy else self.WRITES,
@@ -205,17 +228,12 @@ class DocumentCheckpointSaver(BaseCheckpointSaver):
                 page=LEGACY_PAGE if legacy else WRITE_PAGE,
             )
         ]
+
+    async def _load(self, data: Mapping[str, Any]) -> CheckpointTuple:
+        writes = await self._writes(data)
         fetched: dict[str, Any] = {}
-        if not legacy:
-            flow = resolution([data, *writes])
-            try:
-                collection, refs = next(flow)
-                while True:
-                    collection, refs = flow.send(
-                        await self._fetch(data["thread_id"], collection, refs)
-                    )
-            except StopIteration as done:
-                fetched = done.value
+        if data.get("_schema") != 1:
+            fetched = await self._resolve(data["thread_id"], [data, *writes])
         return self.schema.restore(data, writes, fetched)
 
     # --- LangGraph ------------------------------------------------------------------
@@ -302,3 +320,101 @@ class DocumentCheckpointSaver(BaseCheckpointSaver):
                         collection=collection, id=doc.id, if_version=doc.version
                     )
                 )
+
+    # --- retention --------------------------------------------------------------------
+
+    async def athread_ids(self) -> list[str]:
+        """Every thread with checkpoints in this scope, schema 2 or 1."""
+        scope = {"agent_id": self.agent_id}
+        found: set[str] = set()
+        for collection, page in (
+            (self.CHECKPOINTS, CHECKPOINT_PAGE),
+            (LEGACY_CHECKPOINTS, LEGACY_PAGE),
+        ):
+            async for doc in self._scan(collection, scope, page=page):
+                found.add(str(decode_data(doc.data)["thread_id"]))
+        return sorted(found)
+
+    async def aprune(
+        self,
+        thread_id: str,
+        *,
+        keep_last: int,
+        apply: bool = True,
+        grace: timedelta = RETENTION_GRACE,
+    ) -> RetentionReport:
+        """Keep a thread's newest ``keep_last`` checkpoints, and the subgraph steps
+        they ran (``kept_checkpoints``); delete the older ones (schema 2 and 1),
+        their pending writes, and every value document no kept checkpoint or
+        write references. Values created within ``grace`` are kept. Stop the
+        thread's runs first, as for ``adelete_thread``. ``apply=False`` counts.
+
+        Nothing is deleted until what the kept checkpoints reference is known,
+        then checkpoints go first: a failure part-way leaves unreferenced
+        documents (removed by a retry), never a checkpoint missing its values.
+        """
+        if keep_last < 1:
+            raise ValueError("keep_last must be at least 1")
+        cutoff = datetime.now(timezone.utc) - grace
+        report = RetentionReport(thread_id, keep_last, apply)
+        scope = self.schema.thread_scope(thread_id)
+        stored: list[tuple[str, str, int, Retained]] = []
+        for collection, page in (
+            (self.CHECKPOINTS, CHECKPOINT_PAGE),
+            (LEGACY_CHECKPOINTS, LEGACY_PAGE),
+        ):
+            async for doc in self._scan(collection, scope, page=page):
+                data = decode_data(doc.data)
+                fetched = await self._resolve(
+                    thread_id, self.schema.metadata_roots(data)
+                )
+                retained = self.schema.retained(data, fetched)
+                stored.append((collection, doc.id, doc.version, retained))
+        kept = kept_checkpoints((r for *_, r in stored), keep_last)
+        report.kept = len(kept)
+        live: set[str] = set()
+        for collection, key, _, retained in stored:
+            point = (retained.checkpoint_ns, retained.checkpoint_id)
+            if point in kept and collection == self.CHECKPOINTS:
+                checkpoint = await self._get(collection, key)
+                if checkpoint is not None:
+                    writes = await self._writes(checkpoint)
+                    live |= set(await self._resolve(thread_id, [checkpoint, *writes]))
+        pruned = {(r.checkpoint_ns, r.checkpoint_id) for *_, r in stored} - kept
+        self.schema.known.forget(thread_id)
+        for collection, key, version, retained in stored:
+            if (retained.checkpoint_ns, retained.checkpoint_id) in pruned:
+                report.checkpoints += await self._drop(apply, collection, key, version)
+        for collection in (self.WRITES, LEGACY_WRITES):
+            async for doc in self._scan(collection, scope, page=WRITE_PAGE):
+                data = decode_data(doc.data)
+                if (data["checkpoint_ns"], data["checkpoint_id"]) in pruned:
+                    report.writes += await self._drop(
+                        apply, collection, doc.id, doc.version
+                    )
+        for collection in (BLOBS, ITEMS, PARTS):
+            async for doc in self._scan(collection, scope, page=WRITE_PAGE):
+                data = decode_data(doc.data)
+                if data["ref"] not in live and created_before(doc.created_at, cutoff):
+                    report.values += await self._drop(
+                        apply, collection, doc.id, doc.version
+                    )
+        return report
+
+    async def _drop(self, apply: bool, collection: str, key: str, version: int) -> int:
+        """1 when the document is (or, in a dry run, would be) deleted."""
+        if not apply:
+            return 1
+        try:
+            await self.documents.delete(
+                pb.DeleteRequest(collection=collection, id=key, if_version=version)
+            )
+        except RPCError as exc:
+            if exc.code in (
+                "DOCUMENT_NOT_FOUND",
+                "VERSION_CONFLICT",
+                "COLLECTION_NOT_FOUND",
+            ):
+                return 0  # already gone, or changed since it was read: leave it
+            raise
+        return 1

@@ -127,3 +127,120 @@ def test_migrate_memory_needs_a_source(postgres):
     assert result.exit_code != 0
     assert "POSTGRES_URL" in result.output
     assert postgres == []
+
+
+# --- prune-memory ------------------------------------------------------------------------
+
+
+def _chat(saver, thread_id: str, turns: int) -> None:
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.graph import END, START, MessagesState, StateGraph
+
+    def answer(state):
+        turn = len(state["messages"])
+        return {"messages": [AIMessage(f"answer {turn} " + "x" * 2000, id=f"a{turn}")]}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node("answer", answer)
+    builder.add_edge(START, "answer")
+    builder.add_edge("answer", END)
+    graph = builder.compile(checkpointer=saver)
+    for turn in range(turns):
+        graph.invoke(
+            {
+                "messages": [
+                    HumanMessage(f"question {turn} " + "q" * 1500, id=f"h{turn}")
+                ]
+            },
+            thread(thread_id),
+        )
+
+
+def _engine_memory(root, namespace=ENGINE_MEMORY_NAMESPACE, agent_id=ENGINE_MEMORY_ID):
+    saver = DocumentCheckpointSaver(root.for_namespace(namespace), agent_id=agent_id)
+    saver.setup()
+    return saver
+
+
+def prune(*args: str):
+    return CliRunner().invoke(agent_cli.agent, ["prune-memory", *args])
+
+
+def test_prune_memory_keeps_young_values_by_default(documents):
+    root, _ = documents
+    _chat(_engine_memory(root), "a", 3)
+
+    report = json.loads(prune("--keep-last", "1", "--apply").output)
+
+    assert report["checkpoints"] > 0 and report["values"] == 0  # all under a minute
+
+
+def test_prune_memory_is_a_dry_run_by_default(documents):
+    root, opened = documents
+    saver = _engine_memory(root)
+    _chat(saver, "a", 3)
+    _chat(saver, "b", 2)
+    before = len(list(saver.list(thread("a"))))
+
+    result = prune("--keep-last", "1", "--min-age", "0")
+
+    assert result.exit_code == 0, result.output
+    report = json.loads(result.output)
+    assert (report["mode"], report["threads"], report["keep_last"]) == ("dry-run", 2, 1)
+    assert report["checkpoints"] > 0 and report["values"] > 0
+    assert report["target"] == {
+        "namespace": ENGINE_MEMORY_NAMESPACE,
+        "agent_id": ENGINE_MEMORY_ID,
+    }
+    assert len(list(saver.list(thread("a")))) == before
+    assert opened == [ENGINE_MEMORY_NAMESPACE]
+
+
+def test_prune_memory_applies_and_is_idempotent(documents):
+    root, _ = documents
+    saver = _engine_memory(root)
+    _chat(saver, "a", 3)
+
+    first = json.loads(prune("--keep-last", "1", "--min-age", "0", "--apply").output)
+    again = json.loads(prune("--keep-last", "1", "--min-age", "0", "--apply").output)
+
+    assert (
+        first["mode"] == "applied" and first["checkpoints"] > 0 and first["values"] > 0
+    )
+    assert (again["checkpoints"], again["writes"], again["values"]) == (0, 0, 0)
+    fresh = _engine_memory(root)
+    assert len(list(fresh.list(thread("a")))) == 1
+    assert (
+        len(fresh.get_tuple(thread("a")).checkpoint["channel_values"]["messages"]) == 6
+    )
+
+
+def test_prune_memory_selects_threads_and_scope(documents):
+    root, _ = documents
+    scoped = _engine_memory(root, "acme.research", "acme.research.Researcher.v1")
+    _chat(scoped, "a", 3)
+    _chat(scoped, "b", 3)
+    scope = (
+        "--namespace",
+        "acme.research",
+        "--agent-id",
+        "acme.research.Researcher.v1",
+    )
+
+    report = json.loads(
+        prune(*scope, "--thread", "a", "--keep-last", "1", "--apply").output
+    )
+
+    assert report["threads"] == 1 and [t["thread_id"] for t in report["pruned"]] == [
+        "a"
+    ]
+    fresh = _engine_memory(root, "acme.research", "acme.research.Researcher.v1")
+    assert len(list(fresh.list(thread("a")))) == 1
+    assert len(list(fresh.list(thread("b")))) > 1
+
+
+def test_prune_memory_on_an_empty_store_reports_nothing(documents):
+    result = prune()
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["threads"] == 0

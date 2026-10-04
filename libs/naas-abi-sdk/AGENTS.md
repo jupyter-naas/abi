@@ -18,6 +18,10 @@ increments: content-addressed blobs, list elements and chunks, parts above
 I/O. Stored documents depend on it, so change it only with a schema version.
 Keep it core-free and importable on Python 3.10; tests/test_langgraph_documents.py
 pins the ids. Never deserialize in the pure read helpers (the viewer relies on it).
+It also holds retention (`kept_checkpoints`, `RetentionReport`; the savers'
+`prune`/`aprune` do the I/O) and secret redaction (`RedactingSerializer`: a
+`SecretStr`/`SecretBytes` is stored as one holding `REDACTED_SECRET`, never in
+clear). Redaction does not change the document layout.
 
 
 AgentProxy and AgentHost use document CAS for durable invocations and non-expiring

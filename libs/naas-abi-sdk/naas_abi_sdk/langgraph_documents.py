@@ -20,11 +20,19 @@ content-addressed within the thread, so a step writes only what is new:
   special error/interrupt ones (negative index) are updates.
 
 Documents a checkpoint references are written before it, and only
-``delete_thread`` removes them, so a stored checkpoint is always complete. No
-document exceeds ``PART_SIZE`` plus small fields, and reads fetch by reference
-in batches of at most ``READ_BUDGET`` bytes. Schema 1 (``*_v1``, full snapshots)
-is still read. The sysadmin viewer reads values with ``references``,
-``resolution`` and ``raw_channel_values``, without deserializing anything.
+``delete_thread`` or retention (``kept_checkpoints``: the newest checkpoints of
+a thread and the subgraph steps they ran, with every document they reference)
+removes them, so a stored checkpoint is always complete. No document exceeds
+``PART_SIZE`` plus small fields, and reads fetch by reference in batches of at
+most ``READ_BUDGET`` bytes. Schema 1 (``*_v1``, full snapshots) is still read.
+The sysadmin viewer reads values with ``references``, ``resolution`` and
+``raw_channel_values``, without deserializing anything.
+
+Secrets (``SecretStr``, ``SecretBytes``, anything with ``get_secret_value``)
+are never written: values are serialized through ``RedactingSerializer``, and
+read back holding ``REDACTED_SECRET``. Checkpoints leave the process and the
+Data tab shows raw documents; a graph that needs a credential across steps
+keeps its name and resolves it from the secret service when it uses it.
 
 Needs langgraph-checkpoint (the [langgraph] extra). Keep it importable on the
 SDK's oldest Python and never import it from the package ``__init__``.
@@ -32,11 +40,13 @@ SDK's oldest Python and never import it from the package ``__init__``.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import threading
 from collections import OrderedDict
 from collections.abc import Generator, Iterable, Mapping, Sequence
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, NamedTuple
 
 from langgraph.checkpoint.base import (
@@ -108,6 +118,175 @@ def next_version(current: Any) -> Any:
     if isinstance(current, str):
         return f"{int(current.split('.')[0]) + 1:032}.{0.0:016}"
     return current + 1
+
+
+# --- secrets --------------------------------------------------------------------------
+
+REDACTED_SECRET = "[REDACTED: secrets are not stored in checkpoints]"
+_REDACT_DEPTH = 64  # values nest deeper only by mistake (or a cycle)
+
+
+def redact_secrets(value: Any) -> Any:
+    """``value`` with every secret (anything with ``get_secret_value``, as
+    pydantic's ``SecretStr``/``SecretBytes``) replaced by one of the same type
+    holding ``REDACTED_SECRET``. Walks dicts, lists, tuples, sets, pydantic
+    models (messages included) and dataclasses; returns ``value`` itself, not a
+    copy, when it holds no secret."""
+    return _redact(value, 0)
+
+
+def _redacted(secret: Any) -> Any:
+    marker: Any = REDACTED_SECRET
+    if isinstance(secret.get_secret_value(), (bytes, bytearray)):
+        marker = REDACTED_SECRET.encode()
+    try:
+        return type(secret)(marker)
+    except Exception:  # noqa: BLE001 - an unusual secret type: never its value
+        return marker
+
+
+def _redact(value: Any, depth: int) -> Any:
+    if depth > _REDACT_DEPTH or isinstance(
+        value, (str, bytes, bytearray, int, float, type(None))
+    ):
+        return value
+    if not isinstance(value, type) and callable(
+        getattr(value, "get_secret_value", None)
+    ):
+        return _redacted(value)
+    if isinstance(value, dict):
+        items = {key: _redact(item, depth + 1) for key, item in value.items()}
+        if all(items[key] is value[key] for key in value):
+            return value
+        return items if type(value) is dict else type(value)(items)
+    if isinstance(value, (list, tuple, set, frozenset)):
+        members = [_redact(item, depth + 1) for item in value]
+        if all(new is old for new, old in zip(members, value)):
+            return value
+        if isinstance(value, tuple) and hasattr(value, "_fields"):  # namedtuple
+            return type(value)(*members)
+        return type(value)(members)
+    if dataclasses.is_dataclass(value):
+        changes = {}
+        for field in dataclasses.fields(value):
+            if field.init:
+                current = getattr(value, field.name)
+                new = _redact(current, depth + 1)
+                if new is not current:
+                    changes[field.name] = new
+        return dataclasses.replace(value, **changes) if changes else value  # type: ignore[type-var]
+    model_fields = getattr(type(value), "model_fields", None)
+    if isinstance(model_fields, dict) and callable(getattr(value, "model_copy", None)):
+        names = [*model_fields, *(getattr(value, "__pydantic_extra__", None) or {})]
+        changes = {}
+        for name in names:
+            current = getattr(value, name, None)
+            new = _redact(current, depth + 1)
+            if new is not current:
+                changes[name] = new
+        return value.model_copy(update=changes) if changes else value
+    return value
+
+
+class RedactingSerializer:
+    """``serde`` that never writes a secret (``redact_secrets``); reads as ``serde``."""
+
+    def __init__(self, serde: SerializerProtocol) -> None:
+        self.serde = serde
+
+    def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
+        return self.serde.dumps_typed(redact_secrets(obj))
+
+    def loads_typed(self, data: tuple[str, bytes]) -> Any:
+        return self.serde.loads_typed(data)
+
+
+# --- retention ------------------------------------------------------------------------
+
+
+class Retained(NamedTuple):
+    """A stored checkpoint as retention sees it."""
+
+    checkpoint_ns: str
+    checkpoint_id: str
+    # metadata["parents"][""]: the root checkpoint a subgraph step ran under.
+    root_parent: str | None
+
+
+def kept_checkpoints(
+    stored: Iterable[Retained], keep_last: int
+) -> frozenset[tuple[str, str]]:
+    """The ``(checkpoint_ns, checkpoint_id)`` of one thread that retention keeps.
+
+    The newest ``keep_last`` checkpoints of the root namespace, and the steps of
+    the subgraphs they ran: a child namespace (one per subgraph task) is kept
+    with the root checkpoint it ran under, so an interrupted subgraph still
+    resumes. A namespace without that link (no ``parents`` in its metadata, or
+    no root checkpoint at all) keeps its own newest ``keep_last``.
+    """
+    if keep_last < 1:
+        raise ValueError("keep_last must be at least 1")
+    stored = list(stored)
+    roots = {s.checkpoint_id for s in stored if not s.checkpoint_ns}
+    kept_roots = set(sorted(roots, reverse=True)[:keep_last])
+
+    def linked(s: Retained) -> bool:
+        return bool(kept_roots) and s.root_parent is not None
+
+    unlinked: dict[str, set[str]] = {}
+    for s in stored:
+        if s.checkpoint_ns and not linked(s):
+            unlinked.setdefault(s.checkpoint_ns, set()).add(s.checkpoint_id)
+    newest = {
+        ns: set(sorted(ids, reverse=True)[:keep_last]) for ns, ids in unlinked.items()
+    }
+    kept = set()
+    for s in stored:
+        if not s.checkpoint_ns:
+            keep = s.checkpoint_id in kept_roots
+        elif linked(s):
+            keep = s.root_parent in kept_roots
+        else:
+            keep = s.checkpoint_id in newest[s.checkpoint_ns]
+        if keep:
+            kept.add((s.checkpoint_ns, s.checkpoint_id))
+    return frozenset(kept)
+
+
+# Value documents younger than this are never pruned: a turn writes its values
+# before its checkpoint, so a run that started meanwhile may still need them.
+RETENTION_GRACE = timedelta(minutes=1)
+
+
+def created_before(created_at: datetime | str | None, cutoff: datetime) -> bool:
+    """Whether a document's ``created_at`` (a datetime, or ISO text over RPC) is
+    before ``cutoff``; unknown or unreadable is not (keep it). Naive is UTC."""
+    if isinstance(created_at, str):
+        try:
+            created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+    if not isinstance(created_at, datetime):
+        return False
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    return created_at < cutoff
+
+
+@dataclasses.dataclass
+class RetentionReport:
+    """What a prune of one thread kept and deleted (or would delete, dry run)."""
+
+    thread_id: str
+    keep_last: int
+    applied: bool
+    kept: int = 0  # checkpoints kept
+    checkpoints: int = 0  # checkpoints deleted
+    writes: int = 0  # pending writes deleted
+    values: int = 0  # blobs, list items and parts deleted
+
+    def as_dict(self) -> dict[str, Any]:
+        return dataclasses.asdict(self)
 
 
 def _digest(*chunks: bytes) -> str:
@@ -389,7 +568,7 @@ class CheckpointDocuments:
         if not agent_id:
             raise ValueError("agent_id must be a stable, nonempty identifier")
         self.agent_id = agent_id
-        self.serde = serde
+        self.serde = RedactingSerializer(serde)
         self.known = KnownReferences()
 
     def key(self, *parts: Any) -> str:
@@ -399,6 +578,26 @@ class CheckpointDocuments:
 
     def load(self, value: Mapping[str, Any]) -> Any:
         return self.serde.loads_typed((value["kind"], value["payload"]))
+
+    def retained(self, data: Mapping[str, Any], fetched: Mapping[str, Any]) -> Retained:
+        """A checkpoint document (schema 1 or 2) as retention sees it; ``fetched``
+        holds the parts of metadata stored in parts (``metadata_roots``)."""
+        metadata = self.load(raw_value(data["metadata"], fetched))
+        parents = metadata.get("parents") if isinstance(metadata, Mapping) else None
+        root = parents.get("") if isinstance(parents, Mapping) else None
+        return Retained(
+            str(data["checkpoint_ns"]), str(data["checkpoint_id"]), root or None
+        )
+
+    @staticmethod
+    def metadata_roots(data: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """What to resolve before ``retained``: the metadata, if split into parts."""
+        metadata = data.get("metadata")
+        return (
+            [{"metadata": metadata}]
+            if isinstance(metadata, Mapping) and "parts" in metadata
+            else []
+        )
 
     def scope(self, config: RunnableConfig) -> dict[str, str]:
         """Equality filters for the thread and checkpoint namespace ``config`` names."""
