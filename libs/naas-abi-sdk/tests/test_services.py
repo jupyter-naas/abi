@@ -269,12 +269,18 @@ class StreamTransport:
     def __init__(self, frames, *, no_responders=False):
         self.frames, self.no_responders = list(frames), no_responders
         self.opened, self.closed, self.read = [], [], 0
+        self.operations, self.uploaded = [], bytearray()
 
     async def connect(self):
         return SimpleNamespace(max_payload=1024 * 1024)
 
     async def call(self, subject, request, response_type, transfer=None):
         operation = subject.rsplit(".", 1)[1]
+        self.operations.append(operation)
+        if operation == "write":
+            assert len(request.data) <= 64 * 1024
+            self.uploaded.extend(request.data)
+            return response_type()
         if operation == "open":
             if self.no_responders:
                 from nats.errors import NoRespondersError
@@ -404,3 +410,50 @@ def test_dataset_query_stream_reads_rows_frame_by_frame():
         "acme",
     )
     assert transport.closed == [f"{'a' * 32}:s"]
+
+
+def test_dataset_write_stream_uploads_rows_then_reads_the_result():
+    from naas_abi_sdk.services import FACTORIES
+
+    info = dataset.DatasetInfo(name="t", namespace="acme", snapshot_id=7)
+    transport = StreamTransport([dataset.WriteResponse(info=info).SerializeToString()])
+    service = FACTORIES["dataset"](SimpleNamespace(_transport=transport))
+
+    async def rows():
+        for n in range(20_000):
+            yield {"id": BIG + n, "when": date(2026, 10, 4)}
+
+    result = asyncio.run(
+        service.write_stream("t", rows(), namespace="acme", mode="upsert")
+    )
+
+    assert result.snapshot_id == 7 and result.name == "t"
+    lines = bytes(transport.uploaded).splitlines()
+    assert len(lines) == 20_000
+    assert json.loads(lines[-1]) == {"id": BIG + 19_999, "when": "2026-10-04"}
+    assert transport.operations.index("start") > max(
+        i for i, op in enumerate(transport.operations) if op == "write"
+    )
+    ((operation, metadata),) = transport.opened
+    request = dataset.WriteRequest.FromString(metadata)
+    assert (operation, request.name, request.namespace) == ("write", "t", "acme")
+    assert request.mode == dataset.WRITE_MODE_UPSERT and not request.rows
+
+
+def test_dataset_write_stream_takes_plain_iterables_and_raises_domain_errors():
+    from naas_abi_sdk.services import FACTORIES
+    from naas_abi_sdk.services.errors import ServiceError
+
+    error = dataset.DatasetError()
+    error.error.code, error.error.message = "DATASET_SCHEMA_ERROR", "bad row"
+    transport = StreamTransport(
+        [dataset.WriteResponse(error=error).SerializeToString()]
+    )
+    service = FACTORIES["dataset"](SimpleNamespace(_transport=transport))
+
+    with pytest.raises(ServiceError, match="bad row") as raised:
+        asyncio.run(service.write_stream("t", [{"id": 1}]))
+    assert raised.value.code == "DATASET_SCHEMA_ERROR"
+
+    with pytest.raises(ValueError):
+        asyncio.run(service.write_stream("t", [{"x": float("nan")}]))

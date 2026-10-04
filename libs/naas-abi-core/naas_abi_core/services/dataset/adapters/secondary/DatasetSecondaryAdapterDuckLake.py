@@ -6,12 +6,14 @@ import builtins
 import json
 import logging
 import random
+import tempfile
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from itertools import islice
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -52,6 +54,7 @@ DUCKDB_TYPES = {
 
 _T = TypeVar("_T")
 FETCH_ROWS = 1000  # rows per fetch when streaming a query result
+STAGE_ROWS = 10_000  # rows validated and staged at a time by write_stream
 logger = logging.getLogger(__name__)
 
 
@@ -320,6 +323,138 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
 
         spec, committed_snapshot = self._write_transaction(operation)
         return self._to_info(spec, committed_snapshot)
+
+    def write_stream(
+        self,
+        name: str,
+        rows: Iterable[dict[str, Any]],
+        *,
+        namespace: str = "default",
+        mode: WriteMode = "append",
+        snapshot_id: int | None = None,
+    ) -> DatasetInfo:
+        """Validate and stage the rows ``STAGE_ROWS`` at a time into a local
+        Parquet file, then commit them in one transaction, whose retries
+        replay the file: the iterator is read once."""
+        if mode not in ("append", "replace", "upsert"):
+            raise ValueError(f"Unknown dataset write mode: {mode}")
+        staged_spec = self._read(lambda con: self._load_spec(con, namespace, name))
+        if mode == "upsert" and not staged_spec.primary_key:
+            raise DatasetSchemaError(
+                f"Dataset {namespace}.{name} has no primary key for upsert"
+            )
+        with tempfile.TemporaryDirectory(prefix="abi-dataset-write-") as directory:
+            staged = self._stage_rows(staged_spec, rows, Path(directory), mode)
+
+            def operation(con: Any) -> DatasetSpec:
+                current_snapshot = self._current_snapshot(con)
+                if snapshot_id is not None and snapshot_id != current_snapshot:
+                    raise DatasetSnapshotConflictError(snapshot_id, current_snapshot)
+                spec = self._load_spec(con, namespace, name)
+                if spec.columns != staged_spec.columns:
+                    raise DatasetSchemaError(
+                        f"Dataset {namespace}.{name} changed during the write"
+                    )
+                target = self._qualified_table(namespace, name)
+                if mode == "replace":
+                    con.execute(f"DELETE FROM {target}")  # nosec B608
+                if staged is None:
+                    return spec
+                columns = ", ".join(self._ident(column.name) for column in spec.columns)
+                source = (
+                    f"(SELECT {columns} FROM read_parquet("  # nosec B608
+                    f"{self._sql_string(staged)}))"
+                )
+                if mode == "upsert":
+                    self._merge_rows(con, spec, source)
+                else:
+                    con.execute(
+                        f"INSERT INTO {target} ({columns}) "  # nosec B608
+                        f"SELECT {columns} FROM {source}"
+                    )
+                return spec
+
+            spec, committed_snapshot = self._write_transaction(operation)
+        return self._to_info(spec, committed_snapshot)
+
+    def _stage_rows(
+        self,
+        spec: DatasetSpec,
+        rows: Iterable[dict[str, Any]],
+        directory: Path,
+        mode: WriteMode,
+    ) -> str | None:
+        """The Parquet file holding ``rows`` in order, ``None`` when empty.
+
+        Rows are validated ``STAGE_ROWS`` at a time and written as JSON lines,
+        then DuckDB's JSON reader types them into Parquet: far faster than
+        inserting rows one by one, and memory holds one batch."""
+        import duckdb
+
+        lines = directory / "rows.jsonl"
+        count = 0
+        with lines.open("w", encoding="utf-8") as stage:
+            iterator = iter(rows)
+            while batch := builtins.list(islice(iterator, STAGE_ROWS)):
+                normalized = self._normalize_rows(spec, batch, count)
+                if mode == "upsert":
+                    self._check_null_keys(spec, normalized, count)
+                stage.writelines(
+                    json.dumps(
+                        row,
+                        default=row_value,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                    + "\n"
+                    for row in normalized
+                )
+                count += len(batch)
+        if count == 0:
+            return None
+        # JSON columns hold their canonical text (_normalize_json); the target
+        # column casts it back.
+        types = ", ".join(
+            f"{self._sql_string(column.name)}: "
+            f"{self._sql_string('VARCHAR' if column.type == 'json' else DUCKDB_TYPES[column.type])}"
+            for column in spec.columns
+        )
+        columns = ", ".join(self._ident(column.name) for column in spec.columns)
+        path = str(directory / "rows.parquet")
+        con = duckdb.connect()
+        try:
+            con.execute(
+                f"COPY (SELECT {columns} FROM read_json("  # nosec B608
+                f"{self._sql_string(str(lines))}, format = 'newline_delimited', "
+                f"columns = {{{types}}})) TO {self._sql_string(path)} (FORMAT parquet)"
+            )
+            if mode == "upsert":
+                self._check_duplicate_keys(con, spec, path)
+        finally:
+            con.close()
+        return path
+
+    @staticmethod
+    def _check_null_keys(
+        spec: DatasetSpec, rows: builtins.list[dict[str, Any]], first_index: int
+    ) -> None:
+        for index, row in enumerate(rows, first_index):
+            if any(row[column] is None for column in spec.primary_key):
+                raise DatasetSchemaError(
+                    f"Row {index} has a null primary key value for "
+                    f"{', '.join(spec.primary_key)}"
+                )
+
+    def _check_duplicate_keys(self, con: Any, spec: DatasetSpec, path: str) -> None:
+        keys = ", ".join(self._ident(column) for column in spec.primary_key)
+        duplicate = con.execute(
+            f"SELECT {keys} FROM read_parquet({self._sql_string(path)}) "  # nosec B608
+            f"GROUP BY {keys} HAVING count(*) > 1 LIMIT 1"
+        ).fetchone()
+        if duplicate is not None:
+            raise DatasetSchemaError(
+                f"Incoming upsert contains duplicate primary key {tuple(duplicate)!r}"
+            )
 
     def query(
         self,
@@ -725,11 +860,14 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         )
 
     def _normalize_rows(
-        self, spec: DatasetSpec, rows: builtins.list[dict[str, Any]]
+        self,
+        spec: DatasetSpec,
+        rows: builtins.list[dict[str, Any]],
+        first_index: int = 0,
     ) -> builtins.list[dict[str, Any]]:
         expected = {column.name for column in spec.columns}
         normalized: builtins.list[dict[str, Any]] = []
-        for index, row in enumerate(rows):
+        for index, row in enumerate(rows, first_index):
             missing = expected - set(row)
             extra = set(row) - expected
             if missing:
@@ -810,7 +948,9 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             [[row[column.name] for column in spec.columns] for row in rows],
         )
 
-    def _merge_rows(self, con: Any, spec: DatasetSpec) -> None:
+    def _merge_rows(
+        self, con: Any, spec: DatasetSpec, source: str = "incoming"
+    ) -> None:
         target = self._qualified_table(spec.namespace, spec.name)
         conditions = " AND ".join(
             f"target.{self._ident(column)} = source.{self._ident(column)}"
@@ -826,7 +966,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         )
         con.execute(
             f"MERGE INTO {target} AS target "  # nosec B608
-            f"USING incoming AS source ON ({conditions}) "
+            f"USING {source} AS source ON ({conditions}) "
             f"WHEN MATCHED THEN UPDATE SET {assignments} "
             f"WHEN NOT MATCHED THEN INSERT ({columns}) VALUES ({values})"
         )

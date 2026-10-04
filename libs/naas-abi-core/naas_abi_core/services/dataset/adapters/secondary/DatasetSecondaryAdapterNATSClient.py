@@ -28,12 +28,12 @@ from __future__ import annotations
 # evaluated in this class body below (methods after ``list``); use
 # ``builtins.list`` there -- same workaround as DatasetPort.py/DatasetService.py.
 import builtins
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from datetime import UTC
 from typing import Any
 
-from naas_abi_core.engine.nats_rpc import NatsRPCClient
+from naas_abi_core.engine.nats_rpc import NatsRPCClient, NatsRPCError
 from naas_abi_core.proto.dataset.v1 import dataset_pb2
 from naas_abi_core.services.dataset.adapters.dataset_nats_contract import (
     AUTH_HEADER,
@@ -41,6 +41,7 @@ from naas_abi_core.services.dataset.adapters.dataset_nats_contract import (
     TRANSFER_PREFIX,
 )
 from naas_abi_core.services.dataset.adapters.dataset_row_codec import (
+    encode_lines,
     encode_rows,
     query_result_from_pb,
 )
@@ -260,6 +261,47 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
         response = self._call(
             f"{SUBJECT_PREFIX}.write", request, dataset_pb2.WriteResponse
         )
+        if response.HasField("error"):
+            _raise_for_error(response.error)
+        return _pb_to_dataset_info(response.info)
+
+    def write_stream(
+        self,
+        name: str,
+        rows: Iterable[dict[str, Any]],
+        *,
+        namespace: str = "default",
+        mode: WriteMode = "append",
+        snapshot_id: int | None = None,
+    ) -> DatasetInfo:
+        """Upload the rows as they are read, one JSON object per line, over a
+        transfer stream (docs/adr/20261003_nats-streamed-results.md); the
+        engine commits them once. An error while reading ``rows`` discards the
+        upload: nothing is written."""
+        request = dataset_pb2.WriteRequest(
+            name=name, namespace=namespace, mode=_WRITE_MODE_TO_PB[mode]
+        )
+        if snapshot_id is not None:
+            request.snapshot_id = snapshot_id
+
+        def raise_error(error: Any) -> None:
+            raise NatsRPCError(error.code, error.message)
+
+        with self._transfer_stream(
+            TRANSFER_PREFIX,
+            "write",
+            request.SerializeToString(),
+            raise_error,
+            upload=encode_lines(rows),
+        ) as frames:
+            if frames is None:
+                raise NatsRPCError(
+                    "UNAVAILABLE", "No dataset engine accepts streamed writes"
+                )
+            frame = next(frames, None)
+        if frame is None:
+            raise NatsRPCError("INTERNAL", "Streamed write ended without its result")
+        response = dataset_pb2.WriteResponse.FromString(frame)
         if response.HasField("error"):
             _raise_for_error(response.error)
         return _pb_to_dataset_info(response.info)

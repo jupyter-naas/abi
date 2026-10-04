@@ -6,7 +6,7 @@ from __future__ import annotations
 # evaluated in the class bodies below; use ``builtins.list`` there.
 import builtins
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -221,6 +221,29 @@ class IDatasetPort(ABC):
         ``DatasetSnapshotConflictError``. Prefer idempotent upserts and adapter
         retries when unrelated datasets are written concurrently.
         """
+
+    def write_stream(
+        self,
+        name: str,
+        rows: Iterable[dict[str, Any]],
+        *,
+        namespace: str = "default",
+        mode: WriteMode = "append",
+        snapshot_id: int | None = None,
+    ) -> DatasetInfo:
+        """``write`` for rows read from an iterator once, committed in one
+        snapshot: all of them or none (docs/adr/20261003_nats-streamed-results.md).
+
+        This default collects the rows and calls ``write``; adapters that can
+        stage rows in bounded memory override it.
+        """
+        return self.write(
+            name,
+            builtins.list(rows),
+            namespace=namespace,
+            mode=mode,
+            snapshot_id=snapshot_id,
+        )
 
     @abstractmethod
     def query(

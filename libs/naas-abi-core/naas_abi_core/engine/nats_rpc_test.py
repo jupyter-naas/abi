@@ -555,3 +555,13 @@ def test_primary_counts_reply_headers_against_the_brokers_limit(primary):
     )
 
     assert [error_of(r).code for r in published] == ["PAYLOAD_TOO_LARGE"]
+
+
+def test_uploads_are_regrouped_into_negotiated_chunks_lazily():
+    from naas_abi_core.engine.nats_rpc import upload_chunks
+
+    pieces = (b"x" * n for n in (3, 5, 0, 9, 1))  # 18 bytes
+
+    assert [len(chunk) for chunk in upload_chunks(pieces, 4)] == [4, 4, 4, 4, 2]
+    assert b"".join(upload_chunks([b"ab", b"cd"], 3)) == b"abcd"
+    assert list(upload_chunks([], 4)) == []
