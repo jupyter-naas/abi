@@ -236,9 +236,11 @@ class AuthorizeAgentRequest(_message.Message):
     def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., instance_id: _Optional[str] = ..., lease_token: _Optional[str] = ..., agent_name: _Optional[str] = ..., caller_token: _Optional[str] = ..., new_invocation: bool = ...) -> None: ...
 
 class AuthorizeAgentResponse(_message.Message):
-    __slots__ = ("error", "caller_identity")
+    __slots__ = ("error", "caller_identity", "caller_admin")
     ERROR_FIELD_NUMBER: _ClassVar[int]
     CALLER_IDENTITY_FIELD_NUMBER: _ClassVar[int]
+    CALLER_ADMIN_FIELD_NUMBER: _ClassVar[int]
     error: _common_pb2.CallError
     caller_identity: str
-    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., caller_identity: _Optional[str] = ...) -> None: ...
+    caller_admin: bool
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., caller_identity: _Optional[str] = ..., caller_admin: bool = ...) -> None: ...

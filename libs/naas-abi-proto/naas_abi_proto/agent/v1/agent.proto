@@ -23,6 +23,18 @@ message SubmitRequest {
   string mode = 5;
   uint32 deadline_seconds = 6; // Zero means no total execution deadline.
   uint32 output_format = 7; // 2: immutable paged output fragments.
+  // An _INBOX subject the submitter subscribed to: the owner pushes RunUpdates
+  // there, so the submitter need not poll Status. Empty: no updates.
+  string updates_inbox = 8;
+}
+// Pushed to a submitter's updates_inbox, at most once (core NATS): each event
+// once its fragments are committed (data inline when small, else only its part
+// count, read with EventRequest), then the terminal status once the run is done.
+// Hints only: a gap in sequences, silence or the end is resolved with Status.
+message RunUpdate {
+  AgentEvent event = 1;
+  string status = 2; // set on the last update: the run's terminal status
+  uint64 last_sequence = 3;
 }
 message SubmitResponse { abi.common.v1.CallError error = 1; Invocation invocation = 2; }
 message StatusRequest { abi.common.v1.CallContext context = 1; string invocation_id = 2; uint64 after_sequence = 3; uint32 output_format = 4; }

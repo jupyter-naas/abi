@@ -95,3 +95,34 @@ def test_an_overflow_uploaded_request_is_refused_as_too_large():
         service.register.assert_not_awaited()
 
     asyncio.run(scenario())
+
+
+def test_authorize_agent_names_the_caller_and_whether_it_is_an_admin():
+    async def scenario():
+        service = AsyncMock()
+        service.admin_identities = frozenset({"api", "engine"})
+        service.authorize_agent.return_value = pb.AuthorizeAgentResponse()
+        primary = DiscoveryNATS(service, SECRET, "test")
+
+        async def authorize(caller):
+            msg = SimpleNamespace(
+                data=pb.AuthorizeAgentRequest(
+                    instance_id="r-1",
+                    agent_name="Researcher",
+                    caller_token=issue_service_token(caller, SECRET),
+                ).SerializeToString(),
+                headers={"Nats-Auth-Token": issue_service_token("research", SECRET)},
+                reply="reply",
+                _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
+            )
+            await primary._handle("authorize_agent", msg)
+            return pb.AuthorizeAgentResponse.FromString(
+                msg._client.publish.call_args.args[1]
+            )
+
+        module = await authorize("orchestrator")
+        assert (module.caller_identity, module.caller_admin) == ("orchestrator", False)
+        api = await authorize("api")
+        assert (api.caller_identity, api.caller_admin) == ("api", True)
+
+    asyncio.run(scenario())

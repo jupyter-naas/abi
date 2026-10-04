@@ -9,6 +9,7 @@ import logging
 import math
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from functools import partial
 from typing import Any, Protocol
 
@@ -21,8 +22,14 @@ from naas_abi_sdk.agent import TERMINAL, agent_subject
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
 from naas_abi_sdk.services.models import CollectionSpec
-from naas_abi_sdk.telemetry import internal_span, server_span
+from naas_abi_sdk.telemetry import current_trace_id, internal_span, server_span
 from naas_abi_sdk.transport import RPCError
+
+# Where a submitter may ask for RunUpdates: its own inbox, never a service subject.
+UPDATES_INBOX = re.compile(r"_INBOX\.[A-Za-z0-9_.-]{1,240}")
+# Event data pushed inline up to this (and a quarter of the broker limit);
+# above it only the part count, which the submitter reads with EventRequest.
+INLINE_UPDATE_BYTES = 32 * 1024
 
 
 @dataclass
@@ -52,10 +59,26 @@ class _Run:
     progress_at: float = 0
     cancel_reason: str = ""
     started: asyncio.Event = field(default_factory=asyncio.Event)
+    watchers: set[str] = field(default_factory=set)  # inboxes receiving RunUpdates
 
 
 def _hash(*values: str) -> str:
     return hashlib.sha256(json.dumps(values, ensure_ascii=True).encode()).hexdigest()
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def agent_runs_collection(project: str) -> str:
+    """Where a module's agent hosts keep one record per invocation (in the
+    module's document namespace)."""
+    return f"agent_runs_{_hash(project)[:16]}"
+
+
+def agent_events_collection(project: str) -> str:
+    """Where those invocations' events and output fragments are kept."""
+    return f"agent_events_{_hash(project)[:16]}"
 
 
 def _error(code: str, message: str) -> RPCError:
@@ -82,11 +105,9 @@ class AgentHost:
         self.idle_timeout_seconds = idle_timeout_seconds
         self.session, self.documents, self.handlers = session, documents, handlers
         suffix = _hash(session.client.project)[:16]
-        self.runs_collection, self.locks_collection = (
-            f"agent_runs_{suffix}",
-            f"agent_claims_{suffix}",
-        )
-        self.events_collection = f"agent_events_{suffix}"
+        self.runs_collection = agent_runs_collection(session.client.project)
+        self.locks_collection = f"agent_claims_{suffix}"
+        self.events_collection = agent_events_collection(session.client.project)
         self._membership = (0.0, set())
         self._membership_lock = asyncio.Lock()
         self.runs: dict[str, _Run] = {}
@@ -132,7 +153,11 @@ class AgentHost:
         for sub in old:
             await sub.drain()
 
-    async def _authorize(self, name: str, token: str, new_invocation: bool) -> str:
+    async def _authorize(
+        self, name: str, token: str, new_invocation: bool
+    ) -> tuple[str, bool]:
+        """The caller's identity, and whether it is a platform administrator
+        (discovery's admin identities), as discovery vouches for both."""
         response = await self.session.client._call(
             "authorize_agent",
             discovery_pb.AuthorizeAgentRequest(
@@ -144,7 +169,7 @@ class AgentHost:
             ),
             discovery_pb.AuthorizeAgentResponse,
         )
-        return response.caller_identity
+        return response.caller_identity, response.caller_admin
 
     async def _handle(self, name: str, operation: str, msg) -> None:
         # Runs started by a submit inherit this span (their task copies the context).
@@ -164,7 +189,7 @@ class AgentHost:
             req = cls.FromString(msg.data)
             if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", req.invocation_id):
                 raise _error("INVALID_ARGUMENT", "Invalid invocation ID")
-            caller = await self._authorize(
+            caller, admin = await self._authorize(
                 name,
                 (msg.headers or {}).get("Nats-Auth-Token", ""),
                 operation == "submit",
@@ -179,7 +204,11 @@ class AgentHost:
                 doc = await self._submit(name, key, caller, req)
             else:
                 doc = await self.documents.get(self.runs_collection, key)
-                if doc.data["caller"] != caller:
+                # Platform administrators may stop any run (the System app),
+                # never read another caller's output.
+                if doc.data["caller"] != caller and not (
+                    admin and operation == "cancel"
+                ):
                     raise _error(
                         "PERMISSION_DENIED", "Invocation belongs to another caller"
                     )
@@ -302,6 +331,8 @@ class AgentHost:
             or not 0 <= req.deadline_seconds <= 3600
         ):
             raise _error("INVALID_ARGUMENT", "Invalid thread, prompt, mode or deadline")
+        if req.updates_inbox and not UPDATES_INBOX.fullmatch(req.updates_inbox):
+            raise _error("INVALID_ARGUMENT", "Updates go to an _INBOX subject only")
         fingerprint = _hash(
             caller, req.thread_id, req.prompt, req.mode, str(req.deadline_seconds)
         )
@@ -320,6 +351,7 @@ class AgentHost:
                         "INVOCATION_CONFLICT",
                         "Invocation ID reused with different input",
                     )
+                self._watch(key, req.updates_inbox)
                 return existing
             if self.closing or len(self.runs) >= 32:
                 raise _error(
@@ -340,6 +372,8 @@ class AgentHost:
                 "result": "",
                 "error_code": "",
                 "error_message": "",
+                "submitted_at": _now(),
+                "trace_id": current_trace_id(),
             }
             try:
                 doc = await self.documents.put(
@@ -369,6 +403,7 @@ class AgentHost:
                     status="FAILED",
                     error_code="CONVERSATION_BUSY",
                     error_message="Conversation has an active or unresolved execution claim",
+                    finished_at=_now(),
                 )
                 return await self.documents.put(
                     self.runs_collection, key, data, if_version=doc.version
@@ -389,6 +424,8 @@ class AgentHost:
                 caller,
             )
             run = _Run(key, data, doc.version, context, lock_key, claim.version)
+            if req.updates_inbox:
+                run.watchers.add(req.updates_inbox)
             run.progress_at = asyncio.get_running_loop().time()
             self.runs[key] = run
             run.task = asyncio.create_task(self._execute(name, req, run))
@@ -416,6 +453,8 @@ class AgentHost:
                 return
             if updates.get("status") == "SUCCEEDED" and run.context.cancelled.is_set():
                 raise asyncio.CancelledError()
+            if updates.get("status") in TERMINAL:
+                updates.setdefault("finished_at", _now())
             candidate = run.data | updates
             if len(json.dumps(candidate).encode()) > 384 * 1024:
                 raise _error("OUTPUT_LIMIT", "Invocation record exceeds 384 KiB")
@@ -458,6 +497,46 @@ class AgentHost:
         # Publish the cursor only after every immutable fragment has committed.
         await self._save(run, last_sequence=sequence)
         run.progress_at = asyncio.get_running_loop().time()
+        await self._push(run, event, sequence, parts)
+
+    def _watch(self, key: str, inbox: str) -> None:
+        run = self.runs.get(key)
+        if run is not None and inbox:
+            run.watchers.add(inbox)
+
+    async def _push(
+        self, run: _Run, event: dict | None = None, sequence: int = 0, parts: int = 0
+    ) -> None:
+        """Tell the run's watchers what just committed: an event, or with no
+        event the terminal status. Hints only (at most once, core NATS): the
+        Status reply stays authoritative, so a failed push never fails the run."""
+        if not run.watchers:
+            return
+        try:
+            nc = await self.session.client.transport.connect()
+            if event is None:
+                update = pb.RunUpdate(
+                    status=run.data["status"],
+                    last_sequence=run.data["last_sequence"],
+                )
+            else:
+                limit = min(INLINE_UPDATE_BYTES, nc.max_payload // 4)
+                inline = len(event["data"].encode()) <= limit
+                update = pb.RunUpdate(
+                    event=pb.AgentEvent(
+                        sequence=sequence,
+                        event=event["event"],
+                        data=event["data"] if inline else "",
+                        parts=0 if inline else parts,
+                    )
+                )
+            payload = update.SerializeToString()
+            for inbox in tuple(run.watchers):
+                await nc.publish(inbox, payload)
+        except Exception:  # watchers fall back to Status
+            logging.getLogger(__name__).debug(
+                "Run update not delivered; watchers read the status", exc_info=True
+            )
 
     async def _execute(self, name: str, req, run: _Run) -> None:
         with internal_span(
@@ -530,6 +609,9 @@ class AgentHost:
                         "Conversation claim release failed; reconcile before another run"
                     )
             self.runs.pop(run.key, None)
+            if completed:
+                # After leaving self.runs: a Status read now reports the end.
+                await self._push(run)
 
     async def _cancel(self, run: _Run, reason: str) -> None:
         if run.task and not run.task.done() and not run.context.cancelled.is_set():
