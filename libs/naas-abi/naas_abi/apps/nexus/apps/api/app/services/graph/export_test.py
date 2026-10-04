@@ -243,3 +243,60 @@ class HTTPExportTest(unittest.IsolatedAsyncioTestCase):
             "/graph/export", params={"workspace_id": "alpha", "graph_uri": BETA}
         )
         self.assertEqual(response.status_code, 403)
+
+
+class ReadAheadTest(unittest.IsolatedAsyncioTestCase):
+    """A slow HTTP client must not stall the store's stream (transfer sessions
+    expire after 60 s idle): the export is read ahead into a temporary file."""
+
+    async def test_the_source_is_read_ahead_of_a_slow_reader(self):
+        import asyncio
+
+        from naas_abi.apps.nexus.apps.api.app.services.graph.read_ahead import read_ahead
+
+        state = {"finished": False}
+
+        async def source():
+            for n in range(50):
+                yield f"chunk {n}\n".encode()
+            state["finished"] = True
+
+        chunks = read_ahead(source())
+        first = await anext(chunks)
+        for _ in range(50):  # the reader pauses; the source keeps going
+            if state["finished"]:
+                break
+            await asyncio.sleep(0.01)
+        assert state["finished"]
+        rest = b"".join([chunk async for chunk in chunks])
+        assert first + rest == b"".join(f"chunk {n}\n".encode() for n in range(50))
+
+    async def test_a_source_error_reaches_the_reader_after_the_data(self):
+        from naas_abi.apps.nexus.apps.api.app.services.graph.read_ahead import read_ahead
+
+        async def source():
+            yield b"partial"
+            raise RuntimeError("store failed")
+
+        received = bytearray()
+        with self.assertRaisesRegex(RuntimeError, "store failed"):
+            async for chunk in read_ahead(source()):
+                received.extend(chunk)
+        assert bytes(received) == b"partial"
+
+    async def test_leaving_early_stops_the_source(self):
+        from naas_abi.apps.nexus.apps.api.app.services.graph.read_ahead import read_ahead
+
+        state = {"closed": False}
+
+        async def source():
+            try:
+                while True:
+                    yield b"x" * 1024
+            finally:
+                state["closed"] = True
+
+        chunks = read_ahead(source())
+        await anext(chunks)
+        await chunks.aclose()
+        assert state["closed"]

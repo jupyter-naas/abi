@@ -55,6 +55,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     NetworkSchemaNodeData,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.sparql_safe import sparql_iri
+from naas_abi.apps.nexus.apps.api.app.services.graph.read_ahead import read_ahead
 from naas_abi.ontologies.modules.NexusPlatformOntology import KnowledgeGraph, KnowledgeGraphRole
 from naas_abi_core import logger
 from naas_abi_core.engine.nats_transfer import thread_frames
@@ -2679,7 +2680,7 @@ class GraphService:
         return GraphExportData(
             triple_count=triple_count,
             named_individual_count=individuals,
-            chunks=thread_frames(partial(_produce_export, store, graph_uri, format)),
+            chunks=read_ahead(thread_frames(partial(_produce_export, store, graph_uri, format))),
         )
 
     async def analyze_graph_file(
