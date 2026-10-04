@@ -1,5 +1,6 @@
 import asyncio
-from datetime import datetime, timezone
+import json
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -20,6 +21,65 @@ from naas_abi_sdk.services import (
 from naas_abi_sdk.services.errors import ObjectNotFound, VersionConflict
 from naas_abi_sdk.services.models import ColumnSpec, DatasetInfo, DatasetSpec, FileWrite
 from naas_abi_sdk.transport import RPCError
+
+BIG = 2**60 + 1
+
+
+def test_dataset_query_keeps_integers_exact():
+    client = AsyncMock()
+    client.query.return_value = dataset.QueryResponse(
+        query_result=dataset.QueryResult(
+            columns=["id", "n"], json_rows=[f'{{"id":{BIG},"n":42}}'.encode()]
+        )
+    )
+    service = DatasetService(client)
+
+    result = asyncio.run(service.query("SELECT 1", namespace="acme"))
+
+    assert result.columns == ["id", "n"]
+    assert result.rows == [{"id": BIG, "n": 42}]
+    assert type(result.rows[0]["n"]) is int
+    request = client.query.call_args.args[0]
+    assert request.accept_json_rows and request.namespace == "acme"
+
+
+def test_dataset_query_still_reads_an_older_engine_struct_rows():
+    client = AsyncMock()
+    result = dataset.QueryResult(columns=["n"])
+    result.rows.add().update({"n": 42})
+    client.query.return_value = dataset.QueryResponse(query_result=result)
+
+    assert asyncio.run(DatasetService(client).query("SELECT 1")).rows == [{"n": 42.0}]
+
+
+def test_dataset_flush_and_compact_ask_for_exact_rows():
+    client = AsyncMock()
+    answer = dataset.QueryResult(columns=["n"], json_rows=[b'{"n":3}'])
+    client.flush.return_value = dataset.FlushResponse(query_result=answer)
+    client.compact.return_value = dataset.CompactResponse(query_result=answer)
+    service = DatasetService(client)
+
+    assert asyncio.run(service.flush("t")).rows == [{"n": 3}]
+    assert asyncio.run(service.compact("t")).rows == [{"n": 3}]
+    assert client.flush.call_args.args[0].accept_json_rows
+    assert client.compact.call_args.args[0].accept_json_rows
+
+
+def test_dataset_write_sends_exact_rows_and_struct_rows_for_older_engines():
+    client = AsyncMock()
+    client.write.return_value = dataset.WriteResponse(
+        info=dataset.DatasetInfo(name="t", namespace="default")
+    )
+    service = DatasetService(client)
+
+    asyncio.run(service.write("t", [{"id": BIG, "when": date(2026, 10, 4)}]))
+
+    request = client.write.call_args.args[0]
+    assert [json.loads(row) for row in request.json_rows] == [
+        {"id": BIG, "when": "2026-10-04"}
+    ]
+    assert request.rows[0]["id"] == float(BIG)
+    assert request.rows[0]["when"] == "2026-10-04"
 
 
 def test_object_methods_hide_requests_and_responses_and_preserve_domain_error():
@@ -328,9 +388,9 @@ def test_dataset_query_stream_reads_rows_frame_by_frame():
     from naas_abi_sdk.services import FACTORIES
 
     header = dataset.QueryResult(columns=["id", "name"]).SerializeToString()
-    batch = dataset.QueryResult()
-    for n in range(3):
-        batch.rows.add().update({"id": n, "name": f"row {n}"})
+    batch = dataset.QueryResult(
+        json_rows=[f'{{"id":{n},"name":"row {n}"}}'.encode() for n in range(3)]
+    )
     transport = StreamTransport([header, batch.SerializeToString()])
     service = FACTORIES["dataset"](SimpleNamespace(_transport=transport))
 
@@ -341,13 +401,16 @@ def test_dataset_query_stream_reads_rows_frame_by_frame():
             assert result.columns == ["id", "name"]
             return [row async for row in result.rows]
 
-    assert asyncio.run(scenario()) == [
-        {"id": 0.0, "name": "row 0"},
-        {"id": 1.0, "name": "row 1"},
-        {"id": 2.0, "name": "row 2"},
+    rows = asyncio.run(scenario())
+    assert rows == [
+        {"id": 0, "name": "row 0"},
+        {"id": 1, "name": "row 1"},
+        {"id": 2, "name": "row 2"},
     ]
+    assert type(rows[0]["id"]) is int
     ((operation, metadata),) = transport.opened
     request = dataset.QueryRequest.FromString(metadata)
+    assert request.accept_json_rows
     assert (operation, request.sql, request.namespace) == (
         "query",
         "SELECT id, name FROM t",

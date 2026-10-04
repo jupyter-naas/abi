@@ -20,11 +20,10 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
 from functools import partial
-from typing import Any, TypeVar
+from typing import TypeVar
 
 import nats
 import nats.micro
-from google.protobuf import json_format
 from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
 from naas_abi_core.engine.nats_auth import (
@@ -48,6 +47,10 @@ from naas_abi_core.services.dataset.adapters.dataset_nats_contract import (
     SUBJECT_PREFIX,
     TRANSFER_PREFIX,
 )
+from naas_abi_core.services.dataset.adapters.dataset_row_codec import (
+    query_result_to_pb,
+    write_rows_from_pb,
+)
 from naas_abi_core.services.dataset.adapters.dataset_stream_codec import (
     encode_header,
     row_frames,
@@ -66,7 +69,6 @@ from naas_abi_core.services.dataset.DatasetPort import (
     IDatasetPort,
     PartitionSpec,
     PartitionTransform,
-    QueryResult,
     WriteMode,
 )
 from naas_abi_core.services.dataset.DatasetService import DatasetService
@@ -170,26 +172,6 @@ def _dataset_snapshot_info_to_pb(
     pb = dataset_pb2.DatasetSnapshotInfo(snapshot_id=snapshot.snapshot_id)
     pb.created_at.FromDatetime(snapshot.created_at)
     return pb
-
-
-def _struct_to_row(pb: Any) -> dict[str, Any]:
-    """Decode one ``google.protobuf.Struct`` row back into a plain dict.
-
-    ``pb`` is typed ``Any``, not ``struct_pb2.Struct``, deliberately: mypy
-    cannot resolve well-known-type attributes (``Struct``, ``Timestamp``, ...)
-    from ``google.protobuf`` in this project's environment when referenced as
-    a bare annotation outside a generated ``_pb2.pyi`` (see the ``[tool.mypy]``
-    override comment on ``naas_abi_core.proto.*`` in ``pyproject.toml`` for
-    the same upstream quirk). Encoding the other direction needs no such
-    helper: protobuf message constructors accept a plain dict anywhere a
-    ``Struct``-typed field is expected (see ``_query_result_to_pb`` below), so
-    there is no ``_row_to_struct`` counterpart to this function.
-    """
-    return json_format.MessageToDict(pb)
-
-
-def _query_result_to_pb(result: QueryResult) -> dataset_pb2.QueryResult:
-    return dataset_pb2.QueryResult(columns=result.columns, rows=result.rows)
 
 
 class DatasetPrimaryAdapterNATS:
@@ -578,7 +560,7 @@ class DatasetPrimaryAdapterNATS:
         mode = _PB_TO_WRITE_MODE.get(req.mode, "append")
         info = self._adapter.write(
             req.name,
-            [_struct_to_row(row) for row in req.rows],
+            write_rows_from_pb(req),
             namespace=req.namespace,
             mode=mode,
             snapshot_id=snapshot_id,
@@ -598,7 +580,9 @@ class DatasetPrimaryAdapterNATS:
         result = self._adapter.query(
             req.sql, namespace=req.namespace, snapshot_id=snapshot_id
         )
-        return dataset_pb2.QueryResponse(query_result=_query_result_to_pb(result))
+        return dataset_pb2.QueryResponse(
+            query_result=query_result_to_pb(result, json_rows=req.accept_json_rows)
+        )
 
     async def _handle_flush(self, request: Request) -> None:
         await self._handle(
@@ -610,7 +594,9 @@ class DatasetPrimaryAdapterNATS:
 
     def _call_flush(self, req: dataset_pb2.FlushRequest) -> dataset_pb2.FlushResponse:
         result = self._adapter.flush(req.name, namespace=req.namespace)
-        return dataset_pb2.FlushResponse(query_result=_query_result_to_pb(result))
+        return dataset_pb2.FlushResponse(
+            query_result=query_result_to_pb(result, json_rows=req.accept_json_rows)
+        )
 
     async def _handle_inlined_row_count(self, request: Request) -> None:
         await self._handle(
@@ -638,7 +624,9 @@ class DatasetPrimaryAdapterNATS:
         self, req: dataset_pb2.CompactRequest
     ) -> dataset_pb2.CompactResponse:
         result = self._adapter.compact(req.name, namespace=req.namespace)
-        return dataset_pb2.CompactResponse(query_result=_query_result_to_pb(result))
+        return dataset_pb2.CompactResponse(
+            query_result=query_result_to_pb(result, json_rows=req.accept_json_rows)
+        )
 
     async def _handle_list_snapshots(self, request: Request) -> None:
         await self._handle(

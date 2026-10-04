@@ -126,12 +126,14 @@ class DatasetSnapshotInfoList(_message.Message):
     def __init__(self, items: _Optional[_Iterable[_Union[DatasetSnapshotInfo, _Mapping]]] = ...) -> None: ...
 
 class QueryResult(_message.Message):
-    __slots__ = ("columns", "rows")
+    __slots__ = ("columns", "rows", "json_rows")
     COLUMNS_FIELD_NUMBER: _ClassVar[int]
     ROWS_FIELD_NUMBER: _ClassVar[int]
+    JSON_ROWS_FIELD_NUMBER: _ClassVar[int]
     columns: _containers.RepeatedScalarFieldContainer[str]
     rows: _containers.RepeatedCompositeFieldContainer[_struct_pb2.Struct]
-    def __init__(self, columns: _Optional[_Iterable[str]] = ..., rows: _Optional[_Iterable[_Union[_struct_pb2.Struct, _Mapping]]] = ...) -> None: ...
+    json_rows: _containers.RepeatedScalarFieldContainer[bytes]
+    def __init__(self, columns: _Optional[_Iterable[str]] = ..., rows: _Optional[_Iterable[_Union[_struct_pb2.Struct, _Mapping]]] = ..., json_rows: _Optional[_Iterable[bytes]] = ...) -> None: ...
 
 class DatasetNotFoundDetail(_message.Message):
     __slots__ = ("name", "namespace")
@@ -228,20 +230,22 @@ class ListResponse(_message.Message):
     def __init__(self, datasets: _Optional[_Union[DatasetInfoList, _Mapping]] = ..., error: _Optional[_Union[DatasetError, _Mapping]] = ...) -> None: ...
 
 class WriteRequest(_message.Message):
-    __slots__ = ("context", "name", "rows", "namespace", "mode", "snapshot_id")
+    __slots__ = ("context", "name", "rows", "namespace", "mode", "snapshot_id", "json_rows")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     ROWS_FIELD_NUMBER: _ClassVar[int]
     NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     MODE_FIELD_NUMBER: _ClassVar[int]
     SNAPSHOT_ID_FIELD_NUMBER: _ClassVar[int]
+    JSON_ROWS_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     name: str
     rows: _containers.RepeatedCompositeFieldContainer[_struct_pb2.Struct]
     namespace: str
     mode: WriteMode
     snapshot_id: int
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., rows: _Optional[_Iterable[_Union[_struct_pb2.Struct, _Mapping]]] = ..., namespace: _Optional[str] = ..., mode: _Optional[_Union[WriteMode, str]] = ..., snapshot_id: _Optional[int] = ...) -> None: ...
+    json_rows: _containers.RepeatedScalarFieldContainer[bytes]
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., rows: _Optional[_Iterable[_Union[_struct_pb2.Struct, _Mapping]]] = ..., namespace: _Optional[str] = ..., mode: _Optional[_Union[WriteMode, str]] = ..., snapshot_id: _Optional[int] = ..., json_rows: _Optional[_Iterable[bytes]] = ...) -> None: ...
 
 class WriteResponse(_message.Message):
     __slots__ = ("info", "error")
@@ -252,16 +256,18 @@ class WriteResponse(_message.Message):
     def __init__(self, info: _Optional[_Union[DatasetInfo, _Mapping]] = ..., error: _Optional[_Union[DatasetError, _Mapping]] = ...) -> None: ...
 
 class QueryRequest(_message.Message):
-    __slots__ = ("context", "sql", "namespace", "snapshot_id")
+    __slots__ = ("context", "sql", "namespace", "snapshot_id", "accept_json_rows")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     SQL_FIELD_NUMBER: _ClassVar[int]
     NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     SNAPSHOT_ID_FIELD_NUMBER: _ClassVar[int]
+    ACCEPT_JSON_ROWS_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     sql: str
     namespace: str
     snapshot_id: int
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., sql: _Optional[str] = ..., namespace: _Optional[str] = ..., snapshot_id: _Optional[int] = ...) -> None: ...
+    accept_json_rows: bool
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., sql: _Optional[str] = ..., namespace: _Optional[str] = ..., snapshot_id: _Optional[int] = ..., accept_json_rows: bool = ...) -> None: ...
 
 class QueryResponse(_message.Message):
     __slots__ = ("query_result", "error")
@@ -272,14 +278,16 @@ class QueryResponse(_message.Message):
     def __init__(self, query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., error: _Optional[_Union[DatasetError, _Mapping]] = ...) -> None: ...
 
 class FlushRequest(_message.Message):
-    __slots__ = ("context", "name", "namespace")
+    __slots__ = ("context", "name", "namespace", "accept_json_rows")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    ACCEPT_JSON_ROWS_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     name: str
     namespace: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., namespace: _Optional[str] = ...) -> None: ...
+    accept_json_rows: bool
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., namespace: _Optional[str] = ..., accept_json_rows: bool = ...) -> None: ...
 
 class FlushResponse(_message.Message):
     __slots__ = ("query_result", "error")
@@ -308,14 +316,16 @@ class InlinedRowCountResponse(_message.Message):
     def __init__(self, count: _Optional[int] = ..., error: _Optional[_Union[DatasetError, _Mapping]] = ...) -> None: ...
 
 class CompactRequest(_message.Message):
-    __slots__ = ("context", "name", "namespace")
+    __slots__ = ("context", "name", "namespace", "accept_json_rows")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    ACCEPT_JSON_ROWS_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     name: str
     namespace: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., namespace: _Optional[str] = ...) -> None: ...
+    accept_json_rows: bool
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., namespace: _Optional[str] = ..., accept_json_rows: bool = ...) -> None: ...
 
 class CompactResponse(_message.Message):
     __slots__ = ("query_result", "error")
