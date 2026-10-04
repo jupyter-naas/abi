@@ -39,7 +39,7 @@ Core intent-routing agent.
     - `tools: list[Tool | BaseTool | Agent]` (optional)
     - `agents: list[Agent]` (optional) — sub-agents to route to
     - `intents: list[Intent]` (optional) — custom intents
-    - `memory: BaseCheckpointSaver | None` (optional) — if `None`, uses `create_checkpointer()`
+    - `memory: BaseCheckpointSaver | None` (optional) — if `None`, uses `create_checkpointer()` (the engine's Document Service saver inside an engine)
     - `threshold: float` — minimum score to consider an intent (default `0.85`)
     - `threshold_neighbor: float` — max score gap from best intent to keep as “close” (default `0.05`)
     - `direct_intent_score: float` — score to allow direct routing when clearly best (default `0.90`)
@@ -110,7 +110,7 @@ Core intent-routing agent.
   - Depends on base `Agent` framework, `IntentMapper`, and `DEFAULT_INTENTS`.
 
 - **Checkpointing**
-  - If `memory` is not provided, it uses `create_checkpointer()` (implementation not shown here).
+  - If `memory` is not provided, it uses `create_checkpointer()`: inside an engine, the engine's `DocumentCheckpointSaver` in the Document Service; outside, PostgreSQL when `POSTGRES_URL` is set, else in-memory (see `Agent.md`).
 
 ## Usage
 Minimal setup (requires your concrete chat model and intent definitions from the surrounding package):
