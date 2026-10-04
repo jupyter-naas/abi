@@ -32,7 +32,10 @@ A backend value with no JSON form takes a portable one: dates, timestamps and
 times their ISO-8601 string, `Decimal` a float, bytes base64, NaN and
 infinities `None`, anything else its string form. Writes accept the same
 values plus `date`/`datetime` objects; NaN and infinities raise
-`DatasetSchemaError`. A backend adapter maps its values with
+`DatasetSchemaError`. Timestamps are stored in UTC: a value with an offset
+(`datetime` or ISO-8601 string, `Z` included) is converted, a naive one is
+taken as UTC (`DatasetValues.timestamp_value`); DuckDB alone would drop the
+offset (12:30+02:00 stored as 12:30). A backend adapter maps its values with
 `DatasetValues.row_value`; the generic contract tests hold every adapter to
 these rules, so a new backend that passes them needs no wire change.
 
