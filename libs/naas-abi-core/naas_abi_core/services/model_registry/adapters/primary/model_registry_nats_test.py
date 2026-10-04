@@ -222,3 +222,67 @@ def test_a_failing_model_call_fails_its_span_and_still_raises(spans):
     assert span.name == "model chat gpt-x"
     assert span.status.status_code is StatusCode.ERROR
     assert span.events[0].attributes["exception.type"] == "RuntimeError"
+
+
+def _one_shot(primary, secret, headers):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from naas_abi_core.engine.nats_auth import issue_service_token
+
+    request = _chat_request()
+    request.context.timeout_ms = 5000
+    msg = SimpleNamespace(
+        subject="abi.svc.model_registry.v1.chat",
+        data=request.SerializeToString(),
+        headers={"Nats-Auth-Token": issue_service_token("caller", secret), **headers},
+        reply="reply",
+        respond=AsyncMock(),
+        _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
+    )
+    asyncio.run(primary._handle("chat", msg))
+    return pb.ChatResponse.FromString(msg._client.publish.call_args.args[1])
+
+
+def _caller_headers():
+    from opentelemetry import trace
+    from opentelemetry.propagate import inject
+    from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
+
+    parent = SpanContext(
+        trace_id=0x1234, span_id=0x5678, is_remote=True, trace_flags=TraceFlags(1)
+    )
+    headers: dict[str, str] = {}
+    inject(headers, context=trace.set_span_in_context(NonRecordingSpan(parent)))
+    return headers
+
+
+def test_a_one_shot_model_call_continues_the_callers_trace(spans):
+    from opentelemetry.trace import SpanKind
+
+    secret = "model-unit-test-secret-at-least-32-bytes"
+    primary = _registry_primary()
+    primary.secret = secret
+
+    assert not _one_shot(primary, secret, _caller_headers()).HasField("error")
+
+    by_name = {span.name: span for span in spans.get_finished_spans()}
+    server = next(s for s in by_name.values() if s.kind is SpanKind.SERVER)
+    model = by_name["model chat gpt-x"]
+    assert server.context.trace_id == model.context.trace_id == 0x1234
+    assert model.parent.span_id == server.context.span_id
+
+
+def test_a_failed_one_shot_call_marks_its_server_span(spans):
+    from opentelemetry.trace import SpanKind, StatusCode
+
+    secret = "model-unit-test-secret-at-least-32-bytes"
+    primary = _registry_primary(fail=True)
+    primary.secret = secret
+
+    assert _one_shot(primary, secret, _caller_headers()).error.code == "MODEL_ERROR"
+
+    (server,) = [s for s in spans.get_finished_spans() if s.kind is SpanKind.SERVER]
+    assert server.status.status_code is StatusCode.ERROR
+    assert "MODEL_ERROR" in server.status.description
+    assert "sk-private" not in server.status.description

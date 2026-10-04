@@ -320,6 +320,7 @@ class TransferHost:
 
     async def _handle(self, operation, msg):
         response = OPERATIONS[operation][1]()
+        caller = request = None
         try:
             caller = verify_service_token(
                 (msg.headers or {}).get("Nats-Auth-Token", ""), self.secret
@@ -332,6 +333,15 @@ class TransferHost:
             response = await self._execute(operation, request, caller, msg.headers)
         except Exception as exc:  # noqa: BLE001 - sanitize errors at transport boundary
             response.error.code, response.error.message = self._error(exc)
+            # A failed chunk of the session's own caller fails its span (once:
+            # a handler failure is recorded when it happens, not when read).
+            session = self.sessions.get(getattr(request, "id", ""))
+            if (
+                session is not None
+                and session.caller == caller
+                and exc is not session.error
+            ):
+                session.trace.fail(exc, response.error.code, response.error.message)
         if msg.reply:
             await reply(msg, response.SerializeToString())
 

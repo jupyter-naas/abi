@@ -33,7 +33,7 @@ from naas_abi_sdk.model_codec import (
     encode_json,
     encode_message,
 )
-from naas_abi_sdk.telemetry import internal_span
+from naas_abi_sdk.telemetry import internal_span, record_error, server_span
 
 OPERATIONS = {
     "list_models": (pb.ListModelsRequest, pb.ListModelsResponse),
@@ -46,6 +46,9 @@ OPERATIONS = {
 }
 
 _USAGE_KEYS = ("input_tokens", "output_tokens", "total_tokens")
+
+
+SUBJECT_PREFIX = "abi.svc.model_registry.v1"
 
 
 def _model_span(operation, canonical, wrapper, inputs):
@@ -209,6 +212,16 @@ class ModelRegistryNATS:
             )
 
     async def _handle(self, operation, msg):
+        if operation in {"stream_next", "stream_close"}:
+            # Chunks of an older stream: one span each would flood the trace.
+            await self._serve(operation, msg)
+            return
+        subject = getattr(msg, "subject", "") or f"{SUBJECT_PREFIX}.{operation}"
+        # One-shot calls continue the caller's trace, like micro services do.
+        with server_span(subject, msg.headers):
+            await self._serve(operation, msg)
+
+    async def _serve(self, operation, msg):
         request_type, response_type = OPERATIONS[operation]
         response = response_type()
         try:
@@ -281,6 +294,8 @@ class ModelRegistryNATS:
                 "Model response exceeds limit",
             )
             payload = response.SerializeToString()
+        if response.error.code:
+            record_error(response.error.code, response.error.message)
         if msg.reply:
             await reply(msg, payload)
 
