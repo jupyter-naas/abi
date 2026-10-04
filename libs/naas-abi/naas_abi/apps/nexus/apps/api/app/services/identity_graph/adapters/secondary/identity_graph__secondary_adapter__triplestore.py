@@ -5,6 +5,7 @@ from collections.abc import Callable
 from naas_abi.apps.nexus.apps.api.app.services.identity_graph.port import (
     IdentityGraphStorePort,
 )
+from naas_abi_core.services.triple_store.TripleStorePorts import Exceptions
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from rdflib import Graph, URIRef
 
@@ -24,6 +25,11 @@ class IdentityGraphStoreSecondaryAdapterTripleStore(IdentityGraphStorePort):
         if graph_uri in triple_store.list_graphs():
             triple_store.clear_graph(graph_uri)
         else:
-            triple_store.create_graph(graph_uri)
+            try:
+                triple_store.create_graph(graph_uri)
+            except Exceptions.GraphAlreadyExistsError:
+                # An empty graph exists without being listed (Oxigraph lists
+                # graphs from their triples): clear it like a listed one.
+                triple_store.clear_graph(graph_uri)
         if len(graph):
             triple_store.insert(graph, graph_uri)

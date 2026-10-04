@@ -43,6 +43,7 @@ import requests
 from naas_abi_core.services.triple_store.adaptors.secondary.base import sparql_stream
 from naas_abi_core.services.triple_store.resolve import resolve_local_http_url
 from naas_abi_core.services.triple_store.TripleStorePorts import (
+    Exceptions,
     ITripleStorePort,
     OntologyEvent,
     QueryStream,
@@ -603,7 +604,16 @@ class Oxigraph(ITripleStorePort):
     def create_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
-        self.query(f"CREATE GRAPH <{graph_name!s}>")
+        try:
+            self.query(f"CREATE GRAPH <{graph_name!s}>")
+        except requests.exceptions.HTTPError as exc:
+            # The server refuses CREATE GRAPH on an existing graph, empty ones
+            # included (which list_graphs, reading triples, does not show).
+            if exc.response is not None and "already exists" in exc.response.text:
+                raise Exceptions.GraphAlreadyExistsError(
+                    f"Graph {graph_name} already exists"
+                ) from exc
+            raise
 
     def clear_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
