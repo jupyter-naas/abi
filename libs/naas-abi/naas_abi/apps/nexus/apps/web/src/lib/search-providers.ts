@@ -214,7 +214,8 @@ async function topicProvider(scope: SearchScope, q: string, ctx: ProviderContext
     hits: page.items.map(item => ({
       id: item.uri,
       title: item.title,
-      subtitle: item.subtitle,
+      // Without a subtitle, the topic's metadata rows say what the result is ("People 746").
+      subtitle: item.subtitle || (item.rows || []).map(row => `${row.label} ${row.value}`).join(' · ') || null,
       snippet: item.snippet,
       image: item.image,
       action: { kind: 'topic-item', topic: scope.id, uri: item.uri },

@@ -2,20 +2,19 @@
 
 import { useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, Settings2 } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import { OntologyDictionaryEntry } from '@/components/shell/sidebar/ontology-dictionary-entry';
 import { classDefinitionHref } from '@/lib/graph-instance-browser';
 import type { SearchTopic } from '@/lib/search-topics';
 import { useOntologyDictionaryStore } from '@/stores/ontology-dictionary';
 import { useOntologyStore } from '@/stores/ontology';
-import { SparqlDisclosure } from './sparql-disclosure';
 
 /**
  * The ontology behind a topic: its class, as the workspace ontology defines it
- * (same entry the Ontology page and the graph explorer show), and the queries
- * the topic runs over it.
+ * (same entry the Ontology page and the graph explorer show). The topic's
+ * queries live in Settings → Search.
  */
-export function TopicOntology({ workspaceId, topic, canEdit }: { workspaceId: string; topic: SearchTopic; canEdit: boolean }) {
+export function TopicOntology({ workspaceId, topic }: { workspaceId: string; topic: SearchTopic }) {
   const dictionary = useOntologyDictionaryStore();
   const { load } = dictionary;
   const revision = useOntologyStore(state => state.graphRefreshTrigger);
@@ -48,34 +47,6 @@ export function TopicOntology({ workspaceId, topic, canEdit }: { workspaceId: st
           </p>
         )}
       </section>
-
-      <section className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Queries</h3>
-          {canEdit && (
-            <Link href={`/workspace/${encodeURIComponent(workspaceId)}/settings/search?topic=${encodeURIComponent(topic.id)}`} className="inline-flex items-center gap-1 text-xs text-workspace-accent hover:underline">
-              <Settings2 size={12} /> Edit in settings
-            </Link>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Each query runs on the graphs this workspace can read. Its variables fill the result list, the header and the sections.
-        </p>
-        <div className="space-y-1">
-          <QueryRow label="Results" sparql={topic.results_query} />
-          <QueryRow label="Header" sparql={topic.header_query} />
-          {topic.sections.map(s => <QueryRow key={s.id} label={`Section · ${s.label}`} sparql={s.query} />)}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function QueryRow({ label, sparql }: { label: string; sparql: string }) {
-  return (
-    <div className="rounded-md border px-2 py-1.5">
-      <div className="flex items-center justify-between gap-2 text-sm"><span>{label}</span></div>
-      <SparqlDisclosure sparql={sparql} label="Show query" />
     </div>
   );
 }

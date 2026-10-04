@@ -11,7 +11,7 @@ _PROCESSES: list[dict] = [
         "id": "working",
         "status": "implemented",
         "source": "ontologies/processes/ActOfWorkingProcess.ttl",
-        "iri": "http://ontology.naas.ai/personnel/ActOfWorking",
+        "iri": "http://ontology.naas.ai/people/ActOfWorking",
         "label": "Act of Working",
         "kicker": "Working experience",
         "title": "Act of Working",
@@ -38,7 +38,7 @@ _PROCESSES: list[dict] = [
             "what": {
                 "bfo": "Process",
                 "label": "Act of Working",
-                "class": "personnel:ActOfWorking",
+                "class": "people:ActOfWorking",
             },
             "when": {
                 "bfo": "Temporal Region",
@@ -59,14 +59,14 @@ _PROCESSES: list[dict] = [
                 "bfo": "Generically dependent continuant",
                 "label": "Mission · Employment contract · Profile document",
                 "class": (
-                    "personnel:Mission · personnel:EmploymentContract · "
-                    "personnel:ProfileDocument"
+                    "people:Mission · personnel:EmploymentContract · "
+                    "people:ProfileDocument"
                 ),
             },
             "how_it_is": {
                 "bfo": "Qualities",
                 "label": "Skills · Remuneration",
-                "class": "personnel:Skill · personnel:Remuneration",
+                "class": "people:Skill · personnel:Remuneration",
             },
             "why": {
                 "bfo": "Realizable Entities",
@@ -78,7 +78,7 @@ _PROCESSES: list[dict] = [
             {
                 "on": "Act of Working",
                 "property": "for organization",
-                "property_iri": "personnel:forOrganization",
+                "property_iri": "people:forOrganization",
                 "someValuesFrom": "abi:Organization",
                 "definition": "Every act of working is performed for an organization.",
                 "example": "Demo",
@@ -116,8 +116,8 @@ _PROCESSES: list[dict] = [
             {
                 "on": "Act of Working",
                 "property": "develops skill",
-                "property_iri": "personnel:developsSkill",
-                "someValuesFrom": "personnel:Skill",
+                "property_iri": "people:developsSkill",
+                "someValuesFrom": "people:Skill",
                 "definition": (
                     "Skills are qualities inhering in the person, exercised and developed "
                     "in the act. One skill node is shared by every act that develops it."
@@ -127,19 +127,19 @@ _PROCESSES: list[dict] = [
             {
                 "on": "Employee Role",
                 "property": "has mission",
-                "property_iri": "personnel:hasMission",
-                "someValuesFrom": "personnel:Mission",
+                "property_iri": "people:hasMission",
+                "someValuesFrom": "people:Mission",
                 "definition": (
                     "The role concretizes the mission: rdfs:label carries the opening "
-                    "sentence, personnel:mission_content the full stated text."
+                    "sentence, people:mission_content the full stated text."
                 ),
                 "example": "Lead platform operations and agent orchestration…",
             },
             {
                 "on": "Mission",
                 "property": "is sourced from",
-                "property_iri": "personnel:isSourcedFrom",
-                "someValuesFrom": "personnel:ProfileDocument",
+                "property_iri": "people:isSourcedFrom",
+                "someValuesFrom": "people:ProfileDocument",
                 "definition": (
                     "Provenance: every asserted mission points back at the profile page "
                     "it was read from."
@@ -149,8 +149,8 @@ _PROCESSES: list[dict] = [
             {
                 "on": "Person",
                 "property": "has act of working",
-                "property_iri": "personnel:hasActOfWorking",
-                "someValuesFrom": "personnel:ActOfWorking",
+                "property_iri": "people:hasActOfWorking",
+                "someValuesFrom": "people:ActOfWorking",
                 "definition": "Links a person to each act of working they perform.",
                 "example": "Alice Dupont → COO @ Demo",
             },
@@ -160,7 +160,7 @@ _PROCESSES: list[dict] = [
         "id": "studying",
         "status": "implemented",
         "source": "ontologies/processes/ActOfStudyingProcess.ttl",
-        "iri": "http://ontology.naas.ai/personnel/ActOfStudying",
+        "iri": "http://ontology.naas.ai/people/ActOfStudying",
         "label": "Act of Studying",
         "kicker": "Education history",
         "title": "Act of Studying",
@@ -183,13 +183,13 @@ _PROCESSES: list[dict] = [
             "Act of Studying is the process counterpart to study continuants "
             "(EnrollmentRecord, StudentRole, AcademicDegree). Enrollment records and "
             "degrees point back to the education profile page through "
-            "personnel:isSourcedFrom."
+            "people:isSourcedFrom."
         ),
         "buckets": {
             "what": {
                 "bfo": "Process",
                 "label": "Act of Studying",
-                "class": "personnel:ActOfStudying",
+                "class": "people:ActOfStudying",
             },
             "when": {
                 "bfo": "Temporal Region",
@@ -210,26 +210,26 @@ _PROCESSES: list[dict] = [
                 "bfo": "Generically dependent continuant",
                 "label": "Enrollment record · Academic degree · Profile document",
                 "class": (
-                    "personnel:EnrollmentRecord · personnel:AcademicDegree · "
-                    "personnel:ProfileDocument"
+                    "people:EnrollmentRecord · people:AcademicDegree · "
+                    "people:ProfileDocument"
                 ),
             },
             "how_it_is": {
                 "bfo": "Qualities",
                 "label": "Skills",
-                "class": "personnel:Skill",
+                "class": "people:Skill",
             },
             "why": {
                 "bfo": "Realizable Entities",
                 "label": "Student role",
-                "class": "personnel:StudentRole",
+                "class": "people:StudentRole",
             },
         },
         "restrictions": [
             {
                 "on": "Act of Studying",
                 "property": "for educational organization",
-                "property_iri": "personnel:forEducationalOrganization",
+                "property_iri": "people:forEducationalOrganization",
                 "someValuesFrom": "abi:Organization",
                 "definition": (
                     "Every act of studying is performed with an educational organization."
@@ -259,14 +259,14 @@ _PROCESSES: list[dict] = [
                 "on": "Act of Studying",
                 "property": "realizes",
                 "property_iri": "abi:realizes",
-                "someValuesFrom": "personnel:StudentRole",
+                "someValuesFrom": "people:StudentRole",
                 "definition": "The act realizes the student role borne by the person.",
             },
             {
                 "on": "Act of Studying",
                 "property": "has enrollment",
-                "property_iri": "personnel:hasEnrollment",
-                "someValuesFrom": "personnel:EnrollmentRecord",
+                "property_iri": "people:hasEnrollment",
+                "someValuesFrom": "people:EnrollmentRecord",
                 "definition": (
                     "Concretizes the enrollment record that documents the course of study."
                 ),
@@ -274,8 +274,8 @@ _PROCESSES: list[dict] = [
             {
                 "on": "Act of Studying",
                 "property": "has degree",
-                "property_iri": "personnel:hasDegree",
-                "someValuesFrom": "personnel:AcademicDegree",
+                "property_iri": "people:hasDegree",
+                "someValuesFrom": "people:AcademicDegree",
                 "definition": (
                     "Concretizes the academic degree awarded for the course of study."
                 ),
@@ -283,8 +283,8 @@ _PROCESSES: list[dict] = [
             {
                 "on": "Act of Studying",
                 "property": "develops skill",
-                "property_iri": "personnel:developsSkill",
-                "someValuesFrom": "personnel:Skill",
+                "property_iri": "people:developsSkill",
+                "someValuesFrom": "people:Skill",
                 "definition": (
                     "Skills are qualities inhering in the person, exercised and developed "
                     "in the act."
@@ -294,8 +294,8 @@ _PROCESSES: list[dict] = [
             {
                 "on": "Enrollment Record",
                 "property": "is sourced from",
-                "property_iri": "personnel:isSourcedFrom",
-                "someValuesFrom": "personnel:ProfileDocument",
+                "property_iri": "people:isSourcedFrom",
+                "someValuesFrom": "people:ProfileDocument",
                 "definition": (
                     "Provenance: every enrollment record points back at the education "
                     "profile page it was read from."
@@ -305,8 +305,8 @@ _PROCESSES: list[dict] = [
             {
                 "on": "Person",
                 "property": "has act of studying",
-                "property_iri": "personnel:hasActOfStudying",
-                "someValuesFrom": "personnel:ActOfStudying",
+                "property_iri": "people:hasActOfStudying",
+                "someValuesFrom": "people:ActOfStudying",
                 "definition": "Links a person to an act of studying.",
                 "example": (
                     "Alice Dupont → Master's Degree, Corporate Finance @ Demo Business School"
@@ -317,7 +317,9 @@ _PROCESSES: list[dict] = [
 ]
 
 
-def build_processes_page_payload(*, entity_id: str, data_version: str | None = None) -> dict:
+def build_processes_page_payload(
+    *, entity_id: str, data_version: str | None = None
+) -> dict:
     """Return the Processes page dataset (ontology docs, not instance data)."""
     version = data_version or datetime.now(UTC).strftime("%Y-%m-%d %H:%M")
     return {

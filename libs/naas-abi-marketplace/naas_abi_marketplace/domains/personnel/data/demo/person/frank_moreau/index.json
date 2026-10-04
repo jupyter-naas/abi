@@ -1,93 +1,31 @@
 {
   "schema_version": "1.0",
-  "data_version": "2026-08-19 17:25",
+  "data_version": "2026-10-02 17:30",
   "person": {
     "first_name": "Frank",
     "last_name": "Moreau",
-    "full_name": "Frank Moreau",
-    "linkedin_profile_url": "https://demo.example/profiles/frank_moreau",
-    "email": "frank.moreau@demo.example",
-    "phone": "+33 1 99 00 00 06",
-    "linkedin_url": "https://www.linkedin.com/in/frank-moreau-demo"
+    "full_name": "Frank Moreau"
   },
-  "records": [
+  "employer": "Demo",
+  "service_line": "Growth",
+  "grade": "Manager",
+  "roster": {
+    "employee_id": "E-10433",
+    "job_title": "Head of Growth",
+    "job_family": "Growth",
+    "hire_date": "2020-01-01",
+    "termination_date": "2022-12-31",
+    "status": "terminated"
+  },
+  "employments": [
     {
-      "process_type": "ActOfWorking",
       "organization": "Demo",
+      "client": null,
       "title": "Head of Growth",
-      "contract_type": "Permanent",
-      "site": "France",
-      "start": "2020-01-01",
-      "end": "2022-12-31",
-      "duration": "3 yrs",
-      "mission_label": "Drove outbound and inbound growth for Demo.",
-      "mission": "Drove outbound and inbound growth for Demo.",
-      "skills": [
-        "Sales",
-        "Automation"
-      ],
-      "source": "https://demo.example/profiles/frank_moreau"
-    },
-    {
-      "process_type": "ActOfWorking",
-      "organization": "SalesPlatform",
-      "title": "Account Executive",
-      "contract_type": null,
-      "site": "Remote",
-      "start": "2023-01-01",
-      "end": "2024-12-31",
-      "duration": "2 yrs",
-      "mission_label": "Closed SMB SaaS deals across European markets.",
-      "mission": "Closed SMB SaaS deals across European markets.",
-      "skills": [
-        "Sales",
-        "CRM"
-      ],
-      "source": "https://demo.example/profiles/frank_moreau"
-    },
-    {
-      "process_type": "ActOfWorking",
-      "organization": "Translation Corp",
-      "title": "Account Manager",
-      "contract_type": null,
-      "site": "Paris",
-      "start": "2017-02-01",
-      "end": "2019-12-31",
-      "duration": "3 yrs",
-      "mission_label": "Managed enterprise localization accounts.",
-      "mission": "Managed enterprise localization accounts.",
-      "skills": [
-        "Account Management"
-      ],
-      "source": "https://demo.example/profiles/frank_moreau"
+      "contract_type": "Permanent (CDI)",
+      "job_family": "Growth",
+      "remuneration_amount": 65000,
+      "remuneration_currency": "EUR"
     }
-  ],
-  "profile": {
-    "slug": "frank_moreau",
-    "headline": "Account Executive - growth and revenue operations",
-    "about": "Sells, and builds the automation that makes selling repeatable.",
-    "years_of_experience": 8,
-    "organization": "Demo",
-    "service_line": "Growth",
-    "grade": "Manager",
-    "location": {
-      "office": "Paris Opéra",
-      "city": "Paris",
-      "country": "France",
-      "country_code": "FR"
-    },
-    "photo_path": "apps/people/web/assets/portraits/frank_moreau.svg",
-    "certifications": [
-      {
-        "name": "Demo CRM Specialist",
-        "issuer": "Demo Institute",
-        "issue_date": "2022-05-10",
-        "expiry_date": "2026-05-10",
-        "status": "active"
-      }
-    ],
-    "languages": [],
-    "interests": [],
-    "recommendations": []
-  }
+  ]
 }

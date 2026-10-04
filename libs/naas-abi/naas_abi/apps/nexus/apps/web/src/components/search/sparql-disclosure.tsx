@@ -5,7 +5,7 @@ import { Check, Code2, Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /** "Show SPARQL": every block on the search page can show the query that filled it. */
-export function SparqlDisclosure({ sparql, label = 'SPARQL', className }: { sparql: string; label?: string; className?: string }) {
+export function SparqlDisclosure({ sparql, label = 'SPARQL Query', className }: { sparql: string; label?: string; className?: string }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   if (!sparql) return null;

@@ -22,6 +22,7 @@ from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema impo
     TOPIC_ID_PATTERN,
     SearchTopic,
     SearchTopicValidationError,
+    TopicResultRowDef,
 )
 from rdflib.plugins.sparql import prepareQuery
 
@@ -32,6 +33,7 @@ _SAMPLE_PARAMS: dict[str, Any] = {
     "uri": "http://example.org/sample",
     "limit": 10,
     "offset": 0,
+    "uris": ["http://example.org/sample"],
 }
 
 
@@ -45,6 +47,11 @@ def _render_value(name: str, value: Any) -> str:
         return sparql_string_literal(str(value or ""))[1:-1]
     if name == "uri":
         return sparql_iri(str(value))
+    if name == "uris":
+        # The IRIs of a VALUES block: the template writes ``VALUES ?uri { {{ uris }} }``.
+        if isinstance(value, str) or not isinstance(value, (list, tuple)):
+            raise GraphQuerySpecError("uris must be a list of IRIs")
+        return " ".join(sparql_iri(str(item)) for item in value)
     if name in {"limit", "offset"}:
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise GraphQuerySpecError(f"{name} must be a non-negative integer")
@@ -108,6 +115,22 @@ def validate_query(template: str, role: str, *, label: str = "") -> list[str]:
     return errors
 
 
+def _validate_rows(rows: tuple[TopicResultRowDef, ...], kind: str) -> list[str]:
+    """Result rows and detail facts: ``row``-role queries with a unique id and a label."""
+    errors: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        if not TOPIC_ID_PATTERN.match(row.id):
+            errors.append(f"{kind} id {row.id!r} is invalid")
+        if row.id in seen:
+            errors.append(f"{kind} id {row.id!r} is duplicated")
+        seen.add(row.id)
+        if not row.label.strip():
+            errors.append(f"{kind} {row.id}: label is required")
+        errors += validate_query(row.query, "row", label=f"{kind} {row.id}")
+    return errors
+
+
 def validate_topic(topic: SearchTopic) -> None:
     errors: list[str] = []
     if not TOPIC_ID_PATTERN.match(topic.id):
@@ -128,6 +151,10 @@ def validate_topic(topic: SearchTopic) -> None:
             errors.append(f"graph {graph!r} is not a valid IRI")
     errors += validate_query(topic.results_query, "results", label="results query")
     errors += validate_query(topic.header_query, "header", label="header query")
+    if topic.image_query.strip():
+        errors += validate_query(topic.image_query, "image", label="image query")
+    errors += _validate_rows(topic.result_rows, "result row")
+    errors += _validate_rows(topic.detail_facts, "detail fact")
     seen: set[str] = set()
     for section in topic.sections:
         if not TOPIC_ID_PATTERN.match(section.id):

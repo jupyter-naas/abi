@@ -22,6 +22,7 @@ from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema impo
     SearchTopic,
     SearchTopicNotFoundError,
     SearchTopicValidationError,
+    TopicResultRowDef,
 )
 from rdflib import Graph
 
@@ -44,7 +45,7 @@ ALICE = "http://ontology.naas.ai/abi/Person/alice-dupont"
 @pytest.fixture(scope="module")
 def store() -> GraphQueryTripleStoreAdapter:
     if DEMO_TTL is None:
-        pytest.skip("personnel demo graph not available")
+        pytest.skip("personnel demo graph (people + personnel records) not available")
     return GraphQueryTripleStoreAdapter(Graph().parse(DEMO_TTL, format="turtle"))
 
 
@@ -152,6 +153,15 @@ class TestExecution:
         assert sections["experience"].items and not sections["experience"].error
         assert any(i.item for i in sections["experience"].items)
 
+    async def test_experience_shows_the_skills_it_developed(
+        self, service: SearchTopicService, store
+    ) -> None:
+        detail = await service.detail(WS, "person", ALICE, store)
+        experience = next(s for s in detail.sections if s.id == "experience")
+        tags = [tag for item in experience.items for tag in item.tags]
+        assert "Python" in tags
+        assert all(len(item.tags) == len(set(item.tags)) for item in experience.items)
+
     async def test_organization_links_back_to_people(
         self, service: SearchTopicService, store
     ) -> None:
@@ -164,6 +174,138 @@ class TestExecution:
     async def test_unknown_individual(self, service: SearchTopicService, store) -> None:
         with pytest.raises(SearchTopicNotFoundError):
             await service.detail(WS, "person", "http://example.org/nobody", store)
+
+
+class TestResultDecoration:
+    def test_uris_render_as_a_values_block(self) -> None:
+        rendered = render(
+            "SELECT ?uri ?image WHERE { VALUES ?uri { {{ uris }} } ?uri <http://x/img> ?image }",
+            "image",
+            {"uris": ["http://a/1", "http://a/2"]},
+        )
+        assert "VALUES ?uri { <http://a/1> <http://a/2> }" in rendered
+
+    def test_uris_are_validated(self) -> None:
+        with pytest.raises(GraphQuerySpecError):
+            render(
+                "SELECT ?uri ?value WHERE { VALUES ?uri { {{ uris }} } }",
+                "row",
+                {"uris": ["not an iri"]},
+            )
+
+    def test_row_query_must_project_uri_and_value(self) -> None:
+        errors = validate_query("SELECT ?uri WHERE { VALUES ?uri { {{ uris }} } }", "row")
+        assert errors == ["must project ?value"]
+
+    def test_rows_round_trip_and_are_validated(self) -> None:
+        person = BUILTIN_TOPICS["person"]
+        assert SearchTopic.from_dict(person.to_dict()) == person
+        broken = replace(person, image_query="SELECT ?uri WHERE { VALUES ?uri { {{ uris }} } }")
+        with pytest.raises(SearchTopicValidationError, match="image query"):
+            validate_topic(broken)
+
+    async def test_people_get_portraits_and_rows(self, service: SearchTopicService, store) -> None:
+        results = await service.search(WS, "person", "alice", store)
+        alice = next(item for item in results.items if item.uri == ALICE)
+        assert [row.id for row in alice.rows][:1] == ["organization"]
+        assert all(row.value for row in alice.rows)
+
+    async def test_organizations_count_people_in_a_row(
+        self, service: SearchTopicService, store
+    ) -> None:
+        results = await service.search(WS, "organization", "", store)
+        top = results.items[0]
+        assert any(row.id == "people" and int(row.value) > 0 for row in top.rows)
+
+    async def test_a_broken_row_leaves_the_results(
+        self, service: SearchTopicService, store
+    ) -> None:
+        person = BUILTIN_TOPICS["person"]
+        failing = replace(
+            person.result_rows[0],
+            query="SELECT ?uri ?value WHERE { VALUES ?uri { {{ uris }} } BIND(1/0 AS ?value) }",
+        )
+        await service.save_topic(WS, replace(person, result_rows=(failing,)), user_id="u")
+        results = await service.search(WS, "person", "", store)
+        assert results.items and all(not item.rows for item in results.items)
+
+
+SERVICE_LINE = TopicResultRowDef(
+    id="service_line",
+    label="Service line",
+    query="""PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX abi: <http://ontology.naas.ai/abi/>
+PREFIX personnel: <http://ontology.naas.ai/personnel/>
+SELECT ?uri ?value
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?line rdf:type personnel:ServiceLine ; abi:hasMemberPart ?uri ; rdfs:label ?value .
+}""",
+)
+GRADE = TopicResultRowDef(
+    id="grade",
+    label="Grade",
+    query="""PREFIX personnel: <http://ontology.naas.ai/personnel/>
+SELECT ?uri ?value
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?uri personnel:hasGrade ?grade .
+  ?grade personnel:grade_value ?value .
+}""",
+)
+
+
+class TestDetailFacts:
+    def test_header_is_employer_then_years_of_experience(self) -> None:
+        person = BUILTIN_TOPICS["person"]
+        assert "?employer ?yearsOfExperience" in person.header_query
+        assert "hasGrade" not in person.header_query and "ServiceLine" not in person.header_query
+        assert person.detail_facts == ()
+
+    def test_facts_round_trip_and_are_validated(self) -> None:
+        person = replace(BUILTIN_TOPICS["person"], detail_facts=(SERVICE_LINE, GRADE))
+        assert SearchTopic.from_dict(person.to_dict()) == person
+        validate_topic(person)
+        with pytest.raises(SearchTopicValidationError, match="detail fact grade"):
+            validate_topic(replace(person, detail_facts=(replace(GRADE, label=""),)))
+
+    async def test_organization_header_is_people_then_consultants(
+        self, service: SearchTopicService, store
+    ) -> None:
+        org = BUILTIN_TOPICS["organization"]
+        assert org.detail_label == "Profile"
+        assert "?consultants" not in org.header_query
+        assert [fact.id for fact in org.detail_facts] == ["consultants"]
+        orgs = await service.search(WS, "organization", "", store)
+        detail = await service.detail(WS, "organization", orgs.items[0].uri, store)
+        keys = [fact.key for fact in detail.facts]
+        assert keys[0] == "people"
+        assert "consultants" not in keys or keys.index("consultants") == len(keys) - 1
+
+    async def test_configured_facts_follow_the_header_facts(
+        self, service: SearchTopicService, store
+    ) -> None:
+        person = BUILTIN_TOPICS["person"]
+        await service.save_topic(
+            WS, replace(person, detail_facts=(SERVICE_LINE, GRADE)), user_id="u"
+        )
+        detail = await service.detail(WS, "person", ALICE, store)
+        keys = [fact.key for fact in detail.facts]
+        assert keys[-2:] == ["service_line", "grade"]
+        assert keys.index("employer") < keys.index("service_line")
+        assert next(f for f in detail.facts if f.key == "grade").value == "Partner"
+
+    async def test_a_broken_fact_is_left_out(self, service: SearchTopicService, store) -> None:
+        broken = replace(
+            GRADE,
+            query="SELECT ?uri ?value WHERE { VALUES ?uri { {{ uris }} } BIND(1/0 AS ?value) }",
+        )
+        await service.save_topic(
+            WS, replace(BUILTIN_TOPICS["person"], detail_facts=(broken,)), user_id="u"
+        )
+        detail = await service.detail(WS, "person", ALICE, store)
+        assert detail.title and all(fact.key != "grade" for fact in detail.facts)
 
 
 class TestGraphScope:

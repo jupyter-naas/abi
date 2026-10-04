@@ -66,8 +66,9 @@ modules:
   - module: naas_abi_marketplace.domains.personnel
     enabled: true
 
-  # An app that mounts its own API is also a module, and is registered too.
-  - module: naas_abi_marketplace.domains.personnel.apps.people
+  # Personnel depends on people intelligence (it specializes its vocabulary,
+  # and the cockpit embeds its graph page).
+  - module: naas_abi_marketplace.domains.intelligence.modules.people
     enabled: true
 ```
 
@@ -78,18 +79,18 @@ Drop the folder in, restart the API, and it shows up.
 | App | Id | Reads | Notes |
 |---|---|---|---|
 | `cockpit/` | `naas_abi_marketplace.domains.personnel:cockpit` | JSON in ObjectStorage | Workforce analytics: headcount, tenure, the process graph. See `cockpit/AGENTS.md`. |
-| `people/` | `naas_abi_marketplace.domains.personnel:people` | SQL through the dataset service | People Search: directory and profiles, retargeted with `people/config.yaml`. See `people/AGENTS.md`. |
 
-Both are built from the same graph (`graphs/demo/personnel.ttl`) by their own
-exporter. Neither keeps its own copy of the people: an app that does is a fork
-waiting to happen.
+People Search is people intelligence, not HR: it lives in
+`domains/intelligence/modules/people/apps/people/` (app id
+`naas_abi_marketplace.domains.intelligence.modules.people:people`). The cockpit
+reads `graphs/demo/personnel.ttl` - the people instances plus the employer's
+records - and embeds that module's person graph page.
 
-An app that only serves files needs no Python. An app that mounts routes, as
-`people/` does, carries an `ABIModule` in its `__init__.py`, declares the
-services it needs in `dependencies`, and is registered in `config.yaml` in its
-own right.
+An app that only serves files needs no Python. An app that mounts routes
+carries an `ABIModule` in its `__init__.py`, declares the services it needs in
+`dependencies`, and is registered in `config.yaml` in its own right.
 
 ## See also
 
 - Apps adapter (discovery + `html:` resolution + serving routes): `libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/apps/adapters/primary/apps__primary_adapter__FastAPI.py`. Note which file extensions it will serve: an app referencing anything else gets a 404 in Nexus that it will not get from its own dev server.
-- Reference apps elsewhere in the marketplace: `domains/intelligence/apps/wsr/manifest.json` (external URL), `domains/operations/modules/document/apps/sandbox/manifest.json` (`html:` bundled page), `domains/finance/apps/financial_cockpit/` (Next.js, config + theme files per client)
+- Reference apps elsewhere in the marketplace: `domains/intelligence/modules/wsr/apps/dashboard/manifest.json` (external URL), `domains/operations/modules/document/apps/sandbox/manifest.json` (`html:` bundled page), `domains/finance/apps/financial_cockpit/` (Next.js, config + theme files per client)

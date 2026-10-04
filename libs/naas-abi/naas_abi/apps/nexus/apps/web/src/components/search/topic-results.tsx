@@ -7,7 +7,11 @@ import type { SearchTopic, TopicResultItem } from '@/lib/search-topics';
 import { SparqlDisclosure } from './sparql-disclosure';
 import { TopicAvatar } from './topic-avatar';
 
-/** The results list: one renderer for every topic, filled from the results-role slots. */
+/**
+ * The results list, one row per individual as in Apps, Agents or Chats: picture
+ * (the topic's image query), title, subtitle and the topic's metadata rows.
+ * Opening a row shows it in the topic's detail tab.
+ */
 export function TopicResults({
   topic, query, items, loading, error, hasMore, sparql, selected, hrefFor, onMore,
 }: {
@@ -48,15 +52,25 @@ export function TopicResults({
               scroll={false}
               aria-current={selected === item.uri ? 'true' : undefined}
               className={cn(
-                'flex gap-3 rounded-lg border bg-card p-3 transition-colors hover:border-workspace-accent',
-                selected === item.uri && 'border-workspace-accent bg-workspace-accent-10',
+                'flex w-full gap-3 rounded-lg border bg-card p-3 text-left transition-colors hover:border-workspace-accent',
+                selected === item.uri && 'border-workspace-accent',
               )}
             >
-              <TopicAvatar label={item.title} image={item.image} />
+              <TopicAvatar label={item.title} image={item.image} size={40} />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold">{item.title}</div>
+                <div className="truncate text-sm font-medium">{item.title}</div>
                 {item.subtitle && <div className="truncate text-xs text-muted-foreground">{item.subtitle}</div>}
-                {item.snippet && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{item.snippet}</p>}
+                {item.rows?.length > 0 && (
+                  <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
+                    {item.rows.map(row => (
+                      <div key={row.id} className="flex min-w-0 max-w-full gap-1">
+                        <dt className="flex-shrink-0 text-muted-foreground">{row.label}</dt>
+                        <dd className="truncate">{row.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                {item.snippet && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{item.snippet}</p>}
               </div>
             </Link>
           </li>

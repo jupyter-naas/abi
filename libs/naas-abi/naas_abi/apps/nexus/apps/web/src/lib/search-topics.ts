@@ -6,7 +6,7 @@
  * detail sections. The search page renders every topic with the same
  * components, so a new topic is a settings entry, never new UI.
  */
-export type QueryRole = 'results' | 'header' | 'section';
+export type QueryRole = 'results' | 'header' | 'section' | 'image' | 'row';
 export type TopicSource = 'builtin' | 'override' | 'custom';
 
 export interface TopicSection {
@@ -15,6 +15,13 @@ export interface TopicSection {
   query: string;
   empty_text: string;
   link_topic: string | null;
+}
+
+/** One labelled line of metadata under each result, filled by a `row` query. */
+export interface TopicResultRowDef {
+  id: string;
+  label: string;
+  query: string;
 }
 
 export interface SearchTopic {
@@ -27,6 +34,14 @@ export interface SearchTopic {
   results_query: string;
   header_query: string;
   sections: TopicSection[];
+  /** The picture of each result (`image` role, `VALUES ?uri { {{ uris }} }`). Empty: the results query's ?image. */
+  image_query: string;
+  /** Metadata lines under each result (`row` role), in order. */
+  result_rows: TopicResultRowDef[];
+  /** The tab that shows one individual: "Profile" for a person, "Card" for an organization. */
+  detail_label: string;
+  /** Facts added to the detail header (`row` role, `{{ uris }}` is the one individual), after the header query's. */
+  detail_facts?: TopicResultRowDef[];
   /** Graphs read, within the workspace's. Empty: every graph the workspace can read. */
   graphs: string[];
   enabled: boolean;
@@ -41,6 +56,7 @@ export interface TopicResultItem {
   snippet: string | null;
   image: string | null;
   score: number | null;
+  rows: { id: string; label: string; value: string }[];
 }
 
 export interface TopicResults {
@@ -62,6 +78,8 @@ export interface TopicSectionItem {
   start: string | null;
   end: string | null;
   url: string | null;
+  /** Labels shown as chips on the row (the skills and languages an experience developed). */
+  tags?: string[];
 }
 
 export interface TopicSectionResult {
@@ -97,10 +115,10 @@ export interface RoleContract {
 export interface PreviewBinding { value: string; is_uri: boolean }
 export interface PreviewResult { sparql: string; rows: Record<string, PreviewBinding>[] }
 
-export type SearchTab = 'results' | 'ontology';
+export type SearchTab = 'results' | 'ontology' | 'details';
 
 // -- URL state ---------------------------------------------------------------
-// /search?scope=person&q=alice&item=<iri>&tab=ontology — every view is a link.
+// /search?scope=person&q=alice&item=<iri>&tab=details — every view is a link.
 // No scope is the "All" view. `?topic=` is the earlier name of `?scope=`.
 
 export interface SearchRoute { scope: string | null; q: string; item: string | null; tab: SearchTab }
@@ -111,7 +129,7 @@ export function readSearchRoute(params: Pick<URLSearchParams, 'get'> | null): Se
     scope: params?.get('scope') || params?.get('topic') || null,
     q: params?.get('q') || '',
     item: params?.get('item') || null,
-    tab: tab === 'ontology' ? 'ontology' : 'results',
+    tab: tab === 'ontology' || tab === 'details' ? tab : 'results',
   };
 }
 
@@ -170,6 +188,10 @@ export function blankTopic(id: string): SearchTopic {
     order: 100,
     source: 'custom',
     graphs: [],
+    image_query: '',
+    result_rows: [],
+    detail_label: 'Details',
+    detail_facts: [],
     results_query: `PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT ?uri ?title
 WHERE {

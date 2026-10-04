@@ -8,11 +8,11 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.graph_query import (
     graph_page_payload,
     query_source_rows,
 )
-from naas_abi_marketplace.domains.personnel.paths import DEMO_GRAPH_FILE
+from naas_abi_marketplace.domains.personnel.utils.paths import DEMO_GRAPH_FILE
 from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import XSD
 
-PROFILE_SLUG = URIRef("http://ontology.naas.ai/personnel/profile_slug")
+PROFILE_SLUG = URIRef("http://ontology.naas.ai/people/profile_slug")
 
 
 @pytest.fixture(scope="module")

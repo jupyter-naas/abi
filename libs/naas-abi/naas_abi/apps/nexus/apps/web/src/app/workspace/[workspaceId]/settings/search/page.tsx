@@ -25,7 +25,7 @@ import {
 } from '@/components/settings/settings-ui';
 import {
   blankTopic, searchHref,
-  type PreviewResult, type QueryRole, type RoleContract, type SearchTopic, type TopicSection,
+  type PreviewResult, type QueryRole, type RoleContract, type SearchTopic, type TopicResultRowDef, type TopicSection,
 } from '@/lib/search-topics';
 import { TopicApiError, topicsApi } from '@/lib/search-topics-api';
 import { getApiUrl } from '@/lib/config';
@@ -353,6 +353,48 @@ function TopicEditor({ workspaceId, topic, topics, graphs, contract, canEdit, is
   const set = <K extends keyof SearchTopic>(key: K, value: SearchTopic[K]) => setDraft(d => ({ ...d, [key]: value }));
   const setSection = (index: number, patch: Partial<TopicSection>) =>
     setDraft(d => ({ ...d, sections: d.sections.map((s, i) => (i === index ? { ...s, ...patch } : s)) }));
+  // Result rows and detail facts are both lists of `row` queries.
+  type RowList = 'result_rows' | 'detail_facts';
+  const rowsOf = (d: SearchTopic, key: RowList) => d[key] ?? [];
+  const setRow = (key: RowList, index: number, patch: Partial<TopicResultRowDef>) =>
+    setDraft(d => ({ ...d, [key]: rowsOf(d, key).map((r, i) => (i === index ? { ...r, ...patch } : r)) }));
+  const moveRow = (key: RowList, index: number, delta: number) => setDraft(d => {
+    const rows = [...rowsOf(d, key)];
+    const [moved] = rows.splice(index, 1);
+    rows.splice(Math.max(0, Math.min(rows.length, index + delta)), 0, moved!);
+    return { ...d, [key]: rows };
+  });
+  const rowListEditor = (key: RowList, { title, help, empty, noun, template }: { title: string; help: string; empty: string; noun: string; template: string }) => {
+    const rows = rowsOf(draft, key);
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold">{title}</h4>
+          {canEdit && (
+            <button type="button" onClick={() => set(key, [...rows, { id: `${noun}_${rows.length + 1}`, label: `New ${noun}`, query: template }])}
+              className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}><Plus size={14} /> Add {noun}</button>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">{help}</p>
+        {rows.length === 0 && <p className="text-sm text-muted-foreground">{empty}</p>}
+        {rows.map((row, index) => (
+          <div key={index} className="space-y-3 border border-border bg-card p-3">
+            <fieldset disabled={disabled} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+              <Field label="Id"><input className={cn(input, 'font-mono text-xs')} value={row.id} onChange={e => setRow(key, index, { id: e.target.value })} /></Field>
+              <Field label="Label"><input className={input} value={row.label} onChange={e => setRow(key, index, { label: e.target.value })} /></Field>
+              <div className="flex items-end gap-1 pb-0.5">
+                <IconButton label="Move up" onClick={() => moveRow(key, index, -1)} disabled={index === 0}><ChevronUp size={14} /></IconButton>
+                <IconButton label="Move down" onClick={() => moveRow(key, index, 1)} disabled={index === rows.length - 1}><ChevronDown size={14} /></IconButton>
+                <IconButton label={`Remove ${noun}`} onClick={() => set(key, rows.filter((_, i) => i !== index))}><Trash2 size={14} /></IconButton>
+              </div>
+            </fieldset>
+            <QueryEditor role="row" label="Query" contract={contract?.row} value={row.query} disabled={disabled}
+              onChange={v => setRow(key, index, { query: v })} workspaceId={workspaceId} testUri={testUri} canEdit={canEdit} graphs={draft.graphs} />
+          </div>
+        ))}
+      </div>
+    );
+  };
   const moveSection = (index: number, delta: number) => setDraft(d => {
     const sections = [...d.sections];
     const [moved] = sections.splice(index, 1);
@@ -421,6 +463,9 @@ function TopicEditor({ workspaceId, topic, topics, graphs, contract, canEdit, is
       <fieldset disabled={disabled} className="grid gap-3 sm:grid-cols-2">
         <Field label="Label (singular)"><input className={input} value={draft.label} onChange={e => set('label', e.target.value)} /></Field>
         <Field label="Label (plural, tab name)"><input className={input} value={draft.plural_label} onChange={e => set('plural_label', e.target.value)} /></Field>
+        <Field label="Detail tab label" hint="The tab that shows one individual, after Results and Ontology (e.g. Profile, Card).">
+          <input className={input} value={draft.detail_label} onChange={e => set('detail_label', e.target.value)} placeholder="Details" />
+        </Field>
         <Field label="Description" wide><input className={input} value={draft.description} onChange={e => set('description', e.target.value)} /></Field>
         <Field label="Ontology class IRI" hint="Shown in the Ontology tab of the topic." wide>
           <input className={cn(input, 'font-mono text-xs')} value={draft.class_iri} onChange={e => set('class_iri', e.target.value)} placeholder="http://ontology.naas.ai/abi/Person" />
@@ -474,19 +519,41 @@ function TopicEditor({ workspaceId, topic, topics, graphs, contract, canEdit, is
         <p className="mb-1 font-medium text-foreground">How queries are filled in</p>
         <p>
           <code>{'{{ q }}'}</code> is the text typed in the search box (write it inside quotes), <code>{'{{ uri }}'}</code> the selected
-          individual as an IRI, <code>{'{{ limit }}'}</code>/<code>{'{{ offset }}'}</code> paging. Do not use <code>FROM</code>, <code>SERVICE</code> or a
+          individual as an IRI, <code>{'{{ limit }}'}</code>/<code>{'{{ offset }}'}</code> paging, <code>{'{{ uris }}'}</code> the page of
+          results for the image and row queries (write <code>{'VALUES ?uri { {{ uris }} }'}</code>). Do not use <code>FROM</code>, <code>SERVICE</code> or a
           fixed <code>GRAPH</code>: queries read the graphs this workspace can read.
         </p>
         <label className="mt-2 flex items-center gap-2">
           <span className="shrink-0">Test individual</span>
-          <input className={cn(input, 'font-mono text-xs')} value={testUri} onChange={e => setTestUri(e.target.value)} placeholder="IRI used by Test on header and section queries — Test the results query to pick one" />
+          <input className={cn(input, 'font-mono text-xs')} value={testUri} onChange={e => setTestUri(e.target.value)} placeholder="IRI used by Test on the image, row, header and section queries — Test the results query to pick one" />
         </label>
       </div>
 
       <QueryEditor role="results" label="Results query" contract={contract?.results} value={draft.results_query} disabled={disabled}
         onChange={v => set('results_query', v)} workspaceId={workspaceId} testUri={testUri} onPickUri={setTestUri} canEdit={canEdit} graphs={draft.graphs} />
+      <QueryEditor role="image" label="Image query" contract={contract?.image} value={draft.image_query} disabled={disabled}
+        hint="The picture of each result, e.g. a person's portrait. Leave empty to use ?image from the results query, or initials."
+        placeholder={IMAGE_QUERY_TEMPLATE}
+        onChange={v => set('image_query', v)} workspaceId={workspaceId} testUri={testUri} canEdit={canEdit} graphs={draft.graphs} />
+
+      {rowListEditor('result_rows', {
+        title: 'Result rows',
+        help: 'Each row is one labelled line of metadata under every result. Several values are joined.',
+        empty: 'No rows: results show their title and subtitle only.',
+        noun: 'row',
+        template: ROW_QUERY_TEMPLATE,
+      })}
+
       <QueryEditor role="header" label="Detail header query" contract={contract?.header} value={draft.header_query} disabled={disabled}
         onChange={v => set('header_query', v)} workspaceId={workspaceId} testUri={testUri} canEdit={canEdit} graphs={draft.graphs} />
+
+      {rowListEditor('detail_facts', {
+        title: 'Detail facts',
+        help: "Facts added to the detail header, in order, after the header query's own (e.g. a service line or a grade). {{ uris }} is the individual shown.",
+        empty: 'No extra facts: the header shows the header query only.',
+        noun: 'fact',
+        template: ROW_QUERY_TEMPLATE,
+      })}
 
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -524,9 +591,27 @@ function TopicEditor({ workspaceId, topic, topics, graphs, contract, canEdit, is
   );
 }
 
-function QueryEditor({ role, label, contract, value, onChange, disabled, workspaceId, testUri, onPickUri, canEdit, graphs }: {
+const IMAGE_QUERY_TEMPLATE = `PREFIX people: <http://ontology.naas.ai/people/>
+SELECT ?uri ?image
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?uri people:hasPortrait ?p .
+  ?p people:portrait_url ?image .
+}`;
+
+const ROW_QUERY_TEMPLATE = `PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT DISTINCT ?uri ?value
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?uri ?p ?o .
+  ?o rdfs:label ?value .
+}`;
+
+function QueryEditor({ role, label, hint, placeholder, contract, value, onChange, disabled, workspaceId, testUri, onPickUri, canEdit, graphs }: {
   role: QueryRole;
   label: string;
+  hint?: string;
+  placeholder?: string;
   contract?: RoleContract;
   value: string;
   onChange: (value: string) => void;
@@ -562,17 +647,19 @@ function QueryEditor({ role, label, contract, value, onChange, disabled, workspa
         <span className="text-sm font-medium">{label}</span>
         {contract && (
           <span className="text-caption text-muted-foreground">
-            needs {contract.required.map(v => `?${v}`).join(' ')} · may use {contract.optional.map(v => `?${v}`).join(' ')}
+            needs {contract.required.map(v => `?${v}`).join(' ')}{contract.optional.length > 0 && <> · may use {contract.optional.map(v => `?${v}`).join(' ')}</>}
             {contract.extra_as_facts && ' · other variables show as facts'}
           </span>
         )}
       </div>
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       <textarea
         value={value}
         onChange={e => onChange(e.target.value)}
         disabled={disabled}
         spellCheck={false}
-        rows={Math.min(24, Math.max(6, value.split('\n').length + 1))}
+        rows={Math.min(24, Math.max(6, (value || placeholder || '').split('\n').length + 1))}
+        placeholder={placeholder}
         className={cn(fieldClass, 'bg-muted/30 p-2 font-mono text-xs leading-relaxed disabled:opacity-80')}
         aria-label={label}
       />
@@ -582,7 +669,7 @@ function QueryEditor({ role, label, contract, value, onChange, disabled, workspa
             <input value={testQ} onChange={e => setTestQ(e.target.value)} placeholder="Test text for {{ q }} (empty lists all)"
               className={cn(fieldClass, 'h-8 min-w-0 flex-1 text-xs')} />
           )}
-          <Button variant="secondary" size="sm" onClick={() => void run()} disabled={running || (role !== 'results' && !testUri.trim())}
+          <Button variant="secondary" size="sm" onClick={() => void run()} disabled={running || !value.trim() || (role !== 'results' && !testUri.trim())}
             title={role !== 'results' && !testUri.trim() ? 'Set a test individual first' : undefined}>
             {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Test
           </Button>

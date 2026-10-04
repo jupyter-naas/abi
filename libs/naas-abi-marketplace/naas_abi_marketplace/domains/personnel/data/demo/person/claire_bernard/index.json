@@ -1,118 +1,31 @@
 {
   "schema_version": "1.0",
-  "data_version": "2026-08-19 17:25",
+  "data_version": "2026-10-02 17:30",
   "person": {
     "first_name": "Claire",
     "last_name": "Bernard",
-    "full_name": "Claire Bernard",
-    "linkedin_profile_url": "https://demo.example/profiles/claire_bernard",
-    "email": "claire.bernard@demo.example",
-    "phone": "+33 1 99 00 00 03",
-    "linkedin_url": "https://www.linkedin.com/in/claire-bernard-demo"
+    "full_name": "Claire Bernard"
   },
-  "records": [
+  "employer": "Demo",
+  "service_line": "Technology",
+  "grade": "Director",
+  "roster": {
+    "employee_id": "E-10430",
+    "job_title": "CTO",
+    "job_family": "Executive",
+    "hire_date": "2023-04-01",
+    "termination_date": null,
+    "status": "active"
+  },
+  "employments": [
     {
-      "process_type": "ActOfWorking",
       "organization": "Demo",
+      "client": null,
       "title": "CTO",
-      "contract_type": null,
-      "site": "France",
-      "start": "2023-04-01",
-      "end": null,
-      "duration": "3 yrs",
-      "mission_label": "Own platform architecture and engineering for Demo.",
-      "mission": "Own platform architecture and engineering for Demo.",
-      "skills": [
-        "Kubernetes",
-        "Python"
-      ],
-      "source": "https://demo.example/profiles/claire_bernard"
-    },
-    {
-      "process_type": "ActOfWorking",
-      "organization": "Nexus Labs",
-      "title": "CTO",
-      "contract_type": null,
-      "site": "France",
-      "start": "2021-06-01",
-      "end": "2023-04-30",
-      "duration": "2 yrs",
-      "mission_label": "Led engineering for an automation services startup.",
-      "mission": "Led engineering for an automation services startup.",
-      "skills": [
-        "DevOps",
-        "Python"
-      ],
-      "source": "https://demo.example/profiles/claire_bernard"
-    },
-    {
-      "process_type": "ActOfWorking",
-      "organization": "Cloud Partners",
-      "title": "Cloud Engineer",
-      "contract_type": "Freelance",
-      "site": "Paris",
-      "start": "2020-02-01",
-      "end": "2021-06-30",
-      "duration": "1 yr",
-      "mission_label": "Consulted on Kubernetes and CI/CD implementations.",
-      "mission": "Consulted on Kubernetes and CI/CD implementations.",
-      "skills": [
-        "Kubernetes",
-        "Terraform"
-      ],
-      "source": "https://demo.example/profiles/claire_bernard"
-    },
-    {
-      "process_type": "ActOfStudying",
-      "organization": "Lyon Institute of Technology",
-      "program": "Engineering Degree, Distributed Systems",
-      "site": "Lyon",
-      "start": "2013-09-01",
-      "end": "2018-06-30",
-      "duration": "2013 – 2018",
-      "skills": [
-        "Kubernetes"
-      ],
-      "source": "https://demo.example/profiles/claire_bernard"
+      "contract_type": "Permanent (CDI)",
+      "job_family": "Executive",
+      "remuneration_amount": 85000,
+      "remuneration_currency": "EUR"
     }
-  ],
-  "profile": {
-    "slug": "claire_bernard",
-    "headline": "CTO, Demo - platform engineering",
-    "about": "Builds the platform Demo runs on. Kubernetes since it was hard, Python since before that.",
-    "years_of_experience": 9,
-    "organization": "Demo",
-    "service_line": "Technology",
-    "grade": "Director",
-    "location": {
-      "office": "Lyon Part-Dieu",
-      "city": "Lyon",
-      "country": "France",
-      "country_code": "FR"
-    },
-    "photo_path": "apps/people/web/assets/portraits/claire_bernard.svg",
-    "certifications": [],
-    "languages": [
-      {
-        "name": "French",
-        "proficiency": "Native or bilingual"
-      },
-      {
-        "name": "English",
-        "proficiency": "Professional working"
-      },
-      {
-        "name": "German",
-        "proficiency": "Limited working"
-      }
-    ],
-    "interests": [
-      {
-        "name": "Mountain rescue volunteering",
-        "description": "Weekend volunteer with a local team.",
-        "kind": "topic"
-      }
-    ],
-    "recommendations": []
-  }
+  ]
 }

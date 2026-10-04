@@ -1,114 +1,31 @@
 {
   "schema_version": "1.0",
-  "data_version": "2026-08-19 17:25",
+  "data_version": "2026-10-02 17:30",
   "person": {
     "first_name": "Grace",
     "last_name": "Lambert",
-    "full_name": "Grace Lambert",
-    "linkedin_profile_url": "https://demo.example/profiles/grace_lambert",
-    "email": "grace.lambert@demo.example",
-    "linkedin_url": "https://www.linkedin.com/in/grace-lambert-demo"
+    "full_name": "Grace Lambert"
   },
-  "records": [
+  "employer": "Demo",
+  "service_line": "Strategy",
+  "grade": "Partner",
+  "roster": {
+    "employee_id": "E-10434",
+    "job_title": "Board Advisor",
+    "job_family": "Advisory",
+    "hire_date": "2022-01-01",
+    "termination_date": null,
+    "status": "active"
+  },
+  "employments": [
     {
-      "process_type": "ActOfWorking",
       "organization": "Demo",
+      "client": null,
       "title": "Board Advisor",
-      "contract_type": null,
-      "site": "Paris",
-      "start": "2022-01-01",
-      "end": null,
-      "duration": "4 yrs",
-      "mission_label": "Advise Demo leadership on product partnerships.",
-      "mission": "Advise Demo leadership on product partnerships.",
-      "skills": [
-        "Partnerships"
-      ],
-      "source": "https://demo.example/profiles/grace_lambert"
-    },
-    {
-      "process_type": "ActOfWorking",
-      "organization": "StreamCorp",
-      "title": "Head of Partner Experiences",
-      "contract_type": null,
-      "site": "California",
-      "start": "2015-02-01",
-      "end": "2023-09-30",
-      "duration": "8 yrs",
-      "mission_label": "Led partner enablement for a global streaming platform.",
-      "mission": "Led partner enablement for a global streaming platform.",
-      "skills": [
-        "Partnerships",
-        "Product"
-      ],
-      "source": "https://demo.example/profiles/grace_lambert"
-    },
-    {
-      "process_type": "ActOfWorking",
-      "organization": "DeviceWorks",
-      "title": "CTO",
-      "contract_type": null,
-      "site": "Toronto",
-      "start": "2011-10-01",
-      "end": "2015-01-31",
-      "duration": "3 yrs",
-      "mission_label": "Built smart-TV software partnerships and joint ventures.",
-      "mission": "Built smart-TV software partnerships and joint ventures.",
-      "skills": [
-        "Engineering",
-        "Strategy"
-      ],
-      "source": "https://demo.example/profiles/grace_lambert"
-    },
-    {
-      "process_type": "ActOfStudying",
-      "organization": "Bay Area Business School",
-      "program": "MBA",
-      "site": "San Francisco",
-      "start": "2008-09-01",
-      "end": "2010-06-30",
-      "duration": "2008 – 2010",
-      "skills": [
-        "Strategy"
-      ],
-      "source": "https://demo.example/profiles/grace_lambert"
+      "contract_type": "Advisory agreement",
+      "job_family": "Advisory",
+      "remuneration_amount": null,
+      "remuneration_currency": "EUR"
     }
-  ],
-  "profile": {
-    "slug": "grace_lambert",
-    "headline": "Board advisor - partnerships and product",
-    "about": "Twenty years of partner and product work across hardware and streaming, now advising boards on how the two fit together.",
-    "years_of_experience": 20,
-    "organization": "Demo",
-    "service_line": "Strategy",
-    "grade": "Partner",
-    "location": {
-      "office": "San Francisco",
-      "city": "San Francisco",
-      "country": "United States",
-      "country_code": "US"
-    },
-    "photo_path": "apps/people/web/assets/portraits/grace_lambert.svg",
-    "certifications": [],
-    "languages": [
-      {
-        "name": "English",
-        "proficiency": "Native or bilingual"
-      },
-      {
-        "name": "French",
-        "proficiency": "Professional working"
-      }
-    ],
-    "interests": [],
-    "recommendations": [
-      {
-        "author_first_name": "Hugo",
-        "author_last_name": "Girard",
-        "relationship": "Worked with Grace on the same board",
-        "written_on": "2024-06-21",
-        "content": "Grace asks the question everyone else has been avoiding, in the first ten minutes, and somehow nobody minds."
-      }
-    ]
-  }
+  ]
 }
