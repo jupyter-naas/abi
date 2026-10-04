@@ -110,6 +110,25 @@ Lists all available modules and their enabled/disabled status.
 abi module list
 ```
 
+### Local dev stack
+
+#### `abi dev up [--service <name>]... [-d] [--with-nats] [--with-tracing]`
+Runs the stack natively (no Docker): oxigraph, api, dagster, nexus-web; `--with-nats` adds nats and runs the engine in NATS mode, `--with-tracing` adds Jaeger. `abi dev down`, `abi dev status`, `abi dev logs <name> [-f]` manage it; pids and logs live in `.abi/dev/`.
+
+With `--with-nats`, the SDK modules listed under `dev.modules` in the project config start once the api is ready, each under a supervisor that restarts it when it exits on its own (backing off from 1 s to 30 s):
+
+```yaml
+dev:
+  modules:
+    - name: probe-researcher                # logs, pid, --service name
+      module: operations.projects.nats_probe  # run as `python -m <module> <args>`
+      args: [researcher]
+      env: {NATS_PROBE_DISCOVERY_PROJECT: "${ABI_DISCOVERY_PROJECT}"}
+      restart: on-failure                   # or always, never
+```
+
+Each module gets `ABI_NATS_URL`, `NATS_JWT_SECRET`, `ABI_SERVICE_TOKEN` (for `python -m naas_abi_sdk.module_runner`), `ABI_DISCOVERY_PROJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT` with tracing, and the project's `src/` on `PYTHONPATH`; `env` values may name them as `${VAR}`. A module is addressed like a service: `abi dev up --service probe-researcher -d` (against a running NATS stack), `abi dev logs probe-researcher -f`, `abi dev down --service probe-researcher`. `abi dev down` stops modules before the stack. The engine validates the block and otherwise ignores it.
+
 ### Deployment
 
 #### `abi deploy naas [-e/--env <environment>]`

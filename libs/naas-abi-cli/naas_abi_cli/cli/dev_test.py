@@ -722,3 +722,192 @@ def test_tracing_without_nats_has_no_nats_block(monkeypatch, tmp_path) -> None:
     )
 
     assert set(overlay) == {"telemetry"}
+
+
+# =============================================================================
+# dev.modules: SDK modules `abi dev up --with-nats` runs next to the engine
+# =============================================================================
+
+def _modules(*names: str) -> dict:
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
+        DevModuleConfiguration,
+    )
+
+    return {
+        name: DevModuleConfiguration(name=name, module="probe", args=[name])
+        for name in names
+    }
+
+
+@pytest.fixture
+def stack(monkeypatch, tmp_path):
+    """`abi dev up/down` over fakes, recording what starts and stops in order."""
+    calls: list[tuple[str, str]] = []
+    ports = dict(dev.SERVICE_PORT_BASES)
+    (tmp_path / "instance.json").write_text("{}")
+    monkeypatch.setattr(dev, "_dev_modules", lambda strict=True: _modules("researcher", "orchestrator"))
+    monkeypatch.setattr(dev, "_load_or_create_instance", lambda: {"ports": ports})
+    monkeypatch.setattr(dev, "_instance_path", lambda: tmp_path / "instance.json")
+    monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path)
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    monkeypatch.setattr(dev, "_ensure_storage_layout", lambda: None)
+    monkeypatch.setattr(dev, "_ensure_default_admin_env", lambda: ("admin@example.com", "pw"))
+    monkeypatch.setattr(dev, "_ensure_default_api_key_env", lambda: "key")
+    monkeypatch.setattr(dev, "ensure_nats_secret", lambda path: "s" * 48)
+    monkeypatch.setattr(dev, "_wait_until_ready", lambda *a, **k: True)
+
+    def start_service(name, ports, log_level=None, selected=None, config_overlay=None):
+        calls.append(("start", name))
+        return dev._service_spec(name, ports[name])
+
+    def start_module(module, overlay):
+        assert overlay["nats"]["jwt_secret"] == "s" * 48
+        calls.append(("start", module.name))
+        return dev._module_spec(module.name)
+
+    monkeypatch.setattr(dev, "_start_service", start_service)
+    monkeypatch.setattr(dev, "_start_module", start_module)
+    monkeypatch.setattr(dev, "_stop_service", lambda name, port, force=False: calls.append(("stop", name)))
+    monkeypatch.setattr(dev, "_stop_module", lambda name, force=False: calls.append(("stop", name)))
+    return calls
+
+
+def _abi(*args: str):
+    from click.testing import CliRunner
+
+    return CliRunner().invoke(dev.dev, list(args))
+
+
+def test_with_nats_starts_the_dev_modules_after_the_stack(stack) -> None:
+    result = _abi("up", "--with-nats", "-d")
+
+    assert result.exit_code == 0, result.output
+    assert [name for _, name in stack] == [
+        "oxigraph", "nats", "api", "nexus-web", "researcher", "orchestrator",
+    ]
+
+
+def test_dev_modules_need_nats(stack) -> None:
+    assert _abi("up", "-d").exit_code == 0
+    assert ("start", "researcher") not in stack
+
+
+def test_selecting_services_leaves_the_modules_alone(stack) -> None:
+    assert _abi("up", "--with-nats", "--service", "api", "-d").exit_code == 0
+    assert [name for _, name in stack] == ["nats", "api"]
+
+
+def test_a_module_can_be_started_on_its_own(stack, tmp_path) -> None:
+    dev._write_dev_overlay({"nats": 13042}, nats_secret="s" * 48)
+
+    result = _abi("up", "--service", "orchestrator", "-d")
+
+    assert result.exit_code == 0, result.output
+    assert stack == [("start", "orchestrator")]
+
+
+def test_a_module_without_the_nats_stack_is_refused(stack) -> None:
+    result = _abi("up", "--service", "orchestrator", "-d")
+
+    assert result.exit_code != 0
+    assert "--with-nats" in result.output
+    assert stack == []
+
+
+def test_unknown_names_list_the_modules_too(stack) -> None:
+    result = _abi("up", "--service", "nope", "-d")
+
+    assert result.exit_code != 0
+    assert "researcher" in result.output and "api" in result.output
+
+
+def test_down_stops_the_modules_before_the_stack(stack) -> None:
+    assert _abi("down").exit_code == 0
+    assert [name for _, name in stack] == [
+        "orchestrator", "researcher",
+        "nexus-web", "dagster", "api", "jaeger", "nats", "oxigraph",
+    ]
+
+
+def test_down_can_target_a_module_or_a_service(stack) -> None:
+    assert _abi("down", "--service", "researcher").exit_code == 0
+    assert _abi("down", "--service", "api").exit_code == 0
+    assert stack == [("stop", "researcher"), ("stop", "api")]
+
+
+def test_a_module_named_like_a_stack_service_is_refused(monkeypatch) -> None:
+    monkeypatch.setattr(dev, "load_dev_modules", lambda: _modules("api"))
+
+    with pytest.raises(dev.click.ClickException, match="api"):
+        dev._dev_modules()
+
+
+def test_an_invalid_dev_block_does_not_block_down(monkeypatch) -> None:
+    def broken():
+        raise ValueError("dev.modules: bad")
+
+    monkeypatch.setattr(dev, "load_dev_modules", broken)
+
+    with pytest.raises(dev.click.ClickException):
+        dev._dev_modules()
+    assert dev._dev_modules(strict=False) == {}
+
+
+def test_a_module_runs_supervised_with_the_dev_broker(monkeypatch, tmp_path) -> None:
+    spawned: dict = {}
+    monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path)
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    monkeypatch.setattr(dev, "_read_pid", lambda spec: None)
+    monkeypatch.setattr(
+        dev, "_spawn", lambda spec, cmd, cwd, env: spawned.update(spec=spec, cmd=cmd, env=env) or 4242
+    )
+    overlay = {"nats": {"nats_url": "nats://127.0.0.1:13042", "jwt_secret": "s" * 48, "discovery": {"project": "zen"}}}
+
+    spec = dev._start_module(_modules("researcher")["researcher"], overlay)
+
+    assert spawned["cmd"][2] == "naas_abi_cli.cli.dev_supervisor"
+    assert spawned["env"]["ABI_NATS_URL"] == "nats://127.0.0.1:13042"
+    assert spec.log_relpath == "logs/researcher.log"
+    assert (tmp_path / "researcher.pid").read_text() == "4242\n"
+
+
+def test_stopping_a_module_signals_its_group_and_waits(monkeypatch, tmp_path) -> None:
+    import itertools
+
+    signals: list = []
+    monkeypatch.setattr(dev, "_read_pid", lambda spec: 4242)
+    monkeypatch.setattr(dev, "_pid_path", lambda spec: tmp_path / f"{spec.name}.pid")
+    monkeypatch.setattr(dev.os, "getpgid", lambda pid: 4242)
+    monkeypatch.setattr(dev.os, "killpg", lambda pgid, sig: signals.append(sig))
+    monkeypatch.setattr(dev.time, "sleep", lambda s: None)
+    clock = itertools.count(0, 1.0)
+    monkeypatch.setattr(dev.time, "monotonic", lambda: next(clock))
+
+    # Drains in time: one SIGTERM.
+    alive = itertools.chain([True, True, True], itertools.repeat(False))
+    monkeypatch.setattr(dev, "_pid_alive", lambda pid: next(alive))
+    dev._stop_module("researcher")
+    assert signals == [dev.signal.SIGTERM]
+
+    # Never exits: SIGKILL after the grace period.
+    signals.clear()
+    monkeypatch.setattr(dev, "_pid_alive", lambda pid: True)
+    dev._stop_module("researcher")
+    assert signals == [dev.signal.SIGTERM, dev.signal.SIGKILL]
+
+
+def test_a_module_is_ready_when_alive_and_has_no_url() -> None:
+    started = [dev._service_spec("api", 9879), dev._module_spec("researcher")]
+    table = dev._build_status_panel(
+        started,
+        {"api": 9879, "researcher": 0},
+        "all",
+        {
+            "api": {"pid": 1, "alive": True, "ready": True},
+            "researcher": {"pid": 2, "alive": True, "ready": True},
+        },
+    )
+
+    assert table.row_count == 2
+    assert dev._display_url(started[1]) == "dev module"
+    assert dev._open_letter_map(started) == {"a": "api"}

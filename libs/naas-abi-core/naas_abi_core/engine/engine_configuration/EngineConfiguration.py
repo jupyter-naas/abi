@@ -36,6 +36,9 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_DatasetServic
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
     DeployConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
+    DevConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_DocumentService import (
     DocumentServiceConfiguration,
 )
@@ -488,6 +491,9 @@ class EngineConfiguration(BaseModel):
 
     opencode: OpencodeConfiguration = OpencodeConfiguration()
 
+    # Validated here, used only by `abi dev up --with-nats` (EngineConfiguration_Dev).
+    dev: DevConfiguration = Field(default_factory=DevConfiguration)
+
     def ensure_default_modules(self) -> None:
         default_modules = [
             "naas_abi_core.modules.templatablesparqlquery",
@@ -606,14 +612,9 @@ class EngineConfiguration(BaseModel):
     def _load_bootstrap_dotenv_adapter_from_yaml_content(
         cls, yaml_content: str, base_dir: str | None = None
     ) -> ISecretAdapter | None:
-        # Render Jinja first (with no secret context) so control-flow tags such as
-        # {% include %} / {% for %} resolve before the YAML is parsed. We only need
-        # the dotenv path here, which is bootstrap config and cannot itself depend
-        # on a secret, so empty-rendered secrets are harmless.
-        env = cls._build_jinja_env(base_dir)
-        raw_data = yaml.safe_load(
-            StringIO(cls._render_yaml_template(env, yaml_content))
-        )
+        # We only need the dotenv path here, which is bootstrap config and cannot
+        # itself depend on a secret, so empty-rendered secrets are harmless.
+        raw_data = cls.render_without_secrets(yaml_content, base_dir=base_dir)
         if not isinstance(raw_data, dict):
             return None
 
@@ -654,6 +655,44 @@ class EngineConfiguration(BaseModel):
             return DotenvSecretSecondaryAdaptor(path=path)
 
         return None
+
+    @classmethod
+    def render_without_secrets(
+        cls, yaml_content: str, base_dir: str | None = None
+    ) -> Any:
+        """The config's YAML data with Jinja rendered and every secret empty.
+
+        Control-flow tags such as {% include %} / {% for %} resolve before the
+        YAML is parsed. For bootstrap reads that cannot depend on a secret.
+        """
+        env = cls._build_jinja_env(base_dir)
+        return yaml.safe_load(StringIO(cls._render_yaml_template(env, yaml_content)))
+
+    @classmethod
+    def configuration_file(cls) -> str:
+        """The file ``load_configuration`` reads: ``config.{ENV}.yaml`` when it
+        exists (ENV from the environment, else from the bootstrap dotenv), else
+        ``config.yaml``. Relative to the working directory."""
+        env = os.getenv("ENV")
+        if not env and os.path.exists("config.yaml"):
+            with open("config.yaml", "r") as file:
+                config_yaml = file.read()
+
+            bootstrap_dotenv_adapter = (
+                cls._load_bootstrap_dotenv_adapter_from_yaml_content(config_yaml)
+            )
+            if bootstrap_dotenv_adapter is not None:
+                env_from_bootstrap = bootstrap_dotenv_adapter.get("ENV")
+                if env_from_bootstrap is not None:
+                    env = str(env_from_bootstrap)
+
+        if env and os.path.exists(f"config.{env}.yaml"):
+            return f"config.{env}.yaml"
+        if os.path.exists("config.yaml"):
+            return "config.yaml"
+        raise FileNotFoundError(
+            "Configuration file not found. Please create a config.yaml file or config.{env}.yaml file."
+        )
 
     @classmethod
     def from_yaml(
@@ -774,30 +813,7 @@ class EngineConfiguration(BaseModel):
         if _cached_configuration is not None:
             return _cached_configuration
 
-        env = os.getenv("ENV")
-        if not env and os.path.exists("config.yaml"):
-            with open("config.yaml", "r") as file:
-                config_yaml = file.read()
-
-            bootstrap_dotenv_adapter = (
-                cls._load_bootstrap_dotenv_adapter_from_yaml_content(config_yaml)
-            )
-            if bootstrap_dotenv_adapter is not None:
-                env_from_bootstrap = bootstrap_dotenv_adapter.get("ENV")
-                if env_from_bootstrap is not None:
-                    env = str(env_from_bootstrap)
-
-        # First we check the environment variable.
-        if env and os.path.exists(f"config.{env}.yaml"):
-            config_file = f"config.{env}.yaml"
-        # If the config.{env}.yaml file is not found, we check the config.yaml file.
-        elif os.path.exists("config.yaml"):
-            config_file = "config.yaml"
-        else:
-            raise FileNotFoundError(
-                "Configuration file not found. Please create a config.yaml file or config.{env}.yaml file."
-            )
-
+        config_file = cls.configuration_file()
         overlay = _read_overlay(os.getenv(CONFIG_OVERLAY_ENV))
         logger.debug(
             f"Loading configuration from {config_file}"
