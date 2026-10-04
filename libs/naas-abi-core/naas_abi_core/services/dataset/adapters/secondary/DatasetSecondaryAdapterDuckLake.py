@@ -680,6 +680,10 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         self._write_transaction(operation)
 
     def inlined_row_count(self, name: str, *, namespace: str = "default") -> int:
+        with self._catalog_lock.shared():
+            return self._inlined_row_count(name, namespace)
+
+    def _inlined_row_count(self, name: str, namespace: str) -> int:
         con = self._connect()
         try:
             con.execute("BEGIN")
