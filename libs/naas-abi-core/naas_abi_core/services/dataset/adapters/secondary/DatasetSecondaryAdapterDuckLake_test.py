@@ -558,3 +558,60 @@ def test_query_stream_fetches_rows_in_batches_not_through_query(tmp_path, monkey
         rows = iter(result.rows)
         assert next(rows) == {"id": 0, "payload": {"n": 0}}
         assert sum(1 for _ in rows) == 2499
+
+
+def test_sqlite_catalog_survives_concurrent_reads_and_writes(tmp_path):
+    """Reads overlapping writes on a SQLite catalog used to leave DuckDB holding
+    a lock for good: every later read failed with "database is locked", even
+    from a new adapter in the same process (module jobs hit it in the engine)."""
+    import random
+    import threading
+    import time
+
+    adapter = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'catalog.sqlite'}",
+        data_path=str(tmp_path / "data"),
+        retry_base_delay_seconds=0.01,
+    )
+    columns = (
+        ColumnSpec(name="id", type="string"),
+        ColumnSpec(name="v", type="string"),
+    )
+    for ns in "abc":
+        adapter.create(
+            DatasetSpec(name="t", namespace=ns, columns=columns, primary_key=("id",))
+        )
+    errors: list[str] = []
+    stop = time.monotonic() + 4
+
+    def write(ns: str) -> None:
+        n = 0
+        while time.monotonic() < stop:
+            try:
+                adapter.write(
+                    "t", [{"id": f"{n % 20}", "v": "x"}], namespace=ns, mode="upsert"
+                )
+            except Exception as exc:  # noqa: BLE001 - collected for the assertion
+                errors.append(f"write: {exc}")
+            n += 1
+            time.sleep(random.uniform(0, 0.05))
+
+    def read(ns: str) -> None:
+        while time.monotonic() < stop:
+            try:
+                adapter.describe("t", namespace=ns)
+                adapter.query("SELECT count(*) AS n FROM t", namespace=ns)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"read: {exc}")
+
+    threads = [threading.Thread(target=write, args=(ns,)) for ns in "abc"]
+    threads += [
+        threading.Thread(target=read, args=(ns,)) for ns in "abc" for _ in range(2)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert adapter.describe("t", namespace="a").name == "t"  # not locked afterwards

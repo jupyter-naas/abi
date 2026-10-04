@@ -123,7 +123,7 @@ Without them, a write to an object store fails with HTTP 403 — or, for a batch
 enough for DuckLake to inline in the catalog, appears to succeed while never reaching
 the store. Modules that use the service declare `DatasetService` in `ModuleDependencies.services`.
 
-Each write uses a fresh connection and retries the complete transaction up to 10 times for catalog locks/transaction conflicts. Backoff starts at 50 ms, doubles to a 1-second cap, and has +/-25% jitter. SQLite writers sharing one adapter are serialized before the cross-process retry boundary; PostgreSQL writers remain concurrent. PostgreSQL deployment credentials are rendered from the secret service; do not log the catalog DSN.
+On a SQLite catalog, reads and writes take turns (`_CatalogLock`, reads overlap, a write runs alone): a read overlapping a write could leave DuckDB holding a lock for good, failing every later read in the process. PostgreSQL catalogs stay fully concurrent. Each write uses a fresh connection and retries the complete transaction up to 10 times for catalog locks/transaction conflicts. Backoff starts at 50 ms, doubles to a 1-second cap, and has +/-25% jitter. SQLite writers sharing one adapter are serialized before the cross-process retry boundary; PostgreSQL writers remain concurrent. PostgreSQL deployment credentials are rendered from the secret service; do not log the catalog DSN.
 
 Reads (`describe`, `list`, `list_snapshots`, and `query` without a pinned
 `snapshot_id`) do not pay that fresh-connection cost: they share one
