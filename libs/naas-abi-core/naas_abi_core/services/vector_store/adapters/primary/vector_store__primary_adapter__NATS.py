@@ -32,8 +32,9 @@ never passes any.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import TypeVar
+from collections.abc import AsyncIterator, Callable
+from functools import partial
+from typing import Any, TypeVar
 
 import nats
 import nats.micro
@@ -51,6 +52,7 @@ from naas_abi_core.engine.nats_rpc import (
     respond_protobuf,
 )
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
+from naas_abi_core.engine.nats_transfer import TransferHost, thread_frames
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
 from naas_abi_core.services.vector_store.adapters.vector_store_nats_contract import (
@@ -58,6 +60,10 @@ from naas_abi_core.services.vector_store.adapters.vector_store_nats_contract imp
     SERVICE_NAME,
     SERVICE_VERSION,
     SUBJECT_PREFIX,
+    TRANSFER_PREFIX,
+)
+from naas_abi_core.services.vector_store.adapters.vector_store_stream_codec import (
+    document_frames,
 )
 from naas_abi_core.services.vector_store.IVectorStorePort import (
     IVectorStorePort,
@@ -149,6 +155,13 @@ class VectorStorePrimaryAdapterNATS:
         self._jwt_secret = jwt_secret
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
+        self._transfer = TransferHost(
+            TRANSFER_PREFIX,
+            jwt_secret,
+            self._transfer_frames,
+            operations=("list_vectors",),
+            chunk_bytes=1024 * 1024,
+        )
 
     def _invoke(self, call, request):
         try:
@@ -260,9 +273,11 @@ class VectorStorePrimaryAdapterNATS:
             handler=self._handle_close,
         )
         self._service = service
+        await self._transfer.start(nc)
 
     async def stop(self) -> None:
         """Deregister the service, draining its subscriptions."""
+        await self._transfer.stop()
         service = self._service
         self._service = None
         try:
@@ -270,6 +285,31 @@ class VectorStorePrimaryAdapterNATS:
                 await service.stop()
         finally:
             self._dispatch.close()
+
+    # ------------------------------------------------------------------
+    # Streamed listing: one transfer session per stream, produced on its own
+    # thread one frame at a time (vector_store_stream_codec.py).
+    # ------------------------------------------------------------------
+
+    def _transfer_frames(
+        self, operation: str, metadata: bytes, source: Any
+    ) -> AsyncIterator[bytes]:
+        request = vector_store_pb2.ListVectorsRequest.FromString(metadata)
+        return thread_frames(partial(self._produce_listing, request))
+
+    def _produce_listing(
+        self,
+        request: vector_store_pb2.ListVectorsRequest,
+        emit: Callable[[bytes], bool],
+    ) -> None:
+        with self._adapter.list_vectors_stream(
+            request.collection_name, include_vectors=request.include_vectors
+        ) as documents:
+            for frame in document_frames(
+                _document_to_pb(document) for document in documents
+            ):
+                if not emit(frame):
+                    return
 
     # ------------------------------------------------------------------
     # Shared request handling: auth, decode, dispatch, encode.

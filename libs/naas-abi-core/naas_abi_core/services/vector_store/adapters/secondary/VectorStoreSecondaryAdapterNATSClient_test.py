@@ -417,3 +417,21 @@ def test_search_round_trips_real_similarity_scores(nats_url):
     finally:
         client.close()
         server.stop()
+
+
+@pytest.mark.integration
+def test_list_vectors_stream_without_a_streaming_engine_raises(nats_url):
+    # No primary at all: nobody answers the transfer open, and the client
+    # does not fall back to paging (NATS mode has no older engines).
+    client = VectorStoreSecondaryAdapterNATSClient(
+        nats_url=nats_url,
+        jwt_secret=JWT_SECRET,
+        service_identity="api",
+        timeout_seconds=5.0,
+    )
+    try:
+        with pytest.raises(RuntimeError, match="UNAVAILABLE"):
+            with client.list_vectors_stream("docs") as documents:
+                list(documents)
+    finally:
+        client.close()

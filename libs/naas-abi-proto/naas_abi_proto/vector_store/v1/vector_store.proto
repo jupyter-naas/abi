@@ -1,7 +1,10 @@
 // NATS-RPC contract for the vector_store kernel domain.
-// Mirrors naas_abi_core/services/vector_store/IVectorStorePort.py::IVectorStorePort 1:1 --
-// IVectorStorePort has no streaming/callback members, so this is a full mapping, no
+// Mirrors naas_abi_core/services/vector_store/IVectorStorePort.py::IVectorStorePort 1:1, no
 // exclusions. See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+// Its one streamed member, `list_vectors_stream`, needs no extra message: it travels as
+// transfer/v1 sessions on abi.svc.vector_store.v1.transfer (operation `list_vectors`), the
+// metadata a ListVectorsRequest (`limit` and `cursor` unused), each frame a VectorPage holding
+// documents only, about 256 KiB each (docs/adr/20261003_nats-streamed-results.md).
 //
 // `create_collection`'s `**kwargs` is deliberately NOT part of this wire contract. It is an
 // opaque passthrough straight into the concrete client library (QdrantAdapter and
@@ -44,6 +47,7 @@
 //   abi.svc.vector_store.v1.list_vectors
 //   abi.svc.vector_store.v1.get_collection_info
 //   abi.svc.vector_store.v1.close
+//   abi.svc.vector_store.v1.transfer.*   (transfer/v1 streams; operation list_vectors)
 syntax = "proto3";
 
 package abi.vector_store.v1;

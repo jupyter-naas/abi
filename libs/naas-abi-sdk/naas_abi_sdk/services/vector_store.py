@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
-from naas_abi_sdk.services._codec import ServiceProxy
+from naas_abi_proto.vector_store.v1 import vector_store_pb2 as pb
+
+from naas_abi_sdk.services._codec import ServiceProxy, decode
+from naas_abi_sdk.services._streams import open_stream
 from naas_abi_sdk.services.models import SearchResult, VectorDocument
+from naas_abi_sdk.transport import RPCError
+
+TRANSFER_PREFIX = "abi.svc.vector_store.v1.transfer"
 
 
 class VectorStoreService(ServiceProxy):
@@ -122,6 +130,23 @@ class VectorStoreService(ServiceProxy):
             "delete_vectors", collection_name=collection_name, vector_ids=document_ids
         )
 
+    @asynccontextmanager
+    async def list_documents_stream(
+        self, collection_name: str, *, include_vectors: bool = False
+    ) -> AsyncIterator[AsyncIterator[VectorDocument]]:
+        """Every document of a collection, fetched as it is iterated, in the
+        engine's ``list_vectors`` order (docs/adr/20261003_nats-streamed-results.md).
+        Read it once, inside the block; leaving closes the stream."""
+        request = pb.ListVectorsRequest(
+            collection_name=collection_name, include_vectors=include_vectors
+        )
+        async with open_stream(
+            self._client, TRANSFER_PREFIX, "list_vectors", request.SerializeToString()
+        ) as frames:
+            if frames is None:
+                raise RPCError("UNAVAILABLE", "No engine streams vector listings")
+            yield _documents(frames)
+
     async def get_collection_size(self, collection_name: str) -> int:
         return await self._request("count_vectors", collection_name=collection_name)
 
@@ -135,3 +160,9 @@ class VectorStoreService(ServiceProxy):
         raise NotImplementedError(
             "Remote administrative shutdown is available only through engine.rpc.vector_store.close"
         )
+
+
+async def _documents(frames: AsyncIterator[bytes]) -> AsyncIterator[VectorDocument]:
+    async for frame in frames:
+        for document in pb.VectorPage.FromString(frame).documents:
+            yield decode(document)
