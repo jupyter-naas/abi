@@ -45,10 +45,10 @@ jobs:
           python-version: '3.12'
       - name: Install pinned native NATS server
         run: |
-          curl --fail --location --retry 3 -o /tmp/nats-server.tar.gz https://github.com/nats-io/nats-server/releases/download/v2.11.8/nats-server-v2.11.8-linux-amd64.tar.gz
-          echo "397a6deffb5533e160de0cca322bc3dcaec7fb7282d66a3dfa87a9c183152ad1  /tmp/nats-server.tar.gz" | sha256sum --check
+          curl --fail --location --retry 3 -o /tmp/nats-server.tar.gz https://github.com/nats-io/nats-server/releases/download/v2.14.7/nats-server-v2.14.7-linux-amd64.tar.gz
+          echo "e5c20b1cb2c0566b54c544312e91e011f9e130c5c80f16a14f4cf28ef30b8be2  /tmp/nats-server.tar.gz" | sha256sum --check
           tar -xzf /tmp/nats-server.tar.gz -C /tmp
-          sudo install /tmp/nats-server-v2.11.8-linux-amd64/nats-server /usr/local/bin/nats-server
+          sudo install /tmp/nats-server-v2.14.7-linux-amd64/nats-server /usr/local/bin/nats-server
           nats-server --version
       - name: Install engine test dependencies
         run: uv sync --project libs/naas-abi-core --all-extras --python 3.12
@@ -75,3 +75,17 @@ jobs:
             examples/standalone_module/model_integration_test.py \
             examples/standalone_module/agent_integration_test.py \
             examples/standalone_module/checkpoint_integration_test.py
+      - name: Jobs and claim checks on nats-server 2.14
+        run: |
+          uv run --project libs/naas-abi-core --no-sync pytest -q \
+            libs/naas-abi-sdk/tests/test_jobs_integration.py \
+            libs/naas-abi-sdk/tests/test_claim_check.py
+      - name: Kernel services and their NATS clients over a real broker
+        run: |
+          uv run --project libs/naas-abi-core --no-sync pytest --import-mode=importlib -q \
+            libs/naas-abi-core/naas_abi_core/services/dataset \
+            libs/naas-abi-core/naas_abi_core/services/document/adapters \
+            libs/naas-abi-core/naas_abi_core/services/event \
+            libs/naas-abi-core/naas_abi_core/services/activity_log \
+            libs/naas-abi-core/naas_abi_core/services/vector_store \
+            libs/naas-abi-core/naas_abi_core/services/triple_store/adapters
