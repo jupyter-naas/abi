@@ -51,6 +51,18 @@ class TestOxigraphHTTP(GenericTripleStoreSecondaryAdapterTest):
     def supports_named_graphs(self) -> bool:
         return True
 
+    def test_creating_an_existing_graph_raises_the_ports_error(self, adapter):
+        # Oxigraph refuses CREATE GRAPH on an existing (even empty) graph;
+        # callers must get the port's typed error, not an HTTP 500.
+        from naas_abi_core.services.triple_store.TripleStorePorts import Exceptions
+        from rdflib import URIRef
+
+        graph = URIRef("http://test.example.org/graph/created-twice")
+        adapter.create_graph(graph)
+
+        with pytest.raises(Exceptions.GraphAlreadyExistsError):
+            adapter.create_graph(graph)
+
 
 def test_streams_are_read_from_the_http_response_not_from_query(endpoint, monkeypatch):
     from rdflib import Graph, Literal, URIRef
