@@ -14,9 +14,13 @@ services (secrets, message bus, email) are intentionally excluded for now.
 
 from __future__ import annotations
 
+from itertools import islice
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
+
+
+MAX_ROWS = 200  # rows kg_sparql_query returns to the model
 
 
 def _services() -> Any:
@@ -30,13 +34,35 @@ def platform_service_tools() -> list[BaseTool]:
     @tool
     def kg_sparql_query(query: str) -> Any:
         """Run a SPARQL query against the knowledge graph (triple store) and
-        return the result rows. Use this to answer questions about entities and
-        relationships in the graph."""
+        return the result rows (SELECT), the answer (ASK) or the triples
+        (CONSTRUCT). At most 200 rows come back; a larger result returns
+        {"rows", "total_rows", "truncated"}: refine the query or add a LIMIT.
+        Use this to answer questions about entities and relationships in the
+        graph."""
         try:
-            from naas_abi_core.utils.SPARQL import SPARQLUtils
+            from naas_abi_core.services.triple_store.adapters.triple_store_stream_codec import (
+                nt_line,
+            )
 
-            ts = _services().triple_store
-            return SPARQLUtils(ts).results_to_list(ts.query(query))
+            # A stream: rows past MAX_ROWS are counted, never held in memory.
+            with _services().triple_store.query_stream(query) as result:
+                if result.result_type == "ASK":
+                    return {"ask": bool(result.ask_answer)}
+                if result.result_type == "SELECT":
+                    items: Any = (
+                        {
+                            var: str(row[var]) if row.get(var) is not None else None
+                            for var in result.vars
+                        }
+                        for row in result.rows
+                    )
+                else:
+                    items = (nt_line(triple).rstrip("\n") for triple in result.triples)
+                rows = list(islice(items, MAX_ROWS))
+                total = len(rows) + sum(1 for _ in items)
+            if total > len(rows):
+                return {"rows": rows, "total_rows": total, "truncated": True}
+            return rows or None
         except Exception as exc:  # noqa: BLE001
             return {"error": str(exc)}
 
@@ -112,7 +138,9 @@ def platform_service_tools() -> list[BaseTool]:
         """Get a value from the key-value store by key."""
         try:
             value = _services().kv.get(key)
-            text = value.decode("utf-8", "replace") if isinstance(value, bytes) else value
+            text = (
+                value.decode("utf-8", "replace") if isinstance(value, bytes) else value
+            )
             return {"key": key, "value": text}
         except Exception as exc:  # noqa: BLE001
             return {"error": str(exc)}
