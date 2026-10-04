@@ -75,6 +75,7 @@ def run_summary(run: JobRun) -> dict[str, Any]:
         "instance": run.instance,
         "error": run.error,
         "trace_id": run.trace_id,
+        "skip_reason": run.skip_reason,
     }
 
 
@@ -116,6 +117,7 @@ def job_view(view: JobView) -> dict[str, Any]:
         "running": view.running,
         "last_run": run_summary(view.last_run) if view.last_run else None,
         "recent": [run_summary(r) for r in view.recent],
+        "last_skipped": run_summary(view.last_skipped) if view.last_skipped else None,
     }
 
 
@@ -140,6 +142,9 @@ async def runs(
     trigger: str | None = None,
     before: str | None = None,
     limit: int = Query(50, ge=1, le=500),
+    include_skipped: bool = Query(
+        False, description="Without status: also runs that had nothing to do"
+    ),
     admin: JobsAdminService = Depends(get_jobs_admin),
 ) -> Any:
     statuses = [s.strip().upper() for s in status.split(",") if s.strip()] if status else None
@@ -151,6 +156,7 @@ async def runs(
             trigger_kind=trigger or None,
             before=before or None,
             limit=limit,
+            include_skipped=include_skipped,
         )
     )
     return {"runs": [run_summary(r) for r in page.runs], "next": page.next}

@@ -11,6 +11,10 @@ Declare jobs like agents and run them in the module's own process::
         @job(triggers=(Every("1h"),))
         async def summarize(self, ctx: JobContext) -> None: ...
 
+A module triggers its own jobs once they are hosted: ``self.trigger_job(name,
+payload, idempotency_key=...)`` from sync code, ``await self.atrigger_job(...)``
+from async code.
+
 JetStream message schedules (NATS >= 2.12, time zones >= 2.14) produce the
 triggers; one durable consumer per job hands each trigger to one replica. See
 docs/adr/20261001_nats-jobs.md.
@@ -30,6 +34,7 @@ from typing import Any, ClassVar
 
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
+from naas_abi_sdk import event_filter
 from naas_abi_sdk.telemetry import client_span
 
 JOB_CONTRACT_MAJOR = 1
@@ -61,11 +66,13 @@ RUN_STATUSES = (
     "RUNNING",
     "RETRYING",
     "SUCCEEDED",
+    "SKIPPED",
     "FAILED",
     "TIMED_OUT",
     "CANCELLED",
 )
-TERMINAL_STATUSES = ("SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED")
+# SKIPPED: the handler said the run had nothing to do (``ctx.skip``).
+TERMINAL_STATUSES = ("SUCCEEDED", "SKIPPED", "FAILED", "TIMED_OUT", "CANCELLED")
 
 
 def _hash(*values: str) -> str:
@@ -141,17 +148,36 @@ class Every:
 
 @dataclass(frozen=True, init=False)
 class OnEvent:
-    """Run on events: an ABI event type IRI or any NATS subject (core NATS)."""
+    """Run on events: an ABI event type IRI or any NATS subject (core NATS).
+
+    ``filter`` keeps irrelevant events from triggering the job: an
+    EventBridge-style dict on the event's fields (``naas_abi_sdk.event_filter``),
+    e.g. ``{"prefix": {"prefix": "naas/"}}`` for object puts under ``naas/``.
+    """
 
     subject: str
+    filter: dict[str, Any] | None = field(default=None, hash=False)
     kind = "event"
 
-    def __init__(self, subject: str | None = None, *, event_type: str | None = None):
+    def __init__(
+        self,
+        subject: str | None = None,
+        *,
+        event_type: str | None = None,
+        filter: dict[str, Any] | None = None,
+    ):
         if (subject is None) == (event_type is None):
             raise ValueError("OnEvent needs exactly one of subject or event_type")
         if event_type is not None:
             subject = f"evt.{hashlib.sha256(event_type.encode()).hexdigest()[:32]}.>"
         object.__setattr__(self, "subject", subject)
+        object.__setattr__(
+            self, "filter", event_filter.validate(filter) if filter else None
+        )
+
+    def matches(self, data: Any) -> bool:
+        """Whether this event (its decoded JSON) should trigger the job."""
+        return event_filter.matches(data, self.filter)
 
     @property
     def spec(self) -> str:
@@ -171,7 +197,9 @@ def _trigger_from_pb(value: pb.JobTrigger) -> Trigger:
     if value.kind == "every":
         return Every(value.spec)
     if value.kind == "event":
-        return OnEvent(value.spec)
+        return OnEvent(
+            value.spec, filter=json.loads(value.filter) if value.filter else None
+        )
     raise ValueError(f"Unknown job trigger kind: {value.kind!r}")
 
 
@@ -215,7 +243,14 @@ class JobDescriptor:
             description=self.description,
             contract_major=self.contract_major,
             triggers=[
-                pb.JobTrigger(kind=t.kind, spec=t.spec, time_zone=t.time_zone)
+                pb.JobTrigger(
+                    kind=t.kind,
+                    spec=t.spec,
+                    time_zone=t.time_zone,
+                    filter=json.dumps(t.filter, sort_keys=True)
+                    if isinstance(t, OnEvent) and t.filter
+                    else "",
+                )
                 for t in self.triggers
             ],
             max_concurrency=self.max_concurrency,
@@ -239,6 +274,26 @@ class JobDescriptor:
 
 
 JobHandler = Callable[["JobContext"], Awaitable[Any]]
+
+
+@dataclass(frozen=True)
+class JobRetention:
+    """How long a job host keeps finished run records (QUEUED, RUNNING and
+    RETRYING runs are never touched). Each pass deletes at most ``batch``."""
+
+    max_age: timedelta = timedelta(days=7)
+    max_runs_per_job: int = 1000
+    # Runs that did nothing (``ctx.skip``): polls would drown the history.
+    skipped_max_age: timedelta = timedelta(hours=1)
+    interval: timedelta = timedelta(minutes=10)
+    batch: int = 200
+
+    def __post_init__(self) -> None:
+        if self.max_runs_per_job < 1 or self.batch < 1:
+            raise ValueError("max_runs_per_job and batch must be at least 1")
+        for value in (self.max_age, self.skipped_max_age, self.interval):
+            if value.total_seconds() <= 0:
+                raise ValueError("Retention durations must be positive")
 
 
 def job(
@@ -275,6 +330,10 @@ def is_async_callable(handler: Any) -> bool:
     return inspect.iscoroutinefunction(handler) or (
         callable(handler) and inspect.iscoroutinefunction(type(handler).__call__)
     )
+
+
+class JobsNotHosted(RuntimeError):
+    """A module's jobs are triggered before (or after) its job host runs."""
 
 
 class JobsMixin:
@@ -342,6 +401,66 @@ class JobsMixin:
     def missing_job_handlers(self) -> set[str]:
         return {j.name for j in self.jobs} - set(self._job_handlers)
 
+    # A module's own triggers go through its job host, on the host's loop.
+
+    def _bind_job_host(self, host: Any, loop: asyncio.AbstractEventLoop | None) -> None:
+        """Set by the runtime once the host started (``None`` once it stopped)."""
+        self.__dict__["_abi_job_host"] = (host, loop) if host is not None else None
+
+    def _job_host(self) -> tuple[Any, asyncio.AbstractEventLoop]:
+        bound = self.__dict__.get("_abi_job_host")
+        if bound is None:
+            raise JobsNotHosted(
+                f"The jobs of {type(self).__name__} are not hosted: they run in NATS "
+                "mode, from the end of on_initialized until the module stops"
+            )
+        return bound
+
+    async def atrigger_job(
+        self,
+        name: str,
+        payload: dict[str, Any] | None = None,
+        *,
+        idempotency_key: str | None = None,
+    ) -> JobRun:
+        """Trigger one of this module's jobs. Triggers with the same
+        ``idempotency_key`` within the stream's duplicate window (2 minutes)
+        are one run."""
+        host, loop = self._job_host()
+        trigger = host.trigger(name, payload, idempotency_key=idempotency_key)
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is loop:
+            return await trigger
+        return await asyncio.wrap_future(
+            asyncio.run_coroutine_threadsafe(trigger, loop)
+        )
+
+    def trigger_job(
+        self,
+        name: str,
+        payload: dict[str, Any] | None = None,
+        *,
+        idempotency_key: str | None = None,
+        timeout: float = 30.0,
+    ) -> JobRun:
+        """``atrigger_job`` for sync code (an engine request thread); blocks until
+        the trigger is stored. On the host's own loop, await ``atrigger_job``."""
+        host, loop = self._job_host()
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is loop:
+            raise RuntimeError(
+                "trigger_job would block the job host's loop: await atrigger_job"
+            )
+        return asyncio.run_coroutine_threadsafe(
+            host.trigger(name, payload, idempotency_key=idempotency_key), loop
+        ).result(timeout)
+
 
 # --- subjects and storage -------------------------------------------------------------
 
@@ -400,11 +519,17 @@ class JobContext:
     payload: dict[str, Any]
     cancelled: asyncio.Event = field(default_factory=asyncio.Event)
     logs: list[str] = field(default_factory=list)
+    skipped: str | None = None
 
     def log(self, message: str) -> None:
         """Keep a bounded log on the run record."""
         if len(self.logs) < MAX_LOG_LINES:
             self.logs.append(str(message)[:MAX_LOG_LINE])
+
+    def skip(self, reason: str = "") -> None:
+        """Record this run as SKIPPED (nothing to do) when the handler returns:
+        hidden by default in the System Jobs tab, kept briefly (``JobRetention``)."""
+        self.skipped = str(reason)[:MAX_LOG_LINE]
 
 
 # --- caller side ----------------------------------------------------------------------
@@ -488,13 +613,23 @@ class JobProxy:
     def name(self) -> str:
         return self.descriptor.name
 
-    async def trigger(self, payload: dict[str, Any] | None = None) -> JobRun:
+    async def trigger(
+        self,
+        payload: dict[str, Any] | None = None,
+        *,
+        idempotency_key: str | None = None,
+    ) -> JobRun:
+        """Store a trigger; the run starts when a host takes it. A repeated
+        ``idempotency_key`` within the stream's duplicate window (2 minutes) is
+        the same run (JetStream message-id dedup)."""
         from naas_abi_sdk import claim_check  # needs nats; keep jobs.py nats-free
 
         nc = await self.transport.connect()
         subject = job_subjects(self.project, self.module_id, self.name).trigger
         stream = stream_name(self.project)
         headers = {TRIGGER_HEADER: "manual", "Nats-TTL": "168h"}
+        if idempotency_key:
+            headers["Nats-Msg-Id"] = f"{self.name}:{idempotency_key}"
         # The run continues this trace (the host reads traceparent off the message).
         with client_span(subject, headers):
             # A payload above the broker limit travels as a claim check.

@@ -10,8 +10,10 @@ import {
   sortJobs,
   splitKey,
   startDelay,
+  statusLabel,
   statusTone,
 } from './jobs-model';
+import { STATUS_FILTERS } from './runs-list';
 import { job, run } from './jobs-fixtures';
 
 describe('jobs model', () => {
@@ -47,5 +49,13 @@ describe('jobs model', () => {
     expect(splitKey('ops.reports/digest:7')).toEqual(['ops.reports', 'digest:7']);
     expect(moduleLabel('operations.projects.nats_probe.researcher')).toBe('researcher');
     expect([statusTone('SUCCEEDED'), statusTone('FAILED'), statusTone('RETRYING')]).toEqual(['success', 'danger', 'warn']);
+  });
+
+  it('treats skipped runs as nothing to do, never as failures', () => {
+    expect(statusLabel('SKIPPED')).toBe('Skipped');
+    expect(statusTone('SKIPPED')).toBe('neutral');
+    const h = health([run(), run({ status: 'SKIPPED', duration_ms: 5 }), run({ status: 'FAILED', duration_ms: 1000 })]);
+    expect(h).toMatchObject({ total: 2, succeeded: 1, failed: 1, rate: 0.5, averageMs: 2000 });
+    expect(STATUS_FILTERS.find((f) => f.id === 'skipped')?.statuses).toEqual(['SKIPPED']);
   });
 });

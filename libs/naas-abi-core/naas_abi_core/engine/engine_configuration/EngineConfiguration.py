@@ -277,6 +277,37 @@ class NATSRPCOverflowConfiguration(BaseModel):
     max_sessions: int = Field(default=64, ge=1, le=1024)
 
 
+class NATSJobsRetentionConfiguration(BaseModel):
+    """How long job hosts keep finished run records (``JobRetention``).
+
+    Active runs are never pruned. Runs that did nothing (``ctx.skip``) go after
+    ``skipped_max_age_minutes``; other finished runs after ``max_age_days``,
+    and each job keeps at most ``max_runs_per_job``. ``enabled: false`` keeps
+    every record.
+    """
+
+    enabled: bool = True
+    max_age_days: float = Field(default=7, gt=0, allow_inf_nan=False)
+    max_runs_per_job: int = Field(default=1000, ge=1)
+    skipped_max_age_minutes: float = Field(default=60, gt=0, allow_inf_nan=False)
+    interval_minutes: float = Field(default=10, gt=0, allow_inf_nan=False)
+
+    def to_retention(self) -> Any:
+        """The SDK ``JobRetention`` (``None`` when disabled)."""
+        if not self.enabled:
+            return None
+        from datetime import timedelta
+
+        from naas_abi_sdk.jobs import JobRetention
+
+        return JobRetention(
+            max_age=timedelta(days=self.max_age_days),
+            max_runs_per_job=self.max_runs_per_job,
+            skipped_max_age=timedelta(minutes=self.skipped_max_age_minutes),
+            interval=timedelta(minutes=self.interval_minutes),
+        )
+
+
 class NATSJobsConfiguration(BaseModel):
     """Engine-hosted module jobs (JetStream message schedules, NATS >= 2.14).
 
@@ -291,6 +322,9 @@ class NATSJobsConfiguration(BaseModel):
     enabled: bool = True
     interrupt_grace_seconds: float | None = Field(
         default=5.0, ge=0, allow_inf_nan=False
+    )
+    retention: NATSJobsRetentionConfiguration = Field(
+        default_factory=NATSJobsRetentionConfiguration
     )
 
 

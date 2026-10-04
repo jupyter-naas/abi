@@ -1,6 +1,7 @@
 /** Wire types of /api/admin/system/jobs (sysadmin jobs domain). */
 
-export type RunStatus = 'RUNNING' | 'RETRYING' | 'SUCCEEDED' | 'FAILED' | 'TIMED_OUT' | 'CANCELLED';
+/** SKIPPED: the run had nothing to do (the handler called ctx.skip); hidden by default. */
+export type RunStatus = 'RUNNING' | 'RETRYING' | 'SUCCEEDED' | 'SKIPPED' | 'FAILED' | 'TIMED_OUT' | 'CANCELLED';
 
 export interface JobTrigger {
   kind: 'cron' | 'every' | 'event' | string;
@@ -26,6 +27,7 @@ export interface RunSummary {
   instance: string;
   error: string;
   trace_id: string;
+  skip_reason: string;
 }
 
 export interface RunDetail extends RunSummary {
@@ -52,6 +54,8 @@ export interface JobView {
   running: number;
   last_run: RunSummary | null;
   recent: RunSummary[];
+  /** The latest run that had nothing to do (not in ``recent``). */
+  last_skipped: RunSummary | null;
 }
 
 export interface SourceStatus {

@@ -17,6 +17,7 @@ export const run = (overrides: Partial<RunSummary> = {}): RunSummary => ({
   instance: 'i-1',
   error: '',
   trace_id: '',
+  skip_reason: '',
   ...overrides,
 });
 
@@ -37,5 +38,6 @@ export const job = (overrides: Partial<JobView> = {}): JobView => ({
   running: 0,
   last_run: run(),
   recent: [run()],
+  last_skipped: null,
   ...overrides,
 });

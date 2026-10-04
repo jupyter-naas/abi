@@ -70,6 +70,13 @@ export function JobDetail({
         </Notice>
       )}
 
+      {job.last_skipped && (
+        <p className="job-last-skipped">
+          Last had nothing to do <RelativeTime iso={job.last_skipped.finished_at ?? job.last_skipped.started_at} />
+          {job.last_skipped.skip_reason && <>: {job.last_skipped.skip_reason}</>}
+        </p>
+      )}
+
       <div className="job-cards">
         <Card title="Schedule">
           {job.triggers.length ? (

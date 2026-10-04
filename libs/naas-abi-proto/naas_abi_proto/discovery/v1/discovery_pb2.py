@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from naas_abi_proto.common.v1 import common_pb2 as naas__abi__proto_dot_common_dot_v1_dot_common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n+naas_abi_proto/discovery/v1/discovery.proto\x12\x10\x61\x62i.discovery.v1\x1a%naas_abi_proto/common/v1/common.proto\"b\n\x0f\x41gentDescriptor\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\x12\x16\n\x0e\x63ontract_major\x18\x03 \x01(\r\x12\x14\n\x0c\x63\x61pabilities\x18\x04 \x03(\t\";\n\nJobTrigger\x12\x0c\n\x04kind\x18\x01 \x01(\t\x12\x0c\n\x04spec\x18\x02 \x01(\t\x12\x11\n\ttime_zone\x18\x03 \x01(\t\"\xc2\x01\n\rJobDescriptor\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\x12\x16\n\x0e\x63ontract_major\x18\x03 \x01(\r\x12.\n\x08triggers\x18\x04 \x03(\x0b\x32\x1c.abi.discovery.v1.JobTrigger\x12\x17\n\x0fmax_concurrency\x18\x05 \x01(\r\x12\x14\n\x0cmax_attempts\x18\x06 \x01(\r\x12\x17\n\x0ftimeout_seconds\x18\x07 \x01(\x01\"7\n\nDependency\x12\x11\n\tmodule_id\x18\x01 \x01(\t\x12\x16\n\x0e\x63ontract_major\x18\x02 \x01(\r\"\xec\x01\n\x10ModuleDescriptor\x12\x11\n\tmodule_id\x18\x01 \x01(\t\x12\x17\n\x0fpackage_version\x18\x02 \x01(\t\x12\x16\n\x0e\x63ontract_major\x18\x03 \x01(\r\x12\x32\n\x0c\x64\x65pendencies\x18\x04 \x03(\x0b\x32\x1c.abi.discovery.v1.Dependency\x12\x31\n\x06\x61gents\x18\x05 \x03(\x0b\x32!.abi.discovery.v1.AgentDescriptor\x12-\n\x04jobs\x18\x06 \x03(\x0b\x32\x1f.abi.discovery.v1.JobDescriptor\"{\n\x08Instance\x12\x36\n\ndescriptor\x18\x01 \x01(\x0b\x32\".abi.discovery.v1.ModuleDescriptor\x12\x13\n\x0binstance_id\x18\x02 \x01(\t\x12\x0e\n\x06status\x18\x03 \x01(\t\x12\x12\n\nexpires_at\x18\x04 \x01(\x01\"\xa0\x01\n\x0fRegisterRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\x36\n\ndescriptor\x18\x02 \x01(\x0b\x32\".abi.discovery.v1.ModuleDescriptor\x12\x13\n\x0binstance_id\x18\x03 \x01(\t\x12\x13\n\x0blease_token\x18\x04 \x01(\t\"\x80\x01\n\x10RegisterResponse\x12\'\n\x05\x65rror\x18\x01 \x01(\x0b\x32\x18.abi.common.v1.CallError\x12,\n\x08instance\x18\x02 \x01(\x0b\x32\x1a.abi.discovery.v1.Instance\x12\x15\n\rlease_seconds\x18\x03 \x01(\x01\"\x8c\x01\n\x0cRenewRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\x13\n\x0binstance_id\x18\x02 \x01(\t\x12\x13\n\x0blease_token\x18\x03 \x01(\t\x12\x13\n\x0binitialized\x18\x04 \x01(\x08\x12\x10\n\x08\x64raining\x18\x05 \x01(\x08\"}\n\rRenewResponse\x12\'\n\x05\x65rror\x18\x01 \x01(\x0b\x32\x18.abi.common.v1.CallError\x12,\n\x08instance\x18\x02 \x01(\x0b\x32\x1a.abi.discovery.v1.Instance\x12\x15\n\rlease_seconds\x18\x03 \x01(\x01\"j\n\x11UnregisterRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\x13\n\x0binstance_id\x18\x02 \x01(\t\x12\x13\n\x0blease_token\x18\x03 \x01(\t\"=\n\x12UnregisterResponse\x12\'\n\x05\x65rror\x18\x01 \x01(\x0b\x32\x18.abi.common.v1.CallError\"j\n\x10GetModuleRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\x11\n\tmodule_id\x18\x02 \x01(\t\x12\x16\n\x0e\x63ontract_major\x18\x03 \x01(\r\"k\n\x11GetModuleResponse\x12\'\n\x05\x65rror\x18\x01 \x01(\x0b\x32\x18.abi.common.v1.CallError\x12-\n\tinstances\x18\x02 \x03(\x0b\x32\x1a.abi.discovery.v1.Instance\"k\n\x12ListModulesRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\r\n\x05limit\x18\x02 \x01(\r\x12\x19\n\x11\x61\x66ter_instance_id\x18\x03 \x01(\t\"\x8d\x01\n\x13ListModulesResponse\x12\'\n\x05\x65rror\x18\x01 \x01(\x0b\x32\x18.abi.common.v1.CallError\x12-\n\tinstances\x18\x02 \x03(\x0b\x32\x1a.abi.discovery.v1.Instance\x12\x1e\n\x16next_after_instance_id\x18\x03 \x01(\t\"P\n\x0c\x45victRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\x13\n\x0binstance_id\x18\x02 \x01(\t\"f\n\rEvictResponse\x12\'\n\x05\x65rror\x18\x01 \x01(\x0b\x32\x18.abi.common.v1.CallError\x12,\n\x08instance\x18\x02 \x01(\x0b\x32\x1a.abi.discovery.v1.Instance\"\x88\x01\n\x0eRegistryRecord\x12,\n\x08instance\x18\x01 \x01(\x0b\x32\x1a.abi.discovery.v1.Instance\x12\r\n\x05owner\x18\x02 \x01(\t\x12\x12\n\nlease_hash\x18\x03 \x01(\t\x12\x13\n\x0binitialized\x18\x04 \x01(\x08\x12\x10\n\x08\x64raining\x18\x05 \x01(\x08\"B\n\rRegistryState\x12\x31\n\x07records\x18\x01 \x03(\x0b\x32 .abi.discovery.v1.RegistryRecord\"\xb0\x01\n\x15\x41uthorizeAgentRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\x13\n\x0binstance_id\x18\x02 \x01(\t\x12\x13\n\x0blease_token\x18\x03 \x01(\t\x12\x12\n\nagent_name\x18\x04 \x01(\t\x12\x14\n\x0c\x63\x61ller_token\x18\x05 \x01(\t\x12\x16\n\x0enew_invocation\x18\x06 \x01(\x08\"p\n\x16\x41uthorizeAgentResponse\x12\'\n\x05\x65rror\x18\x01 \x01(\x0b\x32\x18.abi.common.v1.CallError\x12\x17\n\x0f\x63\x61ller_identity\x18\x02 \x01(\t\x12\x14\n\x0c\x63\x61ller_admin\x18\x03 \x01(\x08\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n+naas_abi_proto/discovery/v1/discovery.proto\x12\x10\x61\x62i.discovery.v1\x1a%naas_abi_proto/common/v1/common.proto\"b\n\x0f\x41gentDescriptor\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\x12\x16\n\x0e\x63ontract_major\x18\x03 \x01(\r\x12\x14\n\x0c\x63\x61pabilities\x18\x04 \x03(\t\"K\n\nJobTrigger\x12\x0c\n\x04kind\x18\x01 \x01(\t\x12\x0c\n\x04spec\x18\x02 \x01(\t\x12\x11\n\ttime_zone\x18\x03 \x01(\t\x12\x0e\n\x06\x66ilter\x18\x04 \x01(\t\"\xc2\x01\n\rJobDescriptor\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\x12\x16\n\x0e\x63ontract_major\x18\x03 \x01(\r\x12.\n\x08triggers\x18\x04 \x03(\x0b\x32\x1c.abi.discovery.v1.JobTrigger\x12\x17\n\x0fmax_concurrency\x18\x05 \x01(\r\x12\x14\n\x0cmax_attempts\x18\x06 \x01(\r\x12\x17\n\x0ftimeout_seconds\x18\x07 \x01(\x01\"7\n\nDependency\x12\x11\n\tmodule_id\x18\x01 \x01(\t\x12\x16\n\x0e\x63ontract_major\x18\x02 \x01(\r\"\xec\x01\n\x10ModuleDescriptor\x12\x11\n\tmodule_id\x18\x01 \x01(\t\x12\x17\n\x0fpackage_version\x18\x02 \x01(\t\x12\x16\n\x0e\x63ontract_major\x18\x03 \x01(\r\x12\x32\n\x0c\x64\x65pendencies\x18\x04 \x03(\x0b\x32\x1c.abi.discovery.v1.Dependency\x12\x31\n\x06\x61gents\x18\x05 \x03(\x0b\x32!.abi.discovery.v1.AgentDescriptor\x12-\n\x04jobs\x18\x06 \x03(\x0b\x32\x1f.abi.discovery.v1.JobDescriptor\"{\n\x08Instance\x12\x36\n\ndescriptor\x18\x01 \x01(\x0b\x32\".abi.discovery.v1.ModuleDescriptor\x12\x13\n\x0binstance_id\x18\x02 \x01(\t\x12\x0e\n\x06status\x18\x03 \x01(\t\x12\x12\n\nexpires_at\x18\x04 \x01(\x01\"\xa0\x01\n\x0fRegisterRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\x36\n\ndescriptor\x18\x02 \x01(\x0b\x32\".abi.discovery.v1.ModuleDescriptor\x12\x13\n\x0binstance_id\x18\x03 \x01(\t\x12\x13\n\x0blease_token\x18\x04 \x01(\t\"\x80\x01\n\x10RegisterResponse\x12\'\n\x05\x65rror\x18\x01 \x01(\x0b\x32\x18.abi.common.v1.CallError\x12,\n\x08instance\x18\x02 \x01(\x0b\x32\x1a.abi.discovery.v1.Instance\x12\x15\n\rlease_seconds\x18\x03 \x01(\x01\"\x8c\x01\n\x0cRenewRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\x13\n\x0binstance_id\x18\x02 \x01(\t\x12\x13\n\x0blease_token\x18\x03 \x01(\t\x12\x13\n\x0binitialized\x18\x04 \x01(\x08\x12\x10\n\x08\x64raining\x18\x05 \x01(\x08\"}\n\rRenewResponse\x12\'\n\x05\x65rror\x18\x01 \x01(\x0b\x32\x18.abi.common.v1.CallError\x12,\n\x08instance\x18\x02 \x01(\x0b\x32\x1a.abi.discovery.v1.Instance\x12\x15\n\rlease_seconds\x18\x03 \x01(\x01\"j\n\x11UnregisterRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\x13\n\x0binstance_id\x18\x02 \x01(\t\x12\x13\n\x0blease_token\x18\x03 \x01(\t\"=\n\x12UnregisterResponse\x12\'\n\x05\x65rror\x18\x01 \x01(\x0b\x32\x18.abi.common.v1.CallError\"j\n\x10GetModuleRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\x11\n\tmodule_id\x18\x02 \x01(\t\x12\x16\n\x0e\x63ontract_major\x18\x03 \x01(\r\"k\n\x11GetModuleResponse\x12\'\n\x05\x65rror\x18\x01 \x01(\x0b\x32\x18.abi.common.v1.CallError\x12-\n\tinstances\x18\x02 \x03(\x0b\x32\x1a.abi.discovery.v1.Instance\"k\n\x12ListModulesRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\r\n\x05limit\x18\x02 \x01(\r\x12\x19\n\x11\x61\x66ter_instance_id\x18\x03 \x01(\t\"\x8d\x01\n\x13ListModulesResponse\x12\'\n\x05\x65rror\x18\x01 \x01(\x0b\x32\x18.abi.common.v1.CallError\x12-\n\tinstances\x18\x02 \x03(\x0b\x32\x1a.abi.discovery.v1.Instance\x12\x1e\n\x16next_after_instance_id\x18\x03 \x01(\t\"P\n\x0c\x45victRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\x13\n\x0binstance_id\x18\x02 \x01(\t\"f\n\rEvictResponse\x12\'\n\x05\x65rror\x18\x01 \x01(\x0b\x32\x18.abi.common.v1.CallError\x12,\n\x08instance\x18\x02 \x01(\x0b\x32\x1a.abi.discovery.v1.Instance\"\x88\x01\n\x0eRegistryRecord\x12,\n\x08instance\x18\x01 \x01(\x0b\x32\x1a.abi.discovery.v1.Instance\x12\r\n\x05owner\x18\x02 \x01(\t\x12\x12\n\nlease_hash\x18\x03 \x01(\t\x12\x13\n\x0binitialized\x18\x04 \x01(\x08\x12\x10\n\x08\x64raining\x18\x05 \x01(\x08\"B\n\rRegistryState\x12\x31\n\x07records\x18\x01 \x03(\x0b\x32 .abi.discovery.v1.RegistryRecord\"\xb0\x01\n\x15\x41uthorizeAgentRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\x13\n\x0binstance_id\x18\x02 \x01(\t\x12\x13\n\x0blease_token\x18\x03 \x01(\t\x12\x12\n\nagent_name\x18\x04 \x01(\t\x12\x14\n\x0c\x63\x61ller_token\x18\x05 \x01(\t\x12\x16\n\x0enew_invocation\x18\x06 \x01(\x08\"p\n\x16\x41uthorizeAgentResponse\x12\'\n\x05\x65rror\x18\x01 \x01(\x0b\x32\x18.abi.common.v1.CallError\x12\x17\n\x0f\x63\x61ller_identity\x18\x02 \x01(\t\x12\x14\n\x0c\x63\x61ller_admin\x18\x03 \x01(\x08\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,45 +35,45 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_AGENTDESCRIPTOR']._serialized_start=104
   _globals['_AGENTDESCRIPTOR']._serialized_end=202
   _globals['_JOBTRIGGER']._serialized_start=204
-  _globals['_JOBTRIGGER']._serialized_end=263
-  _globals['_JOBDESCRIPTOR']._serialized_start=266
-  _globals['_JOBDESCRIPTOR']._serialized_end=460
-  _globals['_DEPENDENCY']._serialized_start=462
-  _globals['_DEPENDENCY']._serialized_end=517
-  _globals['_MODULEDESCRIPTOR']._serialized_start=520
-  _globals['_MODULEDESCRIPTOR']._serialized_end=756
-  _globals['_INSTANCE']._serialized_start=758
-  _globals['_INSTANCE']._serialized_end=881
-  _globals['_REGISTERREQUEST']._serialized_start=884
-  _globals['_REGISTERREQUEST']._serialized_end=1044
-  _globals['_REGISTERRESPONSE']._serialized_start=1047
-  _globals['_REGISTERRESPONSE']._serialized_end=1175
-  _globals['_RENEWREQUEST']._serialized_start=1178
-  _globals['_RENEWREQUEST']._serialized_end=1318
-  _globals['_RENEWRESPONSE']._serialized_start=1320
-  _globals['_RENEWRESPONSE']._serialized_end=1445
-  _globals['_UNREGISTERREQUEST']._serialized_start=1447
-  _globals['_UNREGISTERREQUEST']._serialized_end=1553
-  _globals['_UNREGISTERRESPONSE']._serialized_start=1555
-  _globals['_UNREGISTERRESPONSE']._serialized_end=1616
-  _globals['_GETMODULEREQUEST']._serialized_start=1618
-  _globals['_GETMODULEREQUEST']._serialized_end=1724
-  _globals['_GETMODULERESPONSE']._serialized_start=1726
-  _globals['_GETMODULERESPONSE']._serialized_end=1833
-  _globals['_LISTMODULESREQUEST']._serialized_start=1835
-  _globals['_LISTMODULESREQUEST']._serialized_end=1942
-  _globals['_LISTMODULESRESPONSE']._serialized_start=1945
-  _globals['_LISTMODULESRESPONSE']._serialized_end=2086
-  _globals['_EVICTREQUEST']._serialized_start=2088
-  _globals['_EVICTREQUEST']._serialized_end=2168
-  _globals['_EVICTRESPONSE']._serialized_start=2170
-  _globals['_EVICTRESPONSE']._serialized_end=2272
-  _globals['_REGISTRYRECORD']._serialized_start=2275
-  _globals['_REGISTRYRECORD']._serialized_end=2411
-  _globals['_REGISTRYSTATE']._serialized_start=2413
-  _globals['_REGISTRYSTATE']._serialized_end=2479
-  _globals['_AUTHORIZEAGENTREQUEST']._serialized_start=2482
-  _globals['_AUTHORIZEAGENTREQUEST']._serialized_end=2658
-  _globals['_AUTHORIZEAGENTRESPONSE']._serialized_start=2660
-  _globals['_AUTHORIZEAGENTRESPONSE']._serialized_end=2772
+  _globals['_JOBTRIGGER']._serialized_end=279
+  _globals['_JOBDESCRIPTOR']._serialized_start=282
+  _globals['_JOBDESCRIPTOR']._serialized_end=476
+  _globals['_DEPENDENCY']._serialized_start=478
+  _globals['_DEPENDENCY']._serialized_end=533
+  _globals['_MODULEDESCRIPTOR']._serialized_start=536
+  _globals['_MODULEDESCRIPTOR']._serialized_end=772
+  _globals['_INSTANCE']._serialized_start=774
+  _globals['_INSTANCE']._serialized_end=897
+  _globals['_REGISTERREQUEST']._serialized_start=900
+  _globals['_REGISTERREQUEST']._serialized_end=1060
+  _globals['_REGISTERRESPONSE']._serialized_start=1063
+  _globals['_REGISTERRESPONSE']._serialized_end=1191
+  _globals['_RENEWREQUEST']._serialized_start=1194
+  _globals['_RENEWREQUEST']._serialized_end=1334
+  _globals['_RENEWRESPONSE']._serialized_start=1336
+  _globals['_RENEWRESPONSE']._serialized_end=1461
+  _globals['_UNREGISTERREQUEST']._serialized_start=1463
+  _globals['_UNREGISTERREQUEST']._serialized_end=1569
+  _globals['_UNREGISTERRESPONSE']._serialized_start=1571
+  _globals['_UNREGISTERRESPONSE']._serialized_end=1632
+  _globals['_GETMODULEREQUEST']._serialized_start=1634
+  _globals['_GETMODULEREQUEST']._serialized_end=1740
+  _globals['_GETMODULERESPONSE']._serialized_start=1742
+  _globals['_GETMODULERESPONSE']._serialized_end=1849
+  _globals['_LISTMODULESREQUEST']._serialized_start=1851
+  _globals['_LISTMODULESREQUEST']._serialized_end=1958
+  _globals['_LISTMODULESRESPONSE']._serialized_start=1961
+  _globals['_LISTMODULESRESPONSE']._serialized_end=2102
+  _globals['_EVICTREQUEST']._serialized_start=2104
+  _globals['_EVICTREQUEST']._serialized_end=2184
+  _globals['_EVICTRESPONSE']._serialized_start=2186
+  _globals['_EVICTRESPONSE']._serialized_end=2288
+  _globals['_REGISTRYRECORD']._serialized_start=2291
+  _globals['_REGISTRYRECORD']._serialized_end=2427
+  _globals['_REGISTRYSTATE']._serialized_start=2429
+  _globals['_REGISTRYSTATE']._serialized_end=2495
+  _globals['_AUTHORIZEAGENTREQUEST']._serialized_start=2498
+  _globals['_AUTHORIZEAGENTREQUEST']._serialized_end=2674
+  _globals['_AUTHORIZEAGENTRESPONSE']._serialized_start=2676
+  _globals['_AUTHORIZEAGENTRESPONSE']._serialized_end=2788
 # @@protoc_insertion_point(module_scope)

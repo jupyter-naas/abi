@@ -14,6 +14,9 @@ message JobTrigger {
   string kind = 1;
   string spec = 2;
   string time_zone = 3;
+  // An `event` trigger's filter on the event's fields, as JSON (EventBridge-style,
+  // naas_abi_sdk/event_filter.py); empty: every event.
+  string filter = 4;
 }
 message JobDescriptor {
   string name = 1;

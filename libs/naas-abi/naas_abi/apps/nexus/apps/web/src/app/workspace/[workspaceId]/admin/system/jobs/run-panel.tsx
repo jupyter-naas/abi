@@ -211,6 +211,11 @@ export function RunPanel({
           {run.attempt > 1 && <Badge tone="warn">retried</Badge>}
         </div>
         <Timeline run={run} />
+        {run.status === 'SKIPPED' && (
+          <Notice tone="neutral">
+            <span>Nothing to do{run.skip_reason ? `: ${run.skip_reason}` : ''}</span>
+          </Notice>
+        )}
         {run.error && (
           <Notice tone="danger">
             <AlertTriangle size={14} aria-hidden="true" />

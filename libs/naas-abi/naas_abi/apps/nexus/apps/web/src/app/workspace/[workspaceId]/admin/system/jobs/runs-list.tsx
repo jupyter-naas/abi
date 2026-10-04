@@ -14,6 +14,8 @@ export const STATUS_FILTERS: { id: string; label: string; statuses: string[] }[]
   { id: 'failed', label: 'Failed', statuses: ['FAILED', 'TIMED_OUT'] },
   { id: 'succeeded', label: 'Succeeded', statuses: ['SUCCEEDED'] },
   { id: 'cancelled', label: 'Cancelled', statuses: ['CANCELLED'] },
+  // "All" leaves these out (the API hides SKIPPED without a status filter).
+  { id: 'skipped', label: 'Skipped', statuses: ['SKIPPED'] },
 ];
 
 export function StatusFilter({ value, onChange }: { value: string[]; onChange: (statuses: string[]) => void }) {

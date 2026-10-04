@@ -77,6 +77,13 @@ at-least-once: handlers must be idempotent. One durable pull consumer per job;
 in the provider's document namespace (`job_runs_<hash(project)>`), written with CAS.
 Cancellation is cooperative (`ctx.cancelled`). tests/test_jobs_integration.py needs
 `nats-server` on PATH; run it after touching schedules, consumers or acks.
+A module triggers its own jobs through its bound host (`trigger_job` for sync
+code, `atrigger_job` for async; `JobsNotHosted` outside a running host), with an
+optional `idempotency_key` (`Nats-Msg-Id` dedup). `ctx.skip(reason)` records a
+run as SKIPPED; hosts prune finished runs (`JobRetention`: skipped after 1 h,
+others after 7 days, 1,000 per job). `OnEvent(filter=...)` drops events before a
+trigger is published; `event_filter.py` mirrors core's `EventFilter.matches`,
+change them together.
 
 `telemetry.py` is the one OpenTelemetry implementation (core reuses it): W3C trace
 context in NATS headers, CLIENT spans in `Transport.call`, CONSUMER spans for job
