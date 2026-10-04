@@ -62,12 +62,18 @@ from naas_abi_core.services.vector_store.adapters.vector_store_nats_contract imp
     SUBJECT_PREFIX,
     TRANSFER_PREFIX,
 )
+from naas_abi_core.services.vector_store.adapters.vector_store_nats_codec import (
+    document_to_pb,
+    pb_to_object,
+    pb_to_vector,
+    search_result_to_pb,
+)
+from naas_abi_proto.vector_store.values import decode_object
 from naas_abi_core.services.vector_store.adapters.vector_store_stream_codec import (
     document_frames,
 )
 from naas_abi_core.services.vector_store.IVectorStorePort import (
     IVectorStorePort,
-    SearchResult,
     VectorDocument,
 )
 from naas_abi_core.services.vector_store.ontologies.modules.VectorStoreEventOntology import (
@@ -90,39 +96,6 @@ __all__ = [
 
 _RequestT = TypeVar("_RequestT", bound=Message)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
-
-
-def _vector_to_pb(vector: np.ndarray | None) -> vector_store_pb2.VectorData | None:
-    # Passing None for an `optional` message-typed constructor kwarg leaves
-    # the field unset (HasField stays False) rather than setting it to some
-    # default instance -- verified against the generated bindings, the same
-    # convention relied on throughout this module.
-    if vector is None:
-        return None
-    return vector_store_pb2.VectorData(values=[float(v) for v in vector.tolist()])
-
-
-def _pb_to_vector(pb: vector_store_pb2.VectorData) -> np.ndarray:
-    return np.array(list(pb.values), dtype=np.float32)
-
-
-def _document_to_pb(document: VectorDocument) -> vector_store_pb2.VectorDocument:
-    return vector_store_pb2.VectorDocument(
-        id=document.id,
-        vector=_vector_to_pb(document.vector),
-        metadata=document.metadata,
-        payload=document.payload,
-    )
-
-
-def _search_result_to_pb(result: SearchResult) -> vector_store_pb2.SearchResult:
-    return vector_store_pb2.SearchResult(
-        id=result.id,
-        score=result.score,
-        vector=_vector_to_pb(result.vector),
-        metadata=result.metadata,
-        payload=result.payload,
-    )
 
 
 class VectorStorePrimaryAdapterNATS:
@@ -314,7 +287,7 @@ class VectorStorePrimaryAdapterNATS:
             request.collection_name, include_vectors=request.include_vectors
         ) as documents:
             for frame in document_frames(
-                _document_to_pb(document) for document in documents
+                document_to_pb(document) for document in documents
             ):
                 if not emit(frame):
                     return
@@ -483,11 +456,11 @@ class VectorStorePrimaryAdapterNATS:
         documents = [
             VectorDocument(
                 id=doc.id,
-                vector=_pb_to_vector(doc.vector)
+                vector=pb_to_vector(doc.vector)
                 if doc.HasField("vector")
                 else np.array([]),
-                metadata=dict(doc.metadata),
-                payload=dict(doc.payload) if doc.HasField("payload") else None,
+                metadata=decode_object(doc.metadata),
+                payload=pb_to_object(doc, "payload"),
             )
             for doc in req.documents
         ]
@@ -515,13 +488,13 @@ class VectorStorePrimaryAdapterNATS:
             req.collection_name,
             query_vector,
             k=req.k,
-            filter=dict(req.filter) if req.HasField("filter") else None,
+            filter=pb_to_object(req, "filter"),
             include_vectors=req.include_vectors,
             include_metadata=req.include_metadata,
         )
         return vector_store_pb2.SearchResponse(
             results=vector_store_pb2.SearchResultList(
-                results=[_search_result_to_pb(result) for result in results]
+                results=[search_result_to_pb(result) for result in results]
             )
         )
 
@@ -541,7 +514,7 @@ class VectorStorePrimaryAdapterNATS:
         )
         return vector_store_pb2.GetVectorResponse(
             found=vector_store_pb2.VectorDocumentOrNone(
-                document=_document_to_pb(document) if document is not None else None
+                document=document_to_pb(document) if document is not None else None
             )
         )
 
@@ -559,9 +532,9 @@ class VectorStorePrimaryAdapterNATS:
         self._adapter.update_vector(
             req.collection_name,
             req.vector_id,
-            vector=_pb_to_vector(req.vector) if req.HasField("vector") else None,
-            metadata=dict(req.metadata) if req.HasField("metadata") else None,
-            payload=dict(req.payload) if req.HasField("payload") else None,
+            vector=pb_to_vector(req.vector) if req.HasField("vector") else None,
+            metadata=pb_to_object(req, "metadata"),
+            payload=pb_to_object(req, "payload"),
         )
         self._emit(
             DocumentUpdated(
@@ -622,7 +595,7 @@ class VectorStorePrimaryAdapterNATS:
         )
         return vector_store_pb2.ListVectorsResponse(
             page=vector_store_pb2.VectorPage(
-                documents=[_document_to_pb(document) for document in page.documents],
+                documents=[document_to_pb(document) for document in page.documents],
                 next_cursor=page.next_cursor,
             )
         )

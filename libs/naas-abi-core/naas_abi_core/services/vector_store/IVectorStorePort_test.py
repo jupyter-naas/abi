@@ -349,3 +349,67 @@ class GenericVectorStoreAdapterTest(ABC):
         assert len({d.id for d in first}) == 3
         with adapter.list_vectors_stream(test_collection_name) as stream:
             assert sum(1 for _ in stream) == 1_100
+
+    def test_integers_in_metadata_and_payload_keep_their_type_and_value(
+        self, adapter, test_collection_name, test_dimension, sample_vectors
+    ):
+        # JSON values, exact on every adapter and over NATS (no doubles).
+        big = 2**60 + 1
+        metadata = {"index": 3, "big": big, "nested": {"n": 42, "items": [1, 2.5]}}
+        payload = {"count": 7, "big": big, "flag": True, "none": None}
+        adapter.initialize()
+        adapter.create_collection(test_collection_name, test_dimension)
+        adapter.store_vectors(
+            test_collection_name,
+            [
+                VectorDocument(
+                    id="exact",
+                    vector=sample_vectors[0],
+                    metadata=metadata,
+                    payload=payload,
+                ),
+                VectorDocument(
+                    id="other",
+                    vector=sample_vectors[1],
+                    metadata={"index": 4},
+                    payload=None,
+                ),
+            ],
+        )
+
+        def exact(found_metadata, found_payload):
+            assert found_metadata == metadata and found_payload == payload
+            assert type(found_metadata["index"]) is int
+            assert type(found_metadata["nested"]["n"]) is int
+            assert type(found_payload["big"]) is int
+
+        stored = adapter.get_vector(test_collection_name, "exact")
+        exact(stored.metadata, stored.payload)
+        assert adapter.get_vector(test_collection_name, "other").payload is None
+        page = adapter.list_vectors(test_collection_name, limit=10)
+        listed = {d.id: d for d in page.documents}
+        exact(listed["exact"].metadata, listed["exact"].payload)
+        with adapter.list_vectors_stream(test_collection_name) as stream:
+            streamed = {d.id: d for d in stream}
+        exact(streamed["exact"].metadata, streamed["exact"].payload)
+
+        (hit,) = adapter.search(
+            test_collection_name,
+            sample_vectors[0],
+            k=5,
+            filter={"index": 3},
+            include_metadata=True,
+        )
+        assert hit.id == "exact"
+        exact(hit.metadata, hit.payload)
+
+        adapter.update_vector(
+            test_collection_name,
+            "other",
+            metadata={"index": 5, "big": big},
+            payload={"count": 8},
+        )
+        updated = adapter.get_vector(test_collection_name, "other")
+        assert updated.metadata == {"index": 5, "big": big}
+        assert updated.payload == {"count": 8}
+        assert type(updated.metadata["big"]) is int

@@ -8,10 +8,16 @@ from naas_abi_proto.vector_store.v1 import vector_store_pb2 as pb
 
 from naas_abi_sdk.services._codec import ServiceProxy, decode
 from naas_abi_sdk.services._streams import open_stream
-from naas_abi_sdk.services.models import SearchResult, VectorDocument
+from naas_abi_sdk.services.models import (
+    CollectionInfo,
+    SearchResult,
+    VectorDocument,
+    VectorPage,
+)
 from naas_abi_sdk.transport import RPCError
 
 TRANSFER_PREFIX = "abi.svc.vector_store.v1.transfer"
+MAX_PAGE_SIZE = 10_000  # as the engine's VectorStoreService.list_documents
 
 
 class VectorStoreService(ServiceProxy):
@@ -128,6 +134,32 @@ class VectorStoreService(ServiceProxy):
     ) -> None:
         await self._request(
             "delete_vectors", collection_name=collection_name, vector_ids=document_ids
+        )
+
+    async def list_documents(
+        self,
+        collection_name: str,
+        *,
+        limit: int = 100,
+        cursor: str | None = None,
+        include_vectors: bool = False,
+    ) -> VectorPage:
+        """One page of a collection; follow ``next_cursor`` until it is None.
+        ``list_documents_stream`` reads a whole collection."""
+        if not 1 <= limit <= MAX_PAGE_SIZE:
+            raise ValueError(f"limit must be between 1 and {MAX_PAGE_SIZE}")
+        return await self._request(
+            "list_vectors",
+            collection_name=collection_name,
+            limit=limit,
+            cursor=cursor,
+            include_vectors=include_vectors,
+        )
+
+    async def get_collection_info(self, collection_name: str) -> CollectionInfo:
+        """Dimension and distance metric (None when unknown) and size."""
+        return await self._request(
+            "get_collection_info", collection_name=collection_name
         )
 
     @asynccontextmanager

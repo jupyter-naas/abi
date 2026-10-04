@@ -158,6 +158,13 @@ The core client and the SDK facade (`list_documents_stream`, async) read frames
 as they iterate; without a streaming engine they raise `UNAVAILABLE` (no unary
 fallback). `search` is not streamed: backends return the top `k` whole.
 
+Metadata, payloads and search filters cross the wire as one JSON object each
+(UTF-8 bytes, `naas_abi_proto/vector_store/values.py`, which also lists the fields in
+`JSON_OBJECT_FIELDS`), converted by `adapters/vector_store_nats_codec.py` on both sides and
+by the SDK codec: integers stay exact (2^60+1 included) and nested values stay plain. Do not
+move them back to `google.protobuf.Struct`, which made every number a double and nested
+values Struct objects. NaN and infinities have no JSON form and are refused.
+
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
 The latter uses a local `nats-server` executable without Docker.

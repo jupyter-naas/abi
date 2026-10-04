@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 from naas_abi_proto.vector_store.v1 import vector_store_pb2 as pb
+from naas_abi_proto.vector_store.values import encode_object
 
 from naas_abi_sdk.services import FACTORIES
 from naas_abi_sdk.services.models import VectorDocument
@@ -49,8 +50,8 @@ def _page(*numbers, with_vectors=True):
             pb.VectorDocument(
                 id=f"doc_{n}",
                 vector=pb.VectorData(values=[float(n), 0.5]) if with_vectors else None,
-                metadata={"n": n},
-                payload={"text": f"row {n}"},
+                metadata=encode_object({"n": n}),
+                payload=encode_object({"text": f"row {n}"}),
             )
             for n in numbers
         ]
@@ -73,6 +74,7 @@ def test_list_documents_stream_reads_documents_frame_by_frame():
     assert all(isinstance(d, VectorDocument) for d in documents)
     assert documents[0].vector == [1.0, 0.5]
     assert documents[0].metadata == {"n": 1}
+    assert type(documents[0].metadata["n"]) is int
     assert documents[0].payload == {"text": "row 1"}
     ((subject, operation, metadata),) = transport.opened
     assert subject == "abi.svc.vector_store.v1.transfer.open"

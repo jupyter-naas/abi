@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 from naas_abi_core.engine.nats_auth import issue_service_token
 from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
+from naas_abi_proto.vector_store.values import decode_object, encode_object
 from naas_abi_core.services.vector_store.adapters.primary.vector_store__primary_adapter__NATS import (
     AUTH_HEADER,
     VectorStorePrimaryAdapterNATS,
@@ -344,8 +345,8 @@ def test_store_vectors_round_trips_documents():
     document = vector_store_pb2.VectorDocument(
         id="doc-1",
         vector=vector_store_pb2.VectorData(values=[0.1, 0.2, 0.3]),
-        metadata={"category": "a"},
-        payload={"raw": "x"},
+        metadata=encode_object({"category": "a"}),
+        payload=encode_object({"raw": "x"}),
     )
     request = _FakeRequest(
         data=vector_store_pb2.StoreVectorsRequest(
@@ -404,7 +405,7 @@ def test_search_round_trips_results():
     assert result.id == "doc-1"
     assert result.HasField("vector")
     np.testing.assert_array_almost_equal(result.vector.values, [1.0, 0.0], decimal=5)
-    assert dict(result.metadata) == {"category": "a"}
+    assert decode_object(result.metadata) == {"category": "a"}
 
 
 def test_search_with_filter_is_forwarded_to_adapter():
@@ -431,7 +432,7 @@ def test_search_with_filter_is_forwarded_to_adapter():
             collection_name="docs",
             query_vector=[1.0, 0.0],
             k=5,
-            filter={"category": "b"},
+            filter=encode_object({"category": "b"}),
         ).SerializeToString(),
         headers={AUTH_HEADER: _valid_token()},
         subject="abi.svc.vector_store.v1.search",
@@ -476,7 +477,7 @@ def test_get_vector_found_round_trips_document():
     document = response.found.document
     assert document.id == "doc-1"
     np.testing.assert_array_almost_equal(document.vector.values, [1.0, 2.0], decimal=5)
-    assert dict(document.payload) == {"raw": "x"}
+    assert decode_object(document.payload) == {"raw": "x"}
 
 
 def test_get_vector_missing_returns_found_with_no_document():
@@ -518,7 +519,7 @@ def test_successful_update_vector_returns_no_error():
         data=vector_store_pb2.UpdateVectorRequest(
             collection_name="docs",
             vector_id="doc-1",
-            metadata={"category": "updated"},
+            metadata=encode_object({"category": "updated"}),
         ).SerializeToString(),
         headers={AUTH_HEADER: _valid_token()},
         subject="abi.svc.vector_store.v1.update_vector",
@@ -728,8 +729,8 @@ def test_list_vectors_round_trips_pages_and_cursor():
     assert [d.id for d in second.page.documents] == ["doc-2"]
     assert not second.page.HasField("next_cursor")
     doc = first.page.documents[1]
-    assert dict(doc.metadata) == {"i": 1.0}
-    assert dict(doc.payload) == {"text": "t1"}
+    assert decode_object(doc.metadata) == {"i": 1}  # an int, not 1.0
+    assert decode_object(doc.payload) == {"text": "t1"}
     assert not first.page.documents[0].HasField("payload")
 
 

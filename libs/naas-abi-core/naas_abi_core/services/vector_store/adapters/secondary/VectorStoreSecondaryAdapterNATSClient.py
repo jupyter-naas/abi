@@ -54,6 +54,13 @@ from naas_abi_core.services.vector_store.adapters.vector_store_nats_contract imp
     SUBJECT_PREFIX,
     TRANSFER_PREFIX,
 )
+from naas_abi_core.services.vector_store.adapters.vector_store_nats_codec import (
+    document_to_pb,
+    object_to_pb,
+    pb_to_document,
+    pb_to_search_result,
+    vector_to_pb,
+)
 from naas_abi_core.services.vector_store.adapters.vector_store_stream_codec import (
     decode_frame,
 )
@@ -64,44 +71,6 @@ from naas_abi_core.services.vector_store.IVectorStorePort import (
     VectorDocument,
     VectorPage,
 )
-
-
-def _vector_to_pb(vector: np.ndarray | None) -> vector_store_pb2.VectorData | None:
-    if vector is None:
-        return None
-    return vector_store_pb2.VectorData(values=[float(v) for v in vector.tolist()])
-
-
-def _pb_to_vector(pb: vector_store_pb2.VectorData) -> np.ndarray:
-    return np.array(list(pb.values), dtype=np.float32)
-
-
-def _document_to_pb(document: VectorDocument) -> vector_store_pb2.VectorDocument:
-    return vector_store_pb2.VectorDocument(
-        id=document.id,
-        vector=_vector_to_pb(document.vector),
-        metadata=document.metadata,
-        payload=document.payload,
-    )
-
-
-def _pb_to_document(pb: vector_store_pb2.VectorDocument) -> VectorDocument:
-    return VectorDocument(
-        id=pb.id,
-        vector=_pb_to_vector(pb.vector) if pb.HasField("vector") else np.array([]),
-        metadata=dict(pb.metadata),
-        payload=dict(pb.payload) if pb.HasField("payload") else None,
-    )
-
-
-def _pb_to_search_result(pb: vector_store_pb2.SearchResult) -> SearchResult:
-    return SearchResult(
-        id=pb.id,
-        score=pb.score,
-        vector=_pb_to_vector(pb.vector) if pb.HasField("vector") else None,
-        metadata=dict(pb.metadata) if pb.HasField("metadata") else None,
-        payload=dict(pb.payload) if pb.HasField("payload") else None,
-    )
 
 
 def _raise_for_error(error: common_pb2.CallError) -> None:
@@ -209,7 +178,7 @@ class VectorStoreSecondaryAdapterNATSClient(NatsRPCClient, IVectorStorePort):
         request = vector_store_pb2.StoreVectorsRequest(
             context=self._context(),
             collection_name=collection_name,
-            documents=[_document_to_pb(doc) for doc in documents],
+            documents=[document_to_pb(doc) for doc in documents],
         )
         response = self._call(
             f"{SUBJECT_PREFIX}.store_vectors",
@@ -233,7 +202,7 @@ class VectorStoreSecondaryAdapterNATSClient(NatsRPCClient, IVectorStorePort):
             collection_name=collection_name,
             query_vector=[float(v) for v in query_vector.tolist()],
             k=k,
-            filter=filter,
+            filter=object_to_pb(filter),
             include_vectors=include_vectors,
             include_metadata=include_metadata,
         )
@@ -242,7 +211,7 @@ class VectorStoreSecondaryAdapterNATSClient(NatsRPCClient, IVectorStorePort):
         )
         if response.HasField("error"):
             _raise_for_error(response.error)
-        return [_pb_to_search_result(result) for result in response.results.results]
+        return [pb_to_search_result(result) for result in response.results.results]
 
     def get_vector(
         self, collection_name: str, vector_id: str, include_vector: bool = True
@@ -260,7 +229,7 @@ class VectorStoreSecondaryAdapterNATSClient(NatsRPCClient, IVectorStorePort):
             _raise_for_error(response.error)
         if not response.found.HasField("document"):
             return None
-        return _pb_to_document(response.found.document)
+        return pb_to_document(response.found.document)
 
     def update_vector(
         self,
@@ -274,9 +243,9 @@ class VectorStoreSecondaryAdapterNATSClient(NatsRPCClient, IVectorStorePort):
             context=self._context(),
             collection_name=collection_name,
             vector_id=vector_id,
-            vector=_vector_to_pb(vector),
-            metadata=metadata,
-            payload=payload,
+            vector=vector_to_pb(vector),
+            metadata=object_to_pb(metadata),
+            payload=object_to_pb(payload),
         )
         response = self._call(
             f"{SUBJECT_PREFIX}.update_vector",
@@ -336,7 +305,7 @@ class VectorStoreSecondaryAdapterNATSClient(NatsRPCClient, IVectorStorePort):
             _raise_for_error(response.error)
         page = response.page
         return VectorPage(
-            documents=[_pb_to_document(document) for document in page.documents],
+            documents=[pb_to_document(document) for document in page.documents],
             next_cursor=page.next_cursor if page.HasField("next_cursor") else None,
         )
 
@@ -361,7 +330,7 @@ class VectorStoreSecondaryAdapterNATSClient(NatsRPCClient, IVectorStorePort):
                     "UNAVAILABLE", "No vector_store engine streams listings"
                 )
             yield (
-                _pb_to_document(document)
+                pb_to_document(document)
                 for frame in frames
                 for document in decode_frame(frame)
             )

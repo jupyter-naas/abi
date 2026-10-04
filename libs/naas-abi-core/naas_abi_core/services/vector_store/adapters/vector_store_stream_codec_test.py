@@ -1,4 +1,5 @@
 from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
+from naas_abi_proto.vector_store.values import decode_object, encode_object
 from naas_abi_core.services.vector_store.adapters.vector_store_stream_codec import (
     decode_frame,
     document_frames,
@@ -9,7 +10,7 @@ def _document(n: int) -> vector_store_pb2.VectorDocument:
     return vector_store_pb2.VectorDocument(
         id=f"doc_{n}",
         vector=vector_store_pb2.VectorData(values=[float(n)] * 64),
-        metadata={"n": n},
+        metadata=encode_object({"n": n}),
     )
 
 
@@ -20,6 +21,7 @@ def test_documents_cross_the_wire_in_bounded_frames_in_order():
     decoded = [document for frame in frames for document in decode_frame(frame)]
     assert [d.id for d in decoded] == [f"doc_{n}" for n in range(1_000)]
     assert list(decoded[7].vector.values) == [7.0] * 64
+    assert decode_object(decoded[7].metadata) == {"n": 7}
 
 
 def test_no_documents_make_no_frames():

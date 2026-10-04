@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from naas_abi_sdk.services._codec import ServiceProxy
-from naas_abi_sdk.services.models import EmailAttachment
+from naas_abi_sdk.services.models import EmailAttachment, SentEmail, SentEmailSummary
 
 
 class EmailService(ServiceProxy):
@@ -21,7 +21,7 @@ class EmailService(ServiceProxy):
         attachments: list[EmailAttachment] | None = None,
         to_emails: list[str] | str | None = None,
         cc_emails: list[str] | str | None = None,
-    ) -> None:
+    ) -> str | None:
         return await self._request(
             "send",
             to_email=to_email,
@@ -35,3 +35,14 @@ class EmailService(ServiceProxy):
             to_emails=to_emails,
             cc_emails=cc_emails,
         )
+
+    async def list_sent(
+        self, *, limit: int = 100, before: str | None = None
+    ) -> list[SentEmailSummary]:
+        return await self._request("list_sent", limit=limit, before=before)
+
+    async def get_sent(self, message_id: str) -> SentEmail:
+        return await self._request("get_sent", message_id=message_id)
+
+    async def delete_sent(self, message_id: str) -> None:
+        return await self._request("delete_sent", message_id=message_id)
