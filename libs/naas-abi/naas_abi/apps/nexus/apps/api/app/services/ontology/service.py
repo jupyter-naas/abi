@@ -37,12 +37,17 @@ from naas_abi_core import logger
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from rdflib import Graph
+from rdflib import Graph, Literal
 from rdflib.namespace import DC, DCTERMS, OWL, RDF, RDFS
 from rdflib.query import ResultRow
 from rdflib.term import URIRef
 
 _cache = CacheFactory.CacheFS_find_storage(subpath="nexus/ontology")
+# Resolved BFO buckets, by class IRI. Kept across restarts and cache clears: a
+# class's bucket does not change once known (abi:Person is WHO). Only specific
+# buckets are stored; unresolved and entity-only results are retried each time.
+# Cleared one IRI at a time by OntologyService.refresh_bfo_bucket.
+_bfo_bucket_cache = CacheFactory.CacheFS_find_storage(subpath="nexus/ontology_bfo_buckets")
 
 # In-memory cache for graphs loaded with owl:imports resolved (avoids re-fetching remote ontologies)
 _graph_with_imports_cache: dict[str, Graph] = {}
@@ -379,6 +384,114 @@ def _find_bfo_ancestor(graph: Graph, class_iri: str) -> str | None:
     return None
 
 
+_BFO_BUCKET_ROOT_IRIS = frozenset(re.findall(r"<([^>]+)>", _BFO_BUCKET_ROOTS))
+
+
+def _bfo_bucket(graph: Graph, class_iri: str) -> str | None:
+    """Nearest BFO bucket root of ``class_iri``, walking subClassOf and equivalentClass.
+
+    Breadth-first, so the closest root wins. Equivalences matter: abi:Person is
+    only equivalent to CCO Person, whose chain reaches the root. Returns
+    bfo:entity when that is the only root reached.
+    """
+    queue = [URIRef(class_iri)]
+    seen: set[URIRef] = set()
+    entity: str | None = None
+    while queue:
+        current = queue.pop(0)
+        if current in seen:
+            continue
+        seen.add(current)
+        iri = str(current)
+        if iri in _BFO_BUCKET_ROOT_IRIS:
+            return iri
+        if iri in _ABI_TO_BFO_BUCKET_ROOT:
+            return _ABI_TO_BFO_BUCKET_ROOT[iri]
+        # bfo:entity is a last resort: a more specific bucket on another
+        # branch still wins, but a class that only reaches entity is classified.
+        if _is_bfo_entity_iri(iri) or iri == f"{_ABI_NS}Entity":
+            entity = f"{_BFO_NS}BFO_0000001"
+        for predicate in (RDFS.subClassOf, OWL.equivalentClass):
+            queue.extend(o for o in graph.objects(current, predicate) if isinstance(o, URIRef))
+    return entity
+
+
+_BFO_ENTITY_ROOT = f"{_BFO_NS}BFO_0000001"
+
+
+def _bfo_bucket_cache_key(class_iri: str) -> str:
+    return f"bfo_bucket:{class_iri}"
+
+
+def _local_name(iri: str) -> str:
+    return iri.rsplit("#", 1)[-1].rsplit("/", 1)[-1]
+
+
+class _ImportResolver:
+    """Labels and BFO buckets for any IRI the workspace can reach through imports.
+
+    One import graph per catalog file, built lazily and bounded by the same
+    catalog plus the bundled BFO/CCO, so a term declared only in an import
+    (cco:ont00000468, Office Building) still gets its label and its bucket.
+    """
+
+    def __init__(self, paths: list[str]) -> None:
+        self._paths = paths
+        self._graphs: dict[str, Graph] = {}
+
+    def graph(self, path: str) -> Graph:
+        if path not in self._graphs:
+            self._graphs[path] = load_catalog_import_graph(
+                path, self._paths, _IMPORT_URI_TO_LOCAL, bundled_dir=str(_ABI_IMPORTS_DIR)
+            )
+        return self._graphs[path]
+
+    def _ordered(self, preferred: list[str]) -> list[Graph]:
+        order = [p for p in preferred if p in self._paths]
+        order += [p for p in self._paths if p not in order]
+        return [self.graph(p) for p in order]
+
+    def label(self, iri: str, preferred: list[str]) -> str | None:
+        subject = URIRef(iri)
+        for graph in self._ordered(preferred):
+            labels = [o for o in graph.objects(subject, RDFS.label) if isinstance(o, Literal)]
+            if labels:
+                labels.sort(key=lambda v: (v.language not in ("en", None), str(v)))
+                return str(labels[0])
+        return None
+
+    def bucket(self, iri: str, preferred: list[str]) -> str | None:
+        key = _bfo_bucket_cache_key(iri)
+        try:
+            return str(_bfo_bucket_cache.get(key)["bucket"])
+        except Exception:
+            pass
+        entity = None
+        for graph in self._ordered(preferred):
+            found = _bfo_bucket(graph, iri)
+            if found and found != _BFO_ENTITY_ROOT:
+                _bfo_bucket_cache.set_json(key, {"bucket": found})
+                return found
+            entity = entity or found
+        return entity
+
+
+def _dictionary_links(item: dict[str, Any]) -> list[tuple[dict[str, Any], bool]]:
+    """Every link a dictionary item holds, flagged True when it points at a class."""
+    kind = item["type"]
+    links: list[tuple[dict[str, Any], bool]] = []
+    links += [(link, kind in ("entity", "individual")) for link in item.get("parents") or []]
+    links += [(link, True) for link in item.get("equivalents") or []]
+    links += [(link, True) for link in item.get("systemViewParents") or []]
+    links += [(link, True) for link in item.get("domain") or []]
+    links += [(link, kind == "relationship") for link in item.get("range") or []]
+    links += [(link, False) for link in item.get("inverse") or []]
+    for relation in item.get("relations") or []:
+        links.append((relation["property"], False))
+        links.append((relation["target"], True))
+    return links
+
+
 def _compute_ontology_stats_for_graph(graph: Graph) -> tuple[int, int, int, int, int]:
     """Return (classes, object_properties, data_properties, named_individuals, imports)."""
 
@@ -633,12 +746,39 @@ class OntologyService:
                 logger.exception("Could not read dictionary source %s", file.path)
                 errors.append({"path": file.path, "name": file.name, "message": "Could not read this ontology file."})
         declarations = build_workspace_dictionary(sources, include_ontologies=True)
+        # The dictionary itself never follows imports, but a class's BFO bucket
+        # and the label of a class it points at usually sit beyond them
+        # (abi:Person -> CCO -> BFO; cco:ont00000468 is "Office Building").
+        resolver = _ImportResolver([file.path for file in files])
+        declared = {item["id"] for item in declarations if item["type"] == "entity"}
+        for item in declarations:
+            preferred = [source["path"] for source in item["sources"]]
+            if item["type"] == "entity":
+                item["bfoBucket"] = resolver.bucket(item["id"], preferred)
+            for link, is_class in _dictionary_links(item):
+                if link["id"] in declared:
+                    continue
+                if link["name"] == _local_name(link["id"]):
+                    link["name"] = resolver.label(link["id"], preferred) or link["name"]
+                if is_class:
+                    link["bfoBucket"] = resolver.bucket(link["id"], preferred)
         return {
             "items": [item for item in declarations if item["type"] != "ontology"],
             "ontologies": [item for item in declarations if item["type"] == "ontology"],
             "file_count": len(files), "loaded_file_count": len(sources),
             "errors": errors, "complete": not errors,
         }
+
+    async def refresh_bfo_bucket(
+        self, iri: str, catalog_refs: list[str] | None
+    ) -> str | None:
+        """Forget the cached bucket of ``iri`` and resolve it again."""
+        key = _bfo_bucket_cache_key(iri)
+        if _bfo_bucket_cache.exists(key):
+            _bfo_bucket_cache.delete(key)
+        files = await self.list_ontology_files(catalog_refs=catalog_refs)
+        clear_catalog_import_caches()
+        return _ImportResolver([file.path for file in files]).bucket(iri, [])
 
     async def list_classes(
         self,
@@ -749,10 +889,16 @@ class OntologyService:
                     continue
                 seen.add(ontology)
 
-                # Process schemas are registered alongside vocabulary modules.
-                # Folder organization must not hide their system declarations.
+                # Only ontologies are listed: any ontologies/**/*.ttl declaring
+                # owl:Ontology (checked below), except process slices. Slices are
+                # consolidated into ontologies/modules/<Module>Ontology.ttl, which
+                # carries their classes and process-ledger declarations.
                 catalog_folders = {part.lower() for part in Path(ontology).parts}
-                if "sandbox" in ontology.lower() or not {"modules", "processes"}.intersection(catalog_folders):
+                if (
+                    "sandbox" in ontology.lower()
+                    or "ontologies" not in catalog_folders
+                    or "processes" in catalog_folders
+                ):
                     continue
 
                 parts = ontology.split("/")
@@ -953,7 +1099,7 @@ class OntologyService:
                     # module-only graph: used for all queries (classes, properties, restrictions)
                     graph = _load_ontology_graph(path)
                     # imports graph: used only for BFO ancestor resolution — not for queries
-                    ancestor_graph = load_catalog_import_graph(path, [item.path for item in ontologies], _IMPORT_URI_TO_LOCAL)
+                    ancestor_graph = load_catalog_import_graph(path, [item.path for item in ontologies], _IMPORT_URI_TO_LOCAL, bundled_dir=str(_ABI_IMPORTS_DIR))
 
                     for prefix, namespace in graph.namespaces():
                         p = str(prefix)
@@ -1291,7 +1437,7 @@ class OntologyService:
 
         ontologies = await self.list_ontology_files(catalog_refs=catalog_refs)
         self._resolve_ontology_paths(ontology_path, ontologies)
-        ancestor_graph = load_catalog_import_graph(ontology_path, [item.path for item in ontologies], _IMPORT_URI_TO_LOCAL)
+        ancestor_graph = load_catalog_import_graph(ontology_path, [item.path for item in ontologies], _IMPORT_URI_TO_LOCAL, bundled_dir=str(_ABI_IMPORTS_DIR))
 
         # Build equivalence normalisation map: BFO IRI → canonical ABI IRI
         _cp_equiv: dict[str, str] = {}
@@ -1404,7 +1550,7 @@ class OntologyService:
 
         ontologies = await self.list_ontology_files(catalog_refs=catalog_refs)
         self._resolve_ontology_paths(ontology_path, ontologies)
-        ancestor_graph = load_catalog_import_graph(ontology_path, [item.path for item in ontologies], _IMPORT_URI_TO_LOCAL)
+        ancestor_graph = load_catalog_import_graph(ontology_path, [item.path for item in ontologies], _IMPORT_URI_TO_LOCAL, bundled_dir=str(_ABI_IMPORTS_DIR))
 
         # 1. Collect every (sub, super) edge in the upward closure with one SPARQL query.
         iris_values = " ".join(f"<{iri}>" for iri in class_iris)

@@ -26,6 +26,7 @@ import {
   AlertCircle,
   ArrowRight,
   Focus,
+  Palette,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOntologyStore } from '@/stores/ontology';
@@ -294,6 +295,13 @@ function OntologyNetworkView({
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
   /** Per-node visibility overrides — nodes in this set are hidden from the graph. */
   const [hiddenNodeIds, setHiddenNodeIds] = useState<Set<string>>(new Set());
+  // The BFO legend (bucket filters) is opt-in. Hiding it also drops its filters,
+  // so nothing stays filtered without a visible control to undo it.
+  const [showBfoLegend, setShowBfoLegend] = useState(false);
+  const toggleBfoLegend = () => {
+    if (showBfoLegend) { setActiveBuckets(new Set()); setHiddenNodeIds(new Set()); }
+    setShowBfoLegend(!showBfoLegend);
+  };
   const isAllOntologiesOverview = !ontologyPath;
 
   /** Persist vis-network zoom/pan per relation / SubclassOf mode. */
@@ -861,6 +869,20 @@ function OntologyNetworkView({
                   <ArrowRight size={12} />
                   Object Properties
                 </button>
+                <button
+                  onClick={toggleBfoLegend}
+                  aria-pressed={showBfoLegend}
+                  title="Show or hide the BFO 7 buckets legend and its filters"
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs shadow-sm',
+                    showBfoLegend
+                      ? 'border-foreground bg-foreground text-background'
+                      : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Palette size={12} />
+                  BFO legend
+                </button>
               </>
             )}
             {(graphSearchQuery.trim() || activeBuckets.size > 0 || focusedNodeId || hiddenNodeIds.size > 0) && (
@@ -874,7 +896,7 @@ function OntologyNetworkView({
             )}
           </div>
 
-          {!isAllOntologiesOverview && (
+          {!isAllOntologiesOverview && showBfoLegend && (
             <BFOBucketFilters
               activeBuckets={activeBuckets}
               effectiveActiveBuckets={effectiveActiveBuckets}

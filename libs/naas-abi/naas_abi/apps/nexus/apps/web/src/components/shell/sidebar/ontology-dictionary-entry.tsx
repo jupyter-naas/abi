@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useOntologyDictionaryStore } from '@/stores/ontology-dictionary';
 import { useOntologyIconsStore } from '@/stores/ontology-icons';
@@ -16,7 +16,10 @@ import { classProperties } from '@/lib/ontology-class-properties';
 import type { DictionaryTerm } from '@/lib/ontology-dictionary-tree';
 import { ontologyBrowser, termRoute } from '@/lib/ontology-navigation';
 import { dictionaryKindLabel } from '@/lib/ontology-dictionary-tree';
-import { BookOpen, FileCode } from 'lucide-react';
+import { BookOpen, FileCode, RefreshCw } from 'lucide-react';
+import { BFO_BUCKET_BY_TYPE, BFO_BUCKET_BY_URI } from '@/lib/bfo-buckets';
+import { bfoBucketResolver } from '@/lib/detail-network';
+import { cn } from '@/lib/utils';
 
 export function OntologyDictionaryEntry({ context }: { context?: { workspaceId: string; termId: string; basePath: string } } = {}) {
   const router = useRouter();
@@ -26,7 +29,10 @@ export function OntologyDictionaryEntry({ context }: { context?: { workspaceId: 
   const icons = useOntologyIconsStore();
   useEffect(() => { if (workspaceId) void icons.load(workspaceId); }, [workspaceId, icons.load]);
   const params = context ? new URLSearchParams({ browser: 'dictionary', view: 'classes', term: context.termId, termType: 'entity' }) : routeParams;
-  const { terms, loading, error, workspaceId: loadedWorkspace, errors } = useOntologyDictionaryStore();
+  const { terms, loading, error, workspaceId: loadedWorkspace, errors, refreshBfoBucket } = useOntologyDictionaryStore();
+  const resolveBucket = useMemo(() => bfoBucketResolver(terms, { entityFallback: true }), [terms]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const scope = ontologyBrowser(params?.toString() || '') === 'dictionary' ? null : params?.get('ontology');
   const term = loadedWorkspace === workspaceId ? terms.find(item => item.id === params?.get('term') && item.type === params?.get('termType') && (!scope || item.sources?.some(source => source.path === scope))) : undefined;
   const linkedTerm = (id: string, name: string, kind?: DictionaryTerm['type']) => {
@@ -57,6 +63,14 @@ export function OntologyDictionaryEntry({ context }: { context?: { workspaceId: 
   const override = target && icons.workspaceId === workspaceId ? icons.icons[iconTargetKey(target)] : undefined;
   const imageValue = !override ? owlImage : isMaterialIconValue(override) ? undefined : override;
   const missing = <span className="text-muted-foreground">Not specified</span>;
+  const bucket = BFO_BUCKET_BY_URI[resolveBucket(term.id) || ''] || BFO_BUCKET_BY_TYPE.Unknown;
+  const refreshBucket = async () => {
+    if (!workspaceId) return;
+    setRefreshing(true); setRefreshError(null);
+    try { await refreshBfoBucket(workspaceId, term.id); }
+    catch (err) { setRefreshError(err instanceof Error ? err.message : 'Could not refresh the BFO bucket.'); }
+    finally { setRefreshing(false); }
+  };
   const parentLabel = term.type === 'entity' ? 'Subclass of' : term.type === 'individual' ? 'Instance of' : 'Subproperty of';
   const renderLinks = (links: Array<{id: string; name: string}> | undefined, kind?: DictionaryTerm['type']) => links?.length
     ? <div className="flex flex-wrap gap-x-3 gap-y-1">{links.map(link => <span key={link.id}>{linkedTerm(link.id, link.name, kind)}</span>)}</div> : missing;
@@ -76,6 +90,15 @@ export function OntologyDictionaryEntry({ context }: { context?: { workspaceId: 
     <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{term.id}</p>
     <p className="mt-1 text-xs text-muted-foreground">{dictionaryKindLabel(term.type)}</p>
     <dl className="mt-5 divide-y rounded-md border text-sm">
+      {term.type === 'entity' && <div className="grid gap-2 px-4 py-2.5 sm:grid-cols-[128px_minmax(0,1fr)]"><dt className="text-xs leading-6 text-muted-foreground">BFO 7 buckets</dt><dd className="flex items-center gap-2 leading-6">
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full border" style={{ backgroundColor: bucket.color, borderColor: bucket.border }} />
+        <span title={bucket.uri || bucket.description}>{bucket.type === 'Unknown' || bucket.type === 'Entity' ? bucket.type : `${bucket.label} · ${bucket.type}`}</span>
+        <button type="button" onClick={() => void refreshBucket()} disabled={refreshing || !workspaceId}
+          aria-label="Clear the cached BFO bucket and resolve it again" title="Clear the cached BFO bucket and resolve it again"
+          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50">
+          <RefreshCw size={13} className={cn(refreshing && 'animate-spin')} /></button>
+        {refreshError && <span role="alert" className="text-xs text-destructive">{refreshError}</span>}
+      </dd></div>}
       <div className="grid gap-2 px-4 py-2.5 sm:grid-cols-[128px_minmax(0,1fr)]"><dt className="text-xs leading-6 text-muted-foreground">{parentLabel}</dt><dd className="leading-6">{renderLinks(term.parents, term.type === 'individual' ? 'entity' : term.type)}</dd></div>
       <div className="grid gap-2 px-4 py-2.5 sm:grid-cols-[128px_minmax(0,1fr)]"><dt className="text-xs leading-6 text-muted-foreground">Definition</dt><dd className="leading-6">
         {term.description || missing}

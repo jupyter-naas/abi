@@ -1,4 +1,8 @@
-export type DictionaryLink = { id: string; name: string; sources?: Array<{path: string; name: string; moduleName: string}> };
+export type DictionaryLink = {
+  id: string; name: string; sources?: Array<{path: string; name: string; moduleName: string}>;
+  /** BFO bucket of a referenced class not declared in the workspace, resolved server-side through imports. */
+  bfoBucket?: string | null;
+};
 
 export type DictionaryTerm = {
   id: string;
@@ -10,6 +14,8 @@ export type DictionaryTerm = {
   metadata?: Record<'label' | 'definition' | 'example', string[]>;
   parents?: DictionaryLink[];
   equivalents?: DictionaryLink[];
+  /** Nearest BFO bucket root, resolved server-side through the file's imports (BFO/CCO). */
+  bfoBucket?: string | null;
   systemViewKind?: string | null;
   systemViewParents?: DictionaryLink[];
   /** Source ledger wording and business groupings, independent of formal BFO types. */

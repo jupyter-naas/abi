@@ -1,7 +1,7 @@
 import type { GraphEdge, GraphNode } from '@/stores/knowledge-graph';
 import { BFO_BUCKET_BY_URI } from './bfo-buckets';
 import { ontologyConnections, termConnections, termKey, type TermRef } from './ontology-context';
-import type { DictionaryTerm } from './ontology-dictionary-tree';
+import type { DictionaryLink, DictionaryTerm } from './ontology-dictionary-tree';
 
 export type InstanceRelation = {
   role: 'domain' | 'range';
@@ -80,22 +80,54 @@ export function instanceEgoGraph(
  * classes up its parents, so the network can place it in its BFO zone.
  */
 export function termBfoBucketIri(id: string, terms: DictionaryTerm[]): string | undefined {
+  return bfoBucketResolver(terms)(id);
+}
+
+/**
+ * Server-resolved buckets by IRI: each declared term's own, plus those the
+ * server attached to links pointing at classes outside the workspace files
+ * (a CCO parent, a restriction target). A declared term's own value wins.
+ */
+export function serverBfoBuckets(terms: DictionaryTerm[]): Map<string, string> {
+  const buckets = new Map<string, string>();
+  const links = (term: DictionaryTerm) => [
+    ...(term.parents || []), ...(term.equivalents || []), ...(term.domain || []), ...(term.range || []),
+    ...(term.relations || []).map(relation => relation.target as DictionaryLink),
+  ];
+  for (const term of terms) for (const link of links(term)) if (link.bfoBucket) buckets.set(link.id, link.bfoBucket);
+  for (const term of terms) if (term.bfoBucket) buckets.set(term.id, term.bfoBucket);
+  return buckets;
+}
+
+/** Build the parent/bucket indexes once, then classify any number of terms. */
+export function bfoBucketResolver(
+  terms: DictionaryTerm[],
+  { entityFallback = false }: { entityFallback?: boolean } = {},
+): (id: string) => string | undefined {
   const parentsOf = new Map<string, string[]>();
+  const resolvedOf = serverBfoBuckets(terms);
   for (const term of terms) {
     if (term.type !== 'entity' && term.type !== 'individual') continue;
     parentsOf.set(term.id, [...(parentsOf.get(term.id) || []), ...(term.parents || []).map(parent => parent.id)]);
   }
-  const queue = [id];
-  const seen = new Set(queue);
-  for (let i = 0; i < queue.length; i++) {
-    const current = queue[i];
-    const bucket = BFO_BUCKET_BY_URI[current];
-    if (bucket && bucket.type !== 'Entity') return bucket.uri;
-    for (const parent of parentsOf.get(current) || []) {
-      if (!seen.has(parent)) { seen.add(parent); queue.push(parent); }
+  return (id: string) => {
+    const queue = [id];
+    const seen = new Set(queue);
+    let entity: string | undefined;
+    for (let i = 0; i < queue.length; i++) {
+      const current = queue[i];
+      // Resolved server-side through imports the dictionary does not carry.
+      for (const bucket of [BFO_BUCKET_BY_URI[current], BFO_BUCKET_BY_URI[resolvedOf.get(current) || '']]) {
+        if (!bucket) continue;
+        if (bucket.type !== 'Entity') return bucket.uri;
+        entity = bucket.uri;
+      }
+      for (const parent of parentsOf.get(current) || []) {
+        if (!seen.has(parent)) { seen.add(parent); queue.push(parent); }
+      }
     }
-  }
-  return undefined;
+    return entityFallback ? entity : undefined;
+  };
 }
 
 /** Focused term plus immediate incoming and outgoing ontology connections. */
