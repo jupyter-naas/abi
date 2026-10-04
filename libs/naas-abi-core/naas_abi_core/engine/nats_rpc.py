@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -200,6 +200,19 @@ async def _respond_overflow(request: Request, payload: bytes) -> bool:
         },
     )
     return True
+
+
+def upload_chunks(pieces: Iterable[bytes], size: int) -> Iterator[bytes]:
+    """``pieces`` regrouped into chunks of exactly ``size`` bytes (the last one
+    shorter), read lazily: memory holds one chunk."""
+    buffer = bytearray()
+    for piece in pieces:
+        buffer.extend(piece)
+        while len(buffer) >= size:
+            yield bytes(buffer[:size])
+            del buffer[:size]
+    if buffer:
+        yield bytes(buffer)
 
 
 def _stream_frames(
@@ -566,10 +579,13 @@ class NatsRPCClient:
         operation: str,
         metadata: bytes,
         raise_error: Callable[[Any], None],
+        upload: Iterable[bytes] | None = None,
     ) -> Iterator[Iterator[bytes] | None]:
         """Yield the frames of one stream, or ``None`` when no host answers the
-        open (an engine without it: use the unary call). ``raise_error`` raises
-        the domain's exception for an error reply. Leaving closes the session."""
+        open (an engine without it: use the unary call). ``upload`` is sent
+        first, read lazily in negotiated chunks, then the stream starts.
+        ``raise_error`` raises the domain's exception for an error reply.
+        Leaving closes the session, which discards an unfinished upload."""
         # One span for the whole stream (totals as attributes), not one per frame.
         with transfer_span(prefix, operation) as trace:
             nc = self._run_coro(self._ensure_connection_async())
@@ -600,6 +616,15 @@ class NatsRPCClient:
                 yield None
                 return
             try:
+                for sequence, chunk in enumerate(
+                    upload_chunks(upload or (), opened.chunk_bytes)
+                ):
+                    exchange(
+                        transfer_pb.WriteRequest(
+                            id=opened.id, sequence=sequence, data=chunk
+                        ),
+                        transfer_pb.WriteResponse,
+                    )
                 exchange(
                     transfer_pb.StartRequest(id=opened.id), transfer_pb.StartResponse
                 )

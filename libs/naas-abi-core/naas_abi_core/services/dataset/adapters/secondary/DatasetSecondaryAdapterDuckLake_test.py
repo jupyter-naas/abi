@@ -27,6 +27,28 @@ class TestDatasetSecondaryAdapterDuckLake(DatasetSecondaryAdapterContract):
             retry_base_delay_seconds=0.01,
         )
 
+    def test_write_stream_retries_replay_staged_rows_not_the_iterator(
+        self, adapter, monkeypatch
+    ):
+        import duckdb
+
+        adapter.create(self._spec())
+        current_snapshot = adapter._current_snapshot
+        conflicts = []
+
+        def conflict_once(con):
+            if not conflicts:
+                conflicts.append(1)
+                raise duckdb.TransactionException("transaction conflict")
+            return current_snapshot(con)
+
+        monkeypatch.setattr(adapter, "_current_snapshot", conflict_once)
+
+        adapter.write_stream("github_commits", self._commits(500), namespace="acme")
+
+        assert conflicts == [1]  # the transaction ran twice
+        assert self._totals(adapter) == (500, sum(range(500)))
+
     def test_reserved_column_names_are_quoted(self, adapter):
         spec = DatasetSpec(
             name="time_entries",

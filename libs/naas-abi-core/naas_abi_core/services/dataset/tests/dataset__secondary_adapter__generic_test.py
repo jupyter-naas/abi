@@ -547,3 +547,111 @@ class DatasetSecondaryAdapterContract(ABC):
             adapter.write("ratios", [{"ratio": value}], namespace="acme")
 
         assert adapter.query("SELECT * FROM ratios", namespace="acme").rows == []
+
+    # ------------------------------------------------------------------
+    # write_stream: an iterator of rows, committed once.
+    # ------------------------------------------------------------------
+
+    def _commits(self, count: int, start: int = 0):
+        for n in range(start, start + count):
+            yield {
+                "sha": f"c{n:06d}",
+                "project_id": "p1",
+                "author_date": "2026-08-02",
+                "additions": n,
+                "deletions": 1,
+            }
+
+    def _totals(self, adapter: IDatasetPort) -> tuple[int, int]:
+        (row,) = adapter.query(
+            "SELECT count(*) AS n, coalesce(sum(additions), 0) AS total "
+            "FROM github_commits",
+            namespace="acme",
+        ).rows
+        return row["n"], row["total"]
+
+    def test_write_stream_commits_an_iterator_once(self, adapter: IDatasetPort):
+        adapter.create(self._spec())
+        before = len(adapter.list_snapshots())
+
+        info = adapter.write_stream(
+            "github_commits", self._commits(25_000), namespace="acme"
+        )
+
+        assert self._totals(adapter) == (25_000, sum(range(25_000)))
+        assert len(adapter.list_snapshots()) == before + 1
+        assert (
+            info.snapshot_id
+            == adapter.describe("github_commits", namespace="acme").snapshot_id
+        )
+
+    def test_write_stream_replaces_and_upserts(self, adapter: IDatasetPort):
+        adapter.create(self._spec())
+        adapter.write_stream("github_commits", self._commits(10), namespace="acme")
+
+        adapter.write_stream(
+            "github_commits", self._commits(5, start=8), namespace="acme", mode="upsert"
+        )
+        assert self._totals(adapter) == (13, sum(range(13)))
+
+        adapter.write_stream(
+            "github_commits", self._commits(3), namespace="acme", mode="replace"
+        )
+        assert self._totals(adapter) == (3, 3)
+
+        adapter.write_stream(
+            "github_commits", iter(()), namespace="acme", mode="replace"
+        )
+        assert self._totals(adapter) == (0, 0)
+
+    @pytest.mark.parametrize(
+        ("bad", "match"),
+        [
+            ({"sha": "c000010"}, "duplicate primary key"),  # earlier in the stream
+            ({"sha": None}, "null primary key"),
+            ({"additions": float("nan")}, "finite"),
+            ({"extra": 1}, "unknown columns"),
+        ],
+    )
+    def test_write_stream_is_all_or_nothing(
+        self, adapter: IDatasetPort, bad: dict, match: str
+    ):
+        adapter.create(self._spec())
+        adapter.write("github_commits", list(self._commits(2)), namespace="acme")
+
+        def rows():
+            yield from self._commits(3_000, start=10)
+            yield {**next(self._commits(1, start=99_999)), **bad}
+
+        with pytest.raises(DatasetSchemaError, match=match):
+            adapter.write_stream(
+                "github_commits", rows(), namespace="acme", mode="upsert"
+            )
+
+        assert self._totals(adapter) == (2, 1)
+
+    def test_write_stream_stops_when_the_iterator_fails(self, adapter: IDatasetPort):
+        adapter.create(self._spec())
+
+        def rows():
+            yield from self._commits(100)
+            raise RuntimeError("source went away")
+
+        with pytest.raises(Exception, match="source went away"):
+            adapter.write_stream("github_commits", rows(), namespace="acme")
+
+        assert self._totals(adapter) == (0, 0)
+
+    def test_write_stream_checks_the_snapshot(self, adapter: IDatasetPort):
+        created = adapter.create(self._spec())
+        adapter.write("github_commits", list(self._commits(1)), namespace="acme")
+
+        with pytest.raises(DatasetSnapshotConflictError):
+            adapter.write_stream(
+                "github_commits",
+                self._commits(5, start=1),
+                namespace="acme",
+                snapshot_id=created.snapshot_id,
+            )
+
+        assert self._totals(adapter) == (1, 0)

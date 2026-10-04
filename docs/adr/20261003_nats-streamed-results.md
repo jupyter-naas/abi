@@ -75,6 +75,11 @@ queries, and document `find` pages.
   `query`, a `QueryResult` with the columns, then `QueryResult`s with rows only
   (one JSON object per row, as the unary reply: see the dataset AGENTS.md).
   Core client and SDK facade, with the unary fallback.
-- Not yet: streamed dataset writes (an iterator of rows committed once; large
-  write batches go through RPC overflow meanwhile), vector listing, event and
-  activity queries, byte-bounded document `find` pages.
+- Dataset writes: `write_stream(name, rows, ...)` takes an iterator of rows,
+  commits them in one snapshot (all or none). The client uploads one JSON
+  object per line on the same transfer prefix, operation `write`; the transfer
+  host spools the upload to disk and the primary feeds it line by line to the
+  adapter; the one reply frame is the `WriteResponse`. DuckLake stages the rows
+  in batches to a local Parquet file, so transaction retries replay the file.
+- Not yet: vector listing, event and activity queries, byte-bounded document
+  `find` pages.

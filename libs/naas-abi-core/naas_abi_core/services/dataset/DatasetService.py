@@ -3,7 +3,7 @@ from __future__ import annotations
 # ``list`` is a port method name, so it shadows the builtin for annotations
 # evaluated in the class bodies below; use ``builtins.list`` there.
 import builtins
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from typing import Any
 
@@ -62,6 +62,23 @@ class DatasetService(ServiceBase, IDatasetPort):
         snapshot_id: int | None = None,
     ) -> DatasetInfo:
         return self.__adapter.write(
+            name,
+            rows,
+            namespace=namespace,
+            mode=mode,
+            snapshot_id=snapshot_id,
+        )
+
+    def write_stream(
+        self,
+        name: str,
+        rows: Iterable[dict[str, Any]],
+        *,
+        namespace: str = "default",
+        mode: WriteMode = "append",
+        snapshot_id: int | None = None,
+    ) -> DatasetInfo:
+        return self.__adapter.write_stream(
             name,
             rows,
             namespace=namespace,

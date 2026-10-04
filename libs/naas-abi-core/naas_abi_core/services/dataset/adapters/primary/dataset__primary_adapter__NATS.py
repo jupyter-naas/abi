@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
 from functools import partial
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import nats
 import nats.micro
@@ -48,6 +48,7 @@ from naas_abi_core.services.dataset.adapters.dataset_nats_contract import (
     TRANSFER_PREFIX,
 )
 from naas_abi_core.services.dataset.adapters.dataset_row_codec import (
+    decode_lines,
     decode_rows,
     query_result_to_pb,
 )
@@ -174,6 +175,16 @@ def _dataset_snapshot_info_to_pb(
     return pb
 
 
+# The port's exceptions, sent to callers as typed ``DatasetError``s.
+DOMAIN_ERRORS = (
+    DatasetNotFoundError,
+    DatasetAlreadyExistsError,
+    DatasetSnapshotNotFoundError,
+    DatasetSnapshotConflictError,
+    DatasetSchemaError,
+)
+
+
 class DatasetPrimaryAdapterNATS:
     """Serves datasets over NATS RPC (request/reply).
 
@@ -209,7 +220,7 @@ class DatasetPrimaryAdapterNATS:
             TRANSFER_PREFIX,
             jwt_secret,
             self._transfer_frames,
-            operations=("query",),
+            operations=("query", "write"),
             chunk_bytes=1024 * 1024,
             error_mapper=self._transfer_error,
         )
@@ -300,10 +311,38 @@ class DatasetPrimaryAdapterNATS:
     # ------------------------------------------------------------------
 
     def _transfer_frames(
-        self, operation: str, metadata: bytes, source: object
+        self, operation: str, metadata: bytes, source: Any
     ) -> AsyncIterator[bytes]:
+        if operation == "write":
+            write = dataset_pb2.WriteRequest.FromString(metadata)
+            return thread_frames(partial(self._produce_write, write, source))
         request = dataset_pb2.QueryRequest.FromString(metadata)
         return thread_frames(partial(self._produce_query, request))
+
+    def _produce_write(
+        self,
+        request: dataset_pb2.WriteRequest,
+        source: Any,
+        emit: Callable[[bytes], bool],
+    ) -> None:
+        """Commit the uploaded rows (one JSON object per line, spooled to disk
+        by the transfer host) with ``write_stream``; the one frame is the
+        ``WriteResponse``, errors included, as the unary reply."""
+        rows = decode_lines(source) if source is not None else iter(())
+        try:
+            info = self._adapter.write_stream(
+                request.name,
+                rows,
+                namespace=request.namespace,
+                mode=_PB_TO_WRITE_MODE.get(request.mode, "append"),
+                snapshot_id=(
+                    request.snapshot_id if request.HasField("snapshot_id") else None
+                ),
+            )
+            response = dataset_pb2.WriteResponse(info=_dataset_info_to_pb(info))
+        except DOMAIN_ERRORS as exc:
+            response = dataset_pb2.WriteResponse(error=self._domain_error(exc))
+        emit(response.SerializeToString())
 
     def _produce_query(
         self, request: dataset_pb2.QueryRequest, emit: Callable[[bytes], bool]
@@ -376,69 +415,8 @@ class DatasetPrimaryAdapterNATS:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
             response = await self._dispatch.call(call, parsed_request)
-        except DatasetNotFoundError as exc:
-            await self._respond_error(
-                request,
-                response_cls,
-                self._error(
-                    "DATASET_NOT_FOUND",
-                    str(exc),
-                    retryable=False,
-                    not_found=dataset_pb2.DatasetNotFoundDetail(
-                        name=exc.name, namespace=exc.namespace
-                    ),
-                ),
-            )
-            return
-        except DatasetAlreadyExistsError as exc:
-            await self._respond_error(
-                request,
-                response_cls,
-                self._error(
-                    "DATASET_ALREADY_EXISTS",
-                    str(exc),
-                    retryable=False,
-                    already_exists=dataset_pb2.DatasetAlreadyExistsDetail(
-                        name=exc.name, namespace=exc.namespace
-                    ),
-                ),
-            )
-            return
-        except DatasetSnapshotNotFoundError as exc:
-            await self._respond_error(
-                request,
-                response_cls,
-                self._error(
-                    "DATASET_SNAPSHOT_NOT_FOUND",
-                    str(exc),
-                    retryable=False,
-                    snapshot_not_found=dataset_pb2.DatasetSnapshotNotFoundDetail(
-                        snapshot_id=exc.snapshot_id
-                    ),
-                ),
-            )
-            return
-        except DatasetSnapshotConflictError as exc:
-            await self._respond_error(
-                request,
-                response_cls,
-                self._error(
-                    "DATASET_SNAPSHOT_CONFLICT",
-                    str(exc),
-                    retryable=False,
-                    snapshot_conflict=dataset_pb2.DatasetSnapshotConflictDetail(
-                        expected_snapshot_id=exc.expected_snapshot_id,
-                        current_snapshot_id=exc.current_snapshot_id,
-                    ),
-                ),
-            )
-            return
-        except DatasetSchemaError as exc:
-            await self._respond_error(
-                request,
-                response_cls,
-                self._error("DATASET_SCHEMA_ERROR", str(exc), retryable=False),
-            )
+        except DOMAIN_ERRORS as exc:
+            await self._respond_error(request, response_cls, self._domain_error(exc))
             return
         except Exception:  # noqa: BLE001 - a handler must never crash the service
             logger.opt(exception=True).error(
@@ -463,6 +441,48 @@ class DatasetPrimaryAdapterNATS:
         except InvalidServiceTokenError:
             return False
         return True
+
+    @classmethod
+    def _domain_error(cls, exc: Exception) -> dataset_pb2.DatasetError:
+        """The wire error for one of the port's exceptions (``DOMAIN_ERRORS``)."""
+        if isinstance(exc, DatasetNotFoundError):
+            return cls._error(
+                "DATASET_NOT_FOUND",
+                str(exc),
+                retryable=False,
+                not_found=dataset_pb2.DatasetNotFoundDetail(
+                    name=exc.name, namespace=exc.namespace
+                ),
+            )
+        if isinstance(exc, DatasetAlreadyExistsError):
+            return cls._error(
+                "DATASET_ALREADY_EXISTS",
+                str(exc),
+                retryable=False,
+                already_exists=dataset_pb2.DatasetAlreadyExistsDetail(
+                    name=exc.name, namespace=exc.namespace
+                ),
+            )
+        if isinstance(exc, DatasetSnapshotNotFoundError):
+            return cls._error(
+                "DATASET_SNAPSHOT_NOT_FOUND",
+                str(exc),
+                retryable=False,
+                snapshot_not_found=dataset_pb2.DatasetSnapshotNotFoundDetail(
+                    snapshot_id=exc.snapshot_id
+                ),
+            )
+        if isinstance(exc, DatasetSnapshotConflictError):
+            return cls._error(
+                "DATASET_SNAPSHOT_CONFLICT",
+                str(exc),
+                retryable=False,
+                snapshot_conflict=dataset_pb2.DatasetSnapshotConflictDetail(
+                    expected_snapshot_id=exc.expected_snapshot_id,
+                    current_snapshot_id=exc.current_snapshot_id,
+                ),
+            )
+        return cls._error("DATASET_SCHEMA_ERROR", str(exc), retryable=False)
 
     @staticmethod
     def _error(

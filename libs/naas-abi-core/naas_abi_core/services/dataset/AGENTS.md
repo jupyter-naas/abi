@@ -213,6 +213,24 @@ cursor; over NATS the primary hosts `transfer/v1` sessions on
 client and SDK facade fetch frames as they iterate (unary `query` against an
 older engine). Frames carry JSON rows, like the unary reply (below).
 
+## Streamed writes
+
+`write_stream(name, rows, namespace, mode, snapshot_id)` takes an iterator of
+rows, read once, and commits them in one snapshot: all or none. The port's
+default collects them and calls `write`. DuckLake validates them `STAGE_ROWS`
+(10,000) at a time (null upsert keys included) and writes them as JSON lines to
+a temporary directory; DuckDB's JSON reader types them into a Parquet file
+(duplicate upsert keys are found there in SQL, so no key set in memory), and
+one transaction commits from that file; a retry replays the file, never the
+iterator. Live, 300k rows over NATS: 4.1 s with flat client memory (inserting
+row by row took 57 s). Over NATS the client uploads one JSON object per line
+on `abi.svc.dataset.v1.transfer` operation `write` (metadata: a `WriteRequest`
+without rows); the transfer host spools the upload to disk, the primary reads it
+line by line into `write_stream`, and the one reply frame is the
+`WriteResponse`, domain errors included. An error while the caller's iterator
+is read discards the upload before anything is written. The SDK facade's
+`write_stream` takes sync or async iterators.
+
 ## NATS RPC adapters
 
 `adapters/primary/dataset__primary_adapter__NATS.py` exposes the service's

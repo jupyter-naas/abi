@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterable, AsyncIterator, Iterable
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Any
 
@@ -15,16 +15,25 @@ from naas_abi_sdk.transport import RPCError
 
 @asynccontextmanager
 async def open_stream(
-    client: Any, prefix: str, operation: str, metadata: bytes
+    client: Any,
+    prefix: str,
+    operation: str,
+    metadata: bytes,
+    upload: Iterable[bytes] | AsyncIterable[bytes] | None = None,
 ) -> AsyncIterator[AsyncIterator[bytes] | None]:
     """Yield the stream's frames, fetched as they are iterated, or ``None`` when
     no host answers the open (an engine without it: use the unary call).
-    Error replies raise the domain's exception; leaving closes the session."""
+    ``upload`` is sent first, read lazily in negotiated chunks. Error replies
+    raise the domain's exception; leaving closes the session, which discards
+    an unfinished upload."""
     async with AsyncExitStack() as stack:
         try:
             transfer = await stack.enter_async_context(
                 open_transfer(client._transport, prefix, operation, metadata)
             )
+            if upload is not None:
+                async for chunk in _chunks(upload, transfer.chunk_bytes):
+                    await transfer.write(chunk)
             await transfer.start()
         except NoRespondersError:
             yield None
@@ -32,6 +41,31 @@ async def open_stream(
         except RPCError as exc:
             raise domain_error(exc) from exc
         yield _mapping_errors(transfer.frames())
+
+
+async def _chunks(
+    pieces: Iterable[bytes] | AsyncIterable[bytes], size: int
+) -> AsyncIterator[bytes]:
+    """``pieces`` regrouped into chunks of ``size`` bytes; memory holds one."""
+    buffer = bytearray()
+
+    async def pending() -> AsyncIterator[bytes]:
+        while len(buffer) >= size:
+            yield bytes(buffer[:size])
+            del buffer[:size]
+
+    if isinstance(pieces, AsyncIterable):
+        async for piece in pieces:
+            buffer.extend(piece)
+            async for chunk in pending():
+                yield chunk
+    else:
+        for piece in pieces:
+            buffer.extend(piece)
+            async for chunk in pending():
+                yield chunk
+    if buffer:
+        yield bytes(buffer)
 
 
 async def _mapping_errors(frames: AsyncIterator[bytes]) -> AsyncIterator[bytes]:
