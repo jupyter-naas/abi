@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 40c058c224cb477120f279371db2578f8d88f01e4076bfe07a5481d26cbd368e
+# onto2py-source-sha256: 75c7941157cf1ea62ca4fd341b93b177832363c1ff762aa6012f2b7c2ddae08c
 from __future__ import annotations
 
 import datetime
@@ -437,6 +437,40 @@ class Site(RDFEntity):
     ] = os.environ.get("USER")
 
 
+class GeospatialPosition(RDFEntity):
+    """
+    geospatial position
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/GeospatialPosition"
+    _name: ClassVar[str] = "geospatial position"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "latitude": "http://ontology.naas.ai/abi/latitude",
+        "located_in": "http://ontology.naas.ai/abi/locatedIn",
+        "longitude": "http://ontology.naas.ai/abi/longitude",
+    }
+    _object_properties: ClassVar[set[str]] = {"located_in"}
+
+    # Data properties
+    latitude: Annotated[Any, Field(description="x latitude y =Def x is a geospatial position & y is the latitude of x in decimal degrees (WGS 84 unless stated otherwise), from -90 to 90")] | None = None
+    longitude: Annotated[Any, Field(description="x longitude y =Def x is a geospatial position & y is the longitude of x in decimal degrees (WGS 84 unless stated otherwise), from -180 to 180")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[
+        datetime.datetime | None,
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Any | None,
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    located_in: Annotated[list[Site | URIRef | str], Field(description="b located in c =Def b is an independent continuant & c is an independent & neither is a spatial region & there is some time t such that the spatial region which b occupies at t is continuant part of the spatial region which c occupies at t")] | None = None
+
+
 class GenericallyDependentContinuant(RDFEntity):
     """
     generically dependent continuant
@@ -714,6 +748,32 @@ class Agent(MaterialEntity, RDFEntity):
     participates_in: Annotated[list[Process | URIRef | str], Field(description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way")] | None = None
 
 
+class GeospatialRegion(Site, RDFEntity):
+    """
+    geospatial region
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/GeospatialRegion"
+    _name: ClassVar[str] = "geospatial region"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = set()
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[
+        datetime.datetime | None,
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Any | None,
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+
 class DocumentContentEntity(GenericallyDependentContinuant, RDFEntity):
     """
     Document Content Entity
@@ -779,6 +839,190 @@ class TemporalInstant(TemporalRegion, RDFEntity):
     # Object properties
     has_first_instant: Annotated[list[TemporalInstant | URIRef | str], Field(description="t has first instant t' =Def t' first instant of t")] | None = None
     has_last_instant: Annotated[list[TemporalInstant | URIRef | str], Field(description="t has last instant t' =Def t' last instant of t")] | None = None
+
+
+class GeospatialLocation(GeospatialRegion, RDFEntity):
+    """
+    geospatial location
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/GeospatialLocation"
+    _name: ClassVar[str] = "geospatial location"
+    _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[
+        datetime.datetime | None,
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Any | None,
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    continuant_part_of: Annotated[list[MaterialEntity | Site | URIRef | str], Field(description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t")] | None = None
+
+
+class Continent(GeospatialRegion, RDFEntity):
+    """
+    continent
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Continent"
+    _name: ClassVar[str] = "continent"
+    _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[
+        datetime.datetime | None,
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Any | None,
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    continuant_part_of: Annotated[list[GeospatialRegion | URIRef | str], Field(description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t")] | None = None
+
+
+class Country(GeospatialRegion, RDFEntity):
+    """
+    country
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Country"
+    _name: ClassVar[str] = "country"
+    _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[
+        datetime.datetime | None,
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Any | None,
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    continuant_part_of: Annotated[list[GeospatialRegion | URIRef | str], Field(description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t")] | None = None
+
+
+class FirstorderAdministrativeRegion(GeospatialRegion, RDFEntity):
+    """
+    first-order administrative region
+    """
+
+    _class_uri: ClassVar[str] = (
+        "http://ontology.naas.ai/abi/FirstOrderAdministrativeRegion"
+    )
+    _name: ClassVar[str] = "first-order administrative region"
+    _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[
+        datetime.datetime | None,
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Any | None,
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    continuant_part_of: Annotated[list[Country | GeospatialRegion | URIRef | str], Field(description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t")] | None = None
+
+
+class SecondorderAdministrativeRegion(GeospatialRegion, RDFEntity):
+    """
+    second-order administrative region
+    """
+
+    _class_uri: ClassVar[str] = (
+        "http://ontology.naas.ai/abi/SecondOrderAdministrativeRegion"
+    )
+    _name: ClassVar[str] = "second-order administrative region"
+    _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[
+        datetime.datetime | None,
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Any | None,
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    continuant_part_of: Annotated[list[FirstorderAdministrativeRegion | GeospatialRegion | URIRef | str], Field(description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t")] | None = None
+
+
+class LocalAdministrativeRegion(GeospatialRegion, RDFEntity):
+    """
+    local administrative region
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/LocalAdministrativeRegion"
+    _name: ClassVar[str] = "local administrative region"
+    _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[
+        datetime.datetime | None,
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Any | None,
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    continuant_part_of: Annotated[list[Country | GeospatialRegion | URIRef | str], Field(description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t")] | None = None
 
 
 class Book(DocumentContentEntity, RDFEntity):
@@ -991,11 +1235,102 @@ class JournalArticle(DocumentContentEntity, RDFEntity):
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
+class City(LocalAdministrativeRegion, RDFEntity):
+    """
+    city
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/City"
+    _name: ClassVar[str] = "city"
+    _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[
+        datetime.datetime | None,
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Any | None,
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    continuant_part_of: Annotated[list[Country | GeospatialRegion | URIRef | str], Field(description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t")] | None = None
+
+
+class Town(LocalAdministrativeRegion, RDFEntity):
+    """
+    town
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Town"
+    _name: ClassVar[str] = "town"
+    _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[
+        datetime.datetime | None,
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Any | None,
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    continuant_part_of: Annotated[list[Country | GeospatialRegion | URIRef | str], Field(description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t")] | None = None
+
+
+class Village(LocalAdministrativeRegion, RDFEntity):
+    """
+    village
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Village"
+    _name: ClassVar[str] = "village"
+    _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[
+        datetime.datetime | None,
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now()
+    creator: Annotated[
+        Any | None,
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    continuant_part_of: Annotated[list[Country | GeospatialRegion | URIRef | str], Field(description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t")] | None = None
+
+
 # Rebuild models to resolve forward references
 MaterialEntity.model_rebuild()
 Person.model_rebuild()
 Organization.model_rebuild()
 Site.model_rebuild()
+GeospatialPosition.model_rebuild()
 GenericallyDependentContinuant.model_rebuild()
 Quality.model_rebuild()
 Role.model_rebuild()
@@ -1003,11 +1338,21 @@ Disposition.model_rebuild()
 Process.model_rebuild()
 TemporalRegion.model_rebuild()
 Agent.model_rebuild()
+GeospatialRegion.model_rebuild()
 DocumentContentEntity.model_rebuild()
 TemporalInstant.model_rebuild()
+GeospatialLocation.model_rebuild()
+Continent.model_rebuild()
+Country.model_rebuild()
+FirstorderAdministrativeRegion.model_rebuild()
+SecondorderAdministrativeRegion.model_rebuild()
+LocalAdministrativeRegion.model_rebuild()
 Book.model_rebuild()
 Transcript.model_rebuild()
 Spreadsheet.model_rebuild()
 Report.model_rebuild()
 FormDocument.model_rebuild()
 JournalArticle.model_rebuild()
+City.model_rebuild()
+Town.model_rebuild()
+Village.model_rebuild()
