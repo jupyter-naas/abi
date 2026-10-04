@@ -256,3 +256,55 @@ def test_failures_default_to_the_last_day():
 def test_failures_need_the_run_store():
     with pytest.raises(SourceUnavailable):
         asyncio.run(_service(runs=SourceUnavailable("runs", "down")).failures())
+
+
+def _with_skipped_runs():
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import JobRun, RunTrigger
+
+    skipped = [
+        JobRun(
+            "acme.jobs",
+            "nightly",
+            f"nightly:{n}",
+            "SKIPPED",
+            trigger=RunTrigger("schedule"),
+            started_at=f"2026-10-02T08:0{n}:00+00:00",
+            finished_at=f"2026-10-02T08:0{n}:01+00:00",
+            skip_reason="nothing new",
+        )
+        for n in (5, 6)
+    ]
+    return InMemoryJobRunStore(fixtures.job_runs() + skipped)
+
+
+def test_skipped_runs_are_hidden_unless_asked_for():
+    service = _service(runs=_with_skipped_runs())
+
+    default = run(service.runs(module="acme.jobs", job="nightly"))
+    skipped = run(service.runs(statuses=["SKIPPED"]))
+    everything = run(service.runs(module="acme.jobs", job="nightly", include_skipped=True))
+
+    assert [r.run_id for r in default.runs] == ["nightly:3", "nightly:2"]
+    assert [r.run_id for r in skipped.runs] == ["nightly:6", "nightly:5"]
+    assert skipped.runs[0].skip_reason == "nothing new"
+    assert [r.run_id for r in everything.runs] == [
+        "nightly:6",
+        "nightly:5",
+        "nightly:3",
+        "nightly:2",
+    ]
+
+
+def test_the_overview_shows_real_runs_and_when_a_job_last_had_nothing_to_do():
+    overview = run(_service(runs=_with_skipped_runs()).overview())
+    nightly = {j.definition.key: j for j in overview.jobs}["acme.jobs/nightly"]
+
+    assert [r.run_id for r in nightly.recent] == ["nightly:3", "nightly:2"]
+    assert nightly.last_run is not None and nightly.last_run.run_id == "nightly:3"
+    assert nightly.last_skipped is not None and nightly.last_skipped.run_id == "nightly:6"
+
+
+def test_skipped_runs_are_never_failures():
+    found = run(_service(runs=_with_skipped_runs()).failures(since="2026-10-01T00:00:00+00:00"))
+
+    assert all(r.status in ("FAILED", "TIMED_OUT") for r in found.runs)

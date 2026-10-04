@@ -463,3 +463,245 @@ def test_a_run_records_the_trace_of_its_consumer_span(monkeypatch):
 
     (span,) = exporter.get_finished_spans()
     assert docs.run("ingest:7")["trace_id"] == format(span.context.trace_id, "032x")
+
+
+# --- skipped runs, self-triggers, event filters, retention ------------------------------
+
+
+def test_a_skipped_run_is_recorded_as_skipped_and_acked():
+    docs = Documents()
+
+    async def handler(ctx):
+        ctx.skip("no new dumps")
+        return {"checked": 2}
+
+    msg = Msg()
+    _run(_host(docs), JobDescriptor("ingest"), handler, msg)
+
+    run = docs.run("ingest:7")
+    assert run["status"] == "SKIPPED" and run["skip_reason"] == "no new dumps"
+    assert run["result"] == {"checked": 2} and run["finished_at"]
+    assert msg.calls == [("ack",)]
+
+
+class _DedupJetStream:
+    """Publishes like JetStream with message-id dedup: a repeated id answers the
+    first message's sequence with duplicate=True."""
+
+    def __init__(self):
+        self.published: list[tuple[str, dict]] = []
+        self.ids: dict[str, int] = {}
+
+    async def publish(self, subject, payload=b"", headers=None, stream=None):
+        headers = dict(headers or {})
+        msg_id = headers.get("Nats-Msg-Id")
+        if msg_id in self.ids:
+            return SimpleNamespace(seq=self.ids[msg_id], duplicate=True)
+        self.published.append((subject, headers))
+        if msg_id:
+            self.ids[msg_id] = len(self.published)
+        return SimpleNamespace(seq=len(self.published), duplicate=False)
+
+
+def _publishing_host(js, docs=None):
+    class _NC:
+        max_payload = 1024 * 1024
+
+        def jetstream(self):
+            return js
+
+    class _T:
+        async def connect(self):
+            return _NC()
+
+    async def handler(ctx):
+        return None
+
+    return JobHost(
+        _T(),
+        docs or Documents(),
+        MODULE,
+        PROJECT,
+        {"ingest": (JobDescriptor("ingest"), handler)},
+        instance_id="i-1",
+    )
+
+
+def test_a_host_triggers_its_own_jobs_once_per_idempotency_key():
+    import pytest
+
+    js = _DedupJetStream()
+    host = _publishing_host(js)
+
+    async def scenario():
+        first = await host.trigger("ingest", {"run": "r1"}, idempotency_key="r1")
+        again = await host.trigger("ingest", {"run": "r1"}, idempotency_key="r1")
+        other = await host.trigger("ingest")
+        return first, again, other
+
+    first, again, other = asyncio.run(scenario())
+
+    assert first.run_id == again.run_id == "ingest:1" and other.run_id == "ingest:2"
+    assert len(js.published) == 2
+    subject, headers = js.published[0]
+    assert subject == job_subjects(PROJECT, MODULE, "ingest").trigger
+    assert headers["Nats-Msg-Id"] == "ingest:r1" and headers[TRIGGER_HEADER] == "manual"
+    assert "Nats-Msg-Id" not in js.published[1][1]
+    with pytest.raises(ValueError):
+        asyncio.run(host.trigger("someone_elses_job"))
+
+
+def test_an_event_filter_keeps_irrelevant_events_from_triggering():
+    js = JetStream()
+    puts = OnEvent("evt.abc.>", filter={"prefix": {"prefix": "naas/"}})
+    descriptor = JobDescriptor("on_put", triggers=(puts,))
+
+    def event(prefix, event_id):
+        return SimpleNamespace(
+            subject=f"evt.abc.{event_id}",
+            data=json.dumps({"prefix": prefix, "key": "a.csv"}).encode(),
+        )
+
+    async def scenario():
+        host = _host()
+        await host.bridge_event(js, descriptor, event("other/", "ev-1"), puts)
+        await host.bridge_event(js, descriptor, event("naas/mercury", "ev-2"), puts)
+
+    asyncio.run(scenario())
+
+    assert [json.loads(p)["subject"] for _, p, _ in js.published] == ["evt.abc.ev-2"]
+
+
+class QueryDocuments(Documents):
+    """Documents with the queries retention uses: find (eq, in, lt; order_by;
+    limit), count and delete."""
+
+    @staticmethod
+    def _matches(data, where):
+        for field, op, value in where:
+            actual = data.get(field)
+            if op == "eq" and actual != value:
+                return False
+            if op == "in" and actual not in value:
+                return False
+            if op == "lt" and not (actual is not None and actual < value):
+                return False
+        return True
+
+    def _select(self, collection, where):
+        return [
+            d
+            for (c, _), d in self.data.items()
+            if c == collection and self._matches(d.data, where)
+        ]
+
+    async def find(
+        self, collection, *, where=(), order_by=None, limit=100, cursor=None
+    ):
+        from naas_abi_sdk.services.models import Page
+
+        items = self._select(collection, where)
+        if order_by:
+            field, direction = order_by
+            items.sort(
+                key=lambda d: d.data.get(field) or "", reverse=direction == "desc"
+            )
+        return Page(items[:limit], None)
+
+    async def count(self, collection, where=()):
+        return len(self._select(collection, where))
+
+    async def delete(self, collection, id, *, if_version=None):
+        current = self.data.get((collection, id))
+        if current is None:
+            raise DocumentNotFound("NOT_FOUND", id)
+        if if_version is not None and current.version != if_version:
+            raise VersionConflict("VERSION_CONFLICT", id)
+        del self.data[(collection, id)]
+
+    def ids(self):
+        return sorted(i for (c, i) in self.data if c == runs_collection(PROJECT))
+
+
+def _seed(docs, job, n, status, finished_at):
+    run_id = f"{job}:{n}"
+    docs.data[(runs_collection(PROJECT), run_id)] = Document(
+        id=run_id,
+        data={
+            "job": job,
+            "run_id": run_id,
+            "status": status,
+            **({"finished_at": finished_at.isoformat()} if finished_at else {}),
+        },
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+        version=1,
+    )
+
+
+def test_retention_drops_old_and_excess_finished_runs_never_active_ones():
+    from naas_abi_sdk.jobs import JobRetention
+
+    docs = QueryDocuments()
+    now = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+    _seed(docs, "ingest", 1, "SUCCEEDED", now - timedelta(days=8))  # too old
+    _seed(docs, "ingest", 2, "FAILED", now - timedelta(days=1))
+    _seed(docs, "ingest", 3, "SKIPPED", now - timedelta(hours=2))  # skipped, stale
+    _seed(docs, "ingest", 4, "SKIPPED", now - timedelta(minutes=10))
+    _seed(docs, "ingest", 5, "RUNNING", None)  # active: never touched
+    _seed(docs, "ingest", 6, "RETRYING", None)
+    for n in range(10, 15):  # 5 recent finished runs of another job, cap 3
+        _seed(docs, "digest", n, "SUCCEEDED", now - timedelta(minutes=60 - n))
+    retention = JobRetention(
+        max_age=timedelta(days=7),
+        skipped_max_age=timedelta(hours=1),
+        max_runs_per_job=3,
+    )
+    host = JobHost(
+        _Transport(),
+        docs,
+        MODULE,
+        PROJECT,
+        {
+            "ingest": (JobDescriptor("ingest"), None),
+            "digest": (JobDescriptor("digest"), None),
+        },
+        retention=retention,
+    )
+
+    deleted = asyncio.run(host.prune(now=now))
+
+    assert docs.ids() == sorted(
+        [
+            "ingest:2",
+            "ingest:4",
+            "ingest:5",
+            "ingest:6",
+            "digest:12",
+            "digest:13",
+            "digest:14",
+        ]
+    )
+    assert deleted == 4
+
+
+def test_retention_work_per_pass_is_bounded():
+    from naas_abi_sdk.jobs import JobRetention
+
+    docs = QueryDocuments()
+    now = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+    for n in range(25):
+        _seed(docs, "tick", n, "SKIPPED", now - timedelta(days=1))
+    host = JobHost(
+        _Transport(),
+        docs,
+        MODULE,
+        PROJECT,
+        {"tick": (JobDescriptor("tick"), None)},
+        retention=JobRetention(batch=10),
+    )
+
+    assert asyncio.run(host.prune(now=now)) == 10
+    assert asyncio.run(host.prune(now=now)) == 10
+    assert asyncio.run(host.prune(now=now)) == 5
+    assert docs.ids() == []

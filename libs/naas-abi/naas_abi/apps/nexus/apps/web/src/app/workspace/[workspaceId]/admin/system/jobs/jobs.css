@@ -688,3 +688,9 @@ button.jobs-strip-cell:hover {
   width: 680px;
 }
 
+
+.job-last-skipped {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}

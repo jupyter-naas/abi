@@ -412,3 +412,79 @@ def test_triggers_and_events_above_the_broker_limit_reach_the_job(broker):
     assert first["status"] == "SUCCEEDED" and first["result"] == {"length": len(blob)}
     bridged = next(r for r in docs.runs("big_event") if r["status"] == "SUCCEEDED")
     assert bridged["result"] == {"length": len(blob)}
+
+
+def test_a_module_triggers_its_own_job_once_per_idempotency_key(broker):
+    from naas_abi_sdk.jobs import JobsMixin
+
+    docs = Documents()
+    descriptor = JobDescriptor("work")
+
+    class Module(JobsMixin):
+        jobs = (descriptor,)
+
+    async def handler(ctx):
+        return ctx.payload
+
+    async def scenario():
+        host = _host(broker, docs, [(descriptor, handler)])
+        await host.start()
+        module = Module()
+        module._bind_job_host(host, asyncio.get_running_loop())
+        try:
+            first = await module.atrigger_job("work", {"n": 1}, idempotency_key="req-1")
+            again = await module.atrigger_job("work", {"n": 1}, idempotency_key="req-1")
+            other = await module.atrigger_job("work", {"n": 2})
+            await _until(
+                lambda: sum(r["status"] == "SUCCEEDED" for r in docs.runs("work")) >= 2
+            )
+            await asyncio.sleep(0.3)  # a duplicate would have run by now
+            return first, again, other
+        finally:
+            await host.close()
+
+    first, again, other = asyncio.run(scenario())
+
+    assert first.run_id == again.run_id != other.run_id
+    assert sorted(r["payload"]["n"] for r in docs.runs("work")) == [1, 2]
+
+
+def test_event_filters_and_skipped_runs_on_a_real_broker(broker):
+    import nats
+
+    docs = Documents()
+    puts = OnEvent("evt.itest.>", filter={"prefix": {"prefix": "naas/"}})
+    descriptor = JobDescriptor("on_put", triggers=(puts,))
+
+    async def handler(ctx):
+        if ctx.payload["data"]["key"] == "empty.csv":
+            ctx.skip("empty dump")
+
+    async def scenario():
+        host = _host(broker, docs, [(descriptor, handler)])
+        await host.start()
+        nc = await nats.connect(broker)
+        try:
+            for n, (prefix, key) in enumerate(
+                [("other/", "a.csv"), ("naas/", "b.csv"), ("naas/", "empty.csv")]
+            ):
+                await nc.publish(
+                    f"evt.itest.ev-{n}",
+                    json.dumps({"prefix": prefix, "key": key}).encode(),
+                )
+            await nc.flush()
+            await _until(
+                lambda: (
+                    sum(bool(r.get("finished_at")) for r in docs.runs("on_put")) >= 2
+                )
+            )
+            await asyncio.sleep(0.3)  # the filtered event would have run by now
+        finally:
+            await nc.close()
+            await host.close()
+
+    asyncio.run(scenario())
+
+    assert sorted(
+        (r["payload"]["data"]["key"], r["status"]) for r in docs.runs("on_put")
+    ) == [("b.csv", "SUCCEEDED"), ("empty.csv", "SKIPPED")]

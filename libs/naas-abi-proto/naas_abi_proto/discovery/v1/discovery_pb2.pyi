@@ -20,14 +20,16 @@ class AgentDescriptor(_message.Message):
     def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., contract_major: _Optional[int] = ..., capabilities: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class JobTrigger(_message.Message):
-    __slots__ = ("kind", "spec", "time_zone")
+    __slots__ = ("kind", "spec", "time_zone", "filter")
     KIND_FIELD_NUMBER: _ClassVar[int]
     SPEC_FIELD_NUMBER: _ClassVar[int]
     TIME_ZONE_FIELD_NUMBER: _ClassVar[int]
+    FILTER_FIELD_NUMBER: _ClassVar[int]
     kind: str
     spec: str
     time_zone: str
-    def __init__(self, kind: _Optional[str] = ..., spec: _Optional[str] = ..., time_zone: _Optional[str] = ...) -> None: ...
+    filter: str
+    def __init__(self, kind: _Optional[str] = ..., spec: _Optional[str] = ..., time_zone: _Optional[str] = ..., filter: _Optional[str] = ...) -> None: ...
 
 class JobDescriptor(_message.Message):
     __slots__ = ("name", "description", "contract_major", "triggers", "max_concurrency", "max_attempts", "timeout_seconds")

@@ -16,6 +16,8 @@ from typing import Any
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
     ACTIVE_STATUSES,
     FAILED_STATUSES,
+    LISTED_STATUSES,
+    SKIPPED,
     Failures,
     JobCatalog,
     JobControl,
@@ -144,6 +146,7 @@ class JobsAdminService:
         now = self._clock()
 
         recent: dict[str, list[JobRun]] = {d.key: [] for d in definitions}
+        skipped: dict[str, JobRun | None] = {d.key: None for d in definitions}
         running: dict[str, int] = {d.key: 0 for d in definitions}
         if isinstance(self._runs, SourceUnavailable):
             sources["runs"] = SourceStatus(False, self._runs.reason)
@@ -151,12 +154,27 @@ class JobsAdminService:
             store = self._runs
             try:
                 recents = await asyncio.gather(
-                    *(store.recent(d.module_id, d.name, RECENT_RUNS) for d in definitions)
+                    *(
+                        store.list_runs(
+                            [d.module_id],
+                            job=d.name,
+                            statuses=list(LISTED_STATUSES),
+                            limit=RECENT_RUNS,
+                        )
+                        for d in definitions
+                    )
+                )
+                lasts = await asyncio.gather(
+                    *(
+                        store.list_runs([d.module_id], job=d.name, statuses=[SKIPPED], limit=1)
+                        for d in definitions
+                    )
                 )
                 modules = sorted({d.module_id for d in definitions})
                 actives = await asyncio.gather(*(store.running(m) for m in modules))
-                for definition, runs in zip(definitions, recents, strict=True):
+                for definition, runs, last in zip(definitions, recents, lasts, strict=True):
                     recent[definition.key] = runs
+                    skipped[definition.key] = last[0] if last else None
                 for active in actives:
                     for r in active:
                         key = f"{r.module_id}/{r.job}"
@@ -197,6 +215,7 @@ class JobsAdminService:
                     running=running[definition.key],
                     last_run=runs[0] if runs else None,
                     recent=tuple(runs),
+                    last_skipped=skipped[definition.key],
                 )
             )
         return JobsOverview(self.project, tuple(views), sources)
@@ -217,8 +236,13 @@ class JobsAdminService:
         trigger_kind: str | None = None,
         before: str | None = None,
         limit: int = 50,
+        include_skipped: bool = False,
     ) -> RunsPage:
+        """Runs, newest first. Without ``statuses``, runs that had nothing to do
+        (SKIPPED) are left out unless ``include_skipped``."""
         store = self._store()
+        if not statuses and not include_skipped:
+            statuses = list(LISTED_STATUSES)
         if module:
             module_ids = [module]
         else:

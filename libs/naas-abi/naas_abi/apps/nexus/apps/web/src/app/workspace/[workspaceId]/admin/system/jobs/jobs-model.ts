@@ -10,6 +10,7 @@ export const STATUS_LABELS: Record<string, string> = {
   RUNNING: 'Running',
   RETRYING: 'Retrying',
   SUCCEEDED: 'Succeeded',
+  SKIPPED: 'Skipped',
   FAILED: 'Failed',
   TIMED_OUT: 'Timed out',
   CANCELLED: 'Cancelled',
@@ -75,9 +76,10 @@ export interface Health {
   averageMs: number | null;
 }
 
-/** Success rate and average duration over the finished runs given. */
+/** Success rate and average duration over the finished runs given (runs that
+ * had nothing to do, SKIPPED, count for neither). */
 export function health(runs: RunSummary[]): Health {
-  const finished = runs.filter((r) => !isActive(r.status));
+  const finished = runs.filter((r) => !isActive(r.status) && r.status !== 'SKIPPED');
   const succeeded = finished.filter((r) => r.status === 'SUCCEEDED').length;
   const failed = finished.filter((r) => FAILED.includes(r.status)).length;
   const durations = finished.map((r) => r.duration_ms).filter((d): d is number => typeof d === 'number');

@@ -3,6 +3,7 @@
 One durable pull consumer per job is shared by every replica, so each trigger
 reaches one replica; ``max_ack_pending`` bounds concurrency across replicas.
 Delivery is at-least-once: a crash or missed ack redelivers the trigger.
+Finished run records are pruned (``JobRetention``); active ones never are.
 """
 
 from __future__ import annotations
@@ -23,13 +24,17 @@ from naas_abi_sdk.jobs import (
     Every,
     JobContext,
     JobDescriptor,
+    JobProxy,
+    JobRetention,
+    JobRun,
+    OnEvent,
     job_subjects,
     run_key,
     runs_collection,
     stream_name,
 )
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
-from naas_abi_sdk.services.models import CollectionSpec
+from naas_abi_sdk.services.models import CollectionSpec, FieldSpec
 from naas_abi_sdk.telemetry import current_trace_id, record_error, server_span
 
 logger = logging.getLogger(__name__)
@@ -38,6 +43,7 @@ MAX_RESULT_BYTES = 64 * 1024
 MANUAL_TRIGGER_TTL = "168h"
 EVENT_TRIGGER_TTL = "24h"
 MAX_SCHEDULED_TICK_TTL_SECONDS = 3600
+DEFAULT_RETENTION = JobRetention()
 
 
 def _now() -> str:
@@ -115,6 +121,7 @@ class JobHost:
         max_backoff_seconds: float = 300.0,
         close_grace_seconds: float = 10.0,
         close_cancel_seconds: float = 15.0,
+        retention: JobRetention | None = DEFAULT_RETENTION,
     ):
         self.transport, self.documents = transport, documents
         self.module_id, self.project = module_id, project
@@ -130,6 +137,7 @@ class JobHost:
         )
         self.close_grace_seconds = close_grace_seconds
         self.close_cancel_seconds = close_cancel_seconds
+        self.retention = retention
         self.collection = runs_collection(project)
         self._running: dict[str, JobContext] = {}
         self._work: dict[str, asyncio.Task] = {}
@@ -148,7 +156,16 @@ class JobHost:
     async def start(self) -> None:
         from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
 
-        await self.documents.ensure_collection(CollectionSpec(name=self.collection))
+        await self.documents.ensure_collection(
+            CollectionSpec(
+                name=self.collection,
+                # Retention and the System Jobs tab query runs by these.
+                fields=tuple(
+                    FieldSpec(name=f, type="string", indexed=True)
+                    for f in ("job", "status", "finished_at")
+                ),
+            )
+        )
         nc = await self.transport.connect()
         js = nc.jetstream()
         await ensure_stream(js, self.project)
@@ -174,7 +191,7 @@ class JobHost:
                     await nc.subscribe(
                         event.subject,
                         queue=f"{subjects.consumer}-events",
-                        cb=self._event_bridge(js, descriptor),
+                        cb=self._event_bridge(js, descriptor, event),
                     )
                 )
             sub = await js.pull_subscribe_bind(
@@ -187,6 +204,8 @@ class JobHost:
             self._subscriptions.append(
                 await nc.subscribe(cancel_subject, cb=self._on_cancel)
             )
+        if self.retention is not None and self.handlers:
+            self._loops.append(asyncio.create_task(self._retain()))
 
     async def close(self) -> None:
         self._closing = True
@@ -279,8 +298,15 @@ class JobHost:
                 stream_name(self.project), subject=subjects.schedule(index)
             )
 
-    async def bridge_event(self, js: Any, descriptor: JobDescriptor, msg: Any) -> None:
-        """Republish a core-NATS event as a durable trigger (deduplicated per event).
+    async def bridge_event(
+        self,
+        js: Any,
+        descriptor: JobDescriptor,
+        msg: Any,
+        trigger: OnEvent | None = None,
+    ) -> None:
+        """Republish a core-NATS event as a durable trigger (deduplicated per event),
+        unless the trigger's filter rejects it.
 
         Either side may be above the broker limit: the event is read back from
         its claim check, and the trigger (wrapped, so larger) is sent as one.
@@ -293,6 +319,8 @@ class JobHost:
             data: Any = json.loads(raw) if raw else None
         except (ValueError, UnicodeDecodeError):
             data = raw.decode(errors="replace")
+        if trigger is not None and not trigger.matches(data):
+            return
         stream = stream_name(self.project)
         body, headers = await claim_check.prepare(
             nc,
@@ -317,11 +345,97 @@ class JobHost:
         context.cancelled.set()
         return True
 
-    def _event_bridge(self, js: Any, descriptor: JobDescriptor) -> Any:
+    def _event_bridge(
+        self, js: Any, descriptor: JobDescriptor, trigger: OnEvent
+    ) -> Any:
         async def on_event(msg: Any) -> None:
-            self._spawn(self.bridge_event(js, descriptor, msg))
+            self._spawn(self.bridge_event(js, descriptor, msg, trigger))
 
         return on_event
+
+    # --- the module's own triggers -----------------------------------------------------
+
+    async def trigger(
+        self,
+        name: str,
+        payload: dict[str, Any] | None = None,
+        *,
+        idempotency_key: str | None = None,
+    ) -> JobRun:
+        """Trigger one of this host's jobs (``JobsMixin.trigger_job``)."""
+        if name not in self.handlers:
+            raise ValueError(f"Module {self.module_id} has no job named {name!r}")
+        descriptor = self.handlers[name][0]
+        return await JobProxy(
+            self.transport, self.project, self.module_id, descriptor, self.documents
+        ).trigger(payload, idempotency_key=idempotency_key)
+
+    # --- retention ---------------------------------------------------------------------
+
+    async def _retain(self) -> None:
+        assert self.retention is not None
+        while not self._closing:
+            try:
+                await self.prune()
+            except Exception:  # a store hiccup must not stop the next pass
+                logger.warning("Job run retention failed; retrying", exc_info=True)
+            await asyncio.sleep(self.retention.interval.total_seconds())
+
+    async def prune(self, now: datetime | None = None) -> int:
+        """One retention pass over this host's jobs; returns the runs deleted.
+
+        Finished runs older than ``max_age`` go (skipped ones after
+        ``skipped_max_age``), then each job keeps its newest
+        ``max_runs_per_job``. At most ``batch`` deletions per pass.
+        """
+        if self.retention is None:
+            return 0
+        retention = self.retention
+        now = now or datetime.now(timezone.utc)
+        budget = retention.batch
+        kept = [s for s in TERMINAL_STATUSES if s != "SKIPPED"]
+        for name in self.handlers:
+            for statuses, max_age in (
+                (kept, retention.max_age),
+                (["SKIPPED"], retention.skipped_max_age),
+            ):
+                if budget <= 0:
+                    return retention.batch
+                cutoff = (now - max_age).isoformat()
+                budget -= await self._delete(
+                    [
+                        ("job", "eq", name),
+                        ("status", "in", statuses),
+                        ("finished_at", "lt", cutoff),
+                    ],
+                    budget,
+                )
+            if budget <= 0:
+                return retention.batch
+            finished = [("job", "eq", name), ("status", "in", list(TERMINAL_STATUSES))]
+            excess = await self.documents.count(self.collection, finished) - (
+                retention.max_runs_per_job
+            )
+            if excess > 0:
+                budget -= await self._delete(
+                    finished, min(excess, budget), order_by=("finished_at", "asc")
+                )
+        return retention.batch - budget
+
+    async def _delete(self, where: list, limit: int, order_by: Any = None) -> int:
+        page = await self.documents.find(
+            self.collection, where=where, order_by=order_by, limit=min(limit, 1000)
+        )
+        deleted = 0
+        for doc in page.items[:limit]:
+            try:
+                await self.documents.delete(
+                    self.collection, doc.id, if_version=doc.version
+                )
+                deleted += 1
+            except (DocumentNotFound, VersionConflict):
+                continue  # another replica pruned or updated it
+        return deleted
 
     async def _on_cancel(self, msg: Any) -> None:
         self.cancel(msg.data.decode(errors="replace"))
@@ -392,7 +506,7 @@ class JobHost:
             attributes=attributes,
         ):
             status = await self._handle_delivery(descriptor, handler, msg)
-            if status not in ("SUCCEEDED", "CANCELLED"):
+            if status not in ("SUCCEEDED", "SKIPPED", "CANCELLED"):
                 record_error(status)
 
     async def _handle_delivery(
@@ -461,7 +575,8 @@ class JobHost:
                     f"{type(work.exception()).__name__}: {work.exception()}",
                 )
             else:
-                status, result = "SUCCEEDED", self._result(work.result())
+                result = self._result(work.result())
+                status = "SKIPPED" if context.skipped is not None else "SUCCEEDED"
         finally:
             heartbeat.cancel()
             with contextlib.suppress(BaseException):
@@ -470,7 +585,7 @@ class JobHost:
             self._work.pop(run_id, None)
             self._interrupted.discard(run_id)
 
-        if status in ("SUCCEEDED", "CANCELLED"):
+        if status in ("SUCCEEDED", "SKIPPED", "CANCELLED"):
             await msg.ack()
         elif attempt < descriptor.max_attempts:
             status = "RETRYING"
@@ -484,7 +599,9 @@ class JobHost:
         }
         if status in TERMINAL_STATUSES:
             fields["finished_at"] = _now()
-        if status == "SUCCEEDED":
+        if status in ("SUCCEEDED", "SKIPPED"):
             fields["result"] = result
+        if status == "SKIPPED":
+            fields["skip_reason"] = context.skipped
         await self._save(run_id, fields)
         return status

@@ -17,8 +17,12 @@ from typing import Any, Literal, Protocol
 Location = Literal["engine", "remote"]
 
 ACTIVE_STATUSES = ("RUNNING", "RETRYING")
-TERMINAL_STATUSES = ("SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED")
+# SKIPPED: the handler had nothing to do (``ctx.skip``); job hosts keep these
+# briefly. Lists and overviews leave them out unless asked; never a failure.
+SKIPPED = "SKIPPED"
+TERMINAL_STATUSES = ("SUCCEEDED", SKIPPED, "FAILED", "TIMED_OUT", "CANCELLED")
 FAILED_STATUSES = ("FAILED", "TIMED_OUT")
+LISTED_STATUSES = ("QUEUED", *ACTIVE_STATUSES, "SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED")
 
 
 class JobNotFound(Exception):
@@ -95,6 +99,7 @@ class JobRun:
     payload: Any = None
     result: Any = None
     logs: tuple[str, ...] = ()
+    skip_reason: str = ""
 
     @property
     def key(self) -> str:
@@ -183,6 +188,8 @@ class JobView:
     running: int
     last_run: JobRun | None
     recent: tuple[JobRun, ...]
+    # The latest run that had nothing to do (not in ``recent``).
+    last_skipped: JobRun | None = None
 
 
 @dataclass(frozen=True)

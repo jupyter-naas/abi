@@ -337,6 +337,8 @@ async def run_module(
                     instance_id=registration.instance_id,
                 )
                 await job_host.start()
+                # The module's own triggers (atrigger_job) go through this host.
+                module._bind_job_host(job_host, asyncio.get_running_loop())
             if registration:
                 registration.initialized = True
                 await registration.renew()
@@ -363,6 +365,7 @@ async def run_module(
                             "Could not mark module draining", exc_info=True
                         )
                 if job_host:
+                    module._bind_job_host(None, None)
                     await job_host.close()
                 if agent_host:
                     await agent_host.close()

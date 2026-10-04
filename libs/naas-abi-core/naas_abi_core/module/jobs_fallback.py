@@ -16,6 +16,10 @@ from typing import Any, ClassVar
 JOBS_AVAILABLE = False
 
 
+class JobsNotHosted(RuntimeError):
+    """A module's jobs are triggered while no job host runs them."""
+
+
 @dataclass(frozen=True)
 class Cron:
     expression: str
@@ -31,6 +35,7 @@ class Every:
 class OnEvent:
     subject: str | None = None
     event_type: str | None = None
+    filter: dict[str, Any] | None = field(default=None, hash=False)
 
 
 @dataclass(frozen=True)
@@ -53,9 +58,13 @@ class JobContext:
     payload: dict[str, Any]
     cancelled: asyncio.Event = field(default_factory=asyncio.Event)
     logs: list[str] = field(default_factory=list)
+    skipped: str | None = None
 
     def log(self, message: str) -> None:
         self.logs.append(str(message))
+
+    def skip(self, reason: str = "") -> None:
+        self.skipped = str(reason)
 
 
 def job(
@@ -115,3 +124,12 @@ class JobsMixin:
 
     def missing_job_handlers(self) -> set[str]:
         return {j.name for j in self.jobs} - set(self._job_handlers)
+
+    def _bind_job_host(self, host: Any, loop: Any) -> None:
+        return None
+
+    def trigger_job(self, name: str, payload: Any = None, **kwargs: Any) -> Any:
+        raise JobsNotHosted("Jobs run in NATS mode, which needs naas-abi-sdk")
+
+    async def atrigger_job(self, name: str, payload: Any = None, **kwargs: Any) -> Any:
+        raise JobsNotHosted("Jobs run in NATS mode, which needs naas-abi-sdk")

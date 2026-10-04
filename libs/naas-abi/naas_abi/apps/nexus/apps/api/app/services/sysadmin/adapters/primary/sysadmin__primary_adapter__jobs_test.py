@@ -45,6 +45,7 @@ RUN_KEYS = {
     "instance",
     "error",
     "trace_id",
+    "skip_reason",
 }
 
 
@@ -131,6 +132,7 @@ def test_overview_shape(client):
         "running",
         "last_run",
         "recent",
+        "last_skipped",
     }
     assert nightly["triggers"] == [
         {

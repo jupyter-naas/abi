@@ -86,6 +86,8 @@ class EngineJobLoader:
         self.host_factory = host_factory
         self.host_options = dict(host_options or {})
         self.hosts: list[Any] = []
+        # Modules bound to their host, for their own triggers (trigger_job).
+        self._bound: list[Any] = []
         self._loop: _LoopThread | None = None
         self._transport: Any = None
 
@@ -162,15 +164,24 @@ class EngineJobLoader:
                 for j in module.jobs
             },
             instance_id=f"engine-{uuid.uuid4().hex[:12]}",
-            **self.host_options,
+            **{
+                "retention": self.configuration.jobs.retention.to_retention(),
+                **self.host_options,
+            },
         )
         self._loop.run(host.start(), START_TIMEOUT_SECONDS)
         self.hosts.append(host)
+        if hasattr(module, "_bind_job_host"):
+            module._bind_job_host(host, self._loop.loop)
+            self._bound.append(module)
 
     def stop(self) -> None:
         """Stop every host (running jobs get their grace period), then the loop."""
         loop, self._loop = self._loop, None
         hosts, self.hosts = self.hosts, []
+        bound, self._bound = self._bound, []
+        for module in bound:
+            module._bind_job_host(None, None)
         if loop is None:
             return
         for host in reversed(hosts):

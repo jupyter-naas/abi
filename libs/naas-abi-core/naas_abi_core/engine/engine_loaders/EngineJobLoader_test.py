@@ -176,3 +176,73 @@ def test_engine_adds_dataset_maintenance_as_a_kernel_job_owner_in_nats_mode():
     assert set(legacy.job_owners()) == {"acme.jobs"}
     assert not legacy.hosts_jobs
     assert not engine(_config(enabled=False)).hosts_jobs
+
+
+class _TriggeringHost(_Host):
+    async def trigger(self, name, payload=None, *, idempotency_key=None):
+        return (name, payload, idempotency_key, threading.current_thread().name)
+
+
+def test_a_module_triggers_its_own_jobs_while_its_host_runs():
+    from naas_abi_core.engine.engine_loaders.EngineJobLoader import LOOP_THREAD_NAME
+    from naas_abi_sdk.jobs import JobsNotHosted
+
+    hosts: list = []
+    loader = EngineJobLoader(
+        _config(),
+        documents_factory=lambda transport, module_id: None,
+        host_factory=lambda *a, **k: (
+            hosts.append(_TriggeringHost(*a, **k)) or hosts[-1]
+        ),
+    )
+    module = _Jobs()
+    with pytest.raises(JobsNotHosted):
+        module.trigger_job("compact")
+
+    loader.start({"acme.jobs": module}, document_available=True)
+    try:
+        # From a request thread: runs on the jobs loop, never the caller's.
+        assert module.trigger_job("compact", {"x": 1}, idempotency_key="k") == (
+            "compact",
+            {"x": 1},
+            "k",
+            LOOP_THREAD_NAME,
+        )
+    finally:
+        loader.stop()
+
+    with pytest.raises(JobsNotHosted):
+        module.trigger_job("compact")
+
+
+def test_retention_comes_from_the_jobs_configuration():
+    from datetime import timedelta
+
+    hosts: list[_Host] = []
+    loader = _loader(
+        _config(
+            retention={
+                "max_age_days": 3,
+                "max_runs_per_job": 50,
+                "skipped_max_age_minutes": 15,
+            }
+        ),
+        hosts,
+    )
+
+    loader.start({"acme.jobs": _Jobs()}, document_available=True)
+    try:
+        retention = hosts[0].kwargs["retention"]
+    finally:
+        loader.stop()
+
+    assert retention.max_age == timedelta(days=3)
+    assert retention.max_runs_per_job == 50
+    assert retention.skipped_max_age == timedelta(minutes=15)
+
+
+def test_retention_defaults_keep_a_week_and_skipped_runs_an_hour():
+    retention = NATSJobsConfiguration().retention.to_retention()
+
+    assert (retention.max_age.days, retention.max_runs_per_job) == (7, 1000)
+    assert retention.skipped_max_age.total_seconds() == 3600

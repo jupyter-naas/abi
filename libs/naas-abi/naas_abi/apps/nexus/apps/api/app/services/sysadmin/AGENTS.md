@@ -46,6 +46,7 @@ Views of a running deployment for platform super admins: kernel services (config
   - Pages runs across job modules (newest first; `before` is the last `started_at`) and returns one run with its trace link (`telemetry.ui_url`).
   - Triggers and cancels are audited with `run_audited` (service `jobs`, operations `trigger` / `cancel`).
   - The overview degrades per source (`engine`, `discovery`, `runs`, `queue`).
+  - SKIPPED runs (a handler's `ctx.skip`, nothing to do) are left out of runs pages without a status filter (unless `include_skipped`), of each job's recent runs and health, and of failures; the overview gives each job's `last_skipped`.
 - `jobs_schedule.py`: pure helpers.
   - `next_cron`: 6-field cron with seconds, aliases, names, cron's day OR rule, zoneinfo; UTC when no time zone is set.
   - `next_every`: the last scheduled fire plus the interval, rolled forward past now.

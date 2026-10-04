@@ -13,6 +13,7 @@ try:
         JobContext,
         JobDescriptor,
         JobsMixin,
+        JobsNotHosted,
         OnEvent,
         job,
     )
@@ -26,6 +27,7 @@ except ImportError:  # core without [nats]
         JobContext,
         JobDescriptor,
         JobsMixin,
+        JobsNotHosted,
         OnEvent,
         job,
     )
@@ -37,6 +39,7 @@ __all__ = [
     "JobContext",
     "JobDescriptor",
     "JobsMixin",
+    "JobsNotHosted",
     "OnEvent",
     "job",
 ]

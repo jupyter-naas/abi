@@ -58,6 +58,7 @@ def record(module_id: str, run_id: str, data: dict[str, Any]) -> JobRun:
         payload=data.get("payload"),
         result=data.get("result"),
         logs=tuple(str(line) for line in data.get("logs") or ()),
+        skip_reason=str(data.get("skip_reason") or ""),
     )
 
 

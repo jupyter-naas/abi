@@ -234,3 +234,113 @@ def test_client_reaches_any_modules_job_by_name_without_discovery():
         "ingest",
     )
     assert proxy.transport is client._transport
+
+
+# --- event filters, skipped runs, a module triggering its own jobs -----------------------
+
+
+def test_on_event_filters_match_event_fields_and_round_trip():
+    from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
+
+    puts = OnEvent(
+        event_type="http://ontology.naas.ai/abi/ObjectPut",
+        filter={"prefix": {"prefix": "naas/"}, "size_bytes": {"gt": 0}},
+    )
+
+    assert puts.matches({"prefix": "naas/mercury", "size_bytes": 3})
+    assert not puts.matches({"prefix": "other/", "size_bytes": 3})
+    assert not puts.matches("not an object")
+    assert OnEvent("evt.x.>").matches({"anything": 1})  # no filter: every event
+    descriptor = JobDescriptor("ingest", triggers=(puts,))
+    back = JobDescriptor.from_pb(
+        pb.JobDescriptor.FromString(descriptor.to_pb().SerializeToString())
+    )
+    assert back == descriptor and back.triggers[0].filter == puts.filter
+
+
+@pytest.mark.parametrize(
+    "bad", [{"a": {"bogus": 1}}, {"a b": 1}, {"": 1}, ["not", "a", "dict"]]
+)
+def test_malformed_event_filters_are_refused_when_declared(bad):
+    with pytest.raises((ValueError, TypeError)):
+        OnEvent("evt.x.>", filter=bad)
+
+
+def test_a_handler_can_say_a_run_did_nothing():
+    from naas_abi_sdk.jobs import TERMINAL_STATUSES, JobContext
+
+    ctx = JobContext("ingest:1", "ingest", 1, {}, {})
+    assert ctx.skipped is None
+    ctx.skip("no new dumps")
+
+    assert ctx.skipped == "no new dumps"
+    assert "SKIPPED" in TERMINAL_STATUSES
+
+
+class _SelfTriggering(JobsMixin):
+    jobs = (JobDescriptor("ingest"),)
+
+
+class _Host:
+    def __init__(self):
+        self.calls = []
+
+    async def trigger(self, name, payload=None, *, idempotency_key=None):
+        import threading
+
+        self.calls.append(
+            (name, payload, idempotency_key, threading.current_thread().name)
+        )
+        return f"run-of-{name}"
+
+
+def _loop_thread():
+    import threading
+
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=loop.run_forever, name="host-loop", daemon=True)
+    thread.start()
+    return loop, thread
+
+
+def test_a_module_triggers_its_own_jobs_once_they_are_hosted():
+    from naas_abi_sdk.jobs import JobsNotHosted
+
+    module = _SelfTriggering()
+    with pytest.raises(JobsNotHosted):
+        module.trigger_job("ingest")
+    with pytest.raises(JobsNotHosted):
+        asyncio.run(module.atrigger_job("ingest"))
+
+    host, (loop, thread) = _Host(), _loop_thread()
+    try:
+        module._bind_job_host(host, loop)
+        # From sync code (an engine request thread) and from another loop alike,
+        # the trigger runs on the host's loop.
+        assert module.trigger_job("ingest", {"x": 1}, idempotency_key="k") == (
+            "run-of-ingest"
+        )
+        assert asyncio.run(module.atrigger_job("ingest")) == "run-of-ingest"
+        assert host.calls == [
+            ("ingest", {"x": 1}, "k", "host-loop"),
+            ("ingest", None, None, "host-loop"),
+        ]
+        # On the host's own loop the blocking form would deadlock: refuse it.
+        blocked = asyncio.run_coroutine_threadsafe(
+            _call_sync_on_loop(module), loop
+        ).result(5)
+        assert isinstance(blocked, RuntimeError)
+        module._bind_job_host(None, None)
+        with pytest.raises(JobsNotHosted):
+            module.trigger_job("ingest")
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(5)
+
+
+async def _call_sync_on_loop(module):
+    try:
+        module.trigger_job("ingest")
+    except RuntimeError as exc:
+        return exc
+    return None
