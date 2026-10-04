@@ -149,8 +149,12 @@ class VectorStorePrimaryAdapterNATS:
         jwt_secret: str,
         *,
         event_publisher: Callable[[object], None] | None = None,
+        prepare: Callable[[], None] | None = None,
     ) -> None:
         self._event_publisher = event_publisher
+        # Run before each call: an engine's adapter may need initialize(),
+        # which in-process callers trigger lazily through the service.
+        self._prepare = prepare
         self._adapter = adapter
         self._jwt_secret = jwt_secret
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
@@ -165,6 +169,8 @@ class VectorStorePrimaryAdapterNATS:
 
     def _invoke(self, call, request):
         try:
+            if self._prepare is not None:
+                self._prepare()
             return call(request)
         except Exception as exc:
             operation = {
@@ -302,6 +308,8 @@ class VectorStorePrimaryAdapterNATS:
         request: vector_store_pb2.ListVectorsRequest,
         emit: Callable[[bytes], bool],
     ) -> None:
+        if self._prepare is not None:
+            self._prepare()
         with self._adapter.list_vectors_stream(
             request.collection_name, include_vectors=request.include_vectors
         ) as documents:
