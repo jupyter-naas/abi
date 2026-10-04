@@ -595,28 +595,57 @@ class DocumentSQL(ABC):
         ordering = ", ".join(
             part + (" DESC" if descending else " ASC") for part in parts
         )
-        # Stored JSON is ASCII (dumps escapes the rest): its length is its size.
-        size = "0"
-        if max_bytes is not None:
-            size = "octet_length(data::text)" if self.pg else "length(data)"
         items: list[Document] = []
-        more, used = False, 0
+        more = False
         with self.transaction() as connection:
             self.require_collection(connection, namespace, collection)
-            rows = connection.execute(
-                f"SELECT id, data, created_at, updated_at, version, {size} FROM {self.documents_table} WHERE namespace = {self.p} AND collection = {self.p} AND ({condition}) ORDER BY {ordering} LIMIT {self.p}",  # nosec B608
-                params,
+            if max_bytes is None:
+                rows = connection.execute(
+                    f"SELECT id, data, created_at, updated_at, version FROM {self.documents_table} WHERE namespace = {self.p} AND collection = {self.p} AND ({condition}) ORDER BY {ordering} LIMIT {self.p}",  # nosec B608
+                    params,
+                ).fetchall()
+                items = [self.document(row) for row in rows[:limit]]
+                more = len(rows) > limit
+            else:
+                # Sizes first, documents for the kept ids only: memory follows
+                # the byte budget, not limit (a driver buffers whole results).
+                # Stored JSON is ASCII (dumps escapes the rest): its length is
+                # its size.
+                size = "octet_length(data::text)" if self.pg else "length(data)"
+                sized = connection.execute(
+                    f"SELECT id, {size} FROM {self.documents_table} WHERE namespace = {self.p} AND collection = {self.p} AND ({condition}) ORDER BY {ordering} LIMIT {self.p}",  # nosec B608
+                    params,
+                ).fetchall()
+                kept, used = [], 0
+                for id_, length in sized:
+                    weight = length + len(id_) + DOCUMENT_OVERHEAD
+                    if len(kept) == limit or (kept and used + weight > max_bytes):
+                        more = True
+                        break
+                    kept.append(id_)
+                    used += weight
+                if kept:
+                    found = {
+                        row[0]: self.document(row)
+                        for row in connection.execute(
+                            f"SELECT id, data, created_at, updated_at, version FROM {self.documents_table} WHERE namespace = {self.p} AND collection = {self.p} AND id IN ({', '.join([self.p] * len(kept))})",  # nosec B608
+                            [namespace, collection, *kept],
+                        ).fetchall()
+                    }
+                    # A document deleted between the two reads is left out.
+                    items = [found[id_] for id_ in kept if id_ in found]
+        if more and not items:
+            # Every kept document was deleted between the two reads: read again
+            # rather than end the iteration early (no cursor means the end).
+            return self.find(
+                namespace,
+                collection,
+                where,
+                order_by,
+                limit,
+                cursor,
+                max_bytes=max_bytes,
             )
-            # Rows are read one at a time and decoded only when kept.
-            for row in rows:
-                weight = row[5] + len(row[0]) + DOCUMENT_OVERHEAD
-                if len(items) == limit or (
-                    items and max_bytes is not None and used + weight > max_bytes
-                ):
-                    more = True
-                    break
-                items.append(self.document(row))
-                used += weight
         if not more:
             return Page(items, None)
         if fingerprint is None:
