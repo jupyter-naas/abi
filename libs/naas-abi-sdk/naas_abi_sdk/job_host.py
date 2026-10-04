@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 import re
@@ -326,14 +327,17 @@ class JobHost:
         if trigger is not None and not trigger.matches(data):
             return
         stream = stream_name(self.project)
+        headers = {TRIGGER_HEADER: "event", "Nats-TTL": EVENT_TRIGGER_TTL}
+        event_id = (getattr(msg, "headers", None) or {}).get("Nats-Msg-Id")
+        if event_id:
+            identity = json.dumps(
+                [self._subjects(descriptor).trigger, msg.subject, event_id]
+            )
+            headers["Nats-Msg-Id"] = hashlib.sha256(identity.encode()).hexdigest()
         body, headers = await claim_check.prepare(
             nc,
             json.dumps({"subject": msg.subject, "data": data}).encode(),
-            {
-                TRIGGER_HEADER: "event",
-                "Nats-Msg-Id": f"{descriptor.name}:{msg.subject}",
-                "Nats-TTL": EVENT_TRIGGER_TTL,
-            },
+            headers,
             reserve=claim_check.stream_header_reserve(stream),
         )
         await js.publish(
@@ -522,15 +526,49 @@ class JobHost:
                 return
             except VersionConflict:
                 continue
-        logger.warning("Could not save job run %s after concurrent updates", run_id)
+        raise VersionConflict("VERSION_CONFLICT", f"Could not save job run {run_id}")
 
-    async def _heartbeat(self, msg: Any, context: JobContext) -> None:
+    async def _heartbeat(self, msg: Any) -> None:
         while True:
             await asyncio.sleep(self.heartbeat_seconds)
             await msg.in_progress()
-            await self._save(
-                context.run_id, {"logs": list(context.logs), "heartbeat_at": _now()}
-            )
+
+    async def _persist_progress(self, context: JobContext) -> None:
+        while True:
+            await asyncio.sleep(self.heartbeat_seconds)
+            try:
+                await self._save(
+                    context.run_id, {"logs": list(context.logs), "heartbeat_at": _now()}
+                )
+            except Exception:
+                logger.warning(
+                    "Job progress persistence failed; retrying", exc_info=True
+                )
+
+    async def _save_completion(
+        self, run_id: str, fields: dict[str, Any], heartbeat: asyncio.Task
+    ) -> None:
+        while True:
+            if heartbeat.done():
+                await heartbeat
+            try:
+                await self._save(run_id, fields)
+                return
+            except Exception:
+                logger.warning(
+                    "Job completion persistence failed; retrying", exc_info=True
+                )
+                if self._closing or heartbeat.done():
+                    raise
+                # Keep renewing delivery while retaining the completed result in memory.
+                await asyncio.sleep(min(self.heartbeat_seconds, 1.0))
+
+    @staticmethod
+    async def _retire(msg: Any, status: str) -> None:
+        if status in ("SUCCEEDED", "SKIPPED", "CANCELLED"):
+            await msg.ack()
+        else:
+            await msg.term()
 
     @staticmethod
     def _result(value: Any) -> Any:
@@ -566,6 +604,15 @@ class JobHost:
     ) -> str:
         sequence, attempt = msg.metadata.sequence.stream, msg.metadata.num_delivered
         run_id = run_key(descriptor.name, sequence)
+        try:
+            existing = await self.documents.get(self.collection, run_id)
+        except DocumentNotFound:
+            pass
+        else:
+            if existing.data.get("status") in TERMINAL_STATUSES:
+                status = existing.data["status"]
+                await self._retire(msg, status)
+                return status
         headers = msg.headers or {}
         trigger = {"kind": headers.get(TRIGGER_HEADER, "manual")}
         if headers.get("Nats-Scheduler"):
@@ -602,15 +649,27 @@ class JobHost:
             },
         )
         self._running[run_id] = context
-        heartbeat = asyncio.create_task(self._heartbeat(msg, context))
+        heartbeat = asyncio.create_task(self._heartbeat(msg))
+        progress = asyncio.create_task(self._persist_progress(context))
         work = asyncio.create_task(handler(context))
         self._work[run_id] = work
         timeout = descriptor.timeout.total_seconds() if descriptor.timeout else None
         result: Any = None
         error = ""
         try:
-            done, _ = await asyncio.wait({work}, timeout=timeout)
-            if not done:
+            done, _ = await asyncio.wait(
+                {work, heartbeat}, timeout=timeout, return_when=asyncio.FIRST_COMPLETED
+            )
+            if heartbeat in done:
+                logger.error(
+                    "Job acknowledgement heartbeat failed",
+                    exc_info=heartbeat.exception(),
+                )
+                context.cancelled.set()
+                work.cancel()
+                await asyncio.gather(work, return_exceptions=True)
+                status, error = "FAILED", "Acknowledgement heartbeat failed"
+            elif not done:
                 context.cancelled.set()
                 work.cancel()
                 with contextlib.suppress(BaseException):
@@ -630,31 +689,41 @@ class JobHost:
             else:
                 result = self._result(work.result())
                 status = "SKIPPED" if context.skipped is not None else "SUCCEEDED"
+            # Stop progress writes before publishing the final state.
+            progress.cancel()
+            await asyncio.gather(progress, return_exceptions=True)
+            if (
+                status not in ("SUCCEEDED", "SKIPPED", "CANCELLED")
+                and attempt < descriptor.max_attempts
+            ):
+                status = "RETRYING"
+            fields: dict[str, Any] = {
+                "status": status,
+                "logs": list(context.logs),
+                "error": error,
+            }
+            if status in TERMINAL_STATUSES:
+                fields["finished_at"] = _now()
+            if status in ("SUCCEEDED", "SKIPPED"):
+                fields["result"] = result
+            if status == "SKIPPED":
+                fields["skip_reason"] = context.skipped
+            # A failed heartbeat has already stopped the handler; persist that failure
+            # without using the failed renewal task to guard completion retries.
+            if heartbeat.done():
+                await self._save(run_id, fields)
+            else:
+                await self._save_completion(run_id, fields, heartbeat)
+            if status == "RETRYING":
+                await msg.nak(delay=self._backoff(attempt))
+            else:
+                await self._retire(msg, status)
+            return status
         finally:
-            heartbeat.cancel()
-            with contextlib.suppress(BaseException):
-                await heartbeat
+            context.cancelled.set()
+            for task in (heartbeat, progress, work):
+                task.cancel()
+            await asyncio.gather(heartbeat, progress, work, return_exceptions=True)
             self._running.pop(run_id, None)
             self._work.pop(run_id, None)
             self._interrupted.discard(run_id)
-
-        if status in ("SUCCEEDED", "SKIPPED", "CANCELLED"):
-            await msg.ack()
-        elif attempt < descriptor.max_attempts:
-            status = "RETRYING"
-            await msg.nak(delay=self._backoff(attempt))
-        else:
-            await msg.term()
-        fields: dict[str, Any] = {
-            "status": status,
-            "logs": list(context.logs),
-            "error": error,
-        }
-        if status in TERMINAL_STATUSES:
-            fields["finished_at"] = _now()
-        if status in ("SUCCEEDED", "SKIPPED"):
-            fields["result"] = result
-        if status == "SKIPPED":
-            fields["skip_reason"] = context.skipped
-        await self._save(run_id, fields)
-        return status

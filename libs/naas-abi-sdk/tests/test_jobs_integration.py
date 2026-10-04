@@ -488,3 +488,150 @@ def test_event_filters_and_skipped_runs_on_a_real_broker(broker):
     assert sorted(
         (r["payload"]["data"]["key"], r["status"]) for r in docs.runs("on_put")
     ) == [("b.csv", "SUCCEEDED"), ("empty.csv", "SKIPPED")]
+
+
+@pytest.mark.parametrize("stable_ids", [False, True])
+def test_each_event_on_one_subject_reaches_each_modules_job(broker, stable_ids):
+    descriptor = JobDescriptor("on_put", triggers=(OnEvent("evt.review.put"),))
+    stores = [Documents(), Documents()]
+
+    async def handler(ctx):
+        return ctx.payload
+
+    async def scenario():
+        hosts = [_host(broker, docs, [(descriptor, handler)]) for docs in stores]
+        hosts[1].module_id = "acme.other"
+        try:
+            for host in hosts:
+                await host.start()
+            nc = await hosts[0].transport.connect()
+            await nc.flush()
+            await (await hosts[1].transport.connect()).flush()
+            for n in range(2):
+                headers = {"Nats-Msg-Id": f"event-{n}"} if stable_ids else None
+                await nc.publish(
+                    "evt.review.put", json.dumps({"n": n}).encode(), headers=headers
+                )
+                if stable_ids:
+                    await nc.publish(
+                        "evt.review.put", json.dumps({"n": n}).encode(), headers=headers
+                    )
+            await _until(
+                lambda: all(
+                    len([r for r in docs.runs() if r["status"] == "SUCCEEDED"]) == 2
+                    for docs in stores
+                )
+            )
+            await asyncio.sleep(0.2)
+        finally:
+            for host in hosts:
+                await host.close()
+                await host.transport.close()
+
+    asyncio.run(scenario())
+    for docs in stores:
+        assert sorted(r["result"]["data"]["n"] for r in docs.runs()) == [0, 1]
+
+
+def test_log_store_outage_does_not_redeliver_a_running_job_to_another_replica(broker):
+    class FailedLogs(Documents):
+        failures = 0
+
+        async def put(self, collection, id, data, **kwargs):
+            if data["status"] == "RUNNING" and "logs" in data:
+                self.failures += 1
+                raise RuntimeError("log store unavailable")
+            return await super().put(collection, id, data, **kwargs)
+
+    docs = FailedLogs()
+    descriptor = JobDescriptor("slow", max_attempts=3)
+    active, peak, executions = 0, 0, 0
+
+    async def handler(ctx):
+        nonlocal active, peak, executions
+        active += 1
+        executions += 1
+        peak = max(peak, active)
+        try:
+            await asyncio.sleep(0.8)
+        finally:
+            active -= 1
+        return "done"
+
+    async def scenario():
+        hosts = [
+            _host(
+                broker,
+                docs,
+                [(descriptor, handler)],
+                instance_id=f"i-{n}",
+                heartbeat_seconds=0.03,
+                ack_wait_seconds=0.15,
+            )
+            for n in range(2)
+        ]
+        try:
+            for host in hosts:
+                await host.start()
+            run = await hosts[0].trigger("slow")
+            await run.wait(timeout=8, poll_seconds=0.05)
+            await asyncio.sleep(0.3)
+        finally:
+            for host in hosts:
+                await host.close()
+                await host.transport.close()
+
+    asyncio.run(scenario())
+    assert docs.failures > 0
+    assert executions == peak == 1
+
+
+def test_lost_ack_redelivery_retires_saved_completion_without_running_again(broker):
+    docs = Documents()
+    descriptor = JobDescriptor("once", max_attempts=3)
+    executions = []
+
+    async def handler(ctx):
+        executions.append(ctx.run_id)
+        return {"answer": 42}
+
+    async def scenario():
+        host = _host(
+            broker,
+            docs,
+            [(descriptor, handler)],
+            heartbeat_seconds=0.03,
+            ack_wait_seconds=0.15,
+        )
+        original_retire = host._retire
+        attempts = []
+
+        async def lose_first_ack(msg, status):
+            attempts.append(msg.metadata.num_delivered)
+            if len(attempts) == 1:
+                raise RuntimeError("ack lost")
+            await original_retire(msg, status)
+
+        host._retire = lose_first_ack
+        try:
+            await host.start()
+            run = await host.trigger("once")
+            record = await run.wait(timeout=8, poll_seconds=0.05)
+            await _until(lambda: len(attempts) >= 2)
+            await _until(lambda: not host._tasks)
+            info = (
+                await (await host.transport.connect())
+                .jetstream()
+                .consumer_info(
+                    stream_name(PROJECT),
+                    job_subjects(PROJECT, MODULE, descriptor.name).consumer,
+                )
+            )
+            assert info.num_ack_pending == 0
+            assert record["result"] == {"answer": 42}
+        finally:
+            await host.close()
+            await host.transport.close()
+
+    asyncio.run(scenario())
+    assert len(executions) == 1

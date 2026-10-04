@@ -73,8 +73,12 @@ allowed there): keep `jobs.py` importable without `nats` (stdlib and proto only)
 and keep the package `__init__` lazy for the same reason. Triggers are JetStream message schedules (`Cron`, `Every`,
 NATS >= 2.14) and core-NATS events (`OnEvent`, at-most-once bridge). Delivery is
 at-least-once: handlers must be idempotent. One durable pull consumer per job;
-`max_concurrency` is `max_ack_pending`, retries are `nak(delay)`. Run records live
-in the provider's document namespace (`job_runs_<hash(project)>`), written with CAS.
+`max_concurrency` is `max_ack_pending`, retries are `nak(delay)`.
+Renew acknowledgement independently of log persistence; supervise renewal failure.
+Save completion before ack/term/nak and retire redelivered terminal records without
+executing handlers again. Event deduplication requires a source Nats-Msg-Id and
+includes the target module/job; manual idempotency keys are target-scoped too.
+Run records live in the provider's document namespace (`job_runs_<hash(project)>`), written with CAS.
 Cancellation is cooperative (`ctx.cancelled`). tests/test_jobs_integration.py needs
 `nats-server` on PATH; run it after touching schedules, consumers or acks.
 A module triggers its own jobs through its bound host (`trigger_job` for sync

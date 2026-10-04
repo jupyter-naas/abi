@@ -629,7 +629,7 @@ class JobProxy:
         stream = stream_name(self.project)
         headers = {TRIGGER_HEADER: "manual", "Nats-TTL": "168h"}
         if idempotency_key:
-            headers["Nats-Msg-Id"] = f"{self.name}:{idempotency_key}"
+            headers["Nats-Msg-Id"] = _hash(subject, idempotency_key)
         # The run continues this trace (the host reads traceparent off the message).
         with client_span(subject, headers):
             # A payload above the broker limit travels as a claim check.
