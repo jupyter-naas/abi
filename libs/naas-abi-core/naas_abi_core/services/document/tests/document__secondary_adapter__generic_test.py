@@ -633,3 +633,70 @@ class DocumentSecondaryAdapterContract(ABC):
         adapter.put(name, name, name, {field: name}, None)
         page = adapter.find(name, name, [(field, "eq", name)], (field, "asc"), 1, None)
         assert page.items[0].id == name
+
+    # ------------------------------------------------------------------
+    # max_bytes: pages bounded by size as well as by count.
+    # ------------------------------------------------------------------
+
+    def _pages(self, docs, order_by, limit, max_bytes):
+        pages, cursor = [], None
+        while True:
+            page = docs.find(
+                "module", "records", [], order_by, limit, cursor, max_bytes=max_bytes
+            )
+            pages.append(page)
+            cursor = page.cursor
+            if cursor is None:
+                return pages
+
+    @pytest.mark.parametrize("order_by", [None, ("n", "desc")])
+    def test_max_bytes_cuts_pages_and_cursors_continue_without_gap_or_repeat(
+        self, docs, order_by
+    ):
+        for n in range(10):
+            docs.put(
+                "module", "records", f"d{n:02d}", {"n": n, "text": "x" * 1000}, None
+            )
+
+        pages = self._pages(docs, order_by, limit=10, max_bytes=3_000)
+
+        assert len(pages) > 1
+        assert all(1 <= len(page.items) <= 3 for page in pages)  # ~1 KB each
+        ids = [doc.id for page in pages for doc in page.items]
+        expected = [f"d{n:02d}" for n in range(10)]
+        assert ids == (expected if order_by is None else expected[::-1])
+
+    def test_an_item_larger_than_max_bytes_comes_back_alone(self, docs):
+        docs.put("module", "records", "a", {"text": "small"}, None)
+        docs.put("module", "records", "b", {"text": "x" * 10_000}, None)
+        docs.put("module", "records", "c", {"text": "small"}, None)
+
+        pages = self._pages(docs, None, limit=10, max_bytes=1_000)
+
+        assert [[doc.id for doc in page.items] for page in pages] == [
+            ["a"],
+            ["b"],
+            ["c"],
+        ]
+        assert (
+            docs.find(
+                "module",
+                "records",
+                [("text", "ne", "small")],
+                None,
+                10,
+                None,
+                max_bytes=1,
+            )
+            .items[0]
+            .id
+            == "b"
+        )
+
+    def test_limit_still_caps_a_page_within_max_bytes(self, docs):
+        for id in "abcde":
+            docs.put("module", "records", id, {"text": "small"}, None)
+
+        page = docs.find("module", "records", [], None, 2, None, max_bytes=1_000_000)
+
+        assert [doc.id for doc in page.items] == ["a", "b"] and page.cursor

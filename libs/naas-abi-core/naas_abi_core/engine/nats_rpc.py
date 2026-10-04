@@ -139,7 +139,7 @@ async def respond_protobuf(
         # The broker's max_payload is the only limit. It counts the header
         # block, which nats-py's own check does not; a violation closes the
         # connection every primary in this process shares.
-        limit = _broker_limit(request)
+        limit = broker_limit(request)
         if limit is not None and message_size(payload, headers) > limit:
             raise MaxPayloadError()
         await request.respond(payload, headers=headers)
@@ -170,7 +170,7 @@ def message_size(payload: bytes, headers: dict[str, str] | None) -> int:
     return len(payload) + len(f"NATS/1.0\r\n{block}\r\n".encode())
 
 
-def _broker_limit(request: Request) -> int | None:
+def broker_limit(request: Request) -> int | None:
     """The max_payload of the connection a request arrived on."""
     client = getattr(getattr(request, "_msg", None), "_client", None)
     limit = getattr(client, "max_payload", None)

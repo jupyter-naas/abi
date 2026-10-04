@@ -122,6 +122,8 @@ class DocumentSecondaryAdapterNATSClient(NatsRPCClient):
         order_by: OrderBy,
         limit: int,
         cursor: str | None,
+        *,
+        max_bytes: int | None = None,
     ) -> Page:
         response = self._request(
             "find",
@@ -134,6 +136,7 @@ class DocumentSecondaryAdapterNATSClient(NatsRPCClient):
                 else None,
                 limit=limit,
                 cursor=cursor,
+                max_bytes=max_bytes,
             ),
             pb.FindResponse,
         )

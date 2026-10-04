@@ -18,6 +18,7 @@ from naas_abi_core.engine.nats_auth import (
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
+    broker_limit,
     request_payload,
     respond_protobuf,
 )
@@ -47,6 +48,10 @@ OPERATIONS = {
     "namespaces": "Namespaces",
 }
 SUBJECT_PREFIX = "abi.svc.document.v1"
+# A find page's size estimate (stored JSON) stays under this share of the
+# broker limit, so its reply fits without RPC overflow: protobuf can run a few
+# times larger than JSON for many small values.
+PAGE_SHARE = 4
 # Operations across namespaces, and the service identities allowed to call them.
 ADMIN_OPERATIONS = frozenset({"namespaces"})
 ADMIN_IDENTITIES = frozenset({"api", "engine"})
@@ -120,7 +125,11 @@ class DocumentPrimaryAdapterNATS:
             parsed = getattr(pb, OPERATIONS[operation] + "Request").FromString(
                 await request_payload(request)
             )
-            result = await self._dispatch.call(partial(self._call, operation), parsed)
+            call = partial(self._call, operation)
+            if operation == "find":
+                limit = broker_limit(request)
+                call = partial(call, page_bytes=limit // PAGE_SHARE if limit else None)
+            result = await self._dispatch.call(call, parsed)
         except Exception as exc:  # noqa: BLE001 - translate failures at the RPC boundary
             code = next(
                 (code for code, cls in ERRORS.items() if isinstance(exc, cls)),
@@ -144,7 +153,7 @@ class DocumentPrimaryAdapterNATS:
             )
         await respond_protobuf(request, result, response_type)
 
-    def _call(self, operation: str, request):
+    def _call(self, operation: str, request, page_bytes: int | None = None):
         response = getattr(pb, OPERATIONS[operation] + "Response")
         if operation == "namespaces":
             return response(namespaces=self._adapter.namespaces())
@@ -184,6 +193,10 @@ class DocumentPrimaryAdapterNATS:
                 order_by=decode_order(request),
                 limit=request.limit if request.HasField("limit") else 100,
                 cursor=request.cursor if request.HasField("cursor") else None,
+                max_bytes=_smallest(
+                    request.max_bytes if request.HasField("max_bytes") else None,
+                    page_bytes,
+                ),
             )
             return response(
                 items=[encode_document(d) for d in page.items], cursor=page.cursor
@@ -193,3 +206,8 @@ class DocumentPrimaryAdapterNATS:
                 count=service.count(request.collection, decode_where(request.where))
             )
         return response()
+
+
+def _smallest(*budgets: int | None) -> int | None:
+    given = [budget for budget in budgets if budget is not None]
+    return min(given) if given else None

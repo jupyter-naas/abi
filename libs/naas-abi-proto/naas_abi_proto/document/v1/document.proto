@@ -61,8 +61,12 @@ message DeleteRequest {
 }
 message DeleteResponse { abi.common.v1.CallError error = 1;  }
 
+// A page holds at most `limit` items and stops before the item that would take
+// its size past `max_bytes` (always at least one item). The engine also caps it
+// to fit the broker. Only an unset `cursor` in FindResponse means the end.
 message FindRequest {
   abi.common.v1.CallContext context = 1; string namespace = 2; string collection = 3; repeated Predicate where = 4; OrderBy order_by = 5; optional int32 limit = 6; optional string cursor = 7;
+  optional int64 max_bytes = 8;
 }
 message FindResponse { abi.common.v1.CallError error = 1; repeated Document items = 2; optional string cursor = 3; }
 

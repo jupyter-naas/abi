@@ -173,24 +173,27 @@ class DocumentCheckpointSaver(BaseCheckpointSaver):
         return decode_data(result.document.data)
 
     async def _fetch(self, thread_id: str, collection: str, refs: list[str]):
-        result = await self.documents.find(
-            pb.FindRequest(
-                collection=collection,
-                where=[
-                    pb.Predicate(
-                        field="agent_id",
-                        operator="eq",
-                        value=encode_value(self.agent_id),
-                    ),
-                    pb.Predicate(
-                        field="thread_id", operator="eq", value=encode_value(thread_id)
-                    ),
-                    pb.Predicate(field="ref", operator="in", value=encode_value(refs)),
-                ],
-                limit=len(refs),
+        where = [
+            pb.Predicate(
+                field="agent_id", operator="eq", value=encode_value(self.agent_id)
+            ),
+            pb.Predicate(
+                field="thread_id", operator="eq", value=encode_value(thread_id)
+            ),
+            pb.Predicate(field="ref", operator="in", value=encode_value(refs)),
+        ]
+        found: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while True:  # every page: one can be cut short by the engine's byte budget
+            result = await self.documents.find(
+                pb.FindRequest(
+                    collection=collection, where=where, limit=len(refs), cursor=cursor
+                )
             )
-        )
-        return [decode_data(doc.data) for doc in result.items]
+            found.extend(decode_data(doc.data) for doc in result.items)
+            if not result.HasField("cursor"):
+                return found
+            cursor = result.cursor
 
     async def _load(self, data: Mapping[str, Any]) -> CheckpointTuple:
         legacy = data.get("_schema") == 1
