@@ -27,6 +27,7 @@ class TracingMiddleware:
             await self.app(scope, receive, send)
             return
         try:
+            from naas_abi_sdk.telemetry import record_span_exception
             from opentelemetry import propagate
             from opentelemetry.trace import SpanKind, Status, StatusCode
         except ImportError:
@@ -43,6 +44,9 @@ class TracingMiddleware:
             context=propagate.extract(headers),
             kind=SpanKind.SERVER,
             attributes={"http.request.method": method, "url.path": scope.get("path", "")},
+            # Recorded below, with credentials scrubbed from the text.
+            record_exception=False,
+            set_status_on_exception=False,
         ) as span:
 
             async def traced_send(message: dict) -> None:
@@ -56,7 +60,7 @@ class TracingMiddleware:
             try:
                 await self.app(scope, receive, traced_send)
             except Exception as exc:
-                span.set_status(Status(StatusCode.ERROR, type(exc).__name__))
+                record_span_exception(span, exc, description=type(exc).__name__)
                 raise
             finally:
                 route = scope.get("route")

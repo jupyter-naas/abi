@@ -10,11 +10,62 @@ from __future__ import annotations
 
 import contextlib
 import os
+import traceback
 from collections.abc import Iterator, Mapping, MutableMapping
 from typing import Any
 
+from naas_abi_sdk.redaction import scrub_secrets
+
 TRACER_NAME = "naas_abi"
 _configured = False
+
+
+def record_span_exception(
+    span: Any, error: BaseException, *, description: str | None = None
+) -> None:
+    """Record ``error`` on ``span`` as OpenTelemetry does (an ``exception``
+    event, ERROR status), with credentials scrubbed from its message, stack
+    trace and status: spans leave the process (Jaeger keeps a copy).
+
+    ``description`` is the status text; by default ``"<Type>: <message>"``.
+    """
+    if span is None or not span.is_recording():
+        return
+    from opentelemetry.trace import Status, StatusCode
+
+    message = scrub_secrets(str(error))
+    stacktrace = "".join(
+        traceback.format_exception(type(error), error, error.__traceback__)
+    )
+    span.record_exception(
+        error,
+        attributes={
+            "exception.message": message,
+            "exception.stacktrace": scrub_secrets(stacktrace),
+        },
+    )
+    span.set_status(
+        Status(
+            StatusCode.ERROR,
+            scrub_secrets(description)
+            if description is not None
+            else f"{type(error).__name__}: {message}",
+        )
+    )
+
+
+@contextlib.contextmanager
+def _recording_failures(span: Any) -> Iterator[None]:
+    """What ``start_as_current_span`` does when the block raises, scrubbed.
+
+    Spans opened here pass ``record_exception=False`` and
+    ``set_status_on_exception=False``, so the raw text is never recorded.
+    """
+    try:
+        yield
+    except Exception as exc:  # OpenTelemetry records Exception, not BaseException
+        record_span_exception(span, exc)
+        raise
 
 
 class TransferTrace:
@@ -45,10 +96,7 @@ class TransferTrace:
         self.span.set_attribute("abi.transfer.bytes_sent", self.bytes_sent)
         self.span.set_attribute("abi.transfer.bytes_received", self.bytes_received)
         if error is not None:
-            from opentelemetry.trace import Status, StatusCode
-
-            self.span.record_exception(error)
-            self.span.set_status(Status(StatusCode.ERROR, type(error).__name__))
+            record_span_exception(self.span, error, description=type(error).__name__)
         self.span.end()
 
 
@@ -78,12 +126,9 @@ class ServedTransfer(TransferTrace):
         """Record the real failure here; the caller only gets the sanitized code."""
         if self.span is None or not self.span.is_recording():
             return
-        from opentelemetry.trace import Status, StatusCode
-
-        self.span.record_exception(error)
         self.span.set_attribute("abi.error_code", code)
-        self.span.set_status(
-            Status(StatusCode.ERROR, f"{code}: {message}" if message else code)
+        record_span_exception(
+            self.span, error, description=f"{code}: {message}" if message else code
         )
 
     def end(self, how: str, *, cancelled: bool = False) -> None:
@@ -167,11 +212,16 @@ def client_span(
     extra = dict(attributes or {})
     if size is not None:
         extra["messaging.message.body.size"] = size
-    with _tracer().start_as_current_span(
-        f"{service}/{method}",
-        kind=trace.SpanKind.CLIENT,
-        attributes=_attributes(subject, extra),
-    ) as span:
+    with (
+        _tracer().start_as_current_span(
+            f"{service}/{method}",
+            kind=trace.SpanKind.CLIENT,
+            attributes=_attributes(subject, extra),
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span,
+        _recording_failures(span),
+    ):
         propagate.inject(headers)
         yield span
 
@@ -269,12 +319,17 @@ def server_span(
     trace, propagate = api
     service, method = describe_subject(subject)
     span_kind = trace.SpanKind.CONSUMER if kind == "consumer" else trace.SpanKind.SERVER
-    with _tracer().start_as_current_span(
-        name or f"{service}/{method}",
-        context=propagate.extract(dict(headers or {})),
-        kind=span_kind,
-        attributes=_attributes(subject, attributes),
-    ) as span:
+    with (
+        _tracer().start_as_current_span(
+            name or f"{service}/{method}",
+            context=propagate.extract(dict(headers or {})),
+            kind=span_kind,
+            attributes=_attributes(subject, attributes),
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span,
+        _recording_failures(span),
+    ):
         yield span
 
 
@@ -284,7 +339,15 @@ def internal_span(name: str, attributes: dict[str, Any] | None = None) -> Iterat
     if _api() is None:
         yield None
         return
-    with _tracer().start_as_current_span(name, attributes=attributes or {}) as span:
+    with (
+        _tracer().start_as_current_span(
+            name,
+            attributes=attributes or {},
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span,
+        _recording_failures(span),
+    ):
         yield span
 
 
@@ -312,7 +375,8 @@ def record_error(code: str, message: str = "") -> None:
     from opentelemetry.trace import Status, StatusCode
 
     span.set_attribute("abi.error_code", code)
-    span.set_status(Status(StatusCode.ERROR, f"{code}: {message}" if message else code))
+    description = f"{code}: {scrub_secrets(message)}" if message else code
+    span.set_status(Status(StatusCode.ERROR, description))
 
 
 def configure_tracing(
