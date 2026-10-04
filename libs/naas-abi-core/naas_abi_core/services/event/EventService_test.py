@@ -698,3 +698,42 @@ def test_get_stored_by_seq(tmp_path):
     assert service.get_stored(2).event_type == _Other._class_uri
     with pytest.raises(EventNotFoundError):
         service.get_stored(3)
+
+
+# ---------------------------------------------------------------------------
+# query_stream / query_stored_stream
+# ---------------------------------------------------------------------------
+
+
+def test_query_stream_reconstructs_what_query_returns(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    for i in range(1_100):
+        service.publish(UserAuthenticated(user_id=f"u{i}"))
+
+    with service.query_stream(
+        event_class=UserAuthenticated, newest_first=True, limit=600
+    ) as events:
+        streamed = list(events)
+
+    expected = service.query(
+        event_class=UserAuthenticated, newest_first=True, limit=600
+    )
+    assert all(isinstance(event, UserAuthenticated) for event in streamed)
+    assert [e.user_id for e in streamed] == [e.user_id for e in expected]
+    assert streamed[0].user_id == "u1099"
+
+
+def test_query_stored_stream_reads_raw_records_by_type_iri(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    for i in range(5):
+        service.publish(UserAuthenticated(user_id=f"u{i}"))
+
+    with service.query_stored_stream(
+        event_type=UserAuthenticated._class_uri, since_seq=1, limit=3
+    ) as records:
+        streamed = list(records)
+
+    assert [record.seq for record in streamed] == [2, 3, 4]
+    assert streamed == service.query_stored(
+        event_type=UserAuthenticated._class_uri, since_seq=1, limit=3
+    )

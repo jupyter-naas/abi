@@ -13,6 +13,7 @@ activity_log/
 ├── ActivityLogFactory.py
 ├── ActivityLogPort.py             # IActivityLogAdapter, IActivityLogDomain, DTOs
 ├── ActivityLogService.py          # public service
+├── adapters/activity_log_stream_codec.py   # event <-> protobuf, stream frames
 ├── adapters/secondary/
 │   └── ActivityLogSqliteAdapter.py
 └── tests/
@@ -30,6 +31,7 @@ Nexus System app (Data tab) browses actors and their events read-only this way.
 class IActivityLogAdapter:
     def record(event: ActivityEvent) -> None
     def query(actor_id: str, query: ActivityLogQuery | None = None) -> list[ActivityEvent]
+    def query_stream(actor_id, query=None)  # context manager -> Iterator[ActivityEvent]
     def list_actors() -> list[str]
     def shutdown() -> None
 
@@ -42,9 +44,25 @@ class IActivityLogDomain:    # same surface
 ```python
 record(event)                            # swallows exceptions, logs warning
 query(actor_id, query=None) -> list[ActivityEvent]
+query_stream(actor_id, query=None)       # with ... as events: same filters, lazily
 list_actors() -> list[str]
 shutdown()                               # close adapter resources
 ```
+
+### Streamed queries
+
+`query_stream(actor_id, query)` reads what `query` returns, as the caller
+iterates, inside the `with` (docs/adr/20261003_nats-streamed-results.md). The
+snapshot is pinned when the block opens (bounded below the actor's newest
+`seq`), so events recorded while it is read are not included and the stream
+always ends. The port's default (`paged_events`) reads `STREAM_PAGE` (500)
+events at a time by keyset on `seq` (`after_seq`, or `before_seq` for
+`newest_first`), honouring `limit`, and holds no lock between pages, so
+`record` is never blocked by a reader. Over NATS the primary hosts `transfer/v1`
+sessions on `abi.svc.activity_log.v1.transfer` (operation `query`, metadata a
+`QueryRequest`, frames `ActivityEvents` batches of about 256 KiB built in
+`adapters/activity_log_stream_codec.py`); the core client and the SDK facade
+pin the snapshot before opening and have no unary fallback.
 
 ## Available Adapters
 

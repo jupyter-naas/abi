@@ -9,6 +9,9 @@ import pytest
 from naas_abi_core.services.event.adapters.secondary.EventSQLiteAdapter import (
     EventSQLiteAdapter,
 )
+from naas_abi_core.services.event.tests.event__secondary_adapter__generic_test import (
+    EventSecondaryAdapterContract,
+)
 
 
 @pytest.fixture()
@@ -66,7 +69,9 @@ def test_query_filters_by_event_type(adapter):
 
 def test_query_orders_by_seq(adapter):
     adapter.append("urn:e1", "urn:Type:A", _ts(10), b"p1")
-    adapter.append("urn:e2", "urn:Type:A", _ts(0), b"p2")  # earlier timestamp, later seq
+    adapter.append(
+        "urn:e2", "urn:Type:A", _ts(0), b"p2"
+    )  # earlier timestamp, later seq
 
     rows = adapter.query(event_type="urn:Type:A")
     assert [r.seq for r in rows] == [1, 2]
@@ -304,3 +309,11 @@ def test_list_event_types_counts_each_type_with_its_latest_event(adapter):
 
 def test_list_event_types_of_an_empty_log(adapter):
     assert adapter.list_event_types() == []
+
+
+class TestEventSQLiteAdapterContract(EventSecondaryAdapterContract):
+    @pytest.fixture
+    def adapter(self, tmp_path):
+        adapter = EventSQLiteAdapter(str(tmp_path / "contract.sqlite"))
+        yield adapter
+        adapter.close()

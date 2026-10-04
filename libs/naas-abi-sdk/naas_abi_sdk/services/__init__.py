@@ -1,9 +1,9 @@
 """Async service facades: Python arguments and results, no engine dependency."""
 
-from naas_abi_sdk.services._activity_log import ActivityLogService
 from naas_abi_sdk.services._coding_environment import CodingEnvironmentService
 from naas_abi_sdk.services._email import EmailService
 from naas_abi_sdk.services._source_control import SourceControlService
+from naas_abi_sdk.services.activity_log import ActivityLogService
 from naas_abi_sdk.services.cache import CacheService
 from naas_abi_sdk.services.dataset import DatasetService
 from naas_abi_sdk.services.document import DocumentService

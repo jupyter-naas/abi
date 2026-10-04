@@ -25,13 +25,13 @@ every other endpoint's "always call straight through" behaviour.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC
-from typing import TypeVar
+from functools import partial
+from typing import Any, TypeVar
 
 import nats
 import nats.micro
-from google.protobuf import json_format
 from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
 from naas_abi_core.engine.nats_auth import (
@@ -45,10 +45,10 @@ from naas_abi_core.engine.nats_rpc import (
     respond_protobuf,
 )
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
+from naas_abi_core.engine.nats_transfer import TransferHost, thread_frames
 from naas_abi_core.proto.activity_log.v1 import activity_log_pb2
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.services.activity_log.ActivityLogPort import (
-    ActivityEvent,
     ActivityLogQuery,
     IActivityLogAdapter,
     IActivityLogDomain,
@@ -58,6 +58,12 @@ from naas_abi_core.services.activity_log.adapters.activity_log_nats_contract imp
     SERVICE_NAME,
     SERVICE_VERSION,
     SUBJECT_PREFIX,
+    TRANSFER_PREFIX,
+)
+from naas_abi_core.services.activity_log.adapters.activity_log_stream_codec import (
+    activity_frames,
+    event_to_pb,
+    pb_to_event,
 )
 from nats.micro.request import Request
 
@@ -71,31 +77,6 @@ __all__ = [
 
 _RequestT = TypeVar("_RequestT", bound=Message)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
-
-
-def _event_to_pb(event: ActivityEvent) -> activity_log_pb2.ActivityEvent:
-    pb = activity_log_pb2.ActivityEvent(
-        actor_id=event.actor_id,
-        event_type=event.event_type,
-    )
-    pb.timestamp.FromDatetime(event.timestamp)
-    if event.correlation_id is not None:
-        pb.correlation_id = event.correlation_id
-    pb.attributes.update(event.attributes)
-    if event.seq is not None:
-        pb.seq = event.seq
-    return pb
-
-
-def _pb_to_event(pb: activity_log_pb2.ActivityEvent) -> ActivityEvent:
-    return ActivityEvent(
-        actor_id=pb.actor_id,
-        event_type=pb.event_type,
-        timestamp=pb.timestamp.ToDatetime(tzinfo=UTC),
-        correlation_id=pb.correlation_id if pb.HasField("correlation_id") else None,
-        attributes=json_format.MessageToDict(pb.attributes),
-        seq=pb.seq if pb.HasField("seq") else None,
-    )
 
 
 def _pb_to_query(pb: activity_log_pb2.ActivityLogQueryFilter) -> ActivityLogQuery:
@@ -143,6 +124,14 @@ class ActivityLogPrimaryAdapterNATS:
         self._jwt_secret = jwt_secret
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
+        # Streamed queries (docs/adr/20261003_nats-streamed-results.md).
+        self._transfer = TransferHost(
+            TRANSFER_PREFIX,
+            jwt_secret,
+            self._transfer_frames,
+            operations=("query",),
+            chunk_bytes=1024 * 1024,
+        )
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``activity_log`` NATS service on ``nc``.
@@ -181,9 +170,11 @@ class ActivityLogPrimaryAdapterNATS:
             handler=self._handle_shutdown,
         )
         self._service = service
+        await self._transfer.start(nc)
 
     async def stop(self) -> None:
         """Deregister the service, draining its subscriptions."""
+        await self._transfer.stop()
         service = self._service
         self._service = None
         try:
@@ -289,7 +280,7 @@ class ActivityLogPrimaryAdapterNATS:
     def _call_record(
         self, req: activity_log_pb2.RecordRequest
     ) -> activity_log_pb2.RecordResponse:
-        self._adapter.record(_pb_to_event(req.event))
+        self._adapter.record(pb_to_event(req.event))
         return activity_log_pb2.RecordResponse()
 
     async def _handle_query(self, request: Request) -> None:
@@ -307,9 +298,29 @@ class ActivityLogPrimaryAdapterNATS:
         events = self._adapter.query(req.actor_id, query)
         return activity_log_pb2.QueryResponse(
             events=activity_log_pb2.ActivityEvents(
-                events=[_event_to_pb(event) for event in events]
+                events=[event_to_pb(event) for event in events]
             )
         )
+
+    # ------------------------------------------------------------------
+    # Streamed queries: one transfer session per query, produced on its own
+    # thread one frame at a time (activity_log_stream_codec.py).
+    # ------------------------------------------------------------------
+
+    def _transfer_frames(
+        self, operation: str, metadata: bytes, source: Any
+    ) -> AsyncIterator[bytes]:
+        request = activity_log_pb2.QueryRequest.FromString(metadata)
+        return thread_frames(partial(self._produce_query, request))
+
+    def _produce_query(
+        self, request: activity_log_pb2.QueryRequest, emit: Callable[[bytes], bool]
+    ) -> None:
+        query = _pb_to_query(request.filter) if request.HasField("filter") else None
+        with self._adapter.query_stream(request.actor_id, query) as events:
+            for frame in activity_frames(events):
+                if not emit(frame):
+                    return
 
     async def _handle_list_actors(self, request: Request) -> None:
         await self._handle(

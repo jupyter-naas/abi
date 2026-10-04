@@ -25,6 +25,9 @@ from naas_abi_core.services.event.adapters.secondary.EventSQLiteAdapter import (
     EventSQLiteAdapter,
 )
 from naas_abi_core.services.event.EventPort import EventNotFoundError, InvalidEventError
+from naas_abi_core.services.event.tests.event__secondary_adapter__generic_test import (
+    EventSecondaryAdapterContract,
+)
 
 JWT_SECRET = "test-shared-secret"
 
@@ -287,6 +290,15 @@ def _server_and_client(nats_url, tmp_path):
     client.close()
     server.stop()
     wrapped.close()
+
+
+@pytest.mark.integration
+class TestEventNATSClientContract(EventSecondaryAdapterContract):
+    """The shared adapter contract through a real primary and broker."""
+
+    @pytest.fixture
+    def adapter(self, _server_and_client):
+        return _server_and_client
 
 
 @pytest.mark.integration

@@ -94,4 +94,9 @@ queries, and document `find` pages.
   quarter of the broker limit (estimated from the stored JSON), so replies fit
   without overflow. A cut page carries a cursor, only an absent cursor means
   the end, and a single larger document comes back alone.
-- Not yet: event and activity queries.
+- Event and activity log: `query_stream` on the port, service, NATS clients
+  and SDK. The default pages by `seq` with the snapshot pinned at open, so
+  events appended while reading are left out and the stream ends. Over NATS:
+  `abi.svc.event.v1.transfer` / `abi.svc.activity_log.v1.transfer`, operation
+  `query`, `StoredEvents` / `ActivityEvents` frames of about 256 KiB.
+  `query_for_consumer` stays paged unary: its cursor advances with the read.

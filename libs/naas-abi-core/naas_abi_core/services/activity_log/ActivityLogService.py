@@ -1,3 +1,6 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 from naas_abi_core.services.activity_log.ActivityLogPort import (
     ActivityEvent,
     ActivityLogQuery,
@@ -39,6 +42,13 @@ class ActivityLogService(ServiceBase, IActivityLogDomain):
         self, actor_id: str, query: ActivityLogQuery | None = None
     ) -> list[ActivityEvent]:
         return self.__adapter.query(actor_id, query)
+
+    @contextmanager
+    def query_stream(
+        self, actor_id: str, query: ActivityLogQuery | None = None
+    ) -> Iterator[Iterator[ActivityEvent]]:
+        with self.__adapter.query_stream(actor_id, query) as events:
+            yield events
 
     def list_actors(self) -> list[str]:
         return self.__adapter.list_actors()
