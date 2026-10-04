@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 1e06ae961f376a4397e5c204ba90a997d7dd9c9c0a8deb563086dfde7f5d2bd2
+# onto2py-source-sha256: e1d488816a1f25d4c16239b838b873590e0fffaac04b2bb16f36c19b56e8bc93
 from __future__ import annotations
 
 import contextlib
@@ -20,6 +20,7 @@ from typing import (
 
 from naas_abi.ontologies.modules.ABIOntology import (
     GenericallyDependentContinuant,
+    GeospatialRegion,
     MaterialEntity,
     Organization,
     Person,
@@ -402,7 +403,9 @@ class ActOfCertification(RDFEntity):
     occupiesTemporalRegion: Optional[
         Annotated[List[Union[TemporalRegion, URIRef, str]], Field()]
     ] = None
-    occursIn: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    occursIn: Optional[
+        Annotated[List[Union[GeospatialRegion, URIRef, str]], Field()]
+    ] = None
     realizes: Optional[
         Annotated[List[Union[CertificationCandidateRole, URIRef, str]], Field()]
     ] = None

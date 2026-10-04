@@ -1,4 +1,4 @@
-# onto2py-source-sha256: eb11bf2c79c817308646bbbed246cebbb49f5063d0f37c36661b4dcd3ec9408b
+# onto2py-source-sha256: 5076cc1503b7458dac35628880e246d6dd93ce710f59f9e0d0cb34511f711fe2
 from __future__ import annotations
 
 import contextlib
@@ -19,6 +19,7 @@ from typing import (
 )
 
 from naas_abi.ontologies.modules.ABIOntology import (
+    GeospatialRegion,
     Organization,
     Person,
     TemporalRegion,
@@ -401,7 +402,9 @@ class ActOfStudying(RDFEntity):
     occupiesTemporalRegion: Optional[
         Annotated[List[Union[TemporalRegion, URIRef, str]], Field()]
     ] = None
-    occursIn: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    occursIn: Optional[
+        Annotated[List[Union[GeospatialRegion, URIRef, str]], Field()]
+    ] = None
     realizes: Optional[Annotated[Union[URIRef, str], Field()]] = None
 
 

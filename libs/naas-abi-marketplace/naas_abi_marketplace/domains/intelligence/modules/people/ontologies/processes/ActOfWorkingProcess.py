@@ -1,4 +1,4 @@
-# onto2py-source-sha256: b39839929c02dd15663a241b4a2ab5cfa29eb8aa575728262ba983c70f2aefa0
+# onto2py-source-sha256: db798b3cd50a42417177ccd7be47da4561d1db3139cc4eea18d1eb1b970504ee
 from __future__ import annotations
 
 import contextlib
@@ -21,6 +21,7 @@ from typing import (
 from naas_abi.ontologies.modules.ABIOntology import (
     Disposition,
     GenericallyDependentContinuant,
+    GeospatialRegion,
     MaterialEntity,
     Organization,
     Person,
@@ -406,7 +407,9 @@ class ActOfWorking(RDFEntity):
     occupiesTemporalRegion: Optional[
         Annotated[List[Union[TemporalRegion, URIRef, str]], Field()]
     ] = None
-    occursIn: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    occursIn: Optional[
+        Annotated[List[Union[GeospatialRegion, URIRef, str]], Field()]
+    ] = None
     realizes: Optional[Annotated[Union[URIRef, str], Field()]] = None
 
 

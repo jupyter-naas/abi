@@ -1,4 +1,4 @@
-# onto2py-source-sha256: d1268111a16e79d2329a020e21ac9ce57ca0f6b777f9b1bb405ffe0b8bc600dd
+# onto2py-source-sha256: 7cee3ac5d7a07eda5cec73eb21102447e16897aebf8df0a299ebc24f93c8607c
 from __future__ import annotations
 
 import contextlib
@@ -22,6 +22,7 @@ from naas_abi.ontologies.modules.ABIOntology import (
     Disposition,
     DocumentContentEntity,
     GenericallyDependentContinuant,
+    GeospatialRegion,
     MaterialEntity,
     Organization,
     Person,
@@ -419,7 +420,9 @@ class ActOfCertification(RDFEntity):
     occupiesTemporalRegion: Optional[
         Annotated[List[Union[TemporalRegion, URIRef, str]], Field()]
     ] = None
-    occursIn: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    occursIn: Optional[
+        Annotated[List[Union[GeospatialRegion, URIRef, str]], Field()]
+    ] = None
     realizes: Optional[
         Annotated[List[Union[CertificationCandidateRole, URIRef, str]], Field()]
     ] = None
@@ -590,7 +593,9 @@ class ActOfStudying(RDFEntity):
     occupiesTemporalRegion: Optional[
         Annotated[List[Union[TemporalRegion, URIRef, str]], Field()]
     ] = None
-    occursIn: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    occursIn: Optional[
+        Annotated[List[Union[GeospatialRegion, URIRef, str]], Field()]
+    ] = None
     realizes: Optional[Annotated[List[Union[StudentRole, URIRef, str]], Field()]] = None
 
 
@@ -704,7 +709,9 @@ class ActOfWorking(RDFEntity):
     occupiesTemporalRegion: Optional[
         Annotated[List[Union[TemporalRegion, URIRef, str]], Field()]
     ] = None
-    occursIn: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    occursIn: Optional[
+        Annotated[List[Union[GeospatialRegion, URIRef, str]], Field()]
+    ] = None
     realizes: Optional[Annotated[List[Union[OccupationRole, URIRef, str]], Field()]] = (
         None
     )

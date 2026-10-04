@@ -66,6 +66,8 @@ _ABI_CLASS_LABELS: dict[str, str] = {
     f"{ABI_NS}Person": "Person",
     f"{ABI_NS}Organization": "Organization",
     f"{ABI_NS}Site": "Site",
+    f"{ABI_NS}GeospatialRegion": "Geospatial Region",
+    f"{ABI_NS}GeospatialLocation": "Geospatial Location",
     f"{CCO_NS}ont00000468": "Office Building",
     f"{CCO_NS}ont00000270": "Educational Facility",
     f"{CCO_NS}ont00000192": "Facility",

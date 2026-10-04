@@ -88,9 +88,12 @@ BFO process and restricts them.
 | `people:Interest` | HOW IT IS | What someone follows outside the duties of any one job. |
 
 `abi:Site` additionally carries `office_label`, `city_name`, `country_name` and
-`country_code`. Each act occurs in a CCO facility (`OfficeBuilding`,
-`EducationalFacility`, `Facility`), tied to the person and organization by
-restriction in the slice.
+`country_code`. Each act occurs in an `abi:GeospatialRegion` (a site: the
+street-level `abi:GeospatialLocation`, a city or a country, chained upwards by
+`abi:continuantPartOf`). The CCO facility (`OfficeBuilding`,
+`EducationalFacility`, `Facility`) is a material entity located in that site
+(`abi:locatedIn some abi:GeospatialLocation`), tied to the person and
+organization by restriction in the slice.
 
 ## Process ledger
 

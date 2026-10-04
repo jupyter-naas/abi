@@ -28,8 +28,8 @@ personnel:PersonnelOntology a owl:Ontology ;
   dc:description "Internal vocabulary for the personnel (S1) domain: what an organization records about its own staff - the employee role a person bears while employed, the job position it concretizes and the job description of that position, the employment record and contract that document the relationship, and the employment status, remuneration, grade and service line the organization assigns. Every class specializes or relates to the people intelligence vocabulary (PeopleOntology), which it imports: an act of employment is an act of working, an employee role is an occupation role. Nothing in PeopleOntology refers back here."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Internal HR classes. The generic person, working, studying and profile vocabulary is people:, in intelligence/modules/people."@en ;
-  dc11:contributor "Alice Dupont" ;
-  dc11:date "2026-10-02"^^xsd:date .
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-10-04"^^xsd:date .
 
 #################################################################
 #    Object Properties

@@ -29,7 +29,6 @@ people:ActOfProfilingProcess a owl:Ontology ;
   owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
   owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
   rdfs:seeAlso <http://ontology.naas.ai/people/PeopleOntology> ;
-  rdfs:member "bpl-processes/personnel" ;
   abi:pythonPackage "naas_abi_marketplace.domains.intelligence.modules.people" ;
   abi:ontologyResource "ontologies/processes/ActOfProfilingProcess.ttl" ;
   abi:pythonResource "ontologies/processes/ActOfProfilingProcess.py" ;
@@ -37,8 +36,8 @@ people:ActOfProfilingProcess a owl:Ontology ;
   dc:description "Process slice for profiling: a planned act in which statements from a published profile document are registered as acts of working, acts of studying and person-level directory facts without duplicating episode data in a second store."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Runtime: register_profile_from_source. NCOR ledger entry personnel-profiling.ttl (upstream)."@en ;
-  dc11:contributor "Alice Dupont" ;
-  dc11:date "2026-09-18"^^xsd:date .
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-10-04"^^xsd:date .
 
 #################################################################
 #    Classes - WHAT

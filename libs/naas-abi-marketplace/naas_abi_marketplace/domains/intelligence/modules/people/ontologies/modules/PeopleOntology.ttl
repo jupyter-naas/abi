@@ -26,8 +26,8 @@ people:PeopleOntology a owl:Ontology ;
   dc:description "Shared vocabulary for people intelligence (S2): what can be known about any person, whoever employs them - the occupation and student roles they bear, the missions, skills, language capabilities and interests they carry, and the records and documents that report them. It also holds what a person is presented as: the profile summary and portrait published for them, the certifications they hold and the recommendations others write about them. Internal HR records (employee role, job position, employment record and contract, remuneration, grade, service line) are not here: an organization keeps those about its own staff, and specializes these classes to do so. Process slices (ActOfWorkingProcess, ActOfStudyingProcess, ActOfCertificationProcess, ActOfProfilingProcess) import nothing from this file; this ontology imports them and they restrict these classes in context."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Shared people classes. Process restrictions live in ontologies/processes/. Nothing here depends on an organization's internal records: a vocabulary that specializes these classes imports this one, never the reverse."@en ;
-  dc11:contributor "Alice Dupont" ;
-  dc11:date "2026-08-18"^^xsd:date .
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-10-04"^^xsd:date .
 
 #################################################################
 #    Object Properties
@@ -758,7 +758,7 @@ people:ActOfCertification a owl:Class ;
   rdfs:subClassOf cco:ont00000228 ,
     [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
     [ a owl:Restriction ; owl:onProperty people:forCertifyingOrganization ; owl:someValuesFrom abi:Organization ] ,
-    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom cco:ont00000192 ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
     [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
     [ a owl:Restriction ; owl:onProperty people:hasAwardedCertification ; owl:someValuesFrom people:Certification ] ,
     [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom people:CertificationCandidateRole ] ,
@@ -802,6 +802,11 @@ abi:Person rdfs:subClassOf
 
 abi:Organization rdfs:subClassOf
     [ a owl:Restriction ; owl:onProperty people:hasAssessmentFacility ; owl:someValuesFrom cco:ont00000192 ] .
+
+# WHERE x WHERE - the facility stands at a geospatial location (a site), which is
+# a continuant part of the city, region and country the act occurs in.
+cco:ont00000192 rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:locatedIn ; owl:someValuesFrom abi:GeospatialLocation ] .
 
 #################################################################
 #    Object properties - process-only
@@ -985,7 +990,7 @@ people:ActOfStudying a owl:Class ;
     cco:ont00001074 ,
     [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
     [ a owl:Restriction ; owl:onProperty people:forEducationalOrganization ; owl:someValuesFrom abi:Organization ] ,
-    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom cco:ont00000270 ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
     [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
     [ a owl:Restriction ; owl:onProperty people:hasEnrollment ; owl:someValuesFrom people:EnrollmentRecord ] ,
     [ a owl:Restriction ; owl:onProperty people:hasDegree ; owl:someValuesFrom people:AcademicDegree ] ,
@@ -994,7 +999,7 @@ people:ActOfStudying a owl:Class ;
     [ a owl:Restriction ; owl:onProperty people:developsLanguageCapability ; owl:someValuesFrom people:LanguageCapability ] ,
     [ a owl:Restriction ; owl:onProperty people:hasSourceDocument ; owl:someValuesFrom people:ProfileDocument ] ;
   rdfs:label "Act of Studying"@en ;
-  skos:definition "A Planned Act, and an Act of Educational Training Acquisition, in which a person acquires knowledge of a curriculum from an educational organization in an educational facility over a temporal region, realizing a student role, developing skills and language capabilities, under an enrollment record and academic degree."@en ;
+  skos:definition "A Planned Act, and an Act of Educational Training Acquisition, in which a person acquires knowledge of a curriculum from an educational organization at a site (where an educational facility may stand) over a temporal region, realizing a student role, developing skills and language capabilities, under an enrollment record and academic degree."@en ;
   skos:example "Alice Dupont studying for a Master's Degree in Corporate Finance at KEDGE Business School in Bordeaux from 2012 to 2016."@en .
 
 #################################################################
@@ -1019,6 +1024,11 @@ abi:Person rdfs:subClassOf
 
 cco:ont00000564 rdfs:subClassOf
     [ a owl:Restriction ; owl:onProperty people:hasEducationalFacility ; owl:someValuesFrom cco:ont00000270 ] .
+
+# WHERE x WHERE - the educational facility stands at a geospatial location (a site), which is
+# a continuant part of the city, region and country the act occurs in.
+cco:ont00000270 rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:locatedIn ; owl:someValuesFrom abi:GeospatialLocation ] .
 
 #################################################################
 #    Object properties - process-only
@@ -1090,9 +1100,10 @@ people:isDegreeOf a owl:ObjectProperty ;
   rdfs:range  people:ActOfStudying .
 
 # WHO ↔ WHERE (place) - the place a student studies in, as a Site.
-# Not the facility: the backbone is ActOfStudying abi:occursIn EducationalFacility
-# (see hasStudyFacility below). A source that only names a city says where the
-# study was, not which school, so it is kept as a Site (place) of its own.
+# The same site the act of studying occurs in, stated on the person. Not the
+# facility: the school is a material entity located in that site (see
+# hasStudyFacility below). A source that only names a city gives the site at
+# that level, and the chain abi:continuantPartOf climbs from there.
 people:hasStudyLocation a owl:ObjectProperty ;
   owl:inverseOf people:isStudyLocationOf ;
   rdfs:label "has study location"@en ;
@@ -1160,14 +1171,14 @@ people:ActOfWorking a owl:Class ;
   rdfs:subClassOf cco:ont00000228 ,
     [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
     [ a owl:Restriction ; owl:onProperty people:forOrganization ; owl:someValuesFrom abi:Organization ] ,
-    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom cco:ont00000468 ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
     [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
     [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom people:OccupationRole ] ,
     [ a owl:Restriction ; owl:onProperty people:developsSkill ; owl:someValuesFrom people:Skill ] ,
     [ a owl:Restriction ; owl:onProperty people:developsLanguageCapability ; owl:someValuesFrom people:LanguageCapability ] ,
     [ a owl:Restriction ; owl:onProperty people:hasSourceDocument ; owl:someValuesFrom people:ProfileDocument ] ;
   rdfs:label "Act of Working"@en ;
-  skos:definition "A Planned Act in which a person performs work for an organization in an office building over a temporal region, realizing an occupation role and developing skills and language capabilities."@en ;
+  skos:definition "A Planned Act in which a person performs work for an organization at a site (a street-level location, city or country, where an office building may stand) over a temporal region, realizing an occupation role and developing skills and language capabilities."@en ;
   skos:example "Alice Dupont working as Head of Product for Demo, worldwide, since April 2023."@en .
 
 #################################################################
@@ -1199,6 +1210,11 @@ abi:Person rdfs:subClassOf
 
 abi:Organization rdfs:subClassOf
     [ a owl:Restriction ; owl:onProperty people:hasOfficeBuilding ; owl:someValuesFrom cco:ont00000468 ] .
+
+# WHERE x WHERE - the office building stands at a geospatial location (a site), which is
+# a continuant part of the city, region and country the act occurs in.
+cco:ont00000468 rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:locatedIn ; owl:someValuesFrom abi:GeospatialLocation ] .
 
 #################################################################
 #    Object properties - process-only
@@ -1291,9 +1307,10 @@ people:isMissionCarriedBy a owl:ObjectProperty ;
   rdfs:range  abi:Person .
 
 # WHO ↔ WHERE (place) - the place a worker is based in, as a Site.
-# Not the facility: the backbone is ActOfWorking abi:occursIn OfficeBuilding (see
-# hasWorkFacility below). A source that only names a city or a country says where
-# the work is, not which building, so it is kept as a Site (place) of its own.
+# The same site the act of working occurs in, stated on the person. Not the
+# facility: the building is a material entity located in that site (see
+# hasWorkFacility below). A source that only names a city or a country gives the
+# site at that level, and the chain abi:continuantPartOf climbs from there.
 people:hasWorkLocation a owl:ObjectProperty ;
   owl:inverseOf people:isWorkLocationOf ;
   rdfs:label "has work location"@en ;

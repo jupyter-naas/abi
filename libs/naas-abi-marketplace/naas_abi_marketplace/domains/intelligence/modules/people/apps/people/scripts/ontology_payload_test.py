@@ -53,27 +53,39 @@ class TestOntologyPayload:
             r["filler"] == "people:ProfileDocument" for r in detail["restrictions"]
         )
 
-    def test_the_where_of_each_act_is_a_facility_not_a_bare_site(self) -> None:
+    def test_the_where_of_each_act_is_a_geospatial_site_holding_its_facility(
+        self,
+    ) -> None:
         payload = build_ontology_payload()
-        where = {
-            "people:ActOfWorking": "cco:ont00000468",  # Office Building
-            "people:ActOfStudying": "cco:ont00000270",  # Educational Facility
-            "people:ActOfCertification": "cco:ont00000192",  # Facility
-        }
-        for act, facility in where.items():
-            occurs_in = [
+        edges = payload["graph"]["edges"]
+
+        def restricted(source: str, prop: str) -> list[str]:
+            return [
                 edge["to"]
-                for edge in payload["graph"]["edges"]
-                if edge["from"] == act
+                for edge in edges
+                if edge["from"] == source
                 and edge["kind"] == "restriction"
-                and "occursIn" in edge["label"]
+                and prop in edge["label"]
             ]
-            assert occurs_in == [facility], act
+
+        for act in (
+            "people:ActOfWorking",
+            "people:ActOfStudying",
+            "people:ActOfCertification",
+        ):
+            assert restricted(act, "occursIn") == ["abi:GeospatialRegion"], act
+        facilities = (
+            "cco:ont00000468",  # Office Building
+            "cco:ont00000270",  # Educational Facility
+            "cco:ont00000192",  # Facility
+        )
+        for facility in facilities:
+            # The building is a material entity located in the site.
+            assert restricted(facility, "locatedIn") == ["abi:GeospatialLocation"]
         nodes = {node["id"]: node for node in payload["graph"]["nodes"]}
-        for facility in where.values():
-            # named, and filed under WHERE with the sites
+        for facility in facilities:
             assert nodes[facility]["label"] != facility.split(":")[-1]
-            assert nodes[facility]["bfo_bucket"] == "Site"
+            assert nodes[facility]["bfo_bucket"] == "Material Entity"
         assert nodes["cco:ont00000468"]["label"] == "Office Building"
 
     def test_people_and_organizations_are_tied_to_their_facilities(self) -> None:

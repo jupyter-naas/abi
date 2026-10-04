@@ -19,7 +19,9 @@ people:ActOfWorkingProcess a owl:Ontology ;
   #   WHO          Person (the worker), Organization (the employer)
   #   WHAT         ActOfWorking (the process itself)
   #   WHEN         TemporalRegion, bounded by two TemporalInstants
-  #   WHERE        Office Building (CCO Facility - the building the work is done in)
+  #   WHERE        GeospatialRegion (Site - the street-level location, city or country
+  #                the work occurs in); the Office Building (CCO Facility, a material
+  #                entity) is located in that site
   #   WHY          OccupationRole (SDC) - the job title borne by the worker
   #   HOW IT IS    Skill, LanguageCapability (qualities) - what the worker bears and develops in the act
   #   HOW WE KNOW  Mission, ProfileDocument (GDCs)
@@ -33,16 +35,15 @@ people:ActOfWorkingProcess a owl:Ontology ;
   owl:imports <https://www.commoncoreontologies.org/FacilityOntology> ;
   owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
   rdfs:seeAlso <http://ontology.naas.ai/people/PeopleOntology> ;
-  rdfs:member "bpl-processes/personnel" ;
   abi:pythonPackage "naas_abi_marketplace.domains.intelligence.modules.people" ;
   abi:ontologyResource "ontologies/processes/ActOfWorkingProcess.ttl" ;
   abi:pythonResource "ontologies/processes/ActOfWorkingProcess.py" ;
   dc:title "Act of Working Process Ontology"@en ;
-  dc:description "Process slice for the act of working - a CCO Planned Act in which a person performs work for an organization in an office building over a temporal region, realizing an occupation role that concretizes a mission and developing the skills the person bears."@en ;
+  dc:description "Process slice for the act of working - a CCO Planned Act in which a person performs work for an organization at a site (where an office building may stand) over a temporal region, realizing an occupation role that concretizes a mission and developing the skills the person bears."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Process slice for Act of Working. Reuses shared people classes."@en ;
-  dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
-  dc11:date "2026-08-18"^^xsd:date .
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-10-04"^^xsd:date .
 
 #################################################################
 #    Classes - WHAT
@@ -52,14 +53,14 @@ people:ActOfWorking a owl:Class ;
   rdfs:subClassOf cco:ont00000228 ,
     [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
     [ a owl:Restriction ; owl:onProperty people:forOrganization ; owl:someValuesFrom abi:Organization ] ,
-    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom cco:ont00000468 ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
     [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
     [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom people:OccupationRole ] ,
     [ a owl:Restriction ; owl:onProperty people:developsSkill ; owl:someValuesFrom people:Skill ] ,
     [ a owl:Restriction ; owl:onProperty people:developsLanguageCapability ; owl:someValuesFrom people:LanguageCapability ] ,
     [ a owl:Restriction ; owl:onProperty people:hasSourceDocument ; owl:someValuesFrom people:ProfileDocument ] ;
   rdfs:label "Act of Working"@en ;
-  skos:definition "A Planned Act in which a person performs work for an organization in an office building over a temporal region, realizing an occupation role and developing skills and language capabilities."@en ;
+  skos:definition "A Planned Act in which a person performs work for an organization at a site (a street-level location, city or country, where an office building may stand) over a temporal region, realizing an occupation role and developing skills and language capabilities."@en ;
   skos:example "Alice Dupont working as Head of Product for Demo, worldwide, since April 2023."@en .
 
 #################################################################
@@ -91,6 +92,11 @@ abi:Person rdfs:subClassOf
 
 abi:Organization rdfs:subClassOf
     [ a owl:Restriction ; owl:onProperty people:hasOfficeBuilding ; owl:someValuesFrom cco:ont00000468 ] .
+
+# WHERE x WHERE - the office building stands at a geospatial location (a site), which is
+# a continuant part of the city, region and country the act occurs in.
+cco:ont00000468 rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:locatedIn ; owl:someValuesFrom abi:GeospatialLocation ] .
 
 #################################################################
 #    Object properties - process-only
@@ -183,9 +189,10 @@ people:isMissionCarriedBy a owl:ObjectProperty ;
   rdfs:range  abi:Person .
 
 # WHO ↔ WHERE (place) - the place a worker is based in, as a Site.
-# Not the facility: the backbone is ActOfWorking abi:occursIn OfficeBuilding (see
-# hasWorkFacility below). A source that only names a city or a country says where
-# the work is, not which building, so it is kept as a Site (place) of its own.
+# The same site the act of working occurs in, stated on the person. Not the
+# facility: the building is a material entity located in that site (see
+# hasWorkFacility below). A source that only names a city or a country gives the
+# site at that level, and the chain abi:continuantPartOf climbs from there.
 people:hasWorkLocation a owl:ObjectProperty ;
   owl:inverseOf people:isWorkLocationOf ;
   rdfs:label "has work location"@en ;

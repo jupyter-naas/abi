@@ -19,7 +19,9 @@ people:ActOfStudyingProcess a owl:Ontology ;
   #   WHO          Person (the student), Organization (the educational institution)
   #   WHAT         ActOfStudying (the process itself)
   #   WHEN         TemporalRegion, bounded by two TemporalInstants
-  #   WHERE        Educational Facility (CCO Facility - the school, campus or institute studied at)
+  #   WHERE        GeospatialRegion (Site - the street-level location, city or country
+  #                the study occurs in); the Educational Facility (CCO Facility, a
+  #                material entity: the school, campus or institute) is located in that site
   #   WHY          StudentRole (SDC) - the student role borne by the learner
   #   HOW IT IS    Skill, LanguageCapability (qualities) - what the student bears and develops in the act
   #   HOW WE KNOW  EnrollmentRecord, AcademicDegree, ProfileDocument (GDCs)
@@ -29,16 +31,15 @@ people:ActOfStudyingProcess a owl:Ontology ;
   owl:imports <https://www.commoncoreontologies.org/FacilityOntology> ;
   owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
   rdfs:seeAlso <http://ontology.naas.ai/people/PeopleOntology> ;
-  rdfs:member "bpl-processes/personnel" ;
   abi:pythonPackage "naas_abi_marketplace.domains.intelligence.modules.people" ;
   abi:ontologyResource "ontologies/processes/ActOfStudyingProcess.ttl" ;
   abi:pythonResource "ontologies/processes/ActOfStudyingProcess.py" ;
   dc:title "Act of Studying Process Ontology"@en ;
-  dc:description "Process slice for the act of studying - a CCO Planned Act (Act of Educational Training Acquisition) in which a person acquires knowledge of a curriculum from an educational organization in an educational facility over a temporal region, realizing a student role, developing skills and language capabilities, and concretizing an enrollment record and academic degree."@en ;
+  dc:description "Process slice for the act of studying - a CCO Planned Act (Act of Educational Training Acquisition) in which a person acquires knowledge of a curriculum from an educational organization at a site (where an educational facility may stand) over a temporal region, realizing a student role, developing skills and language capabilities, and concretizing an enrollment record and academic degree."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Process slice for Act of Studying. Reuses shared people classes, Skill and ProfileDocument from PeopleOntology."@en ;
-  dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
-  dc11:date "2026-08-19"^^xsd:date .
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-10-04"^^xsd:date .
 
 #################################################################
 #    Classes - WHAT
@@ -49,7 +50,7 @@ people:ActOfStudying a owl:Class ;
     cco:ont00001074 ,
     [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
     [ a owl:Restriction ; owl:onProperty people:forEducationalOrganization ; owl:someValuesFrom abi:Organization ] ,
-    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom cco:ont00000270 ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
     [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
     [ a owl:Restriction ; owl:onProperty people:hasEnrollment ; owl:someValuesFrom people:EnrollmentRecord ] ,
     [ a owl:Restriction ; owl:onProperty people:hasDegree ; owl:someValuesFrom people:AcademicDegree ] ,
@@ -58,7 +59,7 @@ people:ActOfStudying a owl:Class ;
     [ a owl:Restriction ; owl:onProperty people:developsLanguageCapability ; owl:someValuesFrom people:LanguageCapability ] ,
     [ a owl:Restriction ; owl:onProperty people:hasSourceDocument ; owl:someValuesFrom people:ProfileDocument ] ;
   rdfs:label "Act of Studying"@en ;
-  skos:definition "A Planned Act, and an Act of Educational Training Acquisition, in which a person acquires knowledge of a curriculum from an educational organization in an educational facility over a temporal region, realizing a student role, developing skills and language capabilities, under an enrollment record and academic degree."@en ;
+  skos:definition "A Planned Act, and an Act of Educational Training Acquisition, in which a person acquires knowledge of a curriculum from an educational organization at a site (where an educational facility may stand) over a temporal region, realizing a student role, developing skills and language capabilities, under an enrollment record and academic degree."@en ;
   skos:example "Alice Dupont studying for a Master's Degree in Corporate Finance at KEDGE Business School in Bordeaux from 2012 to 2016."@en .
 
 #################################################################
@@ -83,6 +84,11 @@ abi:Person rdfs:subClassOf
 
 cco:ont00000564 rdfs:subClassOf
     [ a owl:Restriction ; owl:onProperty people:hasEducationalFacility ; owl:someValuesFrom cco:ont00000270 ] .
+
+# WHERE x WHERE - the educational facility stands at a geospatial location (a site), which is
+# a continuant part of the city, region and country the act occurs in.
+cco:ont00000270 rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:locatedIn ; owl:someValuesFrom abi:GeospatialLocation ] .
 
 #################################################################
 #    Object properties - process-only
@@ -154,9 +160,10 @@ people:isDegreeOf a owl:ObjectProperty ;
   rdfs:range  people:ActOfStudying .
 
 # WHO ↔ WHERE (place) - the place a student studies in, as a Site.
-# Not the facility: the backbone is ActOfStudying abi:occursIn EducationalFacility
-# (see hasStudyFacility below). A source that only names a city says where the
-# study was, not which school, so it is kept as a Site (place) of its own.
+# The same site the act of studying occurs in, stated on the person. Not the
+# facility: the school is a material entity located in that site (see
+# hasStudyFacility below). A source that only names a city gives the site at
+# that level, and the chain abi:continuantPartOf climbs from there.
 people:hasStudyLocation a owl:ObjectProperty ;
   owl:inverseOf people:isStudyLocationOf ;
   rdfs:label "has study location"@en ;
