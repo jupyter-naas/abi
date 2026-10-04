@@ -41,8 +41,8 @@ from naas_abi_core.services.dataset.adapters.dataset_nats_contract import (
     TRANSFER_PREFIX,
 )
 from naas_abi_core.services.dataset.adapters.dataset_row_codec import (
+    encode_rows,
     query_result_from_pb,
-    write_rows_to_pb,
 )
 from naas_abi_core.services.dataset.adapters.dataset_stream_codec import (
     decode_header,
@@ -251,10 +251,10 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
         request = dataset_pb2.WriteRequest(
             context=self._context(),
             name=name,
+            rows=encode_rows(rows),
             namespace=namespace,
             mode=_WRITE_MODE_TO_PB[mode],
         )
-        write_rows_to_pb(request, rows)
         if snapshot_id is not None:
             request.snapshot_id = snapshot_id
         response = self._call(
@@ -272,10 +272,7 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
         snapshot_id: int | None = None,
     ) -> QueryResult:
         request = dataset_pb2.QueryRequest(
-            context=self._context(),
-            sql=sql,
-            namespace=namespace,
-            accept_json_rows=True,
+            context=self._context(), sql=sql, namespace=namespace
         )
         if snapshot_id is not None:
             request.snapshot_id = snapshot_id
@@ -297,9 +294,7 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
         """Rows fetched as the caller iterates, over a transfer stream
         (docs/adr/20261003_nats-streamed-results.md); the unary ``query`` on an
         engine without it. Leaving the block closes the session."""
-        request = dataset_pb2.QueryRequest(
-            sql=sql, namespace=namespace, accept_json_rows=True
-        )
+        request = dataset_pb2.QueryRequest(sql=sql, namespace=namespace)
         if snapshot_id is not None:
             request.snapshot_id = snapshot_id
 
@@ -327,10 +322,7 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
 
     def flush(self, name: str, *, namespace: str = "default") -> QueryResult:
         request = dataset_pb2.FlushRequest(
-            context=self._context(),
-            name=name,
-            namespace=namespace,
-            accept_json_rows=True,
+            context=self._context(), name=name, namespace=namespace
         )
         response = self._call(
             f"{SUBJECT_PREFIX}.flush", request, dataset_pb2.FlushResponse
@@ -354,10 +346,7 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
 
     def compact(self, name: str, *, namespace: str = "default") -> QueryResult:
         request = dataset_pb2.CompactRequest(
-            context=self._context(),
-            name=name,
-            namespace=namespace,
-            accept_json_rows=True,
+            context=self._context(), name=name, namespace=namespace
         )
         response = self._call(
             f"{SUBJECT_PREFIX}.compact", request, dataset_pb2.CompactResponse

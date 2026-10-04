@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from datetime import date, datetime
 
 import pytest
 from naas_abi_core.services.dataset.DatasetPort import (
@@ -479,3 +480,70 @@ class DatasetSecondaryAdapterContract(ABC):
             assert got["ratio"] == 1.0 and type(got["ratio"]) is float
             assert got["payload"] == {"n": 42, "big": big, "f": 1.5}
             assert type(got["payload"]["n"]) is int
+
+    def test_rows_hold_the_same_portable_values_on_every_adapter(
+        self, adapter: IDatasetPort
+    ):
+        # The value rules in DatasetPort.QueryResult, whatever the backend.
+        adapter.create(
+            DatasetSpec(
+                name="readings",
+                namespace="acme",
+                columns=(
+                    ColumnSpec(name="read_on", type="date"),
+                    ColumnSpec(name="read_at", type="timestamp"),
+                    ColumnSpec(name="ok", type="boolean"),
+                    ColumnSpec(name="label", type="string"),
+                ),
+            )
+        )
+        adapter.write(
+            "readings",
+            [
+                {
+                    "read_on": date(2026, 10, 4),
+                    "read_at": datetime(2026, 10, 4, 12, 30),
+                    "ok": True,
+                    "label": "café",
+                }
+            ],
+            namespace="acme",
+        )
+        sql = (
+            "SELECT read_on, read_at, ok, label, CAST(1.25 AS DECIMAL(3, 2)) AS price, "
+            "CAST('NaN' AS DOUBLE) AS nan, CAST('Infinity' AS DOUBLE) AS inf "
+            "FROM readings"
+        )
+
+        (row,) = adapter.query(sql, namespace="acme").rows
+        with adapter.query_stream(sql, namespace="acme") as result:
+            (streamed,) = list(result.rows)
+
+        expected = {
+            "read_on": "2026-10-04",
+            "read_at": "2026-10-04T12:30:00",
+            "ok": True,
+            "label": "café",
+            "price": 1.25,
+            "nan": None,
+            "inf": None,
+        }
+        assert row == expected and streamed == expected
+        assert type(row["price"]) is float
+
+    @pytest.mark.parametrize("value", [float("nan"), float("inf")])
+    def test_non_finite_numbers_are_refused_on_write(
+        self, adapter: IDatasetPort, value: float
+    ):
+        adapter.create(
+            DatasetSpec(
+                name="ratios",
+                namespace="acme",
+                columns=(ColumnSpec(name="ratio", type="double"),),
+            )
+        )
+
+        with pytest.raises(DatasetSchemaError, match="finite"):
+            adapter.write("ratios", [{"ratio": value}], namespace="acme")
+
+        assert adapter.query("SELECT * FROM ratios", namespace="acme").rows == []

@@ -13,6 +13,7 @@ The graph can catalog a dataset (`dcat:Dataset`). This service stores the table 
 ```
 dataset/
 ├── DatasetPort.py                 # IDatasetPort, DatasetSpec, exceptions
+├── DatasetValues.py               # the values a row holds, for every adapter
 ├── DatasetService.py              # public service
 ├── DatasetFactory.py
 ├── DatasetService_test.py
@@ -22,6 +23,18 @@ dataset/
 ├── tests/dataset__secondary_adapter__generic_test.py
 └── AGENTS.md
 ```
+
+## Row values (`DatasetValues.py`)
+
+Rows hold the same values on every adapter, in-process or over NATS: JSON
+values (`None`, `bool`, exact `int`, finite `float`, `str`, `dict`/`list`).
+A backend value with no JSON form takes a portable one: dates, timestamps and
+times their ISO-8601 string, `Decimal` a float, bytes base64, NaN and
+infinities `None`, anything else its string form. Writes accept the same
+values plus `date`/`datetime` objects; NaN and infinities raise
+`DatasetSchemaError`. A backend adapter maps its values with
+`DatasetValues.row_value`; the generic contract tests hold every adapter to
+these rules, so a new backend that passes them needs no wire change.
 
 ## Port (`DatasetPort.py`)
 
@@ -218,17 +231,12 @@ memory; results that should not be require streaming or a storage reference. No 
 a timeout can hide a completed operation. Reconcile its outcome before retrying.
 `close()` releases only the client's transport, including for vector storage.
 
-Rows cross the wire as UTF-8 JSON objects (`json_rows`, codec in
-`adapters/dataset_row_codec.py`): integers stay integers, exact at any size,
-JSON columns keep their nested types, dates become ISO strings, `Decimal` a
-number and bytes base64. `google.protobuf.Struct` (`rows`) stored every number
-as a double (42 came back as 42.0, integers above 2^53 rounded); it stays for
-peers that predate `json_rows`: a reply carries Struct rows unless the request
-sets `accept_json_rows`, and writes carry both encodings, because an older
-server ignores `json_rows` and would write nothing (a `replace` would empty
-the dataset). The server reads `json_rows` when present. Drop Struct rows from
-writes once every engine reads `json_rows`. The SDK mirrors the codec in
-`naas_abi_sdk/services/_dataset_rows.py`.
+Each row crosses the wire as one UTF-8 JSON object (`QueryResult.rows`,
+`WriteRequest.rows`), encoded by `naas_abi_proto/dataset/rows.py`, which the
+core adapters (`adapters/dataset_row_codec.py`) and the SDK share. Integers
+stay exact at any size and any language can read the rows. Do not move rows
+back to `google.protobuf.Struct`: it makes every number a double (42 came back
+as 42.0, integers above 2^53 rounded).
 
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.

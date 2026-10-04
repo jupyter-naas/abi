@@ -73,8 +73,8 @@ queries, and document `find` pages.
   (`columns`, lazy `rows`). DuckLake fetches 1,000 rows at a time on the
   stream's own cursor; the wire is `abi.svc.dataset.v1.transfer` operation
   `query`, a `QueryResult` with the columns, then `QueryResult`s with rows only
-  (JSON rows, integers exact, as the unary reply since 2026-10-04: see the
-  dataset AGENTS.md). Core client and SDK facade, with the unary fallback.
+  (one JSON object per row, as the unary reply: see the dataset AGENTS.md).
+  Core client and SDK facade, with the unary fallback.
 - Not yet: streamed dataset writes (an iterator of rows committed once; large
   write batches go through RPC overflow meanwhile), vector listing, event and
   activity queries, byte-bounded document `find` pages.

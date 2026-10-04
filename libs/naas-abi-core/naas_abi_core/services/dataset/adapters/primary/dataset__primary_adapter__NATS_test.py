@@ -7,6 +7,7 @@ against a minimal fake ``Request`` that records whatever gets passed to
 """
 
 import asyncio
+import json
 
 # ``list`` is a port method name, so it shadows the builtin for annotations
 # evaluated in _StubAdapter's class body below (methods after ``list``);
@@ -390,7 +391,7 @@ def test_list_round_trips_datasets():
     assert sorted(item.name for item in response.datasets.items) == ["a", "b"]
 
 
-def test_query_round_trips_rows_via_struct():
+def test_query_answers_json_rows_with_exact_integers():
     adapter = DatasetPrimaryAdapterNATS(_StubAdapter(), SECRET)
     request = _FakeRequest(
         data=dataset_pb2.QueryRequest(
@@ -406,8 +407,7 @@ def test_query_round_trips_rows_via_struct():
     response.ParseFromString(request.responses[0])
     assert not response.HasField("error")
     assert list(response.query_result.columns) == ["answer"]
-    assert len(response.query_result.rows) == 1
-    assert response.query_result.rows[0]["answer"] == 42
+    assert [json.loads(row) for row in response.query_result.rows] == [{"answer": 42}]
 
 
 # ---------------------------------------------------------------------------
