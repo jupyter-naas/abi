@@ -929,6 +929,99 @@ def test_completion_outage_keeps_the_result_and_heartbeat_while_retrying():
     assert docs.run("ingest:7")["result"] == {"answer": 42}
 
 
+@pytest.mark.parametrize("blocked", [False, True])
+def test_completion_delay_keeps_a_live_run_safe_from_another_replicas_reaper(
+    monkeypatch, blocked
+):
+    from naas_abi_sdk import job_host
+
+    async def scenario():
+        now = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+        monkeypatch.setattr(job_host, "_now", lambda: now.isoformat())
+        completing = asyncio.Event()
+        refreshed = asyncio.Event()
+        release = asyncio.Event()
+
+        class DelayedCompletion(QueryDocuments):
+            async def put(self, collection, id, data, **kwargs):
+                if data["status"] == "SUCCEEDED" and not release.is_set():
+                    completing.set()
+                    if blocked:
+                        await release.wait()
+                    else:
+                        raise RuntimeError("completion unavailable")
+                doc = await super().put(collection, id, data, **kwargs)
+                if data["status"] == "RUNNING" and "logs" in data:
+                    refreshed.set()
+                return doc
+
+        docs = DelayedCompletion()
+        descriptor = JobDescriptor("ingest", max_attempts=1)
+        host = _host(docs, heartbeat_seconds=0.01)
+        replica = _host(docs)
+        replica.handlers = {"ingest": (descriptor, None)}
+        msg = Msg()
+
+        async def handler(ctx):
+            ctx.log("done")
+            return 42
+
+        task = asyncio.create_task(host.handle(descriptor, handler, msg))
+        try:
+            await asyncio.wait_for(completing.wait(), 1)
+            now += timedelta(minutes=6)
+            await asyncio.wait_for(refreshed.wait(), 1)
+            assert docs.run("ingest:7")["heartbeat_at"] == now.isoformat()
+            assert await replica.reap_lost_runs(now=now) == 0
+            assert docs.run("ingest:7")["status"] == "RUNNING"
+            release.set()
+            await asyncio.wait_for(task, 1)
+            assert docs.run("ingest:7")["status"] == "SUCCEEDED"
+            assert docs.run("ingest:7")["result"] == 42
+            assert docs.run("ingest:7")["logs"] == ["done"]
+            assert msg.calls[-1] == ("ack",)
+        finally:
+            release.set()
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(scenario())
+
+
+def test_a_progress_write_racing_completion_does_not_modify_the_finished_record():
+    async def scenario():
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        class DelayedProgress(Documents):
+            async def put(self, collection, id, data, **kwargs):
+                if data["status"] == "RUNNING" and "logs" in data:
+                    entered.set()
+                    await release.wait()
+                return await super().put(collection, id, data, **kwargs)
+
+        docs = DelayedProgress()
+        host = _host(docs, heartbeat_seconds=0.01)
+        await host._save("ingest:7", {"status": "RUNNING"})
+        context = SimpleNamespace(run_id="ingest:7", logs=["old"])
+        progress = asyncio.create_task(host._persist_progress(context))
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            await host._save(
+                "ingest:7", {"status": "SUCCEEDED", "logs": ["final"], "result": 42}
+            )
+            snapshot = await docs.get(host.collection, "ingest:7")
+            release.set()
+            # Let the in-flight write retry its CAS and subsequent heartbeats run.
+            await asyncio.sleep(0.04)
+            assert await docs.get(host.collection, "ingest:7") == snapshot
+        finally:
+            release.set()
+            progress.cancel()
+            await asyncio.gather(progress, return_exceptions=True)
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize(
     "status", ["SUCCEEDED", "SKIPPED", "CANCELLED", "FAILED", "TIMED_OUT"]
 )
