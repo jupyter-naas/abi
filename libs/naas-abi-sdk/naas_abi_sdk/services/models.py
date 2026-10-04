@@ -248,10 +248,26 @@ class EmailAttachment:
 
 
 @dataclass
+class SentEmailSummary:
+    message_id: str = ""
+    sent_at: str = ""
+    size: int = 0
+    subject: str = ""
+    to: str = ""
+    sender: str = ""
+
+
+@dataclass
+class SentEmail:
+    summary: SentEmailSummary | None = None
+    raw: bytes = b""
+
+
+@dataclass
 class VectorDocument:
     id: str = ""
     vector: list[float] | None = None
-    metadata: dict[str, Any] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
     payload: dict[str, Any] | None = None
 
 
@@ -262,6 +278,20 @@ class SearchResult:
     vector: list[float] | None = None
     metadata: dict[str, Any] | None = None
     payload: dict[str, Any] | None = None
+
+
+@dataclass
+class VectorPage:
+    documents: list[VectorDocument] = field(default_factory=list)
+    next_cursor: str | None = None
+
+
+@dataclass
+class CollectionInfo:
+    name: str = ""
+    dimension: int | None = None
+    distance_metric: str | None = None
+    size: int = 0
 
 
 @dataclass
@@ -336,7 +366,11 @@ DTO_TYPES = {
     "abi.dataset.v1.DatasetSnapshotInfo": DatasetSnapshotInfo,
     "abi.dataset.v1.QueryResult": QueryResult,
     "abi.email.v1.EmailAttachment": EmailAttachment,
+    "abi.email.v1.SentEmailSummary": SentEmailSummary,
+    "abi.email.v1.SentEmail": SentEmail,
     "abi.vector_store.v1.VectorDocument": VectorDocument,
     "abi.vector_store.v1.SearchResult": SearchResult,
+    "abi.vector_store.v1.VectorPage": VectorPage,
+    "abi.vector_store.v1.CollectionInfo": CollectionInfo,
     "abi.event.v1.StoredEvent": StoredEvent,
 }

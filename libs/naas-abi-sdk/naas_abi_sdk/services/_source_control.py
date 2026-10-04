@@ -39,6 +39,9 @@ class SourceControlService(ServiceProxy):
             "list_repos",
         )
 
+    async def delete_repo(self, *, repo_id: str) -> None:
+        return await self._request("delete_repo", repo_id=repo_id)
+
     async def add_collaborator(
         self, *, repo_id: str, username: str, permission: str = "write"
     ) -> None:

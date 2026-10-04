@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from naas_abi_proto.dataset.rows import decode_row, encode_row
+from naas_abi_proto.vector_store.values import decode_object, encode_object
 from naas_abi_sdk import RPCError
 from naas_abi_sdk.catalog import OPERATIONS
 from naas_abi_sdk.module import (
@@ -268,7 +269,7 @@ class ABIModule(BaseModule):
                 {
                     "id": vid,
                     "vector": {"values": [1, 0, 0]},
-                    "metadata": {"value": "created"},
+                    "metadata": encode_object({"value": "created"}),
                 }
             ],
         )
@@ -279,10 +280,11 @@ class ABIModule(BaseModule):
         assert (
             await call("search", query_vector=[1, 0, 0], k=1, include_metadata=True)
         ).results.results[0].id == vid
-        await call("update_vector", vector_id=vid, metadata={"value": "updated"})
-        assert (await call("get_vector", vector_id=vid)).found.document.metadata[
-            "value"
-        ] == "updated"
+        await call(
+            "update_vector", vector_id=vid, metadata=encode_object({"value": "updated"})
+        )
+        found = (await call("get_vector", vector_id=vid)).found.document
+        assert decode_object(found.metadata)["value"] == "updated"
         await call("delete_vectors", vector_ids=[vid])
         assert (await call("count_vectors")).count == 0
         await call("delete_collection")

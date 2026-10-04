@@ -1,5 +1,4 @@
 from naas_abi_proto.common.v1 import common_pb2 as _common_pb2
-from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
@@ -22,9 +21,9 @@ class VectorDocument(_message.Message):
     PAYLOAD_FIELD_NUMBER: _ClassVar[int]
     id: str
     vector: VectorData
-    metadata: _struct_pb2.Struct
-    payload: _struct_pb2.Struct
-    def __init__(self, id: _Optional[str] = ..., vector: _Optional[_Union[VectorData, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., payload: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    metadata: bytes
+    payload: bytes
+    def __init__(self, id: _Optional[str] = ..., vector: _Optional[_Union[VectorData, _Mapping]] = ..., metadata: _Optional[bytes] = ..., payload: _Optional[bytes] = ...) -> None: ...
 
 class SearchResult(_message.Message):
     __slots__ = ("id", "score", "vector", "metadata", "payload")
@@ -36,9 +35,9 @@ class SearchResult(_message.Message):
     id: str
     score: float
     vector: VectorData
-    metadata: _struct_pb2.Struct
-    payload: _struct_pb2.Struct
-    def __init__(self, id: _Optional[str] = ..., score: _Optional[float] = ..., vector: _Optional[_Union[VectorData, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., payload: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    metadata: bytes
+    payload: bytes
+    def __init__(self, id: _Optional[str] = ..., score: _Optional[float] = ..., vector: _Optional[_Union[VectorData, _Mapping]] = ..., metadata: _Optional[bytes] = ..., payload: _Optional[bytes] = ...) -> None: ...
 
 class InitializeRequest(_message.Message):
     __slots__ = ("context",)
@@ -133,10 +132,10 @@ class SearchRequest(_message.Message):
     collection_name: str
     query_vector: _containers.RepeatedScalarFieldContainer[float]
     k: int
-    filter: _struct_pb2.Struct
+    filter: bytes
     include_vectors: bool
     include_metadata: bool
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., collection_name: _Optional[str] = ..., query_vector: _Optional[_Iterable[float]] = ..., k: _Optional[int] = ..., filter: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., include_vectors: bool = ..., include_metadata: bool = ...) -> None: ...
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., collection_name: _Optional[str] = ..., query_vector: _Optional[_Iterable[float]] = ..., k: _Optional[int] = ..., filter: _Optional[bytes] = ..., include_vectors: bool = ..., include_metadata: bool = ...) -> None: ...
 
 class SearchResultList(_message.Message):
     __slots__ = ("results",)
@@ -190,9 +189,9 @@ class UpdateVectorRequest(_message.Message):
     collection_name: str
     vector_id: str
     vector: VectorData
-    metadata: _struct_pb2.Struct
-    payload: _struct_pb2.Struct
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., collection_name: _Optional[str] = ..., vector_id: _Optional[str] = ..., vector: _Optional[_Union[VectorData, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., payload: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    metadata: bytes
+    payload: bytes
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., collection_name: _Optional[str] = ..., vector_id: _Optional[str] = ..., vector: _Optional[_Union[VectorData, _Mapping]] = ..., metadata: _Optional[bytes] = ..., payload: _Optional[bytes] = ...) -> None: ...
 
 class UpdateVectorResponse(_message.Message):
     __slots__ = ("error",)

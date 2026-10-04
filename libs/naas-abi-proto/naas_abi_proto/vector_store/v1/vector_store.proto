@@ -28,6 +28,11 @@
 // without pinning a dtype, but nothing in this domain stores or expects float64 precision --
 // `repeated float` (not `double`) is the right call either way.
 //
+// Metadata, payloads and search filters are one JSON object each, as UTF-8 bytes
+// (naas_abi_proto/vector_store/values.py): integers stay exact and nested values plain,
+// unlike google.protobuf.Struct, which makes every number a double. A non-optional
+// `metadata` left empty is an empty object; an `optional` field left unset is None.
+//
 // `VectorDocument.vector` / `SearchResult.vector` can legitimately be `None` (e.g.
 // `include_vector=False`, or a document stored without embedding its own vector back), and
 // proto3 cannot mark a bare `repeated` field `optional` -- so both wrap it in `VectorData`,
@@ -53,7 +58,6 @@ syntax = "proto3";
 package abi.vector_store.v1;
 
 import "naas_abi_proto/common/v1/common.proto";
-import "google/protobuf/struct.proto";
 
 // Wraps a `repeated float` so it can be used as an `optional` message field --
 // proto3 cannot mark a bare `repeated` scalar field `optional`, and both
@@ -66,16 +70,16 @@ message VectorData {
 message VectorDocument {
   string id = 1;
   optional VectorData vector = 2;
-  google.protobuf.Struct metadata = 3;
-  optional google.protobuf.Struct payload = 4;
+  bytes metadata = 3;  // a JSON object (see the header)
+  optional bytes payload = 4;  // a JSON object; unset is None
 }
 
 message SearchResult {
   string id = 1;
   float score = 2;
   optional VectorData vector = 3;
-  optional google.protobuf.Struct metadata = 4;
-  optional google.protobuf.Struct payload = 5;
+  optional bytes metadata = 4;  // JSON objects; unset is None
+  optional bytes payload = 5;
 }
 
 // -----------------------------------------------------------------------
@@ -159,7 +163,7 @@ message SearchRequest {
   // VectorData-wrapped optional.
   repeated float query_vector = 3;
   int32 k = 4;
-  optional google.protobuf.Struct filter = 5;
+  optional bytes filter = 5;  // a JSON object; unset is no filter
   bool include_vectors = 6;
   bool include_metadata = 7;
 }
@@ -207,8 +211,8 @@ message UpdateVectorRequest {
   // Unset means "leave the vector unchanged" (IVectorStorePort.update_vector's
   // vector=None default) -- distinct from a present-but-empty vector.
   optional VectorData vector = 4;
-  optional google.protobuf.Struct metadata = 5;
-  optional google.protobuf.Struct payload = 6;
+  optional bytes metadata = 5;  // JSON objects; unset leaves them unchanged
+  optional bytes payload = 6;
 }
 message UpdateVectorResponse {
   optional abi.common.v1.CallError error = 1;

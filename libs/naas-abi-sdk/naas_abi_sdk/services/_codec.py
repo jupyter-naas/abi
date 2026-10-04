@@ -10,6 +10,11 @@ from typing import Any
 from google.protobuf import json_format
 from google.protobuf.message import Message
 from naas_abi_proto.dataset.rows import decode_row, encode_row
+from naas_abi_proto.vector_store.values import (
+    JSON_OBJECT_FIELDS,
+    decode_object,
+    encode_object,
+)
 
 from naas_abi_sdk.services.errors import domain_error
 from naas_abi_sdk.services.models import DTO_TYPES, QueryResult
@@ -33,12 +38,16 @@ def message(cls, values):
     if full == "abi.vector_store.v1.VectorData":
         values = {"values": [float(v) for v in values]}
     result = cls()
+    json_fields = JSON_OBJECT_FIELDS.get(full, ())
     for name, value in values.items():
         if value is None:
             continue
         field = cls.DESCRIPTOR.fields_by_name.get(name)
         if field is None:
             raise TypeError(f"{cls.__name__} has no field {name}")
+        if name in json_fields:  # one JSON object on the wire
+            setattr(result, name, encode_object(value))
+            continue
         if field.message_type:
             if field.message_type.GetOptions().map_entry:
                 getattr(result, name).update(value)
@@ -81,10 +90,18 @@ def decode(value):
             columns=list(value.columns), rows=[decode_row(row) for row in value.rows]
         )
     data = {}
+    json_fields = JSON_OBJECT_FIELDS.get(name, ())
     for field in value.DESCRIPTOR.fields:
         if field.name == "error" or field.name.endswith("_detail"):
             continue
         raw = getattr(value, field.name)
+        if field.name in json_fields:
+            data[field.name] = (
+                None
+                if field.has_presence and not value.HasField(field.name)
+                else decode_object(raw)
+            )
+            continue
         if field.is_repeated:
             data[field.name] = (
                 dict(raw)
