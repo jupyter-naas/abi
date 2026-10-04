@@ -124,6 +124,88 @@ class _S3Settings:
         return ", ".join(parts)
 
 
+class _CatalogLock:
+    """Readers-writer lock for a SQLite DuckLake catalog.
+
+    Reads may overlap each other, a write runs alone: when a read overlapped a
+    write, DuckDB's SQLite layer could keep a lock for good, and every later
+    read in the process failed with "database is locked". Reentrant: a thread
+    may nest reads, nest writes, and read inside its own write; asking to
+    write while reading (an open query_stream) raises instead of deadlocking.
+    PostgreSQL catalogs handle concurrency themselves (``_NoCatalogLock``).
+    """
+
+    def __init__(self) -> None:
+        self._condition = threading.Condition()
+        self._readers = 0
+        self._writer: int | None = None
+        self._writer_depth = 0
+        self._waiting_writers = 0
+        self._local = threading.local()
+
+    @contextmanager
+    def shared(self) -> Iterator[None]:
+        depth = getattr(self._local, "depth", 0)
+        if depth or self._writer == threading.get_ident():
+            self._local.depth = depth + 1
+            try:
+                yield
+            finally:
+                self._local.depth = depth
+            return
+        with self._condition:
+            while self._writer is not None or self._waiting_writers:
+                self._condition.wait()
+            self._readers += 1
+        self._local.depth = 1
+        try:
+            yield
+        finally:
+            self._local.depth = 0
+            with self._condition:
+                self._readers -= 1
+                if not self._readers:
+                    self._condition.notify_all()
+
+    @contextmanager
+    def exclusive(self) -> Iterator[None]:
+        me = threading.get_ident()
+        with self._condition:
+            if self._writer == me:
+                self._writer_depth += 1
+            else:
+                if getattr(self._local, "depth", 0):
+                    raise RuntimeError(
+                        "Cannot write to a SQLite DuckLake catalog while this "
+                        "thread is reading it (finish the query_stream first)"
+                    )
+                self._waiting_writers += 1
+                try:
+                    while self._writer is not None or self._readers:
+                        self._condition.wait()
+                finally:
+                    self._waiting_writers -= 1
+                self._writer, self._writer_depth = me, 1
+        try:
+            yield
+        finally:
+            with self._condition:
+                self._writer_depth -= 1
+                if not self._writer_depth:
+                    self._writer = None
+                    self._condition.notify_all()
+
+
+class _NoCatalogLock:
+    @contextmanager
+    def shared(self) -> Iterator[None]:
+        yield
+
+    @contextmanager
+    def exclusive(self) -> Iterator[None]:
+        yield
+
+
 class DatasetSecondaryAdapterDuckLake(IDatasetPort):
     """Store datasets in one DuckLake catalog and data warehouse.
 
@@ -195,8 +277,8 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         self._max_retries = max_retries
         self._retry_base_delay_seconds = retry_base_delay_seconds
         self._retry_max_delay_seconds = retry_max_delay_seconds
-        self._sqlite_write_lock = (
-            threading.RLock() if self._catalog.startswith("sqlite:") else None
+        self._catalog_lock = (
+            _CatalogLock() if self._catalog.startswith("sqlite:") else _NoCatalogLock()
         )
         self._read_connection: Any | None = None
         self._read_connection_lock = threading.Lock()
@@ -470,22 +552,23 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         if snapshot_id is None:
             return self._read(lambda con: self._run_query(con, sql, namespace))
 
-        if not self._snapshot_exists(snapshot_id):
-            raise DatasetSnapshotNotFoundError(snapshot_id)
-        connection = self._get_snapshot_connection(snapshot_id)
-        cursor = connection.cursor()
-        try:
-            return self._run_query(cursor, sql, namespace)
-        except Exception:
-            # Retire on failure, including stale inline tables after an external
-            # flush. Never replay arbitrary query SQL automatically.
-            with self._snapshot_connection_lock:
-                entry = self._snapshot_connections.get(snapshot_id)
-                if entry is not None and entry[1] is connection:
-                    del self._snapshot_connections[snapshot_id]
-            raise
-        finally:
-            cursor.close()
+        with self._catalog_lock.shared():
+            if not self._snapshot_exists(snapshot_id):
+                raise DatasetSnapshotNotFoundError(snapshot_id)
+            connection = self._get_snapshot_connection(snapshot_id)
+            cursor = connection.cursor()
+            try:
+                return self._run_query(cursor, sql, namespace)
+            except Exception:
+                # Retire on failure, including stale inline tables after an
+                # external flush. Never replay arbitrary query SQL automatically.
+                with self._snapshot_connection_lock:
+                    entry = self._snapshot_connections.get(snapshot_id)
+                    if entry is not None and entry[1] is connection:
+                        del self._snapshot_connections[snapshot_id]
+                raise
+            finally:
+                cursor.close()
 
     def _get_snapshot_connection(self, snapshot_id: int) -> Any:
         with self._snapshot_connection_lock:
@@ -543,27 +626,29 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
     ) -> Iterator[RowStream]:
         """Fetch rows ``FETCH_ROWS`` at a time on the stream's own cursor
         (docs/adr/20261003_nats-streamed-results.md). Like ``query``, this
-        never replays the SQL."""
-        if snapshot_id is None:
-            connection = self._get_read_connection()
-        else:
-            if not self._snapshot_exists(snapshot_id):
-                raise DatasetSnapshotNotFoundError(snapshot_id)
-            connection = self._get_snapshot_connection(snapshot_id)
-        cursor = connection.cursor()
-        try:
+        never replays the SQL. On a SQLite catalog the stream reads under the
+        catalog's shared lock until the block exits."""
+        with self._catalog_lock.shared():
+            if snapshot_id is None:
+                connection = self._get_read_connection()
+            else:
+                if not self._snapshot_exists(snapshot_id):
+                    raise DatasetSnapshotNotFoundError(snapshot_id)
+                connection = self._get_snapshot_connection(snapshot_id)
+            cursor = connection.cursor()
             try:
-                cursor.execute(f"USE {self._qualified_schema(namespace)}")
-                result = cursor.execute(sql)
-            except Exception as exc:
-                self._retire_if_stale(exc, connection)
-                raise
-            columns, json_columns = self._describe(result)
-            yield RowStream(
-                columns=columns, rows=self._fetched(result, columns, json_columns)
-            )
-        finally:
-            cursor.close()
+                try:
+                    cursor.execute(f"USE {self._qualified_schema(namespace)}")
+                    result = cursor.execute(sql)
+                except Exception as exc:
+                    self._retire_if_stale(exc, connection)
+                    raise
+                columns, json_columns = self._describe(result)
+                yield RowStream(
+                    columns=columns, rows=self._fetched(result, columns, json_columns)
+                )
+            finally:
+                cursor.close()
 
     def _fetched(
         self, result: Any, columns: builtins.list[str], json_columns: set[int]
@@ -718,22 +803,23 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         """
         import duckdb
 
-        for attempt in range(2):
-            connection = self._get_read_connection()
-            cursor = connection.cursor()
-            try:
-                return operation(cursor)
-            except duckdb.Error as exc:
-                # Do not replay arbitrary SQL: query() allows writes.
-                if (
-                    self._retire_if_stale(exc, connection)
-                    and attempt == 0
-                    and "database has been invalidated" in str(exc)
-                ):
-                    continue
-                raise
-            finally:
-                cursor.close()
+        with self._catalog_lock.shared():
+            for attempt in range(2):
+                connection = self._get_read_connection()
+                cursor = connection.cursor()
+                try:
+                    return operation(cursor)
+                except duckdb.Error as exc:
+                    # Do not replay arbitrary SQL: query() allows writes.
+                    if (
+                        self._retire_if_stale(exc, connection)
+                        and attempt == 0
+                        and "database has been invalidated" in str(exc)
+                    ):
+                        continue
+                    raise
+                finally:
+                    cursor.close()
         raise RuntimeError("unreachable")  # pragma: no cover
 
     def _retire_if_stale(self, exc: Exception, connection: Any) -> bool:
@@ -756,10 +842,8 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         return True
 
     def _write_transaction(self, operation: Callable[[Any], _T]) -> tuple[_T, int]:
-        if self._sqlite_write_lock is not None:
-            with self._sqlite_write_lock:
-                return self._retry_write_transaction(operation)
-        return self._retry_write_transaction(operation)
+        with self._catalog_lock.exclusive():
+            return self._retry_write_transaction(operation)
 
     def _retry_write_transaction(
         self, operation: Callable[[Any], _T]
