@@ -213,6 +213,112 @@ def test_apply_replacements_updates_h1_and_script_footer():
     assert _cover_h1_text(updated) == "Presentation Title & Overview test"
 
 
+def test_element_path_replaces_one_node_and_leaves_the_twin():
+    """data-nexus-edit path ``slideIndex:tag:nth`` scopes a replace to one node."""
+    html = (
+        "<!DOCTYPE html><html><head><title>Same</title></head><body><main>"
+        '<section class="notes"><h1>Same</h1></section>'
+        '<section class="slide cover"><h1>Same</h1><p>Same</p><p>Same</p></section>'
+        '<section class="slide"><h1>Same</h1>'
+        "<li><p>Nested</p></li></section>"
+        "</main></body></html>"
+    )
+    second_p = _apply_replacements_in_section(
+        html,
+        "Same",
+        "Second",
+        0,
+        element_path="0:p:1",
+    )
+    assert not isinstance(second_p, dict), second_p
+    updated, found, replaced, section_idx = second_p
+    assert section_idx == 0
+    assert found == 1
+    assert replaced == 1
+    assert updated.count(">Second<") == 1
+    assert "<p>Same</p><p>Second</p>" in updated
+    assert "<title>Same</title>" in updated
+    assert updated.count("<h1>Same</h1>") == 3
+
+    cover_h1 = _apply_replacements_in_section(
+        html,
+        "Same",
+        "Cover",
+        0,
+        element_path="0:h1:0",
+    )
+    assert not isinstance(cover_h1, dict)
+    cover_html, _, _, _ = cover_h1
+    assert '<section class="slide cover"><h1>Cover</h1>' in cover_html
+    assert '<section class="slide"><h1>Same</h1>' in cover_html
+
+    missing = _apply_replacements_in_section(
+        html, "Nested", "X", 0, element_path="1:p:0"
+    )
+    assert isinstance(missing, dict)
+    assert "not found" in missing["error"]
+
+    li = _apply_replacements_in_section(
+        html, "Nested", "Item", 0, element_path="1:li:0"
+    )
+    assert not isinstance(li, dict)
+    assert "<li><p>Item</p></li>" in li[0]
+
+    clash = _apply_replacements_in_section(
+        html, "Same", "X", 0, element_path="0:h1:0", section_index=1
+    )
+    assert isinstance(clash, dict)
+    assert "section_index" in clash["error"]
+
+
+def test_replace_tool_element_path_is_invocable(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    sc.ensure_repo(owner="abi", name="monorepo")
+    sc.create_branch(
+        repo_id="abi/monorepo",
+        name="slides/ws-test/untitled-local",
+        from_ref="main",
+    )
+    seed = (
+        "<!DOCTYPE html><html><body><main>"
+        '<section class="slide"><h1>Alpha</h1><p>Keep</p></section>'
+        '<section class="slide"><h1>Alpha</h1></section>'
+        "</main></body></html>"
+    )
+    sc.upsert_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/deck.html",
+        content=seed,
+        message="Seed deck",
+        branch="slides/ws-test/untitled-local",
+    )
+    tokens = _slides_context()
+    try:
+        replace = next(t for t in slides_tools() if t.name == "replace_in_slides_deck")
+        assert "element_path" in replace.args
+        result = replace.invoke(
+            {
+                "old": "Alpha",
+                "new": "Beta",
+                "element_path": "1:h1:0",
+                "occurrence": 0,
+            }
+        )
+        assert "error" not in result, result
+        assert result.get("element_path") == "1:h1:0"
+        deck = sc.get_file(
+            repo_id="abi/monorepo",
+            path="slides/ws-test/untitled-local/deck.html",
+            ref="slides/ws-test/untitled-local",
+        )
+        text = deck.text or ""
+        assert "<h1>Alpha</h1>" in text
+        assert "<h1>Beta</h1>" in text
+        assert text.index("<h1>Beta</h1>") > text.index("<h1>Alpha</h1>")
+    finally:
+        _reset_tokens(tokens)
+
+
 def test_section_scoped_replace_updates_cover_h1_not_document_title():
     """occurrence=1 document-wide hits <title>; section_index=0 hits cover H1."""
     html = (
