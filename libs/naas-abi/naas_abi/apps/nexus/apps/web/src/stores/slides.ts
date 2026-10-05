@@ -43,6 +43,12 @@ export type SlidesDeckUpdatedDetail = {
 
 export type SlidesDeckSource = 'sidecar' | 'forgejo' | null;
 
+/** Preview node the user clicked. ``path`` is ``slideIndex:tag:nth``. */
+export type SlidesSelectedElement = {
+  path: string;
+  text: string;
+};
+
 interface SlidesState {
   selectedSlug: string | null;
   selectedTitle: string | null;
@@ -50,6 +56,8 @@ interface SlidesState {
   selectedIndex: number;
   /** Number of slides in the open deck (0 when none is open). Sent to Abi with selectedIndex. */
   slideCount: number;
+  /** Element clicked in Preview. Cleared when the user moves to another slide. */
+  selectedElement: SlidesSelectedElement | null;
   filmstrip: SlidesFilmstripDeck | null;
   reorderOpenDeck: ((fromIndex: number, toIndex: number) => void) | null;
   editorMode: SlidesEditorMode;
@@ -72,6 +80,7 @@ interface SlidesState {
   setSelectedTitle: (title: string | null) => void;
   setSidebarView: (view: SlidesSidebarView) => void;
   setSelectedIndex: (index: number) => void;
+  setSelectedElement: (element: SlidesSelectedElement | null) => void;
   setSlideCount: (count: number) => void;
   setFilmstrip: (filmstrip: SlidesFilmstripDeck | null) => void;
   setReorderOpenDeck: (fn: ((fromIndex: number, toIndex: number) => void) | null) => void;
@@ -97,6 +106,7 @@ export const useSlidesStore = create<SlidesState>()(
       sidebarView: 'decks',
       selectedIndex: 0,
       slideCount: 0,
+      selectedElement: null,
       filmstrip: null,
       reorderOpenDeck: null,
       editorMode: 'preview',
@@ -113,7 +123,26 @@ export const useSlidesStore = create<SlidesState>()(
       setSelectedSlug: (slug) => set({ selectedSlug: slug }),
       setSelectedTitle: (title) => set({ selectedTitle: title }),
       setSidebarView: (view) => set({ sidebarView: view }),
-      setSelectedIndex: (index) => set({ selectedIndex: index }),
+      setSelectedIndex: (index) => {
+        const current = get().selectedElement;
+        const slide = current ? Number(current.path.split(':')[0]) : Number.NaN;
+        set({
+          selectedIndex: index,
+          selectedElement: slide === index ? current : null,
+        });
+      },
+      setSelectedElement: (element) => {
+        if (!element?.path) {
+          set({ selectedElement: null });
+          return;
+        }
+        const text = element.text.replace(/\s+/g, ' ').trim().slice(0, 120);
+        const slide = Number(element.path.split(':')[0]);
+        set({
+          selectedElement: { path: element.path, text },
+          ...(Number.isFinite(slide) ? { selectedIndex: slide } : {}),
+        });
+      },
       setSlideCount: (count) => set({ slideCount: count }),
       setFilmstrip: (filmstrip) => set({ filmstrip }),
       setReorderOpenDeck: (fn) => set({ reorderOpenDeck: fn }),
