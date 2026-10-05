@@ -28,6 +28,9 @@ from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
 )
+from naas_abi_core.services.tool_registry.ToolRegistryService import (
+    ToolRegistryService,
+)
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 
@@ -192,6 +195,16 @@ class ServicesProxy:
     def model_registry_available(self) -> bool:
         # No dependency-declaration check on purpose — see ``model_registry``.
         return self.__engine.services.model_registry_available()
+
+    @property
+    def tool_registry(self) -> ToolRegistryService:
+        # Exempt from ``__ensure_access`` like ``model_registry``: a catalog
+        # every module publishes to and every agent composer reads from.
+        # Executing a tool still goes through the registry's access policy.
+        return self.__engine.services.tool_registry
+
+    def tool_registry_available(self) -> bool:
+        return self.__engine.services.tool_registry_available()
 
     @property
     def coding_environment(self) -> CodingEnvironmentService:

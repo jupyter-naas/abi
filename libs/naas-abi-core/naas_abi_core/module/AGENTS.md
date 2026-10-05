@@ -24,13 +24,14 @@
 
 1. `on_load`: discover classes. Do not touch other modules or services.
 2. `on_initialized`: `instantiate_all` on workflow, pipeline, and tool classes. Call `super().on_initialized()` if you override this hook.
-3. Kernel `_load_runtime_routes`: agents via `New()` + `as_api`; processes via `mount_module_processes`.
+3. `publish_tools(publisher)`: the engine publishes each module's tools to the tool registry under the module's configured name, after every `on_initialized` and before `Engine.load()` returns. The default publishes `self.tools`; override it (calling `super()`) to publish integration `as_tools(configuration)` factories. See `services/tool_registry/AGENTS.md`.
+4. Kernel `_load_runtime_routes`: agents via `New()` + `as_api`; processes via `mount_module_processes`.
 
 A class that needs constructor config we cannot supply is skipped and logged. That is intentional. Do not invent a fake instance.
 
 ## Tools
 
-`module.tools` is the walk #1195 needs (Nexus list and compose). HTTP is narrower: only an `Expose` with a live `as_api` (or a live `run()`) is mounted under `/tools`. A LangChain `BaseTool` is not given REST.
+`module.tools` is the walk #1195 needs (Nexus list and compose). The same instances are published to the tool registry, so agents can be composed from them without the module building an agent (#1245). HTTP is narrower: only an `Expose` with a live `as_api` (or a live `run()`) is mounted under `/tools`. A LangChain `BaseTool` is not given REST.
 
 ## Tests
 

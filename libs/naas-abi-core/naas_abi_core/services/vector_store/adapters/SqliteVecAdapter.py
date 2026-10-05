@@ -56,6 +56,19 @@ def _metric_function(metric: str) -> str:
     )
 
 
+def _score(metric: str, distance: float) -> float:
+    """The ``SearchResult.score`` for a sqlite-vec distance.
+
+    Cosine (and dot, emulated with cosine) is reported as similarity,
+    ``1 - distance``, like the Qdrant adapters: higher is better, 1 for the
+    same direction, which is what ``score_threshold`` and the port contract
+    expect. L1/L2 stay raw distances, as Qdrant reports euclidean.
+    """
+    if metric.lower() in ("cosine", "dot"):
+        return 1.0 - distance
+    return distance
+
+
 def _pack_vector(vec: np.ndarray) -> bytes:
     """Encode an ndarray as a contiguous float32 byte string for sqlite-vec."""
     arr = np.ascontiguousarray(np.asarray(vec, dtype=np.float32))
@@ -309,7 +322,7 @@ class SqliteVecAdapter(IVectorStorePort):
                 results.append(
                     SearchResult(
                         id=row["id"],
-                        score=float(row["distance"]),
+                        score=_score(metric, float(row["distance"])),
                         vector=vec,
                         metadata=metadata,
                         payload=payload,
