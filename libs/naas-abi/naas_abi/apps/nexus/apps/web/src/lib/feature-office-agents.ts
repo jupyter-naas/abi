@@ -110,7 +110,7 @@ export function resourceFromPath(pathname: string | null | undefined): FeatureRe
   if (feature === 'agents' && seg[2]) {
     return { feature, kind: 'agent', id: decode(seg[2]) };
   }
-  if (feature === 'skills' && seg[2]) {
+  if (feature === 'skills' && seg[2] && decode(seg[2]) !== 'new') {
     return { feature, kind: 'skill', id: decode(seg[2]) };
   }
   if (feature === 'code' && seg[1] === 'r' && seg[2] && seg[3]) {
