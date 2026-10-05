@@ -469,6 +469,192 @@ mark,
   background: var(--accent-soft);
 }
 
+/* "Profile" view: one CV card per person. */
+.profile-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.profile-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 18px 14px 16px;
+  text-align: center;
+  color: var(--ink);
+  text-decoration: none;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.profile-card:hover,
+.profile-card:focus-visible {
+  border-color: var(--accent-strong);
+  box-shadow: 0 6px 18px rgba(16, 18, 27, 0.1);
+}
+
+.profile-card .avatar {
+  margin-bottom: 4px;
+}
+
+.profile-card-name {
+  font-weight: 600;
+  color: var(--result-link);
+}
+
+.profile-card-headline {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.profile-card-place {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* "Graph" view: the people found and what ties them (people-network.js). */
+.network-host {
+  margin-bottom: 20px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.network-host > .stats {
+  padding: 16px;
+}
+
+.network-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.network-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-line {
+  width: 22px;
+  border-top: 2px solid #94a3b8;
+}
+
+.legend-client_of {
+  border-top: 2px dashed var(--accent-strong);
+}
+
+.legend-studied_at {
+  border-top: 2px dotted var(--highlight);
+}
+
+.legend-box {
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+}
+
+.legend-school {
+  background: var(--highlight);
+}
+
+.people-network {
+  display: block;
+  width: 100%;
+  height: min(70vh, 640px);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.people-network.is-panning {
+  cursor: grabbing;
+}
+
+.network-edge {
+  stroke: #94a3b8;
+  stroke-width: 1.2;
+}
+
+.network-edge-client_of {
+  stroke: var(--accent-strong);
+  stroke-dasharray: 5 4;
+}
+
+.network-edge-studied_at {
+  stroke: var(--highlight);
+  stroke-dasharray: 2 3;
+}
+
+.network-org rect {
+  fill: var(--accent);
+}
+
+.network-school rect {
+  fill: var(--highlight);
+}
+
+.network-person-disc {
+  fill: var(--chip-surface);
+}
+
+.network-person-initials {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.network-person-ring {
+  fill: none;
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+.network-person:hover .network-person-ring,
+.network-person:focus-visible .network-person-ring {
+  stroke: var(--accent-strong);
+  stroke-width: 3;
+}
+
+.network-label {
+  fill: var(--ink);
+  font-size: 10px;
+  paint-order: stroke;
+  stroke: var(--panel);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.network-org-label {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.network-caption {
+  margin: 0;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .pager {
   display: flex;
   flex-wrap: wrap;

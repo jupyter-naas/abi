@@ -23,11 +23,12 @@ export function parseRoute(config) {
   return { pageId: "home", params };
 }
 
-export function searchHref(config, { query = "", facet = "", page = 1 } = {}) {
+export function searchHref(config, { query = "", facet = "", page = 1, view = "" } = {}) {
   const results = (config.app?.pages || []).find((item) => item.page_id === "results");
   const params = new URLSearchParams();
   if (query) params.set("q", query);
   if (facet) params.set("facet", facet);
+  if (view) params.set("view", view);
   if (page > 1) params.set("page", String(page));
   const suffix = params.toString();
   return `#/${results?.url || "search"}${suffix ? `?${suffix}` : ""}`;
