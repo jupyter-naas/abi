@@ -149,7 +149,13 @@ class TestExecution:
         detail = await service.detail(WS, "person", ALICE, store)
         assert detail.title
         sections = {s.id: s for s in detail.sections}
-        assert set(sections) == {"experience", "education", "skills", "languages"}
+        assert set(sections) == {
+            "experience",
+            "education",
+            "skills",
+            "languages",
+            "certifications",
+        }
         assert sections["experience"].items and not sections["experience"].error
         assert any(i.item for i in sections["experience"].items)
 
@@ -161,6 +167,85 @@ class TestExecution:
         tags = [tag for item in experience.items for tag in item.tags]
         assert "Python" in tags
         assert all(len(item.tags) == len(set(item.tags)) for item in experience.items)
+
+    async def test_certifications_link_to_their_issuer(
+        self, service: SearchTopicService, store
+    ) -> None:
+        detail = await service.detail(WS, "person", ALICE, store)
+        certifications = next(s for s in detail.sections if s.id == "certifications")
+        assert certifications.link_topic == "organization" and not certifications.error
+        kubernetes = next(
+            i for i in certifications.items if i.title == "Certified Kubernetes Administrator"
+        )
+        assert kubernetes.item and kubernetes.subtitle and kubernetes.start
+
+    async def test_a_certification_without_issuer_is_one_row(
+        self, service: SearchTopicService, store
+    ) -> None:
+        graph = Graph().parse(
+            data=f"""
+            @prefix abi: <http://ontology.naas.ai/abi/> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            <{ALICE}> rdfs:label "Alice Dupont" ; abi:hasCertification <http://x/cert> .
+            <http://x/cert> abi:certification_name "Unissued certificate" .
+            <http://x/other> rdfs:label "Unrelated" .
+        """,
+            format="turtle",
+        )
+        detail = await service.detail(WS, "person", ALICE, GraphQueryTripleStoreAdapter(graph))
+        certifications = next(s for s in detail.sections if s.id == "certifications")
+        assert [(i.title, i.item, i.subtitle) for i in certifications.items] == [
+            ("Unissued certificate", None, None)
+        ]
+
+    async def test_experience_shows_the_mission_name_and_context(
+        self, service: SearchTopicService, store
+    ) -> None:
+        graph = Graph().parse(
+            data=f"""
+            @prefix abi: <http://ontology.naas.ai/abi/> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            <{ALICE}> rdfs:label "Alice Dupont" ; abi:hasActOfWorking <http://x/act> .
+            <http://x/act> abi:forOrganization <http://x/firm> ; abi:forClient <http://x/client> ;
+                abi:occursIn <http://x/site> ; abi:realizes <http://x/role> .
+            <http://x/firm> rdfs:label "Firm" .
+            <http://x/client> rdfs:label "Client" .
+            <http://x/site> rdfs:label "France" .
+            <http://x/role> abi:job_title "Tech Lead" ; abi:hasMission <http://x/mission> .
+            <http://x/mission> rdfs:label "DataPool redesign" ;
+                abi:mission_context "The client needed one finance warehouse." ;
+                abi:mission_content "Defined the architecture\\nAutomated 250 pipelines" .
+        """,
+            format="turtle",
+        )
+        detail = await service.detail(WS, "person", ALICE, GraphQueryTripleStoreAdapter(graph))
+        [item] = next(s for s in detail.sections if s.id == "experience").items
+        assert item.subtitle == "Firm · client: Client · DataPool redesign · France"
+        assert item.snippet == (
+            "The client needed one finance warehouse.\n"
+            "Defined the architecture\nAutomated 250 pipelines"
+        )
+
+    async def test_education_falls_back_on_enrollment_dates(
+        self, service: SearchTopicService, store
+    ) -> None:
+        detail = await service.detail(WS, "person", ALICE, store)
+        education = next(s for s in detail.sections if s.id == "education")
+        assert education.items and all(item.start for item in education.items)
+
+    async def test_organization_lists_alumni_and_certified_people(
+        self, service: SearchTopicService, store
+    ) -> None:
+        university = await service.detail(
+            WS, "organization", "http://ontology.naas.ai/abi/Organization/demo-university", store
+        )
+        alumni = next(s for s in university.sections if s.id == "alumni")
+        assert alumni.link_topic == "person" and len(alumni.items) == 2
+        institute = await service.detail(
+            WS, "organization", "http://ontology.naas.ai/abi/Organization/demo-institute", store
+        )
+        certified = next(s for s in institute.sections if s.id == "certified")
+        assert certified.items and all(item.tags for item in certified.items)
 
     async def test_organization_links_back_to_people(
         self, service: SearchTopicService, store

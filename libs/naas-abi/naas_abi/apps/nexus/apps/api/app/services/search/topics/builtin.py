@@ -1,11 +1,15 @@
 """Topics every workspace starts with.
 
 They read the ABI upper vocabulary (``abi:Person``, ``abi:Organization``) and
-enrich it with the people intelligence module's properties (``people:``) and,
-for an employer's own records (service line, grade), the personnel module's
-(``personnel:``) when present — every such join is OPTIONAL, so a workspace
-without those modules still lists its people and organizations. A workspace may override any of them from the
-search settings page; ``reset`` brings back the definition below.
+enrich it with what the intelligence modules add to it, all in the ``abi:``
+namespace: the people module (profile summary, portrait, skills, language
+capabilities, certifications, and the acts of working, studying and
+certification), the organizations module (website, industry, parent
+organization) and, for an employer's own records, the personnel module
+(``abi:isEmployedBy``). Every such join is OPTIONAL, so a workspace without
+those modules still lists its people and organizations. A workspace may
+override any of them from the search settings page; ``reset`` brings back the
+definition below.
 """
 
 from __future__ import annotations
@@ -21,11 +25,17 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX abi: <http://ontology.naas.ai/abi/>
 """
 
-_ACT_PERIOD = """  OPTIONAL {
+
+def _act_period(start: str = "start", end: str = "end") -> str:
+    """Bind ``?<start>``/``?<end>`` to the dates bounding ``?act``'s temporal region."""
+    return f"""  OPTIONAL {{
     ?act abi:occupiesTemporalRegion ?temporal .
-    OPTIONAL { ?temporal abi:hasFirstInstant ?fi . ?fi abi:instant_date ?start . }
-    OPTIONAL { ?temporal abi:hasLastInstant ?li . ?li abi:instant_date ?end . }
-  }"""
+    OPTIONAL {{ ?temporal abi:hasFirstInstant ?fi . ?fi abi:instant_date ?{start} . }}
+    OPTIONAL {{ ?temporal abi:hasLastInstant ?li . ?li abi:instant_date ?{end} . }}
+  }}"""
+
+
+_ACT_PERIOD = _act_period()
 
 PERSON = SearchTopic(
     id="person",
@@ -94,6 +104,8 @@ WHERE {
   ?uri abi:hasActOfWorking ?act .
   ?act abi:realizes ?role .
   ?role abi:job_title ?value .
+  # Current roles only: an act whose period has a last instant is past experience.
+  FILTER NOT EXISTS { ?act abi:occupiesTemporalRegion ?t . ?t abi:hasLastInstant ?li . }
 }
 """,
         ),
@@ -107,8 +119,9 @@ WHERE {
   VALUES ?uri { {{ uris }} }
   ?uri abi:hasWorkLocation ?site .
   OPTIONAL { ?site abi:office_label ?office . }
+  OPTIONAL { ?site abi:city_name ?city . }
   OPTIONAL { ?site abi:country_name ?country . }
-  BIND(COALESCE(?office, ?country) AS ?value)
+  BIND(COALESCE(?office, ?city, ?country) AS ?value)
   FILTER(BOUND(?value))
 }
 """,
@@ -166,17 +179,38 @@ WHERE {
   }
   OPTIONAL { ?act abi:forOrganization ?item . ?item rdfs:label ?orgLabel . }
   OPTIONAL { ?act abi:forClient ?client . ?client rdfs:label ?clientLabel . }
+  OPTIONAL { ?act abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
   OPTIONAL {
     ?act abi:realizes ?role .
     OPTIONAL { ?role abi:job_title ?jobTitle . }
-    OPTIONAL { ?role abi:hasMission ?mission . ?mission abi:mission_content ?snippet . }
+    OPTIONAL {
+      ?role abi:hasMission ?mission .
+      OPTIONAL { ?mission abi:mission_content ?missionContent . }
+      OPTIONAL { ?mission abi:mission_context ?missionContext . }
+      OPTIONAL { ?mission rdfs:label ?missionLabel . }
+    }
   }
   OPTIONAL { ?act rdfs:label ?actLabel . }
 """
             + _ACT_PERIOD
             + """
   BIND(COALESCE(?jobTitle, ?actLabel, "Role") AS ?title)
-  BIND(IF(BOUND(?clientLabel), CONCAT(COALESCE(?orgLabel, ""), " · client: ", ?clientLabel), ?orgLabel) AS ?subtitle)
+  # A mission's label is its opening sentence. When the content does not start
+  # with it, the label names the mission (a project) and goes in the subtitle.
+  BIND(COALESCE(
+    IF(STRSTARTS(STR(?missionContent), STR(?missionLabel)), "", CONCAT(" · ", ?missionLabel)),
+    ""
+  ) AS ?missionName)
+  BIND(CONCAT(
+    COALESCE(?orgLabel, ""),
+    COALESCE(CONCAT(" · client: ", ?clientLabel), ""),
+    ?missionName,
+    COALESCE(CONCAT(" · ", ?siteLabel), "")
+  ) AS ?line)
+  BIND(IF(STRSTARTS(?line, " · "), SUBSTR(?line, 4), ?line) AS ?subtitle)
+  # The situation the mission answered, then what was done, one line each.
+  BIND(COALESCE(?missionContent, ?missionLabel) AS ?body)
+  BIND(COALESCE(CONCAT(?missionContext, "\\n", ?body), ?body, ?missionContext) AS ?snippet)
 }
 ORDER BY DESC(?start)
 LIMIT {{ limit }}
@@ -193,13 +227,20 @@ SELECT ?title ?item ?subtitle ?start ?end
 WHERE {
   {{ uri }} abi:hasActOfStudying ?act .
   OPTIONAL { ?act abi:forEducationalOrganization ?item . ?item rdfs:label ?subtitle . }
-  OPTIONAL { ?act abi:hasEnrollment ?e . ?e abi:program_name ?program . }
+  OPTIONAL {
+    ?act abi:hasEnrollment ?e .
+    OPTIONAL { ?e abi:program_name ?program . }
+    OPTIONAL { ?e abi:enrollment_date ?enrolled . }
+    OPTIONAL { ?e abi:completion_date ?completed . }
+  }
   OPTIONAL { ?act abi:hasDegree ?d . ?d rdfs:label ?degree . }
   OPTIONAL { ?act rdfs:label ?actLabel . }
 """
-            + _ACT_PERIOD
+            + _act_period("periodStart", "periodEnd")
             + """
   BIND(COALESCE(?degree, ?program, ?actLabel, "Studies") AS ?title)
+  BIND(COALESCE(?periodStart, ?enrolled) AS ?start)
+  BIND(COALESCE(?periodEnd, ?completed) AS ?end)
 }
 ORDER BY DESC(?start)
 LIMIT {{ limit }}
@@ -214,7 +255,10 @@ LIMIT {{ limit }}
 SELECT DISTINCT ?title
 WHERE {
   {{ uri }} abi:hasSkill ?skill .
-  ?skill rdfs:label ?title .
+  OPTIONAL { ?skill rdfs:label ?skillLabel . }
+  OPTIONAL { ?skill abi:skill_name ?skillName . }
+  BIND(COALESCE(?skillLabel, ?skillName) AS ?title)
+  FILTER(BOUND(?title))
 }
 ORDER BY LCASE(STR(?title))
 LIMIT {{ limit }}
@@ -230,9 +274,40 @@ SELECT ?title ?subtitle
 WHERE {
   {{ uri }} abi:hasLanguageCapability ?cap .
   OPTIONAL { ?cap abi:language_name ?name . }
+  OPTIONAL { ?cap abi:ofLanguage ?language . ?language rdfs:label ?languageLabel . }
   OPTIONAL { ?cap abi:proficiency_level ?subtitle . }
-  BIND(COALESCE(?name, "Language") AS ?title)
+  BIND(COALESCE(?name, ?languageLabel, "Language") AS ?title)
 }
+LIMIT {{ limit }}
+""",
+        ),
+        TopicSection(
+            id="certifications",
+            label="Certifications",
+            empty_text="No certifications recorded.",
+            link_topic="organization",
+            query=_PREFIXES
+            + """
+SELECT ?title ?item ?subtitle ?start ?end ?url
+WHERE {
+  {{ uri }} abi:hasCertification ?cert .
+  OPTIONAL { ?cert abi:certification_name ?name . }
+  OPTIONAL { ?cert rdfs:label ?certLabel . }
+  # The issuer is stated on the certification, or as the certifying body of
+  # the act of certification that awarded it.
+  OPTIONAL { ?cert abi:issuedByOrganization ?issuer . ?issuer rdfs:label ?issuerLabel . }
+  OPTIONAL {
+    ?act abi:hasAwardedCertification ?cert ; abi:forCertifyingOrganization ?certifier .
+    ?certifier rdfs:label ?certifierLabel .
+  }
+  BIND(COALESCE(?issuer, ?certifier) AS ?item)
+  BIND(COALESCE(?issuerLabel, ?certifierLabel) AS ?subtitle)
+  OPTIONAL { ?cert abi:issue_date ?start . }
+  OPTIONAL { ?cert abi:expiry_date ?end . }
+  OPTIONAL { ?cert abi:credential_url ?url . }
+  BIND(COALESCE(?name, ?certLabel, "Certification") AS ?title)
+}
+ORDER BY DESC(?start) LCASE(STR(?title))
 LIMIT {{ limit }}
 """,
         ),
@@ -243,7 +318,7 @@ ORGANIZATION = SearchTopic(
     id="organization",
     label="Organization",
     plural_label="Organizations",
-    description="Organizations in the workspace graphs, with the people who worked for or with them.",
+    description="Organizations in the workspace graphs, with the people who worked for, with, or studied at them.",
     icon="Building2",
     class_iri="http://ontology.naas.ai/abi/Organization",
     order=20,
@@ -295,13 +370,31 @@ WHERE {
 GROUP BY ?uri
 """,
         ),
+        TopicResultRowDef(
+            id="alumni",
+            label="Alumni",
+            query=_PREFIXES
+            + """
+SELECT ?uri (STR(COUNT(DISTINCT ?person)) AS ?value)
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?act abi:forEducationalOrganization ?uri .
+  ?person abi:hasActOfStudying ?act .
+}
+GROUP BY ?uri
+""",
+        ),
     ),
     header_query=_PREFIXES
     + """
-SELECT ?title (COUNT(DISTINCT ?employee) AS ?people)
+SELECT ?title (COUNT(DISTINCT ?employee) AS ?people) (SAMPLE(?industryLabel) AS ?industry)
+       (SAMPLE(?parentLabel) AS ?parentOrganization) (SAMPLE(?website) AS ?url)
 WHERE {
   {{ uri }} rdfs:label ?title .
   OPTIONAL { ?a abi:forOrganization {{ uri }} . ?employee abi:hasActOfWorking ?a . }
+  OPTIONAL { {{ uri }} abi:hasIndustry ?i . ?i rdfs:label ?industryLabel . }
+  OPTIONAL { {{ uri }} abi:hasParentOrganization ?parent . ?parent rdfs:label ?parentLabel . }
+  OPTIONAL { {{ uri }} abi:hasWebsite ?w . ?w abi:website_url ?website . }
 }
 GROUP BY ?title
 LIMIT 1
@@ -365,6 +458,51 @@ WHERE {
             + """
 }
 ORDER BY DESC(?start)
+LIMIT {{ limit }}
+""",
+        ),
+        TopicSection(
+            id="alumni",
+            label="Alumni",
+            empty_text="Nobody recorded as having studied at this organization.",
+            link_topic="person",
+            query=_PREFIXES
+            + """
+SELECT ?title ?item (SAMPLE(?studies) AS ?subtitle) (MIN(?s) AS ?start) (MAX(?e) AS ?end)
+WHERE {
+  ?act abi:forEducationalOrganization {{ uri }} .
+  ?item abi:hasActOfStudying ?act ; rdfs:label ?title .
+  OPTIONAL { ?act abi:hasDegree ?d . ?d rdfs:label ?degree . }
+  OPTIONAL { ?act abi:hasEnrollment ?en . ?en abi:program_name ?program . }
+  BIND(COALESCE(?degree, ?program) AS ?studies)
+"""
+            + _act_period("s", "e")
+            + """
+}
+GROUP BY ?item ?title
+ORDER BY LCASE(STR(?title))
+LIMIT {{ limit }}
+""",
+        ),
+        TopicSection(
+            id="certified",
+            label="Certified people",
+            empty_text="No certifications recorded as issued by this organization.",
+            link_topic="person",
+            query=_PREFIXES
+            + """
+SELECT ?title ?item (GROUP_CONCAT(DISTINCT ?certName; separator="\\n") AS ?tags)
+WHERE {
+  { ?cert abi:issuedByOrganization {{ uri }} . }
+  UNION
+  { ?act abi:forCertifyingOrganization {{ uri }} ; abi:hasAwardedCertification ?cert . }
+  ?item abi:hasCertification ?cert ; rdfs:label ?title .
+  OPTIONAL { ?cert abi:certification_name ?name . }
+  OPTIONAL { ?cert rdfs:label ?certLabel . }
+  BIND(COALESCE(?name, ?certLabel) AS ?certName)
+}
+GROUP BY ?item ?title
+ORDER BY LCASE(STR(?title))
 LIMIT {{ limit }}
 """,
         ),
