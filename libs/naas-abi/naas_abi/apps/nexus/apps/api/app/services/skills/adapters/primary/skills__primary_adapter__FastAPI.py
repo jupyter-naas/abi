@@ -71,12 +71,8 @@ class SkillPackageFileBody(BaseModel):
 class SkillPackageBody(BaseModel):
     """A skill package the user asked to write. Not an agent tool."""
 
-    workspace_id: str = Field(..., min_length=1, max_length=100)
-    name: str = Field(..., min_length=1, max_length=200)
-    description: str = Field(..., min_length=1, max_length=2000)
+    skill_id: str = Field(..., min_length=1, max_length=100)
     when_to_use: str = Field(..., min_length=1, max_length=2000)
-    body: str = Field(..., min_length=1)
-    slug: str | None = Field(default=None, max_length=100)
     files: list[SkillPackageFileBody] = Field(default_factory=list)
 
 
@@ -134,21 +130,19 @@ async def write_skill_package(
     skill_service: SkillService = Depends(get_skill_service),
 ) -> dict[str, object]:
     """Write SKILL.md when the user asks. Prompt rows stay on POST /api/skills/."""
-    await require_workspace_access(current_user.id, body.workspace_id)
     try:
-        path = skill_service.write_requested_skill_package(
-            body.workspace_id,
-            slug=body.slug or normalize_slug(body.name),
-            name=body.name,
-            description=body.description,
+        await skill_service.write_requested_skill_package(
+            request_context(current_user),
+            body.skill_id,
             when_to_use=body.when_to_use,
-            body=body.body,
             files=[{"path": item.path, "body": item.body} for item in body.files],
         )
+    except SkillPermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {
-        "slug": path.parent.name,
+        "skill_id": body.skill_id,
         "file": "SKILL.md",
         "files": ["SKILL.md", *[item.path for item in body.files]],
     }

@@ -94,6 +94,25 @@ export default function SkillEditorPage() {
     };
   }, [skill, selectedFile]);
 
+  // Module catalog rows disclose metadata; load instructions only on this detail page.
+  useEffect(() => {
+    if (skill?.source !== 'module') return;
+    let cancelled = false;
+    void (async () => {
+      const { authFetch } = await import('@/stores/auth');
+      const { getApiUrl } = await import('@/lib/config');
+      try {
+        const response = await authFetch(`${getApiUrl()}/api/skills/${encodeURIComponent(skill.id)}`);
+        if (!response.ok) throw new Error('Could not load skill instructions.');
+        const loaded = await response.json();
+        if (!cancelled) setPrompt(loaded.prompt ?? '');
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load skill instructions.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [skill?.id, skill?.source]);
+
   const handleSave = async () => {
     if (!skill) return;
     setSaving(true);
@@ -124,7 +143,7 @@ export default function SkillEditorPage() {
   return (
     <SkillRecordView
       title={skill.name}
-      subtitle={<span className="font-mono text-primary">/{skill.slug}</span>}
+      subtitle={<span className="font-mono text-primary">/{skill.slug}{skill.catalogRef ? ` · ${skill.catalogRef}` : ''}</span>}
       onBack={() => router.push(`/workspace/${workspaceId}/settings/skills`)}
       actions={
         <Button onClick={handleSave} disabled={saving || !canModify}>

@@ -61,6 +61,8 @@ def _skill_row(skill: Any) -> dict[str, Any]:
         "enabled": skill.enabled,
         "description": clip(skill.description, 200),
         "builtin": bool(getattr(skill, "builtin", False)),
+        "source": getattr(skill, "source", "user"),
+        "catalog_ref": getattr(skill, "catalog_ref", None),
     }
 
 
@@ -123,6 +125,11 @@ def skills_tools() -> list[BaseTool]:
                 return {
                     "error": f"No visible skill {wanted}. See list_workspace_skills."
                 }
+            if getattr(found, "source", "user") == "module":
+                with bound_session(db):
+                    found = await _registry().skills.get_skill(request_context(user_id), found.id)
+                if found is None:
+                    return {"error": "This skill is no longer enabled in the workspace."}
             out = jsonable(found)
             out["prompt"] = clip(found.prompt, _MAX_PROMPT)
             return out
@@ -357,6 +364,11 @@ def make_read_workspace_skill_tool():
                     f"No enabled skill '{needle}'. "
                     "The catalog lists enabled skills by slug."
                 )
+            if getattr(found, "source", "user") == "module":
+                with bound_session(db):
+                    found = await _registry().skills.get_skill(request_context(user_id), found.id)
+                if found is None:
+                    return "This skill is no longer enabled in the workspace."
             return found.prompt or ""
 
         result = guarded(_FEATURE, lambda: run_db(_run))

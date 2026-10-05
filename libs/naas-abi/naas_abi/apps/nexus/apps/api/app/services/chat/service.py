@@ -591,8 +591,10 @@ class ChatService:
             agent, AGENT_SYSTEM_PROMPTS["aia"]
         )
         if include_skills:
+            # Cloud requests are stateless: prior assistant replies do not
+            # preserve the system prompt sent on the first turn.
             system_prompt += await self._build_skills_block(
-                context, workspace_id, prior_messages
+                context, workspace_id
             )
         slides_block = _render_slides_context_block(client_context, workspace_id)
         if slides_block:
@@ -739,6 +741,9 @@ class ChatService:
             return None
         for skill in skills:
             if skill.enabled and str(skill.slug).lower() == needle:
+                if getattr(skill, "source", "user") == "module":
+                    loaded = await self.skills_service.get_skill(context, skill.id)
+                    return replace(loaded, slug=skill.slug) if loaded else None
                 return skill
         return None
 

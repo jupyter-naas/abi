@@ -97,7 +97,7 @@ export function SkillRecordView({
 
       {builtin ? (
         <SettingsNotice>
-          This skill ships with Nexus. Invoke it with /{builtinSlug}. It cannot be edited or deleted.
+          This skill is provided by an enabled module. Invoke it with /{builtinSlug}. Its package is read-only.
         </SettingsNotice>
       ) : (
         !canModify && <SettingsNotice>Only the creator can modify this private skill.</SettingsNotice>
@@ -137,7 +137,7 @@ export function SkillRecordView({
                 disabled={!canModify}
                 className="w-auto"
               >
-                {builtin && <option value="builtin">Built-in</option>}
+                {builtin && <option value="builtin">Module</option>}
                 <option value="user">Private (only me)</option>
                 <option value="workspace">Workspace</option>
                 <option value="organization">Organization</option>

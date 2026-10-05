@@ -119,9 +119,7 @@ def test_ollama_endpoint_allows_host_docker_internal() -> None:
         model="qwen2.5:3b",
     )
 
-    assert (
-        validated_provider_endpoint(config) == "http://host.docker.internal:11434"
-    )
+    assert validated_provider_endpoint(config) == "http://host.docker.internal:11434"
 
 
 def test_ollama_endpoint_still_rejects_cloud_metadata_ip() -> None:
@@ -390,11 +388,10 @@ async def test_cloud_stream_executes_read_workspace_skill(monkeypatch) -> None:
     from datetime import UTC, datetime
     from types import SimpleNamespace
 
-    from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
-
     from naas_abi.agents.feature.context import nexus_feature_context
     from naas_abi.apps.nexus.apps.api.app.services.skills.port import SkillRecord
     from naas_abi.tools import skills_tools as tools_module
+    from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
 
     enabled_body = "ENABLED_SKILL_BODY_MUST_REACH_THE_MODEL"
     disabled_body = "DISABLED_BODY_MUST_STAY_HIDDEN"
@@ -575,3 +572,209 @@ def test_redact_url_for_logs_masks_sensitive_query_params() -> None:
     assert "foo=bar" in redacted
     assert "secret123" not in redacted
     assert "xyz" not in redacted
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "provider,stream",
+    [
+        ("ollama", False),
+        ("custom", False),
+        ("cloudflare", False),
+        ("ollama", True),
+        ("cloudflare", True),
+    ],
+)
+async def test_native_provider_executes_skill_calls_and_continues(monkeypatch, provider, stream):
+    import copy
+    import json
+    from unittest.mock import AsyncMock
+
+    from naas_abi.apps.nexus.apps.api.app.services import provider_runtime as runtime
+
+    requests = []
+    execute = AsyncMock(return_value="FULL_SKILL_BODY")
+    monkeypatch.setattr(runtime, "execute_tool", execute)
+    call = {"name": "read_workspace_skill", "arguments": {"slug": "weekly"}}
+    if provider != "cloudflare":
+        call = {"function": call}
+    if provider == "custom":
+        call.update(id="call-1", type="function")
+        call["function"]["arguments"] = json.dumps(call["function"]["arguments"])
+
+    class Response:
+        status_code = 200
+
+        def __init__(self, first):
+            self.first = first
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            msg = {"content": "", "tool_calls": [call]} if self.first else {"content": "Done"}
+            if provider == "ollama":
+                return {"message": msg}
+            if provider == "custom":
+                return {"choices": [{"message": msg}]}
+            return {"result": {"response": msg["content"], "tool_calls": msg.get("tool_calls", [])}}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def aiter_lines(self):
+            data = self.json()
+            yield (
+                json.dumps(data) if provider == "ollama" else "data: " + json.dumps(data["result"])
+            )
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def post(self, url, **kwargs):
+            requests.append(copy.deepcopy(kwargs["json"]))
+            return Response(len(requests) == 1)
+
+        def stream(self, method, url, **kwargs):
+            requests.append(copy.deepcopy(kwargs["json"]))
+            return Response(len(requests) == 1)
+
+    monkeypatch.setattr(runtime.httpx, "AsyncClient", Client)
+    config = ProviderConfig(
+        id="p",
+        name="p",
+        type=provider,
+        enabled=True,
+        model="test",
+        api_key="test",
+        account_id="test",
+        endpoint="http://localhost:11434" if provider == "ollama" else "https://example.com",
+    )
+    fn = getattr(runtime, ("stream_with_" if stream else "complete_with_") + provider)
+    result = fn([runtime.Message(role="user", content="Use the weekly skill")], config, None)
+    answer = "".join([token async for token in result]) if stream else await result
+    assert answer == "Done"
+    execute.assert_awaited_once_with("read_workspace_skill", {"slug": "weekly"})
+    assert len(requests) == 2
+    assert requests[1]["messages"][-1]["content"] == "FULL_SKILL_BODY"
+    if provider == "custom":
+        assert requests[1]["messages"][-1]["tool_call_id"] == "call-1"
+    if provider == "cloudflare":
+        assert requests[0]["tools"][0]["name"] == "read_workspace_skill"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("provider", ["openai", "anthropic"])
+async def test_sdk_completion_executes_skill_then_create(monkeypatch, provider):
+    import copy
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from naas_abi.apps.nexus.apps.api.app.services import provider_runtime as runtime
+
+    requests = []
+    execute = AsyncMock(side_effect=["Skill instructions", "Created"])
+    monkeypatch.setattr(runtime, "execute_tool", execute)
+    calls = [
+        ("read_workspace_skill", {"slug": "skill-creator"}),
+        ("create_skill", {"name": "Weekly", "prompt": "Summarize"}),
+    ]
+
+    class Block(SimpleNamespace):
+        def model_dump(self, **kwargs):
+            return vars(self)
+
+    def create(**kwargs):
+        requests.append(copy.deepcopy(kwargs))
+        index = len(requests) - 1
+        if provider == "anthropic":
+            block = (
+                Block(type="text", text="Done")
+                if index == 2
+                else Block(
+                    type="tool_use", id=f"call-{index}", name=calls[index][0], input=calls[index][1]
+                )
+            )
+            return SimpleNamespace(content=[block])
+        msg = (
+            Block(role="assistant", content="Done")
+            if index == 2
+            else Block(
+                role="assistant",
+                content=None,
+                tool_calls=[
+                    {
+                        "id": f"call-{index}",
+                        "type": "function",
+                        "function": {
+                            "name": calls[index][0],
+                            "arguments": json.dumps(calls[index][1]),
+                        },
+                    }
+                ],
+            )
+        )
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg)])
+
+    if provider == "openai":
+        monkeypatch.setattr(
+            runtime.openai,
+            "OpenAI",
+            lambda **kwargs: SimpleNamespace(
+                chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+            ),
+        )
+    else:
+        monkeypatch.setattr(
+            runtime.anthropic,
+            "Anthropic",
+            lambda **kwargs: SimpleNamespace(messages=SimpleNamespace(create=create)),
+        )
+    config = ProviderConfig(
+        id="p", name="p", type=provider, enabled=True, model="test", api_key="test"
+    )
+    answer = await getattr(runtime, "complete_with_" + provider)(
+        [runtime.Message(role="user", content="Create a skill")], config, None
+    )
+    assert answer == "Done"
+    assert execute.await_count == 2
+    assert len(requests) == 3
+    assert "Skill instructions" in str(requests[1]["messages"])
+    assert "Created" in str(requests[2]["messages"])
+
+
+@pytest.mark.asyncio
+async def test_skill_tool_loop_is_bounded_and_rejects_unoffered_tools(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from naas_abi.apps.nexus.apps.api.app.services import provider_runtime as runtime
+
+    execute = AsyncMock(return_value="ok")
+    monkeypatch.setattr(runtime, "execute_tool", execute)
+    assert "Error" in await runtime._run_skill_call("search_web", {})
+    assert "Error" in await runtime._run_skill_call("create_skill", "broken JSON")
+    execute.assert_not_awaited()
+    send = AsyncMock(
+        return_value={
+            "tool_calls": [
+                {
+                    "id": "call",
+                    "function": {"name": "read_workspace_skill", "arguments": {"slug": "x"}},
+                }
+            ]
+        }
+    )
+    with pytest.raises(RuntimeError, match="round limit"):
+        await runtime._complete_skill_turn(send, [])
+    assert execute.await_count == runtime._MAX_SKILL_TOOL_ROUNDS

@@ -91,6 +91,7 @@ class IdentityWorkspaceSeed:
     agents: list[str] = field(default_factory=list)
     apps: list[str] = field(default_factory=list)
     ontologies: list[str] = field(default_factory=list)
+    skills: list[str] = field(default_factory=list)
 
 
 @dataclass

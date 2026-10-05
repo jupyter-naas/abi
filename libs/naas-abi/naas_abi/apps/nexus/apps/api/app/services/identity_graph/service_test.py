@@ -103,6 +103,7 @@ PLATFORM = PlatformSnapshot(
             agents=["bob BobAgent", "naas_abi SlidesAgent"],
             apps=["external.acme:web"],
             ontologies=["naas_abi:BFO7BucketsProcessOntology.ttl"],
+                    skills=["naas_abi:slides"],
         )
     },
 )
@@ -267,6 +268,7 @@ def test_workspace_records_its_settings_and_configured_seeds() -> None:
     assert (ws, NEXUS.default_agent, Literal("bob BobAgent")) in graph
     assert (ws, NEXUS.seeded_agent, Literal("naas_abi SlidesAgent")) in graph
     assert (ws, NEXUS.seeded_app, Literal("external.acme:web")) in graph
+    assert (ws, NEXUS.seeded_skill, Literal("naas_abi:slides")) in graph
     assert (ws, NEXUS.seeded_ontology, Literal("naas_abi:BFO7BucketsProcessOntology.ttl")) in graph
 
 

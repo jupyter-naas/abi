@@ -15,6 +15,8 @@ export interface Skill {
   scope: SkillScope;
   enabled: boolean;
   builtin?: boolean;
+  source?: 'user' | 'module';
+  catalogRef?: string | null;
   whenToUse?: string;
   files?: string[];
   lastUsedAt: string | null;
@@ -85,6 +87,8 @@ const mapApiSkill = (s: any): Skill => ({
       : 'user',
   enabled: Boolean(s.enabled),
   builtin: Boolean(s.builtin) || s.scope === 'builtin',
+  source: s.source === 'module' ? 'module' : 'user',
+  catalogRef: s.catalog_ref ?? null,
   whenToUse: s.when_to_use ?? '',
   files: Array.isArray(s.files) ? s.files : [],
   lastUsedAt: s.last_used_at ?? null,

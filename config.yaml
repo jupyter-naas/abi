@@ -102,6 +102,12 @@ modules:
             workspaces:
               - name: "Default"
                 slug: "default"
+                skills:
+                  - "naas_abi:sheets"
+                  - "naas_abi:slides"
+                  - "naas_abi:documents"
+                  - "naas_abi:web-research"
+                  - "naas_abi:skill-creator"
                 owner_email: "admin@example.com"
                 members:
                   - email: "admin@example.com"

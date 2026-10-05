@@ -3,6 +3,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Protocol
+
+from naas_abi.skills.catalog import ModuleSkill
 
 SKILL_SCOPES = ("user", "workspace", "organization")
 
@@ -26,6 +29,8 @@ class SkillRecord:
     when_to_use: str = ""
     # Real package paths. Postgres prompt rows leave this empty.
     files: tuple[str, ...] = ()
+    source: str = "user"
+    catalog_ref: str | None = None
 
 
 @dataclass
@@ -82,3 +87,13 @@ class SkillPersistencePort(ABC):
     @abstractmethod
     async def delete(self, skill_id: str) -> bool:
         pass
+
+
+class ModuleSkillCatalogPort(Protocol):
+    async def list_enabled(self, workspace_id: str) -> list[ModuleSkill]:
+        """Packages explicitly allowed in this workspace's configuration."""
+        ...
+
+    def read_file(self, reference: str, relative: str) -> str | None:
+        """Read a file of an already authorized module skill."""
+        ...

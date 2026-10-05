@@ -531,6 +531,7 @@ class Workspace(GenericallyDependentContinuant, RDFEntity):
         "seeded_agent": "http://ontology.naas.ai/nexus/seeded_agent",
         "seeded_app": "http://ontology.naas.ai/nexus/seeded_app",
         "seeded_ontology": "http://ontology.naas.ai/nexus/seeded_ontology",
+        "seeded_skill": "http://ontology.naas.ai/nexus/seeded_skill",
         "sidebar_color": "http://ontology.naas.ai/nexus/sidebar_color",
         "slug": "http://ontology.naas.ai/nexus/slug",
         "system_drive_enabled": "http://ontology.naas.ai/nexus/system_drive_enabled",
@@ -566,6 +567,7 @@ class Workspace(GenericallyDependentContinuant, RDFEntity):
     seeded_agent: Annotated[str, Field(description="An agent reference the platform configuration makes available in this workspace.")] | None = None
     seeded_app: Annotated[str, Field(description="A catalog app id the platform configuration makes available in this workspace.")] | None = None
     seeded_ontology: Annotated[str, Field(description="An ontology reference the platform configuration makes available in this workspace.")] | None = None
+    seeded_skill: Annotated[str, Field(description="A module skill reference the platform configuration makes available in this workspace.")] | None = None
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
     created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
     creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None

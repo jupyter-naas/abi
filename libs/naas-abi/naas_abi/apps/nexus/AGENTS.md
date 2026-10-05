@@ -658,3 +658,37 @@ validation script checks HTML workbooks without mutating formulas.
 Sheets mutations require writer membership. Saves use the existing source-control
 upsert operations, as Slides does. Git is authoritative; sidecars are mirrors.
 Dev output is `.next-dev`, separate from the production `.next` build directory.
+
+
+## Skills catalog
+
+Module skills are discovered by `BaseModule.on_load` under
+`<module>/skills/<slug>/SKILL.md`. Each entry has frontmatter `name`, `description`,
+and `when_to_use`, followed by its instructions; supporting files remain beside it.
+The stable reference is `<loaded-module-key>:<slug>`, for example `naas_abi:slides`.
+
+Set `skills:` alongside `agents:` and `ontologies:` in the workspace config:
+
+```yaml
+skills:
+  - naas_abi:slides
+  - naas_abi:web-research
+```
+
+Missing, null, and empty lists expose no module skills. This list is authoritative
+on each request using the live runtime configuration (restart/reload after changing
+YAML); the settings UI cannot override it. Workspace identity is matched using both
+organization and workspace slugs. Unknown references are logged and remain unavailable.
+
+`services/skills/adapters/secondary/module_catalog.py` resolves loaded module assets
+and configuration. `SkillService` applies membership checks to catalog listing,
+detail reads, file reads, and invocation. Module IDs are workspace-bound; there is
+no globally readable bundled-skill route. List rows contain metadata, provenance
+(`source`, `catalog_ref`), and file names; detail/invoke loads the instructions.
+Equal module skill slugs receive module-prefixed commands. Authorized user records
+keep precedence over an equal command, and remain independently owned and editable.
+
+The default development workspace explicitly enables the five `naas_abi` skills.
+Other workspaces must configure their own allowlist. Office slash handoffs require
+the corresponding module skill to be enabled; opening an office document still
+selects its agent independently of slash commands.

@@ -132,7 +132,7 @@ export function composerPlusMenuRows(input: {
   }
 
   const skills = invocableComposerSkills(input.skills);
-  const manage = input.workspaceId
+  const manage: ComposerPlusManageSkills | null = input.workspaceId
     ? {
         label: COMPOSER_PLUS_MANAGE_SKILLS_LABEL,
         href: manageSkillsSettingsHref(input.workspaceId),

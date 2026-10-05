@@ -16,8 +16,14 @@ from naas_abi.apps.nexus.apps.api.app.services.skills.port import (
 from naas_abi.apps.nexus.apps.api.app.services.skills.service import (
     SkillPermissionError,
     SkillService,
+    module_skill_id,
 )
-from naas_abi.skills.catalog import load_bundled_skills, read_package_file
+from naas_abi.skills.catalog import (
+    ModuleSkill,
+    load_bundled_skills,
+    package_root,
+    read_package_file,
+)
 
 # One sentence that lives only in each SKILL.md body.
 _MARKERS = {
@@ -67,7 +73,18 @@ def _context() -> RequestContext:
 def _service(stored: list[SkillRecord] | None = None) -> tuple[SkillService, AsyncMock]:
     adapter = AsyncMock()
     adapter.list_visible = AsyncMock(return_value=list(stored or []))
-    service = SkillService(adapter)
+    catalog = SimpleNamespace(
+        list_enabled=AsyncMock(
+            return_value=[
+                ModuleSkill("naas_abi", s, package_root(s.slug))
+                for s in load_bundled_skills()
+            ]
+        ),
+        read_file=lambda ref, relative: read_package_file(
+            ref.split(":", 1)[1], relative
+        ),
+    )
+    service = SkillService(adapter, module_catalog=catalog)
     service._ensure_workspace_access = AsyncMock()  # type: ignore[method-assign]
     return service, adapter
 
@@ -97,8 +114,10 @@ async def test_bundled_skills_are_listed_without_inlining_bodies() -> None:
         assert row.builtin is True
         assert row.scope == "builtin"
         assert row.enabled is True
-        assert row.id == f"bundled-{row.slug}"
-        assert row.prompt == bodies[row.slug]
+        assert row.id == module_skill_id("ws-1", f"naas_abi:{row.slug}")
+        assert row.prompt == ""
+        loaded_row = await service.get_skill(_context(), row.id)
+        assert loaded_row.prompt == bodies[row.slug]
         assert row.when_to_use.strip()
         assert row.files == _PACKAGE_FILES[row.slug]
         if row.slug in _REFERENCE_MARKERS:
@@ -169,9 +188,13 @@ async def test_saved_slug_hides_bundled_row_and_writes_are_rejected() -> None:
 
     with pytest.raises(SkillPermissionError):
         await service.update_skill(
-            _context(), "bundled-slides", SkillUpdateInput(name="Nope")
+            _context(),
+            module_skill_id("ws-1", "naas_abi:slides"),
+            SkillUpdateInput(name="Nope"),
         )
     with pytest.raises(SkillPermissionError):
-        await service.delete_skill(_context(), "bundled-slides")
+        await service.delete_skill(
+            _context(), module_skill_id("ws-1", "naas_abi:slides")
+        )
     adapter.update.assert_not_awaited()
     adapter.delete.assert_not_awaited()

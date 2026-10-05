@@ -23,7 +23,7 @@ const SCOPE_LABELS: Record<SkillScope, string> = {
   user: 'Private',
   workspace: 'Workspace',
   organization: 'Organization',
-  builtin: 'Built-in',
+  builtin: 'Module',
 };
 
 export default function SkillsSettingsPage() {
@@ -98,7 +98,7 @@ export default function SkillsSettingsPage() {
       <SettingsPageHeader
         title="Skills"
         badge={`${enabledCount} enabled`}
-        description="Reusable prompts you invoke in chat with /<slug>. Built-in skills ship with Nexus and stay read-only."
+        description="Reusable prompts you invoke in chat with /<slug>. Module skills are enabled through workspace configuration and stay read-only."
         actions={
           <Button onClick={() => router.push(newSkillHref)}>
             <Plus size={16} />
@@ -213,8 +213,8 @@ export default function SkillsSettingsPage() {
                         checked={skill.enabled}
                         onCheckedChange={(checked) => handleToggleEnabled(skill.id, checked)}
                         disabled={!canModify}
-                        aria-label={skill.builtin ? 'Built-in skill stays enabled' : skill.enabled ? 'Disable' : 'Enable'}
-                        title={skill.builtin ? 'Built-in skills stay enabled' : skill.enabled ? 'Disable' : 'Enable'}
+                        aria-label={skill.builtin ? 'Module skill is enabled in workspace configuration' : skill.enabled ? 'Disable' : 'Enable'}
+                        title={skill.builtin ? 'Module skill is enabled in workspace configuration' : skill.enabled ? 'Disable' : 'Enable'}
                       />
                     </td>
                     <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>

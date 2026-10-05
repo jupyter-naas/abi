@@ -4,10 +4,11 @@ Supports: Anthropic (Claude), OpenAI, Ollama, Cloudflare Workers AI, and custom 
 """
 
 import importlib
+import json
 import logging
 import pkgutil
 import threading
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any, Literal
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -225,6 +226,57 @@ def validated_provider_endpoint(config: ProviderConfig) -> str | None:
     return config.endpoint.rstrip("/") if config.endpoint else None
 
 
+_MAX_SKILL_TOOL_ROUNDS = 4
+
+
+async def _run_skill_call(name: str, arguments: Any) -> str:
+    """Execute only tools offered on this turn; report malformed calls to the model."""
+    if name not in {item["function"]["name"] for item in cloud_turn_tool_schema()}:
+        return "Error: tool was not offered on this turn."
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments)
+        except json.JSONDecodeError:
+            return "Error: tool arguments must be a JSON object."
+    if not isinstance(arguments, dict):
+        return "Error: tool arguments must be a JSON object."
+    return await execute_tool(name, arguments)
+
+
+async def _append_skill_results(messages: list[dict], message: dict, wire: str = "openai") -> bool:
+    calls = message.get("tool_calls") or []
+    if not calls:
+        return False
+    messages.append({"role": "assistant", **message})
+    for call in calls:
+        function = call.get("function", call)
+        name = function.get("name", "")
+        result = await _run_skill_call(name, function.get("arguments", {}))
+        reply = {"role": "tool", "content": result}
+        if wire == "openai":
+            reply["tool_call_id"] = call["id"]
+        else:
+            reply["name" if wire == "cloudflare" else "tool_name"] = name
+        messages.append(reply)
+    return True
+
+
+async def _complete_skill_turn(
+    send: Callable[[list[dict]], Awaitable[dict]],
+    messages: list[dict],
+    wire: str = "openai",
+) -> str:
+    """Bounded tool loop shared by completion adapters."""
+    for round_index in range(_MAX_SKILL_TOOL_ROUNDS + 1):
+        message = await send(messages)
+        if not message.get("tool_calls"):
+            return message.get("content") or ""
+        if round_index == _MAX_SKILL_TOOL_ROUNDS:
+            raise RuntimeError("Skill tool round limit reached")
+        await _append_skill_results(messages, message, wire)
+    raise AssertionError("unreachable")
+
+
 async def complete_with_anthropic(
     messages: list[Message],
     config: ProviderConfig,
@@ -260,15 +312,33 @@ async def complete_with_anthropic(
         if msg.role == "system":
             system_parts.append(msg.content)
 
-    response = client.messages.create(
-        model=config.model,
-        max_tokens=4096,
-        system="\n\n".join(system_parts) if system_parts else None,
-        messages=anthropic_messages,
-        tools=anthropic_turn_tools(),
-    )
-
-    return response.content[0].text
+    for round_index in range(_MAX_SKILL_TOOL_ROUNDS + 1):
+        response = client.messages.create(
+            model=config.model,
+            max_tokens=4096,
+            system="\n\n".join(system_parts) if system_parts else None,
+            messages=anthropic_messages,
+            tools=anthropic_turn_tools(),
+        )
+        calls = [block for block in response.content if block.type == "tool_use"]
+        if not calls:
+            return "".join(block.text for block in response.content if block.type == "text")
+        if round_index == _MAX_SKILL_TOOL_ROUNDS:
+            raise RuntimeError("Skill tool round limit reached")
+        anthropic_messages.append(
+            {"role": "assistant", "content": [block.model_dump() for block in response.content]}
+        )
+        results = []
+        for call in calls:
+            results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": call.id,
+                    "content": await _run_skill_call(call.name, call.input),
+                }
+            )
+        anthropic_messages.append({"role": "user", "content": results})
+    raise AssertionError("unreachable")
 
 
 async def complete_with_openai(
@@ -302,15 +372,16 @@ async def complete_with_openai(
             }
         )
 
-    response = client.chat.completions.create(
-        model=config.model,
-        messages=openai_messages,
-        max_tokens=4096,
-        tools=cloud_turn_tool_schema(),
-    )
+    async def send(turn_messages: list[dict]) -> dict:
+        response = client.chat.completions.create(
+            model=config.model,
+            messages=turn_messages,
+            max_tokens=4096,
+            tools=cloud_turn_tool_schema(),
+        )
+        return response.choices[0].message.model_dump(exclude_none=True)
 
-    content = response.choices[0].message.content
-    return content or ""
+    return await _complete_skill_turn(send, openai_messages)
 
 
 async def complete_with_ollama(
@@ -339,18 +410,22 @@ async def complete_with_ollama(
         ollama_messages.append(message_dict)
 
     async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(
-            f"{endpoint}/api/chat",
-            json={
-                "model": config.model,
-                "messages": ollama_messages,
-                "stream": False,
-                "tools": cloud_turn_tool_schema(),
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data["message"]["content"]
+
+        async def send(turn_messages: list[dict]) -> dict:
+            response = await client.post(
+                f"{endpoint}/api/chat",
+                json={
+                    "model": config.model,
+                    "messages": turn_messages,
+                    "stream": False,
+                    "tools": cloud_turn_tool_schema(),
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["message"]
+
+        return await _complete_skill_turn(send, ollama_messages, "ollama")
 
 
 async def stream_with_ollama(
@@ -383,36 +458,48 @@ async def stream_with_ollama(
         ollama_messages.append(message_dict)
 
     async with httpx.AsyncClient(timeout=120.0) as client:
-        async with client.stream(
-            "POST",
-            f"{endpoint}/api/chat",
-            json={
-                "model": config.model,
-                "messages": ollama_messages,
-                "stream": True,
-                "tools": cloud_turn_tool_schema(),
-            },
-        ) as response:
-            response.raise_for_status()
+        for round_index in range(_MAX_SKILL_TOOL_ROUNDS + 1):
+            calls: list[dict] = []
+            content: list[str] = []
+            async with client.stream(
+                "POST",
+                f"{endpoint}/api/chat",
+                json={
+                    "model": config.model,
+                    "messages": ollama_messages,
+                    "stream": True,
+                    "tools": cloud_turn_tool_schema(),
+                },
+            ) as response:
+                response.raise_for_status()
 
-            # Ollama streams JSON lines (not SSE). Each line looks like:
-            # {"model":"...","message":{"role":"assistant","content":"token"},"done":false}
-            # Final line has {"done": true}
-            async for line in response.aiter_lines():
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
+                # Ollama streams JSON lines (not SSE). Each line looks like:
+                # {"model":"...","message":{"role":"assistant","content":"token"},"done":false}
+                # Final line has {"done": true}
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
 
-                # Some implementations may send thinking tokens separately; if we
-                # ever receive a dedicated field, wrap it in <think> tags. For now
-                # we stream assistant content as-is and let the model emit tags.
-                msg = data.get("message") or {}
-                token = msg.get("content")
-                if token:
-                    yield token
+                    # Some implementations may send thinking tokens separately; if we
+                    # ever receive a dedicated field, wrap it in <think> tags. For now
+                    # we stream assistant content as-is and let the model emit tags.
+                    msg = data.get("message") or {}
+                    calls.extend(msg.get("tool_calls") or [])
+                    token = msg.get("content")
+                    if token:
+                        content.append(token)
+                        yield token
+            if not calls:
+                return
+            if round_index == _MAX_SKILL_TOOL_ROUNDS:
+                raise RuntimeError("Skill tool round limit reached")
+            await _append_skill_results(
+                ollama_messages, {"content": "".join(content), "tool_calls": calls}, "ollama"
+            )
 
 
 def _absorb_tool_call_delta(acc: dict[int, dict[str, str]], delta: dict) -> None:
@@ -472,13 +559,9 @@ async def _stream_after_skill_tool(
         if not isinstance(parsed, dict):
             parsed = {}
         results.append((call_id, await execute_tool(slot["name"], parsed)))
-    follow_messages.append(
-        {"role": "assistant", "content": None, "tool_calls": assistant_calls}
-    )
+    follow_messages.append({"role": "assistant", "content": None, "tool_calls": assistant_calls})
     for call_id, result in results:
-        follow_messages.append(
-            {"role": "tool", "tool_call_id": call_id, "content": result}
-        )
+        follow_messages.append({"role": "tool", "tool_call_id": call_id, "content": result})
     follow = {
         "model": payload.get("model"),
         "messages": follow_messages,
@@ -545,9 +628,7 @@ async def stream_with_openai_compatible(
     # Restore full API key for actual request
     headers["Authorization"] = f"Bearer {config.api_key}"
 
-    payload = openai_compatible_payload(
-        messages, config, system_prompt, stream=True
-    )
+    payload = openai_compatible_payload(messages, config, system_prompt, stream=True)
 
     logger.info(f"🚀 Streaming to {endpoint}/chat/completions with model={config.model}")
 
@@ -668,21 +749,25 @@ async def complete_with_cloudflare(
     }
 
     async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(
-            url,
-            headers=headers,
-            json={
-                "messages": cf_messages,
-                "tools": cloud_turn_tool_schema(),
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
 
-        # Cloudflare returns { "result": { "response": "..." } }
-        if "result" in data:
-            return data["result"].get("response", str(data["result"]))
-        return str(data)
+        async def send(turn_messages: list[dict]) -> dict:
+            response = await client.post(
+                url,
+                headers=headers,
+                json={
+                    "messages": turn_messages,
+                    "tools": [item["function"] for item in cloud_turn_tool_schema()],
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            result = data.get("result", data)
+            return {
+                "content": result.get("response", ""),
+                "tool_calls": result.get("tool_calls", []),
+            }
+
+        return await _complete_skill_turn(send, cf_messages, "cloudflare")
 
 
 async def stream_with_cloudflare(
@@ -726,31 +811,45 @@ async def stream_with_cloudflare(
     }
 
     async with httpx.AsyncClient(timeout=120.0) as client:
-        async with client.stream(
-            "POST",
-            url,
-            headers=headers,
-            json={
-                "messages": cf_messages,
-                "stream": True,
-                "tools": cloud_turn_tool_schema(),
-            },
-        ) as response:
-            if response.status_code != 200:
-                body = await response.aread()
-                raise ValueError(f"Cloudflare API error: {response.status_code} - {body.decode()}")
+        for round_index in range(_MAX_SKILL_TOOL_ROUNDS + 1):
+            calls: list[dict] = []
+            content: list[str] = []
+            async with client.stream(
+                "POST",
+                url,
+                headers=headers,
+                json={
+                    "messages": cf_messages,
+                    "stream": True,
+                    "tools": [item["function"] for item in cloud_turn_tool_schema()],
+                },
+            ) as response:
+                if response.status_code != 200:
+                    body = await response.aread()
+                    raise ValueError(
+                        f"Cloudflare API error: {response.status_code} - {body.decode()}"
+                    )
 
-            async for line in response.aiter_lines():
-                if line.startswith("data: "):
-                    data_str = line[6:]
-                    if data_str == "[DONE]":
-                        break
-                    try:
-                        data = json.loads(data_str)
-                        if "response" in data:
-                            yield data["response"]
-                    except json.JSONDecodeError:
-                        continue
+                async for line in response.aiter_lines():
+                    if line.startswith("data: "):
+                        data_str = line[6:]
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(data_str)
+                            calls.extend(data.get("tool_calls") or [])
+                            if "response" in data:
+                                content.append(data["response"])
+                                yield data["response"]
+                        except json.JSONDecodeError:
+                            continue
+            if not calls:
+                return
+            if round_index == _MAX_SKILL_TOOL_ROUNDS:
+                raise RuntimeError("Skill tool round limit reached")
+            await _append_skill_results(
+                cf_messages, {"content": "".join(content), "tool_calls": calls}, "cloudflare"
+            )
 
 
 async def complete_with_custom(
@@ -781,19 +880,23 @@ async def complete_with_custom(
         headers["Authorization"] = f"Bearer {config.api_key}"
 
     async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(
-            f"{endpoint}/v1/chat/completions",
-            headers=headers,
-            json={
-                "model": config.model,
-                "messages": api_messages,
-                "max_tokens": 4096,
-                "tools": cloud_turn_tool_schema(),
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data["choices"][0]["message"]["content"]
+
+        async def send(turn_messages: list[dict]) -> dict:
+            response = await client.post(
+                f"{endpoint}/v1/chat/completions",
+                headers=headers,
+                json={
+                    "model": config.model,
+                    "messages": turn_messages,
+                    "max_tokens": 4096,
+                    "tools": cloud_turn_tool_schema(),
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]
+
+        return await _complete_skill_turn(send, api_messages, "openai")
 
 
 async def complete_chat(
@@ -862,9 +965,7 @@ async def complete_with_abi(
         )
         import asyncio
 
-        agent = await asyncio.to_thread(
-            _duplicate_inprocess_agent, template_agent, thread_id
-        )
+        agent = await asyncio.to_thread(_duplicate_inprocess_agent, template_agent, thread_id)
         if llm_model:
             _retarget_inprocess_chat_model(agent, llm_model)
         _attach_read_workspace_skill(agent)
@@ -925,6 +1026,7 @@ def is_multimodal_model(model_name: str) -> bool:
 # TOOL DEFINITIONS FOR FUNCTION CALLING
 # ============================================
 
+
 def cloud_turn_tool_schema() -> list[dict[str, Any]]:
     """Tools registered on a cloud chat turn.
 
@@ -972,15 +1074,13 @@ def cloud_turn_tool_schema() -> list[dict[str, Any]]:
                         "prompt": {
                             "type": "string",
                             "description": (
-                                "The full instructions the skill runs. "
-                                "Written to stand on its own."
+                                "The full instructions the skill runs. Written to stand on its own."
                             ),
                         },
                         "slug": {
                             "type": "string",
                             "description": (
-                                "Chat command, lowercase and hyphenated. "
-                                "Omit to slugify the name."
+                                "Chat command, lowercase and hyphenated. Omit to slugify the name."
                             ),
                         },
                         "description": {
@@ -1575,9 +1675,7 @@ def _normalize_inprocess_llm_model(model_id: str | None) -> str | None:
     return _INPROCESS_LLM_MODEL_ALIASES.get(mid, mid)
 
 
-_INPROCESS_LLM_MODEL_RESOLVERS: list[
-    Callable[[str, str | None], str | None]
-] = []
+_INPROCESS_LLM_MODEL_RESOLVERS: list[Callable[[str, str | None], str | None]] = []
 
 
 def register_inprocess_llm_model_resolver(
@@ -1599,9 +1697,7 @@ def _ensure_inprocess_llm_resolvers_loaded() -> None:
         pass
 
 
-def resolve_inprocess_llm_model_for_turn(
-    agent_name: str, config_llm: str | None
-) -> str | None:
+def resolve_inprocess_llm_model_for_turn(agent_name: str, config_llm: str | None) -> str | None:
     """Resolve the chat model id for an in-process ABI agent turn."""
     _ensure_inprocess_llm_resolvers_loaded()
     normalized = _normalize_inprocess_llm_model(config_llm)
@@ -1875,9 +1971,7 @@ async def stream_with_abi_inprocess(
     # (the previous behaviour) caused cross-conversation response leakage when
     # two requests overlapped — see jupyter-naas/abi#991.
     assert thread_id is not None, "thread_id is required"
-    agent = await asyncio.to_thread(
-        _duplicate_inprocess_agent, template_agent, thread_id
-    )
+    agent = await asyncio.to_thread(_duplicate_inprocess_agent, template_agent, thread_id)
     if llm_model:
         try:
             _retarget_inprocess_chat_model(agent, llm_model)

@@ -1155,7 +1155,7 @@ async def test_build_abi_injection_preamble_includes_skills_and_user_profile() -
 
 
 @pytest.mark.asyncio
-async def test_build_system_prompt_omits_skills_catalog_on_follow_up() -> None:
+async def test_build_system_prompt_keeps_skills_catalog_on_follow_up() -> None:
     skill = SimpleNamespace(
         slug="weekly-report",
         name="Weekly report",
@@ -1177,8 +1177,8 @@ async def test_build_system_prompt_omits_skills_catalog_on_follow_up() -> None:
         context=context,
     )
 
-    assert "slug: weekly-report" not in prompt
-    assert "when_to_use:" not in prompt
+    assert "slug: weekly-report" in prompt
+    assert "when_to_use:" in prompt
     assert "Summarize this week's activity in bullet points." not in prompt
     assert "MULTI-AGENT NOTICE" in prompt
 
@@ -1363,7 +1363,7 @@ async def test_skill_catalog_lands_on_one_channel_and_slash_expands_the_body(
 
     cloud_follow = await _run("openai", "again", prior)
     assert cloud_follow["injection_preamble"] is None
-    assert "slug: weekly-report" not in (cloud_follow["system_prompt"] or "")
+    assert "slug: weekly-report" in (cloud_follow["system_prompt"] or "")
     assert body not in (cloud_follow["system_prompt"] or "")
 
 

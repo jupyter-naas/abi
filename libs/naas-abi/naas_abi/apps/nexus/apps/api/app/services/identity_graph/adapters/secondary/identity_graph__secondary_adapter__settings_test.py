@@ -53,6 +53,7 @@ def _settings() -> Settings:
                         "agents": ["external.adqcc AdqccAgent", "bob BobAgent"],
                         "apps": ["external.adqcc:web"],
                         "ontologies": ["adqcc:AdqccOntology.ttl"],
+                            "skills": ["naas_abi:slides"],
                     }
                 ],
             }
@@ -117,6 +118,7 @@ def test_feature_flags_tenant_and_seeds_are_typed() -> None:
     assert seed.agents == ["external.adqcc AdqccAgent", "bob BobAgent"]
     assert seed.apps == ["external.adqcc:web"]
     assert seed.ontologies == ["adqcc:AdqccOntology.ttl"]
+    assert seed.skills == ["naas_abi:slides"]
 
 
 def test_urls_carrying_credentials_are_stripped_even_under_innocent_keys() -> None:

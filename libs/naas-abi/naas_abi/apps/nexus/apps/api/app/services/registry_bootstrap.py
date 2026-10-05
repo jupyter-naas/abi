@@ -33,6 +33,9 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
 )
 from naas_abi.apps.nexus.apps.api.app.services.search.service import SearchService
+from naas_abi.apps.nexus.apps.api.app.services.skills.adapters.secondary.module_catalog import (
+    ModuleSkillCatalog,
+)
 from naas_abi.apps.nexus.apps.api.app.services.skills.adapters.secondary.postgres import (
     SkillSecondaryAdapterPostgres,
 )
@@ -59,6 +62,7 @@ def initialize_nexus_service_registry() -> ServiceRegistry:
     )
     skills_service = SkillService(
         SkillSecondaryAdapterPostgres(db_getter=db_getter),
+        module_catalog=ModuleSkillCatalog(db_getter),
         iam_service=iam_service,
     )
     chat_service = ChatService(

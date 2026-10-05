@@ -13,6 +13,7 @@ from naas_abi_core.module.ModuleAgentLoader import ModuleAgentLoader
 from naas_abi_core.module.ModuleModelLoader import ModuleModelLoader
 from naas_abi_core.module.ModuleOrchestrationLoader import ModuleOrchestrationLoader
 from naas_abi_core.module.ModulePipelineLoader import ModulePipelineLoader
+from naas_abi_core.module.ModuleSkillLoader import ModuleSkillLoader
 from naas_abi_core.module.ModuleToolLoader import ModuleToolLoader
 from naas_abi_core.module.ModuleUtils import find_class_module_root_path
 from naas_abi_core.module.ModuleWorkflowLoader import ModuleWorkflowLoader
@@ -74,6 +75,7 @@ class BaseModule(Generic[TConfig]):
     dependencies: ModuleDependencies = ModuleDependencies(modules=[], services=[])
 
     __ontologies: list[str] = []
+    __skills: list[str] = []
     __agents: list[type[Expose]] = []
     __integrations: list[Integration] = []
     __workflows: list[Workflow] = []
@@ -95,6 +97,7 @@ class BaseModule(Generic[TConfig]):
         self._engine = engine
         self._configuration = configuration
         self.__ontologies = []
+        self.__skills = []
         self.__agents = []
         self.__workflows = []
         self.__pipelines = []
@@ -136,6 +139,11 @@ class BaseModule(Generic[TConfig]):
         return self._configuration
 
     @property
+    def skills(self) -> list[str]:
+        """Module-owned SKILL.md entry points discovered during on_load."""
+        return self.__skills
+
+    @property
     def ontologies(self) -> list[str]:
         return self.__ontologies
 
@@ -166,6 +174,7 @@ class BaseModule(Generic[TConfig]):
     def on_load(self):
         logger.debug(f"on_load for module {self.__module__.split('.')[0]}")
         self.__load_ontologies()
+        self.__skills = ModuleSkillLoader.load_skills(self.module_root_path)
 
         self.__agents = ModuleAgentLoader.load_agents(self.__class__)
         self.__orchestrations = ModuleOrchestrationLoader.load_orchestrations(
@@ -282,6 +291,7 @@ class BaseModule(Generic[TConfig]):
 #             # self.__load_agents()
 #             self.__load_triggers()
 #             self.__load_ontologies()
+        self.__skills = ModuleSkillLoader.load_skills(self.module_root_path)
 #         except Exception as e:
 #             logger.error(f"❌ Critical error loading module {self.module_import_path}: {e}")
 #             raise SystemExit(f"Application crashed due to module loading failure: {self.module_import_path}")

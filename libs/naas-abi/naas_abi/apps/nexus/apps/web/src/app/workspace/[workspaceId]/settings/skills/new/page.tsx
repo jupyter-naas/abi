@@ -121,12 +121,8 @@ export default function NewSkillPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          workspace_id: workspaceId,
-          slug: skill.slug,
-          name: trimmedName,
-          description: trimmedDescription || trimmedName,
+          skill_id: skill.id,
           when_to_use: trimmedDescription || 'The user invokes this skill.',
-          body: skillBody,
           files: files
             .filter((file) => file.path !== SKILL_MD_PATH)
             .map((file) => ({ path: file.path, body: file.body })),

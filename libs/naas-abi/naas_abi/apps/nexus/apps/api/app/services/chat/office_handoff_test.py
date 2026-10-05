@@ -26,16 +26,13 @@ from naas_abi.apps.nexus.apps.api.app.services.skills.service import SkillServic
 _MARKERS = {
     "sheets": "The workbook JSON inside `workbook.html` is authoritative.",
     "slides": (
-        "Hand the deck to SlidesAgent and write the open presentation HTML, "
-        "not a PowerPoint file."
+        "Hand the deck to SlidesAgent and write the open presentation HTML, not a PowerPoint file."
     ),
     "documents": (
         "Hand the memo to DocumentsAgent and fill the open document template "
         "instead of emitting a Word file."
     ),
-    "web-research": (
-        "Run search_public_web or web_search and cite only URLs the tool returned."
-    ),
+    "web-research": ("Run search_public_web or web_search and cite only URLs the tool returned."),
 }
 
 
@@ -105,7 +102,16 @@ def _context() -> RequestContext:
 def _chat(tmp_path) -> ChatService:
     adapter = AsyncMock()
     adapter.list_visible = AsyncMock(return_value=[])
-    service = SkillService(adapter, user_skills_root=tmp_path)
+    from naas_abi.skills.catalog import ModuleSkill, load_bundled_skills, package_root
+
+    catalog = SimpleNamespace(
+        list_enabled=AsyncMock(
+            return_value=[
+                ModuleSkill("naas_abi", s, package_root(s.slug)) for s in load_bundled_skills()
+            ]
+        )
+    )
+    service = SkillService(adapter, user_skills_root=tmp_path, module_catalog=catalog)
     service._ensure_workspace_access = AsyncMock()  # type: ignore[method-assign]
     return ChatService(adapter=SimpleNamespace(), skills_service=service)
 
@@ -151,10 +157,7 @@ def test_office_slash_selects_the_office_agent_when_no_file_is_open() -> None:
     assert resolve_workspace_turn_agent(agents, "abi", "/documents a memo") == "documents"
     assert resolve_workspace_turn_agent(agents, "abi", "/web-research wheat") == "abi"
     assert suppressed_office_skill_slug(agents, "/web-research wheat") is None
-    assert (
-        resolve_workspace_turn_agent(_roster(sheets=False), "abi", "/sheets budget")
-        == "abi"
-    )
+    assert resolve_workspace_turn_agent(_roster(sheets=False), "abi", "/sheets budget") == "abi"
 
 
 @pytest.mark.asyncio
@@ -285,6 +288,7 @@ def _install_stream_fakes(
         yield SimpleNamespace(
             agents=SimpleNamespace(list_workspace_agents=list_workspace_agents),
             chat=_FakeChat(),
+            skills=chat.skills_service,
         )
 
     async def fake_get_or_create_conversation(**_kwargs) -> str:
@@ -310,7 +314,9 @@ def _install_stream_fakes(
     monkeypatch.setattr(streaming, "AsyncSessionLocal", fake_session)
     monkeypatch.setattr(streaming, "bind_registry", fake_bind_registry)
     monkeypatch.setattr(streaming, "get_or_create_conversation", fake_get_or_create_conversation)
-    monkeypatch.setattr(streaming, "build_provider_messages_with_agents", fake_build_provider_messages)
+    monkeypatch.setattr(
+        streaming, "build_provider_messages_with_agents", fake_build_provider_messages
+    )
     monkeypatch.setattr(streaming, "request_context", lambda _user: _context())
     monkeypatch.setattr(streaming, "persist_stream_content", fake_persist_stream_content)
     monkeypatch.setattr(streaming, "persist_stream_metadata", fake_persist_stream_metadata)
@@ -432,3 +438,12 @@ async def test_missing_sheets_agent_keeps_slash_expansion(
     assert not errors, errors
     assert capture["agent_id"] == "abi"
     assert _MARKERS["sheets"] in _provider_text(capture)
+
+
+@pytest.mark.asyncio
+async def test_unconfigured_office_skill_does_not_route_to_office_agent(monkeypatch, tmp_path):
+    chat = _chat(tmp_path)
+    chat.skills_service.module_catalog.list_enabled.return_value = []
+    capture = await _drive(monkeypatch, "/slides a deck", roster=_roster(), chat=chat, context=None)
+    assert capture["agent_id"] == "abi"
+    assert "Invoked skill" not in _provider_text(capture)

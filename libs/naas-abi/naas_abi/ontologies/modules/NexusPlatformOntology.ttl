@@ -2532,6 +2532,9 @@ nexus:seeded_app a owl:DatatypeProperty ; rdfs:label "seeded app"@en ; rdfs:doma
 nexus:seeded_ontology a owl:DatatypeProperty ; rdfs:label "seeded ontology"@en ; rdfs:domain nexus:Workspace ; rdfs:range xsd:string ;
     skos:definition "An ontology reference the platform configuration makes available in this workspace."@en .
 
+nexus:seeded_skill a owl:DatatypeProperty ; rdfs:label "seeded skill"@en ; rdfs:domain nexus:Workspace ; rdfs:range xsd:string ;
+    skos:definition "A module skill reference the platform configuration makes available in this workspace."@en .
+
 # Memberships, features and policies
 nexus:membership_role a owl:DatatypeProperty ; rdfs:label "membership role"@en ;
     rdfs:domain nexus:WorkspaceMembership, nexus:OrganizationMembership, nexus:IdentityAndAccessProcess ; rdfs:range xsd:string ;

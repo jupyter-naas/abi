@@ -61,7 +61,40 @@ class BundledSkill:
         return f"bundled-{self.slug}"
 
 
-def parse_frontmatter(text: str, path: Path | None = None) -> tuple[dict[str, str], str]:
+@dataclass(frozen=True)
+class ModuleSkill:
+    module_name: str
+    skill: BundledSkill
+    root: Path
+
+    @property
+    def reference(self) -> str:
+        return f"{self.module_name}:{self.skill.slug}"
+
+
+def load_module_skills(modules: dict) -> dict[str, ModuleSkill]:
+    """Catalog only packages discovered by loaded ABI modules."""
+    found: dict[str, ModuleSkill] = {}
+    for module_name, module in modules.items():
+        for raw in module.skills:
+            path = Path(raw)
+            skill = _load_one(path)
+            root = (
+                sheets_package_root()
+                if path.resolve()
+                == (Path(__file__).parent / "sheets/SKILL.md").resolve()
+                else path.parent
+            )
+            item = ModuleSkill(module_name, skill, root)
+            if item.reference in found:
+                raise ValueError(f"Duplicate module skill reference: {item.reference}")
+            found[item.reference] = item
+    return found
+
+
+def parse_frontmatter(
+    text: str, path: Path | None = None
+) -> tuple[dict[str, str], str]:
     """Split YAML-ish frontmatter from a SKILL.md body.
 
     Values are single-line. A missing closer or a missing required field

@@ -234,6 +234,7 @@ async def stream_chat_response(
     suppress_skill_slugs: frozenset[str] = frozenset()
     if request.workspace_id:
         from naas_abi.apps.nexus.apps.api.app.services.chat.office_handoff import (
+            office_slash_slug,
             resolve_workspace_turn_agent,
             suppressed_office_skill_slug,
         )
@@ -244,15 +245,27 @@ async def stream_chat_response(
                     context=request_context(current_user),
                     workspace_id=request.workspace_id,
                 )
+                handoff_message = request.message or ""
+                office_slug = office_slash_slug(handoff_message)
+                if office_slug:
+                    skills = await registry.skills.list_visible_skills(
+                        request_context(current_user), request.workspace_id
+                    )
+                    if not any(
+                        skill.enabled and skill.slug == office_slug
+                        and skill.catalog_ref == f"naas_abi:{office_slug}"
+                        for skill in skills
+                    ):
+                        handoff_message = ""
         ctx = request.context if isinstance(request.context, dict) else None
         resolved_agent = resolve_workspace_turn_agent(
             workspace_agents,
             request.agent,
-            request.message or "",
+            handoff_message,
             ctx,
         )
         suppress = suppressed_office_skill_slug(
-            workspace_agents, request.message or ""
+            workspace_agents, handoff_message
         )
         if suppress:
             suppress_skill_slugs = frozenset({suppress})

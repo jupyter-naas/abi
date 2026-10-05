@@ -391,3 +391,20 @@ def test_write_tools_are_the_ones_the_web_refreshes_on() -> None:
     block = web.read_text(encoding="utf-8").split("SKILL_WRITE_TOOLS = [", 1)[1]
     listed = set(block.split("]", 1)[0].replace("'", "").replace(" ", "").split(","))
     assert listed - {""} == set(tools_module.SKILL_WRITE_TOOLS)
+
+
+def test_module_skill_read_fetches_body_after_catalog_match(skills):
+    from dataclasses import replace
+    from unittest.mock import AsyncMock
+
+    service = skills["service"]
+    row = _skill(
+        "module-row", "weekly-report", prompt="", source="module", builtin=True
+    )
+    service.skills = [row]
+    service.get_skill = AsyncMock(return_value=replace(row, prompt="Module procedure"))
+    result = tools_module.make_read_workspace_skill_tool().invoke(
+        {"slug": "weekly-report"}
+    )
+    assert result == "Module procedure"
+    service.get_skill.assert_awaited_once()
