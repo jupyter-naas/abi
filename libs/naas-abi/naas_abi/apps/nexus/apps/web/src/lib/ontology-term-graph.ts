@@ -1,6 +1,6 @@
 import type { GraphNode, GraphEdge } from '../stores/knowledge-graph';
 import { BFO_BUCKET_BY_URI } from './bfo-buckets';
-import { serverBfoBuckets } from './detail-network';
+import { classHierarchyIndex, serverBfoBuckets } from './detail-network';
 import { classProperties } from './ontology-class-properties';
 import { ontologyConnections, termKey, type TermRef, type TermConnection } from './ontology-context';
 import { dictionaryKindLabel, type DictionaryTerm } from './ontology-dictionary-tree';
@@ -13,6 +13,7 @@ export const BFO_LAYOUT_RELATIONS: TermGraphRelations = { hierarchy: false, rest
 /** Adapt the permitted dictionary declarations to the existing network canvas. */
 export function buildTermGraph(term: DictionaryTerm, terms: DictionaryTerm[]): TermGraph {
   const byKey = new Map(terms.map(item => [termKey(item), item]));
+  const hierarchyOf = classHierarchyIndex(terms);
   const serverBuckets = serverBfoBuckets(terms);
   const byId = new Map<string, DictionaryTerm[]>();
   terms.forEach(item => byId.set(item.id, [...(byId.get(item.id) || []), item]));
@@ -61,6 +62,7 @@ export function buildTermGraph(term: DictionaryTerm, terms: DictionaryTerm[]): T
           iri: ref.id, term_type: ref.type, kind: ref.type ? dictionaryKindLabel(ref.type) : 'Referenced term',
           definition: loaded?.description || '', bfo_parent_iri: bfo,
           source_files: loaded?.sources || [], is_primary: key === termKey(term),
+          ...(!ref.type || ref.type === 'entity' ? hierarchyOf(ref.id) : {}),
         },
       });
     }

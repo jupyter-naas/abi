@@ -7,7 +7,7 @@ import { useOntologyDictionaryStore } from '@/stores/ontology-dictionary';
 import { useOntologyStore } from '@/stores/ontology';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { cn } from '@/lib/utils';
-import { groupClassesByBfoBucket } from '@/lib/ontology-bfo-groups';
+import { groupClassesByBfoBucket, referencedClasses } from '@/lib/ontology-bfo-groups';
 import { buildDictionaryTree, filterDictionaryTree, dictionaryKindLabel, type DictionaryNode, type DictionaryTerm } from '@/lib/ontology-dictionary-tree';
 import { dictionaryFilters, dictionaryFiltersRoute, termRoute } from '@/lib/ontology-navigation';
 import { dictionaryFiles, dictionaryFilesRoute, type DictionaryFile } from '@/lib/ontology-file-filter';
@@ -83,7 +83,9 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
     setClosed(new Set());
   }, [workspaceId, refresh, load]);
 
-  const scopedTerms = useMemo(() => fileTerms.filter(term => !kinds.length || kinds.includes(term.type)), [fileTerms, kinds]);
+  // Selected files also list the classes their restrictions point at, flagged referenced.
+  const scopedTerms = useMemo(() => [...fileTerms, ...(selectedFiles.length && classesInScope ? referencedClasses(fileTerms, terms, selectedFiles) : [])]
+    .filter(term => !kinds.length || kinds.includes(term.type)), [fileTerms, kinds, selectedFiles, classesInScope, terms]);
   const matches = useMemo(() => scopedTerms.filter(term => `${term.name} ${term.description || ''}`.toLowerCase().includes(query.trim().toLowerCase())), [scopedTerms, query]);
   const tree = useMemo(() => filterDictionaryTree(buildDictionaryTree(scopedTerms), query), [scopedTerms, query]);
   const bfoGroups = useMemo(() => layout === 'bfo' ? groupClassesByBfoBucket(matches, terms) : [], [layout, matches, terms]);
@@ -102,6 +104,7 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
       className={cn('flex min-w-0 flex-1 items-center rounded-md min-h-7 px-2 py-1 text-left text-xs leading-[18px]', selected && 'bg-workspace-accent-10 text-workspace-accent')}>
       <OntologyTopicIcon subject={term} className="ontology-sidebar-topic-icon" />
       <span className="min-w-0 truncate">{term.name}</span>
+      {term.referenced && <span className="ml-1 shrink-0 text-muted-foreground" title="Declared elsewhere; the selection points at it">(referenced)</span>}
       <span className="sr-only">{dictionaryKindLabel(term.type)}</span>
     </button>;
   }
@@ -115,7 +118,7 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
           onClick={() => toggleNode(node.id)}
           className="shrink-0 rounded p-1 hover:bg-workspace-accent-10"><ChevronRight size={12} className={cn(open && 'rotate-90')} /></button>
           : <span className="w-5 shrink-0" />}
-        {node.term && !node.term.referenced ? renderTerm(node.term, JSON.stringify(itemPath)) : <button type="button" data-ontology-tree-item={JSON.stringify(itemPath)} onClick={() => toggleNode(node.id)} className="flex min-w-0 flex-1 items-center px-2 py-1 text-xs leading-[18px] text-muted-foreground" title={node.term ? `${node.name}\n${node.term.id}\nReferenced by the selection, declared in an import` : 'Parent declared outside this selection'}><OntologyTopicIcon subject={iconSubjects.get(node.id) || { name: node.name }} className="ontology-sidebar-topic-icon" /><span className="min-w-0 truncate">{node.name}</span><span className="ml-1 shrink-0 text-xs">{node.term ? '(referenced)' : '(parent)'}</span></button>}
+        {node.term && (!node.term.referenced || node.term.sources?.length) ? renderTerm(node.term, JSON.stringify(itemPath)) : <button type="button" data-ontology-tree-item={JSON.stringify(itemPath)} onClick={() => toggleNode(node.id)} className="flex min-w-0 flex-1 items-center px-2 py-1 text-xs leading-[18px] text-muted-foreground" title={node.term ? `${node.name}\n${node.term.id}\nReferenced by the selection, declared in an import` : 'Parent declared outside this selection'}><OntologyTopicIcon subject={iconSubjects.get(node.id) || { name: node.name }} className="ontology-sidebar-topic-icon" /><span className="min-w-0 truncate">{node.name}</span><span className="ml-1 shrink-0 text-xs">{node.term ? '(referenced)' : '(parent)'}</span></button>}
       </div>
       {open && node.children.length > 0 && <ul>{node.children.map(child => renderNode(child, depth + 1, itemPath, indent))}</ul>}
     </li>;

@@ -1,6 +1,6 @@
 import type { GraphEdge, GraphNode } from '../stores/knowledge-graph';
 import { BFO_BUCKET_DEFS } from './bfo-buckets';
-import { bfoBucketResolver } from './detail-network';
+import { bfoBucketResolver, classHierarchyIndex } from './detail-network';
 import { termKey } from './ontology-context';
 import type { DashboardRestriction } from './ontology-dashboard';
 import { dictionaryKindLabel, type DictionaryTerm } from './ontology-dictionary-tree';
@@ -29,8 +29,9 @@ export function buildFileNetwork(
   const kept = allowed ? restrictions.filter(item => allowed.has(sliceKey(item.subject.id, item.property.id, item.target.id))) : restrictions;
   const resolve = bfoBucketResolver(allTerms, { entityFallback: true });
   const declared = new Map(allTerms.filter(term => term.type === 'entity').map(term => [term.id, term]));
+  const hierarchyOf = classHierarchyIndex(allTerms);
   const nodes = new Map<string, GraphNode>();
-  const addNode = (id: string, name: string): string => {
+  const addNode = (id: string, name: string, link?: DashboardRestriction['target']): string => {
     const term = declared.get(id);
     const key = termKey({ id, name, type: 'entity' });
     if (!nodes.has(key)) {
@@ -41,6 +42,7 @@ export function buildFileNetwork(
         properties: {
           iri: id, term_type: 'entity', kind: term ? dictionaryKindLabel('entity') : 'Referenced term',
           definition: term?.description || '', bfo_parent_iri: bucket, source_files: term?.sources || [], is_primary: false,
+          ...hierarchyOf(id, link),
         },
       });
     }
@@ -52,7 +54,7 @@ export function buildFileNetwork(
   for (const term of cards) addNode(term.id, term.name);
   const edges: GraphEdge[] = kept.map(item => {
     const source = addNode(item.subject.id, item.subject.name);
-    const target = addNode(item.target.id, item.target.name);
+    const target = addNode(item.target.id, item.target.name, item.target);
     return {
       id: item.key, source, target, type: item.property.name, label: item.property.name,
       properties: { relation_kind: 'restriction', property_iri: item.property.id, declaration: 'restriction', constraint: item.constraint, source_files: item.sources },

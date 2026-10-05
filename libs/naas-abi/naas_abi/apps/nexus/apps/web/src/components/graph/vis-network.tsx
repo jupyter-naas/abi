@@ -8,7 +8,7 @@ import type { GraphNode, GraphEdge } from '@/stores/knowledge-graph';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BFO_BUCKET_BY_TYPE, BFO_BUCKET_DEFS } from '@/lib/bfo-buckets';
-import { bfoZoneLayout, drawBfoZones, zoneBounds, type ZoneLayout } from './bfo-zone-layout';
+import { bfoZoneLayout, drawBfoZones, zoneBounds, zoneParents, type ZoneLayout } from './bfo-zone-layout';
 import { installOrthogonalEdges } from './orthogonal-network';
 import { compactNetworkPositions } from './compact-network-layout';
 import { fitBoundsViewport, fitReadableViewport, spacingViewport } from './network-viewport';
@@ -1084,9 +1084,16 @@ export function VisNetwork({
   const zoneLayout = useMemo(() => {
     if (!bfoZones) return null;
     const byId = new Map(nodes.map(node => [node.id, node]));
+    const buckets = new Map(nodes.map(node => [node.id, resolveNodeBucketKey(node, byId)]));
+    const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+    // Subclasses sit right of their parent class in its zone, whether or not subclass edges are drawn.
+    const parents = zoneParents(nodes.map(node => ({
+      id: node.id, bucket: buckets.get(node.id)!, iri: typeof node.properties?.iri === 'string' ? node.properties.iri : undefined,
+      equivalents: strings(node.properties?.equivalent_iris), ancestors: strings(node.properties?.ancestor_iris),
+    })));
     return bfoZoneLayout(nodes.map(node => {
       const box = nodeLayoutBox(node);
-      return { id: node.id, label: node.label, bucket: resolveNodeBucketKey(node, byId), width: box.width, height: box.height };
+      return { id: node.id, label: node.label, bucket: buckets.get(node.id)!, width: box.width, height: box.height, parent: parents.get(node.id) };
     }), edges);
   }, [bfoZones, nodes, edges, nodeLayoutBox]);
   zoneLayoutRef.current = zoneLayout;

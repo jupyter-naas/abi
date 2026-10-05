@@ -12,7 +12,8 @@ import { instanceImageValue } from '@/lib/instance-image';
 import { iconTarget, iconTargetKey } from '@/lib/ontology-icon-library';
 import '@/components/ontology/ontology-detail.css';
 import { OntologyUsedIn } from '@/components/ontology/ontology-used-in';
-import { classProperties } from '@/lib/ontology-class-properties';
+import { classProperties, classRestrictions } from '@/lib/ontology-class-properties';
+import { referencedClasses } from '@/lib/ontology-bfo-groups';
 import type { DictionaryTerm } from '@/lib/ontology-dictionary-tree';
 import { ontologyBrowser, termRoute } from '@/lib/ontology-navigation';
 import { dictionaryKindLabel } from '@/lib/ontology-dictionary-tree';
@@ -34,7 +35,15 @@ export function OntologyDictionaryEntry({ context }: { context?: { workspaceId: 
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const scope = ontologyBrowser(params?.toString() || '') === 'dictionary' ? null : params?.get('ontology');
-  const term = loadedWorkspace === workspaceId ? terms.find(item => item.id === params?.get('term') && item.type === params?.get('termType') && (!scope || item.sources?.some(source => source.path === scope))) : undefined;
+  const termId = params?.get('term');
+  const termType = params?.get('termType');
+  const term = useMemo(() => {
+    if (loadedWorkspace !== workspaceId) return undefined;
+    const declared = terms.find(item => item.id === termId && item.type === termType && (!scope || item.sources?.some(source => source.path === scope)));
+    if (declared || !scope || termType !== 'entity') return declared;
+    // A class the file only points at through a restriction (abi:GeospatialRegion in PeopleOntology).
+    return referencedClasses(terms.filter(item => item.sources?.some(source => source.path === scope)), terms, [scope]).find(item => item.id === termId);
+  }, [loadedWorkspace, workspaceId, terms, termId, termType, scope]);
   const linkedTerm = (id: string, name: string, kind?: DictionaryTerm['type']) => {
     const target = terms.find(item => item.id === id && (!kind || item.type === kind));
     if (!target) return <span title={id}>{name}</span>;
@@ -52,6 +61,8 @@ export function OntologyDictionaryEntry({ context }: { context?: { workspaceId: 
     {errors.length > 0 && <p className="text-sm text-destructive">Some ontology files could not be read. See the sidebar for details.</p>}
   </div>;
   const properties = classProperties(term, terms);
+  const restrictions = classRestrictions(term, terms);
+  const fileName = (path: string) => path.split('/').pop();
   const owlImage = instanceImageValue({
     relations: (term.relations || []).map(relation => ({
       predicate_uri: relation.property.id,
@@ -112,19 +123,35 @@ export function OntologyDictionaryEntry({ context }: { context?: { workspaceId: 
       {([['Domain', term.domain], ['Range', term.range], ['Inverse', term.inverse]] as const).map(([label, links]) => links?.length ?
         <div key={label} className="grid gap-2 px-4 py-2.5 sm:grid-cols-[128px_minmax(0,1fr)]"><dt className="text-xs leading-6 text-muted-foreground">{label}</dt><dd className="leading-6">{renderLinks(links, label === 'Inverse' ? 'relationship' : undefined)}</dd></div> : null)}
     </dl>
+    {term.type === 'entity' && ([['relationship', 'Object Properties'], ['attribute', 'Data Properties']] as const).map(([kind, title]) => {
+      const rows = properties.filter(({property}) => property.type === kind);
+      return <section key={kind} className="mt-4 overflow-hidden rounded-md border">
+        <h2 className="border-b px-4 py-2.5 text-sm font-medium">{title} <span className="ml-2 text-xs text-muted-foreground">{rows.length}</span></h2>
+        {rows.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm">
+          <thead className="text-xs text-muted-foreground"><tr><th className="px-4 py-2 font-normal">Property</th><th className="px-4 py-2 font-normal">Range</th><th className="px-4 py-2 font-normal">Declared on</th></tr></thead>
+          <tbody>{rows.map(({property, declaredOn}) => <tr key={property.id} className="border-t align-top">
+            <td className="px-4 py-2">{linkedTerm(property.id, property.name, property.type)}</td>
+            <td className="px-4 py-2">{renderLinks(property.range)}</td>
+            <td className="px-4 py-2">{renderLinks(declaredOn, 'entity')}</td>
+          </tr>)}</tbody>
+        </table><p className="border-t px-4 py-2 text-xs text-muted-foreground">{title} with a declared domain on this class or its parents.</p></div>
+          : <p className="px-4 py-4 text-sm text-muted-foreground">No {title.toLowerCase()} with a named domain on this class or its parents.</p>}
+        {!!errors.length && <p role="status" className="border-t px-4 py-2 text-xs text-muted-foreground">Some workspace files could not be read. {title} may be incomplete.</p>}
+      </section>;
+    })}
     {term.type === 'entity' && <section className="mt-4 overflow-hidden rounded-md border">
-      <h2 className="border-b px-4 py-2.5 text-sm font-medium">Properties <span className="ml-2 text-xs text-muted-foreground">{properties.length}</span></h2>
-      {properties.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm">
-        <thead className="text-xs text-muted-foreground"><tr><th className="px-4 py-2 font-normal">Property</th><th className="px-4 py-2 font-normal">Type</th><th className="px-4 py-2 font-normal">Range</th><th className="px-4 py-2 font-normal">Declared on</th></tr></thead>
-        <tbody>{properties.map(({property, declaredOn}) => <tr key={`${property.type}:${property.id}`} className="border-t align-top">
-          <td className="px-4 py-2">{linkedTerm(property.id, property.name, property.type)}</td>
-          <td className="px-4 py-2 text-xs leading-5 text-muted-foreground">{dictionaryKindLabel(property.type)}</td>
-          <td className="px-4 py-2">{renderLinks(property.range)}</td>
-          <td className="px-4 py-2">{renderLinks(declaredOn, 'entity')}</td>
+      <h2 className="border-b px-4 py-2.5 text-sm font-medium">Restrictions <span className="ml-2 text-xs text-muted-foreground">{restrictions.length}</span></h2>
+      {restrictions.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm">
+        <thead className="text-xs text-muted-foreground"><tr><th className="px-4 py-2 font-normal">Property</th><th className="px-4 py-2 font-normal">Constraint</th><th className="px-4 py-2 font-normal">Filler</th><th className="px-4 py-2 font-normal">Declared on</th><th className="px-4 py-2 font-normal">Stated in</th></tr></thead>
+        <tbody>{restrictions.map(item => <tr key={item.key} className="border-t align-top">
+          <td className="px-4 py-2">{linkedTerm(item.property.id, item.property.name, 'relationship')}</td>
+          <td className="px-4 py-2 font-mono text-xs leading-5 text-muted-foreground">{item.constraint || 'some'}</td>
+          <td className="px-4 py-2">{linkedTerm(item.target.id, item.target.name)}</td>
+          <td className="px-4 py-2">{item.declaredOn.id === term.id ? <span className="text-muted-foreground">This class</span> : linkedTerm(item.declaredOn.id, item.declaredOn.name, 'entity')}</td>
+          <td className="px-4 py-2 text-xs leading-5 text-muted-foreground">{item.sources.map(source => <span key={source.path} className="block" title={source.path}>{fileName(source.path)}</span>)}</td>
         </tr>)}</tbody>
-      </table><p className="border-t px-4 py-2 text-xs text-muted-foreground">Properties with a declared domain on this class or its parents.</p></div>
-        : <p className="px-4 py-4 text-sm text-muted-foreground">No properties with a named domain on this class or its parents.</p>}
-      {!!errors.length && <p role="status" className="border-t px-4 py-2 text-xs text-muted-foreground">Some workspace files could not be read. Properties may be incomplete.</p>}
+      </table><p className="border-t px-4 py-2 text-xs text-muted-foreground">owl:Restriction statements on this class or its parents.</p></div>
+        : <p className="px-4 py-4 text-sm text-muted-foreground">No restrictions on this class or its parents.</p>}
     </section>}
     <OntologyUsedIn key={`${term.type}:${term.id}`} term={term} terms={terms} basePath={context?.basePath} />
     <section className="mt-6"><h2 className="text-sm font-semibold">Defined in {term.sources?.length} source {term.sources?.length === 1 ? 'file' : 'files'}</h2>

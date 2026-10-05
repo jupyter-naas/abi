@@ -26,22 +26,31 @@ function bucketTree(terms: DictionaryTerm[]): DictionaryNode[] {
 }
 
 /**
- * Classes a selected class points at without the workspace declaring them,
- * such as cco:ont00000270 (Educational Facility) as the place Act of Studying
- * occurs in. They carry the bucket and ancestors the server resolved through imports.
+ * Classes the selection points at without declaring them, flagged
+ * ``referenced``: abi:GeospatialRegion, declared in ABIOntology, as the place
+ * PeopleOntology's Act of Working occurs in; cco:ont00000270 (Educational
+ * Facility), declared nowhere in the workspace, carries the bucket and
+ * ancestors the server resolved through imports. ``paths`` adds restrictions
+ * those files state on classes declared elsewhere.
  */
-function referencedClasses(terms: DictionaryTerm[], allTerms: DictionaryTerm[]): DictionaryTerm[] {
-  const declared = new Set(allTerms.filter(term => term.type === 'entity').map(term => term.id));
+export function referencedClasses(terms: DictionaryTerm[], allTerms: DictionaryTerm[], paths: string[] = []): DictionaryTerm[] {
+  const selected = new Set(terms.filter(term => term.type === 'entity').map(term => term.id));
+  const declared = new Map(allTerms.filter(term => term.type === 'entity').map(term => [term.id, term]));
   const found = new Map<string, DictionaryTerm>();
   const add = (link: DictionaryLink) => {
-    if (declared.has(link.id) || found.has(link.id) || link.id.startsWith('_:')) return;
-    found.set(link.id, { id: link.id, name: link.name, type: 'entity', referenced: true, bfoBucket: link.bfoBucket, bfoAncestors: link.bfoAncestors });
+    if (selected.has(link.id) || found.has(link.id) || link.id.startsWith('_:')) return;
+    const known = declared.get(link.id);
+    found.set(link.id, known ? { ...known, referenced: true }
+      : { id: link.id, name: link.name, type: 'entity', referenced: true, bfoBucket: link.bfoBucket, bfoAncestors: link.bfoAncestors });
   };
   for (const term of terms) {
     if (term.type !== 'entity') continue;
     for (const relation of term.relations || []) add(relation.target);
   }
-  return [...found.values()];
+  if (paths.length) for (const term of allTerms) for (const relation of term.relations || []) {
+    if (relation.kind === 'restriction' && relation.sources.some(source => paths.includes(source.path))) add(relation.target);
+  }
+  return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Display order of the BFO 7 Buckets view: the process first, then what frames and fills it. */

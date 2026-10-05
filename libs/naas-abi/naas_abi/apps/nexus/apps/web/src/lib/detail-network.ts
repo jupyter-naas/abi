@@ -130,6 +130,29 @@ export function bfoBucketResolver(
   };
 }
 
+/**
+ * Where a class sits in the hierarchy, for the BFO zones: its superclasses
+ * nearest first (dictionary parents, then those the server resolved through
+ * imports) and its equivalent classes. Built once, then asked per class.
+ */
+export function classHierarchyIndex(terms: DictionaryTerm[]) {
+  const classes = new Map<string, DictionaryTerm>();
+  for (const term of terms) if (term.type === 'entity' && !classes.has(term.id)) classes.set(term.id, term);
+  return (id: string, link?: { bfoAncestors?: string[] }) => {
+    const ancestors: string[] = [];
+    const seen = new Set([id]);
+    const queue = [id];
+    for (let i = 0; i < queue.length; i++) {
+      for (const parent of classes.get(queue[i])?.parents || []) {
+        if (seen.has(parent.id)) continue;
+        seen.add(parent.id); ancestors.push(parent.id); queue.push(parent.id);
+      }
+    }
+    for (const iri of classes.get(id)?.bfoAncestors || link?.bfoAncestors || []) if (!seen.has(iri)) { seen.add(iri); ancestors.push(iri); }
+    return { ancestor_iris: ancestors, equivalent_iris: (classes.get(id)?.equivalents || []).map(link => link.id) };
+  };
+}
+
 /** Focused term plus immediate incoming and outgoing ontology connections. */
 export function termEgoGraph(term: DictionaryTerm, terms: DictionaryTerm[]) {
   const related = termConnections(term, ontologyConnections(terms));

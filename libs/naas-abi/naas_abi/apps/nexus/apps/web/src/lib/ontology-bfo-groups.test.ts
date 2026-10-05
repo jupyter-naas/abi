@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupClassesByBfoBucket } from './ontology-bfo-groups';
+import { groupClassesByBfoBucket, referencedClasses } from './ontology-bfo-groups';
 import type { DictionaryNode, DictionaryTerm } from './ontology-dictionary-tree';
 
 const BFO = 'http://purl.obolibrary.org/obo/';
@@ -93,6 +93,18 @@ test('classes the selection only references are grouped, flagged referenced', ()
   const groups = groupClassesByBfoBucket([study], [study, site]);
   const material = groups.find(group => group.bucket.type === 'Material Entity')!;
   assert.deepEqual(material.terms.map(term => [term.name, term.referenced]), [['Educational Facility', true]]);
-  // Declared targets are not duplicated: they are listed when selected.
-  assert.deepEqual(groups.find(group => group.bucket.type === 'Site')!.terms, []);
+  // Declared in another file: listed from its workspace declaration, still flagged referenced.
+  assert.deepEqual(groups.find(group => group.bucket.type === 'Site')!.terms.map(term => [term.name, term.referenced, term.equivalents?.length]), [['site', true, 1]]);
+  // Once selected, a target is not duplicated.
+  const both = groupClassesByBfoBucket([study, site], [study, site]);
+  assert.deepEqual(both.find(group => group.bucket.type === 'Site')!.terms.map(term => [term.name, term.referenced]), [['site', undefined]]);
+});
+
+test('restrictions a file states on classes declared elsewhere bring their targets in', () => {
+  const region: DictionaryTerm = { id: 'abi:GeospatialRegion', name: 'Geospatial Region', type: 'entity', bfoBucket: `${BFO}BFO_0000029` };
+  const file = { path: 'people/PeopleOntology.ttl', name: 'People', moduleName: 'people' };
+  const work: DictionaryTerm = { id: 'people:ActOfWorking', name: 'Act of Working', type: 'entity', sources: [{ path: 'abi/ABIOntology.ttl', name: 'ABI', moduleName: 'abi' }],
+    relations: [{ property: { id: 'abi:occursIn', name: 'occurs in' }, kind: 'restriction', constraint: 'some', sources: [file], target: { id: region.id, name: region.name } }] };
+  assert.deepEqual(referencedClasses([], [work, region], [file.path]).map(term => [term.id, term.referenced]), [['abi:GeospatialRegion', true]]);
+  assert.deepEqual(referencedClasses([], [work, region], ['other.ttl']), []);
 });

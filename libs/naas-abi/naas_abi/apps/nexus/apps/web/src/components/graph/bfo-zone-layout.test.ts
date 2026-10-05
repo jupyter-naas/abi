@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bfoZoneLayout, type ZoneCard } from './bfo-zone-layout';
+import { bfoZoneLayout, zoneParents, type ZoneCard } from './bfo-zone-layout';
 
 const card = (id: string, bucket: string): ZoneCard => ({ id, bucket, label: id, width: 100, height: 60 });
 const inside = (point: { x: number; y: number }, box: { x: number; y: number; width: number; height: number }) =>
@@ -55,5 +55,42 @@ describe('bfoZoneLayout', () => {
 
   it('is empty without cards', () => {
     expect(bfoZoneLayout([], [])).toEqual({ positions: new Map(), zones: [], bands: [] });
+  });
+  it('puts a subclass right of its parent class in the zone', () => {
+    const layout = bfoZoneLayout([
+      card('act', 'Process'),
+      card('region', 'Temporal Region'),
+      { ...card('instant', 'Temporal Region'), parent: 'region' },
+      { ...card('time-instant', 'Temporal Region'), parent: 'instant' },
+      { ...card('date', 'Temporal Region'), parent: 'instant' },
+      card('person', 'Material Entity'),
+    ], []);
+    const at = (id: string) => layout.positions.get(id)!;
+    expect(at('instant').x).toBeGreaterThan(at('region').x);
+    expect(at('instant').y).toBe(at('region').y);
+    expect(at('date').x).toBeGreaterThan(at('instant').x);
+    expect(at('time-instant').x).toBe(at('date').x);
+    expect(at('date').y).toBe(at('instant').y);
+    expect(at('time-instant').y).toBeGreaterThan(at('date').y);
+    const temporal = layout.zones.find(zone => zone.key === 'Temporal Region')!;
+    for (const id of ['region', 'instant', 'time-instant', 'date']) expect(inside(at(id), temporal)).toBe(true);
+    const process = layout.zones.find(zone => zone.key === 'Process')!;
+    expect(process.x + process.width).toBeLessThanOrEqual(temporal.x);
+  });
+
+  it('finds the nearest superclass card in the same zone, through equivalents', () => {
+    const BFO = 'http://purl.obolibrary.org/obo/';
+    const parents = zoneParents([
+      { id: 'region', bucket: 'Temporal Region', iri: 'abi:TemporalRegion', equivalents: [`${BFO}BFO_0000008`] },
+      { id: 'instant', bucket: 'Temporal Region', iri: 'abi:TemporalInstant', equivalents: [`${BFO}BFO_0000203`], ancestors: ['abi:TemporalRegion', `${BFO}BFO_0000008`] },
+      { id: 'time', bucket: 'Temporal Region', iri: 'time:Instant', ancestors: [`${BFO}BFO_0000203`, `${BFO}BFO_0000148`, `${BFO}BFO_0000008`] },
+      { id: 'bfo-instant', bucket: 'Temporal Region', iri: `${BFO}BFO_0000203`, ancestors: ['abi:TemporalInstant', `${BFO}BFO_0000148`] },
+      { id: 'act', bucket: 'Process', iri: 'abi:Act', ancestors: ['abi:TemporalRegion'] },
+    ]);
+    expect(parents.get('instant')).toBe('region');
+    expect(parents.get('time')).toBe('instant');
+    // Equivalent to abi:TemporalInstant: not its child.
+    expect(parents.get('bfo-instant')).toBeUndefined();
+    expect(parents.get('act')).toBeUndefined();
   });
 });

@@ -5,11 +5,14 @@
  * right); continuants in a band below (Material Entity, Site, Generically
  * Dependent Continuant, Quality, Realizable). Anything else lands in an
  * "Other" zone at the end of the continuants. A zone is as big as the cards it
- * holds. Ported from the people app's network layout
+ * holds. Inside a zone a subclass sits to the right of its parent class
+ * (temporal region, then temporal instant, then its subclasses).
+ * Ported from the people app's network layout
  * (naas_abi_marketplace intelligence/modules/people/apps/people/web/lib/network-layout.js).
  */
 
-export type ZoneCard = { id: string; width: number; height: number; bucket: string; label: string };
+/** ``parent``: the card of the nearest superclass, when it is in the same zone. */
+export type ZoneCard = { id: string; width: number; height: number; bucket: string; label: string; parent?: string };
 export type ZoneLink = { source: string; target: string };
 export type Zone = { key: string; x: number; y: number; width: number; height: number };
 export type Band = { label: 'OCCURRENTS' | 'CONTINUANTS'; x: number; y: number; width: number; height: number };
@@ -31,7 +34,52 @@ const MARGIN = 48;
 // Wide enough for the longest zone title ("HOW WE KNOW · GDC", "WHEN · Temporal Region").
 const MIN_ZONE_WIDTH = 190;
 
-type Measured = { cols: number; cellW: number; cellH: number; width: number; height: number };
+/** ``cells``: fixed (column, row) of every card when the zone holds a class hierarchy. */
+type Measured = { cols: number; cellW: number; cellH: number; width: number; height: number; cells?: Map<string, { col: number; row: number }> };
+
+/**
+ * Cells of a zone that holds subclasses of its own cards: a class in column
+ * ``depth``, its subclasses one column to the right, the first of them on its
+ * row. Cards outside any hierarchy fill the rows below, as many per row as
+ * the hierarchy has columns. Null when no card has a parent in the zone.
+ */
+function hierarchyCells(cards: ZoneCard[]) {
+  const ids = new Set(cards.map(card => card.id));
+  const children = new Map<string, ZoneCard[]>();
+  for (const card of cards) {
+    if (!card.parent || card.parent === card.id || !ids.has(card.parent)) continue;
+    children.set(card.parent, [...(children.get(card.parent) || []), card]);
+  }
+  if (!children.size) return null;
+  const hasParent = new Set([...children.values()].flat().map(card => card.id));
+  const byLabel = (a: ZoneCard, b: ZoneCard) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id);
+  const cells = new Map<string, { col: number; row: number }>();
+  let rows = 0;
+  let cols = 1;
+  const visit = (card: ZoneCard, col: number) => {
+    if (cells.has(card.id)) return;
+    cells.set(card.id, { col, row: rows });
+    cols = Math.max(cols, col + 1);
+    const below = (children.get(card.id) || []).filter(child => !cells.has(child.id)).sort(byLabel);
+    if (!below.length) { rows += 1; return; }
+    below.forEach(child => visit(child, col + 1));
+  };
+  const roots = cards.filter(card => !hasParent.has(card.id) && children.has(card.id)).sort(byLabel);
+  roots.forEach(root => visit(root, 0));
+  // A parent cycle has no root: start it anywhere.
+  cards.filter(card => children.has(card.id) || hasParent.has(card.id)).sort(byLabel).forEach(card => visit(card, 0));
+  const singles = cards.filter(card => !cells.has(card.id));
+  singles.forEach((card, k) => cells.set(card.id, { col: k % cols, row: rows + Math.floor(k / cols) }));
+  return { cells, cols, rows: rows + Math.ceil(singles.length / cols) };
+}
+
+function measureHierarchy(cards: ZoneCard[], cellH: number): Measured | null {
+  const tree = hierarchyCells(cards);
+  if (!tree) return null;
+  const cellW = cellWidth(cards);
+  const width = Math.max(MIN_ZONE_WIDTH, tree.cols * cellW + (tree.cols - 1) * CARD_GAP_X + 2 * ZONE_PAD);
+  return { cols: tree.cols, cellW, cellH, width, height: zoneHeight(tree.rows, cellH), cells: tree.cells };
+}
 
 /** Cards in reading order: each one followed by those linked to it, the root first. */
 function inReadingOrder(cards: ZoneCard[], links: ZoneLink[]): ZoneCard[] {
@@ -63,6 +111,8 @@ function zoneHeight(rows: number, cellH: number) {
 
 /** A zone with at most ``rows`` rows: its columns follow from how many cards it holds. */
 function measureZone(cards: ZoneCard[], rows: number, cellH: number): Measured {
+  const tree = measureHierarchy(cards, cellH);
+  if (tree) return tree;
   const cols = Math.max(1, Math.ceil(cards.length / Math.min(rows, cards.length)));
   const used = Math.ceil(cards.length / cols);
   const cellW = cellWidth(cards);
@@ -72,6 +122,8 @@ function measureZone(cards: ZoneCard[], rows: number, cellH: number): Measured {
 
 /** A zone of a given width: as many columns as fit, and the rows that leaves. */
 function fitZone(cards: ZoneCard[], width: number, cellH: number): Measured {
+  const tree = measureHierarchy(cards, cellH);
+  if (tree) return { ...tree, width: Math.max(width, tree.width) };
   const cellW = cellWidth(cards);
   const fits = Math.max(1, Math.floor((width - 2 * ZONE_PAD + CARD_GAP_X) / (cellW + CARD_GAP_X)));
   const cols = Math.min(fits, cards.length);
@@ -107,7 +159,7 @@ export function bfoZoneLayout(cards: ZoneCard[], links: ZoneLink[], { aspect = 1
   // The top band spans the view: Process takes 70% of it when Temporal Region shares it.
   const shares = top.length > 1 ? [PROCESS_SHARE, 1 - PROCESS_SHARE] : [1];
   const topGap = top.length > 1 ? ZONE_GAP : 0;
-  const oneColumn = (key: string) => Math.max(MIN_ZONE_WIDTH, cellWidth(groups.get(key)!) + 2 * ZONE_PAD);
+  const oneColumn = (key: string) => measureHierarchy(groups.get(key)!, topCellH)?.width ?? Math.max(MIN_ZONE_WIDTH, cellWidth(groups.get(key)!) + 2 * ZONE_PAD);
   const innerMin = top.length ? Math.max(...top.map((key, i) => (oneColumn(key) + topGap / 2) / shares[i])) : 0;
   const topBand = (inner: number) => {
     const zones = top.map((key, i) => fitZone(groups.get(key)!, shares[i] * inner - topGap / 2, topCellH));
@@ -132,11 +184,22 @@ export function bfoZoneLayout(cards: ZoneCard[], links: ZoneLink[], { aspect = 1
   const place = (key: string, zone: Measured, x: number, y: number, bandHeight: number) => {
     const list = groups.get(key)!;
     zones.push({ key, x, y, width: zone.width, height: bandHeight });
-    const used = Math.ceil(list.length / zone.cols);
+    const used = zone.cells ? Math.max(...[...zone.cells.values()].map(cell => cell.row)) + 1 : Math.ceil(list.length / zone.cols);
     const pitch = zone.cellH + CARD_GAP_Y;
     const room = bandHeight - ZONE_HEADER - 2 * ZONE_PAD;
     // Centred by whole rows, so rows line up with the zones beside it.
     const offset = Math.max(0, Math.floor(Math.floor((room + CARD_GAP_Y) / pitch - used) / 2));
+    if (zone.cells) {
+      const blockWidth = zone.cols * zone.cellW + (zone.cols - 1) * CARD_GAP_X;
+      for (const card of list) {
+        const cell = zone.cells.get(card.id)!;
+        positions.set(card.id, {
+          x: x + (zone.width - blockWidth) / 2 + cell.col * (zone.cellW + CARD_GAP_X) + zone.cellW / 2,
+          y: y + ZONE_HEADER + ZONE_PAD + (offset + cell.row) * pitch + zone.cellH / 2,
+        });
+      }
+      return;
+    }
     list.forEach((card, k) => {
       const line = Math.floor(k / zone.cols);
       const inLine = Math.min(zone.cols, list.length - line * zone.cols);
@@ -171,6 +234,32 @@ export function bfoZoneLayout(cards: ZoneCard[], links: ZoneLink[], { aspect = 1
     bands.push({ label: 'CONTINUANTS', x: 0, y, width: layout.width, height: layout.height - y });
   }
   return { positions, zones, bands };
+}
+
+export type ZoneClass = { id: string; bucket: string; iri?: string; equivalents?: string[]; ancestors?: string[] };
+
+/**
+ * Each card's nearest superclass among the cards of its zone, by IRI.
+ * ``ancestors`` lists superclasses nearest first; a card answers to its IRI
+ * and its equivalents, so time:Instant (subclass of bfo:BFO_0000203) goes
+ * under abi:TemporalInstant (equivalent to it). Equivalent classes never
+ * become each other's parent.
+ */
+export function zoneParents(classes: ZoneClass[]): Map<string, string> {
+  const names = new Map(classes.map(item => [item.id, new Set([item.iri, ...(item.equivalents || [])].filter((iri): iri is string => Boolean(iri)))]));
+  const above = new Map(classes.map(item => [item.id, new Set(item.ancestors || [])]));
+  const byIri = new Map<string, ZoneClass[]>();
+  for (const item of classes) for (const iri of names.get(item.id)!) byIri.set(iri, [...(byIri.get(iri) || []), item]);
+  const isAbove = (upper: ZoneClass, lower: ZoneClass) => [...names.get(upper.id)!].some(iri => above.get(lower.id)!.has(iri));
+  const same = (a: ZoneClass, b: ZoneClass) => [...names.get(a.id)!].some(iri => names.get(b.id)!.has(iri));
+  const parents = new Map<string, string>();
+  for (const item of classes) {
+    for (const iri of item.ancestors || []) {
+      const parent = (byIri.get(iri) || []).find(other => other.id !== item.id && other.bucket === item.bucket && !isAbove(item, other) && !same(item, other));
+      if (parent) { parents.set(item.id, parent.id); break; }
+    }
+  }
+  return parents;
 }
 
 /** The rectangle the bands cover, to frame the whole drawing. */
