@@ -95,3 +95,46 @@ describe('the BFO zone network', () => {
     expect(routed.bottom).toBeGreaterThan(bare.bottom!);
   });
 });
+
+describe('facing cards', () => {
+  const box = (x: number, y: number): Box => ({ left: x - WIDTH / 2, right: x + WIDTH / 2, top: y - HEIGHT / 2, bottom: y + HEIGHT / 2 });
+  const rules = edgeSides(id => id.split(' ')[0] === 'P' ? 'Process' : id.split(' ')[0] === 'Q' ? 'Quality' : 'Temporal Region');
+
+  it('joins a class and its subclass beside it with a straight connector', () => {
+    // Temporal Region, then Temporal Instant to its right, in the occurrents.
+    const boxes = new Map([['T region', box(0, 0)], ['T instant', box(260, 0)]]);
+    const routes = routeEdges(boxes, [{ id: 'sub', source: 'T instant', target: 'T region' }], { sidesFor: rules });
+    expect(routes.get('sub')).toEqual([{ x: 190, y: 0 }, { x: 70, y: 0 }]);
+  });
+
+  it('joins a class and its subclass below it with a straight connector', () => {
+    const boxes = new Map([['T a', box(0, 0)], ['T b', box(0, 200)]]);
+    const routes = routeEdges(boxes, [{ id: 'sub', source: 'T b', target: 'T a' }], { sidesFor: rules });
+    expect(routes.get('sub')).toEqual([{ x: 0, y: 168 }, { x: 0, y: 32 }]);
+  });
+
+  it('bends round a card that stands between them', () => {
+    const boxes = new Map([['T a', box(0, 0)], ['T b', box(260, 0)], ['T c', box(520, 0)]]);
+    const routes = routeEdges(boxes, [{ id: 'skip', source: 'T a', target: 'T c' }], { sidesFor: rules });
+    expect(routes.get('skip')!.length).toBeGreaterThan(2);
+  });
+
+  it('keeps a rule that sends the connector out by another side', () => {
+    // Process / Temporal Region is a U over the top (N / N), even side by side.
+    const boxes = new Map([['P a', box(0, 0)], ['T b', box(260, 0)]]);
+    const points = routeEdges(boxes, [{ id: 'u', source: 'P a', target: 'T b' }], { sidesFor: rules }).get('u')!;
+    expect(points[0].y).toBe(-32);
+    expect(points[points.length - 1].y).toBe(-32);
+  });
+
+  it('gives the other connectors on that side their own ports', () => {
+    // Process: its subclass to the right, and a Quality it reaches by its east side.
+    const boxes = new Map([['P a', box(0, 0)], ['P b', box(260, 0)], ['Q c', box(260, 300)]]);
+    const routes = routeEdges(boxes, [{ id: 'sub', source: 'P b', target: 'P a' }, { id: 'rule', source: 'P a', target: 'Q c' }], { sidesFor: rules });
+    const straight = routes.get('sub')!;
+    expect(straight).toHaveLength(2);
+    const out = routes.get('rule')![0];
+    expect(out.x).toBe(70);
+    expect(Math.abs(out.y - straight[0].y)).toBeGreaterThanOrEqual(6);
+  });
+});

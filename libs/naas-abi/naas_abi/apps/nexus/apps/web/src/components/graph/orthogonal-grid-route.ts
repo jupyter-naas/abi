@@ -203,6 +203,35 @@ function span(from: Box, to: Box, sides: EdgeSides) {
   return manhattan(a, b);
 }
 
+/**
+ * Two cards that face each other across a clear gap, overlapping along it: a
+ * class and its subclass beside or below it in a zone. Their connector is one
+ * straight run between the facing sides, when its sides are free or are those.
+ * ``track`` is the position along the overlap; null when they do not face.
+ */
+function facing(from: Box, to: Box, sides: EdgeSides, cards: Box[]) {
+  for (const horizontal of [true, false]) {
+    const [aLo, aHi, bLo, bHi] = horizontal ? [from.top, from.bottom, to.top, to.bottom] : [from.left, from.right, to.left, to.right];
+    const lo = Math.max(aLo, bLo) + PORT_INSET, hi = Math.min(aHi, bHi) - PORT_INSET;
+    if (lo > hi) continue;
+    const forward = horizontal ? to.left >= from.right : to.top >= from.bottom;
+    const backward = horizontal ? from.left >= to.right : from.top >= to.bottom;
+    if (!forward && !backward) continue;
+    const out: Side = horizontal ? (forward ? 'E' : 'W') : (forward ? 'S' : 'N');
+    const into: Side = horizontal ? (forward ? 'W' : 'E') : (forward ? 'N' : 'S');
+    if (sides && !(sides.source.includes(out) && sides.target.includes(into))) continue;
+    const [start, end] = horizontal ? (forward ? [from.right, to.left] : [from.left, to.right]) : (forward ? [from.bottom, to.top] : [from.top, to.bottom]);
+    // Nothing may stand in the gap across the overlap.
+    const blocked = cards.some(b => b !== from && b !== to && (horizontal
+      ? b.right > Math.min(start, end) - CLEARANCE && b.left < Math.max(start, end) + CLEARANCE && b.bottom > lo - CLEARANCE && b.top < hi + CLEARANCE
+      : b.bottom > Math.min(start, end) - CLEARANCE && b.top < Math.max(start, end) + CLEARANCE && b.right > lo - CLEARANCE && b.left < hi + CLEARANCE));
+    if (blocked) continue;
+    const at = (track: number) => (horizontal ? [{ x: start, y: track }, { x: end, y: track }] : [{ x: track, y: start }, { x: track, y: end }]);
+    return { lo, hi, out, into, at };
+  }
+  return null;
+}
+
 type Attachment = { port: Point; point: Point; side: Side; states: { state: number; cost: number }[] };
 type Found = { chain: number[]; points: Point[]; cost: number; startSide: Side; endSide: Side };
 type Item = { edge: GridEdge; from: Box; to: Box; sides: EdgeSides; length: number };
@@ -227,6 +256,7 @@ export function routeEdges(
   const result = new Map<string, Point[]>();
   const cards = [...boxes.values()];
   const todo: Item[] = [];
+  const straight: { edge: GridEdge; from: Box; to: Box; run: NonNullable<ReturnType<typeof facing>> }[] = [];
   for (const edge of edges) {
     const from = boxes.get(edge.source), to = boxes.get(edge.target);
     if (!from || !to) continue;
@@ -239,7 +269,23 @@ export function routeEdges(
       continue;
     }
     const sides = sidesFor?.(edge) ?? null;
-    todo.push({ edge, from, to, sides, length: span(from, to, sides) });
+    const run = facing(from, to, sides, cards);
+    if (run) straight.push({ edge, from, to, run });
+    else todo.push({ edge, from, to, sides, length: span(from, to, sides) });
+  }
+  // Straight runs: in the middle of the overlap, a track apart when two cards share several.
+  const pairs = new Map<string, typeof straight>();
+  for (const item of straight) {
+    const key = JSON.stringify([item.edge.source, item.edge.target].sort());
+    pairs.set(key, [...(pairs.get(key) || []), item]);
+  }
+  for (const group of pairs.values()) {
+    group.sort((a, b) => a.edge.id.localeCompare(b.edge.id));
+    group.forEach((item, k) => {
+      const mid = (item.run.lo + item.run.hi) / 2;
+      const track = Math.max(item.run.lo, Math.min(item.run.hi, mid + (k - (group.length - 1) / 2) * TRACK));
+      result.set(item.edge.id, item.run.at(track));
+    });
   }
   if (!todo.length) return result;
 
@@ -278,6 +324,7 @@ export function routeEdges(
     vUsed = new Uint8Array(vFree.length);
     passH = new Uint8Array(nx * ny);
     passV = new Uint8Array(nx * ny);
+    for (const item of straight) remember(result.get(item.edge.id)!);
   };
 
   /** Take every grid edge a drawn run lies along, even in part. */
@@ -483,12 +530,25 @@ export function routeEdges(
   }
 
   // Ports: on each side of a card, in the order of where the connectors go next.
-  const ends = new Map<string, { edgeId: string; which: 'a' | 'b'; far: number; own: number }[]>();
-  const attach = (cardId: string, side: Side, edgeId: string, which: 'a' | 'b', far: number, own: number) => {
+  // ``fixed``: where along the side a straight run already attaches (0..1, as a slot).
+  const ends = new Map<string, { edgeId: string; which: 'a' | 'b'; far: number; own: number; fixed?: number }[]>();
+  const attach = (cardId: string, side: Side, edgeId: string, which: 'a' | 'b', far: number, own: number, fixed?: number) => {
     const key = `${cardId}|${side}`;
     if (!ends.has(key)) ends.set(key, []);
-    ends.get(key)!.push({ edgeId, which, far, own });
+    ends.get(key)!.push({ edgeId, which, far, own, fixed });
   };
+  const slotAt = (box: Box, side: Side, point: Point) => {
+    const horizontalSide = side === 'N' || side === 'S';
+    const length = horizontalSide ? box.right - box.left : box.bottom - box.top;
+    const inset = Math.min(PORT_INSET, length / 4);
+    const along = horizontalSide ? point.x - box.left : point.y - box.top;
+    return length > 2 * inset ? (along - inset) / (length - 2 * inset) : 0.5;
+  };
+  for (const item of straight) {
+    const [a, b] = result.get(item.edge.id)!;
+    attach(item.edge.source, item.run.out, item.edge.id, 'a', 0, 0, slotAt(item.from, item.run.out, a));
+    attach(item.edge.target, item.run.into, item.edge.id, 'b', 0, 0, slotAt(item.to, item.run.into, b));
+  }
   // Where a route first leaves the line its port is on, along that side.
   const heads = (list: Point[], side: Side) => {
     const key = (p: Point) => (side === 'N' || side === 'S' ? p.x : p.y);
@@ -508,8 +568,16 @@ export function routeEdges(
     // within each way the longest first from the middle out, so that a U or a C
     // nests inside the next one and their legs do not cross at the card.
     const group = (entry: { far: number; own: number }) => (entry.far < entry.own - 0.5 ? 0 : entry.far > entry.own + 0.5 ? 2 : 1);
-    list.sort((p, q) => group(p) - group(q) || q.far - p.far || p.edgeId.localeCompare(q.edgeId));
-    list.forEach((entry, i) => slot.set(`${entry.edgeId}|${entry.which}`, (i + 1) / (list.length + 1)));
+    const free = list.filter(entry => entry.fixed === undefined);
+    free.sort((p, q) => group(p) - group(q) || q.far - p.far || p.edgeId.localeCompare(q.edgeId));
+    // A straight run keeps its place: the others take the slots furthest from it.
+    const slots = list.map((_, i) => (i + 1) / (list.length + 1));
+    for (const entry of list) {
+      if (entry.fixed === undefined) continue;
+      const nearest = slots.reduce((best, value, i) => (Math.abs(value - entry.fixed!) < Math.abs(slots[best] - entry.fixed!) ? i : best), 0);
+      slots.splice(nearest, 1);
+    }
+    free.forEach((entry, i) => slot.set(`${entry.edgeId}|${entry.which}`, slots[i]));
   }
 
   // Pass 2: with the ports fixed, the tracks.
