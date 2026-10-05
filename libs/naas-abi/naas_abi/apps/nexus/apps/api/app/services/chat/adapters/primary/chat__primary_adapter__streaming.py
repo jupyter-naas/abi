@@ -231,12 +231,11 @@ async def stream_chat_response(
         "None" if not request.provider else request.provider.type,
     )
 
+    suppress_skill_slugs: frozenset[str] = frozenset()
     if request.workspace_id:
-        from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
-            pick_workspace_chat_agent_id,
-            pick_workspace_documents_agent_id,
-            pick_workspace_sheets_agent_id,
-            pick_workspace_slides_agent_id,
+        from naas_abi.apps.nexus.apps.api.app.services.chat.office_handoff import (
+            resolve_workspace_turn_agent,
+            suppressed_office_skill_slug,
         )
 
         async with AsyncSessionLocal() as db:
@@ -245,29 +244,18 @@ async def stream_chat_response(
                     context=request_context(current_user),
                     workspace_id=request.workspace_id,
                 )
-        resolved_agent = pick_workspace_chat_agent_id(
-            workspace_agents, request.agent
-        )
-        from naas_abi.agents.documents.policy import open_documents_slug
-        from naas_abi.agents.sheets.policy import open_sheets_slug
-        from naas_abi.agents.slides.policy import open_slides_slug
-
-        slides_agent = None
         ctx = request.context if isinstance(request.context, dict) else None
-        if open_slides_slug(ctx):
-            slides_agent = pick_workspace_slides_agent_id(workspace_agents)
-        documents_agent = None
-        if open_documents_slug(ctx):
-            documents_agent = pick_workspace_documents_agent_id(workspace_agents)
-        sheets_agent = None
-        if open_sheets_slug(ctx) and not open_slides_slug(ctx) and not open_documents_slug(ctx):
-            sheets_agent = pick_workspace_sheets_agent_id(workspace_agents)
-        if sheets_agent:
-            resolved_agent = sheets_agent
-        elif slides_agent:
-            resolved_agent = slides_agent
-        elif documents_agent:
-            resolved_agent = documents_agent
+        resolved_agent = resolve_workspace_turn_agent(
+            workspace_agents,
+            request.agent,
+            request.message or "",
+            ctx,
+        )
+        suppress = suppressed_office_skill_slug(
+            workspace_agents, request.message or ""
+        )
+        if suppress:
+            suppress_skill_slugs = frozenset({suppress})
         if resolved_agent and resolved_agent != request.agent:
             logger.info(
                 "Rewriting chat agent %s -> %s for workspace %s",
@@ -554,7 +542,17 @@ async def stream_chat_response(
                     conversation_id=conversation_id,
                     user_id=current_user.id,
                 )
+                provider_messages = await registry.chat.expand_invoked_skill_messages(
+                    provider_messages,
+                    request_context(current_user),
+                    request.workspace_id,
+                    suppress_slugs=suppress_skill_slugs,
+                )
                 prior_messages = list(request.messages or [])
+                # One catalog, on the channel this provider actually reads.
+                # ABI ignores system_prompt and uses the preamble. Cloud models
+                # do the opposite, so the other channel skips the skills fetch.
+                abi_turn = provider.type == "abi"
                 system_prompt = await registry.chat.build_system_prompt(
                     agent=request.agent,
                     explicit_system_prompt=request.system_prompt,
@@ -564,6 +562,7 @@ async def stream_chat_response(
                     conversation_id=conversation_id,
                     context=request_context(current_user),
                     client_context=client_ctx or None,
+                    include_skills=not abi_turn,
                 )
                 user_context_preamble = await registry.chat.build_abi_injection_preamble(
                     prior_messages=prior_messages,
@@ -572,6 +571,7 @@ async def stream_chat_response(
                     conversation_id=conversation_id,
                     context=request_context(current_user),
                     client_context=client_ctx or None,
+                    include_skills=abi_turn,
                 )
             await db.commit()
         except Exception:

@@ -51,6 +51,15 @@ def test_the_agent_catalog_no_longer_touches_skills() -> None:
     assert not {name for name in names if "skill" in name}
 
 
+def test_skills_prompt_says_office_slashes_do_not_inline_a_procedure() -> None:
+    text = SkillsAgent.system_prompt
+    assert "/sheets" in text
+    assert "/slides" in text
+    assert "/documents" in text
+    assert "web-research" in text
+    assert "does not include the procedure" in text
+
+
 def test_skills_prompt_tells_the_agent_to_save_not_to_draft() -> None:
     prompt = SkillsAgent.system_prompt
     assert FEATURE_GROUNDING_GUIDELINES in prompt

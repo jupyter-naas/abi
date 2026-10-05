@@ -1092,10 +1092,29 @@ async def test_build_system_prompt_includes_enabled_skills_catalog() -> None:
         context=context,
     )
 
-    assert "/weekly-report" in prompt
-    assert "Summarize this week's activity in bullet points." in prompt
+    assert "slug: weekly-report" in prompt
+    assert "name: Weekly report" in prompt
+    assert "description: Summarize the week" in prompt
+    assert "when_to_use:" in prompt
+    assert "read_workspace_skill" in prompt
+    assert "Summarize this week's activity in bullet points." not in prompt
     assert "disabled-one" not in prompt
     skills_service.list_visible_skills.assert_awaited_once_with(context, "ws-1")
+    body = await service.read_enabled_skill_body(context, "ws-1", "weekly-report")
+    assert body == "Summarize this week's activity in bullet points."
+    expanded = await service.expand_invoked_skill_messages(
+        [ProviderMessage(role="user", content="/weekly-report focus on sales")],
+        context,
+        "ws-1",
+    )
+    assert "Summarize this week's activity in bullet points." in expanded[0].content
+    assert "focus on sales" in expanded[0].content
+    ordinary = await service.expand_invoked_skill_messages(
+        [ProviderMessage(role="user", content="hello")],
+        context,
+        "ws-1",
+    )
+    assert ordinary[0].content == "hello"
 
 
 @pytest.mark.asyncio
@@ -1124,14 +1143,48 @@ async def test_build_abi_injection_preamble_includes_skills_and_user_profile() -
     )
 
     assert preamble is not None
-    assert "/human-writing" in preamble
-    assert "Avoid robotic phrasing." in preamble
+    assert "slug: human-writing" in preamble
+    assert "name: Human Writing" in preamble
+    assert "description: Write like a human" in preamble
+    assert "read_workspace_skill" in preamble
+    assert "Avoid robotic phrasing." not in preamble
     assert "Name: Alice Smith" in preamble
     skills_service.list_visible_skills.assert_awaited_once_with(context, "ws-1")
+    body = await service.read_enabled_skill_body(context, "ws-1", "human-writing")
+    assert body == "Avoid robotic phrasing."
 
 
 @pytest.mark.asyncio
-async def test_build_abi_injection_preamble_keeps_skills_on_follow_up_turns() -> None:
+async def test_build_system_prompt_omits_skills_catalog_on_follow_up() -> None:
+    skill = SimpleNamespace(
+        slug="weekly-report",
+        name="Weekly report",
+        description="Summarize the week",
+        when_to_use="When the user wants the week summarized.",
+        prompt="Summarize this week's activity in bullet points.",
+        enabled=True,
+    )
+    skills_service = SimpleNamespace(list_visible_skills=AsyncMock(return_value=[skill]))
+    service = ChatService(adapter=SimpleNamespace(), skills_service=skills_service)
+    context = SimpleNamespace(actor_user_id="user-1")
+
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt=None,
+        prior_messages=[SimpleNamespace(role="assistant", content="Hello")],
+        user_id="user-1",
+        workspace_id="ws-1",
+        context=context,
+    )
+
+    assert "slug: weekly-report" not in prompt
+    assert "when_to_use:" not in prompt
+    assert "Summarize this week's activity in bullet points." not in prompt
+    assert "MULTI-AGENT NOTICE" in prompt
+
+
+@pytest.mark.asyncio
+async def test_build_abi_injection_preamble_omits_skills_catalog_on_follow_up() -> None:
     skill = SimpleNamespace(
         slug="clean-typography",
         name="Clean Typography",
@@ -1156,9 +1209,162 @@ async def test_build_abi_injection_preamble_keeps_skills_on_follow_up_turns() ->
     )
 
     assert preamble is not None
-    assert "/clean-typography" in preamble
+    assert "slug: clean-typography" not in preamble
+    assert "name: Clean Typography" not in preamble
+    assert "when_to_use:" not in preamble
+    assert "Remove em-dashes." not in preamble
     assert "MULTI-AGENT NOTICE" in preamble
     assert "Name: Alice Smith" not in preamble
+    expanded = await service.expand_invoked_skill_messages(
+        [ProviderMessage(role="user", content="/clean-typography")],
+        context,
+        "ws-1",
+    )
+    assert "Remove em-dashes." in expanded[0].content
+
+
+@pytest.mark.asyncio
+async def test_expand_invoked_skill_leaves_unknown_and_reserved_slugs() -> None:
+    skill = SimpleNamespace(
+        slug="weekly-report",
+        name="Weekly report",
+        description="Summarize the week",
+        prompt="Summarize this week's activity in bullet points.",
+        enabled=True,
+    )
+    disabled = SimpleNamespace(
+        slug="disabled-one",
+        name="Disabled",
+        description="",
+        prompt="Disabled body must stay hidden.",
+        enabled=False,
+    )
+    skills_service = SimpleNamespace(
+        list_visible_skills=AsyncMock(return_value=[skill, disabled])
+    )
+    service = ChatService(adapter=SimpleNamespace(), skills_service=skills_service)
+    context = SimpleNamespace(actor_user_id="user-1")
+
+    for text in ("/create-skill write one", "/skills", "/not-a-real-skill", "/disabled-one"):
+        expanded = await service.expand_invoked_skill_messages(
+            [ProviderMessage(role="user", content=text)],
+            context,
+            "ws-1",
+        )
+        assert expanded[0].content == text
+        assert "Summarize this week's activity in bullet points." not in expanded[0].content
+        assert "Disabled body must stay hidden." not in expanded[0].content
+
+    assert await service.read_enabled_skill_body(context, "ws-1", "create-skill") is None
+    assert await service.read_enabled_skill_body(context, "ws-1", "disabled-one") is None
+
+
+@pytest.mark.asyncio
+async def test_skill_catalog_lands_on_one_channel_and_slash_expands_the_body(
+    monkeypatch,
+) -> None:
+    now = datetime.now()
+    body = "Summarize this week's activity in bullet points."
+    skill = SimpleNamespace(
+        slug="weekly-report",
+        name="Weekly report",
+        description="Summarize the week",
+        prompt=body,
+        enabled=True,
+    )
+    skills_service = SimpleNamespace(list_visible_skills=AsyncMock(return_value=[skill]))
+    adapter = SimpleNamespace(
+        get_conversation_by_id_for_user=AsyncMock(return_value=_conversation(now)),
+        create_message=AsyncMock(),
+        touch_conversation=AsyncMock(),
+    )
+
+    async def _run(provider_type: str, message: str, history: list | None = None) -> dict:
+        service = ChatService(adapter=adapter, skills_service=skills_service)
+        service.get_or_create_conversation = AsyncMock(return_value="conv-1")
+        service.resolve_provider = AsyncMock(
+            return_value=ResolvedProvider(
+                id="p1",
+                name=provider_type,
+                type=provider_type,
+                enabled=True,
+                endpoint=(
+                    "inprocess://abi"
+                    if provider_type == "abi"
+                    else "https://api.openai.com/v1"
+                ),
+                api_key=None,
+                account_id=None,
+                model="Abi" if provider_type == "abi" else "gpt-4o-mini",
+            )
+        )
+        service.build_provider_messages_with_agents = AsyncMock(
+            return_value=[ChatInputMessage(role="user", content=message)]
+        )
+        captured: dict = {}
+
+        async def _fake_complete_chat(
+            messages, config, system_prompt, thread_id=None, injection_preamble=None
+        ):
+            del config, thread_id
+            captured["messages"] = messages
+            captured["system_prompt"] = system_prompt
+            captured["injection_preamble"] = injection_preamble
+            return "ok"
+
+        monkeypatch.setattr(
+            "naas_abi.apps.nexus.apps.api.app.services.chat.service.complete_with_provider",
+            _fake_complete_chat,
+        )
+        skills_service.list_visible_skills.reset_mock()
+        await service.complete_chat_request(
+            request=CompleteChatInput(
+                message=message,
+                agent="aia",
+                workspace_id="ws-1",
+                messages=history or [ChatInputMessage(role="user", content=message)],
+            ),
+            context=_context(),
+            now=now,
+        )
+        captured["calls"] = skills_service.list_visible_skills.await_count
+        return captured
+
+    abi = await _run("abi", "hello")
+    assert abi["calls"] == 1
+    assert "slug: weekly-report" in (abi["injection_preamble"] or "")
+    assert "slug: weekly-report" not in (abi["system_prompt"] or "")
+    assert body not in (abi["injection_preamble"] or "")
+    assert body not in (abi["system_prompt"] or "")
+
+    cloud = await _run("openai", "hello")
+    assert cloud["calls"] == 1
+    assert cloud["injection_preamble"] is None
+    assert "slug: weekly-report" in (cloud["system_prompt"] or "")
+    assert body not in (cloud["system_prompt"] or "")
+
+    invoked = await _run("abi", "/weekly-report focus on sales")
+    assert body in invoked["messages"][0].content
+    assert "focus on sales" in invoked["messages"][0].content
+    assert body not in (invoked["injection_preamble"] or "")
+    assert body not in (invoked["system_prompt"] or "")
+    assert "slug: weekly-report" in (invoked["injection_preamble"] or "")
+
+    prior = [
+        ChatInputMessage(role="user", content="hello"),
+        ChatInputMessage(role="assistant", content="Hi"),
+        ChatInputMessage(role="user", content="again"),
+    ]
+    abi_follow = await _run("abi", "again", prior)
+    assert "slug: weekly-report" not in (abi_follow["injection_preamble"] or "")
+    assert body not in (abi_follow["injection_preamble"] or "")
+    assert "slug: weekly-report" not in (abi_follow["system_prompt"] or "")
+    assert body not in (abi_follow["system_prompt"] or "")
+
+    cloud_follow = await _run("openai", "again", prior)
+    assert cloud_follow["injection_preamble"] is None
+    assert "slug: weekly-report" not in (cloud_follow["system_prompt"] or "")
+    assert body not in (cloud_follow["system_prompt"] or "")
 
 
 @pytest.mark.asyncio
@@ -1280,7 +1486,43 @@ def test_render_slides_context_block_omits_selection_when_absent() -> None:
     block = _render_slides_context_block({"slides": {"slug": "q3-br"}}, "ws-1")
     assert "- selected_slide_index:" not in block
     assert "- slide_count:" not in block
+    assert "- selected_element_path:" not in block
     assert "- slug: q3-br" in block
+
+
+def test_render_slides_context_block_carries_selected_element() -> None:
+    block = _render_slides_context_block(
+        {
+            "slides": {
+                "slug": "q3-br",
+                "selected_index": 1,
+                "slide_count": 4,
+                "selected_element_path": "1:h1:0",
+                "selected_element_text": "  Q3   roadmap  ",
+            }
+        },
+        "ws-1",
+    )
+    assert "- selected_element_path: 1:h1:0" in block
+    assert "- selected_element_text: Q3 roadmap" in block
+    assert "element_path" in block
+
+
+def test_render_slides_context_block_drops_a_stale_element_path() -> None:
+    block = _render_slides_context_block(
+        {
+            "slides": {
+                "slug": "q3-br",
+                "selected_index": 0,
+                "slide_count": 2,
+                "selected_element_path": "1:p:0",
+                "selected_element_text": "other slide",
+            }
+        },
+        "ws-1",
+    )
+    assert "- selected_element_path:" not in block
+    assert "- selected_slide_index: 0" in block
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import contextlib
+import os
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -48,7 +50,7 @@ class _FakeSkillsService:
     async def create_skill(self, context, data):
         del context
         self.created.append(data)
-        return _skill(
+        record = _skill(
             "skill-new",
             data.slug,
             name=data.name,
@@ -56,6 +58,8 @@ class _FakeSkillsService:
             prompt=data.prompt,
             scope=data.scope,
         )
+        self.skills.append(record)
+        return record
 
     async def update_skill(self, context, skill_id, updates):
         del context
@@ -147,6 +151,79 @@ def test_get_accepts_a_slash_command(skills) -> None:
     assert out["id"] == "skill-1"
 
 
+def test_read_workspace_skill_returns_the_full_prompt_unclipped(skills) -> None:
+    marker = "UNIQUE_SKILL_BODY_SENTENCE_PAST_THE_CLIP"
+    prompt = ("instruction " * 400) + marker
+    assert len(prompt) > 4000
+    skills["service"].skills.append(
+        _skill(
+            "skill-long",
+            "long-form",
+            name="Long form",
+            description="A long procedure",
+            prompt=prompt,
+        )
+    )
+    tool = tools_module.make_read_workspace_skill_tool()
+    result = tool.invoke({"slug": "/long-form"})
+    assert result == prompt
+    assert marker in result
+
+
+def test_read_workspace_skill_does_not_return_office_procedure_bodies(skills) -> None:
+    """Sheets, slides, and documents stay catalog rows. The chat tool must not
+    hand their procedure to whichever agent is running."""
+    sheets_body = "The workbook JSON inside `workbook.html` is authoritative."
+    slides_body = (
+        "Hand the deck to SlidesAgent and write the open presentation HTML, "
+        "not a PowerPoint file."
+    )
+    documents_body = (
+        "Hand the memo to DocumentsAgent and fill the open document template "
+        "instead of emitting a Word file."
+    )
+    research_body = (
+        "Run search_public_web or web_search and cite only URLs the tool returned."
+    )
+    skills["service"].skills.extend(
+        [
+            _skill("skill-sheets", "sheets", prompt=sheets_body),
+            _skill("skill-slides", "slides", prompt=slides_body),
+            _skill("skill-documents", "documents", prompt=documents_body),
+            _skill("skill-research", "web-research", prompt=research_body),
+        ]
+    )
+    tool = tools_module.make_read_workspace_skill_tool()
+
+    for slug, body in (
+        ("sheets", sheets_body),
+        ("/slides", slides_body),
+        ("documents", documents_body),
+    ):
+        result = tool.invoke({"slug": slug})
+        assert body not in result
+        assert "office" in result.lower()
+
+    research = tool.invoke({"slug": "web-research"})
+    assert research == research_body
+
+
+def test_read_workspace_skill_skips_disabled_unknown_and_reserved(skills) -> None:
+    secret = "DISABLED_BODY_MUST_STAY_HIDDEN"
+    skills["service"].skills.append(
+        _skill("skill-off", "disabled-one", prompt=secret, enabled=False)
+    )
+    tool = tools_module.make_read_workspace_skill_tool()
+    disabled = tool.invoke({"slug": "disabled-one"})
+    unknown = tool.invoke({"slug": "missing-skill"})
+    reserved = tool.invoke({"slug": "/create-skill"})
+    assert secret not in disabled
+    assert "No enabled skill" in disabled
+    assert "No enabled skill" in unknown
+    assert "reserved" in reserved
+    assert secret not in reserved
+
+
 def test_get_without_an_open_skill_asks_for_one(skills) -> None:
     out = skills["tools"]["get_workspace_skill"].invoke({})
     assert "No skill is open" in out["error"]
@@ -168,6 +245,95 @@ def test_create_saves_the_skill_and_reports_its_command(skills) -> None:
     assert created.workspace_id == "ws-1"
     assert created.user_id == "user-1"
     assert created.scope == "workspace"
+
+
+def _home_skills_root() -> Path:
+    return Path(os.path.expanduser("~")) / "skills"
+
+
+def _under_home_skills(path: Path) -> bool:
+    root = _home_skills_root()
+    try:
+        candidate = path.expanduser().resolve()
+        base = root.resolve()
+    except OSError:
+        candidate = path.expanduser()
+        base = root
+    if candidate == base:
+        return True
+    try:
+        candidate.relative_to(base)
+    except ValueError:
+        return False
+    return True
+
+
+def _watch_home_skills_writes(monkeypatch) -> list[Path]:
+    """Record writes under ~/skills. The tool must not land there."""
+    hits: list[Path] = []
+
+    def consider(path: object) -> None:
+        try:
+            candidate = Path(os.fspath(path))  # type: ignore[arg-type]
+        except TypeError:
+            return
+        if _under_home_skills(candidate):
+            hits.append(candidate)
+
+    real_write_text = Path.write_text
+    real_write_bytes = Path.write_bytes
+    real_mkdir = Path.mkdir
+    real_open = open
+
+    def write_text(self, *args, **kwargs):
+        consider(self)
+        return real_write_text(self, *args, **kwargs)
+
+    def write_bytes(self, *args, **kwargs):
+        consider(self)
+        return real_write_bytes(self, *args, **kwargs)
+
+    def mkdir(self, *args, **kwargs):
+        consider(self)
+        return real_mkdir(self, *args, **kwargs)
+
+    def tracked_open(file, mode="r", *args, **kwargs):
+        if any(flag in mode for flag in ("w", "a", "x", "+")):
+            consider(file)
+        return real_open(file, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", write_text)
+    monkeypatch.setattr(Path, "write_bytes", write_bytes)
+    monkeypatch.setattr(Path, "mkdir", mkdir)
+    monkeypatch.setattr("builtins.open", tracked_open)
+    return hits
+
+
+def test_create_skill_records_a_listed_skill_and_skips_home_skills(
+    skills, monkeypatch
+) -> None:
+    """create_skill stores name, description, and prompt. It does not write ~/skills."""
+    import asyncio
+
+    hits = _watch_home_skills_writes(monkeypatch)
+    name = "Weekly Sales Summary"
+    description = "Weekly sales table for the workspace."
+    prompt = "Summarize last week's sales as a Markdown table."
+    skills["tools"]["create_skill"].invoke(
+        {"name": name, "description": description, "prompt": prompt}
+    )
+
+    created = skills["service"].created[-1]
+    assert created.name == name
+    assert created.description == description
+    assert created.prompt == prompt
+
+    listed = asyncio.run(skills["service"].list_visible_skills(object(), "ws-1"))
+    match = next(row for row in listed if row.name == name)
+    assert match.name == name
+    assert match.description == description
+    assert match.prompt == prompt
+    assert hits == []
 
 
 def test_create_refuses_a_skill_with_no_prompt(skills) -> None:

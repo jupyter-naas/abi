@@ -60,6 +60,7 @@ def _skill_row(skill: Any) -> dict[str, Any]:
         "scope": skill.scope,
         "enabled": skill.enabled,
         "description": clip(skill.description, 200),
+        "builtin": bool(getattr(skill, "builtin", False)),
     }
 
 
@@ -231,6 +232,13 @@ def skills_tools() -> list[BaseTool]:
                 return {
                     "error": f"No visible skill {wanted}. See list_workspace_skills."
                 }
+            if getattr(found, "builtin", False):
+                return {
+                    "error": (
+                        f"/{found.slug} is a built-in skill. It cannot be edited. "
+                        "Save a new skill if you want a variant."
+                    )
+                }
             with bound_session(db):
                 updated = await _registry().skills.update_skill(
                     request_context(user_id),
@@ -269,6 +277,13 @@ def skills_tools() -> list[BaseTool]:
                 return {
                     "error": f"No visible skill {wanted}. See list_workspace_skills."
                 }
+            if getattr(found, "builtin", False):
+                return {
+                    "error": (
+                        f"/{found.slug} is a built-in skill. It cannot be deleted. "
+                        "Save a new skill if you want a variant."
+                    )
+                }
             with bound_session(db):
                 deleted = await _registry().skills.delete_skill(
                     request_context(user_id), found.id
@@ -286,3 +301,78 @@ def skills_tools() -> list[BaseTool]:
         update_skill,
         delete_skill,
     ]
+
+
+def make_read_workspace_skill_tool():
+    """Full prompt of one enabled skill. Not clipped. Used on the chat turn."""
+
+    @tool
+    def read_workspace_skill(slug: str) -> str:
+        """Read the full prompt of one enabled skill by slug.
+
+        Call this before following a skill from the catalog. The catalog only
+        lists slug, name, description, and when_to_use. This returns the entire
+        prompt. `/sheets`, `/slides`, and `/documents` are office handoffs and
+        do not return a procedure. `/skills` and `/create-skill` are reserved
+        and are not skill rows.
+
+        Args:
+            slug: Skill slug, with or without a leading slash.
+        """
+        ctx = tool_context()
+        if isinstance(ctx, dict):
+            return ctx["error"] if "error" in ctx else str(ctx)
+        user_id, workspace_id = ctx
+        needle = (slug or "").strip().lstrip("/").lower()
+        if not needle:
+            return "Pass a skill slug."
+        from naas_abi.apps.nexus.apps.api.app.services.skills.service import (
+            RESERVED_SLUGS,
+        )
+
+        if needle in RESERVED_SLUGS:
+            return (
+                f"/{needle} is a reserved command, not a skill row. "
+                "It is not expanded from the skills catalog."
+            )
+        from naas_abi.skills.catalog import OFFICE_HANDOFF_SLUGS
+
+        if needle in OFFICE_HANDOFF_SLUGS:
+            return (
+                f"/{needle} is an office handoff. "
+                "The procedure is not loaded into this agent. "
+                "Sheets, Slides, and Documents own those turns."
+            )
+
+        async def _run(db: Any) -> str:
+            skills = await _visible_skills(db, user_id, workspace_id)
+            if isinstance(skills, dict):
+                return str(skills.get("error") or skills)
+            found = next(
+                (s for s in skills if s.enabled and str(s.slug).lower() == needle),
+                None,
+            )
+            if found is None:
+                return (
+                    f"No enabled skill '{needle}'. "
+                    "The catalog lists enabled skills by slug."
+                )
+            return found.prompt or ""
+
+        result = guarded(_FEATURE, lambda: run_db(_run))
+        if isinstance(result, dict):
+            return str(result.get("error") or result)
+        return str(result)
+
+    return read_workspace_skill
+
+
+def make_create_skill_tool() -> BaseTool:
+    """The create_skill tool SkillsAgent already saves with.
+
+    Same function: a Postgres skill row that Settings lists. Not a file.
+    """
+    for item in skills_tools():
+        if item.name == "create_skill":
+            return item
+    raise RuntimeError("create_skill is missing from skills_tools")

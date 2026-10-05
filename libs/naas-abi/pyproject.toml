@@ -71,6 +71,7 @@ naas_abi = [
     "ontologies/**/*",
     "apps/nexus/demo/**/*",
     "apps/analytics/**/*",
+    "skills/**/*.md",
 ]
 
 

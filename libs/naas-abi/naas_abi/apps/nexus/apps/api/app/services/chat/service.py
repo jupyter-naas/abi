@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Protocol
 from uuid import uuid4
@@ -49,7 +50,11 @@ from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     complete_chat as complete_with_provider,
 )
 from naas_abi.apps.nexus.apps.api.app.services.secrets_crypto import decrypt_secret_value
-from naas_abi.apps.nexus.apps.api.app.services.skills.service import SkillService
+from naas_abi.apps.nexus.apps.api.app.services.skills.service import (
+    RESERVED_SLUGS,
+    SkillService,
+)
+from naas_abi.skills.catalog import CatalogEntry, render_catalog
 
 
 @dataclass
@@ -63,6 +68,11 @@ class ResolvedProvider:
     account_id: str | None
     model: str
     llm_model: str | None = None
+
+
+def _catalog_already_disclosed(prior_messages: list) -> bool:
+    """True once this thread has already received an assistant reply."""
+    return any(getattr(message, "role", None) == "assistant" for message in prior_messages)
 
 
 # Metadata keys tracking "refresh" (regenerate) lineage on messages.
@@ -153,14 +163,16 @@ _SKILLS_HANDOFF_NOTE = (
 
 _SKILLS_CATALOG_HEADER = (
     "\n## Available skills\n"
-    "The workspace has the following user-created skills. Each is a prompt someone wrote for a "
-    "recurring task. Apply them proactively: whenever the user's message matches what a skill "
-    "is for, based on everything you know from the conversation so far, follow that skill's "
-    "instructions in your response — the user does not need to name it explicitly. If a skill "
-    "seems to apply but you don't have enough information from the conversation to follow it "
-    "correctly, ask the user for the specific details you need before proceeding, rather than "
-    "guessing or skipping it. A skill can also be invoked explicitly with `/<slug> [args]`; "
-    "treat any args as additional input to that skill.\n\n"
+    "Each enabled skill is listed by slug, name, description, and when_to_use. "
+    "The skill body is not in this prompt. "
+    "Before following a skill, call read_workspace_skill with its slug and follow the prompt it returns. "
+    "If the user message starts with /<slug>, that invocation already includes the body, "
+    "except when /sheets, /slides, or /documents handed the turn to the office agent. "
+    "Follow an included body, and treat any args as extra input. "
+    "Do not guess the procedure from the description alone. "
+    "/sheets, /slides, and /documents hand the turn to the Sheets, Slides, and Documents agents. "
+    "Their procedures are not listed in this catalog. "
+    "/skills and /create-skill are reserved commands, not skill rows.\n\n"
 )
 
 
@@ -174,24 +186,58 @@ def _coerce_index(value: object) -> int | None:
     return None
 
 
-def _selected_slide_lines(slides: dict) -> list[str]:
-    """Selected slide from the editor, in tool index space (0-based).
+_ELEMENT_PATH_RE = re.compile(r"^(\d+):([a-z][a-z0-9]*):(\d+)$")
+_ELEMENT_TEXT_MAX = 120
 
-    ``slide_count`` alone is still useful; ``selected_index`` without a count
-    is emitted as-is. Out-of-range or negative indexes are dropped.
-    """
+
+def _resolved_slide_cursor(slides: dict) -> tuple[int | None, int | None]:
+    """``(slide_count, selected_index)`` after dropping empty or out-of-range values."""
     count = _coerce_index(slides.get("slide_count"))
     index = _coerce_index(slides.get("selected_index"))
     if count is not None and count <= 0:
         count = None
     if index is not None and (index < 0 or (count is not None and index >= count)):
         index = None
+    return count, index
+
+
+def _selected_slide_lines(slides: dict) -> list[str]:
+    """Selected slide from the editor, in tool index space (0-based).
+
+    ``slide_count`` alone is still useful; ``selected_index`` without a count
+    is emitted as-is. Out-of-range or negative indexes are dropped.
+    """
+    count, index = _resolved_slide_cursor(slides)
     lines: list[str] = []
     if count is not None:
         lines.append(f"- slide_count: {count}")
     if index is not None:
         human = f"{index + 1} of {count}" if count is not None else str(index + 1)
         lines.append(f"- selected_slide_index: {index} (slide {human} in the editor)")
+    return lines
+
+
+def _selected_element_lines(slides: dict) -> list[str]:
+    """Clicked preview node, same ``slideIndex:tag:nth`` as ``data-nexus-edit``."""
+    raw_path = slides.get("selected_element_path")
+    if not isinstance(raw_path, str):
+        return []
+    path = raw_path.strip().lower()
+    parsed = _ELEMENT_PATH_RE.match(path)
+    if not parsed:
+        return []
+    slide_index = int(parsed.group(1))
+    count, selected = _resolved_slide_cursor(slides)
+    if count is not None and slide_index >= count:
+        return []
+    if selected is not None and slide_index != selected:
+        return []
+    lines = [f"- selected_element_path: {path}"]
+    raw_text = slides.get("selected_element_text")
+    if isinstance(raw_text, str):
+        text = re.sub(r"\s+", " ", raw_text).strip()[:_ELEMENT_TEXT_MAX]
+        if text:
+            lines.append(f"- selected_element_text: {text}")
     return lines
 
 
@@ -257,6 +303,7 @@ def _render_slides_context_block(
     if mode:
         lines.append(f"- editor_mode: {mode}")
     lines.extend(_selected_slide_lines(slides))
+    lines.extend(_selected_element_lines(slides))
     return (
         "\n\n## Open Slides presentation\n"
         "The user is editing this presentation in the Slides overlay right now. "
@@ -273,6 +320,12 @@ def _render_slides_context_block(
         "after_index on the Slides tools. When the user says this slide, here, "
         "the current slide, or gives no slide, target that index. Do not ask "
         "which slide.\n"
+        "selected_element_path, when present, is the element the user clicked "
+        "in Preview. It matches data-nexus-edit and looks like "
+        "slideIndex:tag:nth. selected_element_text is a short snippet of that "
+        "element. When the user says this, this heading, this text, or make "
+        "this bigger, call replace_in_slides_deck with element_path set to "
+        "selected_element_path. Do not ask which element.\n"
         "Plan, then write. For news, current events, "
         '"what is going on", country or company briefings, or any factual deck:\n'
         f"1. Call web_search 2 to 4 times first (latest developments, context, "
@@ -532,11 +585,15 @@ class ChatService:
         conversation_id: str | None = None,
         context: RequestContext | None = None,
         client_context: dict | None = None,
+        include_skills: bool = True,
     ) -> str:
         system_prompt = explicit_system_prompt or AGENT_SYSTEM_PROMPTS.get(
             agent, AGENT_SYSTEM_PROMPTS["aia"]
         )
-        system_prompt += await self._build_skills_block(context, workspace_id)
+        if include_skills:
+            system_prompt += await self._build_skills_block(
+                context, workspace_id, prior_messages
+            )
         slides_block = _render_slides_context_block(client_context, workspace_id)
         if slides_block:
             system_prompt += slides_block
@@ -571,17 +628,23 @@ class ChatService:
         conversation_id: str | None = None,
         context: RequestContext | None = None,
         client_context: dict | None = None,
+        include_skills: bool = True,
     ) -> str | None:
         """Context prepended to the user message for in-process ABI agents.
 
         ABI agents keep their own system prompt and ignore the Nexus
         ``system_prompt`` passed to cloud providers, so the skills catalog and
         first-turn user profile must be injected via the user message instead.
+        Cloud turns pass include_skills=False here: they already carry the
+        catalog on the system prompt, and this preamble is not sent.
         """
         parts: list[str] = []
-        skills_block = await self._build_skills_block(context, workspace_id)
-        if skills_block.strip():
-            parts.append(skills_block.strip())
+        if include_skills:
+            skills_block = await self._build_skills_block(
+                context, workspace_id, prior_messages
+            )
+            if skills_block.strip():
+                parts.append(skills_block.strip())
 
         slides_block = _render_slides_context_block(client_context, workspace_id)
         if slides_block.strip():
@@ -618,15 +681,23 @@ class ChatService:
         return "\n\n".join(parts) if parts else None
 
     async def _build_skills_block(
-        self, context: RequestContext | None, workspace_id: str | None
+        self,
+        context: RequestContext | None,
+        workspace_id: str | None,
+        prior_messages: list | None = None,
     ) -> str:
-        """Skills catalog + the note that creating one belongs to the Skills
-        agent, injected fresh into the system prompt on every turn. Keeping it always-resident (rather than a
-        one-off prompt expansion at invocation time) is what lets the agent decide
-        on its own, turn after turn, whether a skill applies — mirroring how
-        Claude's own Skills stay visible in context instead of being invoked once
-        and forgotten."""
+        """Catalog of enabled skills: slug, name, description, and when_to_use.
+
+        The body is not included. The model loads it with read_workspace_skill,
+        or receives it when a /slug message is expanded before the agent runs.
+        /sheets, /slides, and /documents are not expanded when that office agent
+        is on the workspace roster: the turn is handed to that agent instead.
+        The catalog is sent once per thread: a later turn that already has an
+        assistant message does not get it again.
+        """
         block = _SKILLS_HANDOFF_NOTE
+        if _catalog_already_disclosed(prior_messages or []):
+            return block
         if not self.skills_service or not context or not workspace_id:
             return block
         try:
@@ -637,12 +708,108 @@ class ChatService:
         enabled = [s for s in skills if s.enabled]
         if not enabled:
             return block
-        lines = [
-            f"- `/{s.slug}` — {s.name}{f': {s.description}' if s.description else ''}\n"
-            f"  Instructions: {s.prompt}"
+        entries = [
+            CatalogEntry(
+                slug=s.slug,
+                name=s.name,
+                description=(getattr(s, "description", None) or ""),
+                when_to_use=(getattr(s, "when_to_use", None) or ""),
+            )
             for s in enabled
         ]
-        return block + _SKILLS_CATALOG_HEADER + "\n".join(lines) + "\n"
+        catalog = render_catalog(entries, header=_SKILLS_CATALOG_HEADER)
+        return block + catalog
+
+    async def _enabled_skill_by_slug(
+        self,
+        context: RequestContext | None,
+        workspace_id: str | None,
+        slug: str,
+    ):
+        """Enabled visible skill for a slug, or None. Reserved slugs stay None."""
+        needle = (slug or "").strip().lstrip("/").lower()
+        if not needle or needle in RESERVED_SLUGS:
+            return None
+        if not self.skills_service or not context or not workspace_id:
+            return None
+        try:
+            skills = await self.skills_service.list_visible_skills(context, workspace_id)
+        except Exception:
+            logger.warning("Failed to resolve skill %s", needle, exc_info=True)
+            return None
+        for skill in skills:
+            if skill.enabled and str(skill.slug).lower() == needle:
+                return skill
+        return None
+
+    async def read_enabled_skill_body(
+        self,
+        context: RequestContext | None,
+        workspace_id: str | None,
+        slug: str,
+    ) -> str | None:
+        """Full prompt for one enabled skill. None when the slug is unknown or reserved."""
+        skill = await self._enabled_skill_by_slug(context, workspace_id, slug)
+        if skill is None:
+            return None
+        return skill.prompt or ""
+
+    def _slash_on_first_line(self, content: str) -> tuple[str, str, str] | None:
+        from naas_abi.apps.nexus.apps.api.app.services.chat.office_handoff import (
+            slash_on_first_line,
+        )
+
+        return slash_on_first_line(content)
+
+    async def expand_invoked_skill_messages(
+        self,
+        messages: list,
+        context: RequestContext | None,
+        workspace_id: str | None,
+        suppress_slugs: set[str] | frozenset[str] | None = None,
+    ) -> list:
+        """If the latest user message is /slug plus optional args, prepend that skill's prompt.
+
+        Unknown slugs and the reserved commands /skills and /create-skill are left unchanged.
+        Slugs in ``suppress_slugs`` stay as the user typed them. Office handoff uses that
+        so /sheets, /slides, and /documents do not paste a procedure into the turn.
+        The stored chat row stays the slash text; only the message sent to the model changes.
+        """
+        if not messages:
+            return messages
+        index = next(
+            (i for i in range(len(messages) - 1, -1, -1) if getattr(messages[i], "role", None) == "user"),
+            None,
+        )
+        if index is None:
+            return messages
+        content = messages[index].content or ""
+        parsed = self._slash_on_first_line(content)
+        if parsed is None:
+            return messages
+        slug, args, tail = parsed
+        if slug in RESERVED_SLUGS or slug in (suppress_slugs or ()):
+            return messages
+        skill = await self._enabled_skill_by_slug(context, workspace_id, slug)
+        if skill is None:
+            return messages
+        first_line = content.partition("\n")[0].strip()
+        parts = [
+            f"Invoked skill /{skill.slug} ({skill.name}). Follow this skill body.",
+            "",
+            skill.prompt or "",
+        ]
+        if args:
+            parts.extend(["", f"Arguments: {args}"])
+        parts.extend(["", f"User message: {first_line}"])
+        expanded = "\n".join(parts) + tail
+        updated = list(messages)
+        message = messages[index]
+        if hasattr(message, "model_copy"):
+            updated[index] = message.model_copy(update={"content": expanded})
+        else:
+            updated[index] = replace(message, content=expanded)
+        return updated
 
     async def build_user_context_addendum(
         self,
@@ -1220,7 +1387,13 @@ class ChatService:
                     conversation_id=conversation_id,
                     user_id=context.actor_user_id,
                 )
+                provider_messages = await self.expand_invoked_skill_messages(
+                    provider_messages,
+                    context,
+                    request.workspace_id,
+                )
                 prior_messages = list(request.messages or [])
+                abi_turn = provider.type == "abi"
                 system_prompt = await self.build_system_prompt(
                     agent=request.agent,
                     explicit_system_prompt=request.system_prompt,
@@ -1230,9 +1403,10 @@ class ChatService:
                     conversation_id=conversation_id,
                     context=context,
                     client_context=request.context,
+                    include_skills=not abi_turn,
                 )
                 injection_preamble = None
-                if provider.type == "abi":
+                if abi_turn:
                     injection_preamble = await self.build_abi_injection_preamble(
                         prior_messages=prior_messages,
                         user_id=context.actor_user_id,
@@ -1240,6 +1414,7 @@ class ChatService:
                         conversation_id=conversation_id,
                         context=context,
                         client_context=request.context,
+                        include_skills=True,
                     )
 
                 from naas_abi.agents.feature import bind_feature_context
