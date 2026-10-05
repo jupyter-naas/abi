@@ -10,7 +10,8 @@ import { cn } from '@/lib/utils';
 import { groupClassesByBfoBucket, referencedClasses } from '@/lib/ontology-bfo-groups';
 import { buildDictionaryTree, filterDictionaryTree, dictionaryKindLabel, type DictionaryNode, type DictionaryTerm } from '@/lib/ontology-dictionary-tree';
 import { dictionaryFilters, dictionaryFiltersRoute, termRoute } from '@/lib/ontology-navigation';
-import { dictionaryFiles, dictionaryFilesRoute, type DictionaryFile } from '@/lib/ontology-file-filter';
+import { dictionaryFiles, type DictionaryFile } from '@/lib/ontology-file-filter';
+import { dashboardFilesRoute } from '@/lib/ontology-dashboard';
 import { systemOntologyPaths } from '@/lib/ontology-system-filter';
 import { getWorkspacePath } from './utils';
 import { OntologyTopicIcon } from '@/components/ontology/ontology-topic-icon';
@@ -53,7 +54,7 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
   function updateFiles(path?: string) {
     const selected = dictionaryFiles(latestQuery.current);
     const nextPaths = !path ? [] : selected.includes(path) ? selected.filter(value => value !== path) : [...selected, path];
-    const next = dictionaryFilesRoute(latestQuery.current, nextPaths);
+    const next = dashboardFilesRoute(latestQuery.current, nextPaths);
     latestQuery.current = next.toString();
     router.replace(`?${next}`, {scroll: false});
   }

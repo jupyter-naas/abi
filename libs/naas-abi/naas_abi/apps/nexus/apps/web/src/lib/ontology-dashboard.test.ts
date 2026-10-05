@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildOntologyDashboard, dashboardTerms, dashboardRoute, dashboardCoverage, dashboardOntologies, dashboardKindRoute, dashboardRestrictions, type OntologyDeclaration } from './ontology-dashboard';
+import { buildOntologyDashboard, dashboardTerms, dashboardRoute, dashboardFilesRoute, dashboardCoverage, dashboardOntologies, dashboardKindRoute, dashboardRestrictions, type OntologyDeclaration } from './ontology-dashboard';
 import type { DictionaryTerm } from './ontology-dictionary-tree';
 
 const a = {path:'/allowed/a.ttl',name:'A ontology',moduleName:'a'};
@@ -53,6 +53,22 @@ test('dashboard drill-down preserves accumulated scope and visualization setting
   // A selection changed in the sidebar meanwhile is the user's: kept.
   const changed=new URLSearchParams(next); changed.append('dictionaryFile','/b.ttl');
   assert.deepEqual(dashboardRoute(changed.toString()).getAll('dictionaryFile'),[a.path,'/b.ttl']);
+});
+
+test('the sidebar file picker keeps the open ontology in step with its selection', () => {
+  const open=dashboardRoute('view=overview&systemFilter=system',a.path);
+  // Picking another ontology alone opens that one, not a file that is no longer in scope.
+  const swapped=dashboardFilesRoute(open.toString(),[b.path]);
+  assert.equal(swapped.get('dashboardFile'),b.path);
+  assert.deepEqual(swapped.getAll('dictionaryFile'),[b.path]);
+  assert.deepEqual(swapped.getAll('systemFilter'),['system']);
+  // Adding a second one, or clearing the picker, returns to the overview of the selection.
+  const both=dashboardFilesRoute(open.toString(),[a.path,b.path]);
+  assert.equal(both.has('dashboardFile'),false);
+  assert.deepEqual(both.getAll('dictionaryFile'),[a.path,b.path]);
+  assert.equal(dashboardFilesRoute(open.toString(),[]).has('dashboardFile'),false);
+  // On the overview, picking files filters it and opens nothing.
+  assert.equal(dashboardFilesRoute('view=overview',[a.path]).has('dashboardFile'),false);
 });
 
 test('coverage excludes display fallbacks, deduplicates shared declarations and scopes metadata to files', () => {

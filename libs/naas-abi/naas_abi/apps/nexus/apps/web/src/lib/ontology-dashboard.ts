@@ -1,5 +1,5 @@
 import type { DictionaryLink, DictionaryTerm } from './ontology-dictionary-tree';
-import type { DictionaryFile } from './ontology-file-filter';
+import { dictionaryFilesRoute, type DictionaryFile } from './ontology-file-filter';
 import { termKey } from './ontology-context';
 import { dictionaryFilter, dictionaryFilterRoute } from './ontology-navigation';
 
@@ -127,5 +127,19 @@ export function dashboardRoute(query: string, file?: string) {
     params.delete('dashboardFile');
     if (previous && selected.length === 1 && selected[0] === previous) params.delete('dictionaryFile');
   }
+  return params;
+}
+
+/**
+ * The sidebar file picker, while an ontology is open on the dashboard: one file
+ * picked opens that one, so the open file never falls out of the selection;
+ * none or several return to the overview of what is picked.
+ */
+export function dashboardFilesRoute(query: string, paths: string[]) {
+  const params = dictionaryFilesRoute(query, paths);
+  if (!params.has('dashboardFile')) return params;
+  const selected = params.getAll('dictionaryFile');
+  if (selected.length === 1) params.set('dashboardFile', selected[0]);
+  else params.delete('dashboardFile');
   return params;
 }
