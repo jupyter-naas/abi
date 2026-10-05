@@ -212,3 +212,34 @@ def test_evict_calls_the_admin_operation_and_returns_the_instance():
         2,
     )
     assert evicted.dependencies == (("store", 1),)
+
+
+def test_rollout_is_registered_and_draining_wakes_the_runner():
+    async def scenario():
+        client = DiscoveryClient(AsyncMock())
+        client.transport.call.side_effect = [
+            pb.RegisterResponse(
+                instance=pb.Instance(status="STARTING"), lease_seconds=20
+            ),
+            pb.RenewResponse(instance=pb.Instance(status="DRAINING"), lease_seconds=20),
+        ]
+        session = DiscoverySession(
+            client,
+            pb.ModuleDescriptor(module_id="a", contract_major=1),
+            rollout_id="release-2",
+            rollout_modules=("a", "b"),
+        )
+        await session.register()
+        request = client.transport.call.call_args.args[1]
+        assert request.rollout_id == "release-2"
+        assert list(request.rollout_modules) == ["a", "b"]
+        await session.renew()
+        assert session.draining is True
+        assert session.drain_requested.is_set()
+
+    asyncio.run(scenario())
+
+
+def test_rollout_configuration_rejects_a_cohort_without_an_id():
+    with pytest.raises(ValueError, match="rollout id"):
+        DiscoveryConfiguration(rollout_modules=("a",))

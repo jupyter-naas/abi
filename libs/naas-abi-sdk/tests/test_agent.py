@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 from naas_abi_proto.agent.v1 import agent_pb2 as pb
 
-from naas_abi_sdk.agent import AgentProxy, SubmissionUncertain
+from naas_abi_sdk.agent import DEFAULT_DEADLINE_SECONDS, AgentProxy, SubmissionUncertain
 from naas_abi_sdk.discovery import AgentDescriptor
 
 
@@ -53,7 +53,20 @@ def test_proxy_invocation_hides_proto_and_duplicate_has_separate_thread():
     ]
     assert asyncio.run(agent.invoke("hi")) == "hello"
     assert agent.duplicate().state.thread_id != agent.state.thread_id
-    assert transport.call.call_args_list[0].args[1].prompt == "hi"
+    submitted = transport.call.call_args_list[0].args[1]
+    assert submitted.prompt == "hi"
+    assert submitted.deadline_seconds == DEFAULT_DEADLINE_SECONDS
+
+
+def test_explicit_timeout_is_the_deadline():
+    agent, transport = proxy()
+    transport.call.return_value = pb.SubmitResponse(
+        invocation=pb.Invocation(owner_instance_id="one", status="SUCCEEDED")
+    )
+
+    asyncio.run(agent.submit("hi", deadline_seconds=90))
+
+    assert transport.call.await_args.args[1].deadline_seconds == 90
 
 
 def test_lost_submit_reply_exposes_handle_without_replaying():

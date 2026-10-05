@@ -34,6 +34,21 @@ def _name(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,255}", value))
 
 
+def _rollout_id(value: str) -> bool:
+    return value == "" or bool(
+        re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,127}", value)
+    )
+
+
+def _cohort(req: pb.RegisterRequest) -> tuple[str, ...]:
+    """Module ids that must be up before this rollout can replace the previous one."""
+    if req.rollout_modules:
+        return tuple(sorted(set(req.rollout_modules)))
+    if req.rollout_id:
+        return (req.descriptor.module_id,)
+    return ()
+
+
 JOB_TRIGGER_KINDS = ("cron", "every", "event")
 
 # Service identities allowed to evict registrations: the Nexus API (System app)
@@ -83,27 +98,132 @@ class DiscoveryService:
         live = [r for r in state.records if r.instance.expires_at > self.clock()]
         return pb.RegistryState(records=live), revision
 
-    def _ready(self, state: pb.RegistryState) -> None:
-        ready: set[tuple[str, int]] = set()
-        for r in state.records:
-            r.instance.status = (
-                "DRAINING"
-                if r.draining
-                else ("DEGRADED" if r.initialized else "STARTING")
+    def _apply_rollouts(self, state: pb.RegistryState) -> dict[str, str]:
+        """Choose the serving rollout per module id and drain the one it replaces.
+
+        A rollout is every live instance that shares a rollout id. It becomes
+        eligible once each of its module ids has an initialized instance and
+        each dependency is either inside that rollout or already initialized
+        outside it. The latest eligible rollout for a module id is the one that
+        serves. Older complete rollouts, and instances with no rollout id, are
+        marked draining. An incomplete rollout stays up so a partial deploy
+        cannot take traffic away from the current one.
+        """
+        groups: dict[str, list[pb.RegistryRecord]] = {}
+        for record in state.records:
+            if record.rollout_id:
+                groups.setdefault(record.rollout_id, []).append(record)
+        starts = {
+            rollout: min(record.registered_at for record in members)
+            for rollout, members in groups.items()
+        }
+        complete = {
+            rollout: self._rollout_complete(members, state)
+            for rollout, members in groups.items()
+        }
+        serving: dict[str, str] = {}
+        for rollout, members in groups.items():
+            if not complete[rollout]:
+                continue
+            for record in members:
+                module_id = record.instance.descriptor.module_id
+                current = serving.get(module_id)
+                if current is None or (starts[rollout], rollout) > (
+                    starts[current],
+                    current,
+                ):
+                    serving[module_id] = rollout
+        for record in state.records:
+            module_id = record.instance.descriptor.module_id
+            winner = serving.get(module_id)
+            if winner is None or record.rollout_id == winner:
+                continue
+            if record.rollout_id and not complete.get(record.rollout_id, False):
+                continue
+            record.draining = True
+        return serving
+
+    def _rollout_complete(
+        self, members: list[pb.RegistryRecord], state: pb.RegistryState
+    ) -> bool:
+        declared = set(members[0].rollout_modules)
+        if not declared or any(
+            set(record.rollout_modules) != declared for record in members
+        ):
+            return False
+        live = [
+            record for record in members if record.initialized and not record.draining
+        ]
+        module_ids = declared
+        if not module_ids <= {record.instance.descriptor.module_id for record in live}:
+            return False
+        cohort = {
+            (
+                record.instance.descriptor.module_id,
+                record.instance.descriptor.contract_major,
             )
+            for record in live
+        }
+        for record in live:
+            for dep in record.instance.descriptor.dependencies:
+                pair = (dep.module_id, dep.contract_major)
+                if dep.module_id in module_ids:
+                    if pair not in cohort:
+                        return False
+                    continue
+                if not any(
+                    other.initialized
+                    and not other.draining
+                    and other.instance.descriptor.module_id == dep.module_id
+                    and other.instance.descriptor.contract_major == dep.contract_major
+                    for other in state.records
+                ):
+                    return False
+        return True
+
+    def _staged(
+        self,
+        record: pb.RegistryRecord,
+        state: pb.RegistryState,
+        serving: dict[str, str],
+    ) -> bool:
+        """A new generation waits while the current one of that module is still up."""
+        if record.draining or not record.initialized or not record.rollout_id:
+            return False
+        module_id = record.instance.descriptor.module_id
+        if record.rollout_id == serving.get(module_id):
+            return False
+        return any(
+            other is not record
+            and not other.draining
+            and other.instance.descriptor.module_id == module_id
+            and other.rollout_id != record.rollout_id
+            for other in state.records
+        )
+
+    def _ready(self, state: pb.RegistryState) -> None:
+        serving = self._apply_rollouts(state)
+        ready: set[tuple[str, int]] = set()
+        for record in state.records:
+            if record.draining:
+                record.instance.status = "DRAINING"
+            elif not record.initialized:
+                record.instance.status = "STARTING"
+            elif self._staged(record, state, serving):
+                record.instance.status = "STAGED"
+            else:
+                record.instance.status = "DEGRADED"
         for _ in range(len(state.records) + 1):
             before = len(ready)
-            for r in state.records:
-                if (
-                    r.initialized
-                    and not r.draining
-                    and all(
-                        (d.module_id, d.contract_major) in ready
-                        for d in r.instance.descriptor.dependencies
-                    )
+            for record in state.records:
+                if record.instance.status != "DEGRADED":
+                    continue
+                if all(
+                    (dep.module_id, dep.contract_major) in ready
+                    for dep in record.instance.descriptor.dependencies
                 ):
-                    r.instance.status = "READY"
-                    descriptor = r.instance.descriptor
+                    record.instance.status = "READY"
+                    descriptor = record.instance.descriptor
                     ready.add((descriptor.module_id, descriptor.contract_major))
             if len(ready) == before:
                 break
@@ -114,6 +234,19 @@ class DiscoveryService:
             _name(d.module_id) and _name(req.instance_id),
             "INVALID_ARGUMENT",
             "Invalid module or instance identity",
+        )
+        _require(_rollout_id(req.rollout_id), "INVALID_ARGUMENT", "Invalid rollout id")
+        cohort = tuple(req.rollout_modules) or (
+            (d.module_id,) if req.rollout_id else ()
+        )
+        _require(
+            (bool(req.rollout_id) or not req.rollout_modules)
+            and len(cohort) <= 64
+            and len(set(cohort)) == len(cohort)
+            and all(_name(module_id) for module_id in cohort)
+            and (not cohort or d.module_id in cohort),
+            "INVALID_ARGUMENT",
+            "Invalid rollout modules",
         )
         _require(
             32 <= len(req.lease_token) <= 256,
@@ -168,9 +301,28 @@ class DiscoveryService:
             "INVALID_ARGUMENT",
             "Invalid job descriptor",
         )
+        _require(
+            len(d.models) <= 128 and len({x.name for x in d.models}) == len(d.models),
+            "INVALID_ARGUMENT",
+            "Too many or duplicate models",
+        )
+        _require(
+            all(
+                _name(x.name) and x.kind == "chat" and len(x.description) <= 4096
+                for x in d.models
+            ),
+            "INVALID_ARGUMENT",
+            "Invalid model descriptor",
+        )
         graph = {}
         for record in state.records:
             other = record.instance.descriptor
+            if req.rollout_id and record.rollout_id == req.rollout_id:
+                _require(
+                    tuple(sorted(record.rollout_modules)) == _cohort(req),
+                    "DESCRIPTOR_CONFLICT",
+                    "Rollout members do not match",
+                )
             if (other.module_id, other.contract_major) == (
                 d.module_id,
                 d.contract_major,
@@ -178,9 +330,10 @@ class DiscoveryService:
                 _require(
                     other.dependencies == d.dependencies
                     and other.agents == d.agents
-                    and other.jobs == d.jobs,
+                    and other.jobs == d.jobs
+                    and other.models == d.models,
                     "DESCRIPTOR_CONFLICT",
-                    "Replicas of a contract must declare identical dependencies, agents and jobs",
+                    "Replicas of a contract must declare identical dependencies, agents, jobs and models",
                 )
             graph[(other.module_id, other.contract_major)] = [
                 (x.module_id, x.contract_major) for x in other.dependencies
@@ -249,7 +402,9 @@ class DiscoveryService:
             if record is not None:
                 self._authorize(record, req.lease_token, owner)
                 _require(
-                    record.instance.descriptor == req.descriptor,
+                    record.instance.descriptor == req.descriptor
+                    and record.rollout_id == req.rollout_id
+                    and tuple(sorted(record.rollout_modules)) == _cohort(req),
                     "DESCRIPTOR_CONFLICT",
                     "Registration identity cannot change",
                 )
@@ -262,10 +417,14 @@ class DiscoveryService:
                 record = state.records.add(
                     owner=owner,
                     lease_hash=hashlib.sha256(req.lease_token.encode()).hexdigest(),
+                    rollout_id=req.rollout_id,
+                    registered_at=self.clock(),
+                    rollout_modules=_cohort(req),
                     instance=pb.Instance(
                         descriptor=req.descriptor,
                         instance_id=req.instance_id,
                         expires_at=self.clock() + self.lease_seconds,
+                        rollout_id=req.rollout_id,
                     ),
                 )
             self._ready(state)
@@ -410,3 +569,30 @@ class DiscoveryService:
                 "Provider is not ready",
             )
         return pb.AuthorizeAgentResponse()
+
+    async def authorize_model(
+        self, req: pb.AuthorizeModelRequest, owner: str
+    ) -> pb.AuthorizeModelResponse:
+        state, _ = await self._read()
+        self._ready(state)
+        record = next(
+            (r for r in state.records if r.instance.instance_id == req.instance_id),
+            None,
+        )
+        if record is None:
+            raise DiscoveryError("LEASE_EXPIRED", "Provider registration expired")
+        self._authorize(record, req.lease_token, owner)
+        _require(
+            any(
+                m.name == req.model_name and m.kind == "chat"
+                for m in record.instance.descriptor.models
+            ),
+            "MODEL_NOT_FOUND",
+            req.model_name,
+        )
+        _require(
+            record.instance.status == "READY",
+            "MODULE_UNAVAILABLE",
+            "Provider is not ready",
+        )
+        return pb.AuthorizeModelResponse()

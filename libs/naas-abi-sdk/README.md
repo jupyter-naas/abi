@@ -268,8 +268,16 @@ jitter. `module.discovery_status` exposes last-confirmed readiness and becomes
 UNAVAILABLE after confirmation expires. Dependency loss yields DEGRADED on the
 registry without killing independent module work. Every ModuleProxy lookup queries
 fresh state; missing, incompatible and not-ready modules have distinct RPC error
-codes. Recovery after lease loss uses a new instance identity. Unload marks
-DRAINING and unregisters; a hard crash is handled by expiry.
+codes. Recovery after lease loss uses a new instance identity. A rollout id
+and its module list cut a deploy over together: the previous generation stays
+ready until every listed module is up, then it drains. `SIGTERM` stops new
+work, finishes runs and jobs already started, and unregisters. A hard crash is
+handled by lease expiry.
+
+Set `ABI_HEALTH_PORT` to open a probe with no extra dependency. `GET /health` is
+liveness and stays up while the process is draining. `GET /ready` is 200 only
+when discovery reports `READY` (or discovery is off). Other statuses return 503.
+`ABI_HEALTH_HOST` defaults to `0.0.0.0`. Leave the port unset and nothing listens.
 
 `list_agents()` returns descriptors; `get_agent(name)` returns an invocable
 proxy when its capability is registered. Legacy engine modules are not automatically

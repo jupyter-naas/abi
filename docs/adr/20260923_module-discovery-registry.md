@@ -47,3 +47,30 @@ logging; no new metrics/tracing stack is introduced.
 The existing proto package does not yet include Protovalidate annotations/runtime.
 This contract currently validates at the discovery application boundary with
 behavior tests; schema-embedded validation remains an explicit repository gap.
+
+## Rollouts and draining (2026-10-05)
+
+A process joins a rollout by registering a rollout id. Processes that must cut
+over together send the same id and the same list of module ids. An empty list
+means that module alone. `ABI_ROLLOUT_ID` and `ABI_ROLLOUT_MODULES` set those
+values when the discovery configuration leaves them empty.
+
+Discovery keeps the current generation serving until every module id in the new
+rollout has an initialized instance, and until each of that rollout's
+dependencies is either inside the rollout or already initialized outside it.
+Until then the new instances are `STAGED` while a previous generation of that
+module id is still up, and lookups that want a ready module skip them. When the
+rollout is complete, it becomes the serving generation for those module ids.
+Older complete generations, and instances with no rollout id, are marked
+draining. A later complete rollout replaces an earlier one. An incomplete
+rollout is left in place, so a deploy that never finishes does not take traffic
+away from the current one. Same-rollout replicas stay up together. The module
+id is the identity being replaced. The contract major stays the caller's pin.
+`package_version` is not an order.
+
+`SIGTERM` and `SIGINT` ask the process to drain as well. Draining renews with
+`draining` set, stops new agent submits, job fetches and model chats, and waits
+for runs and jobs that already started. A finished agent run releases its
+conversation claim. The process then unregisters. A draining instance stays in
+discovery until it exits, so a claim held by a live run is not treated as
+abandoned. A hard kill still falls through to lease expiry.

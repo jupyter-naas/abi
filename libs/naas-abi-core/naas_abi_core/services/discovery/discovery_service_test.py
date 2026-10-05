@@ -22,18 +22,39 @@ class MemoryRegistry:
         self.data, self.revision = data, self.revision + 1
 
 
-def registration(name, id, dependencies=()):
+def registration(name, id, dependencies=(), rollout="", contract=1, cohort=()):
     return pb.RegisterRequest(
         descriptor=pb.ModuleDescriptor(
             module_id=name,
-            contract_major=1,
+            contract_major=contract,
             dependencies=[
                 pb.Dependency(module_id=d, contract_major=1) for d in dependencies
             ],
         ),
         instance_id=id,
         lease_token="a" * 32 + id,
+        rollout_id=rollout,
+        rollout_modules=cohort,
     )
+
+
+async def _up(service, req):
+    await service.register(req, "owner")
+    return await service.renew(
+        pb.RenewRequest(
+            instance_id=req.instance_id,
+            lease_token=req.lease_token,
+            initialized=True,
+        ),
+        "owner",
+    )
+
+
+async def _statuses(service, name, contract=1):
+    result = await service.get_module(
+        pb.GetModuleRequest(module_id=name, contract_major=contract)
+    )
+    return {item.instance_id: item.status for item in result.instances}
 
 
 def test_readiness_dependency_loss_recovery_and_replicas():
@@ -161,6 +182,33 @@ def test_cas_contention_retries_validation_and_pages_do_not_expose_credentials()
         assert b"a" * 32 not in first.SerializeToString()
         with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
             await service.register(registration("bad.*", "bad"), "owner")
+
+    asyncio.run(scenario())
+
+
+def test_model_authorization_requires_provider_lease_and_readiness():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        req = registration("provider", "instance")
+        req.descriptor.models.add(name="writer", kind="chat")
+        await service.register(req, "provider-identity")
+        auth = pb.AuthorizeModelRequest(
+            instance_id="instance",
+            lease_token=req.lease_token,
+            model_name="writer",
+        )
+        with pytest.raises(DiscoveryError, match="MODULE_UNAVAILABLE"):
+            await service.authorize_model(auth, "provider-identity")
+        await service.renew(
+            pb.RenewRequest(
+                instance_id="instance", lease_token=req.lease_token, initialized=True
+            ),
+            "provider-identity",
+        )
+        await service.authorize_model(auth, "provider-identity")
+        auth.model_name = "missing"
+        with pytest.raises(DiscoveryError, match="MODEL_NOT_FOUND"):
+            await service.authorize_model(auth, "provider-identity")
 
     asyncio.run(scenario())
 
@@ -339,3 +387,65 @@ def test_evicting_an_unknown_or_malformed_instance_is_refused(instance_id, code)
 def test_admin_identities_must_be_named():
     with pytest.raises(ValueError):
         DiscoveryService(MemoryRegistry(), admin_identities=("",))
+
+
+def test_rollout_waits_for_the_cohort_then_drains_the_previous_generation():
+    async def scenario():
+        now = [0.0]
+        service = DiscoveryService(MemoryRegistry(), clock=lambda: now[0])
+        old_a, old_b = registration("a", "a-old"), registration("b", "b-old")
+        await _up(service, old_a)
+        await _up(service, old_b)
+        now[0] = 10
+        cohort = ("a", "b")
+        new_a = registration("a", "a-new", rollout="release-2", cohort=cohort)
+        await _up(service, new_a)
+        assert await _statuses(service, "a") == {"a-old": "READY", "a-new": "STAGED"}
+        assert (await _statuses(service, "b"))["b-old"] == "READY"
+        new_b = registration("b", "b-new", rollout="release-2", cohort=cohort)
+        await _up(service, new_b)
+        assert await _statuses(service, "a") == {"a-old": "DRAINING", "a-new": "READY"}
+        assert await _statuses(service, "b") == {"b-old": "DRAINING", "b-new": "READY"}
+
+    asyncio.run(scenario())
+
+
+def test_same_rollout_replica_joins_and_a_later_rollout_replaces_it():
+    async def scenario():
+        now = [0.0]
+        service = DiscoveryService(MemoryRegistry(), clock=lambda: now[0])
+        await _up(service, registration("a", "a1", rollout="release-1"))
+        await _up(service, registration("a", "a2", rollout="release-1"))
+        assert await _statuses(service, "a") == {"a1": "READY", "a2": "READY"}
+        now[0] = 5
+        await _up(service, registration("a", "a3", rollout="release-2", contract=2))
+        assert await _statuses(service, "a") == {"a1": "DRAINING", "a2": "DRAINING"}
+        assert await _statuses(service, "a", contract=2) == {"a3": "READY"}
+
+    asyncio.run(scenario())
+
+
+def test_first_rollout_becomes_ready_and_a_missing_dependency_blocks_cutover():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry(), clock=lambda: 0.0)
+        cohort = ("a", "b")
+        await _up(service, registration("b", "b1", rollout="release-1", cohort=cohort))
+        await _up(
+            service, registration("a", "a1", ("b",), rollout="release-1", cohort=cohort)
+        )
+        assert (await _statuses(service, "a"))["a1"] == "READY"
+        assert (await _statuses(service, "b"))["b1"] == "READY"
+        blocked = DiscoveryService(MemoryRegistry(), clock=lambda: 0.0)
+        await _up(blocked, registration("a", "a-old"))
+        await _up(
+            blocked,
+            registration("a", "a-new", ("missing",), rollout="release-2", contract=2),
+        )
+        assert (await _statuses(blocked, "a"))["a-old"] == "READY"
+        assert (await _statuses(blocked, "a", contract=2))["a-new"] == "STAGED"
+        with pytest.raises(DiscoveryError, match="Invalid rollout id"):
+            await service.register(
+                registration("a", "bad", rollout="not valid"), "owner"
+            )
+
+    asyncio.run(scenario())

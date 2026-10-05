@@ -17,6 +17,9 @@ from nats.errors import Error as NATSError
 from naas_abi_sdk.transport import RPCError
 
 TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"}
+# Wall-clock budget for invoke/stream_invoke when the caller sets no timeout.
+# deadline_seconds 0 on submit still means the caller keeps the run open.
+DEFAULT_DEADLINE_SECONDS = 300
 # With pushed RunUpdates, read Status only after this long without one (a lost
 # update, or an owner that died); without them, Status is polled every 0.1 s.
 QUIET_SECONDS = 5.0
@@ -346,7 +349,9 @@ class AgentProxy:
         handle = await self.submit(
             prompt,
             invocation_id=invocation_id,
-            deadline_seconds=math.ceil(timeout) if timeout is not None else None,
+            deadline_seconds=(
+                math.ceil(timeout) if timeout is not None else DEFAULT_DEADLINE_SECONDS
+            ),
         )
         return await handle.result(timeout=timeout)
 
@@ -365,7 +370,9 @@ class AgentProxy:
             prompt,
             invocation_id=invocation_id,
             stream=True,
-            deadline_seconds=math.ceil(timeout) if timeout is not None else None,
+            deadline_seconds=(
+                math.ceil(timeout) if timeout is not None else DEFAULT_DEADLINE_SECONDS
+            ),
         )
         async for event in handle.events(timeout=timeout):
             yield {"event": event["event"], "data": event["data"]}

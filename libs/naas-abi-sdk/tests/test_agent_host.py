@@ -61,13 +61,16 @@ class Handler:
         return "result"
 
 
-def host(documents, handler, owner="owner"):
+def host(documents, handler, owner="owner", live=None):
+    listed = (owner,) if live is None else live
     session = SimpleNamespace(
         instance_id=owner,
         descriptor=SimpleNamespace(module_id="provider", contract_major=1),
         client=SimpleNamespace(
             project="default",
-            get_module=AsyncMock(return_value=[SimpleNamespace(instance_id=owner)]),
+            get_module=AsyncMock(
+                return_value=[SimpleNamespace(instance_id=i) for i in listed]
+            ),
         ),
     )
     return AgentHost(session, documents, {"agent": handler})
@@ -86,7 +89,8 @@ def request(id="id", prompt="hello"):
 def test_replicas_deduplicate_and_serialize_conversations():
     async def scenario():
         docs, handler = Documents(), Handler()
-        a, b = host(docs, handler), host(docs, handler, "replica")
+        live = ("owner", "replica")
+        a, b = host(docs, handler, live=live), host(docs, handler, "replica", live)
         first, second = await asyncio.gather(
             a._submit("agent", "key", "caller", request()),
             b._submit("agent", "key", "caller", request()),
@@ -117,12 +121,96 @@ def test_uncertain_ownership_write_never_replays_or_releases_claim():
         original = host(docs, handler)
         with pytest.raises(ConnectionError):
             await original._submit("agent", "key", "caller", request())
-        replacement = host(docs, handler, "replacement")
+        replacement = host(docs, handler, "replacement", ("owner", "replacement"))
         existing = await replacement._submit("agent", "key", "caller", request())
         assert existing.data["status"] == "RUNNING"
         assert handler.calls == 0
         conflict = await replacement._submit("agent", "next", "caller", request("next"))
         assert conflict.data["error_code"] == "CONVERSATION_BUSY"
+
+    asyncio.run(scenario())
+
+
+def test_absent_discovery_owner_releases_the_conversation_claim():
+    async def scenario():
+        docs, handler = Documents(), Handler()
+        docs.lose_running_reply = True
+        original = host(docs, handler)
+        with pytest.raises(ConnectionError):
+            await original._submit("agent", "key", "caller", request())
+        docs.lose_running_reply = False
+        replacement = host(docs, handler, "replacement", ("replacement",))
+        taken = await replacement._submit("agent", "next", "caller", request("next"))
+        assert taken.data["status"] == "RUNNING"
+        assert taken.data["owner"] == "replacement"
+        await asyncio.sleep(0)
+        assert handler.calls == 1
+        abandoned = await docs.get(replacement.runs_collection, "key")
+        assert abandoned.data["status"] == "FAILED"
+        assert abandoned.data["error_code"] == "OWNER_GONE"
+        again = await replacement._submit("agent", "key", "caller", request())
+        assert again.data["status"] == "FAILED"
+        assert handler.calls == 1
+        handler.finish.set()
+        await asyncio.gather(*(run.task for run in replacement.runs.values()))
+
+    asyncio.run(scenario())
+
+
+def test_discovery_lookup_failure_keeps_the_conversation_claim():
+    async def scenario():
+        docs, handler = Documents(), Handler()
+        docs.lose_running_reply = True
+        original = host(docs, handler)
+        with pytest.raises(ConnectionError):
+            await original._submit("agent", "key", "caller", request())
+        docs.lose_running_reply = False
+        replacement = host(docs, handler, "replacement", ())
+        replacement.session.client.get_module.side_effect = RPCError(
+            "UNAVAILABLE", "discovery down"
+        )
+        conflict = await replacement._submit("agent", "next", "caller", request("next"))
+        assert conflict.data["error_code"] == "CONVERSATION_BUSY"
+        assert handler.calls == 0
+
+    asyncio.run(scenario())
+
+
+def test_process_accepts_200_runs_and_rejects_the_next():
+    async def scenario():
+        from naas_abi_sdk.agent_host import MAX_ACTIVE_RUNS
+
+        docs, handler = Documents(), Handler()
+        owner = host(docs, handler)
+        for i in range(MAX_ACTIVE_RUNS):
+            await owner._submit(
+                "agent",
+                f"key-{i}",
+                "caller",
+                pb.SubmitRequest(
+                    invocation_id=f"id-{i}",
+                    thread_id=f"thread-{i}",
+                    prompt="hello",
+                    mode="invoke",
+                    deadline_seconds=10,
+                ),
+            )
+        assert len(owner.runs) == MAX_ACTIVE_RUNS
+        with pytest.raises(RPCError, match="AGENT_BUSY"):
+            await owner._submit(
+                "agent",
+                "overflow",
+                "caller",
+                pb.SubmitRequest(
+                    invocation_id="overflow",
+                    thread_id="thread-overflow",
+                    prompt="hello",
+                    mode="invoke",
+                    deadline_seconds=10,
+                ),
+            )
+        handler.finish.set()
+        await asyncio.gather(*(run.task for run in list(owner.runs.values())))
 
     asyncio.run(scenario())
 
@@ -475,5 +563,26 @@ def test_a_failed_push_never_fails_the_run():
         await asyncio.gather(*(r.task for r in owner.runs.values()))
         doc = await docs.get(owner.runs_collection, "key")
         assert doc.data["status"] == "SUCCEEDED"
+
+    asyncio.run(scenario())
+
+
+def test_drain_lets_a_live_run_finish():
+    async def scenario():
+        owner = host(Documents(), Handler())
+        release = asyncio.Event()
+
+        async def run():
+            await release.wait()
+
+        task = asyncio.create_task(run())
+        owner.runs["key"] = SimpleNamespace(task=task)
+        draining = asyncio.create_task(owner.drain(1))
+        await asyncio.sleep(0)
+        assert owner.closing is True
+        assert not task.done()
+        release.set()
+        await draining
+        assert task.done() and not task.cancelled()
 
     asyncio.run(scenario())
