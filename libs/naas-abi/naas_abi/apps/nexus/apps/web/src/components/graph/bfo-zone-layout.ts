@@ -5,8 +5,9 @@
  * right); continuants in a band below (Material Entity, Site, Generically
  * Dependent Continuant, Quality, Realizable). Anything else lands in an
  * "Other" zone at the end of the continuants. A zone is as big as the cards it
- * holds. Inside a zone a subclass sits to the right of its parent class
- * (temporal region, then temporal instant, then its subclasses).
+ * holds. Inside a zone a subclass follows its parent class: to its right in
+ * the occurrents (temporal region, then temporal instant), below it in the
+ * continuants (material entity above person and organization).
  * Ported from the people app's network layout
  * (naas_abi_marketplace intelligence/modules/people/apps/people/web/lib/network-layout.js).
  */
@@ -37,13 +38,17 @@ const MIN_ZONE_WIDTH = 190;
 /** ``cells``: fixed (column, row) of every card when the zone holds a class hierarchy. */
 type Measured = { cols: number; cellW: number; cellH: number; width: number; height: number; cells?: Map<string, { col: number; row: number }> };
 
+/** Where subclasses go: right of their parent (occurrents) or below it (continuants). */
+type Direction = 'right' | 'down';
+
 /**
- * Cells of a zone that holds subclasses of its own cards: a class in column
- * ``depth``, its subclasses one column to the right, the first of them on its
- * row. Cards outside any hierarchy fill the rows below, as many per row as
- * the hierarchy has columns. Null when no card has a parent in the zone.
+ * Cells of a zone that holds subclasses of its own cards. ``right``: a class
+ * in column ``depth``, its subclasses one column to the right, the first of
+ * them on its row. ``down``: a class in row ``depth``, its subclasses one row
+ * below, side by side, the first of them in its column. Cards outside any
+ * hierarchy fill the rows below. Null when no card has a parent in the zone.
  */
-function hierarchyCells(cards: ZoneCard[]) {
+function hierarchyCells(cards: ZoneCard[], direction: Direction) {
   const ids = new Set(cards.map(card => card.id));
   const children = new Map<string, ZoneCard[]>();
   for (const card of cards) {
@@ -54,27 +59,33 @@ function hierarchyCells(cards: ZoneCard[]) {
   const hasParent = new Set([...children.values()].flat().map(card => card.id));
   const byLabel = (a: ZoneCard, b: ZoneCard) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id);
   const cells = new Map<string, { col: number; row: number }>();
-  let rows = 0;
-  let cols = 1;
-  const visit = (card: ZoneCard, col: number) => {
+  // ``leaves`` counts the lines the hierarchy uses across: rows when it grows
+  // right, columns when it grows down. ``depth`` is the other axis.
+  let leaves = 0;
+  let depth = 1;
+  const visit = (card: ZoneCard, level: number) => {
     if (cells.has(card.id)) return;
-    cells.set(card.id, { col, row: rows });
-    cols = Math.max(cols, col + 1);
+    cells.set(card.id, direction === 'right' ? { col: level, row: leaves } : { col: leaves, row: level });
+    depth = Math.max(depth, level + 1);
     const below = (children.get(card.id) || []).filter(child => !cells.has(child.id)).sort(byLabel);
-    if (!below.length) { rows += 1; return; }
-    below.forEach(child => visit(child, col + 1));
+    if (!below.length) { leaves += 1; return; }
+    below.forEach(child => visit(child, level + 1));
   };
   const roots = cards.filter(card => !hasParent.has(card.id) && children.has(card.id)).sort(byLabel);
   roots.forEach(root => visit(root, 0));
   // A parent cycle has no root: start it anywhere.
   cards.filter(card => children.has(card.id) || hasParent.has(card.id)).sort(byLabel).forEach(card => visit(card, 0));
   const singles = cards.filter(card => !cells.has(card.id));
-  singles.forEach((card, k) => cells.set(card.id, { col: k % cols, row: rows + Math.floor(k / cols) }));
-  return { cells, cols, rows: rows + Math.ceil(singles.length / cols) };
+  const treeCols = direction === 'right' ? depth : leaves;
+  const treeRows = direction === 'right' ? leaves : depth;
+  // Growing down, a narrow tree must not stack its loose cards in one tall column.
+  const perRow = direction === 'right' ? treeCols : Math.max(treeCols, Math.ceil(Math.sqrt(singles.length)));
+  singles.forEach((card, k) => cells.set(card.id, { col: k % perRow, row: treeRows + Math.floor(k / perRow) }));
+  return { cells, cols: Math.max(treeCols, singles.length ? perRow : 0), rows: treeRows + Math.ceil(singles.length / perRow) };
 }
 
-function measureHierarchy(cards: ZoneCard[], cellH: number): Measured | null {
-  const tree = hierarchyCells(cards);
+function measureHierarchy(cards: ZoneCard[], cellH: number, direction: Direction): Measured | null {
+  const tree = hierarchyCells(cards, direction);
   if (!tree) return null;
   const cellW = cellWidth(cards);
   const width = Math.max(MIN_ZONE_WIDTH, tree.cols * cellW + (tree.cols - 1) * CARD_GAP_X + 2 * ZONE_PAD);
@@ -111,7 +122,8 @@ function zoneHeight(rows: number, cellH: number) {
 
 /** A zone with at most ``rows`` rows: its columns follow from how many cards it holds. */
 function measureZone(cards: ZoneCard[], rows: number, cellH: number): Measured {
-  const tree = measureHierarchy(cards, cellH);
+  // Continuants: the bottom band, where subclasses sit below their parent.
+  const tree = measureHierarchy(cards, cellH, 'down');
   if (tree) return tree;
   const cols = Math.max(1, Math.ceil(cards.length / Math.min(rows, cards.length)));
   const used = Math.ceil(cards.length / cols);
@@ -122,7 +134,8 @@ function measureZone(cards: ZoneCard[], rows: number, cellH: number): Measured {
 
 /** A zone of a given width: as many columns as fit, and the rows that leaves. */
 function fitZone(cards: ZoneCard[], width: number, cellH: number): Measured {
-  const tree = measureHierarchy(cards, cellH);
+  // Occurrents: the top band, where subclasses sit right of their parent.
+  const tree = measureHierarchy(cards, cellH, 'right');
   if (tree) return { ...tree, width: Math.max(width, tree.width) };
   const cellW = cellWidth(cards);
   const fits = Math.max(1, Math.floor((width - 2 * ZONE_PAD + CARD_GAP_X) / (cellW + CARD_GAP_X)));
@@ -159,7 +172,7 @@ export function bfoZoneLayout(cards: ZoneCard[], links: ZoneLink[], { aspect = 1
   // The top band spans the view: Process takes 70% of it when Temporal Region shares it.
   const shares = top.length > 1 ? [PROCESS_SHARE, 1 - PROCESS_SHARE] : [1];
   const topGap = top.length > 1 ? ZONE_GAP : 0;
-  const oneColumn = (key: string) => measureHierarchy(groups.get(key)!, topCellH)?.width ?? Math.max(MIN_ZONE_WIDTH, cellWidth(groups.get(key)!) + 2 * ZONE_PAD);
+  const oneColumn = (key: string) => measureHierarchy(groups.get(key)!, topCellH, 'right')?.width ?? Math.max(MIN_ZONE_WIDTH, cellWidth(groups.get(key)!) + 2 * ZONE_PAD);
   const innerMin = top.length ? Math.max(...top.map((key, i) => (oneColumn(key) + topGap / 2) / shares[i])) : 0;
   const topBand = (inner: number) => {
     const zones = top.map((key, i) => fitZone(groups.get(key)!, shares[i] * inner - topGap / 2, topCellH));

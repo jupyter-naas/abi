@@ -1,4 +1,4 @@
-# onto2py-source-sha256: a9bbe5d47ed8e6d74624988f75df4f4adb681f23c6a996d12c7b3211974b6d9a
+# onto2py-source-sha256: 12f397fe5809d26e80cf800cd3906cc8470aad445336139bfb62786bf57d27ab
 from __future__ import annotations
 
 import contextlib

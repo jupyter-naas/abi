@@ -1,10 +1,11 @@
 from naas_abi_marketplace.domains.intelligence.modules.organizations.ontologies.processes.ActOfSubsidiaryEstablishmentProcess import (
-    ActOfSubsidiaryEstablishment as _ActOfSubsidiaryEstablishment,
+    SubsidiaryEstablishment as _SubsidiaryEstablishment,
 )
 
 
-class ActOfSubsidiaryEstablishment(_ActOfSubsidiaryEstablishment):
-    """Action class for ActOfSubsidiaryEstablishment"""
+class SubsidiaryEstablishment(_SubsidiaryEstablishment):
+    """Action class for SubsidiaryEstablishment"""
 
     def actions(self):
         """Action method - implement your logic here"""
+        pass

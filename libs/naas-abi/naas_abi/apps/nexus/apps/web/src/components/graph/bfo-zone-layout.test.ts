@@ -78,6 +78,30 @@ describe('bfoZoneLayout', () => {
     expect(process.x + process.width).toBeLessThanOrEqual(temporal.x);
   });
 
+  it('puts a continuant subclass below its parent class, siblings side by side', () => {
+    const layout = bfoZoneLayout([
+      card('act', 'Process'),
+      card('material', 'Material Entity'),
+      { ...card('person', 'Material Entity'), parent: 'material' },
+      { ...card('org', 'Material Entity'), parent: 'material' },
+      { ...card('employee', 'Material Entity'), parent: 'person' },
+      card('loose', 'Material Entity'),
+    ], []);
+    const at = (id: string) => layout.positions.get(id)!;
+    // Parents on top.
+    expect(at('person').y).toBeGreaterThan(at('material').y);
+    expect(at('employee').y).toBeGreaterThan(at('person').y);
+    // Siblings on one row, by label; the first child under its parent.
+    expect(at('org').y).toBe(at('person').y);
+    expect(at('person').x).toBeGreaterThan(at('org').x);
+    expect(at('org').x).toBe(at('material').x);
+    expect(at('employee').x).toBe(at('person').x);
+    // Cards outside the hierarchy come below it.
+    expect(at('loose').y).toBeGreaterThan(at('employee').y);
+    const zone = layout.zones.find(item => item.key === 'Material Entity')!;
+    for (const id of ['material', 'person', 'org', 'employee', 'loose']) expect(inside(at(id), zone)).toBe(true);
+  });
+
   it('finds the nearest superclass card in the same zone, through equivalents', () => {
     const BFO = 'http://purl.obolibrary.org/obo/';
     const parents = zoneParents([

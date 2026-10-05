@@ -38,13 +38,21 @@ test('dashboard drill-down preserves accumulated scope and visualization setting
   const next=dashboardRoute(query,a.path);
   assert.equal(next.get('view'),'overview');
   assert.equal(next.get('dashboardFile'),a.path);
-  assert.deepEqual(next.getAll('dictionaryFile'),['/a.ttl','/b.ttl']);
+  // The opened ontology becomes the sidebar's file selection.
+  assert.deepEqual(next.getAll('dictionaryFile'),[a.path]);
   assert.deepEqual(next.getAll('systemFilter'),['system']);
   assert.equal(next.get('termFilter'),'annotation');
   assert.equal(next.get('spacing'),'compact');
   assert.equal(next.get('connectors'),'orthogonal');
   for (const key of ['term','termType','system','subsystem','process']) assert.equal(next.has(key),false);
-  assert.equal(dashboardRoute(next.toString()).has('dashboardFile'),false);
+  const back=dashboardRoute(next.toString());
+  assert.equal(back.has('dashboardFile'),false);
+  // Leaving clears the mirrored selection, keeps the other filters.
+  assert.deepEqual(back.getAll('dictionaryFile'),[]);
+  assert.deepEqual(back.getAll('systemFilter'),['system']);
+  // A selection changed in the sidebar meanwhile is the user's: kept.
+  const changed=new URLSearchParams(next); changed.append('dictionaryFile','/b.ttl');
+  assert.deepEqual(dashboardRoute(changed.toString()).getAll('dictionaryFile'),[a.path,'/b.ttl']);
 });
 
 test('coverage excludes display fallbacks, deduplicates shared declarations and scopes metadata to files', () => {
@@ -74,8 +82,10 @@ test('ontology KPI toggles and drill-down preserve workspace filters and navigat
   const file=dashboardRoute(ontology.toString(),a.path);
   assert.equal(file.has('dashboardType'),false);
   assert.equal(file.get('dashboardFile'),a.path);
+  // The drill-down selects the opened ontology in the sidebar.
+  assert.deepEqual(file.getAll('dictionaryFile'),[a.path]);
+  for (const result of [ontology,classes]) assert.deepEqual(result.getAll('dictionaryFile'),['/a.ttl']);
   for (const result of [ontology,classes,file]) {
-    assert.deepEqual(result.getAll('dictionaryFile'),['/a.ttl']);
     assert.deepEqual(result.getAll('systemFilter'),['abi']);
     assert.equal(result.get('spacing'),'compact');
   }

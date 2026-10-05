@@ -1,4 +1,4 @@
-# onto2py-source-sha256: b956e7cb17484a5c93e6287d55f12abd7de00937ef38b771a2b8c53966af7e36
+# onto2py-source-sha256: a8d0ecfc3b8c916e1612662414d30883e6cb6b77fa7d5e7eb9b52ecc658cccfe
 from __future__ import annotations
 
 import datetime
@@ -383,38 +383,6 @@ class Site(RDFEntity):
     ] = os.environ.get("USER")
 
 
-class GeospatialPosition(RDFEntity):
-    """
-    geospatial position
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/GeospatialPosition"
-    _name: ClassVar[str] = "geospatial position"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "latitude": "http://ontology.naas.ai/abi/latitude",
-        "located_in": "http://ontology.naas.ai/abi/locatedIn",
-        "longitude": "http://ontology.naas.ai/abi/longitude",
-    }
-    _object_properties: ClassVar[set[str]] = {"located_in"}
-
-    # Data properties
-    latitude: Annotated[Any, Field(description="x latitude y =Def x is a geospatial position & y is the latitude of x in decimal degrees (WGS 84 unless stated otherwise), from -90 to 90")] | None = None
-    longitude: Annotated[Any, Field(description="x longitude y =Def x is a geospatial position & y is the longitude of x in decimal degrees (WGS 84 unless stated otherwise), from -180 to 180")] | None = None
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    located_in: Annotated[list[Site | URIRef | str], Field(description="b located in c =Def b is an independent continuant & c is an independent & neither is a spatial region & there is some time t such that the spatial region which b occupies at t is continuant part of the spatial region which c occupies at t")] | None = None
 
 
 class GenericallyDependentContinuant(RDFEntity):
@@ -704,7 +672,6 @@ class TemporalInstant(TemporalRegion, RDFEntity):
 # Rebuild models to resolve forward references
 MaterialEntity.model_rebuild()
 Site.model_rebuild()
-GeospatialPosition.model_rebuild()
 GenericallyDependentContinuant.model_rebuild()
 Quality.model_rebuild()
 Role.model_rebuild()

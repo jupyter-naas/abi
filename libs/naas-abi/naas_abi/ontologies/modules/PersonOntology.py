@@ -1,4 +1,4 @@
-# onto2py-source-sha256: e8091ef9d3cd38734198f638ba7af0a63e5fad4eab394c4473eee2bb9c5171ad
+# onto2py-source-sha256: 768aa5b7f9509d9c52231081064edec8b8963234c11704aca8a82f6098f9badc
 from __future__ import annotations
 
 import contextlib
@@ -313,12 +313,15 @@ class Person(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "date_of_birth": "http://ontology.naas.ai/abi/date_of_birth",
         "first_name": "http://ontology.naas.ai/abi/first_name",
         "full_name": "http://ontology.naas.ai/abi/full_name",
+        "given_name": "http://ontology.naas.ai/abi/given_name",
+        "has_skill": "http://ontology.naas.ai/abi/hasSkill",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "last_name": "http://ontology.naas.ai/abi/last_name",
     }
-    _object_properties: ClassVar[set[str]] = set()
+    _object_properties: ClassVar[set[str]] = {"has_skill"}
 
     # Data properties
     first_name: (
@@ -348,6 +351,24 @@ class Person(RDFEntity):
         ]
         | None
     ) = None
+    given_name: (
+        Annotated[
+            str,
+            Field(
+                description="x given name y =Def x is a person & y is a string & y is the given name of x"
+            ),
+        ]
+        | None
+    ) = None
+    date_of_birth: (
+        Annotated[
+            datetime.date,
+            Field(
+                description="x date of birth y =Def x is a person & y is the date on which x was born"
+            ),
+        ]
+        | None
+    ) = None
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
     created: Annotated[
         datetime.datetime | None,
@@ -357,6 +378,17 @@ class Person(RDFEntity):
         Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
+
+    # Object properties
+    has_skill: (
+        Annotated[
+            URIRef | str,
+            Field(
+                description="A relation between a person and a professional skill they possess."
+            ),
+        ]
+        | None
+    ) = None
 
 
 # Rebuild models to resolve forward references

@@ -1,4 +1,4 @@
-from naas_abi_marketplace.domains.intelligence.modules.organizations.ontologies.processes.OrganizationAllianceProcess import (
+from naas_abi_marketplace.domains.intelligence.modules.organizations.ontologies.processes.ActOfMarketingAllianceProcess import (
     MarketingAlliance as _MarketingAlliance,
 )
 

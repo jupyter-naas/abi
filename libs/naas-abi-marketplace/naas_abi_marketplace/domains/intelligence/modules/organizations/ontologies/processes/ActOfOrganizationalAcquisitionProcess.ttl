@@ -1,0 +1,74 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+
+abi:ActOfOrganizationalAcquisitionProcess a owl:Ontology ;
+  # Slice: the act and the document that records it. Shared vocabulary
+  # (StrategicAlliance, participant and record properties,
+  # OrganizationalAgreementRole) lives in the module OrganizationOntology,
+  # which this slice does NOT import (the module consolidates this file).
+  #
+  # Seven-bucket mapping for one organizational acquisition:
+  #   WHO          Organization (the acquirer and the acquired, directional)
+  #   WHAT         ActOfOrganizationalAcquisition (the process itself)
+  #   WHEN         TemporalRegion, from the agreement's effective date to its end
+  #   WHERE        GeospatialRegion (Site - the country, region or city the act occurs in)
+  #   WHY          OrganizationalAgreementRole (SDC) - the role each party bears under the agreement
+  #   HOW IT IS    not stated: no quality is specific to this act
+  #   HOW WE KNOW  OrganizationAcquisition (the restructuring record, a descriptive ICE)
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/GeospatialRegionOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/organizations/OrganizationOntology> ;
+  abi:pythonPackage "naas_abi_marketplace.domains.intelligence.modules.organizations" ;
+  abi:ontologyResource "ontologies/processes/ActOfOrganizationalAcquisitionProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/ActOfOrganizationalAcquisitionProcess.py" ;
+  dc:title "Act of Organizational Acquisition Process Ontology"@en ;
+  dc:description "Process slice for the act of organizational acquisition: a CCO Planned Act with organizations as participants, occurring in a geospatial region over a temporal region, realizing the agreement roles the parties bear, and documented by its organization acquisition record."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Process slice for Act of Organizational Acquisition. Reuses the shared organization vocabulary."@en ;
+  dc11:contributor "Florent Ravenel", "Alice Dupont", "Emma Petit", "Grace Lambert" ;
+  dc11:date "2026-10-05"^^xsd:date .
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfOrganizationalAcquisition a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasAcquiringOrganization ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasAcquiredOrganization ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:OrganizationalAgreementRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasRestructuringRecord ; owl:someValuesFrom abi:OrganizationAcquisition ] ;
+  rdfs:label "Act of Organizational Acquisition"@en ;
+  skos:definition "An Act of Possession in which one organization gains control over another organization, acquiring its assets, operations, and management to expand its operations or market share."@en ;
+  skos:example "Company X acquires Company Y, taking control of its operations and integrating Company Y's products into its own product line."@en ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:OrganizationAcquisition a owl:Class ;
+  rdfs:subClassOf cco:ont00000853 ; # Descriptive Information Content Entity
+  rdfs:label "Organization Acquisition"@en ;
+  skos:definition "Details a planned act in which one organization gains control over another organization, acquiring its assets, operations, and management to expand its operations or market share."@en ;
+  skos:example "Company X acquires Company Y, taking control of its operations and integrating Company Y's products into its own product line."@en ;
+  rdfs:comment "An organization acquisition is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW IT IS
+#################################################################

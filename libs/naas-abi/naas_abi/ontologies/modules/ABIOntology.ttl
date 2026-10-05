@@ -12,8 +12,7 @@
 abi:Ontology a owl:Ontology ;
   owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl> ,
   <https://www.commoncoreontologies.org/AgentOntology> ,
-  <https://www.commoncoreontologies.org/InformationEntityOntology> ,
-  <https://www.commoncoreontologies.org/GeospatialOntology> ;
+  <https://www.commoncoreontologies.org/InformationEntityOntology> ;
   dc:title "ABI Ontology"@en ;
   dc:description "Ontology for the ABI"@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
@@ -191,21 +190,6 @@ abi:Site a owl:Class ;
     skos:example "A hole in a portion of cheese; a rabbit hole; the Grand Canyon; the Piazza San Marco; the kangaroo-joey-containing hole of a kangaroo pouch; your left nostril (a fiat part - the opening - of your left nasal cavity); the lumen of your gut; the hold of a ship; the interior of the trunk of your car; hole in an engineered floor joist"@en ;
     rdfs:subClassOf bfo:BFO_0000141 .
 
-# Geospatial position (WHERE, as a point)
-# A point has no volume, so it is not a site and nothing occurs in it: a
-# process occurs in a site, and a geospatial position located in that site
-# pins it down with coordinates.
-abi:GeospatialPosition a owl:Class ;
-    owl:equivalentClass cco:ont00000373 ;
-    rdfs:label "geospatial position"@en ;
-    skos:definition "A Fiat Point that is at or near the surface of the Earth and fixed according to some Geospatial Coordinate Reference System."@en ;
-    skos:example "The point at latitude 48.8738, longitude 2.2950 (WGS 84), located in the site of an office building on avenue Kléber, Paris"@en ;
-    rdfs:subClassOf bfo:BFO_0000147 ,
-        [ a owl:Restriction ;
-          owl:onProperty abi:locatedIn ;
-          owl:allValuesFrom abi:Site
-        ] .
-
 # Generically dependent continuant / ICE (HOW WE KNOW)
 abi:GenericallyDependentContinuant a owl:Class ;
     owl:equivalentClass bfo:BFO_0000031 ;
@@ -361,21 +345,3 @@ abi:TemporalInstant a owl:Class ;
     rdfs:label "temporal instant"@en ;
     skos:definition "(Elucidation) A temporal instant is a zero-dimensional temporal region that has no proper temporal part."@en ;
     rdfs:subClassOf abi:TemporalRegion .
-
-#################################################################
-# Data Properties
-#################################################################
-
-abi:latitude a owl:DatatypeProperty ;
-    rdfs:subPropertyOf cco:ont00001766 ;
-    rdfs:label "latitude"@en ;
-    skos:definition "x latitude y =Def x is a geospatial position & y is the latitude of x in decimal degrees (WGS 84 unless stated otherwise), from -90 to 90"@en ;
-    rdfs:domain abi:GeospatialPosition ;
-    rdfs:range xsd:decimal .
-
-abi:longitude a owl:DatatypeProperty ;
-    rdfs:subPropertyOf cco:ont00001764 ;
-    rdfs:label "longitude"@en ;
-    skos:definition "x longitude y =Def x is a geospatial position & y is the longitude of x in decimal degrees (WGS 84 unless stated otherwise), from -180 to 180"@en ;
-    rdfs:domain abi:GeospatialPosition ;
-    rdfs:range xsd:decimal .

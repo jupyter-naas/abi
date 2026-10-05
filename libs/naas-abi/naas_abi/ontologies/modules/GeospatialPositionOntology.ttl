@@ -1,0 +1,61 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+abi:GeospatialPositionOntology a owl:Ontology ;
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <https://www.commoncoreontologies.org/GeospatialOntology> ;
+  dc:title "Geospatial Position Ontology"@en ;
+  dc:description "Geospatial positions (CCO Geospatial Position) and their latitude and longitude."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "WHERE, as a point: a fiat point at or near the surface of the Earth, fixed by coordinates and located in a site. Aligned with the Common Core Ontologies Geospatial Ontology."@en ;
+  rdfs:seeAlso <https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi/naas_abi/ontologies/modules/GeospatialPositionOntology.ttl> ;
+  abi:pythonPackage "naas_abi" ;
+  abi:ontologyResource "ontologies/modules/GeospatialPositionOntology.ttl" ;
+  abi:pythonResource "ontologies/modules/GeospatialPositionOntology.py" ;
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-10-05"^^xsd:date .
+
+#################################################################
+# Classes
+#################################################################
+
+# Geospatial position (WHERE, as a point)
+# A point has no volume, so it is not a site and nothing occurs in it: a
+# process occurs in a site, and a geospatial position located in that site
+# pins it down with coordinates.
+abi:GeospatialPosition a owl:Class ;
+    owl:equivalentClass cco:ont00000373 ;
+    rdfs:label "geospatial position"@en ;
+    skos:definition "A Fiat Point that is at or near the surface of the Earth and fixed according to some Geospatial Coordinate Reference System."@en ;
+    skos:example "The point at latitude 48.8738, longitude 2.2950 (WGS 84), located in the site of an office building on avenue Kléber, Paris"@en ;
+    rdfs:subClassOf bfo:BFO_0000147 ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:locatedIn ;
+          owl:allValuesFrom abi:Site
+        ] .
+
+#################################################################
+# Data Properties
+#################################################################
+
+abi:latitude a owl:DatatypeProperty ;
+    rdfs:subPropertyOf cco:ont00001766 ;
+    rdfs:label "latitude"@en ;
+    skos:definition "x latitude y =Def x is a geospatial position & y is the latitude of x in decimal degrees (WGS 84 unless stated otherwise), from -90 to 90"@en ;
+    rdfs:domain abi:GeospatialPosition ;
+    rdfs:range xsd:decimal .
+
+abi:longitude a owl:DatatypeProperty ;
+    rdfs:subPropertyOf cco:ont00001764 ;
+    rdfs:label "longitude"@en ;
+    skos:definition "x longitude y =Def x is a geospatial position & y is the longitude of x in decimal degrees (WGS 84 unless stated otherwise), from -180 to 180"@en ;
+    rdfs:domain abi:GeospatialPosition ;
+    rdfs:range xsd:decimal .

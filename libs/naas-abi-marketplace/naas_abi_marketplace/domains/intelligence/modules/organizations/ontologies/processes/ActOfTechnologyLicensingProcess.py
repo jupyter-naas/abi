@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 0d72fcb63c3bf338a0cb2c15b860f9efa2f41b5cefda149d340a37677d10f851
+# onto2py-source-sha256: d06392abd7f684875dd0592f365cf46ae0527f9c934e81c4f928b198b1be5ae0
 from __future__ import annotations
 
 import contextlib
@@ -15,9 +15,13 @@ from typing import (
     get_origin,
 )
 
-from naas_abi_marketplace.domains.intelligence.modules.organizations.ontologies.modules.OrganizationOntology import (
-    Organization,
+from naas_abi.ontologies.modules.ABIOntology import (
+    TemporalRegion,
 )
+from naas_abi.ontologies.modules.GeospatialRegionOntology import (
+    GeospatialRegion,
+)
+from naas_abi.ontologies.modules.OrganizationOntology import Organization
 from pydantic import BaseModel, Field, ValidationError
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, XSD
@@ -306,63 +310,29 @@ class RDFEntity(BaseModel):
         return g
 
 
-class ActOfOrganizationalMerger(RDFEntity):
+class ActOfTechnologyLicensing(RDFEntity):
     """
-    Act of Organizational Merger
+    Act of Technology Licensing
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/ActOfOrganizationalMerger"
-    _name: ClassVar[str] = "Act of Organizational Merger"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/ActOfTechnologyLicensing"
+    _name: ClassVar[str] = "Act of Technology Licensing"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_merging_organization": "http://ontology.naas.ai/abi/hasMergingOrganization",
+        "hasAllianceAgreement": "http://ontology.naas.ai/abi/hasAllianceAgreement",
+        "hasAllianceParticipant": "http://ontology.naas.ai/abi/hasAllianceParticipant",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {"has_merging_organization"}
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    has_merging_organization: (
-        Annotated[
-            list[Organization | URIRef | str],
-            Field(
-                description="Relates an act of merger to one of the organizations uniting in it. Symmetric in role: no participant is privileged, which is exactly what distinguishes a merger from an acquisition."
-            ),
-        ]
-        | None
-    ) = None
-
-
-class ActOfOrganizationalAcquisition(RDFEntity):
-    """
-    Act of Organizational Acquisition
-    """
-
-    _class_uri: ClassVar[str] = (
-        "http://ontology.naas.ai/abi/ActOfOrganizationalAcquisition"
-    )
-    _name: ClassVar[str] = "Act of Organizational Acquisition"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_acquired_organization": "http://ontology.naas.ai/abi/hasAcquiredOrganization",
-        "has_acquiring_organization": "http://ontology.naas.ai/abi/hasAcquiringOrganization",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "occupiesTemporalRegion": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+        "occursIn": "http://ontology.naas.ai/abi/occursIn",
+        "realizes": "http://ontology.naas.ai/abi/realizes",
     }
     _object_properties: ClassVar[set[str]] = {
-        "has_acquired_organization",
-        "has_acquiring_organization",
+        "hasAllianceAgreement",
+        "hasAllianceParticipant",
+        "occupiesTemporalRegion",
+        "occursIn",
+        "realizes",
     }
 
     # Data properties
@@ -377,91 +347,26 @@ class ActOfOrganizationalAcquisition(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
-    has_acquired_organization: (
-        Annotated[
-            list[Organization | URIRef | str],
-            Field(
-                description="Relates an act of acquisition to the organization whose assets, operations and management pass under the acquirer's control."
-            ),
-        ]
-        | None
+    hasAllianceAgreement: (
+        Annotated[list[TechnologyLicensing | URIRef | str], Field()] | None
     ) = None
-    has_acquiring_organization: (
-        Annotated[
-            list[Organization | URIRef | str],
-            Field(
-                description="Relates an act of acquisition to the organization gaining control. Kept distinct from abi:hasAcquiredOrganization so that 'who bought whom' is answerable."
-            ),
-        ]
-        | None
+    hasAllianceParticipant: (
+        Annotated[list[Organization | URIRef | str], Field()] | None
     ) = None
+    occupiesTemporalRegion: (
+        Annotated[list[TemporalRegion | URIRef | str], Field()] | None
+    ) = None
+    occursIn: Annotated[list[GeospatialRegion | URIRef | str], Field()] | None = None
+    realizes: Annotated[URIRef | str, Field()] | None = None
 
 
-class ActOfSubsidiaryEstablishment(RDFEntity):
+class TechnologyLicensing(RDFEntity):
     """
-    Act of Subsidiary Establishment
-    """
-
-    _class_uri: ClassVar[str] = (
-        "http://ontology.naas.ai/abi/ActOfSubsidiaryEstablishment"
-    )
-    _name: ClassVar[str] = "Act of Subsidiary Establishment"
-    _property_uris: ClassVar[dict] = {
-        "bFO_0000057": "http://purl.obolibrary.org/obo/BFO_0000057",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {"bFO_0000057"}
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    bFO_0000057: Annotated[list[Organization | URIRef | str], Field()] | None = None
-
-
-class OrganizationMerger(RDFEntity):
-    """
-    A merger is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity.
+    A technology licensing is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity.
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/OrganizationMerger"
-    _name: ClassVar[str] = "Organization Merger"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = set()
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-
-class OrganizationAcquisition(RDFEntity):
-    """
-    An organization acquisition is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity.
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/OrganizationAcquisition"
-    _name: ClassVar[str] = "Organization Acquisition"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/TechnologyLicensing"
+    _name: ClassVar[str] = "Technology Licensing"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
@@ -482,8 +387,5 @@ class OrganizationAcquisition(RDFEntity):
 
 
 # Rebuild models to resolve forward references
-ActOfOrganizationalMerger.model_rebuild()
-ActOfOrganizationalAcquisition.model_rebuild()
-ActOfSubsidiaryEstablishment.model_rebuild()
-OrganizationMerger.model_rebuild()
-OrganizationAcquisition.model_rebuild()
+ActOfTechnologyLicensing.model_rebuild()
+TechnologyLicensing.model_rebuild()

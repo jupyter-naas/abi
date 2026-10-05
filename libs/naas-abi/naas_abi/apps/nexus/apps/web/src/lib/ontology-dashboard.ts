@@ -106,12 +106,26 @@ export function dashboardTerms(tiles: DashboardTile[]) {
   return [...new Map(tiles.flatMap(tile => tile.terms).map(term => [termKey(term), term])).values()];
 }
 
-/** Tile drill-down changes the dashboard selection, preserving accumulated sidebar filters. */
+/**
+ * Tile drill-down changes the dashboard selection and selects that ontology in
+ * the sidebar file picker, so both show the same file. Leaving the drill-down
+ * clears that selection only while it still mirrors the file: a selection the
+ * user changed in the sidebar meanwhile is kept. Other sidebar filters are kept.
+ */
 export function dashboardRoute(query: string, file?: string) {
   const params = new URLSearchParams(query);
   params.set('view', 'overview');
   params.delete('dashboardType');
   ['term', 'termType', 'system', 'subsystem', 'process'].forEach(key => params.delete(key));
-  if (file) params.set('dashboardFile', file); else params.delete('dashboardFile');
+  const previous = params.get('dashboardFile');
+  const selected = params.getAll('dictionaryFile');
+  if (file) {
+    params.set('dashboardFile', file);
+    params.delete('dictionaryFile');
+    params.append('dictionaryFile', file);
+  } else {
+    params.delete('dashboardFile');
+    if (previous && selected.length === 1 && selected[0] === previous) params.delete('dictionaryFile');
+  }
   return params;
 }

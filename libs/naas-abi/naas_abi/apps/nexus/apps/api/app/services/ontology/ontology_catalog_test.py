@@ -74,6 +74,19 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await service.workspace_dictionary([]))["ontologies"], [])
             self.assertEqual(await service.list_ontology_files(catalog_refs=[]), [])
 
+    async def test_a_moved_or_broken_file_is_skipped_not_fatal(self):
+        # The module lists its files at boot: a file moved or deleted since,
+        # or one that no longer parses, must not hide every other ontology.
+        with TemporaryDirectory() as directory:
+            root = Path(directory) / "example" / "ontologies" / "modules"
+            root.mkdir(parents=True)
+            good = root / "Good.ttl"
+            good.write_text('@prefix owl: <http://www.w3.org/2002/07/owl#> .\n<urn:good> a owl:Ontology .\n')
+            broken = root / "Broken.ttl"
+            broken.write_text("this is not turtle")
+            files = await service_for([root / "Moved.ttl", broken, good]).list_ontology_files()
+            self.assertEqual([Path(item.path).name for item in files], ["Good.ttl"])
+
     async def test_dictionary_entities_carry_bfo_bucket_through_imports(self):
         # Neither class names a BFO root in the workspace file: the bucket is
         # only reachable through the bundled CCO import (Planned Act -> process)

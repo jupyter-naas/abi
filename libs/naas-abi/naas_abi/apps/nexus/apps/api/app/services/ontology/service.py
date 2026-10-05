@@ -1009,8 +1009,14 @@ class OntologyService:
                 if catalog_refs is not None and not ontology_matches_seed(ontology, module_name, catalog_refs):
                     continue
 
+                # The module lists its files at boot: one moved, deleted or broken
+                # since is skipped, so it cannot hide every other ontology.
                 ontology_graph = Graph()
-                ontology_graph.parse(ontology, format="turtle")
+                try:
+                    ontology_graph.parse(ontology, format="turtle")
+                except Exception as exc:
+                    logger.warning(f"Skipping unreadable ontology file {ontology}: {exc}")
+                    continue
 
                 ontology_uri = next(ontology_graph.subjects(RDF.type, OWL.Ontology), None)
                 if ontology_uri is None:
