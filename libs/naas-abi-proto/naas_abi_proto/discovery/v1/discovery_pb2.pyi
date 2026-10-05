@@ -57,45 +57,63 @@ class Dependency(_message.Message):
     contract_major: int
     def __init__(self, module_id: _Optional[str] = ..., contract_major: _Optional[int] = ...) -> None: ...
 
+class ModelDescriptor(_message.Message):
+    __slots__ = ("name", "description", "kind")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    description: str
+    kind: str
+    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., kind: _Optional[str] = ...) -> None: ...
+
 class ModuleDescriptor(_message.Message):
-    __slots__ = ("module_id", "package_version", "contract_major", "dependencies", "agents", "jobs")
+    __slots__ = ("module_id", "package_version", "contract_major", "dependencies", "agents", "jobs", "models")
     MODULE_ID_FIELD_NUMBER: _ClassVar[int]
     PACKAGE_VERSION_FIELD_NUMBER: _ClassVar[int]
     CONTRACT_MAJOR_FIELD_NUMBER: _ClassVar[int]
     DEPENDENCIES_FIELD_NUMBER: _ClassVar[int]
     AGENTS_FIELD_NUMBER: _ClassVar[int]
     JOBS_FIELD_NUMBER: _ClassVar[int]
+    MODELS_FIELD_NUMBER: _ClassVar[int]
     module_id: str
     package_version: str
     contract_major: int
     dependencies: _containers.RepeatedCompositeFieldContainer[Dependency]
     agents: _containers.RepeatedCompositeFieldContainer[AgentDescriptor]
     jobs: _containers.RepeatedCompositeFieldContainer[JobDescriptor]
-    def __init__(self, module_id: _Optional[str] = ..., package_version: _Optional[str] = ..., contract_major: _Optional[int] = ..., dependencies: _Optional[_Iterable[_Union[Dependency, _Mapping]]] = ..., agents: _Optional[_Iterable[_Union[AgentDescriptor, _Mapping]]] = ..., jobs: _Optional[_Iterable[_Union[JobDescriptor, _Mapping]]] = ...) -> None: ...
+    models: _containers.RepeatedCompositeFieldContainer[ModelDescriptor]
+    def __init__(self, module_id: _Optional[str] = ..., package_version: _Optional[str] = ..., contract_major: _Optional[int] = ..., dependencies: _Optional[_Iterable[_Union[Dependency, _Mapping]]] = ..., agents: _Optional[_Iterable[_Union[AgentDescriptor, _Mapping]]] = ..., jobs: _Optional[_Iterable[_Union[JobDescriptor, _Mapping]]] = ..., models: _Optional[_Iterable[_Union[ModelDescriptor, _Mapping]]] = ...) -> None: ...
 
 class Instance(_message.Message):
-    __slots__ = ("descriptor", "instance_id", "status", "expires_at")
+    __slots__ = ("descriptor", "instance_id", "status", "expires_at", "rollout_id")
     DESCRIPTOR_FIELD_NUMBER: _ClassVar[int]
     INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
     EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    ROLLOUT_ID_FIELD_NUMBER: _ClassVar[int]
     descriptor: ModuleDescriptor
     instance_id: str
     status: str
     expires_at: float
-    def __init__(self, descriptor: _Optional[_Union[ModuleDescriptor, _Mapping]] = ..., instance_id: _Optional[str] = ..., status: _Optional[str] = ..., expires_at: _Optional[float] = ...) -> None: ...
+    rollout_id: str
+    def __init__(self, descriptor: _Optional[_Union[ModuleDescriptor, _Mapping]] = ..., instance_id: _Optional[str] = ..., status: _Optional[str] = ..., expires_at: _Optional[float] = ..., rollout_id: _Optional[str] = ...) -> None: ...
 
 class RegisterRequest(_message.Message):
-    __slots__ = ("context", "descriptor", "instance_id", "lease_token")
+    __slots__ = ("context", "descriptor", "instance_id", "lease_token", "rollout_id", "rollout_modules")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTOR_FIELD_NUMBER: _ClassVar[int]
     INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
     LEASE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    ROLLOUT_ID_FIELD_NUMBER: _ClassVar[int]
+    ROLLOUT_MODULES_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     descriptor: ModuleDescriptor
     instance_id: str
     lease_token: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., descriptor: _Optional[_Union[ModuleDescriptor, _Mapping]] = ..., instance_id: _Optional[str] = ..., lease_token: _Optional[str] = ...) -> None: ...
+    rollout_id: str
+    rollout_modules: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., descriptor: _Optional[_Union[ModuleDescriptor, _Mapping]] = ..., instance_id: _Optional[str] = ..., lease_token: _Optional[str] = ..., rollout_id: _Optional[str] = ..., rollout_modules: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class RegisterResponse(_message.Message):
     __slots__ = ("error", "instance", "lease_seconds")
@@ -202,18 +220,24 @@ class EvictResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., instance: _Optional[_Union[Instance, _Mapping]] = ...) -> None: ...
 
 class RegistryRecord(_message.Message):
-    __slots__ = ("instance", "owner", "lease_hash", "initialized", "draining")
+    __slots__ = ("instance", "owner", "lease_hash", "initialized", "draining", "rollout_id", "registered_at", "rollout_modules")
     INSTANCE_FIELD_NUMBER: _ClassVar[int]
     OWNER_FIELD_NUMBER: _ClassVar[int]
     LEASE_HASH_FIELD_NUMBER: _ClassVar[int]
     INITIALIZED_FIELD_NUMBER: _ClassVar[int]
     DRAINING_FIELD_NUMBER: _ClassVar[int]
+    ROLLOUT_ID_FIELD_NUMBER: _ClassVar[int]
+    REGISTERED_AT_FIELD_NUMBER: _ClassVar[int]
+    ROLLOUT_MODULES_FIELD_NUMBER: _ClassVar[int]
     instance: Instance
     owner: str
     lease_hash: str
     initialized: bool
     draining: bool
-    def __init__(self, instance: _Optional[_Union[Instance, _Mapping]] = ..., owner: _Optional[str] = ..., lease_hash: _Optional[str] = ..., initialized: bool = ..., draining: bool = ...) -> None: ...
+    rollout_id: str
+    registered_at: float
+    rollout_modules: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, instance: _Optional[_Union[Instance, _Mapping]] = ..., owner: _Optional[str] = ..., lease_hash: _Optional[str] = ..., initialized: bool = ..., draining: bool = ..., rollout_id: _Optional[str] = ..., registered_at: _Optional[float] = ..., rollout_modules: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class RegistryState(_message.Message):
     __slots__ = ("records",)
@@ -238,6 +262,30 @@ class AuthorizeAgentRequest(_message.Message):
     def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., instance_id: _Optional[str] = ..., lease_token: _Optional[str] = ..., agent_name: _Optional[str] = ..., caller_token: _Optional[str] = ..., new_invocation: bool = ...) -> None: ...
 
 class AuthorizeAgentResponse(_message.Message):
+    __slots__ = ("error", "caller_identity", "caller_admin")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    CALLER_IDENTITY_FIELD_NUMBER: _ClassVar[int]
+    CALLER_ADMIN_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    caller_identity: str
+    caller_admin: bool
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., caller_identity: _Optional[str] = ..., caller_admin: bool = ...) -> None: ...
+
+class AuthorizeModelRequest(_message.Message):
+    __slots__ = ("context", "instance_id", "lease_token", "model_name", "caller_token")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
+    LEASE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    MODEL_NAME_FIELD_NUMBER: _ClassVar[int]
+    CALLER_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    instance_id: str
+    lease_token: str
+    model_name: str
+    caller_token: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., instance_id: _Optional[str] = ..., lease_token: _Optional[str] = ..., model_name: _Optional[str] = ..., caller_token: _Optional[str] = ...) -> None: ...
+
+class AuthorizeModelResponse(_message.Message):
     __slots__ = ("error", "caller_identity", "caller_admin")
     ERROR_FIELD_NUMBER: _ClassVar[int]
     CALLER_IDENTITY_FIELD_NUMBER: _ClassVar[int]

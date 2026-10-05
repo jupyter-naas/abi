@@ -27,6 +27,15 @@ class AgentDescriptor:
 
 
 @dataclass(frozen=True)
+class ModelDescriptor:
+    """A chat model served by this module. Inference stays in its process."""
+
+    name: str
+    description: str = ""
+    kind: str = "chat"
+
+
+@dataclass(frozen=True)
 class ModuleInstance:
     module_id: str
     instance_id: str
@@ -38,6 +47,7 @@ class ModuleInstance:
     jobs: tuple[Any, ...] = ()
     # (module_id, contract_major) of each required module.
     dependencies: tuple[tuple[str, int], ...] = ()
+    models: tuple[ModelDescriptor, ...] = ()
 
 
 def _instance(value: pb.Instance) -> ModuleInstance:
@@ -57,6 +67,7 @@ def _instance(value: pb.Instance) -> ModuleInstance:
         ),
         _jobs(d),
         tuple((x.module_id, x.contract_major) for x in d.dependencies),
+        tuple(ModelDescriptor(m.name, m.description, m.kind) for m in d.models),
     )
 
 
@@ -66,11 +77,25 @@ def _jobs(descriptor: pb.ModuleDescriptor) -> tuple[Any, ...]:
     return tuple(JobDescriptor.from_pb(j) for j in descriptor.jobs)
 
 
+_ROLLOUT_ID = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,127}")
+
+
+def validate_rollout_id(value: str) -> str:
+    if value and not _ROLLOUT_ID.fullmatch(value):
+        raise ValueError("Invalid rollout id")
+    return value
+
+
 @dataclass(frozen=True)
 class DiscoveryConfiguration:
     project: str = "default"
     startup_timeout: float = 60
     refresh_seconds: float = 2
+    # Shared by every process that must cut over together. Empty is not a rollout.
+    rollout_id: str = ""
+    # Module ids required before this rollout replaces the previous one.
+    # Empty with a rollout id means this module alone.
+    rollout_modules: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", self.project):
@@ -80,6 +105,18 @@ class DiscoveryConfiguration:
             for v in (self.startup_timeout, self.refresh_seconds)
         ):
             raise ValueError("Discovery timeouts must be finite and positive")
+        validate_rollout_id(self.rollout_id)
+        if self.rollout_modules and not self.rollout_id:
+            raise ValueError("Rollout modules require a rollout id")
+        if len(self.rollout_modules) > 64 or len(set(self.rollout_modules)) != len(
+            self.rollout_modules
+        ):
+            raise ValueError("Invalid rollout modules")
+        if any(
+            not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,255}", module_id)
+            for module_id in self.rollout_modules
+        ):
+            raise ValueError("Invalid rollout modules")
 
 
 class DiscoveryClient:
@@ -146,6 +183,41 @@ class ModuleProxy:
                 "MODULE_UNAVAILABLE", f"{self.module_id} has no ready instances"
             )
         return ready
+
+    async def get_chat_model(self, name: str):
+        """A LangChain chat model served by a ready instance of this module."""
+        from naas_abi_proto.model_registry.v1 import model_registry_pb2 as model_pb
+
+        from naas_abi_sdk.model_host import ModuleModelClient, model_subject
+        from naas_abi_sdk.models import (
+            ChatModelProxy,
+            RemoteModel,
+            UnaryModelConnection,
+        )
+
+        eligible = [
+            instance
+            for instance in await self.ready_instances()
+            if any(
+                model.name == name and model.kind == "chat" for model in instance.models
+            )
+        ]
+        if not eligible:
+            raise RPCError("MODEL_NOT_FOUND", name)
+        target = eligible[0]
+        ref = model_pb.ModelRef(canonical_id=name, provider=self.module_id, kind="chat")
+        proxy = ChatModelProxy(
+            connection=UnaryModelConnection(
+                ModuleModelClient(
+                    self.client.transport,
+                    model_subject(self.client.project, target.instance_id, name),
+                )
+            ),
+            ref=ref,
+            model_id=name,
+            provider=self.module_id,
+        )
+        return RemoteModel(name, name, self.module_id, proxy, "chat", name, None, {})
 
     async def get_agent(self, name: str):
         from naas_abi_sdk.agent import AgentProxy
@@ -220,8 +292,17 @@ class ModulesProxy:
 
 
 class DiscoverySession:
-    def __init__(self, client: DiscoveryClient, descriptor: pb.ModuleDescriptor):
+    def __init__(
+        self,
+        client: DiscoveryClient,
+        descriptor: pb.ModuleDescriptor,
+        rollout_id: str = "",
+        rollout_modules: tuple[str, ...] = (),
+    ):
+        validate_rollout_id(rollout_id)
         self.client, self.descriptor = client, descriptor
+        self.rollout_id = rollout_id
+        self.rollout_modules = tuple(rollout_modules)
         self.instance_id, self.lease_token = str(uuid4()), uuid4().hex
         self.initialized, self.draining = False, False
         self.lease_seconds, self.confirmed_until = 20.0, 0.0
@@ -230,6 +311,8 @@ class DiscoverySession:
         self.status = "STARTING"
         self.on_registered = None
         self._bound = True
+        # Set when this process should stop accepting work and finish what it has.
+        self.drain_requested = asyncio.Event()
 
     @property
     def current_status(self) -> str:
@@ -243,6 +326,8 @@ class DiscoverySession:
                 descriptor=self.descriptor,
                 instance_id=self.instance_id,
                 lease_token=self.lease_token,
+                rollout_id=self.rollout_id,
+                rollout_modules=self.rollout_modules,
             ),
             pb.RegisterResponse,
         )
@@ -277,6 +362,9 @@ class DiscoverySession:
             self.lease_seconds = result.lease_seconds
             self.confirmed_until = started + result.lease_seconds
             self.status = result.instance.status
+            if self.status == "DRAINING":
+                self.draining = True
+                self.drain_requested.set()
 
     def _heartbeat_delay(self, failures: int) -> float:
         delay = min(30, min(5, self.lease_seconds / 4) * 2 ** min(failures, 3))
@@ -375,4 +463,8 @@ def module_descriptor(
             for a in module_type.agents
         ],
         jobs=[j.to_pb() for j in getattr(module_type, "jobs", ())],
+        models=[
+            pb.ModelDescriptor(name=m.name, description=m.description, kind=m.kind)
+            for m in getattr(module_type, "models", ())
+        ],
     )

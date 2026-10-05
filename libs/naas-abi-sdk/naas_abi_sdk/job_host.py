@@ -150,8 +150,10 @@ class JobHost:
         self._interrupted: set[str] = set()
         self._tasks: set[asyncio.Task] = set()
         self._loops: list[asyncio.Task] = []
+        self._consumers: list[asyncio.Task] = []
         self._subscriptions: list[Any] = []
         self._closing = False
+        self._draining = False
 
     def _subjects(self, descriptor: JobDescriptor):
         return job_subjects(self.project, self.module_id, descriptor.name)
@@ -202,7 +204,7 @@ class JobHost:
             sub = await js.pull_subscribe_bind(
                 durable=subjects.consumer, stream=stream_name(self.project)
             )
-            self._loops.append(
+            self._consumers.append(
                 asyncio.create_task(self._consume(sub, descriptor, handler))
             )
         if cancel_subject:
@@ -212,11 +214,29 @@ class JobHost:
         if self.handlers:
             self._loops.append(asyncio.create_task(self._upkeep()))
 
+    async def drain(self, timeout: float) -> None:
+        """Stop pulling new jobs. Runs already started continue until timeout."""
+        self._draining = True
+        for loop in self._consumers:
+            loop.cancel()
+        await asyncio.gather(*self._consumers, return_exceptions=True)
+        self._consumers.clear()
+        for subscription in self._subscriptions:
+            with contextlib.suppress(Exception):
+                await subscription.unsubscribe()
+        self._subscriptions.clear()
+        if self._tasks:
+            await asyncio.wait(set(self._tasks), timeout=timeout)
+
     async def close(self) -> None:
         self._closing = True
-        for loop in self._loops:
+        self._draining = True
+        loops = [*self._consumers, *self._loops]
+        for loop in loops:
             loop.cancel()
-        await asyncio.gather(*self._loops, return_exceptions=True)
+        await asyncio.gather(*loops, return_exceptions=True)
+        self._consumers.clear()
+        self._loops.clear()
         for subscription in self._subscriptions:
             with contextlib.suppress(Exception):
                 await subscription.unsubscribe()
@@ -250,7 +270,7 @@ class JobHost:
         from nats.errors import TimeoutError as NATSTimeoutError
 
         slots = asyncio.Semaphore(descriptor.max_concurrency)
-        while not self._closing:
+        while not self._closing and not self._draining:
             await slots.acquire()
             try:
                 messages = await sub.fetch(1, timeout=self.fetch_timeout_seconds)
@@ -357,6 +377,8 @@ class JobHost:
         self, js: Any, descriptor: JobDescriptor, trigger: OnEvent
     ) -> Any:
         async def on_event(msg: Any) -> None:
+            if self._draining or self._closing:
+                return
             self._spawn(self.bridge_event(js, descriptor, msg, trigger))
 
         return on_event

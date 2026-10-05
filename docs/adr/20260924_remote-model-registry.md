@@ -72,3 +72,22 @@ Existing shared-trust service JWT and broker ACL limitations still apply.
 - No migration of model credentials, agent graphs, or conversation checkpoints.
 - The standalone demo covers all seven RPCs with its four-package raw worker,
   and a separate core-free `[models]` environment exercises LangChain proxies.
+
+## Module-served chat models (2026-10-05)
+
+A module may publish a chat model and another module may call it. This does
+not move engine model registration.
+
+- The module declares `models = (ModelDescriptor(name, kind="chat"),)` and binds
+  `expose_model(name, handler)` before it becomes ready. `handler.invoke`
+  receives LangChain messages and returns text. A handler that accepts
+  `tools` and `tool_options` may return an `AIMessage` with tool calls. The
+  caller's agent executes those tools. Discovery stores the descriptor.
+  Replicas must declare the same models.
+- A caller with that module as a dependency uses
+  `(await engine.modules[id].get_chat_model(name)).model`. The call is one
+  unary `ChatRequest` to `abi.mod.<project>.<instance>.model.<name>.chat` on a
+  ready instance. The provider checks the caller with `authorize_model`.
+- Streaming is refused. Tool schemas and tool-call replies are carried on the
+  unary chat request. Engine `model_registry` defaults are unchanged. Both
+  sides need the SDK `[models]` extra.

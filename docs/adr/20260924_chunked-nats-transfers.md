@@ -24,7 +24,9 @@ Downloads have two queued packets per session. Defaults are 64 KiB chunks
 60 seconds idle expiry. A configured total-upload cap is optional, defaulting to
 none. Polling refreshes activity while waiting for a model's first or next token.
 Short exchange timeouts do not bound total generation. Optional model execution
-deadlines are configured separately; remote agents also default to no deadline.
+deadlines are configured separately. Remote agent deadlines are set in
+`docs/adr/20260923_remote-agent-proxy.md` (300 seconds when the caller omits
+`timeout`, as of 2026-10-05).
 
 Object byte APIs collect or split chunks internally; stream APIs use bounded
 reads. Model messages, histories, tools, outputs and embeddings use fragmented

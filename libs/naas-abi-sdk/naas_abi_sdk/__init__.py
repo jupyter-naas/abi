@@ -17,7 +17,11 @@ if TYPE_CHECKING:
         SubmissionUncertain,
     )
     from naas_abi_sdk.client import ABIClient
-    from naas_abi_sdk.discovery import AgentDescriptor, DiscoveryConfiguration
+    from naas_abi_sdk.discovery import (
+        AgentDescriptor,
+        DiscoveryConfiguration,
+        ModelDescriptor,
+    )
     from naas_abi_sdk.module import (
         BaseModule,
         ModuleConfiguration,
@@ -36,6 +40,7 @@ _EXPORTS = {
     "DiscoveryConfiguration": "naas_abi_sdk.discovery",
     "InvocationHandle": "naas_abi_sdk.agent",
     "ModuleConfiguration": "naas_abi_sdk.module",
+    "ModelDescriptor": "naas_abi_sdk.discovery",
     "ModuleDependencies": "naas_abi_sdk.module",
     "RPCError": "naas_abi_sdk.transport",
     "SubmissionUncertain": "naas_abi_sdk.agent",
@@ -51,6 +56,7 @@ __all__ = [
     "BaseModule",
     "DiscoveryConfiguration",
     "InvocationHandle",
+    "ModelDescriptor",
     "ModuleConfiguration",
     "ModuleDependencies",
     "RPCError",
