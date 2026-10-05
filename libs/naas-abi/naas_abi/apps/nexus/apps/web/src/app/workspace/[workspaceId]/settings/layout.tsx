@@ -8,8 +8,8 @@ import { SETTINGS_GROUPS } from '@/components/shell/settings-nav';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { SettingsReloadProvider } from '@/components/settings/settings-reload';
 
-// Service embeds and architecture visualization use the full content area instead of
-// the centered card layout every other settings page uses.
+// Service embeds and the architecture view manage their own viewport.
+// Every other settings page scrolls in the padded area beside the settings nav.
 const FULL_PAGE_PATTERN = /\/settings\/(?:services\/[^/]+|infrastructure)$/;
 
 export default function SettingsLayout({
@@ -45,7 +45,7 @@ export default function SettingsLayout({
           <div className="flex-1 overflow-hidden">{children}</div>
         ) : (
           <div className="flex-1 overflow-auto px-4 py-6">
-            <div className="mx-auto max-w-4xl">{children}</div>
+            <div className="w-full min-w-0">{children}</div>
           </div>
         )}
       </SettingsReloadProvider>
