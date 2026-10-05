@@ -8,4 +8,3 @@ class WatchAndAlertingExecutionRole(_WatchAndAlertingExecutionRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

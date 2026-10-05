@@ -8,4 +8,3 @@ class VendorPersonnel(_VendorPersonnel):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

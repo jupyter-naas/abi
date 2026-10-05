@@ -8,4 +8,3 @@ class BudgetOwnerRole(_BudgetOwnerRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

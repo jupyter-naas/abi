@@ -8,4 +8,3 @@ class AttendanceAndLeaveRequestLeave(_AttendanceAndLeaveRequestLeave):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

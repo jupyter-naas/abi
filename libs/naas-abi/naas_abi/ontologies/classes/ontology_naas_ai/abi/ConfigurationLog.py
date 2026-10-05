@@ -8,4 +8,3 @@ class ConfigurationLog(_ConfigurationLog):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

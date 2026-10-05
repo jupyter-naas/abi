@@ -8,4 +8,3 @@ class PaymentsAndExpensesCapture(_PaymentsAndExpensesCapture):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

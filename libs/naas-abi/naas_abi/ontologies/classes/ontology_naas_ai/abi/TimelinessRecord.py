@@ -8,4 +8,3 @@ class TimelinessRecord(_TimelinessRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

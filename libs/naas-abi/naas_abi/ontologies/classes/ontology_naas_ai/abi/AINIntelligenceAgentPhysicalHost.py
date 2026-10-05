@@ -8,4 +8,3 @@ class AINIntelligenceAgentPhysicalHost(_AINIntelligenceAgentPhysicalHost):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

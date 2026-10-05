@@ -8,4 +8,3 @@ class PublicAndCommunicationsExecutionRole(_PublicAndCommunicationsExecutionRole
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

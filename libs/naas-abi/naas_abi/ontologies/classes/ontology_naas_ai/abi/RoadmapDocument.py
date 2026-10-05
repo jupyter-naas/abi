@@ -8,4 +8,3 @@ class RoadmapDocument(_RoadmapDocument):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

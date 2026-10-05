@@ -8,4 +8,3 @@ class AINGapdetectionAgentSoftware(_AINGapdetectionAgentSoftware):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

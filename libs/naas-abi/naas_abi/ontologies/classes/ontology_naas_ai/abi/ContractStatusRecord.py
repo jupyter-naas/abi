@@ -8,4 +8,3 @@ class ContractStatusRecord(_ContractStatusRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

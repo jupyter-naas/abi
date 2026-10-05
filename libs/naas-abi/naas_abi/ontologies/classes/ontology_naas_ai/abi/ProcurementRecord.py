@@ -8,4 +8,3 @@ class ProcurementRecord(_ProcurementRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

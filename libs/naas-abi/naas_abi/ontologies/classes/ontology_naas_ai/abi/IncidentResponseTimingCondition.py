@@ -8,4 +8,3 @@ class IncidentResponseTimingCondition(_IncidentResponseTimingCondition):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

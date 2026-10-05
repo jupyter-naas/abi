@@ -8,4 +8,3 @@ class AttendanceAndLeaveRecordAttendance(_AttendanceAndLeaveRecordAttendance):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

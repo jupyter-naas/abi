@@ -8,4 +8,3 @@ class OffboardingExecutionRole(_OffboardingExecutionRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

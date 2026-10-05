@@ -8,4 +8,3 @@ class FleetDispatchTimingCondition(_FleetDispatchTimingCondition):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

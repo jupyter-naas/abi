@@ -8,4 +8,3 @@ class ScoreRecord(_ScoreRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

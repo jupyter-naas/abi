@@ -8,4 +8,3 @@ class ForecastingModel(_ForecastingModel):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

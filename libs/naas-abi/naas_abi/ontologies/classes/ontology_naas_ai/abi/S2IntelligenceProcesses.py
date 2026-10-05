@@ -8,4 +8,3 @@ class S2IntelligenceProcesses(_S2IntelligenceProcesses):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

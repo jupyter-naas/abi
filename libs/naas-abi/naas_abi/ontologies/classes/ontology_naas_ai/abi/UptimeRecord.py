@@ -8,4 +8,3 @@ class UptimeRecord(_UptimeRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

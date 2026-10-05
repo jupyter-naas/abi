@@ -8,4 +8,3 @@ class SupplierRole(_SupplierRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

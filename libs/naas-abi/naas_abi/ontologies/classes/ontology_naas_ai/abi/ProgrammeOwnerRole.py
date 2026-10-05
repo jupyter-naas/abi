@@ -8,4 +8,3 @@ class ProgrammeOwnerRole(_ProgrammeOwnerRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

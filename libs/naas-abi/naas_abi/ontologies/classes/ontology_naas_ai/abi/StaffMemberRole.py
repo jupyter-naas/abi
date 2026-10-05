@@ -8,4 +8,3 @@ class StaffMemberRole(_StaffMemberRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

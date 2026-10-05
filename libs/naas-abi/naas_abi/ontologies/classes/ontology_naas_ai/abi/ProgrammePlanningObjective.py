@@ -8,4 +8,3 @@ class ProgrammePlanningObjective(_ProgrammePlanningObjective):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

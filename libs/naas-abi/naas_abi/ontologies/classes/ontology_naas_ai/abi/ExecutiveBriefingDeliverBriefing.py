@@ -8,4 +8,3 @@ class ExecutiveBriefingDeliverBriefing(_ExecutiveBriefingDeliverBriefing):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

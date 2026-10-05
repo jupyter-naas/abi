@@ -8,4 +8,3 @@ class PublicAndCommunicationsPrepare(_PublicAndCommunicationsPrepare):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

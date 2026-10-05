@@ -8,4 +8,3 @@ class S6SignalProcesses(_S6SignalProcesses):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -8,4 +8,3 @@ class ExceptionRateRecord(_ExceptionRateRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

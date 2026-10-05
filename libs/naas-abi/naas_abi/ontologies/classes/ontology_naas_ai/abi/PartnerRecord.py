@@ -8,4 +8,3 @@ class PartnerRecord(_PartnerRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

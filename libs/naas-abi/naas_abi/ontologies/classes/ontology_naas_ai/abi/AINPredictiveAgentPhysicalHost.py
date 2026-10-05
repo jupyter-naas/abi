@@ -8,4 +8,3 @@ class AINPredictiveAgentPhysicalHost(_AINPredictiveAgentPhysicalHost):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

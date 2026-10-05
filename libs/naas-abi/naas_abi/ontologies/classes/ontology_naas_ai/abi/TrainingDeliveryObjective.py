@@ -8,4 +8,3 @@ class TrainingDeliveryObjective(_TrainingDeliveryObjective):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

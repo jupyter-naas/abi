@@ -8,4 +8,3 @@ class TrainerRole(_TrainerRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -8,4 +8,3 @@ class BudgetManagementTimingCondition(_BudgetManagementTimingCondition):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

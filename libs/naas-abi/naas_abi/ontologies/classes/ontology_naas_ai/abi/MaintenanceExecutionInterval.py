@@ -8,4 +8,3 @@ class MaintenanceExecutionInterval(_MaintenanceExecutionInterval):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

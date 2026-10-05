@@ -8,4 +8,3 @@ class AINFinanceAgentPhysicalHost(_AINFinanceAgentPhysicalHost):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

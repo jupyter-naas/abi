@@ -8,4 +8,3 @@ class WorkorderProcessingRoute(_WorkorderProcessingRoute):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

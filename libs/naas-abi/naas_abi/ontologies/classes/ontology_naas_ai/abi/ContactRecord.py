@@ -8,4 +8,3 @@ class ContactRecord(_ContactRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

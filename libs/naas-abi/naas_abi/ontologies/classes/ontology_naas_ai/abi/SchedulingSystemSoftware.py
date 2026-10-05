@@ -8,4 +8,3 @@ class SchedulingSystemSoftware(_SchedulingSystemSoftware):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

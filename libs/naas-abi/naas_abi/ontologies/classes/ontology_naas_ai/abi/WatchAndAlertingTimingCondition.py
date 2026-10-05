@@ -8,4 +8,3 @@ class WatchAndAlertingTimingCondition(_WatchAndAlertingTimingCondition):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

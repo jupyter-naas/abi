@@ -8,4 +8,3 @@ class SecurityOfficerRole(_SecurityOfficerRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

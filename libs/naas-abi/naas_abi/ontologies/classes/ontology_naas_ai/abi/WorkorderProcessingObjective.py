@@ -8,4 +8,3 @@ class WorkorderProcessingObjective(_WorkorderProcessingObjective):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

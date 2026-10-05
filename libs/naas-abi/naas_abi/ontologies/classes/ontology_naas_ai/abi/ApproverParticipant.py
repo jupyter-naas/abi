@@ -8,4 +8,3 @@ class ApproverParticipant(_ApproverParticipant):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

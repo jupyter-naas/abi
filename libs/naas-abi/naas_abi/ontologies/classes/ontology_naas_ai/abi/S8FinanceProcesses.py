@@ -8,4 +8,3 @@ class S8FinanceProcesses(_S8FinanceProcesses):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

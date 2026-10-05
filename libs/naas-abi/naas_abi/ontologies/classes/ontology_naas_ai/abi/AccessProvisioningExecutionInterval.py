@@ -8,4 +8,3 @@ class AccessProvisioningExecutionInterval(_AccessProvisioningExecutionInterval):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

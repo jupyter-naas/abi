@@ -8,4 +8,3 @@ class RemediationLog(_RemediationLog):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -8,4 +8,3 @@ class S8ApproverParticipant(_S8ApproverParticipant):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

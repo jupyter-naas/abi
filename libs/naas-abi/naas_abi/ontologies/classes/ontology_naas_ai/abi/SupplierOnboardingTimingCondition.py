@@ -8,4 +8,3 @@ class SupplierOnboardingTimingCondition(_SupplierOnboardingTimingCondition):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

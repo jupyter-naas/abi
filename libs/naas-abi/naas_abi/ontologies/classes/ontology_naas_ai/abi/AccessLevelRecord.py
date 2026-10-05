@@ -8,4 +8,3 @@ class AccessLevelRecord(_AccessLevelRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

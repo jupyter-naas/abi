@@ -8,4 +8,3 @@ class SchedulingSystemPhysicalHost(_SchedulingSystemPhysicalHost):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

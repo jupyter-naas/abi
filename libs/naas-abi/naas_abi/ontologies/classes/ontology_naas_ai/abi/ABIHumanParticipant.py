@@ -8,4 +8,3 @@ class ABIHumanParticipant(_ABIHumanParticipant):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

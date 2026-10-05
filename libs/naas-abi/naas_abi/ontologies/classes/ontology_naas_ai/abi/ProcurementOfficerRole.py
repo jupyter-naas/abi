@@ -8,4 +8,3 @@ class ProcurementOfficerRole(_ProcurementOfficerRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

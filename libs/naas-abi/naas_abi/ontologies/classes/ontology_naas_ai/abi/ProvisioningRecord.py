@@ -8,4 +8,3 @@ class ProvisioningRecord(_ProvisioningRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

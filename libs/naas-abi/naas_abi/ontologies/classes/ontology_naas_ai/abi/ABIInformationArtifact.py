@@ -8,4 +8,3 @@ class ABIInformationArtifact(_ABIInformationArtifact):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

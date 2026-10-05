@@ -8,4 +8,3 @@ class S4LogisticsProcesses(_S4LogisticsProcesses):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

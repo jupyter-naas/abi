@@ -8,4 +8,3 @@ class WorkorderProcessingExecuteClose(_WorkorderProcessingExecuteClose):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

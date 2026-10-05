@@ -8,4 +8,3 @@ class StockAndInventoryTimingCondition(_StockAndInventoryTimingCondition):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

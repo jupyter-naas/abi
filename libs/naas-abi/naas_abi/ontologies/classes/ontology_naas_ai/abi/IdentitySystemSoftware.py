@@ -8,4 +8,3 @@ class IdentitySystemSoftware(_IdentitySystemSoftware):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

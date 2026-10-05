@@ -8,4 +8,3 @@ class ProgrammePlanningExecutionRole(_ProgrammePlanningExecutionRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

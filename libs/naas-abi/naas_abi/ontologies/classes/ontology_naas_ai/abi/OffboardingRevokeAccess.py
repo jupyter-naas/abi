@@ -8,4 +8,3 @@ class OffboardingRevokeAccess(_OffboardingRevokeAccess):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

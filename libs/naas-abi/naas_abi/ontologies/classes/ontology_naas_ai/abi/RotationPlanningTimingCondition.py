@@ -8,4 +8,3 @@ class RotationPlanningTimingCondition(_RotationPlanningTimingCondition):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -8,4 +8,3 @@ class CommsRecord(_CommsRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

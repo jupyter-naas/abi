@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from naas_abi_core.utils.onto2py.onto2py import (
     ClassInfo,
+    _find_ruff,
     _run_ruff,
     create_class_files,
 )
@@ -111,3 +112,42 @@ def test_create_class_files_lints_preexisting_files(tmp_path: Path):
         linted = run_ruff.call_args.args[0]
 
     assert linted == created, "pre-existing class files must still be linted"
+
+
+def test_create_class_files_emits_no_redundant_pass(tmp_path: Path):
+    """The stub body is a docstring, so a trailing `pass` trips PIE790."""
+    ttl_file = tmp_path / "domain" / "ontologies" / "modules" / "DomainOntology.ttl"
+    ttl_file.parent.mkdir(parents=True)
+    ttl_file.write_text("# ttl stub\n")
+    py_file = ttl_file.with_suffix(".py")
+    py_file.write_text("# generated stub\n")
+
+    classes = {"http://example.org/onto#Alpha": _class_info("Alpha")}
+    with patch("naas_abi_core.utils.onto2py.onto2py._run_ruff") as run_ruff:
+        create_class_files(str(ttl_file), classes, py_file)
+        created = run_ruff.call_args.args[0]
+
+    content = Path(created[0]).read_text()
+    assert "def actions(self):" in content
+    assert "pass" not in content
+
+
+def test_find_ruff_prefers_ruff_env_var(monkeypatch):
+    """`make check` gates with $RUFF, so the generator must lint with it too."""
+    monkeypatch.setenv("RUFF", "uvx ruff@0.16.10")
+    completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+    with patch(
+        "naas_abi_core.utils.onto2py.onto2py.subprocess.run", return_value=completed
+    ) as run:
+        assert _find_ruff() == "uvx ruff@0.16.10"
+    assert run.call_args.args[0] == ["uvx", "ruff@0.16.10", "--version"]
+
+
+def test_find_ruff_prefers_uvx_over_local_binaries(monkeypatch):
+    """Without $RUFF, use the gate's default (`uvx ruff`), not a venv pin."""
+    monkeypatch.delenv("RUFF", raising=False)
+    completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+    with patch(
+        "naas_abi_core.utils.onto2py.onto2py.subprocess.run", return_value=completed
+    ):
+        assert _find_ruff() == "uvx ruff"

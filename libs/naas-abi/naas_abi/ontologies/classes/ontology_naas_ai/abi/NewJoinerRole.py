@@ -8,4 +8,3 @@ class NewJoinerRole(_NewJoinerRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

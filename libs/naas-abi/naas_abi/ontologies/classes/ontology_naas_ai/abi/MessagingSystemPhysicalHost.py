@@ -8,4 +8,3 @@ class MessagingSystemPhysicalHost(_MessagingSystemPhysicalHost):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

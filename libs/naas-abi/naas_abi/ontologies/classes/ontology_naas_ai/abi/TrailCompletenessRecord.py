@@ -8,4 +8,3 @@ class TrailCompletenessRecord(_TrailCompletenessRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

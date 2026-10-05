@@ -8,4 +8,3 @@ class AuditTrailMaintenanceProduceOnDemand(_AuditTrailMaintenanceProduceOnDemand
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

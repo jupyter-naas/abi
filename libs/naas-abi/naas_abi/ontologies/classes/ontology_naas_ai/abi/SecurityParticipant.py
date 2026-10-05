@@ -8,4 +8,3 @@ class SecurityParticipant(_SecurityParticipant):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

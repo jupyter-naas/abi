@@ -8,4 +8,3 @@ class AttendanceAndLeaveTimingCondition(_AttendanceAndLeaveTimingCondition):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -8,4 +8,3 @@ class ABIExecutionSite(_ABIExecutionSite):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

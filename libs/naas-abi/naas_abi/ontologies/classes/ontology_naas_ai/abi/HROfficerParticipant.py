@@ -8,4 +8,3 @@ class HROfficerParticipant(_HROfficerParticipant):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

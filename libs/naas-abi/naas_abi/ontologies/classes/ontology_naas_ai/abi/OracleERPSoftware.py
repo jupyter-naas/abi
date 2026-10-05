@@ -8,4 +8,3 @@ class OracleERPSoftware(_OracleERPSoftware):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

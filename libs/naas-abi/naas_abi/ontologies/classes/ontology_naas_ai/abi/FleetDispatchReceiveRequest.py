@@ -8,4 +8,3 @@ class FleetDispatchReceiveRequest(_FleetDispatchReceiveRequest):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

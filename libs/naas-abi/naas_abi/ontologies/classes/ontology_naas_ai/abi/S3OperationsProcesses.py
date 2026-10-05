@@ -8,4 +8,3 @@ class S3OperationsProcesses(_S3OperationsProcesses):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

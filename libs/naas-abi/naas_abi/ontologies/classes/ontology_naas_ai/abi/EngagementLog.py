@@ -8,4 +8,3 @@ class EngagementLog(_EngagementLog):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

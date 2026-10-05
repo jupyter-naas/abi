@@ -8,4 +8,3 @@ class AnalystParticipant(_AnalystParticipant):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

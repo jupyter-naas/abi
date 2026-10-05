@@ -8,4 +8,3 @@ class S1LeadParticipant(_S1LeadParticipant):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

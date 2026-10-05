@@ -8,4 +8,3 @@ class AssessmentFeedBack(_AssessmentFeedBack):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

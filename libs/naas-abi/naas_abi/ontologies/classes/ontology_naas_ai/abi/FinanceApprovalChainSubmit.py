@@ -8,4 +8,3 @@ class FinanceApprovalChainSubmit(_FinanceApprovalChainSubmit):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

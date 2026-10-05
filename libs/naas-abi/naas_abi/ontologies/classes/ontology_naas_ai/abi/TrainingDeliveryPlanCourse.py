@@ -8,4 +8,3 @@ class TrainingDeliveryPlanCourse(_TrainingDeliveryPlanCourse):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

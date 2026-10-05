@@ -8,4 +8,3 @@ class S4ControllerParticipant(_S4ControllerParticipant):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -8,4 +8,3 @@ class CoverageRecord(_CoverageRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

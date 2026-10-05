@@ -8,4 +8,3 @@ class ITProvisioningVerify(_ITProvisioningVerify):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

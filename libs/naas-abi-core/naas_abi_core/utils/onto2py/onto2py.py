@@ -2370,7 +2370,6 @@ class {class_info.name}(_{class_info.name}):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass
 '''
 
         # Write the file
@@ -2392,20 +2391,29 @@ class {class_info.name}(_{class_info.name}):
 
 
 def _find_ruff() -> str | None:
-    """Locate the ruff binary, trying several common locations."""
+    """Locate the ruff binary, preferring the one `make check` gates with.
+
+    The gate lints with `$RUFF` (default `uvx ruff`). A venv-pinned ruff can be
+    older and miss default rules the gate enforces, so generated files would
+    pass here and fail there; the local binaries are only a fallback.
+    """
     candidates = [
+        os.environ.get("RUFF", "").strip(),
+        "uvx ruff",
         "ruff",
         str(Path(sys.executable).parent / "ruff"),
-        "uvx ruff",
     ]
     for candidate in candidates:
+        if not candidate:
+            continue
         parts = candidate.split()
         try:
             result = subprocess.run(
                 [*parts, "--version"],
                 capture_output=True,
                 text=True,
-                timeout=5,
+                # uvx may have to fetch ruff on first use
+                timeout=60,
                 check=False,
             )
             if result.returncode == 0:
@@ -3084,9 +3092,6 @@ def generate_class_code(
         for prop in props:
             lines.extend(generate_property_code(prop, has_any_import))
         emitted_property_group = True
-
-    if not emitted_property_group:
-        lines.append("    pass")
 
     return lines
 

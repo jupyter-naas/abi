@@ -8,4 +8,3 @@ class PaymentStatusRecord(_PaymentStatusRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -8,4 +8,3 @@ class RotationPlanningPublish(_RotationPlanningPublish):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

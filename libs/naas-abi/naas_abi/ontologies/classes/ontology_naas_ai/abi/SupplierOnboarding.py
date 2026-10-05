@@ -8,4 +8,3 @@ class SupplierOnboarding(_SupplierOnboarding):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

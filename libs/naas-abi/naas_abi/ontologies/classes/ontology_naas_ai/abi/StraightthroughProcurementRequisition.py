@@ -8,4 +8,3 @@ class StraightthroughProcurementRequisition(_StraightthroughProcurementRequisiti
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

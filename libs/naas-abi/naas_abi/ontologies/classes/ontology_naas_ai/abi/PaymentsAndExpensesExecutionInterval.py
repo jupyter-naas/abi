@@ -8,4 +8,3 @@ class PaymentsAndExpensesExecutionInterval(_PaymentsAndExpensesExecutionInterval
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

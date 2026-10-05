@@ -8,4 +8,3 @@ class StakeholderEngagementRecord(_StakeholderEngagementRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

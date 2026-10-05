@@ -8,4 +8,3 @@ class VehicleStatusRecord(_VehicleStatusRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

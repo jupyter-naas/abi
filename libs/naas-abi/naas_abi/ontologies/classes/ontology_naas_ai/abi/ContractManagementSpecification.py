@@ -8,4 +8,3 @@ class ContractManagementSpecification(_ContractManagementSpecification):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

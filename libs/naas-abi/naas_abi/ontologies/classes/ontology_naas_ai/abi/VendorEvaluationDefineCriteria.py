@@ -8,4 +8,3 @@ class VendorEvaluationDefineCriteria(_VendorEvaluationDefineCriteria):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

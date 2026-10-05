@@ -8,4 +8,3 @@ class ScheduleRecord(_ScheduleRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

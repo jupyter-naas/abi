@@ -8,4 +8,3 @@ class ContractManagementDraft(_ContractManagementDraft):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

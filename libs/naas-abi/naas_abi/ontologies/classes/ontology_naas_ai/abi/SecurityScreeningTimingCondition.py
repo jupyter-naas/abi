@@ -8,4 +8,3 @@ class SecurityScreeningTimingCondition(_SecurityScreeningTimingCondition):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

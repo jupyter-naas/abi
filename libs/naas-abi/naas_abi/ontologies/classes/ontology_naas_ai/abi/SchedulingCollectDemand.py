@@ -8,4 +8,3 @@ class SchedulingCollectDemand(_SchedulingCollectDemand):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

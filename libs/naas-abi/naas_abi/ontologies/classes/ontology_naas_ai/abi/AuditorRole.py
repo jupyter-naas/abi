@@ -8,4 +8,3 @@ class AuditorRole(_AuditorRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

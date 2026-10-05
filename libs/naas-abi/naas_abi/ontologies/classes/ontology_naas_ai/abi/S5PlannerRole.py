@@ -8,4 +8,3 @@ class S5PlannerRole(_S5PlannerRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

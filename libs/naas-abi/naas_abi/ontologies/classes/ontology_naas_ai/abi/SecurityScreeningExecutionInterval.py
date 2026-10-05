@@ -8,4 +8,3 @@ class SecurityScreeningExecutionInterval(_SecurityScreeningExecutionInterval):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

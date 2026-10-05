@@ -8,4 +8,3 @@ class PartnerOrganisationRole(_PartnerOrganisationRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -8,4 +8,3 @@ class LearningSystemPhysicalHost(_LearningSystemPhysicalHost):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

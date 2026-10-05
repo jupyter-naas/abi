@@ -8,4 +8,3 @@ class SubjectParticipant(_SubjectParticipant):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

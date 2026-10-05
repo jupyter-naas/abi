@@ -8,4 +8,3 @@ class CyberPostureblueredTeamAttackred(_CyberPostureblueredTeamAttackred):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

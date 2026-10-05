@@ -8,4 +8,3 @@ class RegistryCompletenessRecord(_RegistryCompletenessRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

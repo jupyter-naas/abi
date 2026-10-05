@@ -8,4 +8,3 @@ class PartnerCoordinationAlign(_PartnerCoordinationAlign):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

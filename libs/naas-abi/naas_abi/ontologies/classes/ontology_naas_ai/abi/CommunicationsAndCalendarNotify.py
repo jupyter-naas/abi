@@ -8,4 +8,3 @@ class CommunicationsAndCalendarNotify(_CommunicationsAndCalendarNotify):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

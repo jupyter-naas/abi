@@ -8,4 +8,3 @@ class CapabilityDevelopmentDevelop(_CapabilityDevelopmentDevelop):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

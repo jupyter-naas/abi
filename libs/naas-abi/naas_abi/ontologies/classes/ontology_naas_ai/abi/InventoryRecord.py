@@ -8,4 +8,3 @@ class InventoryRecord(_InventoryRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

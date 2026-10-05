@@ -8,4 +8,3 @@ class AssetRegistryObjective(_AssetRegistryObjective):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

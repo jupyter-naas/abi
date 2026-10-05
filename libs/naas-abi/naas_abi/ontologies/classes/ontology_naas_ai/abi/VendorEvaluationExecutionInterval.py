@@ -8,4 +8,3 @@ class VendorEvaluationExecutionInterval(_VendorEvaluationExecutionInterval):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -8,4 +8,3 @@ class CapabilityRoadmapExecutionInterval(_CapabilityRoadmapExecutionInterval):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

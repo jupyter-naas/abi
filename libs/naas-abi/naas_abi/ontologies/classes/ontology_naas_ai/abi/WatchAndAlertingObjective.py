@@ -8,4 +8,3 @@ class WatchAndAlertingObjective(_WatchAndAlertingObjective):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

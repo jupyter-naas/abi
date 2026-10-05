@@ -8,4 +8,3 @@ class StakeholderRole(_StakeholderRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

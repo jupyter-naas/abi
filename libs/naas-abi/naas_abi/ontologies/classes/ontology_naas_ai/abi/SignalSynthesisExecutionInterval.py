@@ -8,4 +8,3 @@ class SignalSynthesisExecutionInterval(_SignalSynthesisExecutionInterval):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -8,4 +8,3 @@ class S8ApproverRole(_S8ApproverRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

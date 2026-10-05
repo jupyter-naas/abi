@@ -8,4 +8,3 @@ class ITProvisioningTimingCondition(_ITProvisioningTimingCondition):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

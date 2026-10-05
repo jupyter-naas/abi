@@ -8,4 +8,3 @@ class CapabilityDevelopmentExecutionInterval(_CapabilityDevelopmentExecutionInte
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

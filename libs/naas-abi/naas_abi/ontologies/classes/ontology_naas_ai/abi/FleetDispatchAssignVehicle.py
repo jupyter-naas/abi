@@ -8,4 +8,3 @@ class FleetDispatchAssignVehicle(_FleetDispatchAssignVehicle):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -8,4 +8,3 @@ class ABISoftware(_ABISoftware):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

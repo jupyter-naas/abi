@@ -8,4 +8,3 @@ class DriverParticipant(_DriverParticipant):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

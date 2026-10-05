@@ -8,4 +8,3 @@ class FalsepositiveRateRecord(_FalsepositiveRateRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

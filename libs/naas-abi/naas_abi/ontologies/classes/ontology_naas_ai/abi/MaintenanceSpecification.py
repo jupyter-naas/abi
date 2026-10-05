@@ -8,4 +8,3 @@ class MaintenanceSpecification(_MaintenanceSpecification):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

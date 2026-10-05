@@ -8,4 +8,3 @@ class S3SchedulerParticipant(_S3SchedulerParticipant):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

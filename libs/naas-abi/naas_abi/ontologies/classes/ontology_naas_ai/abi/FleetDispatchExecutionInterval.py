@@ -8,4 +8,3 @@ class FleetDispatchExecutionInterval(_FleetDispatchExecutionInterval):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

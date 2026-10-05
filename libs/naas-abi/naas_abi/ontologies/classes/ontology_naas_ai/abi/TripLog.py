@@ -8,4 +8,3 @@ class TripLog(_TripLog):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

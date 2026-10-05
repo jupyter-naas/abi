@@ -8,4 +8,3 @@ class ExecutiveBriefingExecutionInterval(_ExecutiveBriefingExecutionInterval):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

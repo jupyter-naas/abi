@@ -8,4 +8,3 @@ class CapabilityRoadmapObjective(_CapabilityRoadmapObjective):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

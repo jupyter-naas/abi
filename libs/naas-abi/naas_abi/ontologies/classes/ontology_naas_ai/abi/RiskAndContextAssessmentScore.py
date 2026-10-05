@@ -8,4 +8,3 @@ class RiskAndContextAssessmentScore(_RiskAndContextAssessmentScore):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

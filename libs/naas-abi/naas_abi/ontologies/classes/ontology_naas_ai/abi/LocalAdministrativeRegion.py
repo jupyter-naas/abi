@@ -8,4 +8,3 @@ class LocalAdministrativeRegion(_LocalAdministrativeRegion):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

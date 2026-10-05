@@ -8,4 +8,3 @@ class OffboardingReturnAssets(_OffboardingReturnAssets):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

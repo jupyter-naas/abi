@@ -8,4 +8,3 @@ class IncidentResponseExecutionInterval(_IncidentResponseExecutionInterval):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

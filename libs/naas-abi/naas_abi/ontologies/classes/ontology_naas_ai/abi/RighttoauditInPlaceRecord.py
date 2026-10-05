@@ -8,4 +8,3 @@ class RighttoauditInPlaceRecord(_RighttoauditInPlaceRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

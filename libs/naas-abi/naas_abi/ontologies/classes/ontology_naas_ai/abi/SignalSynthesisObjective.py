@@ -8,4 +8,3 @@ class SignalSynthesisObjective(_SignalSynthesisObjective):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -8,4 +8,3 @@ class GapCoverageRecord(_GapCoverageRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

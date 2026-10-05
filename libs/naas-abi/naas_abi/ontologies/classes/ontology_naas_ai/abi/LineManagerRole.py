@@ -8,4 +8,3 @@ class LineManagerRole(_LineManagerRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

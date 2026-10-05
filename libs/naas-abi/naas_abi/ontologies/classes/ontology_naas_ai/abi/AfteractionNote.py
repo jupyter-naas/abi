@@ -8,4 +8,3 @@ class AfteractionNote(_AfteractionNote):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

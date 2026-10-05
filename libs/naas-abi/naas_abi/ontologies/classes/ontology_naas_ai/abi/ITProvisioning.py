@@ -8,4 +8,3 @@ class ITProvisioning(_ITProvisioning):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

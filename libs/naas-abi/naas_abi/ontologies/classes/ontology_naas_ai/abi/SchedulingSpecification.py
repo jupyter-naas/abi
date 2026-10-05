@@ -8,4 +8,3 @@ class SchedulingSpecification(_SchedulingSpecification):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

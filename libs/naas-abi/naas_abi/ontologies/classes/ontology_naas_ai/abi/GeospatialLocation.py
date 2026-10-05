@@ -8,4 +8,3 @@ class GeospatialLocation(_GeospatialLocation):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

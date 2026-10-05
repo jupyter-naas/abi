@@ -8,4 +8,3 @@ class SubjectRole(_SubjectRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

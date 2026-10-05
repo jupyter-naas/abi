@@ -8,4 +8,3 @@ class PartnerCoordination(_PartnerCoordination):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

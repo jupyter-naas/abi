@@ -8,4 +8,3 @@ class SLAAdherenceRecord(_SLAAdherenceRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

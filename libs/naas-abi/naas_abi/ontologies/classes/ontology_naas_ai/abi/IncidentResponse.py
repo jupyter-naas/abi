@@ -8,4 +8,3 @@ class IncidentResponse(_IncidentResponse):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

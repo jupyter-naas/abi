@@ -8,4 +8,3 @@ class S9ExternalAffairsProcesses(_S9ExternalAffairsProcesses):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

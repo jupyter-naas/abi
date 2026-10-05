@@ -8,4 +8,3 @@ class AlertFeed(_AlertFeed):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

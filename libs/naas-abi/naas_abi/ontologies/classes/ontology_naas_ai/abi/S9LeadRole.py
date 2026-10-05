@@ -8,4 +8,3 @@ class S9LeadRole(_S9LeadRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

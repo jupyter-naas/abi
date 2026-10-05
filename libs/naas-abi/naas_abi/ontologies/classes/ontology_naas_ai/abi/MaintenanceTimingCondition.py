@@ -8,4 +8,3 @@ class MaintenanceTimingCondition(_MaintenanceTimingCondition):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -8,4 +8,3 @@ class OnboardingSpecification(_OnboardingSpecification):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

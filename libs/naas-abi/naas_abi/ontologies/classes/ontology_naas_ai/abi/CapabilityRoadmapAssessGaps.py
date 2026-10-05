@@ -8,4 +8,3 @@ class CapabilityRoadmapAssessGaps(_CapabilityRoadmapAssessGaps):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

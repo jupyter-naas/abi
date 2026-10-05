@@ -8,4 +8,3 @@ class ApprovalLog(_ApprovalLog):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass
