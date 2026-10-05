@@ -123,9 +123,17 @@ class ABIModule(BaseModule):
 <script type="module" src="/api/their-people/web/js/shell.js"></script>
 ```
 
-Absolute, and under `/api/`, because Nexus proxies `/api/` and `/app-html/` and
-nothing else. Their own files stay relative (`assets/logo.svg`), so they resolve
-against their page in both the dev server and Nexus.
+Their own files stay relative (`assets/logo.svg`), so they resolve against
+their page in both the dev server and Nexus.
+
+Inside Nexus the page is a bundled app at `/app-html/<module>/<app>/web/index.html`,
+and from that iframe only `/app-html/` reaches the backend: a request to `/api/…`
+goes to the Nexus web host and 404s. An instance shown in Nexus therefore also
+mounts itself beside its page, at `/app-html/<module>/<app>/api`, and its page
+sets `data-people-api-base` on `<html>` to that mount before loading the shell.
+`web/lib/config.js` reads it, and `apiUrl()` moves URLs the data states under the
+declared prefix (portraits) onto it. The Forvis Mazars instance in bob
+(`intelligence.people_intelligence.apps.people`, `web/boot.js`) does exactly this.
 
 Everything per-instance is resolved against the folder holding the config: brand
 files, `data.graph.file`, and `data.portrait_prefix`. Run one locally with
