@@ -34,7 +34,9 @@ def get_global(name: str) -> dict:
 def get_entity_dataset(entity_id: str, path: str) -> dict:
     page_id = path.split("/", 1)[0]
     if path != "manifest.json" and page_id and not is_public_page(page_id):
-        raise HTTPException(status_code=403, detail=f"Page is not accessible: {page_id}")
+        raise HTTPException(
+            status_code=403, detail=f"Page is not accessible: {page_id}"
+        )
     try:
         payload = read_json(f"entities/{entity_id}/{path}")
     except MissingDatasetError as exc:

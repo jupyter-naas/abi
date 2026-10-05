@@ -75,7 +75,9 @@ def metrics_for_person(
     year_start: date,
     year_end: date,
 ) -> dict[str, float | int]:
-    person_rows = [row for row in working_rows if row.get("personLabel") == person_label]
+    person_rows = [
+        row for row in working_rows if row.get("personLabel") == person_label
+    ]
     career_intervals: list[tuple[date, date]] = []
     org_intervals: list[tuple[date, date]] = []
 
@@ -118,7 +120,9 @@ def scolarity_for_person(
     reference: date,
 ) -> dict[str, float | int | list[str] | str]:
     """Merged act-of-studying span for one person (same interval logic as seniority)."""
-    person_rows = [row for row in studying_rows if row.get("personLabel") == person_label]
+    person_rows = [
+        row for row in studying_rows if row.get("personLabel") == person_label
+    ]
     study_intervals: list[tuple[date, date]] = []
     diplomas: list[str] = []
     seen_diplomas: set[str] = set()
@@ -188,18 +192,29 @@ def build_workforce_metrics(
         org_year_days_total += int(person_metrics["org_time_in_year_days"])
 
     active_rows = [row for row in enriched if row.get("status_value") == "active"]
-    avg_seniority = round(
-        sum(seniority_values) / len(seniority_values),
-        1,
-    ) if seniority_values else 0.0
-    avg_scolarity = round(
-        sum(scolarity_values) / len(scolarity_values),
-        1,
-    ) if scolarity_values else 0.0
+    avg_seniority = (
+        round(
+            sum(seniority_values) / len(seniority_values),
+            1,
+        )
+        if seniority_values
+        else 0.0
+    )
+    avg_scolarity = (
+        round(
+            sum(scolarity_values) / len(scolarity_values),
+            1,
+        )
+        if scolarity_values
+        else 0.0
+    )
 
     kpis = {
         "active_headcount": {"value": len(active_rows)},
-        "org_time_in_year": {"value": days_to_years(org_year_days_total), "unit": "years"},
+        "org_time_in_year": {
+            "value": days_to_years(org_year_days_total),
+            "unit": "years",
+        },
         "avg_seniority": {"value": avg_seniority, "unit": "years"},
         "avg_scolarity": {"value": avg_scolarity, "unit": "years"},
     }

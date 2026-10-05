@@ -22,6 +22,12 @@ class ABIModule(BaseModule):
             # PersonnelAgent.get_tools() resolves its SPARQL tools through this
             # module, so it must be loaded before the agent is built.
             "naas_abi_core.modules.templatablesparqlquery",
+            # Personnel specializes the people vocabulary (an act of employment
+            # is an act of working) and the cockpit embeds people's graph page;
+            # both are imports. Load the people module too so its ontology is in
+            # the triple store - soft, so a configuration that predates the split
+            # still loads.
+            "naas_abi_marketplace.domains.intelligence.modules.people#soft",
         ],
         services=[
             # Secret,
@@ -66,8 +72,21 @@ class ABIModule(BaseModule):
         return getattr(self, "_cockpit_data_source", "missing")
 
     def api(self, app: FastAPI) -> None:
+        from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.api.mount import (
+            RevalidatedStaticFiles,
+        )
+        from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.graph_view import (
+            GRAPH_PAGE_DIR,
+        )
         from naas_abi_marketplace.domains.personnel.apps.cockpit.api.routes import (
             router,
         )
 
         app.include_router(router, prefix="/api/personnel-cockpit")
+        # The cockpit's graph page is the people module's (graph_page/), served
+        # here so the cockpit loads it from its own API prefix.
+        app.mount(
+            "/api/personnel-cockpit/graph-page",
+            RevalidatedStaticFiles(directory=GRAPH_PAGE_DIR),
+            name="personnel-cockpit-graph-page",
+        )

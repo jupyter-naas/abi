@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { markAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
 import { useFeature } from '@/hooks/use-feature';
-import { getWorkspaceSwitchPath } from '@/lib/feature-access';
+import { getWorkspaceHomePath } from '@/lib/feature-access';
 import {
   buildQuickOpenItems,
   conversationUpdatedAtMs,
@@ -26,7 +26,6 @@ import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 
 export function QuickOpen() {
   const router = useRouter();
-  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -235,18 +234,10 @@ export function QuickOpen() {
       const action = item.action;
       if (action.kind === 'workspace') {
         if (action.workspaceId !== currentWorkspaceId) {
-          const target = workspaces.find((w) => w.id === action.workspaceId);
           setActiveConversation(null);
           markAppsSkipRestore();
           setCurrentWorkspace(action.workspaceId);
-          router.push(
-            getWorkspaceSwitchPath({
-              pathname,
-              targetWorkspaceId: action.workspaceId,
-              role: target?.currentUserRole,
-              workspaceFlags: target?.featureFlags,
-            }),
-          );
+          router.push(getWorkspaceHomePath(action.workspaceId));
         }
         close();
         return;
@@ -283,8 +274,6 @@ export function QuickOpen() {
     },
     [
       currentWorkspaceId,
-      workspaces,
-      pathname,
       router,
       setActiveConversation,
       setCurrentWorkspace,

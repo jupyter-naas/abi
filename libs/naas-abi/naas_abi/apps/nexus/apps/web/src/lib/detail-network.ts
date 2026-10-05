@@ -1,4 +1,5 @@
 import type { GraphEdge, GraphNode } from '@/stores/knowledge-graph';
+import { BFO_BUCKET_BY_URI } from './bfo-buckets';
 import { ontologyConnections, termConnections, termKey, type TermRef } from './ontology-context';
 import type { DictionaryTerm } from './ontology-dictionary-tree';
 
@@ -74,6 +75,29 @@ export function instanceEgoGraph(
   return { rootId, nodes: [...nodes.values()], edges };
 }
 
+/**
+ * The BFO bucket class a term falls under: the nearest of the seven bucket
+ * classes up its parents, so the network can place it in its BFO zone.
+ */
+export function termBfoBucketIri(id: string, terms: DictionaryTerm[]): string | undefined {
+  const parentsOf = new Map<string, string[]>();
+  for (const term of terms) {
+    if (term.type !== 'entity' && term.type !== 'individual') continue;
+    parentsOf.set(term.id, [...(parentsOf.get(term.id) || []), ...(term.parents || []).map(parent => parent.id)]);
+  }
+  const queue = [id];
+  const seen = new Set(queue);
+  for (let i = 0; i < queue.length; i++) {
+    const current = queue[i];
+    const bucket = BFO_BUCKET_BY_URI[current];
+    if (bucket && bucket.type !== 'Entity') return bucket.uri;
+    for (const parent of parentsOf.get(current) || []) {
+      if (!seen.has(parent)) { seen.add(parent); queue.push(parent); }
+    }
+  }
+  return undefined;
+}
+
 /** Focused term plus immediate incoming and outgoing ontology connections. */
 export function termEgoGraph(term: DictionaryTerm, terms: DictionaryTerm[]) {
   const related = termConnections(term, ontologyConnections(terms));
@@ -81,10 +105,13 @@ export function termEgoGraph(term: DictionaryTerm, terms: DictionaryTerm[]) {
   const nodes = new Map<string, GraphNode>();
   const add = (ref: TermRef, primary = false) => {
     const loaded = terms.find(item => item.id === ref.id && (!ref.type || item.type === ref.type));
-    return addNode(nodes, termKey(loaded || ref), loaded?.name || ref.name, loaded?.type || ref.type || 'Resource', {
+    const type = loaded?.type || ref.type;
+    const bucket = type === 'entity' || type === 'individual' ? termBfoBucketIri(ref.id, terms) : undefined;
+    return addNode(nodes, termKey(loaded || ref), loaded?.name || ref.name, type || 'Resource', {
       iri: ref.id,
-      term_type: loaded?.type || ref.type,
+      term_type: type,
       is_primary: primary,
+      ...(bucket ? { bfo_parent_iri: bucket } : {}),
     });
   };
   const rootId = add(term, true);

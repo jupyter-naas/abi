@@ -16,7 +16,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 )
 from naas_abi_core.utils.Storage import find_storage_folder
 from naas_abi_core.utils.StorageUtils import StorageUtils
-from naas_abi_marketplace.domains.personnel.paths import (
+from naas_abi_marketplace.domains.personnel.utils.paths import (
     PERSONNEL_ROOT,
     cockpit_storage_prefix,
     module_datastore_path,

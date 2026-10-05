@@ -829,3 +829,26 @@ class WorkspaceResourcePolicyModel(Base):
     revision = Column(Integer, nullable=False, default=1)
     updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
+class SearchTopicModel(Base):
+    """A workspace's search topic: an override of a built-in one, or a custom topic."""
+
+    __tablename__ = "search_topics"
+
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    topic_id = Column(String(48), primary_key=True)
+    definition = Column(Text, nullable=False)  # JSON SearchTopic
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+class SearchSettingsModel(Base):
+    """A workspace's search settings: which feature and web-engine scopes are switched off."""
+
+    __tablename__ = "search_settings"
+
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    settings = Column(Text, nullable=False)  # JSON {"disabled_scopes": [...]}
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)

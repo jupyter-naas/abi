@@ -87,6 +87,19 @@ Committed datasets live under ``data/`` and are served to the UI through
 - ``data/globals/entities.json`` - sidebar entity dropdown (organization perimeters)
 - Build input graph: ``domains/personnel/data/graph/personnel_demo.ttl``
 
+The queries and the shaping of their rows live in ``graph_query.py``; the
+exporter calls them to write the datasets. It reads both query files (people
+and personnel) and hands the graph page builder HR roster rows through
+``graph_page_roster``.
+
+The graph page itself is not the cockpit's: ``GraphPage.js``, its payload
+builder and ``graph-page.css`` belong to the people module
+(``intelligence/modules/people/apps/people/graph_page/`` and
+``scripts/graph_payload.py``). The cockpit loads the page from
+``/api/personnel-cockpit/graph-page/`` (mounted by the personnel module and
+the dev server). Change the page there, and keep ``css/app.css`` in step for
+the cockpit shell.
+
 Regenerate with ``make demo-data`` (from ``domains/personnel``). Dev server:
 ``make app-personnel-cockpit``. Do not invent manager hierarchies - not in the ontology.
 

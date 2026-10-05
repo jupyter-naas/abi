@@ -1,8 +1,8 @@
 /**
- * Graph parameters, ported from the Personnel Cockpit's `graph.parameters`
- * config block (`domains/personnel/apps/cockpit/config.yaml`).
+ * Graph parameters, ported from the person graph page's `graph.parameters`
+ * block (`domains/intelligence/modules/people/apps/people/graph_page/graph.yaml`).
  *
- * The cockpit reads these from YAML at runtime; Nexus has no per-app config
+ * The graph page reads these from YAML at runtime; Nexus has no per-app config
  * file for the admin surface, so the same definitions live here as data. Keep
  * the shapes identical — the panel renders straight off them.
  */

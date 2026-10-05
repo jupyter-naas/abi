@@ -9,6 +9,12 @@
 #  Data: GRAPH <http://ontology.naas.ai/graph/personnel>
 #  Schema: <http://ontology.naas.ai/personnel/>
 #
+#  What the organization records about its own staff. Career history,
+#  skills, studies and published profiles are people intelligence:
+#  PeopleSparqlQueries.ttl in intelligence/modules/people. The personnel
+#  graph holds each person's identity (type and label) alongside their
+#  records, so these queries read one graph.
+#
 #  Person vs employee role vs employment record
 #  --------------------------------------------
 #  The graph keeps three things apart that HR systems usually merge.
@@ -289,173 +295,41 @@ intentMapping:findHeadcountByJobFamilyQuery a intentMapping:TemplatableSparqlQue
     intentMapping:hasArgument intentMapping:personnelLimitArg .
 
 #-----------------------------------------------------------------
-# Process queries
+# Query arguments
+#
+# TemplatableSparqlQueryLoader requires all four predicates below on
+# every argument; an argument missing one is not loaded, and the query
+# that references it then renders with its placeholder unfilled.
+# validationPattern is matched against the raw value before substitution
+# - keep it tight enough to block injection.
 #-----------------------------------------------------------------
 
-intentMapping:findWorkingProcessesQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "find_working_processes"@en ;
-    intentMapping:intentDescription "Return every act of working with the seven buckets it ties together: the person performing the work and the organization they work for (WHO), the site (WHERE), the temporal region and its bounding instants (WHEN), the employee role and the mission that role concretizes (WHY), the skills developed (HOW IT IS), and the contract and profile document it was sourced from (HOW WE KNOW). Backed by the ActOfWorkingProcess ontology." ;
-    intentMapping:sparqlTemplate """
-        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX personnel: <http://ontology.naas.ai/personnel/>
+intentMapping:personnelLimitArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "limit" ;
+    intentMapping:argumentDescription "Maximum number of rows to return (positive integer)." ;
+    intentMapping:validationPattern "^[1-9][0-9]{0,3}$" ;
+    intentMapping:validationFormat "integer" .
 
-        SELECT DISTINCT ?person ?personLabel ?working ?workingLabel ?org ?orgLabel ?site ?siteLabel
-                        ?temporal ?temporalLabel ?temporalStart ?temporalEnd ?durationLabel
-                        ?firstInstant ?firstInstantLabel ?lastInstant ?lastInstantLabel
-                        ?contract ?contractLabel ?contractType
-                        ?role ?roleLabel ?position ?positionLabel ?jobTitle
-                        ?mission ?missionLabel ?missionContent
-                        ?profile ?profileLabel ?sourceUrl
-                        ?remuneration ?remunerationLabel ?remunerationAmount ?remunerationCurrency
-        WHERE {
-          GRAPH <http://ontology.naas.ai/graph/personnel> {
-            ?person rdf:type abi:Person ;
-                    rdfs:label ?personLabel ;
-                    personnel:hasActOfWorking ?working .
-            ?working rdf:type personnel:ActOfWorking .
-            OPTIONAL { ?working rdfs:label ?workingLabel . }
-            OPTIONAL { ?working personnel:forOrganization ?org . ?org rdfs:label ?orgLabel . }
-            OPTIONAL { ?working abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
-            OPTIONAL {
-              ?working abi:occupiesTemporalRegion ?temporal .
-              ?temporal rdfs:label ?temporalLabel .
-              OPTIONAL { ?temporal personnel:duration_label ?durationLabel . }
-              OPTIONAL {
-                ?temporal abi:hasFirstInstant ?firstInstant .
-                ?firstInstant personnel:instant_date ?temporalStart .
-                OPTIONAL { ?firstInstant rdfs:label ?firstInstantLabel . }
-              }
-              # An ongoing experience has no last instant: the region stays open.
-              OPTIONAL {
-                ?temporal abi:hasLastInstant ?lastInstant .
-                ?lastInstant personnel:instant_date ?temporalEnd .
-                OPTIONAL { ?lastInstant rdfs:label ?lastInstantLabel . }
-              }
-            }
-            OPTIONAL {
-              ?working personnel:hasContract ?contract .
-              ?contract rdfs:label ?contractLabel .
-              OPTIONAL { ?contract personnel:contract_type ?contractType . }
-            }
-            # Reached through the act, not through the person: a person bears one
-            # employee role per job, so joining on the person would cross-join
-            # every role against every act of working they ever performed.
-            OPTIONAL {
-              ?working abi:realizes ?role .
-              OPTIONAL { ?role rdfs:label ?roleLabel . }
-              OPTIONAL {
-                ?role personnel:hasJobPosition ?position .
-                ?position rdfs:label ?positionLabel .
-                OPTIONAL { ?position personnel:job_title ?jobTitle . }
-              }
-              OPTIONAL {
-                ?role personnel:hasMission ?mission .
-                ?mission rdfs:label ?missionLabel .
-                OPTIONAL { ?mission personnel:mission_content ?missionContent . }
-                OPTIONAL {
-                  ?mission personnel:isSourcedFrom ?profile .
-                  ?profile rdfs:label ?profileLabel .
-                  OPTIONAL { ?profile personnel:source_url ?sourceUrl . }
-                }
-              }
-            }
-            OPTIONAL {
-              ?working abi:hasParticipant ?remuneration .
-              ?remuneration a personnel:Remuneration ; rdfs:label ?remunerationLabel .
-              OPTIONAL { ?remuneration personnel:remuneration_amount ?remunerationAmount . }
-              OPTIONAL { ?remuneration personnel:remuneration_currency ?remunerationCurrency . }
-            }
-          }
-        }
-        ORDER BY ?personLabel DESC(?temporalStart)
-        LIMIT {{ limit }}
-    """ ;
-    intentMapping:hasArgument intentMapping:personnelLimitArg .
+intentMapping:personnelEmployeeIdArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "employee_id" ;
+    intentMapping:argumentDescription "Identifier an employing organization assigned to a person, e.g. 'E-10428'." ;
+    intentMapping:validationPattern "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" ;
+    intentMapping:validationFormat "employee_id" .
 
-intentMapping:findSkillsDevelopedQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "find_skills_developed"@en ;
-    intentMapping:intentDescription "Return every skill a person bears together with each act of working in which it was developed. A skill exercised across several jobs yields one row per job, which is what links those jobs to one another in the graph. Backed by the ActOfWorkingProcess ontology." ;
-    intentMapping:sparqlTemplate """
-        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX personnel: <http://ontology.naas.ai/personnel/>
+intentMapping:personnelStatusValueArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "status_value" ;
+    intentMapping:argumentDescription "Employment status to filter on, e.g. 'active', 'on-leave', 'notice-period', 'terminated'." ;
+    intentMapping:validationPattern "^[A-Za-z][A-Za-z -]{0,63}$" ;
+    intentMapping:validationFormat "status_value" .
 
-        SELECT DISTINCT ?personLabel ?skill ?skillLabel ?working ?orgLabel
-        WHERE {
-          GRAPH <http://ontology.naas.ai/graph/personnel> {
-            ?person rdf:type abi:Person ;
-                    rdfs:label ?personLabel ;
-                    personnel:hasSkill ?skill .
-            ?skill rdf:type personnel:Skill ; rdfs:label ?skillLabel .
-            OPTIONAL {
-              ?skill personnel:isSkillDevelopedIn ?working .
-              OPTIONAL { ?working personnel:forOrganization ?org . ?org rdfs:label ?orgLabel . }
-            }
-          }
-        }
-        ORDER BY ?personLabel ?skillLabel
-        LIMIT {{ limit }}
-    """ ;
-    intentMapping:hasArgument intentMapping:personnelLimitArg .
+intentMapping:personnelOrganizationNameArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "organization_name" ;
+    intentMapping:argumentDescription "Name of an organization to filter on, matched case-insensitively." ;
+    intentMapping:validationPattern "^[^\\\\\"{}]{1,128}$" ;
+    intentMapping:validationFormat "organization_name" .
 
-intentMapping:findActsOfStudyingQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "find_acts_of_studying"@en ;
-    intentMapping:intentDescription "Return every act of studying: the person enrolled, the educational organization, site, temporal region, enrollment record, programme name, and student role. Backed by the ActOfStudyingProcess ontology." ;
-    intentMapping:sparqlTemplate """
-        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX personnel: <http://ontology.naas.ai/personnel/>
-
-        SELECT DISTINCT ?person ?personLabel ?studying ?studyingLabel ?org ?orgLabel ?site ?siteLabel
-                        ?temporal ?temporalLabel ?temporalStart ?temporalEnd ?durationLabel
-                        ?firstInstant ?firstInstantLabel ?lastInstant ?lastInstantLabel
-                        ?enrollment ?enrollmentLabel ?programName
-                        ?role ?roleLabel
-                        ?degree ?degreeLabel
-        WHERE {
-          GRAPH <http://ontology.naas.ai/graph/personnel> {
-            ?person rdf:type abi:Person ;
-                    rdfs:label ?personLabel ;
-                    personnel:hasActOfStudying ?studying .
-            ?studying rdf:type personnel:ActOfStudying .
-            OPTIONAL { ?studying rdfs:label ?studyingLabel . }
-            OPTIONAL { ?studying personnel:forEducationalOrganization ?org . ?org rdfs:label ?orgLabel . }
-            OPTIONAL { ?studying abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
-            OPTIONAL {
-              ?studying abi:occupiesTemporalRegion ?temporal .
-              ?temporal rdfs:label ?temporalLabel .
-              OPTIONAL { ?temporal personnel:duration_label ?durationLabel . }
-              OPTIONAL {
-                ?temporal abi:hasFirstInstant ?firstInstant .
-                ?firstInstant personnel:instant_date ?temporalStart .
-                OPTIONAL { ?firstInstant rdfs:label ?firstInstantLabel . }
-              }
-              OPTIONAL {
-                ?temporal abi:hasLastInstant ?lastInstant .
-                ?lastInstant personnel:instant_date ?temporalEnd .
-                OPTIONAL { ?lastInstant rdfs:label ?lastInstantLabel . }
-              }
-            }
-            OPTIONAL {
-              ?studying personnel:hasEnrollment ?enrollment .
-              ?enrollment rdfs:label ?enrollmentLabel .
-              OPTIONAL { ?enrollment personnel:program_name ?programName . }
-            }
-            OPTIONAL {
-              ?studying abi:realizes ?role .
-              OPTIONAL { ?role rdfs:label ?roleLabel . }
-            }
-            OPTIONAL {
-              ?studying personnel:hasDegree ?degree .
-              ?degree rdfs:label ?degreeLabel .
-            }
-          }
-        }
-        ORDER BY ?personLabel DESC(?temporalStart)
-        LIMIT {{ limit }}
-    """ ;
-    intentMapping:hasArgument intentMapping:personnelLimitArg .
+intentMapping:personnelJobTitleArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "job_title" ;
+    intentMapping:argumentDescription "Job title, or part of one, to match against published positions." ;
+    intentMapping:validationPattern "^[^\\\\\"{}]{1,128}$" ;
+    intentMapping:validationFormat "job_title" .
