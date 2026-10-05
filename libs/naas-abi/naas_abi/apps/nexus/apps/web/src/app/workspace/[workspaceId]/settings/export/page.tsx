@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Download, FileJson, FileText, Database, Clock, CheckCircle } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { SettingsNotice, SettingsPageHeader, SettingsSection } from '@/components/settings/settings-ui';
 
 interface ExportJob {
   id: string;
@@ -65,46 +66,27 @@ export default function ExportPage() {
   ];
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-lg font-semibold">Data Export</h2>
-        <p className="text-sm text-muted-foreground">
-          Download your data from NEXUS
-        </p>
-      </div>
+    <div className="space-y-6">
+      <SettingsPageHeader title="Data Export" description="Download your data from NEXUS" />
 
-      {/* Export options */}
       <div className="grid gap-4 sm:grid-cols-2">
         {exportOptions.map((option) => {
           const Icon = option.icon;
           const isExporting = exporting === option.id;
-          
+
           return (
-            <div key={option.id} className="rounded-xl border bg-card p-6">
+            <SettingsSection key={option.id}>
               <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
+                <div className="flex h-10 w-10 items-center justify-center bg-muted text-muted-foreground">
                   <Icon size={20} />
                 </div>
                 <div>
                   <h3 className="font-medium">{option.name}</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {option.format}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{option.format}</p>
                 </div>
               </div>
-              <p className="mb-4 text-sm text-muted-foreground">
-                {option.description}
-              </p>
-              <button
-                onClick={() => handleExport(option.id)}
-                disabled={isExporting}
-                className={cn(
-                  'flex w-full items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors',
-                  isExporting
-                    ? 'bg-secondary text-muted-foreground'
-                    : 'bg-primary text-primary-foreground hover:bg-primary/90'
-                )}
-              >
+              <p className="mb-4 text-sm text-muted-foreground">{option.description}</p>
+              <Button onClick={() => handleExport(option.id)} disabled={isExporting} className="w-full">
                 {isExporting ? (
                   <>
                     <Clock size={16} className="animate-spin" />
@@ -116,52 +98,40 @@ export default function ExportPage() {
                     Export
                   </>
                 )}
-              </button>
-            </div>
+              </Button>
+            </SettingsSection>
           );
         })}
       </div>
 
-      {/* Export history */}
-      <div className="rounded-xl border bg-card p-6">
-        <h3 className="mb-4 font-semibold">Export History</h3>
+      <SettingsSection title="Export History">
         {exports.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No exports yet. Your export history will appear here.
-          </p>
+          <p className="text-sm text-muted-foreground">No exports yet. Your export history will appear here.</p>
         ) : (
           <div className="space-y-3">
             {exports.map((exp) => (
-              <div
-                key={exp.id}
-                className="flex items-center justify-between rounded-lg border bg-secondary/30 p-3"
-              >
+              <div key={exp.id} className="flex items-center justify-between border border-border bg-muted/30 p-3">
                 <div className="flex items-center gap-3">
                   <CheckCircle size={18} className="text-primary" />
                   <div>
                     <p className="text-sm font-medium capitalize">{exp.type}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {exp.createdAt.toLocaleString()}
-                    </p>
+                    <p className="text-xs text-muted-foreground">{exp.createdAt.toLocaleString()}</p>
                   </div>
                 </div>
-                <button className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 text-sm hover:bg-secondary">
+                <Button variant="secondary" size="sm">
                   <Download size={14} />
                   Download
-                </button>
+                </Button>
               </div>
             ))}
           </div>
         )}
-      </div>
+      </SettingsSection>
 
-      {/* Data retention notice */}
-      <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4">
-        <p className="text-sm text-yellow-600 dark:text-yellow-400">
-          <strong>Data Retention:</strong> Exports are available for download for
-          7 days. After that, you'll need to create a new export.
-        </p>
-      </div>
+      <SettingsNotice tone="warning">
+        <strong>Data Retention:</strong> Exports are available for download for 7 days. After that, you&apos;ll need
+        to create a new export.
+      </SettingsNotice>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getFeatureForWorkspacePath,
   getFirstAllowedWorkspacePath,
+  getWorkspaceHomePath,
   getWorkspaceSwitchPath,
   isWorkspaceAdminEventsPath,
   isWorkspacePathAllowed,
@@ -141,6 +142,13 @@ describe('getFirstAllowedWorkspacePath', () => {
         role: 'member',
       }),
     ).toBe('/workspace/ws1/chat');
+  });
+});
+
+describe('getWorkspaceHomePath', () => {
+  it('lands on the workspace home, which no feature flag hides', () => {
+    expect(getWorkspaceHomePath('ws-other')).toBe('/workspace/ws-other/home');
+    expect(isWorkspacePathAllowed({ pathname: '/workspace/ws-other/home', role: 'member', workspaceFlags: {} })).toBe(true);
   });
 });
 

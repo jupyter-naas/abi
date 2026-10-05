@@ -2,6 +2,67 @@
 
 <!-- version list -->
 
+## v2.77.0 (2026-10-04)
+
+
+## v2.76.0 (2026-10-02)
+
+### Features
+
+- **settings**: Update Nexus settings design system and UI components
+  ([`f0fa360`](https://github.com/jupyter-naas/abi/commit/f0fa360ecffc894981b2d31f152a5a62190b8efb))
+
+- **settings-cache**: Add 24h API cache for settings pages with manual reload
+  ([`df9a6b0`](https://github.com/jupyter-naas/abi/commit/df9a6b058dfcc031f4694a8e6620e5befe3261ec))
+
+- **settings-cache**: Add 24h caching middleware for Nexus settings API
+  ([`43b9ebc`](https://github.com/jupyter-naas/abi/commit/43b9ebc5061ea53c5daca65a0332a17ad1e07be4))
+
+### Refactoring
+
+- **settings**: Large refactor of Nexus settings UI and components
+  ([`2a04ea2`](https://github.com/jupyter-naas/abi/commit/2a04ea2c8bd406f2671cd40975ca01117ec6bc90))
+
+- **settings**: Update components settings cache and remove reload button from org header
+  ([`13b5afc`](https://github.com/jupyter-naas/abi/commit/13b5afcaed8c38983517a2ed53415455f0620047))
+
+- **settings**: Update nexus settings design system and related components
+  ([`4daec20`](https://github.com/jupyter-naas/abi/commit/4daec2050a5761d2702aa464c25ea3a6f760025b))
+
+
+## v2.75.0 (2026-10-01)
+
+### Bug Fixes
+
+- **nexus**: Update workspace navigation to use home path
+  ([`e065406`](https://github.com/jupyter-naas/abi/commit/e065406295fd5358a11b7aaba0795f9e04c9b628))
+
+- **search-section**: Remove unused imports and clean up unused variables
+  ([`760e2c7`](https://github.com/jupyter-naas/abi/commit/760e2c7a8d1435dbee9580e894137121269bf3c1))
+
+### Features
+
+- Init search
+  ([`9f6f600`](https://github.com/jupyter-naas/abi/commit/9f6f60002fe6279b06d26a545cad5b436276e2b6))
+
+- **search**: Add and reorder search section in sidebar navigation
+  ([`e50bfb6`](https://github.com/jupyter-naas/abi/commit/e50bfb66ed86556448c59c776ce3cb0012582beb))
+
+- **search**: Add workspace access requirement to topic endpoints
+  ([`bfe45fa`](https://github.com/jupyter-naas/abi/commit/bfe45fa8af5cab7878208cee226d5f30b5e5dbfe))
+
+- **search**: Improve safeImage to resolve API base URL
+  ([`ad2c8a9`](https://github.com/jupyter-naas/abi/commit/ad2c8a9b4b5e3a81c02d5e3fdb1276286fe51343))
+
+- **search-nexus**: Add client vs employer distinction and improve search topics
+  ([`ed746ff`](https://github.com/jupyter-naas/abi/commit/ed746ff428079e8385426ae7bc223f5416af47a0))
+
+### Refactoring
+
+- **agents**: Simplify agents page by removing unused code and hooks
+  ([`094e9c7`](https://github.com/jupyter-naas/abi/commit/094e9c74775fab34e7d84c684931c54209c3e182))
+
+
 ## v2.74.0 (2026-09-30)
 
 

@@ -6,6 +6,20 @@ import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useParams } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { useConfirm } from '@/components/ui/dialogs';
+import { Input, Select } from '@/components/ui/input';
+import {
+  SettingsEmpty,
+  SettingsLoading,
+  SettingsNotice,
+  SettingsPageHeader,
+  SettingsFilterSelect,
+  SettingsSection,
+  SettingsTableToolbar,
+  countLabel,
+  settingsTable,
+} from '@/components/settings/settings-ui';
 
 interface Member {
   id: string;
@@ -18,7 +32,7 @@ interface Member {
 }
 
 const roleConfig = {
-  owner: { label: 'Owner', icon: Crown, color: 'text-yellow-500' },
+  owner: { label: 'Owner', icon: Crown, color: 'text-primary' },
   admin: { label: 'Admin', icon: Shield, color: 'text-primary' },
   member: { label: 'Member', icon: User, color: 'text-foreground' },
   viewer: { label: 'Viewer', icon: User, color: 'text-muted-foreground' },
@@ -51,6 +65,9 @@ export default function MembersPage() {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState('');
   const [actionError, setActionError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const { confirm: confirmRemove, dialog: confirmDialog } = useConfirm();
 
   const membershipRole =
     workspace?.currentUserRole ||
@@ -133,7 +150,7 @@ export default function MembersPage() {
 
   const handleRemoveMember = async (userId: string) => {
     if (!canManage) return;
-    if (!confirm('Remove this member?')) return;
+    if (!(await confirmRemove({ title: 'Remove this member?', confirmLabel: 'Remove' }))) return;
 
     setActionError('');
     try {
@@ -187,226 +204,212 @@ export default function MembersPage() {
     }
   };
 
+  const query = searchQuery.trim().toLowerCase();
+  const filteredMembers = members.filter((member) => {
+    if (roleFilter !== 'all' && member.role !== roleFilter) return false;
+    return !query || member.name.toLowerCase().includes(query) || member.email.toLowerCase().includes(query);
+  });
+  const adminCount = members.filter((m) => m.role === 'owner' || m.role === 'admin').length;
+
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">Members</h2>
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-              {members.length}
-            </span>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Manage who has access to this workspace
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            setInviteError('');
-            setShowInvite(true);
-          }}
-          disabled={!canManage}
-          title={
-            canManage
-              ? undefined
-              : 'Only workspace owners and admins can invite members'
-          }
-          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Plus size={16} />
-          Invite Member
-        </button>
-      </div>
+    <div className="space-y-6">
+      <SettingsPageHeader
+        title="Members"
+        badge={`${members.length} active`}
+        description="Manage who has access to this workspace"
+        actions={
+          <Button
+            onClick={() => {
+              setInviteError('');
+              setShowInvite(true);
+            }}
+            disabled={!canManage}
+            title={canManage ? undefined : 'Only workspace owners and admins can invite members'}
+          >
+            <Plus size={16} />
+            Invite Member
+          </Button>
+        }
+      />
 
       {actionError && (
-        <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-          <AlertCircle size={16} />
-          <span>{actionError}</span>
-        </div>
+        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+          {actionError}
+        </SettingsNotice>
       )}
 
       {showInvite && canManage && (
-        <div className="rounded-xl border bg-card p-4">
-          <h3 className="mb-2 font-medium">Invite New Member</h3>
-          <p className="mb-4 text-xs text-muted-foreground">
-            Creates the account if needed and emails a sign-in code. Same API as{' '}
-            <code className="text-[0.95em]">abi workspace members add</code> /{' '}
-            <code className="text-[0.95em]">
-              POST /api/workspaces/{'{id}'}/members/invite
-            </code>
-            .
-          </p>
-
+        <SettingsSection
+          title="Invite New Member"
+          description={
+            <>
+              Creates the account if needed and emails a sign-in code. Same API as{' '}
+              <code>abi workspace members add</code> / <code>POST /api/workspaces/{'{id}'}/members/invite</code>.
+            </>
+          }
+        >
           {inviteError && (
-            <div className="mb-4 flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-              <AlertCircle size={16} />
-              <span>{inviteError}</span>
-            </div>
+            <SettingsNotice tone="error" icon={<AlertCircle size={14} />} className="mb-4">
+              {inviteError}
+            </SettingsNotice>
           )}
 
           <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="flex-1">
-              <input
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="email@example.com"
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-            <select
+            <Input
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="email@example.com"
+              className="flex-1"
+            />
+            <Select
               value={inviteRole}
-              onChange={(e) =>
-                setInviteRole(e.target.value as typeof inviteRole)
-              }
-              className="rounded-lg border bg-background px-3 py-2 text-sm"
+              onChange={(e) => setInviteRole(e.target.value as typeof inviteRole)}
+              className="sm:w-40"
             >
               <option value="member">Member</option>
               <option value="viewer">Viewer</option>
               <option value="admin">Admin</option>
-            </select>
-            <button
-              onClick={() => void handleInvite()}
-              disabled={!inviteEmail.trim() || inviteLoading}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
+            </Select>
+            <Button onClick={() => void handleInvite()} disabled={!inviteEmail.trim() || inviteLoading}>
               {inviteLoading ? 'Sending...' : 'Send Invite'}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="secondary"
               onClick={() => {
                 setShowInvite(false);
                 setInviteError('');
               }}
-              className="rounded-lg border px-4 py-2 text-sm text-muted-foreground hover:bg-secondary"
             >
               Cancel
-            </button>
+            </Button>
           </div>
-        </div>
+        </SettingsSection>
       )}
 
-      <div className="rounded-xl border bg-card">
-        {loading ? (
-          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            Loading members...
-          </div>
-        ) : members.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            No members yet.
-          </div>
-        ) : (
-          <table className="w-full">
+      {loading ? (
+        <SettingsLoading label="Loading members…" />
+      ) : members.length === 0 ? (
+        <SettingsEmpty title="No members yet." />
+      ) : (
+        <div className="space-y-4">
+        <SettingsTableToolbar
+          search={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search members by name or email..."
+          filters={
+            <SettingsFilterSelect
+              label="Role"
+              value={roleFilter}
+              onChange={setRoleFilter}
+              options={[
+                { value: 'all', label: 'All roles' },
+                ...(Object.keys(roleConfig) as (keyof typeof roleConfig)[]).map((role) => ({
+                  value: role,
+                  label: roleConfig[role].label,
+                })),
+              ]}
+            />
+          }
+          meta={`${countLabel(filteredMembers.length, members.length, 'member')} · ${adminCount} owner${adminCount === 1 ? '' : 's'} or admin${adminCount === 1 ? '' : 's'}`}
+        />
+        <div className={settingsTable.wrapper}>
+          <table className={settingsTable.table}>
             <thead>
-              <tr className="border-b text-left text-sm text-muted-foreground">
-                <th className="p-4 font-medium">Member</th>
-                <th className="p-4 font-medium">Role</th>
-                <th className="p-4 font-medium">Joined</th>
-                <th className="p-4 font-medium text-right">Actions</th>
+              <tr className={settingsTable.headRow}>
+                <th className={settingsTable.th}>Member</th>
+                <th className={settingsTable.th}>Role</th>
+                <th className={settingsTable.th}>Joined</th>
+                <th className={cn(settingsTable.th, 'text-right')}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {members.map((member) => {
+              {filteredMembers.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                    No members match the current search and filters
+                  </td>
+                </tr>
+              )}
+              {filteredMembers.map((member) => {
                 const role = roleConfig[member.role] || roleConfig.member;
                 const RoleIcon = role.icon;
-                const initial = (member.name || member.email || '?')
-                  .charAt(0)
-                  .toUpperCase();
-                const roleLocked =
-                  member.role === 'owner' ||
-                  member.user_id === authUser?.id ||
-                  !canManage;
+                const initial = (member.name || member.email || '?').charAt(0).toUpperCase();
+                const roleLocked = member.role === 'owner' || member.user_id === authUser?.id || !canManage;
                 return (
-                  <tr key={member.id} className="border-b last:border-0">
-                    <td className="p-4">
+                  <tr key={member.id} className={settingsTable.row}>
+                    <td className={settingsTable.td}>
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                        <div className="flex h-9 w-9 items-center justify-center bg-primary text-primary-foreground">
                           {initial}
                         </div>
                         <div>
                           <p className="font-medium">{member.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {member.email}
-                          </p>
+                          <p className="text-xs text-muted-foreground">{member.email}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="p-4">
+                    <td className={settingsTable.td}>
                       {roleLocked ? (
-                        <div
-                          className={cn(
-                            'flex items-center gap-2 text-sm',
-                            role.color
-                          )}
-                        >
+                        <div className={cn('flex items-center gap-2', role.color)}>
                           <RoleIcon size={14} />
                           {role.label}
                         </div>
                       ) : (
-                        <select
+                        <Select
                           value={member.role}
                           onChange={(e) =>
-                            void handleChangeRole(
-                              member.user_id,
-                              e.target.value as 'admin' | 'member' | 'viewer'
-                            )
+                            void handleChangeRole(member.user_id, e.target.value as 'admin' | 'member' | 'viewer')
                           }
-                          className="rounded border bg-background px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                          className="h-8 w-32"
                         >
                           <option value="member">Member</option>
                           <option value="viewer">Viewer</option>
                           <option value="admin">Admin</option>
-                        </select>
+                        </Select>
                       )}
                     </td>
-                    <td className="p-4 text-sm text-muted-foreground">
+                    <td className={cn(settingsTable.td, 'text-muted-foreground')}>
                       {member.joinedAt.toLocaleDateString()}
                     </td>
-                    <td className="p-4 text-right">
-                      {canManage &&
-                        member.role !== 'owner' &&
-                        member.user_id !== authUser?.id && (
-                          <button
-                            onClick={() =>
-                              void handleRemoveMember(member.user_id)
-                            }
-                            className="text-muted-foreground hover:text-destructive"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
+                    <td className={cn(settingsTable.td, 'text-right')}>
+                      {canManage && member.role !== 'owner' && member.user_id !== authUser?.id && (
+                        <Button
+                          variant="destructive-ghost"
+                          size="icon"
+                          onClick={() => void handleRemoveMember(member.user_id)}
+                          title="Remove member"
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+        </div>
+      )}
 
-      <div className="rounded-xl border bg-muted/30 p-4">
-        <h3 className="mb-3 font-medium">Role Permissions</h3>
+      <SettingsSection title="Role Permissions">
         <div className="grid gap-3 sm:grid-cols-3">
           <div>
-            <p className="font-medium text-sm">Member</p>
-            <p className="text-xs text-muted-foreground">
-              Can use agents, create content, and view data
-            </p>
+            <p className="text-sm font-medium">Member</p>
+            <p className="text-xs text-muted-foreground">Can use agents, create content, and view data</p>
           </div>
           <div>
-            <p className="font-medium text-sm">Viewer</p>
-            <p className="text-xs text-muted-foreground">
-              Read-only access to workspace content
-            </p>
+            <p className="text-sm font-medium">Viewer</p>
+            <p className="text-xs text-muted-foreground">Read-only access to workspace content</p>
           </div>
           <div>
-            <p className="font-medium text-sm">Admin</p>
-            <p className="text-xs text-muted-foreground">
-              Full access except billing and workspace deletion
-            </p>
+            <p className="text-sm font-medium">Admin</p>
+            <p className="text-xs text-muted-foreground">Full access except billing and workspace deletion</p>
           </div>
         </div>
-      </div>
+      </SettingsSection>
+      {confirmDialog}
     </div>
   );
 }

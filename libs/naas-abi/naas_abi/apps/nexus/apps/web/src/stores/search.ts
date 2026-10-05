@@ -5,8 +5,16 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { authFetch } from './auth';
 import { getApiUrl } from '@/lib/config';
+import { WEB_ENGINE_IDS } from '@/lib/search-scopes';
 
 export type SourceCategory = 'public' | 'private' | 'custom';
+
+/**
+ * The Web scope queries only the engines `/api/search/web` implements
+ * (`WEB_ENGINES`), and of those only the ones the workspace allows. Private
+ * sources (conversations, files, graph, ontology) have their own scopes.
+ */
+export { WEB_ENGINE_IDS };
 
 export interface SearchSource {
   id: string;
@@ -36,6 +44,9 @@ export interface SearchResult {
 export interface SearchState {
   // Available sources
   sources: SearchSource[];
+  /** Engines the current workspace allows (Settings → Search); null until known. */
+  allowedEngineIds: string[] | null;
+  setAllowedEngines: (ids: string[]) => void;
   
   // Search state
   query: string;
@@ -71,7 +82,7 @@ const defaultPublicSources: SearchSource[] = [
     name: 'Wikipedia',
     category: 'public',
     icon: 'BookOpen',
-    enabled: true,
+    enabled: false, // the query leaves Nexus: off until switched on
     description: 'Search Wikipedia articles (free API)',
   },
   {
@@ -79,7 +90,7 @@ const defaultPublicSources: SearchSource[] = [
     name: 'DuckDuckGo',
     category: 'public',
     icon: 'Search',
-    enabled: true,
+    enabled: false, // the query leaves Nexus: off until switched on
     description: 'DuckDuckGo instant answers (free API)',
   },
   {
@@ -156,6 +167,11 @@ export const useSearchStore = create<SearchState>()(
     (set, get) => ({
       // Initial state
       sources: [...defaultPublicSources, ...defaultPrivateSources, ...defaultCustomSources],
+      allowedEngineIds: null,
+      // A workspace change can forbid an engine: forget the last query so it reruns without it.
+      setAllowedEngines: (ids) => set((state) => (
+        state.allowedEngineIds?.join() === ids.join() ? {} : { allowedEngineIds: ids, query: '', results: [] }
+      )),
       query: '',
       results: [],
       loading: false,
@@ -167,11 +183,14 @@ export const useSearchStore = create<SearchState>()(
       setQuery: (query) => set({ query }),
 
       // Toggle source enabled/disabled
+      // Results depend on the engines: forget the last query so the next search reruns.
       toggleSource: (sourceId) =>
         set((state) => ({
           sources: state.sources.map((s) =>
             s.id === sourceId ? { ...s, enabled: !s.enabled } : s
           ),
+          query: '',
+          results: [],
         })),
 
       // Toggle category expansion in sidebar
@@ -222,7 +241,8 @@ export const useSearchStore = create<SearchState>()(
         get().addRecentSearch(query);
 
         try {
-          const enabledSources = get().sources.filter((s) => s.enabled);
+          const allowed = get().allowedEngineIds ?? WEB_ENGINE_IDS;
+          const enabledSources = get().sources.filter((s) => s.enabled && allowed.includes(s.id));
           const results: SearchResult[] = [];
 
           // Search each enabled source
@@ -261,6 +281,15 @@ export const useSearchStore = create<SearchState>()(
     }),
     {
       name: 'nexus-search',
+      // v1: web engines start off (the Web scope sends the query outside Nexus).
+      version: 1,
+      migrate: (persisted, version) => {
+        const state = persisted as Partial<SearchState>;
+        if (version < 1 && Array.isArray(state.sources)) {
+          state.sources = state.sources.map((s) => (WEB_ENGINE_IDS.includes(s.id) ? { ...s, enabled: false } : s));
+        }
+        return state as SearchState;
+      },
       partialize: (state) => ({
         sources: state.sources,
         recentSearches: state.recentSearches,
@@ -354,6 +383,9 @@ export const selectPrivateSources = (state: SearchState) =>
 
 export const selectCustomSources = (state: SearchState) =>
   state.sources.filter((s) => s.category === 'custom');
+
+export const selectWebEngines = (state: SearchState) =>
+  state.sources.filter((s) => WEB_ENGINE_IDS.includes(s.id));
 
 export const selectEnabledSources = (state: SearchState) =>
   state.sources.filter((s) => s.enabled);

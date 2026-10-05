@@ -1,0 +1,11 @@
+from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.modules.PeopleOntology import (
+    Recommendation as _Recommendation,
+)
+
+
+class Recommendation(_Recommendation):
+    """Action class for Recommendation"""
+
+    def actions(self):
+        """Action method - implement your logic here"""
+        pass

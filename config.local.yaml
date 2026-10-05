@@ -160,21 +160,31 @@ modules:
     config:
       openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
 
-  # Q: How do I connect the WSR app to live real-world data feeds?
-  # A: WSR is an app of the intelligence bucket, not a module of its own -- configure
-  #    it under the "wsr" key below. Provide API keys for each source; leave blank to
-  #    skip that source gracefully.
-  #    OpenSky: flight tracking | TfL: Transport for London | OpenWebcamDB: public webcams
   - module: naas_abi_marketplace.domains.intelligence
     enabled: true
+
+  # Organization vocabulary + alliance/restructuring processes (S2 intelligence).
+  - module: naas_abi_marketplace.domains.intelligence.modules.organizations
+    enabled: true
+
+  # People intelligence: anyone's career, studies, skills and published profile,
+  # People Search and the 7-bucket person graph (S2 intelligence).
+  - module: naas_abi_marketplace.domains.intelligence.modules.people
+    enabled: true
+
+  # Q: How do I connect the WSR app to live real-world data feeds?
+  # A: WSR is a module of the intelligence bucket -- configure it below. Provide API
+  #    keys for each source; leave blank to skip that source gracefully.
+  #    OpenSky: flight tracking | TfL: Transport for London | OpenWebcamDB: public webcams
+  - module: naas_abi_marketplace.domains.intelligence.modules.wsr
+    enabled: true
     config:
-      wsr:
-        opensky_client_id: ""
-        opensky_client_secret: ""
-        tfl_app_key: ""
-        openwebcamdb_api_key: ""
-        demo_login: "demo@naas.ai"
-        demo_password: "demo1234"
+      opensky_client_id: ""
+      opensky_client_secret: ""
+      tfl_app_key: ""
+      openwebcamdb_api_key: ""
+      demo_login: "demo@naas.ai"
+      demo_password: "demo1234"
 
   # Q: How do I make documents searchable by meaning, not just keywords?
   # A: Pick an embedding model -- the pipeline converts text to vectors automatically.

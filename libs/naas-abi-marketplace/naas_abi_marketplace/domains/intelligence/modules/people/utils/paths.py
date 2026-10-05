@@ -1,0 +1,56 @@
+"""Canonical filesystem paths for the people module."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+PEOPLE_ROOT = Path(__file__).resolve().parents[1]
+ONTOLOGIES_DIR = PEOPLE_ROOT / "ontologies"
+
+# Demo inputs (fictional person JSON).
+DEMO_SOURCE_DIR = PEOPLE_ROOT / "data" / "demo" / "person"
+
+# Demo instance graph (TTL) — built from demo sources, consumed by export scripts.
+DEMO_GRAPH_DIR = PEOPLE_ROOT / "graphs" / "demo"
+DEMO_GRAPH_FILE = DEMO_GRAPH_DIR / "people.ttl"
+
+
+def module_configuration_class() -> type:
+    from naas_abi_marketplace.domains.intelligence.modules.people import ABIModule
+
+    return ABIModule.Configuration
+
+
+def _configuration_default(field_name: str) -> str:
+    field = module_configuration_class().model_fields[field_name]
+    default = field.default
+    if default is None or default is ...:
+        raise ValueError(f"Missing default for people Configuration.{field_name}")
+    return str(default)
+
+
+def module_datastore_path() -> str:
+    try:
+        from naas_abi_marketplace.domains.intelligence.modules.people import ABIModule
+
+        return ABIModule.get_instance().configuration.datastore_path
+    except Exception:
+        return _configuration_default("datastore_path")
+
+
+def module_graph_name() -> str:
+    try:
+        from naas_abi_marketplace.domains.intelligence.modules.people import ABIModule
+
+        return ABIModule.get_instance().configuration.graph_name
+    except Exception:
+        return _configuration_default("graph_name")
+
+
+def module_ontology_namespace() -> str:
+    try:
+        from naas_abi_marketplace.domains.intelligence.modules.people import ABIModule
+
+        return ABIModule.get_instance().configuration.ontology_namespace
+    except Exception:
+        return _configuration_default("ontology_namespace")

@@ -6,6 +6,8 @@ import { dictionaryKindLabel, type DictionaryTerm } from './ontology-dictionary-
 
 export type TermGraph = { rootId: string; nodes: GraphNode[]; edges: GraphEdge[] };
 export type TermGraphRelations = { hierarchy: boolean; restrictions: boolean; properties: boolean };
+/** What the BFO 7 buckets view shows by default, on the Network page and the Details preview: restrictions only. */
+export const BFO_LAYOUT_RELATIONS: TermGraphRelations = { hierarchy: false, restrictions: true, properties: false };
 
 /** Adapt the permitted dictionary declarations to the existing network canvas. */
 export function buildTermGraph(term: DictionaryTerm, terms: DictionaryTerm[]): TermGraph {
