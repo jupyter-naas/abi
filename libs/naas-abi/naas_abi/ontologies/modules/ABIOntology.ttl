@@ -21,8 +21,8 @@ abi:Ontology a owl:Ontology ;
   abi:pythonPackage "naas_abi" ;
   abi:ontologyResource "ontologies/modules/ABIOntology.ttl" ;
   abi:pythonResource "ontologies/modules/ABIOntology.py" ;
-  dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
-  dc11:date "2026-06-26"^^xsd:date .
+  dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
+  dc11:date "2026-10-04"^^xsd:date .
 
 #################################################################
 # Object Properties
@@ -182,25 +182,6 @@ abi:MaterialEntity a owl:Class ;
           owl:allValuesFrom abi:Disposition
         ] .
 
-abi:Person a owl:Class ;
-    rdfs:label "Person"@en ;
-    skos:altLabel "Human"@en ;
-    skos:definition "An Animal that is a member of the species Homo sapiens."@en ;
-    owl:equivalentClass cco:ont00001262 ;
-    rdfs:subClassOf cco:ont00000562 .
-
-abi:Organization a owl:Class ;
-    rdfs:label "Organization"@en ;
-    skos:definition "A Group of Agents which can be the bearer of roles, has members, and has a set of organization rules."@en ;
-    owl:equivalentClass cco:ont00001180 ;
-    rdfs:subClassOf cco:ont00000300 .
-
-abi:Agent a owl:Class ;
-    rdfs:label "Agent"@en ;
-    skos:definition "An Agent is a Material Entity that bears an Agent Capability."@en ;
-    owl:equivalentClass cco:ont00001017 ;
-    rdfs:subClassOf abi:MaterialEntity .
-
 # Site (WHERE)
 abi:Site a owl:Class ;
     owl:equivalentClass bfo:BFO_0000029 ;
@@ -232,43 +213,6 @@ abi:GenericallyDependentContinuant a owl:Class ;
           owl:onProperty abi:genericallyDependsOn ;
           owl:someValuesFrom abi:MaterialEntity
         ] .
-
-# Document Content Entity (HOW WE KNOW — document subhierarchy)
-abi:DocumentContentEntity a owl:Class ;
-    rdfs:label "Document Content Entity"@en ;
-    skos:altLabel "Document"@en ;
-    skos:definition "A generically dependent continuant that consists of a series of paragraphs of text or diagrams intended to be carried by physical pieces of paper or an electronic word processor file."@en ;
-    rdfs:subClassOf abi:GenericallyDependentContinuant .
-
-abi:Book a owl:Class ;
-    rdfs:label "Book"@en ;
-    skos:definition "A Document Content Entity that canonically appears as ink on paper or parchment, or other materials fastened together to hinge at one side."@en ;
-    rdfs:subClassOf abi:DocumentContentEntity .
-
-abi:Transcript a owl:Class ;
-    rdfs:label "Transcript"@en ;
-    skos:definition "A Document Content Entity that was originally recorded in a different medium."@en ;
-    rdfs:subClassOf abi:DocumentContentEntity .
-
-abi:Spreadsheet a owl:Class ;
-    rdfs:label "Spreadsheet"@en ;
-    skos:definition "A Document Content Entity that canonically appears as an interactive, tabular form."@en ;
-    rdfs:subClassOf abi:DocumentContentEntity .
-
-abi:Report a owl:Class ;
-    rdfs:label "Report"@en ;
-    skos:definition "A Document Content Entity that conveys an account of some event, situation, or the result of some observation or inquiry."@en ;
-    rdfs:subClassOf abi:DocumentContentEntity .
-
-abi:FormDocument a owl:Class ;
-    rdfs:label "Form Document"@en ;
-    skos:definition "A Document Content Entity that has Document Field Contents as parts."@en ;
-    rdfs:subClassOf abi:DocumentContentEntity .
-
-abi:JournalArticle a owl:Class ;
-    rdfs:label "Journal Article"@en ;
-    skos:definition "A Document Content Entity that is part of a Journal Issue."@en ;
-    rdfs:subClassOf abi:DocumentContentEntity .
 
 # Quality (HOW IT IS)
 abi:Quality a owl:Class ;
@@ -401,25 +345,3 @@ abi:TemporalInstant a owl:Class ;
     rdfs:label "temporal instant"@en ;
     skos:definition "(Elucidation) A temporal instant is a zero-dimensional temporal region that has no proper temporal part."@en ;
     rdfs:subClassOf abi:TemporalRegion .
-
-#################################################################
-# Data Properties
-#################################################################
-
-abi:first_name a owl:DatatypeProperty ;
-    rdfs:label "first name"@en ;
-    skos:definition "x first name y =Def x is a person & y is a string & y is the first name of x"@en ;
-    rdfs:domain abi:Person ;
-    rdfs:range xsd:string .
-
-abi:last_name a owl:DatatypeProperty ;
-    rdfs:label "last name"@en ;
-    skos:definition "x last name y =Def x is a person & y is a string & y is the last name of x"@en ;
-    rdfs:domain abi:Person ;
-    rdfs:range xsd:string .
-
-abi:full_name a owl:DatatypeProperty ;
-    rdfs:label "full name"@en ;
-    skos:definition "x full name y =Def x is a person & y is a string & y is the full name of x"@en ;
-    rdfs:domain abi:Person ;
-    rdfs:range xsd:string .

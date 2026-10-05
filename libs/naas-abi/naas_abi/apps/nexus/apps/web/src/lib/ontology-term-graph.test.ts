@@ -103,3 +103,30 @@ test('cycles terminate and remain represented without cyclic tree-layout edges',
   assert.equal(graph.edges.length, 2);
   assert.equal(graph.edges.filter(edge => edge.properties?.relation_kind === 'is_a').length, 1);
 });
+
+test('server-resolved buckets classify terms whose parents sit in unloaded imports', () => {
+  // CCO is never in the dictionary: Planned Act and CCO Person are bare references.
+  const plannedAct = { id: 'https://www.commoncoreontologies.org/ont00000228', name: 'Planned Act' };
+  const ccoPerson = { id: 'https://www.commoncoreontologies.org/ont00001262', name: 'Person' };
+  const human: DictionaryTerm = { id: 'abi:Person', name: 'Person', type: 'entity', equivalents: [ccoPerson],
+    bfoBucket: 'http://purl.obolibrary.org/obo/BFO_0000040' };
+  const work: DictionaryTerm = { id: 'abi:ActOfWorking', name: 'Act of Working', type: 'entity', parents: [plannedAct],
+    bfoBucket: 'http://purl.obolibrary.org/obo/BFO_0000015', relations: [
+      { property: { id: 'abi:hasParticipant', name: 'has participant' }, target: human, kind: 'restriction', constraint: 'some', sources: [source] },
+    ] };
+  const unresolved: DictionaryTerm = { ...work, id: 'people:Other', bfoBucket: null };
+  const graph = buildTermGraph(work, [work, human, unresolved]);
+  assert.equal(graph.nodes.find(node => node.id === termKey(work))?.type, 'Process');
+  assert.equal(graph.nodes.find(node => node.id === termKey(human))?.type, 'Material Entity');
+  assert.equal(buildTermGraph(unresolved, [unresolved]).nodes[0].type, 'Unknown');
+});
+
+test('a referenced class outside the workspace uses the bucket and label the server put on the link', () => {
+  const office = { id: 'https://www.commoncoreontologies.org/ont00000468', name: 'Office Building', bfoBucket: 'http://purl.obolibrary.org/obo/BFO_0000040' };
+  const work: DictionaryTerm = { id: 'abi:ActOfWorking', name: 'Act of Working', type: 'entity', bfoBucket: 'http://purl.obolibrary.org/obo/BFO_0000015', relations: [
+    { property: { id: 'abi:occursIn', name: 'occurs in' }, target: office, kind: 'restriction', constraint: 'some', sources: [source] },
+  ] };
+  const node = buildTermGraph(work, [work]).nodes.find(item => item.properties.iri === office.id);
+  assert.equal(node?.label, 'Office Building');
+  assert.equal(node?.type, 'Material Entity');
+});

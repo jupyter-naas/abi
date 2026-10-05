@@ -1,5 +1,5 @@
 """
-Webcams port — wsr:CCTVStreamingProcess (OpenWebcamDB) interface contracts.
+Webcams port — abi:CCTVStreamingProcess (OpenWebcamDB) interface contracts.
 """
 
 from ports.models import CCTVCamera, StreamResult

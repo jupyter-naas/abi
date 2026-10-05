@@ -1,4 +1,10 @@
-export type DictionaryLink = { id: string; name: string; sources?: Array<{path: string; name: string; moduleName: string}> };
+export type DictionaryLink = {
+  id: string; name: string; sources?: Array<{path: string; name: string; moduleName: string}>;
+  /** BFO bucket of a referenced class not declared in the workspace, resolved server-side through imports. */
+  bfoBucket?: string | null;
+  /** Every class above it through subClassOf/equivalentClass and imports, nearest first. */
+  bfoAncestors?: string[];
+};
 
 export type DictionaryTerm = {
   id: string;
@@ -10,6 +16,12 @@ export type DictionaryTerm = {
   metadata?: Record<'label' | 'definition' | 'example', string[]>;
   parents?: DictionaryLink[];
   equivalents?: DictionaryLink[];
+  /** Nearest BFO bucket root, resolved server-side through the file's imports (BFO/CCO). */
+  bfoBucket?: string | null;
+  /** Every class above it through subClassOf/equivalentClass and imports, nearest first. */
+  bfoAncestors?: string[];
+  /** Not declared in the workspace: only pointed at by a declared term (cco:ont00000270). */
+  referenced?: boolean;
   systemViewKind?: string | null;
   systemViewParents?: DictionaryLink[];
   /** Source ledger wording and business groupings, independent of formal BFO types. */
@@ -28,7 +40,7 @@ export type DictionaryTerm = {
   contacts?: string[];
   relations?: Array<{
     property: { id: string; name: string };
-    target: { id: string; name: string };
+    target: DictionaryLink;
     kind: 'assertion' | 'restriction';
     constraint?: string;
     sources: Array<{ path: string; name: string; moduleName: string }>;

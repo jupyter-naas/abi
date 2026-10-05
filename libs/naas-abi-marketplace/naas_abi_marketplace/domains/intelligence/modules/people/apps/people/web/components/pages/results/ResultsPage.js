@@ -1,6 +1,7 @@
 import { fetchSearch } from "../../../lib/api.js";
 import { avatarHtml, escapeHtml, flagHtml, highlight } from "../../../lib/dom.js";
 import { profileHref, searchHref } from "../../../lib/routes.js";
+import { overflowTabs } from "../../../lib/tab-overflow.js";
 
 function resultHtml(config, hit, tokens, query) {
   const place = [hit.organization, ...(hit.place || [])].filter(Boolean);
@@ -163,6 +164,8 @@ export async function mountResults(view, { config, params }) {
       }
       ${pagerHtml(config, payload, query)}
     </div>`;
+  const tabs = view.querySelector(".tabs");
+  if (tabs) overflowTabs(tabs);
 
   return { showTopbarSearch: true, query };
 }

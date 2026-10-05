@@ -159,20 +159,20 @@ def _working_event(work: dict, **mutation: str) -> dict[str, Any] | None:
     role = work.get("role")
     mission = work.get("mission")
     triples = _triples(
-        _triple(work.get("person"), f"{PEOPLE}hasActOfWorking", process),
-        _triple(process, RDF_TYPE, f"{PEOPLE}ActOfWorking"),
+        _triple(work.get("person"), f"{ABI}hasActOfWorking", process),
+        _triple(process, RDF_TYPE, f"{ABI}ActOfWorking"),
         _triple(process, RDFS_LABEL, work.get("workingLabel")),
-        _triple(process, f"{PEOPLE}forOrganization", work.get("org")),
+        _triple(process, f"{ABI}forOrganization", work.get("org")),
         _triple(process, f"{ABI}occursIn", work.get("site")),
         _triple(process, f"{ABI}occupiesTemporalRegion", temporal),
-        _triple(process, f"{PERSONNEL}hasContract", work.get("contract")),
+        _triple(process, f"{ABI}hasContract", work.get("contract")),
         _triple(process, f"{ABI}realizes", role),
         _triple(process, f"{ABI}hasParticipant", work.get("remuneration")),
         _triple(temporal, f"{ABI}hasFirstInstant", work.get("firstInstant")),
         _triple(temporal, f"{ABI}hasLastInstant", work.get("lastInstant")),
-        _triple(role, f"{PERSONNEL}hasJobPosition", work.get("position")),
-        _triple(role, f"{PEOPLE}hasMission", mission),
-        _triple(mission, f"{PEOPLE}isSourcedFrom", work.get("profile")),
+        _triple(role, f"{ABI}hasJobPosition", work.get("position")),
+        _triple(role, f"{ABI}hasMission", mission),
+        _triple(mission, f"{ABI}isSourcedFrom", work.get("profile")),
     )
     return _event(work, process, triples, **mutation)
 
@@ -181,11 +181,11 @@ def _studying_event(study: dict, **mutation: str) -> dict[str, Any] | None:
     process = study.get("studying")
     enrollment = study.get("enrollment")
     triples = _triples(
-        _triple(study.get("person"), f"{PEOPLE}hasActOfStudying", process),
-        _triple(process, RDF_TYPE, f"{PEOPLE}ActOfStudying"),
+        _triple(study.get("person"), f"{ABI}hasActOfStudying", process),
+        _triple(process, RDF_TYPE, f"{ABI}ActOfStudying"),
         _triple(
             process,
-            f"{PEOPLE}forEducationalOrganization",
+            f"{ABI}forEducationalOrganization",
             study.get("org"),
         ),
         _triple(process, f"{ABI}occursIn", study.get("site")),
@@ -194,15 +194,15 @@ def _studying_event(study: dict, **mutation: str) -> dict[str, Any] | None:
             f"{ABI}occupiesTemporalRegion",
             study.get("temporal"),
         ),
-        _triple(process, f"{PEOPLE}hasEnrollment", enrollment),
+        _triple(process, f"{ABI}hasEnrollment", enrollment),
         _triple(
             study.get("person"),
-            f"{PEOPLE}hasStudentRole",
+            f"{ABI}hasStudentRole",
             study.get("role"),
         ),
         _triple(
             enrollment,
-            f"{PEOPLE}program_name",
+            f"{ABI}program_name",
             study.get("programName"),
         ),
     )

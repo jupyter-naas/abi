@@ -17,6 +17,7 @@
   # One owl:imports statement per IRI — see the note in
   # ontologies/modules/{{module_name_pascal}}Ontology.ttl.
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/PersonOntology> ;
   owl:imports <http://ontology.naas.ai/{{module_name_snake}}/{{module_name_pascal}}Ontology> ;
   rdfs:seeAlso <http://ontology.naas.ai/{{module_name_snake}}/{{module_name_pascal}}Ontology> ;
 

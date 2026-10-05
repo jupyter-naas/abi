@@ -51,10 +51,10 @@ than redefining them:
 
 | people (generic) | personnel (internal) |
 |---|---|
-| `people:ActOfWorking` ⊑ CCO Planned Act | `personnel:ActOfEmployment` ⊑ `people:ActOfWorking`, CCO Act of Employment |
-| `people:OccupationRole` ≡ CCO Occupation Role | `personnel:EmployeeRole` ⊑ `people:OccupationRole` |
-| `people:employment_type` - the engagement type a source publishes | `personnel:EmploymentContract`, `personnel:contract_type` |
-| `people:worksFor` - a source says they work there | `personnel:isEmployedBy` - the employer's own record |
+| `abi:ActOfWorking` ⊑ CCO Planned Act | `abi:ActOfEmployment` ⊑ `abi:ActOfWorking`, CCO Act of Employment |
+| `abi:OccupationRole` ≡ CCO Occupation Role | `abi:EmployeeRole` ⊑ `abi:OccupationRole` |
+| `abi:employment_type` - the engagement type a source publishes | `abi:EmploymentContract`, `abi:contract_type` |
+| `abi:worksFor` - a source says they work there | `abi:isEmployedBy` - the employer's own record |
 
 The dependency runs one way: `PersonnelOntology` imports `PeopleOntology`, the
 personnel pipelines extend `PeopleGraphContext`, the cockpit embeds
@@ -62,7 +62,7 @@ personnel pipelines extend `PeopleGraphContext`, the cockpit embeds
 
 **Same individual, two graphs.** An act of working is minted once, in
 `people:`, and written to `…/graph/people`. When it is also an act of
-employment, personnel types the same IRI `personnel:ActOfEmployment` and adds
+employment, personnel types the same IRI `abi:ActOfEmployment` and adds
 its contract in `…/graph/personnel`. `act_of_working_uri` in
 `pipelines/utils/graph_builders.py` is the shared key.
 
@@ -74,23 +74,26 @@ BFO process and restricts them.
 | Class | Bucket | Carries |
 |---|---|---|
 | `abi:Person` | WHO | The human being. Survives any change of employer. |
-| `people:OccupationRole` | WHY | The role a person bears while working in some capacity; its `job_title` as the source states it. |
-| `people:StudentRole` | WHY | The role borne while enrolled in a curriculum. |
-| `people:Mission` | HOW WE KNOW | What a person is charged with in one engagement; concretized by the occupation role. |
-| `people:ProfileSummary` | HOW WE KNOW | Headline, summary, quote and the years of experience a source claims. |
-| `people:Portrait` | HOW WE KNOW | The address of a photograph (CCO Image subclass). Never the bytes. |
-| `people:ProfileDocument` | HOW WE KNOW | The page a claim was published on. Every slice points its records back to one. |
-| `people:EnrollmentRecord`, `people:AcademicDegree` | HOW WE KNOW | A course of study and the degree it awarded. |
-| `people:Certification` | HOW WE KNOW | A certification or licence (CCO Certificate), its issuer, dates and credential URL. |
-| `people:Recommendation` | HOW WE KNOW | What one person wrote about another. Both people are required. |
-| `people:Skill` | HOW IT IS | A learned capacity a person bears; any planned act can develop one (`developsSkill`). |
-| `people:LanguageCapability` | HOW IT IS | A language and the proficiency a source stated. |
-| `people:Interest` | HOW IT IS | What someone follows outside the duties of any one job. |
+| `abi:OccupationRole` | WHY | The role a person bears while working in some capacity; its `job_title` as the source states it. |
+| `abi:StudentRole` | WHY | The role borne while enrolled in a curriculum. |
+| `abi:Mission` | HOW WE KNOW | What a person is charged with in one engagement; concretized by the occupation role. |
+| `abi:ProfileSummary` | HOW WE KNOW | Headline, summary, quote and the years of experience a source claims. |
+| `abi:Portrait` | HOW WE KNOW | The address of a photograph (CCO Image subclass). Never the bytes. |
+| `abi:ProfileDocument` | HOW WE KNOW | The page a claim was published on. Every slice points its records back to one. |
+| `abi:EnrollmentRecord`, `abi:AcademicDegree` | HOW WE KNOW | A course of study and the degree it awarded. |
+| `abi:Certification` | HOW WE KNOW | A certification or licence (CCO Certificate), its issuer, dates and credential URL. |
+| `abi:Recommendation` | HOW WE KNOW | What one person wrote about another. Both people are required. |
+| `abi:Skill` | HOW IT IS | A learned capacity a person bears; any planned act can develop one (`developsSkill`). |
+| `abi:LanguageCapability` | HOW IT IS | A language and the proficiency a source stated. |
+| `abi:Interest` | HOW IT IS | What someone follows outside the duties of any one job. |
 
 `abi:Site` additionally carries `office_label`, `city_name`, `country_name` and
-`country_code`. Each act occurs in a CCO facility (`OfficeBuilding`,
-`EducationalFacility`, `Facility`), tied to the person and organization by
-restriction in the slice.
+`country_code`. Each act occurs in an `abi:GeospatialRegion` (a site: the
+street-level `abi:GeospatialLocation`, a city or a country, chained upwards by
+`abi:continuantPartOf`). The CCO facility (`OfficeBuilding`,
+`EducationalFacility`, `Facility`) is a material entity located in that site
+(`abi:locatedIn some abi:GeospatialLocation`), tied to the person and
+organization by restriction in the slice.
 
 ## Process ledger
 

@@ -12,7 +12,7 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
 class TestBfoBucketResolution:
     def test_occupation_role_maps_to_realizable(self) -> None:
         graph = load_bucket_inference_graph()
-        iri = "http://ontology.naas.ai/people/OccupationRole"
+        iri = "http://ontology.naas.ai/abi/OccupationRole"
         assert infer_cockpit_bfo_bucket(graph, iri) == "Realizable"
         assert (
             find_bfo_bucket_root_iri(graph, iri)
@@ -26,5 +26,5 @@ class TestBfoBucketResolution:
 
     def test_act_of_working_maps_to_process(self) -> None:
         graph = load_bucket_inference_graph()
-        iri = "http://ontology.naas.ai/people/ActOfWorking"
+        iri = "http://ontology.naas.ai/abi/ActOfWorking"
         assert infer_cockpit_bfo_bucket(graph, iri) == "Process"

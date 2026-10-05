@@ -1,5 +1,5 @@
 """
-CCTV port — wsr:CCTVStreamingProcess interface contracts.
+CCTV port — abi:CCTVStreamingProcess interface contracts.
 
 ICCTVAdapter  — contract every source adapter must satisfy.
 ICCTVService  — contract the service provides to routers.

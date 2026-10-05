@@ -22,13 +22,13 @@
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/hugo-girard",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/hugo-girard-leadership-co-co-founder"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/hugo-girard-leadership-co-co-founder",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/hugo-girard-leadership-co-co-founder",
@@ -37,7 +37,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/hugo-girard-leadership-co-co-founder",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/leadership-co"
         },
         {
@@ -62,23 +62,23 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/hugo-girard-leadership-co-co-founder",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/hugo-girard-leadership-co-co-founder"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/hugo-girard-leadership-co-co-founder",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/hugo-girard-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/hugo-girard",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/hugo-girard-demo-advisor"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/hugo-girard-demo-advisor",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/hugo-girard-demo-advisor",
@@ -87,7 +87,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/hugo-girard-demo-advisor",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/demo"
         },
         {
@@ -112,23 +112,23 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/hugo-girard-demo-advisor",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/hugo-girard-demo-advisor"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/hugo-girard-demo-advisor",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/hugo-girard-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/hugo-girard",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/hugo-girard-agile-partners-chief-agility-officer"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/hugo-girard-agile-partners-chief-agility-officer",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/hugo-girard-agile-partners-chief-agility-officer",
@@ -137,7 +137,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/hugo-girard-agile-partners-chief-agility-officer",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/agile-partners"
         },
         {
@@ -167,12 +167,12 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/hugo-girard-agile-partners-chief-agility-officer",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/hugo-girard-agile-partners-chief-agility-officer"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/hugo-girard-agile-partners-chief-agility-officer",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/hugo-girard-linkedin"
         }
       ],
@@ -215,13 +215,13 @@
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/frank-moreau",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/frank-moreau-salesplatform-account-executive"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/frank-moreau-salesplatform-account-executive",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/frank-moreau-salesplatform-account-executive",
@@ -230,7 +230,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/frank-moreau-salesplatform-account-executive",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/salesplatform"
         },
         {
@@ -260,23 +260,23 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/frank-moreau-salesplatform-account-executive",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/frank-moreau-salesplatform-account-executive"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/frank-moreau-salesplatform-account-executive",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/frank-moreau-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/frank-moreau",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/frank-moreau-demo-head-of-growth"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/frank-moreau-demo-head-of-growth",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/frank-moreau-demo-head-of-growth",
@@ -285,7 +285,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/frank-moreau-demo-head-of-growth",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/demo"
         },
         {
@@ -315,23 +315,23 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/frank-moreau-demo-head-of-growth",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/frank-moreau-demo-head-of-growth"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/frank-moreau-demo-head-of-growth",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/frank-moreau-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/frank-moreau",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/frank-moreau-translation-corp-account-manager"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/frank-moreau-translation-corp-account-manager",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/frank-moreau-translation-corp-account-manager",
@@ -340,7 +340,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/frank-moreau-translation-corp-account-manager",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/translation-corp"
         },
         {
@@ -370,12 +370,12 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/frank-moreau-translation-corp-account-manager",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/frank-moreau-translation-corp-account-manager"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/frank-moreau-translation-corp-account-manager",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/frank-moreau-linkedin"
         }
       ],
@@ -418,13 +418,13 @@
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/grace-lambert",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/grace-lambert-demo-board-advisor"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/grace-lambert-demo-board-advisor",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/grace-lambert-demo-board-advisor",
@@ -433,7 +433,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/grace-lambert-demo-board-advisor",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/demo"
         },
         {
@@ -458,23 +458,23 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/grace-lambert-demo-board-advisor",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/grace-lambert-demo-board-advisor"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/grace-lambert-demo-board-advisor",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/grace-lambert-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/grace-lambert",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/grace-lambert-streamcorp-head-of-partner-experiences"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/grace-lambert-streamcorp-head-of-partner-experiences",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/grace-lambert-streamcorp-head-of-partner-experiences",
@@ -483,7 +483,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/grace-lambert-streamcorp-head-of-partner-experiences",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/streamcorp"
         },
         {
@@ -513,23 +513,23 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/grace-lambert-streamcorp-head-of-partner-experiences",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/grace-lambert-streamcorp-head-of-partner-experiences"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/grace-lambert-streamcorp-head-of-partner-experiences",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/grace-lambert-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/grace-lambert",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/grace-lambert-deviceworks-cto"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/grace-lambert-deviceworks-cto",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/grace-lambert-deviceworks-cto",
@@ -538,7 +538,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/grace-lambert-deviceworks-cto",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/deviceworks"
         },
         {
@@ -568,27 +568,27 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/grace-lambert-deviceworks-cto",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/grace-lambert-deviceworks-cto"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/grace-lambert-deviceworks-cto",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/grace-lambert-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/grace-lambert",
-          "predicate": "http://ontology.naas.ai/people/hasActOfStudying",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfStudying",
           "object": "http://ontology.naas.ai/people/ActOfStudying/grace-lambert-bay-area-business-school-mba"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfStudying/grace-lambert-bay-area-business-school-mba",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfStudying"
+          "object": "http://ontology.naas.ai/abi/ActOfStudying"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfStudying/grace-lambert-bay-area-business-school-mba",
-          "predicate": "http://ontology.naas.ai/people/forEducationalOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forEducationalOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/bay-area-business-school"
         },
         {
@@ -603,17 +603,17 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfStudying/grace-lambert-bay-area-business-school-mba",
-          "predicate": "http://ontology.naas.ai/people/hasEnrollment",
+          "predicate": "http://ontology.naas.ai/abi/hasEnrollment",
           "object": "http://ontology.naas.ai/people/EnrollmentRecord/grace-lambert-bay-area-business-school-mba"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/grace-lambert",
-          "predicate": "http://ontology.naas.ai/people/hasStudentRole",
+          "predicate": "http://ontology.naas.ai/abi/hasStudentRole",
           "object": "http://ontology.naas.ai/people/StudentRole/grace-lambert-bay-area-business-school-mba"
         },
         {
           "subject": "http://ontology.naas.ai/people/EnrollmentRecord/grace-lambert-bay-area-business-school-mba",
-          "predicate": "http://ontology.naas.ai/people/program_name",
+          "predicate": "http://ontology.naas.ai/abi/program_name",
           "object": "MBA"
         }
       ],
@@ -656,13 +656,13 @@
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/david-leroy",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/david-leroy-demo-lead-developer-frontend"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/david-leroy-demo-lead-developer-frontend",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/david-leroy-demo-lead-developer-frontend",
@@ -671,7 +671,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/david-leroy-demo-lead-developer-frontend",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/demo"
         },
         {
@@ -701,23 +701,23 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/david-leroy-demo-lead-developer-frontend",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/david-leroy-demo-lead-developer-frontend"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/david-leroy-demo-lead-developer-frontend",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/david-leroy-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/david-leroy",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/david-leroy-legaltech-co-fullstack-developer"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/david-leroy-legaltech-co-fullstack-developer",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/david-leroy-legaltech-co-fullstack-developer",
@@ -726,7 +726,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/david-leroy-legaltech-co-fullstack-developer",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/legaltech-co"
         },
         {
@@ -756,12 +756,12 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/david-leroy-legaltech-co-fullstack-developer",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/david-leroy-legaltech-co-fullstack-developer"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/david-leroy-legaltech-co-fullstack-developer",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/david-leroy-linkedin"
         }
       ],
@@ -804,13 +804,13 @@
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/bob-martin",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/bob-martin-global-advisors-senior-advisor-data-ai"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/bob-martin-global-advisors-senior-advisor-data-ai",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/bob-martin-global-advisors-senior-advisor-data-ai",
@@ -819,7 +819,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/bob-martin-global-advisors-senior-advisor-data-ai",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/global-advisors"
         },
         {
@@ -844,23 +844,23 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/bob-martin-global-advisors-senior-advisor-data-ai",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/bob-martin-global-advisors-senior-advisor-data-ai"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/bob-martin-global-advisors-senior-advisor-data-ai",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/bob-martin-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/bob-martin",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/bob-martin-demo-ceo"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/bob-martin-demo-ceo",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/bob-martin-demo-ceo",
@@ -869,7 +869,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/bob-martin-demo-ceo",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/demo"
         },
         {
@@ -894,23 +894,23 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/bob-martin-demo-ceo",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/bob-martin-demo-ceo"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/bob-martin-demo-ceo",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/bob-martin-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/bob-martin",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/bob-martin-nexus-labs-founder"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/bob-martin-nexus-labs-founder",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/bob-martin-nexus-labs-founder",
@@ -919,7 +919,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/bob-martin-nexus-labs-founder",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/nexus-labs"
         },
         {
@@ -949,12 +949,12 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/bob-martin-nexus-labs-founder",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/bob-martin-nexus-labs-founder"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/bob-martin-nexus-labs-founder",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/bob-martin-linkedin"
         }
       ],
@@ -997,13 +997,13 @@
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/claire-bernard",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/claire-bernard-demo-cto"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/claire-bernard-demo-cto",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/claire-bernard-demo-cto",
@@ -1012,7 +1012,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/claire-bernard-demo-cto",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/demo"
         },
         {
@@ -1037,23 +1037,23 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/claire-bernard-demo-cto",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/claire-bernard-demo-cto"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/claire-bernard-demo-cto",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/claire-bernard-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/claire-bernard",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/claire-bernard-nexus-labs-cto"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/claire-bernard-nexus-labs-cto",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/claire-bernard-nexus-labs-cto",
@@ -1062,7 +1062,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/claire-bernard-nexus-labs-cto",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/nexus-labs"
         },
         {
@@ -1092,23 +1092,23 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/claire-bernard-nexus-labs-cto",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/claire-bernard-nexus-labs-cto"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/claire-bernard-nexus-labs-cto",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/claire-bernard-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/claire-bernard",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/claire-bernard-cloud-partners-cloud-engineer"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/claire-bernard-cloud-partners-cloud-engineer",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/claire-bernard-cloud-partners-cloud-engineer",
@@ -1117,7 +1117,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/claire-bernard-cloud-partners-cloud-engineer",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/cloud-partners"
         },
         {
@@ -1147,27 +1147,27 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/claire-bernard-cloud-partners-cloud-engineer",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/claire-bernard-cloud-partners-cloud-engineer"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/claire-bernard-cloud-partners-cloud-engineer",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/claire-bernard-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/claire-bernard",
-          "predicate": "http://ontology.naas.ai/people/hasActOfStudying",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfStudying",
           "object": "http://ontology.naas.ai/people/ActOfStudying/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfStudying/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfStudying"
+          "object": "http://ontology.naas.ai/abi/ActOfStudying"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfStudying/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems",
-          "predicate": "http://ontology.naas.ai/people/forEducationalOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forEducationalOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/lyon-institute-of-technology"
         },
         {
@@ -1182,17 +1182,17 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfStudying/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems",
-          "predicate": "http://ontology.naas.ai/people/hasEnrollment",
+          "predicate": "http://ontology.naas.ai/abi/hasEnrollment",
           "object": "http://ontology.naas.ai/people/EnrollmentRecord/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/claire-bernard",
-          "predicate": "http://ontology.naas.ai/people/hasStudentRole",
+          "predicate": "http://ontology.naas.ai/abi/hasStudentRole",
           "object": "http://ontology.naas.ai/people/StudentRole/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems"
         },
         {
           "subject": "http://ontology.naas.ai/people/EnrollmentRecord/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems",
-          "predicate": "http://ontology.naas.ai/people/program_name",
+          "predicate": "http://ontology.naas.ai/abi/program_name",
           "object": "Engineering Degree, Distributed Systems"
         }
       ],
@@ -1235,13 +1235,13 @@
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/emma-petit",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/emma-petit-launchpad-solo-maker"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/emma-petit-launchpad-solo-maker",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/emma-petit-launchpad-solo-maker",
@@ -1250,7 +1250,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/emma-petit-launchpad-solo-maker",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/launchpad"
         },
         {
@@ -1275,23 +1275,23 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/emma-petit-launchpad-solo-maker",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/emma-petit-launchpad-solo-maker"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/emma-petit-launchpad-solo-maker",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/emma-petit-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/emma-petit",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/emma-petit-demo-cto"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/emma-petit-demo-cto",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/emma-petit-demo-cto",
@@ -1300,7 +1300,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/emma-petit-demo-cto",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/demo"
         },
         {
@@ -1330,27 +1330,27 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/emma-petit-demo-cto",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/emma-petit-demo-cto"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/emma-petit-demo-cto",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/emma-petit-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/emma-petit",
-          "predicate": "http://ontology.naas.ai/people/hasActOfStudying",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfStudying",
           "object": "http://ontology.naas.ai/people/ActOfStudying/emma-petit-demo-university-bachelor-s-degree-software-engineering"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfStudying/emma-petit-demo-university-bachelor-s-degree-software-engineering",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfStudying"
+          "object": "http://ontology.naas.ai/abi/ActOfStudying"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfStudying/emma-petit-demo-university-bachelor-s-degree-software-engineering",
-          "predicate": "http://ontology.naas.ai/people/forEducationalOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forEducationalOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/demo-university"
         },
         {
@@ -1365,17 +1365,17 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfStudying/emma-petit-demo-university-bachelor-s-degree-software-engineering",
-          "predicate": "http://ontology.naas.ai/people/hasEnrollment",
+          "predicate": "http://ontology.naas.ai/abi/hasEnrollment",
           "object": "http://ontology.naas.ai/people/EnrollmentRecord/emma-petit-demo-university-bachelor-s-degree-software-engineering"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/emma-petit",
-          "predicate": "http://ontology.naas.ai/people/hasStudentRole",
+          "predicate": "http://ontology.naas.ai/abi/hasStudentRole",
           "object": "http://ontology.naas.ai/people/StudentRole/emma-petit-demo-university-bachelor-s-degree-software-engineering"
         },
         {
           "subject": "http://ontology.naas.ai/people/EnrollmentRecord/emma-petit-demo-university-bachelor-s-degree-software-engineering",
-          "predicate": "http://ontology.naas.ai/people/program_name",
+          "predicate": "http://ontology.naas.ai/abi/program_name",
           "object": "Bachelor's Degree, Software Engineering"
         }
       ],
@@ -1418,13 +1418,13 @@
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/alice-dupont",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/alice-dupont-demo-coo"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/alice-dupont-demo-coo",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/alice-dupont-demo-coo",
@@ -1433,7 +1433,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/alice-dupont-demo-coo",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/demo"
         },
         {
@@ -1458,23 +1458,23 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/alice-dupont-demo-coo",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/alice-dupont-demo-coo"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/alice-dupont-demo-coo",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/alice-dupont-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/alice-dupont",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/alice-dupont-acme-consulting-data-ai-engineer"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/alice-dupont-acme-consulting-data-ai-engineer",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/alice-dupont-acme-consulting-data-ai-engineer",
@@ -1483,7 +1483,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/alice-dupont-acme-consulting-data-ai-engineer",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/acme-consulting"
         },
         {
@@ -1508,23 +1508,23 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/alice-dupont-acme-consulting-data-ai-engineer",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/alice-dupont-acme-consulting-data-ai-engineer"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/alice-dupont-acme-consulting-data-ai-engineer",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/alice-dupont-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/alice-dupont",
-          "predicate": "http://ontology.naas.ai/people/hasActOfWorking",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfWorking",
           "object": "http://ontology.naas.ai/people/ActOfWorking/alice-dupont-nexus-labs-co-founder"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/alice-dupont-nexus-labs-co-founder",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfWorking"
+          "object": "http://ontology.naas.ai/abi/ActOfWorking"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/alice-dupont-nexus-labs-co-founder",
@@ -1533,7 +1533,7 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfWorking/alice-dupont-nexus-labs-co-founder",
-          "predicate": "http://ontology.naas.ai/people/forOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/nexus-labs"
         },
         {
@@ -1563,27 +1563,27 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/OccupationRole/alice-dupont-nexus-labs-co-founder",
-          "predicate": "http://ontology.naas.ai/people/hasMission",
+          "predicate": "http://ontology.naas.ai/abi/hasMission",
           "object": "http://ontology.naas.ai/people/Mission/alice-dupont-nexus-labs-co-founder"
         },
         {
           "subject": "http://ontology.naas.ai/people/Mission/alice-dupont-nexus-labs-co-founder",
-          "predicate": "http://ontology.naas.ai/people/isSourcedFrom",
+          "predicate": "http://ontology.naas.ai/abi/isSourcedFrom",
           "object": "http://ontology.naas.ai/people/ProfileDocument/alice-dupont-linkedin"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/alice-dupont",
-          "predicate": "http://ontology.naas.ai/people/hasActOfStudying",
+          "predicate": "http://ontology.naas.ai/abi/hasActOfStudying",
           "object": "http://ontology.naas.ai/people/ActOfStudying/alice-dupont-demo-university-master-s-degree-computer-science"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfStudying/alice-dupont-demo-university-master-s-degree-computer-science",
           "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-          "object": "http://ontology.naas.ai/people/ActOfStudying"
+          "object": "http://ontology.naas.ai/abi/ActOfStudying"
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfStudying/alice-dupont-demo-university-master-s-degree-computer-science",
-          "predicate": "http://ontology.naas.ai/people/forEducationalOrganization",
+          "predicate": "http://ontology.naas.ai/abi/forEducationalOrganization",
           "object": "http://ontology.naas.ai/abi/Organization/demo-university"
         },
         {
@@ -1598,17 +1598,17 @@
         },
         {
           "subject": "http://ontology.naas.ai/people/ActOfStudying/alice-dupont-demo-university-master-s-degree-computer-science",
-          "predicate": "http://ontology.naas.ai/people/hasEnrollment",
+          "predicate": "http://ontology.naas.ai/abi/hasEnrollment",
           "object": "http://ontology.naas.ai/people/EnrollmentRecord/alice-dupont-demo-university-master-s-degree-computer-science"
         },
         {
           "subject": "http://ontology.naas.ai/abi/Person/alice-dupont",
-          "predicate": "http://ontology.naas.ai/people/hasStudentRole",
+          "predicate": "http://ontology.naas.ai/abi/hasStudentRole",
           "object": "http://ontology.naas.ai/people/StudentRole/alice-dupont-demo-university-master-s-degree-computer-science"
         },
         {
           "subject": "http://ontology.naas.ai/people/EnrollmentRecord/alice-dupont-demo-university-master-s-degree-computer-science",
-          "predicate": "http://ontology.naas.ai/people/program_name",
+          "predicate": "http://ontology.naas.ai/abi/program_name",
           "object": "Master's Degree, Computer Science"
         }
       ],

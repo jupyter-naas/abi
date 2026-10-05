@@ -31,6 +31,13 @@ export function OntologyTermNetwork({ term, terms, systemSidebar = false }: { te
   const [zoneBuckets, setZoneBuckets] = useState(false);
   const [activeBuckets, setActiveBuckets] = useState<Set<string>>(new Set());
   const [hiddenNodeIds, setHiddenNodeIds] = useState<Set<string>>(new Set());
+  // The BFO legend (bucket filters) is opt-in. Hiding it also drops its filters,
+  // so nothing stays filtered without a visible control to undo it.
+  const [showBfoLegend, setShowBfoLegend] = useState(false);
+  const toggleBfoLegend = (show: boolean) => {
+    if (!show) { setActiveBuckets(new Set()); setHiddenNodeIds(new Set()); }
+    setShowBfoLegend(show);
+  };
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [focusRequestKey, setFocusRequestKey] = useState(0);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -106,6 +113,9 @@ export function OntologyTermNetwork({ term, terms, systemSidebar = false }: { te
           <label title="Show property relationships">
             <input type="checkbox" checked={properties} onChange={event => setProperties(event.target.checked)} />Properties
           </label>
+          {!systemSidebar && <label title="Show or hide the BFO 7 buckets legend and its filters">
+            <input type="checkbox" checked={showBfoLegend} onChange={event => toggleBfoLegend(event.target.checked)} />BFO legend
+          </label>}
         </div>
         {zones && <div className="ontology-term-controls" role="group" aria-label="BFO zones">
           <label title="Show the top-level zones and their titles: Occurrents and Continuants">
@@ -150,7 +160,7 @@ export function OntologyTermNetwork({ term, terms, systemSidebar = false }: { te
           viewStateKey={processView ? `ontology:process:${graph.rootId}` : `ontology:term:${graph.rootId}:${layout}:${hierarchy}:${restrictions}:${properties}`}
         />
       </div>
-      {!systemSidebar && <BFOBucketFilters activeBuckets={activeBuckets} onToggle={toggleBucket} nodesPerBucket={nodesPerBucket} hiddenNodeIds={hiddenNodeIds} onNodeToggle={toggleNode} />}
+      {!systemSidebar && showBfoLegend && <BFOBucketFilters activeBuckets={activeBuckets} onToggle={toggleBucket} nodesPerBucket={nodesPerBucket} hiddenNodeIds={hiddenNodeIds} onNodeToggle={toggleNode} />}
     </div>
     {selectedNode && <OntologyNodeInspector node={selectedNode} nodes={visible.nodes} edges={visible.edges} terms={terms}
       context={systemSidebar ? term : undefined} onClose={() => selectNode(null)} onSelect={selectNode}

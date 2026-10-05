@@ -8,7 +8,8 @@ import type { GraphNode, GraphEdge } from '@/stores/knowledge-graph';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BFO_BUCKET_BY_TYPE, BFO_BUCKET_DEFS } from '@/lib/bfo-buckets';
-import { bfoZoneLayout, drawBfoZones, zoneBounds, type ZoneLayout } from './bfo-zone-layout';
+import { edgeSides } from './bfo-edge-rules';
+import { bfoZoneLayout, drawBfoZones, zoneBounds, zoneParents, type ZoneLayout } from './bfo-zone-layout';
 import { installOrthogonalEdges } from './orthogonal-network';
 import { compactNetworkPositions } from './compact-network-layout';
 import { fitBoundsViewport, fitReadableViewport, spacingViewport } from './network-viewport';
@@ -48,6 +49,15 @@ const BFO_URI_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
   'BFO_0000031': 'GDC',
   'BFO_0000019': 'Quality',
   'BFO_0000017': 'Realizable',
+  // Continuant fiat boundaries (abi:GeospatialPosition is a fiat point) answer WHERE.
+  'http://purl.obolibrary.org/obo/BFO_0000140': 'Site',
+  'BFO_0000140': 'Site',
+  'http://purl.obolibrary.org/obo/BFO_0000142': 'Site',
+  'BFO_0000142': 'Site',
+  'http://purl.obolibrary.org/obo/BFO_0000146': 'Site',
+  'BFO_0000146': 'Site',
+  'http://purl.obolibrary.org/obo/BFO_0000147': 'Site',
+  'BFO_0000147': 'Site',
 };
 
 // Lowercase label → color bucket (covers common BFO/CCO labels)
@@ -129,6 +139,15 @@ function computeSpreadPositions(nodeIds: string[], spacing = 300): Map<string, {
     result.set(id, { x: r * Math.cos(theta), y: r * Math.sin(theta) });
   });
   return result;
+}
+
+/** Width of one character of an edge label at its 9px size, for sizing the layout before it is drawn. */
+const EDGE_LABEL_CHAR_WIDTH = 5.3;
+
+/** The label an edge is drawn with: none for subclass links. */
+function edgeLabelText(edge: GraphEdge): string | undefined {
+  if (edge.properties?.relation_kind === 'is_a') return undefined;
+  return (edge.label || (edge.properties?.relation_label as string | undefined) || edge.type || '').trim() || undefined;
 }
 
 /** Roundness values for parallel edges between the same node pair (max 0.6). */
@@ -1081,14 +1100,31 @@ export function VisNetwork({
     })), edges, nodeSpacing);
   }, [nodes, edges, nodeSpacing, suppliedFixedLayout, bfoZones, layoutDirection, physicsEnabled, nodeLayoutBox]);
 
-  const zoneLayout = useMemo(() => {
+  // In the BFO zones, the buckets a connector joins fix the sides of the cards it uses (bfo-edge-rules.ts).
+  const zoneSides = useMemo(() => {
     if (!bfoZones) return null;
     const byId = new Map(nodes.map(node => [node.id, node]));
+    const buckets = new Map(nodes.map(node => [node.id, resolveNodeBucketKey(node, byId)]));
+    return { buckets, sidesFor: edgeSides(id => buckets.get(id)) };
+  }, [bfoZones, nodes]);
+  const zoneLayout = useMemo(() => {
+    if (!zoneSides) return null;
+    const { buckets, sidesFor } = zoneSides;
+    const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+    // Subclasses sit right of their parent class in its zone, whether or not subclass edges are drawn.
+    const parents = zoneParents(nodes.map(node => ({
+      id: node.id, bucket: buckets.get(node.id)!, iri: typeof node.properties?.iri === 'string' ? node.properties.iri : undefined,
+      equivalents: strings(node.properties?.equivalent_iris), ancestors: strings(node.properties?.ancestor_iris),
+    })));
     return bfoZoneLayout(nodes.map(node => {
       const box = nodeLayoutBox(node);
-      return { id: node.id, label: node.label, bucket: resolveNodeBucketKey(node, byId), width: box.width, height: box.height };
-    }), edges);
-  }, [bfoZones, nodes, edges, nodeLayoutBox]);
+      return { id: node.id, label: node.label, bucket: buckets.get(node.id)!, width: box.width, height: box.height, parent: parents.get(node.id) };
+    }), edges.map(edge => {
+      // Gaps between cards are sized to hold the labels drawn in them.
+      const text = edgeLabelText(edge);
+      return { source: edge.source, target: edge.target, labelWidth: text ? text.length * EDGE_LABEL_CHAR_WIDTH : undefined };
+    }), { sidesFor });
+  }, [zoneSides, nodes, edges, nodeLayoutBox]);
   zoneLayoutRef.current = zoneLayout;
 
   // Fetch and cache logo images as data URIs so they can be embedded in SVG.
@@ -1259,14 +1295,7 @@ export function VisNetwork({
     const dimmed = anyEdgeSelected && !isSelected;
     const color = dimmed ? 'rgba(148,163,184,0.25)' : baseColor;
     const fontColor = dimmed ? 'rgba(100,116,139,0.35)' : (isHierarchical ? '#000000' : '#64748b');
-    const labelText = isHierarchical || grouping
-      ? undefined
-      : (
-          edge.label
-          || (edge.properties?.relation_label as string | undefined)
-          || edge.type
-          || ''
-        ).trim() || undefined;
+    const labelText = grouping ? undefined : edgeLabelText(edge);
     const labelBackground = document.documentElement.classList.contains('dark')
       ? '#18181b'
       : '#ffffff';
@@ -1314,8 +1343,16 @@ export function VisNetwork({
   const routedEdges = useMemo(() => orthogonalEdges ? edges.map(edge => ({
     id: edge.id, source: edge.source, target: edge.target, style: toVisEdge(edge),
   })) : [], [orthogonalEdges, edges, toVisEdge]);
-  const routingStateRef = useRef({ edges: routedEdges, selected: selectedEdgeIds, direction: layoutDirection });
-  routingStateRef.current = { edges: routedEdges, selected: selectedEdgeIds, direction: layoutDirection };
+  const zoneFrame = useMemo(() => {
+    const bounds = zoneLayout && zoneBounds(zoneLayout);
+    return bounds ? { left: bounds.x, top: bounds.y, right: bounds.x + bounds.width, bottom: bounds.y + bounds.height } : null;
+  }, [zoneLayout]);
+  const routingState = () => ({
+    edges: routedEdges, selected: selectedEdgeIds, direction: layoutDirection,
+    sidesFor: zoneSides?.sidesFor, room: zoneLayout?.room, frame: zoneFrame,
+  });
+  const routingStateRef = useRef(routingState());
+  routingStateRef.current = routingState();
 
   // Network options - simple config, let vis-network handle zoom.
   // autoResize is disabled because its synchronous resize handling triggers the
@@ -1836,7 +1873,7 @@ export function VisNetwork({
       orthogonalRendererRef.current = null;
     };
   }, [orthogonalEdges]);
-  useEffect(() => { if (orthogonalEdges) networkRef.current?.redraw(); }, [orthogonalEdges, routedEdges, selectedEdgeIds]);
+  useEffect(() => { if (orthogonalEdges) networkRef.current?.redraw(); }, [orthogonalEdges, routedEdges, selectedEdgeIds, zoneSides, zoneLayout]);
 
   // Bring selected nodes to the foreground. vis-network has no z-index and
   // draws nodes in DataSet insertion order (later = on top), drawing nodes over
