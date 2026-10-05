@@ -85,8 +85,8 @@ import { activeSuggestions, type ChatSuggestion } from '@/lib/suggestion-row';
 
 const getApiBase = () => getApiUrl();
 
-// Max image size for uploads (5MB)
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+// Max file size for chat uploads (10MB)
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 const SUPPORTED_DOCUMENT_EXTENSIONS = ['pdf', 'docx', 'pptx', 'txt', 'md', 'json', 'csv'];
 const ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/gif,image/webp,.pdf,.docx,.pptx,.txt,.md,.json,.csv';
@@ -1474,7 +1474,7 @@ export function ChatInterface({
       
       // Validate file size
       if (file.size > MAX_IMAGE_SIZE) {
-        setImageError(`File too large: ${file.name}. Max size is 5MB.`);
+        setImageError(`File too large: ${file.name}. Max size is 10MB.`);
         continue;
       }
       
