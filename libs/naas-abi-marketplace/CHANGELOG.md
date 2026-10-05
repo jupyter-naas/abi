@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.57.0 (2026-10-05)
+
+### Features
+
+- **people**: Add network search API and network graph data
+  ([`ec50d40`](https://github.com/jupyter-naas/abi/commit/ec50d40d0fce92eb7dd6bddc7dcd26ac0341d375))
+
+
 ## v3.56.0 (2026-10-05)
 
 ### Chores
