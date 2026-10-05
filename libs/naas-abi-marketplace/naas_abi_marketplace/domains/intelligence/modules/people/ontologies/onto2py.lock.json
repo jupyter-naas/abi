@@ -1,6 +1,6 @@
 {
   "files": {
-    "modules/PeopleOntology.ttl": "7a5e0235838d549b79f7966b1a0ccc32b4fd50521df6c6ad31d0078806cce569",
+    "modules/PeopleOntology.ttl": "4de25cebb3b6253e45c217412fdb70b5f6b47c96b18f6307f6d157295fb9f50a",
     "processes/ActOfCertificationProcess.ttl": "758407579f61bac91e1b9ee7b628768ce1df1470ea5e45a71d7b7b4b17108781",
     "processes/ActOfProfilingProcess.ttl": "2e91fc7dfecfa708c37220687c1874d37780dcdd7d6020adc7877477313c83fc",
     "processes/ActOfStudyingProcess.ttl": "c933efc83d8f662a925121f0f1106fa01a89fc9a407a493c49258f2a4847c146",

@@ -83,6 +83,7 @@ _BUCKET_INFERENCE_TTL_PATHS: tuple[Path, ...] = (
     _ABI_ONTOLOGY_PATH.with_name("GeospatialRegionOntology.ttl"),
     _ABI_ONTOLOGY_PATH.with_name("PersonOntology.ttl"),
     _ABI_ONTOLOGY_PATH.with_name("OrganizationOntology.ttl"),
+    _ABI_ONTOLOGY_PATH.with_name("DocumentContentEntityOntology.ttl"),
     _ABI_IMPORTS_DIR / "top-level" / "bfo-core.ttl",
     _ABI_IMPORTS_DIR / "mid-level" / "AgentOntology.ttl",
     _ABI_IMPORTS_DIR / "mid-level" / "QualityOntology.ttl",

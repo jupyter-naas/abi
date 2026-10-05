@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 83f68db87883dfbb6e938dbdb2a4544e3d0e75f36d381409cd0cbb319c9d112e
+# onto2py-source-sha256: 2b46fe8d436a5dd4ea294e005c3aeb88fbcde69f09a4a7c4a3dac45bc4b12098
 from __future__ import annotations
 
 import contextlib
@@ -25,6 +25,9 @@ from naas_abi.ontologies.modules.ABIOntology import (
     Process,
     Quality,
     Role,
+)
+from naas_abi.ontologies.modules.DocumentContentEntityOntology import (
+    DocumentContentEntity,
 )
 from naas_abi.ontologies.modules.OrganizationOntology import Organization
 from naas_abi.ontologies.modules.PersonOntology import Person
@@ -1010,7 +1013,7 @@ class ServiceLine(Organization, RDFEntity):
     ] = None
 
 
-class JobDescription(GenericallyDependentContinuant, RDFEntity):
+class JobDescription(DocumentContentEntity, RDFEntity):
     """
     Job Description
     """

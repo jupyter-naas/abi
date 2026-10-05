@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 0c2b7d35009dcdfa2622c87555e62b4ecee2dd835018547677ad0c5a211b4124
+# onto2py-source-sha256: 31bcb49803a4c603e3474c725ac9bc22459083c4140d7f879a01c5e6903e623a
 from __future__ import annotations
 
 import contextlib
@@ -26,6 +26,9 @@ from naas_abi.ontologies.modules.ABIOntology import (
     Quality,
     Role,
     TemporalRegion,
+)
+from naas_abi.ontologies.modules.DocumentContentEntityOntology import (
+    DocumentContentEntity,
 )
 from naas_abi.ontologies.modules.GeospatialRegionOntology import (
     GeospatialRegion,
@@ -1826,7 +1829,7 @@ class Mission(GenericallyDependentContinuant, RDFEntity):
     ] = None
 
 
-class Recommendation(GenericallyDependentContinuant, RDFEntity):
+class Recommendation(DocumentContentEntity, RDFEntity):
     """
     Two people, and both are required: the subject it generically depends on, and the author who wrote it. An anonymous testimonial is not a recommendation in this sense and must not be minted as one.
     """
@@ -1925,7 +1928,7 @@ class Recommendation(GenericallyDependentContinuant, RDFEntity):
     ] = None
 
 
-class ProfileSummary(GenericallyDependentContinuant, RDFEntity):
+class ProfileSummary(DocumentContentEntity, RDFEntity):
     """
     Person-level, where people:Mission is job-level: the summary spans a career, a mission describes one act of working. Sourced from a ProfileDocument so every claim it carries stays traceable to where it was published.
     """
@@ -2035,7 +2038,7 @@ class ProfileSummary(GenericallyDependentContinuant, RDFEntity):
     ] = None
 
 
-class ProfileDocument(GenericallyDependentContinuant, RDFEntity):
+class ProfileDocument(DocumentContentEntity, RDFEntity):
     """
     The provenance anchor of the demo graph: everything asserted from a profile page: missions, roles, skills, enrollments, degrees, certifications points back to the ProfileDocument it was read from.
     """

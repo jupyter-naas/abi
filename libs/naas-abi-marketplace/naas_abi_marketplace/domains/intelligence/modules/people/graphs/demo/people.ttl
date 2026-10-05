@@ -3684,8 +3684,7 @@ people:Recommendation a owl:Class ;
         [ a owl:Restriction ;
             owl:onProperty abi:participatesIn ;
             owl:someValuesFrom people:ActOfProfiling ],
-        abi:GenericallyDependentContinuant,
-        cco:ont00002039 ;
+        abi:DocumentContentEntity ;
     skos:definition "A document content entity in which one person states, in their own words, what it was like to work with another and what that person is good at."@en ;
     skos:example "'Alice rebuilt our close process in one quarter' - written by her former CFO, 2024-11-02."@en .
 
@@ -3819,8 +3818,7 @@ people:ProfileSummary a owl:Class ;
         [ a owl:Restriction ;
             owl:onProperty abi:participatesIn ;
             owl:someValuesFrom people:ActOfProfiling ],
-        abi:GenericallyDependentContinuant,
-        cco:ont00002039 ;
+        abi:DocumentContentEntity ;
     skos:definition "A document content entity that states how a person is presented in general: the one-line headline, the paragraph about them, an attributed quote, and the years of experience claimed for them."@en ;
     skos:example "The headline and 'About' paragraph on a person's published directory page."@en .
 
@@ -4215,8 +4213,7 @@ people:ProfileDocument a owl:Class ;
     rdfs:subClassOf [ a owl:Restriction ;
             owl:onProperty abi:genericallyDependsOn ;
             owl:someValuesFrom abi:Person ],
-        abi:GenericallyDependentContinuant,
-        cco:ont00002039 ;
+        abi:DocumentContentEntity ;
     skos:definition "A document content entity, published at a retrievable address, from which statements about a person's history are taken: what they did, where they studied, what they hold. Carried by the person the profile is about."@en ;
     skos:example "https://demo.example/profiles/demo"@en .
 
