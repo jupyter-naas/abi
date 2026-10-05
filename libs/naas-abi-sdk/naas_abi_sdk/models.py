@@ -22,6 +22,7 @@ from naas_abi_sdk.model_codec import (
     encode_message,
 )
 from naas_abi_sdk.transfer import model_frames
+from naas_abi_sdk.transport import RPCError
 
 
 class ModelConnection:
@@ -85,6 +86,20 @@ class ModelConnection:
         if len(results) != 1:
             raise ValueError("Expected one model response")
         return response_type.FromString(results[0])
+
+
+class UnaryModelConnection(ModelConnection):
+    """Chat against one module instance. Streaming is refused; tool calls are not."""
+
+    async def result(self, operation, request, response_type):
+        method = getattr(self.client, operation)
+        return await self.on_loop(method(request))
+
+    async def frames(self, operation, request):
+        raise RPCError(
+            "UNIMPLEMENTED", "A module-served model does not stream; use ainvoke"
+        )
+        yield  # pragma: no cover
 
 
 class ChatModelProxy(BaseChatModel):

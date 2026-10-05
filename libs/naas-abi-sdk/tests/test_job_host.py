@@ -1128,3 +1128,32 @@ def test_manual_idempotency_keys_do_not_suppress_other_modules_jobs():
 
     asyncio.run(scenario())
     assert len(js.published) == 2
+
+
+def test_drain_stops_new_fetches_and_lets_the_running_job_finish():
+    async def scenario():
+        from unittest.mock import AsyncMock
+
+        from naas_abi_sdk.job_host import JobHost
+
+        host = JobHost(AsyncMock(), AsyncMock(), "acme", "default", {})
+        release = asyncio.Event()
+
+        async def job():
+            await release.wait()
+
+        host._tasks.add(asyncio.create_task(job()))
+
+        async def consume():
+            await asyncio.Event().wait()
+
+        consumer = asyncio.create_task(consume())
+        host._consumers.append(consumer)
+        draining = asyncio.create_task(host.drain(1))
+        await asyncio.sleep(0)
+        assert host._draining is True
+        release.set()
+        await draining
+        assert consumer.done()
+
+    asyncio.run(scenario())

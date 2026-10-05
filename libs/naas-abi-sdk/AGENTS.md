@@ -24,11 +24,40 @@ It also holds retention (`kept_checkpoints`, `RetentionReport`; the savers'
 clear). Redaction does not change the document layout.
 
 
-AgentProxy and AgentHost use document CAS for durable invocations and non-expiring
-conversation claims. Never infer execution ownership from discovery leases or
-replay an orphaned run. Core Agent/IntentAgent compatibility belongs in core's
+AgentProxy and AgentHost use document CAS for durable invocations. A conversation
+claim is released when its owner instance is absent from a successful discovery
+lookup, so that thread can accept a new run. The orphaned invocation is marked
+failed and is not replayed. A failed lookup keeps the claim. This process never
+treats its own instance as absent. A provider process accepts at most 200 live
+runs, shared by every agent it hosts. `invoke` and `stream_invoke` send a 300
+second deadline unless the caller passes `timeout`; `deadline_seconds` 0 on
+submit still means no deadline. Core Agent/IntentAgent compatibility belongs in core's
 RemoteAgentAdapter; only agent_tools imports optional LangChain dependencies.
 Agent streaming preserves string event/data pairs and sequence-based replay.
+
+A rollout id (`DiscoveryConfiguration.rollout_id`, or `ABI_ROLLOUT_ID`) marks
+processes that cut over together. `rollout_modules` (or `ABI_ROLLOUT_MODULES`,
+comma-separated) names every module id that must be initialized first. Empty
+means this module alone. Discovery keeps the previous generation `READY` until
+that set is up, then marks it `DRAINING` and serves the new one. `STAGED` is a
+new generation waiting behind a live one. `SIGTERM` and `SIGINT` drain the
+process: new agent submits, job fetches and model chats stop, accepted runs and
+jobs finish, then the process unregisters. A live run keeps its claim until it
+finishes. See the discovery ADR, section "Rollouts and draining (2026-10-05)".
+
+`ABI_HEALTH_PORT` (or `run_module(..., health_port=)`) opens a standard-library
+HTTP probe on `ABI_HEALTH_HOST` (default `0.0.0.0`). Unset means no port.
+`GET /health` is liveness and stays 200 while the process is up, including
+`DRAINING` and `STAGED`. `GET /ready` is 200 for `READY`, and for `DISABLED`
+when discovery is off. Every other status is 503. The server closes when the
+module exits.
+
+A module can serve a chat model (`ModelDescriptor`, `expose_model`, `ModelHost`).
+Another module calls `engine.modules[id].get_chat_model(name)`. The call is unary,
+instance-addressed, and authorized with `authorize_model`. The handler returns
+text or an `AIMessage` with tool calls. The caller's agent executes the tools.
+Streaming is refused. Engine model registration stays
+on the model registry.
 
 Model proxies/codec import optional LangChain through [models]. Never import them
 from package __init__ or the base service catalog. Registry facades lazy-load

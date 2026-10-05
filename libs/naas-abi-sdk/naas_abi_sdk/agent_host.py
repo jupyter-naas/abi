@@ -27,6 +27,8 @@ from naas_abi_sdk.transport import RPCError
 
 # Where a submitter may ask for RunUpdates: its own inbox, never a service subject.
 UPDATES_INBOX = re.compile(r"_INBOX\.[A-Za-z0-9_.-]{1,240}")
+# Live executions in this process, shared by every agent it hosts.
+MAX_ACTIVE_RUNS = 200
 # Event data pushed inline up to this (and a quarter of the broker limit);
 # above it only the part count, which the submitter reads with EventRequest.
 INLINE_UPDATE_BYTES = 32 * 1024
@@ -322,6 +324,89 @@ class AgentHost:
             result_parts=data.get("result_parts", 0),
         )
 
+    async def _acquire_claim(self, lock_key: str, invocation_key: str):
+        """The new claim, or None when a live owner still holds the conversation.
+
+        An owner that discovery no longer lists loses the claim. The orphaned
+        invocation is marked failed and is not executed again.
+        """
+        record = {"invocation_key": invocation_key, "owner": self.session.instance_id}
+        for _ in range(3):
+            try:
+                return await self.documents.put(
+                    self.locks_collection, lock_key, record, if_version=0
+                )
+            except VersionConflict:
+                if not await self._release_absent_claim(lock_key):
+                    return None
+        return None
+
+    async def _release_absent_claim(self, lock_key: str) -> bool:
+        """True when the caller should try to create the claim again."""
+        try:
+            existing = await self.documents.get(self.locks_collection, lock_key)
+        except DocumentNotFound:
+            return True
+        owner = existing.data.get("owner", "")
+        if not await self._owner_absent(owner):
+            return False
+        try:
+            await self.documents.delete(
+                self.locks_collection, lock_key, if_version=existing.version
+            )
+        except DocumentNotFound:
+            return True
+        except VersionConflict:
+            return True
+        await self._fail_abandoned(existing.data.get("invocation_key", ""), owner)
+        return True
+
+    async def _owner_absent(self, owner: str) -> bool:
+        """Whether discovery no longer lists this owner.
+
+        This process is never absent. A failed lookup keeps the claim.
+        """
+        if owner == self.session.instance_id:
+            return False
+        try:
+            instances = await self.session.client.get_module(
+                self.session.descriptor.module_id,
+                self.session.descriptor.contract_major,
+            )
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "Discovery lookup failed; conversation claim kept", exc_info=True
+            )
+            return False
+        return owner not in {i.instance_id for i in instances}
+
+    async def _fail_abandoned(self, invocation_key: str, owner: str) -> None:
+        if not invocation_key:
+            return
+        try:
+            existing = await self.documents.get(self.runs_collection, invocation_key)
+        except DocumentNotFound:
+            return
+        if existing.data.get("status") in TERMINAL:
+            return
+        try:
+            await self.documents.put(
+                self.runs_collection,
+                invocation_key,
+                {
+                    **existing.data,
+                    "status": "FAILED",
+                    "error_code": "OWNER_GONE",
+                    "error_message": (
+                        f"Owner {owner} left discovery; the conversation claim was released"
+                    ),
+                    "finished_at": _now(),
+                },
+                if_version=existing.version,
+            )
+        except (DocumentNotFound, VersionConflict):
+            return
+
     async def _submit(self, name: str, key: str, caller: str, req):
         if (
             not req.thread_id
@@ -353,7 +438,7 @@ class AgentHost:
                     )
                 self._watch(key, req.updates_inbox)
                 return existing
-            if self.closing or len(self.runs) >= 32:
+            if self.closing or len(self.runs) >= MAX_ACTIVE_RUNS:
                 raise _error(
                     "AGENT_BUSY", "Provider is draining or at execution capacity"
                 )
@@ -391,14 +476,8 @@ class AgentHost:
                     )
                 return existing
             lock_key = _hash(name, caller, req.thread_id)
-            try:
-                claim = await self.documents.put(
-                    self.locks_collection,
-                    lock_key,
-                    {"invocation_key": key, "owner": self.session.instance_id},
-                    if_version=0,
-                )
-            except VersionConflict:
+            claim = await self._acquire_claim(lock_key, key)
+            if claim is None:
                 data.update(
                     status="FAILED",
                     error_code="CONVERSATION_BUSY",
@@ -637,6 +716,21 @@ class AgentHost:
     async def _deadline(self, run: _Run, seconds: int) -> None:
         await asyncio.sleep(seconds)
         await self._cancel(run, "TIMED_OUT")
+
+    async def drain(self, timeout: float) -> None:
+        """Stop accepting submits and let accepted runs finish.
+
+        A finished run releases its conversation claim. This does not cancel a
+        live run; close() does that for whatever is still going.
+        """
+        self.closing = True
+        tasks = [
+            run.task
+            for run in self.runs.values()
+            if run.task is not None and not run.task.done()
+        ]
+        if tasks:
+            await asyncio.wait(tasks, timeout=timeout)
 
     async def close(self) -> None:
         self.closing = True
