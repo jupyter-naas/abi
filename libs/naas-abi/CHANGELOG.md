@@ -2,6 +2,79 @@
 
 <!-- version list -->
 
+## v2.79.0 (2026-10-05)
+
+### Bug Fixes
+
+- Onto2py code generated
+  ([`3d4283a`](https://github.com/jupyter-naas/abi/commit/3d4283a305bf04794270d4704c3975be63f76e35))
+
+- **ontology-file-network**: Correct initial state of zoneBuckets to false
+  ([`9011c2a`](https://github.com/jupyter-naas/abi/commit/9011c2a845dde8f8fa1b45d32029491b3209e63a))
+
+### Chores
+
+- Commit staged changes
+  ([`50d907d`](https://github.com/jupyter-naas/abi/commit/50d907d0cb5df755ed38cc2565adf0150a535c8a))
+
+- Run onto2py on NaasABIOntology (conso processes)
+  ([`10995d2`](https://github.com/jupyter-naas/abi/commit/10995d2e1b981761dae8946d2da3fee90379055e))
+
+### Features
+
+- **graph**: Add BFO edge rules and orthogonal grid routing
+  ([`aacad22`](https://github.com/jupyter-naas/abi/commit/aacad227ed0f3ab02036357a67ac9c07a20b668c))
+
+- **graph**: Enhance BFO edge routing and zone layout
+  ([`2941235`](https://github.com/jupyter-naas/abi/commit/2941235726aeadc28a3b33575ff493169379ce32))
+
+- **ontology**: Add ancestor classification for BFO buckets
+  ([`70ab431`](https://github.com/jupyter-naas/abi/commit/70ab43175b0c2b11e159a5b0e4eb21024999ec41))
+
+### Refactoring
+
+- **ontologies**: Add action classes for geospatial and administrative regions
+  ([`4dbffc8`](https://github.com/jupyter-naas/abi/commit/4dbffc8b5876b5e91593f8794ebef9d08ad196b4))
+
+- **ontologies**: Add new ontology-related modules and tests
+  ([`5e9ec6a`](https://github.com/jupyter-naas/abi/commit/5e9ec6a19162fe5263bf7bdcd203f22bb3eb33e4))
+
+- **ontologies**: Improve module ontology consolidation and path resolution
+  ([`7d3bc9a`](https://github.com/jupyter-naas/abi/commit/7d3bc9a3eb346e7f116e1f0fa5839c4c6011e64e))
+
+- **ontologies**: Update and add DocumentContentEntity ontology modules and related classes
+  ([`fa6df3c`](https://github.com/jupyter-naas/abi/commit/fa6df3c6605687d2e814aa92e4c856c31e8898c1))
+
+- **ontologies**: Update and add multiple ontology classes and processes
+  ([`41f436a`](https://github.com/jupyter-naas/abi/commit/41f436a71c5cd42eba37f84a1fbb499a341dc4ca))
+
+- **ontologies**: Update multiple ontology and process modules
+  ([`41a95b3`](https://github.com/jupyter-naas/abi/commit/41a95b31bf70d199fc568d22e9db03e990eb8e3e))
+
+- **ontologies**: Update ontology imports and remove deprecated classes
+  ([`e85d98a`](https://github.com/jupyter-naas/abi/commit/e85d98a3e14953923aa6d21a17a972b10d14c01d))
+
+- **ontology**: Add process slices endpoint and tests
+  ([`d4ef150`](https://github.com/jupyter-naas/abi/commit/d4ef150dadf9489329134745d007e99c5f0c69b7))
+
+- **ontology**: Add support for fiat boundary buckets in BFO ontology
+  ([`f47b04a`](https://github.com/jupyter-naas/abi/commit/f47b04a6811fb85bbc946f705af1909fa07a4188))
+
+- **ontology**: Update ontology page and graph components
+  ([`6dfcceb`](https://github.com/jupyter-naas/abi/commit/6dfcceb5aefce63a2e2b4aaf27870d84e9904a2d))
+
+- **ontology**: Update sidebar file picker to sync with dashboard selection
+  ([`0d79ee2`](https://github.com/jupyter-naas/abi/commit/0d79ee232f2784a9356c264f4a6e6afae58acaa0))
+
+- **search**: Enhance topics builtin queries and enrich data
+  ([`08fcf76`](https://github.com/jupyter-naas/abi/commit/08fcf76e6360fc70d2f9c80e45e3cb35c37ccc6e))
+
+### Testing
+
+- **graph**: Add tests for facing cards and improve orthogonal grid routing
+  ([`1fb54b6`](https://github.com/jupyter-naas/abi/commit/1fb54b606c90329b43d24208bfba38b77e0ef568))
+
+
 ## v2.78.0 (2026-10-05)
 
 ### Features
