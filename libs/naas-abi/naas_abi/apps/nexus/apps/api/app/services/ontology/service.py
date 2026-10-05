@@ -418,6 +418,10 @@ def _bfo_bucket(graph: Graph, class_iri: str) -> str | None:
 
 _BFO_ENTITY_ROOT = f"{_BFO_NS}BFO_0000001"
 
+# Markers onto2py's consolidation writes around the process slices it merges.
+_CONSOLIDATED_START = "# >>> onto2py:consolidated-processes >>>"
+_CONSOLIDATED_END = "# <<< onto2py:consolidated-processes <<<"
+
 
 def _class_ancestors(graph: Graph, class_iri: str) -> list[str]:
     """Every class above ``class_iri`` through subClassOf and equivalentClass, nearest first.
@@ -800,6 +804,61 @@ class OntologyService:
             "file_count": len(files), "loaded_file_count": len(sources),
             "errors": errors, "complete": not errors,
         }
+
+    async def process_slices(
+        self, path: str, catalog_refs: list[str] | None
+    ) -> list[dict[str, Any]]:
+        """Process slices consolidated into ``path``, with what each one states.
+
+        A module ontology carries its processes verbatim in the onto2py
+        consolidated region, whose comments name each slice and its source file.
+        The slice files themselves are never listed as ontologies, so they are
+        read here only for a file the workspace admits, to tell which classes
+        and restrictions came from which process.
+        """
+        files = await self.list_ontology_files(catalog_refs=catalog_refs)
+        if path not in {file.path for file in files}:
+            return []
+        try:
+            content = Path(path).read_text(encoding="utf-8")
+        except OSError:
+            return []
+        start = content.find(_CONSOLIDATED_START)
+        end = content.find(_CONSOLIDATED_END, start)
+        if start < 0 or end < 0:
+            return []
+        module_root = Path(path).resolve().parents[2]
+        slices = []
+        for source in re.findall(r"^\s*#\s*Source:\s*(\S+\.ttl)\s*$", content[start:end], re.M):
+            slice_path = (module_root / source).resolve()
+            if module_root not in slice_path.parents or not slice_path.is_file():
+                continue
+            try:
+                graph = Graph().parse(slice_path, format="turtle")
+            except Exception:
+                logger.exception("Could not read process slice %s", slice_path)
+                continue
+            header = next((s for s in graph.subjects(RDF.type, OWL.Ontology) if isinstance(s, URIRef)), None)
+            title = header and (graph.value(header, DCTERMS.title) or graph.value(header, RDFS.label))
+            classes = {
+                subject for subject in graph.subjects(RDFS.subClassOf, None) if isinstance(subject, URIRef)
+            } | {subject for subject in graph.subjects(RDF.type, OWL.Class) if isinstance(subject, URIRef)}
+            restrictions = []
+            for subject in sorted(classes, key=str):
+                for restriction in graph.objects(subject, RDFS.subClassOf):
+                    prop = graph.value(restriction, OWL.onProperty)
+                    for predicate in (OWL.someValuesFrom, OWL.allValuesFrom, OWL.onClass, OWL.hasValue):
+                        target = graph.value(restriction, predicate)
+                        if isinstance(prop, URIRef) and isinstance(target, URIRef):
+                            restrictions.append({"subject": str(subject), "property": str(prop), "target": str(target)})
+            slices.append({
+                "id": str(header) if header else slice_path.stem,
+                "name": str(title) if title else slice_path.stem,
+                "path": str(slice_path),
+                "classes": sorted(str(item) for item in classes),
+                "restrictions": restrictions,
+            })
+        return slices
 
     async def refresh_bfo_bucket(
         self, iri: str, catalog_refs: list[str] | None

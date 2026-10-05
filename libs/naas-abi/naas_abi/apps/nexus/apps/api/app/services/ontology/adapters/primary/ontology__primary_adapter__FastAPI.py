@@ -171,6 +171,16 @@ async def refresh_bfo_bucket(
     return {"iri": data.iri, "bfoBucket": bucket}
 
 
+@router.get("/process-slices")
+async def list_process_slices(
+    path: str = Query(..., min_length=1, max_length=4096),
+    ontology_service: OntologyService = Depends(get_ontology_service),
+    catalog_refs: list[str] = Depends(ontology_catalog_scope),
+) -> dict:
+    """Process slices consolidated into one workspace ontology file."""
+    return {"items": await ontology_service.process_slices(path, catalog_refs=catalog_refs)}
+
+
 @router.get("/classes")
 async def list_classes(
     ontology_path: str | None = Query(None, alias="ontology_path"),

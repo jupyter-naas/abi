@@ -8,7 +8,7 @@ import { getApiUrl } from '@/lib/config';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useOntologyStore } from '@/stores/ontology';
 import { useOntologyDictionaryStore } from '@/stores/ontology-dictionary';
-import { DASHBOARD_KINDS, buildOntologyDashboard, dashboardRoute, dashboardTerms, dashboardCoverage, dashboardOntologies, dashboardKindRoute, type DashboardFile } from '@/lib/ontology-dashboard';
+import { DASHBOARD_KINDS, buildOntologyDashboard, dashboardRoute, dashboardTerms, dashboardCoverage, dashboardOntologies, dashboardKindRoute, dashboardRestrictions, isPseudoKind, type DashboardFile } from '@/lib/ontology-dashboard';
 import { systemOntologyPaths } from '@/lib/ontology-system-filter';
 import { dictionaryFiles } from '@/lib/ontology-file-filter';
 import { dictionaryFilters, ontologyBrowser, termRoute } from '@/lib/ontology-navigation';
@@ -19,6 +19,7 @@ import type { DictionaryTerm } from '@/lib/ontology-dictionary-tree';
 import { OntologyNodeInspector } from './ontology-node-inspector';
 import { OntologyTopicIcon } from './ontology-topic-icon';
 import { OntologyIconPicker } from './ontology-icon-picker';
+import { OntologyFileNetwork } from './ontology-file-network';
 import './ontology-dashboard.css';
 
 type Inventory = { workspaceId: string; revision: number; files: DashboardFile[]; loading: boolean; error?: string };
@@ -40,7 +41,8 @@ export function OntologyDashboard() {
   const [selection, setSelection] = useState<{ scope: string; root: string; node: string } | null>(null);
   const [page, setPage] = useState<{ scope: string; count: number } | null>(null);
   const kinds = dictionaryFilters(query);
-  const kind = params.get('dashboardType') === 'ontology' ? 'ontology' : !kinds.length ? 'all' : kinds.length === 1 ? kinds[0] : 'multiple';
+  const dashboardType = params.get('dashboardType');
+  const kind = dashboardType && isPseudoKind(dashboardType) ? dashboardType : !kinds.length ? 'all' : kinds.length === 1 ? kinds[0] : 'multiple';
   const kindLabel = kind === 'multiple' ? `${kinds.length} types selected` : DASHBOARD_KINDS.find(item => item.type === kind)?.label;
   const filePath = params.get('dashboardFile');
   const scope = `${workspaceId}:${query}:${revision}`;
@@ -78,22 +80,31 @@ export function OntologyDashboard() {
   const terms = dashboardTerms(activeTiles);
   const activePaths = activeTiles.map(tile => tile.path);
   const ontologies = dashboardOntologies(dictionary.ontologies || [], activePaths);
+  const activeKey = activePaths.join('\n');
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the paths, not the array identity
+  const restrictions = useMemo(() => dashboardRestrictions(workspaceTerms, activePaths), [workspaceTerms, activeKey]);
+  const restrictionCounts = useMemo(() => new Map(tiles.map(tile => [tile.path, dashboardRestrictions(workspaceTerms, [tile.path]).length])), [tiles, workspaceTerms]);
   const coverage = dashboardCoverage([...terms, ...ontologies], activePaths);
   const filteredTerms = terms.filter(term => !kinds.length || kinds.includes(term.type));
   const groups = new Map<string, typeof tiles>();
   for (const tile of activeTiles) {
     if (kind !== 'all' && !tile.failed && !(kind === 'ontology'
       ? ontologies.some(item => item.sources?.some(source => source.path === tile.path))
+      : kind === 'restriction' ? (restrictionCounts.get(tile.path) || 0) > 0
       : tile.terms.some(term => kinds.includes(term.type)))) continue;
     const group = groups.get(tile.moduleName) || [];
     group.push(tile); groups.set(tile.moduleName, group);
   }
   const visibleLimit = page?.scope === scope ? page.count : PAGE_SIZE;
   const visibleTerms = filteredTerms.slice(0, visibleLimit);
-  const root = selection?.scope === scope ? terms.find(term => termKey(term) === selection.root) : undefined;
+  // A network card may be a class the file restricts without declaring it (abi:Person in People).
+  const root = selection?.scope === scope ? terms.find(term => termKey(term) === selection.root) || workspaceTerms.find(term => termKey(term) === selection.root) : undefined;
+  const selectNetworkNode = (id: string | null) => setSelection(id && workspaceTerms.some(term => termKey(term) === id) ? { scope, root: id, node: id } : null);
   const graph = useMemo(() => root ? buildTermGraph(root, workspaceTerms) : null, [root, workspaceTerms]);
   const node = graph?.nodes.find(item => item.id === selection?.node);
   const inspectedTerm = node ? inspectorTerm(node, workspaceTerms) : undefined;
+  // One ontology is in view: counting its owl:Ontology declarations says nothing.
+  const breakdownKinds = DASHBOARD_KINDS.filter(item => !(filePath && item.type === 'ontology'));
   const navigate = (next: URLSearchParams) => router.push(`?${next}`, { scroll: false });
   const openTerm = (term: DictionaryTerm, network = false) => {
     const next = termRoute(query, term);
@@ -131,13 +142,29 @@ export function OntologyDashboard() {
         </div>)}
       </div>
       <div className="ontology-dashboard-table-heading"><h2>Breakdown by types</h2></div>
-      <div className="ontology-dashboard-metrics" aria-label="RDF Types">
-        {DASHBOARD_KINDS.map(item => <button type="button" key={item.type} className="ontology-dashboard-metric" style={tint(item.color)} aria-pressed={item.type === 'ontology' ? kind === 'ontology' : kind !== 'ontology' && kinds.includes(item.type)} onClick={() => navigate(dashboardKindRoute(query, item.type))} title={item.type === 'ontology' ? 'Distinct owl:Ontology declarations in the selected files.' : undefined}>
-          <span>{item.label}</span><strong>{number(item.type === 'ontology' ? ontologies.length : terms.filter(term => term.type === item.type).length)}</strong><span className="ontology-dashboard-metric-symbol" aria-hidden="true">{item.symbol}</span>
+      <div className="ontology-dashboard-metrics" aria-label="RDF Types" style={{ '--ontology-kpi-columns': breakdownKinds.length } as CSSProperties}>
+        {breakdownKinds.map(item => <button type="button" key={item.type} className="ontology-dashboard-metric" style={tint(item.color)} aria-pressed={isPseudoKind(item.type) ? kind === item.type : !isPseudoKind(kind) && (kinds as string[]).includes(item.type)} onClick={() => navigate(dashboardKindRoute(query, item.type))} title={item.type === 'ontology' ? 'Distinct owl:Ontology declarations in the selected files.' : item.type === 'restriction' ? 'Distinct owl:Restriction statements (class, property, filler) made in the selected files, including on classes declared elsewhere.' : undefined}>
+          <span>{item.label}</span><strong>{number(item.type === 'ontology' ? ontologies.length : item.type === 'restriction' ? restrictions.length : terms.filter(term => term.type === item.type).length)}</strong><span className="ontology-dashboard-metric-symbol" aria-hidden="true">{item.symbol}</span>
         </button>)}
       </div>
-      <div className="ontology-dashboard-table-heading"><h2>{filePath && kind !== 'ontology' ? 'Types' : 'Ontologies'}</h2><span>{kind === 'all' ? filePath ? `${filteredTerms.length} types` : 'Grouped by module' : kind === 'multiple' ? `${kindLabel} · adjust in All types` : `${kindLabel} · select the active count to show all`}</span></div>
-      {filePath && kind !== 'ontology' ? !selectedFile ? <p className="ontology-dashboard-empty">This ontology is not available in the current workspace or file selection.</p>
+      {filePath && selectedFile && !selectedFile.failed && workspaceId && <>
+        <div className="ontology-dashboard-table-heading"><h2>Network</h2><span>BFO 7 buckets · classes and the restrictions this ontology states</span></div>
+        <OntologyFileNetwork workspaceId={workspaceId} path={selectedFile.path} fileTerms={selectedFile.terms} restrictions={restrictions} terms={workspaceTerms}
+          selectedNodeId={selection?.scope === scope ? selection.node : null} onSelect={selectNetworkNode} />
+      </>}
+      <div className="ontology-dashboard-table-heading"><h2>{filePath && kind === 'restriction' ? 'OWL Restrictions' : filePath && kind !== 'ontology' ? 'Types' : 'Ontologies'}</h2><span>{kind === 'all' ? filePath ? `${filteredTerms.length} types` : 'Grouped by module' : kind === 'multiple' ? `${kindLabel} · adjust in All types` : `${kindLabel} · select the active count to show all`}</span></div>
+      {filePath && kind === 'restriction' ? !restrictions.length ? <p className="ontology-dashboard-empty">This ontology states no restrictions.</p>
+        : <div className="ontology-dashboard-grid" aria-label="OWL Restrictions">
+          {restrictions.map((item, index) => <button type="button" key={item.key} className="ontology-dashboard-tile ontology-dashboard-restriction" style={tint('#e11d48')}
+            aria-pressed={selection?.scope === scope && selection.root === termKey(item.subject)} title={`${item.subject.name} ${item.property.name} ${item.constraint || 'some'} ${item.target.name}`}
+            onClick={() => setSelection({ scope, root: termKey(item.subject), node: termKey(item.subject) })}>
+            <span className="ontology-dashboard-tile-index">{String(index + 1).padStart(2, '0')}<span>Re</span></span>
+            <OntologyTopicIcon subject={item.subject} className="ontology-dashboard-tile-icon" />
+            <strong>{item.subject.name} → {item.property.name} {item.constraint || 'some'} {item.target.name}</strong>
+            <span className="ontology-dashboard-tile-meta">OWL Restriction<ArrowUpRight size={12} /></span>
+          </button>)}
+        </div>
+        : filePath && kind !== 'ontology' ? !selectedFile ? <p className="ontology-dashboard-empty">This ontology is not available in the current workspace or file selection.</p>
         : selectedFile.failed ? <p className="ontology-dashboard-empty">This ontology could not be read. <button type="button" onClick={reload}>Try again</button></p>
         : !filteredTerms.length ? <p className="ontology-dashboard-empty">{terms.length ? 'No types match the selected category.' : 'No types are declared in this ontology.'}</p>
         : <>
@@ -157,8 +184,8 @@ export function OntologyDashboard() {
         : groups.size ? [...groups].map(([moduleName, files]) => <section className="ontology-dashboard-group" key={moduleName} aria-label={moduleName}>
           <h3>{moduleName}<span>{files.length}</span></h3><div className="ontology-dashboard-grid">
             {files.map(tile => {
-              const dominant = [...DASHBOARD_KINDS].filter(item => item.type !== 'ontology').sort((a, b) => tile.terms.filter(term => term.type === b.type).length - tile.terms.filter(term => term.type === a.type).length)[0];
-              const count = kind === 'ontology' ? dashboardOntologies(ontologies, [tile.path]).length : kind === 'all' ? tile.terms.length : tile.terms.filter(term => kinds.includes(term.type)).length;
+              const dominant = [...DASHBOARD_KINDS].filter(item => !isPseudoKind(item.type)).sort((a, b) => tile.terms.filter(term => term.type === b.type).length - tile.terms.filter(term => term.type === a.type).length)[0];
+              const count = kind === 'ontology' ? dashboardOntologies(ontologies, [tile.path]).length : kind === 'restriction' ? restrictionCounts.get(tile.path) || 0 : kind === 'all' ? tile.terms.length : tile.terms.filter(term => kinds.includes(term.type)).length;
               return <button type="button" key={tile.path} className="ontology-dashboard-tile" style={tint(dominant.color)} data-failed={tile.failed || undefined}
                 title={`${tile.name}\n${tile.path.split('/').pop()}`} onClick={() => navigate(dashboardRoute(query, tile.path))}>
                 <span className="ontology-dashboard-tile-index">{String(tile.index).padStart(2, '0')}<ArrowUpRight size={12} /></span>

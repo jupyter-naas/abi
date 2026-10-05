@@ -159,6 +159,49 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(buckets["urn:Vague"], "http://purl.obolibrary.org/obo/BFO_0000001")
             self.assertEqual(self.cache.data, {})
 
+    async def test_process_slices_of_a_consolidated_ontology(self):
+        with TemporaryDirectory() as directory:
+            module = Path(directory) / "example"
+            slices = module / "ontologies" / "processes"
+            slices.mkdir(parents=True)
+            prefixes = """@prefix owl: <http://www.w3.org/2002/07/owl#> .
+                @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+                @prefix dc: <http://purl.org/dc/terms/> .
+                @prefix ex: <urn:ex:> .
+            """
+            (slices / "WorkProcess.ttl").write_text(prefixes + """
+                ex:WorkProcess a owl:Ontology ; dc:title "Work Process Ontology"@en .
+                ex:Work a owl:Class ; rdfs:subClassOf
+                    [ a owl:Restriction ; owl:onProperty ex:occursIn ; owl:someValuesFrom ex:Site ] .
+                ex:Person rdfs:subClassOf
+                    [ a owl:Restriction ; owl:onProperty ex:hasDesk ; owl:someValuesFrom ex:Desk ] .
+            """)
+            # Present on disk but not consolidated: never reported.
+            (slices / "Draft.ttl").write_text(prefixes + "ex:Draft a owl:Ontology .")
+            path = module / "ontologies" / "modules" / "Example.ttl"
+            path.parent.mkdir(parents=True)
+            path.write_text(prefixes + """
+                ex:Example a owl:Ontology .
+                # >>> onto2py:consolidated-processes >>>
+                #    Process slice: urn:ex:WorkProcess
+                #    Source: ontologies/processes/WorkProcess.ttl
+                # <<< onto2py:consolidated-processes <<<
+            """)
+            plain = module / "ontologies" / "modules" / "Plain.ttl"
+            plain.write_text(prefixes + "ex:Plain a owl:Ontology .")
+            service = service_for([path, plain])
+            [work] = await service.process_slices(str(path), None)
+            self.assertEqual(work["id"], "urn:ex:WorkProcess")
+            self.assertEqual(work["name"], "Work Process Ontology")
+            self.assertEqual(work["classes"], ["urn:ex:Person", "urn:ex:Work"])
+            self.assertEqual(sorted(map(tuple, (r.values() for r in work["restrictions"]))), [
+                ("urn:ex:Person", "urn:ex:hasDesk", "urn:ex:Desk"),
+                ("urn:ex:Work", "urn:ex:occursIn", "urn:ex:Site"),
+            ])
+            self.assertEqual(await service.process_slices(str(plain), None), [])
+            # Only files the workspace catalog admits.
+            self.assertEqual(await service.process_slices(str(path), []), [])
+
     async def test_abi_process_catalog_contains_system_and_all_processes(self):
         import naas_abi
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildOntologyDashboard, dashboardTerms, dashboardRoute, dashboardCoverage, dashboardOntologies, dashboardKindRoute, type OntologyDeclaration } from './ontology-dashboard';
+import { buildOntologyDashboard, dashboardTerms, dashboardRoute, dashboardCoverage, dashboardOntologies, dashboardKindRoute, dashboardRestrictions, type OntologyDeclaration } from './ontology-dashboard';
 import type { DictionaryTerm } from './ontology-dictionary-tree';
 
 const a = {path:'/allowed/a.ttl',name:'A ontology',moduleName:'a'};
@@ -79,4 +79,27 @@ test('ontology KPI toggles and drill-down preserve workspace filters and navigat
     assert.deepEqual(result.getAll('systemFilter'),['abi']);
     assert.equal(result.get('spacing'),'compact');
   }
+});
+
+test('restrictions belong to the file that states them, once each', () => {
+  const restricted: DictionaryTerm = {id:'https://example.org/person',name:'Person',type:'entity',sources:[a],relations:[
+    {property:{id:'p:hasDesk',name:'has desk'},target:{id:'x:Desk',name:'Desk'},kind:'restriction',constraint:'some',sources:[b]},
+    {property:{id:'p:hasDesk',name:'has desk'},target:{id:'x:Desk',name:'Desk'},kind:'restriction',constraint:'some',sources:[a]},
+    {property:{id:'p:knows',name:'knows'},target:{id:'x:Other',name:'Other'},kind:'assertion',sources:[b]},
+  ]};
+  // Declared in a, restricted in b: b counts it.
+  assert.deepEqual(dashboardRestrictions([restricted],[b.path]).map(item=>item.target.name),['Desk']);
+  const both=dashboardRestrictions([restricted,restricted],[a.path,b.path]);
+  assert.equal(both.length,1);
+  assert.deepEqual(both[0].sources.map(source=>source.path).sort(),[a.path,b.path]);
+  assert.equal(dashboardRestrictions([restricted],['/elsewhere.ttl']).length,0);
+});
+
+test('the restriction KPI toggles like the ontology one', () => {
+  const base='view=overview&termFilter=entity&dictionaryFile=%2Fa.ttl';
+  const on=dashboardKindRoute(base,'restriction');
+  assert.equal(on.get('dashboardType'),'restriction');
+  assert.equal(on.get('termFilter'),'all');
+  assert.equal(dashboardKindRoute(on.toString(),'restriction').has('dashboardType'),false);
+  assert.equal(dashboardKindRoute(on.toString(),'ontology').get('dashboardType'),'ontology');
 });
