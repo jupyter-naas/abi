@@ -8,6 +8,7 @@ import type { GraphNode, GraphEdge } from '@/stores/knowledge-graph';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BFO_BUCKET_BY_TYPE, BFO_BUCKET_DEFS } from '@/lib/bfo-buckets';
+import { edgeSides } from './bfo-edge-rules';
 import { bfoZoneLayout, drawBfoZones, zoneBounds, zoneParents, type ZoneLayout } from './bfo-zone-layout';
 import { installOrthogonalEdges } from './orthogonal-network';
 import { compactNetworkPositions } from './compact-network-layout';
@@ -1090,10 +1091,16 @@ export function VisNetwork({
     })), edges, nodeSpacing);
   }, [nodes, edges, nodeSpacing, suppliedFixedLayout, bfoZones, layoutDirection, physicsEnabled, nodeLayoutBox]);
 
-  const zoneLayout = useMemo(() => {
+  // In the BFO zones, the buckets a connector joins fix the sides of the cards it uses (bfo-edge-rules.ts).
+  const zoneSides = useMemo(() => {
     if (!bfoZones) return null;
     const byId = new Map(nodes.map(node => [node.id, node]));
     const buckets = new Map(nodes.map(node => [node.id, resolveNodeBucketKey(node, byId)]));
+    return { buckets, sidesFor: edgeSides(id => buckets.get(id)) };
+  }, [bfoZones, nodes]);
+  const zoneLayout = useMemo(() => {
+    if (!zoneSides) return null;
+    const { buckets, sidesFor } = zoneSides;
     const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
     // Subclasses sit right of their parent class in its zone, whether or not subclass edges are drawn.
     const parents = zoneParents(nodes.map(node => ({
@@ -1103,8 +1110,8 @@ export function VisNetwork({
     return bfoZoneLayout(nodes.map(node => {
       const box = nodeLayoutBox(node);
       return { id: node.id, label: node.label, bucket: buckets.get(node.id)!, width: box.width, height: box.height, parent: parents.get(node.id) };
-    }), edges);
-  }, [bfoZones, nodes, edges, nodeLayoutBox]);
+    }), edges, { sidesFor });
+  }, [zoneSides, nodes, edges, nodeLayoutBox]);
   zoneLayoutRef.current = zoneLayout;
 
   // Fetch and cache logo images as data URIs so they can be embedded in SVG.
@@ -1330,8 +1337,12 @@ export function VisNetwork({
   const routedEdges = useMemo(() => orthogonalEdges ? edges.map(edge => ({
     id: edge.id, source: edge.source, target: edge.target, style: toVisEdge(edge),
   })) : [], [orthogonalEdges, edges, toVisEdge]);
-  const routingStateRef = useRef({ edges: routedEdges, selected: selectedEdgeIds, direction: layoutDirection });
-  routingStateRef.current = { edges: routedEdges, selected: selectedEdgeIds, direction: layoutDirection };
+  const routingState = () => ({
+    edges: routedEdges, selected: selectedEdgeIds, direction: layoutDirection,
+    sidesFor: zoneSides?.sidesFor, room: zoneLayout?.room,
+  });
+  const routingStateRef = useRef(routingState());
+  routingStateRef.current = routingState();
 
   // Network options - simple config, let vis-network handle zoom.
   // autoResize is disabled because its synchronous resize handling triggers the
@@ -1852,7 +1863,7 @@ export function VisNetwork({
       orthogonalRendererRef.current = null;
     };
   }, [orthogonalEdges]);
-  useEffect(() => { if (orthogonalEdges) networkRef.current?.redraw(); }, [orthogonalEdges, routedEdges, selectedEdgeIds]);
+  useEffect(() => { if (orthogonalEdges) networkRef.current?.redraw(); }, [orthogonalEdges, routedEdges, selectedEdgeIds, zoneSides, zoneLayout]);
 
   // Bring selected nodes to the foreground. vis-network has no z-index and
   // draws nodes in DataSet insertion order (later = on top), drawing nodes over

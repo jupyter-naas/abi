@@ -8,16 +8,22 @@
  * holds. Inside a zone a subclass follows its parent class: to its right in
  * the occurrents (temporal region, then temporal instant), below it in the
  * continuants (material entity above person and organization).
+ * When the BFO edge rules fix the sides connectors use (bfo-edge-rules.ts), the
+ * margins and corridors are widened for the connectors the rules send through
+ * them, a track apiece, so those can be drawn side by side.
  * Ported from the people app's network layout
  * (naas_abi_marketplace intelligence/modules/people/apps/people/web/lib/network-layout.js).
  */
+import { sideLoads, type Side, type SidesFor } from './bfo-edge-rules';
+import { TRACK, type Room } from './orthogonal-grid-route';
 
 /** ``parent``: the card of the nearest superclass, when it is in the same zone. */
 export type ZoneCard = { id: string; width: number; height: number; bucket: string; label: string; parent?: string };
 export type ZoneLink = { source: string; target: string };
 export type Zone = { key: string; x: number; y: number; width: number; height: number };
 export type Band = { label: 'OCCURRENTS' | 'CONTINUANTS'; x: number; y: number; width: number; height: number };
-export type ZoneLayout = { positions: Map<string, { x: number; y: number }>; zones: Zone[]; bands: Band[] };
+/** ``room``: the margin left outside the zones, per side, for the connectors that run there. */
+export type ZoneLayout = { positions: Map<string, { x: number; y: number }>; zones: Zone[]; bands: Band[]; room?: Room };
 
 export const OCCURRENT_BUCKETS = ['Process', 'Temporal Region'];
 export const CONTINUANT_BUCKETS = ['Material Entity', 'Site', 'GDC', 'Quality', 'Realizable'];
@@ -34,6 +40,8 @@ const CORRIDOR = 72;
 const MARGIN = 48;
 // Wide enough for the longest zone title ("HOW WE KNOW · GDC", "WHEN · Temporal Region").
 const MIN_ZONE_WIDTH = 190;
+// Most free connectors one gap between two bottom zones is widened for.
+const MAX_GAP_LOAD = 176;
 
 /** ``cells``: fixed (column, row) of every card when the zone holds a class hierarchy. */
 type Measured = { cols: number; cellW: number; cellH: number; width: number; height: number; cells?: Map<string, { col: number; row: number }> };
@@ -148,7 +156,7 @@ function fitZone(cards: ZoneCard[], width: number, cellH: number): Measured {
  * the shape of the view (``aspect`` is its width to height). Positions are card
  * centres; zones and bands are rectangles, all in canvas units.
  */
-export function bfoZoneLayout(cards: ZoneCard[], links: ZoneLink[], { aspect = 1.7 } = {}): ZoneLayout {
+export function bfoZoneLayout(cards: ZoneCard[], links: ZoneLink[], { aspect = 1.7, sidesFor }: { aspect?: number; sidesFor?: SidesFor | null } = {}): ZoneLayout {
   if (!cards.length) return { positions: new Map(), zones: [], bands: [] };
   const known = new Set([...OCCURRENT_BUCKETS, ...CONTINUANT_BUCKETS]);
   const groups = new Map<string, ZoneCard[]>();
@@ -160,18 +168,32 @@ export function bfoZoneLayout(cards: ZoneCard[], links: ZoneLink[], { aspect = 1
 
   const top = OCCURRENT_BUCKETS.filter(key => groups.has(key));
   const bottom = [...CONTINUANT_BUCKETS, OTHER_BUCKET].filter(key => groups.has(key));
+  const zoneOf = new Map<string, string>();
+  for (const [key, list] of groups) for (const card of list) zoneOf.set(card.id, key);
+  const linked = links.filter(link => link.source !== link.target && zoneOf.has(link.source) && zoneOf.has(link.target));
+
+  // A side a card's neighbour stands in front of cannot be left by in a straight
+  // line. So the cards that most connectors leave by the bottom go last in their
+  // zone (its bottom row); in the top band, those going out west first and east last.
+  if (sidesFor) {
+    const demand = sideLoads(linked, sidesFor);
+    const need = (id: string, side: Side) => demand.get(id)?.[side] || 0;
+    for (const key of bottom) groups.set(key, [...groups.get(key)!].sort((a, b) => need(a.id, 'S') - need(b.id, 'S')));
+    for (const key of top) groups.set(key, [...groups.get(key)!].sort((a, b) => need(a.id, 'E') - need(a.id, 'W') - (need(b.id, 'E') - need(b.id, 'W'))));
+  }
+  const spacing = connectorRoom(linked, zoneOf, top, bottom, sidesFor);
   const cellHeight = (keys: string[]) => Math.max(0, ...keys.flatMap(key => groups.get(key)!.map(card => card.height)));
   const topCellH = cellHeight(top);
   const bottomCellH = cellHeight(bottom);
 
   const bottomBand = (rows: number) => {
     const zones = bottom.map(key => measureZone(groups.get(key)!, rows, bottomCellH));
-    const width = zones.reduce((sum, zone, i) => sum + zone.width + (i ? ZONE_GAP : 0), 0);
+    const width = zones.reduce((sum, zone, i) => sum + zone.width + spacing.gapBefore(i), 0);
     return { zones, width, height: Math.max(0, ...zones.map(zone => zone.height)) };
   };
   // The top band spans the view: Process takes 70% of it when Temporal Region shares it.
   const shares = top.length > 1 ? [PROCESS_SHARE, 1 - PROCESS_SHARE] : [1];
-  const topGap = top.length > 1 ? ZONE_GAP : 0;
+  const topGap = top.length > 1 ? spacing.topGap : 0;
   const oneColumn = (key: string) => measureHierarchy(groups.get(key)!, topCellH, 'right')?.width ?? Math.max(MIN_ZONE_WIDTH, cellWidth(groups.get(key)!) + 2 * ZONE_PAD);
   const innerMin = top.length ? Math.max(...top.map((key, i) => (oneColumn(key) + topGap / 2) / shares[i])) : 0;
   const topBand = (inner: number) => {
@@ -179,14 +201,14 @@ export function bfoZoneLayout(cards: ZoneCard[], links: ZoneLink[], { aspect = 1
     return { zones, height: Math.max(0, ...zones.map(zone => zone.height)) };
   };
 
-  const corridor = top.length && bottom.length ? CORRIDOR : 0;
+  const corridor = top.length && bottom.length ? spacing.corridor : 0;
   let best: { score: number; lower: ReturnType<typeof bottomBand>; upper: ReturnType<typeof topBand>; inner: number; width: number; height: number } | null = null;
   for (let rows = 1; rows <= 8; rows += 1) {
     const lower = bottomBand(rows);
     const inner = Math.max(lower.width, innerMin);
     const upper = topBand(inner);
-    const width = inner + 2 * MARGIN;
-    const height = 2 * MARGIN + upper.height + corridor + lower.height;
+    const width = inner + spacing.left + MARGIN;
+    const height = spacing.above + upper.height + corridor + lower.height + (bottom.length ? spacing.below : MARGIN);
     const score = Math.abs(Math.log(width / height / aspect));
     if (!best || score < best.score - 1e-9) best = { score, lower, upper, inner, width, height };
   }
@@ -223,18 +245,18 @@ export function bfoZoneLayout(cards: ZoneCard[], links: ZoneLink[], { aspect = 1
       });
     });
   };
-  const upperY = MARGIN;
-  const lowerY = MARGIN + layout.upper.height + corridor;
+  const upperY = spacing.above;
+  const lowerY = (top.length ? spacing.above : MARGIN) + layout.upper.height + corridor;
   if (top.length) {
-    place(top[0], layout.upper.zones[0], MARGIN, upperY, layout.upper.height);
+    place(top[0], layout.upper.zones[0], spacing.left, upperY, layout.upper.height);
     if (top.length > 1) {
       const right = layout.upper.zones[1];
-      place(top[1], right, MARGIN + layout.inner - right.width, upperY, layout.upper.height);
+      place(top[1], right, spacing.left + layout.inner - right.width, upperY, layout.upper.height);
     }
   }
-  let x = MARGIN + (layout.inner - layout.lower.width) / 2;
+  let x = spacing.left + (layout.inner - layout.lower.width) / 2;
   bottom.forEach((key, i) => {
-    if (i) x += ZONE_GAP;
+    x += spacing.gapBefore(i);
     place(key, layout.lower.zones[i], x, lowerY, layout.lower.height);
     x += layout.lower.zones[i].width;
   });
@@ -246,7 +268,72 @@ export function bfoZoneLayout(cards: ZoneCard[], links: ZoneLink[], { aspect = 1
     const y = top.length ? split : 0;
     bands.push({ label: 'CONTINUANTS', x: 0, y, width: layout.width, height: layout.height - y });
   }
-  return { positions, zones, bands };
+  const room = { top: spacing.above, bottom: bottom.length ? spacing.below : MARGIN, left: spacing.left, right: MARGIN };
+  return { positions, zones, bands, room };
+}
+
+/**
+ * Room for the connectors, counted from the sides the rules give them: what the
+ * rules send under the bottom band, over the top band or down the left margin
+ * needs a margin of its own, and the corridors carry only what passes through.
+ * Without rules, the fixed gaps.
+ */
+function connectorRoom(links: ZoneLink[], zoneOf: Map<string, string>, top: string[], bottom: string[], sidesFor?: SidesFor | null) {
+  if (!sidesFor) {
+    return { above: MARGIN, below: MARGIN, left: MARGIN, corridor: CORRIDOR, topGap: ZONE_GAP, gapBefore: (i: number) => (i ? ZONE_GAP : 0) };
+  }
+  const only = (sides?: Side[]) => (sides?.length === 1 ? sides[0] : null);
+  const inTop = (zone: string) => top.includes(zone);
+  const budget = { top: 0, bottom: 0, left: 0, mid: 0, eastOfTop: 0, west: new Map<string, number>() };
+  const free: ZoneLink[] = [];
+  for (const link of links) {
+    const rule = sidesFor(link);
+    const from = zoneOf.get(link.source)!, to = zoneOf.get(link.target)!;
+    const s = only(rule?.source), t = only(rule?.target);
+    const crossing = inTop(from) !== inTop(to);
+    if (!s || !t) {
+      free.push(link);
+      if (crossing) budget.mid += 1;
+      continue;
+    }
+    if (s === 'N' && t === 'N') budget.top += 1;
+    if (s === 'S' && t === 'S') budget.bottom += 1;
+    for (const [zone, side, other] of [[from, s, to], [to, t, from]] as const) {
+      if (inTop(zone) && side === 'W') budget.left += 1;
+      if (inTop(zone) && side === 'E') budget.eastOfTop += 1;
+      if (!inTop(zone) && side === 'W' && inTop(other)) budget.west.set(zone, (budget.west.get(zone) || 0) + 1);
+    }
+    if (crossing && !(s === 'W' && t === 'W')) budget.mid += 1;
+  }
+  const gapBefore = (i: number) => {
+    if (i === 0) return 0;
+    const left = new Set(bottom.slice(0, i));
+    const load = free.reduce((sum, link) => {
+      const a = zoneOf.get(link.source)!, b = zoneOf.get(link.target)!;
+      if (bottom.includes(a) && bottom.includes(b)) return sum + (left.has(a) !== left.has(b) ? 1 : 0);
+      // A free connector from the other band lands in one zone of this row.
+      const landing = bottom.includes(a) ? a : bottom.includes(b) ? b : null;
+      return landing === bottom[i - 1] || landing === bottom[i] ? sum + 0.5 : sum;
+    }, 0);
+    // The connectors the rules send in by the west side of this zone come down this gap.
+    return ZONE_GAP + TRACK * (budget.west.get(bottom[i]) || 0) + Math.min(MAX_GAP_LOAD, Math.round(3 * load));
+  };
+  // Free connectors that skip over a zone in the bottom row run under it.
+  const skipping = free.filter(link => {
+    const x = bottom.indexOf(zoneOf.get(link.source)!), y = bottom.indexOf(zoneOf.get(link.target)!);
+    return x >= 0 && y >= 0 && Math.abs(x - y) > 1;
+  }).length;
+  const freeBetweenTop = free.filter(link => inTop(zoneOf.get(link.source)!) && inTop(zoneOf.get(link.target)!) && zoneOf.get(link.source) !== zoneOf.get(link.target)).length;
+  return {
+    // Over the top band for the U shapes, under the bottom band for theirs, down the left for the C shapes.
+    above: MARGIN + TRACK * budget.top,
+    below: MARGIN + TRACK * (budget.bottom + Math.ceil(skipping / 2)),
+    left: MARGIN + TRACK * budget.left,
+    corridor: Math.max(CORRIDOR, 60 + TRACK * budget.mid),
+    // Connectors leaving Process by its east side go down between it and Temporal Region.
+    topGap: ZONE_GAP + TRACK * (budget.eastOfTop + freeBetweenTop),
+    gapBefore,
+  };
 }
 
 export type ZoneClass = { id: string; bucket: string; iri?: string; equivalents?: string[]; ancestors?: string[] };

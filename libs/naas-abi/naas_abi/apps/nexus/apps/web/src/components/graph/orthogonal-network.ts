@@ -1,15 +1,26 @@
 import type { Edge, Network } from 'vis-network/standalone';
+import type { SidesFor } from './bfo-edge-rules';
+import { routeEdges, type Room } from './orthogonal-grid-route';
 import { orthogonalRoute, parallelLanes, routeDistance, routeLabel, type Box, type Point } from './orthogonal-route';
 
 export type RoutedEdge = { id: string; source: string; target: string; style: Edge };
 type DrawnEdge = RoutedEdge & { points: Point[]; labelBox?: Box };
-type State = { edges: RoutedEdge[]; selected: string[]; direction?: 'LR' | 'TD' };
+/**
+ * ``sidesFor``: the BFO zone layout's edge rules. When set, every connector is
+ * routed together on the corridor grid, on the sides the rules give; ``room`` is
+ * the margin the layout left for them outside the cards.
+ */
+type State = { edges: RoutedEdge[]; selected: string[]; direction?: 'LR' | 'TD'; sidesFor?: SidesFor | null; room?: Room };
 
 /** Use public canvas events, so the existing network retains layout, focus and node inspection. */
 export function installOrthogonalEdges(network: Network, container: HTMLElement, read: () => State) {
   let drawn: DrawnEdge[] = [], hovered: string | null = null, geometryKey = '';
   let previousEdges: RoutedEdge[] | undefined;
   let lanes = new Map<string, { lane: number; laneCount: number }>();
+  let previousSides: SidesFor | null | undefined;
+  // While a card is dragged, its connectors are routed one by one, which is fast;
+  // the whole grid is routed again once it is dropped.
+  let dragging = false;
   const canvas = container.querySelector('canvas');
   const originalCursor = canvas?.style.cursor || '';
 
@@ -26,8 +37,9 @@ export function installOrthogonalEdges(network: Network, container: HTMLElement,
   }
 
   function draw(ctx: CanvasRenderingContext2D) {
-    const { edges, selected, direction } = read();
+    const { edges, selected, direction, sidesFor, room } = read();
     if (edges !== previousEdges) { lanes = parallelLanes(edges); previousEdges = edges; geometryKey = ''; }
+    if (sidesFor !== previousSides) { previousSides = sidesFor; geometryKey = ''; }
     const positions = network.getPositions();
     const boxes = new Map<string, Box>();
     for (const [id, point] of Object.entries(positions)) {
@@ -38,8 +50,15 @@ export function installOrthogonalEdges(network: Network, container: HTMLElement,
       if (!Number.isFinite(halfWidth + halfHeight + point.x + point.y)) continue;
       boxes.set(id, { left: point.x - halfWidth, right: point.x + halfWidth, top: point.y - halfHeight, bottom: point.y + halfHeight });
     }
-    const key = JSON.stringify([direction, [...boxes]]);
-    if (key !== geometryKey) {
+    const key = JSON.stringify([direction, dragging, room, [...boxes]]);
+    if (key !== geometryKey && sidesFor && !dragging) {
+      geometryKey = key;
+      const routes = routeEdges(boxes, edges, { direction, sidesFor, room });
+      drawn = edges.flatMap(edge => {
+        const points = routes.get(edge.id);
+        return points ? [{ ...edge, points }] : [];
+      });
+    } else if (key !== geometryKey) {
       geometryKey = key;
       drawn = edges.flatMap(edge => {
         const from = boxes.get(edge.source), to = boxes.get(edge.target);
@@ -114,12 +133,18 @@ export function installOrthogonalEdges(network: Network, container: HTMLElement,
     if (canvas) canvas.style.cursor = originalCursor;
     network.redraw();
   }
+  function dragStart(params: { nodes?: unknown[] }) { if (params?.nodes?.length) dragging = true; }
+  function dragEnd() { if (!dragging) return; dragging = false; network.redraw(); }
   network.on('beforeDrawing', draw);
+  network.on('dragStart', dragStart);
+  network.on('dragEnd', dragEnd);
   container.addEventListener('pointermove', pointerMove);
   container.addEventListener('pointerleave', pointerLeave);
   network.redraw();
   return { hitTest, destroy() {
     network.off('beforeDrawing', draw);
+    network.off('dragStart', dragStart);
+    network.off('dragEnd', dragEnd);
     container.removeEventListener('pointermove', pointerMove);
     container.removeEventListener('pointerleave', pointerLeave);
     if (canvas) canvas.style.cursor = originalCursor;
