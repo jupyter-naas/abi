@@ -138,3 +138,36 @@ describe('facing cards', () => {
     expect(Math.abs(out.y - straight[0].y)).toBeGreaterThanOrEqual(6);
   });
 });
+
+describe('a large drawing', () => {
+  it('keeps the rules when it is routed coarse first, then fine', () => {
+    // Twelve cards a bucket: enough for the two-level routing.
+    const cards = BUCKETS.flatMap(bucket => Array.from({ length: 12 }, (_, n) => ({ id: `${bucket} ${n + 1}`, label: `${bucket} ${n + 1}`, bucket, width: WIDTH, height: HEIGHT })));
+    const bucketOf = new Map(cards.map(card => [card.id, card.bucket]));
+    const links = BFO_EDGE_RULES.map((rule, i) => ({ id: `e${i}`, source: `${rule.buckets[0]} 1`, target: `${rule.buckets[1]} 2` }));
+    const rules = edgeSides(id => bucketOf.get(id));
+    const layout = bfoZoneLayout(cards, links, { aspect: 1.8, sidesFor: rules });
+    const boxes = new Map<string, Box>(cards.map(card => {
+      const at = layout.positions.get(card.id)!;
+      return [card.id, { left: at.x - WIDTH / 2, right: at.x + WIDTH / 2, top: at.y - HEIGHT / 2, bottom: at.y + HEIGHT / 2 }];
+    }));
+    const findings: RouteFinding[] = [];
+    const routes = routeEdges(boxes, links, { sidesFor: rules, room: layout.room, report: finding => findings.push(finding) });
+    expect(findings.filter(finding => finding.type === 'fallback')).toEqual([]);
+    links.forEach((link, i) => {
+      const points = routes.get(link.id)!;
+      expect(borderOf(points[0], boxes.get(link.source)!)).toBe(BFO_EDGE_RULES[i].sides[0]);
+      expect(borderOf(points[points.length - 1], boxes.get(link.target)!)).toBe(BFO_EDGE_RULES[i].sides[1]);
+    });
+  });
+});
+
+describe('straightening', () => {
+  it('leaves no route with two bends where one will do', () => {
+    // Two free cards diagonal to each other with nothing between: an L, not a Z.
+    const box = (x: number, y: number): Box => ({ left: x - WIDTH / 2, right: x + WIDTH / 2, top: y - HEIGHT / 2, bottom: y + HEIGHT / 2 });
+    const boxes = new Map([['T a', box(0, 0)], ['T b', box(400, 300)]]);
+    const points = routeEdges(boxes, [{ id: 'l', source: 'T a', target: 'T b' }], { sidesFor: edgeSides(() => 'Temporal Region') }).get('l')!;
+    expect(points).toHaveLength(3);
+  });
+});

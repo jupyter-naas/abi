@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bfoZoneLayout, zoneParents, type ZoneCard } from './bfo-zone-layout';
+import { arrangeCells, bfoZoneLayout, zoneParents, type ZoneCard } from './bfo-zone-layout';
 
 const card = (id: string, bucket: string): ZoneCard => ({ id, bucket, label: id, width: 100, height: 60 });
 const inside = (point: { x: number; y: number }, box: { x: number; y: number; width: number; height: number }) =>
@@ -116,5 +116,58 @@ describe('bfoZoneLayout', () => {
     // Equivalent to abi:TemporalInstant: not its child.
     expect(parents.get('bfo-instant')).toBeUndefined();
     expect(parents.get('act')).toBeUndefined();
+  });
+});
+
+describe('arrangeCells', () => {
+  it('moves connected cards next to each other, loose ones out of the way', () => {
+    // a and b linked, far apart in reading order; x, y, z loose.
+    const ids = ['a', 'x', 'y', 'z', 'b'];
+    const start = new Map(ids.map((id, k) => [id, { col: k % 3, row: Math.floor(k / 3) }]));
+    const cells = arrangeCells(ids, start, { cols: 3, rows: 2, pitchX: 200, pitchY: 120, links: [{ source: 'a', target: 'b', inside: true }] });
+    const a = cells.get('a')!, b = cells.get('b')!;
+    expect(Math.abs(a.col - b.col) + Math.abs(a.row - b.row)).toBe(1);
+    // Every card keeps a cell of its own.
+    expect(new Set([...cells.values()].map(cell => `${cell.col},${cell.row}`)).size).toBe(ids.length);
+  });
+
+  it('sends a card whose connector leaves by the bottom to the bottom row', () => {
+    const ids = ['a', 'b', 'c', 'd'];
+    const start = new Map(ids.map((id, k) => [id, { col: k % 2, row: Math.floor(k / 2) }]));
+    const cells = arrangeCells(ids, start, { cols: 2, rows: 2, pitchX: 200, pitchY: 120, links: [{ source: 'a', target: 'elsewhere', sourceSide: 'S', inside: false }] });
+    expect(cells.get('a')!.row).toBe(1);
+  });
+
+  it('leaves fixed cards where they are', () => {
+    const ids = ['a', 'x', 'b'];
+    const start = new Map(ids.map((id, k) => [id, { col: k, row: 0 }]));
+    const cells = arrangeCells(ids, start, { cols: 3, rows: 1, pitchX: 200, pitchY: 120, fixed: new Set(['a', 'b']), links: [{ source: 'a', target: 'b', inside: true }] });
+    expect(cells.get('a')).toEqual({ col: 0, row: 0 });
+    expect(cells.get('b')).toEqual({ col: 2, row: 0 });
+  });
+});
+
+describe('subclass hierarchies', () => {
+  it('packs a wide tree into shelves to keep the drawing to the shape of the view', () => {
+    // One class with thirty subclasses: one row of thirty is far too wide.
+    const cards: ZoneCard[] = [card('root', 'Material Entity'), ...Array.from({ length: 30 }, (_, i) => ({ ...card(`c${String(i).padStart(2, '0')}`, 'Material Entity'), parent: 'root' }))];
+    const layout = bfoZoneLayout(cards, [], { aspect: 1.7 });
+    const zone = layout.zones.find(item => item.key === 'Material Entity')!;
+    expect(zone.width / zone.height).toBeLessThan(4);
+    // Still below their class, first one under it.
+    for (let i = 0; i < 30; i += 1) expect(layout.positions.get(`c${String(i).padStart(2, '0')}`)!.y).toBeGreaterThan(layout.positions.get('root')!.y);
+    expect(layout.positions.get('c00')!.x).toBe(layout.positions.get('root')!.x);
+  });
+
+  it('widens the gap between cards for the labels drawn in it', () => {
+    const cards = [card('a', 'Quality'), card('b', 'Quality'), card('c', 'Quality')];
+    const plain = bfoZoneLayout(cards, [{ source: 'a', target: 'b' }], { aspect: 6 });
+    const labelled = bfoZoneLayout(cards, [{ source: 'a', target: 'b', labelWidth: 150 }], { aspect: 6 });
+    const gap = (layout: typeof plain) => {
+      const xs = [...layout.positions.values()].map(point => point.x).sort((p, q) => p - q);
+      return xs[1] - xs[0] - 100;
+    };
+    expect(gap(labelled)).toBeGreaterThanOrEqual(150);
+    expect(gap(labelled)).toBeGreaterThan(gap(plain));
   });
 });

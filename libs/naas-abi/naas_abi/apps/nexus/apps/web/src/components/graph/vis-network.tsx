@@ -141,6 +141,15 @@ function computeSpreadPositions(nodeIds: string[], spacing = 300): Map<string, {
   return result;
 }
 
+/** Width of one character of an edge label at its 9px size, for sizing the layout before it is drawn. */
+const EDGE_LABEL_CHAR_WIDTH = 5.3;
+
+/** The label an edge is drawn with: none for subclass links. */
+function edgeLabelText(edge: GraphEdge): string | undefined {
+  if (edge.properties?.relation_kind === 'is_a') return undefined;
+  return (edge.label || (edge.properties?.relation_label as string | undefined) || edge.type || '').trim() || undefined;
+}
+
 /** Roundness values for parallel edges between the same node pair (max 0.6). */
 export function computeParallelEdgeRoundness(count: number): number[] {
   if (count <= 0) return [];
@@ -1110,7 +1119,11 @@ export function VisNetwork({
     return bfoZoneLayout(nodes.map(node => {
       const box = nodeLayoutBox(node);
       return { id: node.id, label: node.label, bucket: buckets.get(node.id)!, width: box.width, height: box.height, parent: parents.get(node.id) };
-    }), edges, { sidesFor });
+    }), edges.map(edge => {
+      // Gaps between cards are sized to hold the labels drawn in them.
+      const text = edgeLabelText(edge);
+      return { source: edge.source, target: edge.target, labelWidth: text ? text.length * EDGE_LABEL_CHAR_WIDTH : undefined };
+    }), { sidesFor });
   }, [zoneSides, nodes, edges, nodeLayoutBox]);
   zoneLayoutRef.current = zoneLayout;
 
@@ -1282,14 +1295,7 @@ export function VisNetwork({
     const dimmed = anyEdgeSelected && !isSelected;
     const color = dimmed ? 'rgba(148,163,184,0.25)' : baseColor;
     const fontColor = dimmed ? 'rgba(100,116,139,0.35)' : (isHierarchical ? '#000000' : '#64748b');
-    const labelText = isHierarchical || grouping
-      ? undefined
-      : (
-          edge.label
-          || (edge.properties?.relation_label as string | undefined)
-          || edge.type
-          || ''
-        ).trim() || undefined;
+    const labelText = grouping ? undefined : edgeLabelText(edge);
     const labelBackground = document.documentElement.classList.contains('dark')
       ? '#18181b'
       : '#ffffff';
@@ -1337,9 +1343,13 @@ export function VisNetwork({
   const routedEdges = useMemo(() => orthogonalEdges ? edges.map(edge => ({
     id: edge.id, source: edge.source, target: edge.target, style: toVisEdge(edge),
   })) : [], [orthogonalEdges, edges, toVisEdge]);
+  const zoneFrame = useMemo(() => {
+    const bounds = zoneLayout && zoneBounds(zoneLayout);
+    return bounds ? { left: bounds.x, top: bounds.y, right: bounds.x + bounds.width, bottom: bounds.y + bounds.height } : null;
+  }, [zoneLayout]);
   const routingState = () => ({
     edges: routedEdges, selected: selectedEdgeIds, direction: layoutDirection,
-    sidesFor: zoneSides?.sidesFor, room: zoneLayout?.room,
+    sidesFor: zoneSides?.sidesFor, room: zoneLayout?.room, frame: zoneFrame,
   });
   const routingStateRef = useRef(routingState());
   routingStateRef.current = routingState();

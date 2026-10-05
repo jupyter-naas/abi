@@ -33,6 +33,12 @@ const MARGIN_TRACKS = 10; // tracks outside the outermost cards, at least
 const MAX_TRACKS = 12; // tracks each side of the middle of one corridor
 const ATTACH_LIMIT = 40; // corridor lines tried per port
 const MAX_BENDS = 3;
+// Many parallel tracks cost the same, and A* would expand every one of them:
+// ties go to the state nearer the card, for routes within 0.1% of the cheapest.
+const TIE = 1.001;
+const WINDOW = 240;
+const NEAR = 60;
+const COARSE_FROM = 60; // cards from which a drawing is routed coarse first // how far from its first-pass route the second pass looks first // how far round its two cards a route is first looked for
 
 const SIDES: Record<Side, Point> = { N: { x: 0, y: -1 }, S: { x: 0, y: 1 }, W: { x: -1, y: 0 }, E: { x: 1, y: 0 } };
 const SIDE_NAMES = Object.keys(SIDES) as Side[];
@@ -87,12 +93,12 @@ function mergeIntervals<T>(items: T[], start: (item: T) => number, end: (item: T
 }
 
 /** Track positions across a gap, centred, with room to spare at each side. */
-function tracksIn(from: number, to: number) {
+function tracksIn(from: number, to: number, most = MAX_TRACKS) {
   const lines: number[] = [];
   const room = (to - from) / 2 - 1;
   if (room < 0) return lines;
   const mid = (from + to) / 2;
-  for (let j = 0; Math.abs(j * TRACK) <= room && Math.abs(j) <= MAX_TRACKS; j = j > 0 ? -j : -j + 1) lines.push(mid + j * TRACK);
+  for (let j = 0; Math.abs(j * TRACK) <= room && Math.abs(j) <= most; j = j > 0 ? -j : -j + 1) lines.push(mid + j * TRACK);
   return lines;
 }
 
@@ -102,10 +108,10 @@ function tracksIn(from: number, to: number) {
  * the whole view, and the gaps between the cards of one band are corridors
  * across that band. Every corridor is cut into tracks.
  */
-export function corridorLines(boxes: Box[], along: 'x' | 'y', room: Room = {}) {
+export function corridorLines(boxes: Box[], along: 'x' | 'y', room: Room = {}, { tracks = MAX_TRACKS, margin = MARGIN_TRACKS } = {}) {
   const rows = along === 'y';
   // Tracks outside the outermost cards: as many as the room the layout left holds.
-  const tracksFor = (space?: number) => Math.max(MARGIN_TRACKS, Math.floor((space ?? 0) / TRACK) - 1);
+  const tracksFor = (space?: number) => (margin < MARGIN_TRACKS ? margin : Math.max(margin, Math.floor((space ?? 0) / TRACK) - 1));
   const [before, after, low, high] = rows
     ? [tracksFor(room.top), tracksFor(room.bottom), tracksFor(room.left), tracksFor(room.right)]
     : [tracksFor(room.left), tracksFor(room.right), tracksFor(room.top), tracksFor(room.bottom)];
@@ -119,7 +125,7 @@ export function corridorLines(boxes: Box[], along: 'x' | 'y', room: Room = {}) {
   const crossLines = new Set<number>();
   const keep = (set: Set<number>, value: number) => set.add(Math.round(value * 2) / 2);
 
-  for (let i = 1; i < bands.length; i += 1) for (const v of tracksIn(bands[i - 1].end, bands[i].start)) keep(alongLines, v);
+  for (let i = 1; i < bands.length; i += 1) for (const v of tracksIn(bands[i - 1].end, bands[i].start, tracks)) keep(alongLines, v);
   for (let k = 0; k < before; k += 1) keep(alongLines, bands[0].start - 2 - k * TRACK);
   for (let k = 0; k < after; k += 1) keep(alongLines, bands[bands.length - 1].end + 2 + k * TRACK);
   const lowest = Math.min(...boxes.map(cStart));
@@ -128,7 +134,7 @@ export function corridorLines(boxes: Box[], along: 'x' | 'y', room: Room = {}) {
   for (let k = 0; k < high; k += 1) keep(crossLines, highest + 2 + k * TRACK);
   for (const band of bands) {
     const cells = mergeIntervals(band.items, cStart, cEnd);
-    for (let i = 1; i < cells.length; i += 1) for (const v of tracksIn(cells[i - 1].end, cells[i].start)) keep(crossLines, v);
+    for (let i = 1; i < cells.length; i += 1) for (const v of tracksIn(cells[i - 1].end, cells[i].start, tracks)) keep(crossLines, v);
   }
   // Corridors are cut into tracks separately, so two lines can fall a pixel
   // apart, and connectors on them would be drawn as one. Keep a track between lines.
@@ -142,39 +148,48 @@ export function corridorLines(boxes: Box[], along: 'x' | 'y', room: Room = {}) {
   return rows ? { xs: sorted(crossLines), ys: sorted(alongLines) } : { xs: sorted(alongLines), ys: sorted(crossLines) };
 }
 
-/** A min-heap of [priority, value]. */
+/** A min-heap of (priority, value), in typed arrays: no allocation per entry. */
 class Heap {
-  items: [number, number][] = [];
-  get size() { return this.items.length; }
+  private keys = new Float64Array(1024);
+  private values = new Int32Array(1024);
+  size = 0;
+  clear() { this.size = 0; }
   push(priority: number, value: number) {
-    const items = this.items;
-    items.push([priority, value]);
-    let i = items.length - 1;
+    if (this.size === this.keys.length) {
+      const keys = new Float64Array(this.size * 2); keys.set(this.keys); this.keys = keys;
+      const values = new Int32Array(this.size * 2); values.set(this.values); this.values = values;
+    }
+    const { keys, values } = this;
+    let i = this.size++;
     while (i > 0) {
       const parent = (i - 1) >> 1;
-      if (items[parent][0] <= items[i][0]) break;
-      [items[parent], items[i]] = [items[i], items[parent]];
+      if (keys[parent] <= priority) break;
+      keys[i] = keys[parent]; values[i] = values[parent];
       i = parent;
     }
+    keys[i] = priority; values[i] = value;
   }
+  /** The least priority, read before ``pop``. */
+  get topKey() { return this.keys[0]; }
+  /** Remove the least entry; returns its value. */
   pop() {
-    const items = this.items;
-    const top = items[0];
-    const last = items.pop()!;
-    if (items.length) {
-      items[0] = last;
+    const { keys, values } = this;
+    const value = values[0];
+    const n = --this.size;
+    if (n > 0) {
+      const key = keys[n], last = values[n];
       let i = 0;
       for (;;) {
-        const l = 2 * i + 1, r = l + 1;
-        let m = i;
-        if (l < items.length && items[l][0] < items[m][0]) m = l;
-        if (r < items.length && items[r][0] < items[m][0]) m = r;
-        if (m === i) break;
-        [items[m], items[i]] = [items[i], items[m]];
+        const l = 2 * i + 1;
+        if (l >= n) break;
+        const m = l + 1 < n && keys[l + 1] < keys[l] ? l + 1 : l;
+        if (keys[m] >= key) break;
+        keys[i] = keys[m]; values[i] = values[m];
         i = m;
       }
+      keys[i] = key; values[i] = last;
     }
-    return top;
+    return value;
   }
 }
 
@@ -251,8 +266,9 @@ type Item = { edge: GridEdge; from: Box; to: Box; sides: EdgeSides; length: numb
 export function routeEdges(
   boxes: Map<string, Box>,
   edges: GridEdge[],
-  { direction, sidesFor, room, report }: { direction?: 'LR' | 'TD'; sidesFor?: SidesFor | null; room?: Room; report?: (finding: RouteFinding) => void } = {},
+  options: { direction?: 'LR' | 'TD'; sidesFor?: SidesFor | null; room?: Room; report?: (finding: RouteFinding) => void; coarse?: boolean } = {},
 ): Map<string, Point[]> {
+  const { direction, sidesFor, room, report, coarse } = options;
   const result = new Map<string, Point[]>();
   const cards = [...boxes.values()];
   const todo: Item[] = [];
@@ -289,29 +305,30 @@ export function routeEdges(
   }
   if (!todo.length) return result;
 
-  const { xs, ys } = corridorLines(cards, direction === 'LR' ? 'x' : 'y', room);
+  // A large drawing is routed twice: on a coarse grid, one line per corridor,
+  // which settles the corridors each route takes; then on the fine grid of
+  // tracks, each route looked for only along its coarse one.
+  const guides = !coarse && cards.length >= COARSE_FROM ? routeEdges(boxes, edges, { ...options, coarse: true, report: undefined }) : null;
+  const { xs, ys } = corridorLines(cards, direction === 'LR' ? 'x' : 'y', room, coarse ? { tracks: 0, margin: 3 } : {});
   const nx = xs.length, ny = ys.length;
 
-  // What is free: a node is free outside every card, and so is the run between two.
-  const inside = (x: number, y: number) =>
-    cards.some(b => x > b.left - CLEARANCE && x < b.right + CLEARANCE && y > b.top - CLEARANCE && y < b.bottom + CLEARANCE);
-  const nodeFree = new Uint8Array(nx * ny);
-  for (let j = 0; j < ny; j += 1) for (let i = 0; i < nx; i += 1) nodeFree[j * nx + i] = inside(xs[i], ys[j]) ? 0 : 1;
-  const hFree = new Uint8Array(Math.max(0, nx - 1) * ny); // (i, j) to (i + 1, j)
-  const vFree = new Uint8Array(nx * Math.max(0, ny - 1)); // (i, j) to (i, j + 1)
-  const crossesX = (y: number, x0: number, x1: number) =>
-    cards.some(b => y > b.top - CLEARANCE && y < b.bottom + CLEARANCE && x1 > b.left - CLEARANCE && x0 < b.right + CLEARANCE);
-  const crossesY = (x: number, y0: number, y1: number) =>
-    cards.some(b => x > b.left - CLEARANCE && x < b.right + CLEARANCE && y1 > b.top - CLEARANCE && y0 < b.bottom + CLEARANCE);
-  for (let j = 0; j < ny; j += 1) {
-    for (let i = 0; i < nx - 1; i += 1) {
-      hFree[j * (nx - 1) + i] = nodeFree[j * nx + i] && nodeFree[j * nx + i + 1] && !crossesX(ys[j], xs[i], xs[i + 1]) ? 1 : 0;
-    }
-  }
-  for (let i = 0; i < nx; i += 1) {
-    for (let j = 0; j < ny - 1; j += 1) {
-      vFree[i * (ny - 1) + j] = nodeFree[j * nx + i] && nodeFree[(j + 1) * nx + i] && !crossesY(xs[i], ys[j], ys[j + 1]) ? 1 : 0;
-    }
+  // What is free: a node is free outside every card, and so is the run between
+  // two. Each card marks what it covers: the lines strictly inside it, found by
+  // binary search, so the cost is the area the cards cover, not grid × cards.
+  const nodeFree = new Uint8Array(nx * ny).fill(1);
+  const hFree = new Uint8Array(Math.max(0, nx - 1) * ny).fill(1); // (i, j) to (i + 1, j)
+  const vFree = new Uint8Array(nx * Math.max(0, ny - 1)).fill(1); // (i, j) to (i, j + 1)
+  const firstAbove = (lines: number[], value: number) => lastAtOrBelow(lines, value) + 1; // first line > value (within 1e-6)
+  const lastBelow = (lines: number[], value: number) => lastAtOrBelow(lines, value - 2e-6); // last line < value
+  for (const b of cards) {
+    const left = b.left - CLEARANCE, right = b.right + CLEARANCE, top = b.top - CLEARANCE, bottom = b.bottom + CLEARANCE;
+    const i0 = firstAbove(xs, left), i1 = lastBelow(xs, right);
+    const j0 = firstAbove(ys, top), j1 = lastBelow(ys, bottom);
+    // Nodes inside, and the vertical runs on a line inside that reach into it.
+    for (let j = j0; j <= j1; j += 1) for (let i = i0; i <= i1; i += 1) nodeFree[j * nx + i] = 0;
+    for (let i = i0; i <= i1; i += 1) for (let j = Math.max(0, j0 - 1); j <= Math.min(ny - 2, j1); j += 1) vFree[i * (ny - 1) + j] = 0;
+    // Horizontal runs on a line inside that reach into it.
+    for (let j = j0; j <= j1; j += 1) for (let i = Math.max(0, i0 - 1); i <= Math.min(nx - 2, i1); i += 1) hFree[j * (nx - 1) + i] = 0;
   }
 
   // What is taken, by the connectors routed so far.
@@ -418,24 +435,38 @@ export function routeEdges(
     return out;
   }
 
-  /** The cheapest way between two sets of attachments, or null. ``target`` is the card being reached. */
-  function shortest(starts: Attachment[], ends: Attachment[], target: Box): Found | null {
-    // A*: a path to the card is never shorter than the straight-line distance to it.
-    const heuristic = (node: number) => {
+  const dist = new Float64Array(nx * ny * 2).fill(Infinity);
+  const prev = new Int32Array(nx * ny * 2).fill(-1);
+  const touched: number[] = [];
+  const heap = new Heap();
+
+  /**
+   * The cheapest way between two sets of attachments, or null. ``target`` is the
+   * card being reached; ``window`` the grid columns and rows the path may use.
+   */
+  function shortest(starts: Attachment[], ends: Attachment[], target: Box, window: { i0: number; i1: number; j0: number; j1: number }, mask?: Uint8Array): Found | null {
+    // A*: a path to the card is never shorter than the Manhattan distance to it,
+    // and it turns at least once when it must still change both column and row,
+    // or the one it is not moving along.
+    const heuristic = (state: number) => {
+      const node = state >> 1, alongY = state & 1;
       const x = xs[node % nx], y = ys[(node / nx) | 0];
-      return Math.max(target.left - x, 0, x - target.right) + Math.max(target.top - y, 0, y - target.bottom);
+      const dx = Math.max(target.left - x, 0, x - target.right), dy = Math.max(target.top - y, 0, y - target.bottom);
+      return dx + dy + ((dx > 0 && dy > 0) || (dx > 0 && alongY) || (dy > 0 && !alongY) ? BEND : 0);
     };
-    const dist = new Float64Array(nx * ny * 2).fill(Infinity);
-    const prev = new Int32Array(nx * ny * 2).fill(-1);
+    // The buffers are shared by every search; ``touched`` lists what this one set.
+    for (const s of touched) { dist[s] = Infinity; prev[s] = -1; }
+    touched.length = 0;
     const seed = new Map<number, Attachment>();
     const goal = new Map<number, { cost: number; attach: Attachment }>();
-    const heap = new Heap();
+    heap.clear();
     for (const attach of starts) {
       for (const { state, cost } of attach.states) {
         if (cost < dist[state]) {
+          if (dist[state] === Infinity) touched.push(state);
           dist[state] = cost;
           seed.set(state, attach);
-          heap.push(cost + heuristic(state >> 1), state);
+          heap.push(cost + TIE * heuristic(state), state);
         }
       }
     }
@@ -446,9 +477,9 @@ export function routeEdges(
     }
     let best = Infinity, bestState = -1;
     while (heap.size) {
-      const [f, s] = heap.pop();
+      const f = heap.topKey, s = heap.pop();
       const d = dist[s];
-      if (f > d + heuristic(s >> 1) + 1e-6) continue; // a stale entry
+      if (f > d + TIE * heuristic(s) + 1e-6) continue; // a stale entry
       if (f >= best) break;
       const reached = goal.get(s);
       if (reached && d + reached.cost < best) { best = d + reached.cost; bestState = s; }
@@ -456,10 +487,13 @@ export function routeEdges(
       const axis = s & 1; // 0: moving along x, 1: along y
       const i = node % nx, j = (node / nx) | 0;
       const relax = (next: number, cost: number) => {
+        const ni = (next >> 1) % nx, nj = ((next >> 1) / nx) | 0;
+        if (ni < window.i0 || ni > window.i1 || nj < window.j0 || nj > window.j1 || (mask && !mask[next >> 1])) return;
         if (cost < dist[next]) {
+          if (dist[next] === Infinity) touched.push(next);
           dist[next] = cost;
           prev[next] = s;
-          heap.push(cost + heuristic(next >> 1), next);
+          heap.push(cost + TIE * heuristic(next), next);
         }
       };
       if (axis === 0) {
@@ -504,10 +538,37 @@ export function routeEdges(
   // The short ones first: they have the fewest places to go.
   todo.sort((a, b) => a.length - b.length || a.edge.id.localeCompare(b.edge.id));
 
-  const bothEnds = (item: Item, sidesA: Side[], sidesB: Side[], slotA: number, slotB: number) => {
+  /** The grid columns and rows that cover a box widened by ``by``. */
+  const windowOf = (left: number, top: number, right: number, bottom: number, by: number) => ({
+    i0: Math.max(0, lastAtOrBelow(xs, left - by)), i1: Math.min(nx - 1, lastAtOrBelow(xs, right + by) + 1),
+    j0: Math.max(0, lastAtOrBelow(ys, top - by)), j1: Math.min(ny - 1, lastAtOrBelow(ys, bottom + by) + 1),
+  });
+  const everywhere = { i0: 0, i1: nx - 1, j0: 0, j1: ny - 1 };
+  const band = new Uint8Array(nx * ny);
+  const banded: number[] = [];
+  /**
+   * The route between the given sides. It is looked for first near ``near``
+   * (the route the first pass found, coarse to fine), then in a window round the
+   * two cards, which is where nearly every route lies, and only then everywhere.
+   */
+  const bothEnds = (item: Item, sidesA: Side[], sidesB: Side[], slotA: number, slotB: number, near?: Point[]) => {
     const starts = sidesA.flatMap(side => attachments(item.from, side, port(item.from, side, slotA)));
     const ends = sidesB.flatMap(side => attachments(item.to, side, port(item.to, side, slotB)));
-    return shortest(starts, ends, item.to);
+    const { from, to } = item;
+    const around = { left: Math.min(from.left, to.left), top: Math.min(from.top, to.top), right: Math.max(from.right, to.right), bottom: Math.max(from.bottom, to.bottom) };
+    if (near && near.length > 1) {
+      // A band ``NEAR`` wide round each run of the guide.
+      for (const node of banded) band[node] = 0;
+      banded.length = 0;
+      for (let k = 1; k < near.length; k += 1) {
+        const w = windowOf(Math.min(near[k - 1].x, near[k].x), Math.min(near[k - 1].y, near[k].y), Math.max(near[k - 1].x, near[k].x), Math.max(near[k - 1].y, near[k].y), NEAR);
+        for (let j = w.j0; j <= w.j1; j += 1) for (let i = w.i0; i <= w.i1; i += 1) { const node = j * nx + i; if (!band[node]) { band[node] = 1; banded.push(node); } }
+      }
+      const found = shortest(starts, ends, to, everywhere, band);
+      if (found) return found;
+    }
+    const reach = WINDOW + Math.abs(centre(from).x - centre(to).x) / 4 + Math.abs(centre(from).y - centre(to).y) / 4;
+    return shortest(starts, ends, to, windowOf(around.left, around.top, around.right, around.bottom, reach)) ?? shortest(starts, ends, to, everywhere);
   };
 
   // Pass 1: which side of each card, with every port in the middle of its side.
@@ -516,7 +577,7 @@ export function routeEdges(
   const chosen = new Map<string, Found>();
   const fallen = new Set<string>();
   for (const item of todo) {
-    let found = bothEnds(item, item.sides?.source ?? SIDE_NAMES, item.sides?.target ?? SIDE_NAMES, 0.5, 0.5);
+    let found = bothEnds(item, item.sides?.source ?? SIDE_NAMES, item.sides?.target ?? SIDE_NAMES, 0.5, 0.5, guides?.get(item.edge.id));
     if (!found && item.sides) {
       // No way through on the sides the rule gives: free choice, and say so.
       found = bothEnds(item, SIDE_NAMES, SIDE_NAMES, 0.5, 0.5);
@@ -586,7 +647,7 @@ export function routeEdges(
   for (const item of todo) {
     const pick = chosen.get(item.edge.id);
     const slotOf = (which: 'a' | 'b') => slot.get(`${item.edge.id}|${which}`) ?? 0.5;
-    let found = pick ? bothEnds(item, [pick.startSide], [pick.endSide], slotOf('a'), slotOf('b')) : null;
+    let found = pick ? bothEnds(item, [pick.startSide], [pick.endSide], slotOf('a'), slotOf('b'), pick.points) : null;
     // The spread ports left no way through: keep the required sides if they can be kept.
     if (!found && item.sides && !fallen.has(item.edge.id)) found = bothEnds(item, item.sides.source, item.sides.target, 0.5, 0.5);
     // Still none: let the sides change.
@@ -604,5 +665,62 @@ export function routeEdges(
     const bends = points.length - 2;
     if (item.sides && bends > MAX_BENDS) report?.({ type: 'bends', edge: item.edge, bends });
   }
+  straighten(result, todo, cards);
   return result;
+}
+
+/**
+ * Routes with two bends or more replaced, where it is clear, by one with a single
+ * bend: out of one card along its row (or column) to the other's column (or
+ * row), and into it. The sides must be ones the rule allows; the new route must
+ * keep off every card, not run along another route, and not attach where
+ * another already does.
+ */
+function straighten(result: Map<string, Point[]>, items: Item[], cards: Box[]) {
+  const runs = (points: Point[]) => points.slice(1).map((b, k) => [points[k], b] as const);
+  const sideOf = (box: Box, p: Point): Side => (Math.abs(p.y - box.top) < 1e-6 ? 'N' : Math.abs(p.y - box.bottom) < 1e-6 ? 'S' : Math.abs(p.x - box.left) < 1e-6 ? 'W' : 'E');
+  const clearOfCards = (a: Point, b: Point, own: Box[]) => !cards.some(box => !own.includes(box) && (Math.abs(a.x - b.x) < 1e-6
+    ? a.x > box.left - CLEARANCE && a.x < box.right + CLEARANCE && Math.max(a.y, b.y) > box.top - CLEARANCE && Math.min(a.y, b.y) < box.bottom + CLEARANCE
+    : a.y > box.top - CLEARANCE && a.y < box.bottom + CLEARANCE && Math.max(a.x, b.x) > box.left - CLEARANCE && Math.min(a.x, b.x) < box.right + CLEARANCE));
+  // Inside its own cards, a run is only the stub from the border.
+  const alongOther = (a: Point, b: Point, id: string) => {
+    const vertical = Math.abs(a.x - b.x) < 1e-6;
+    const at = vertical ? a.x : a.y, lo = vertical ? Math.min(a.y, b.y) : Math.min(a.x, b.x), hi = vertical ? Math.max(a.y, b.y) : Math.max(a.x, b.x);
+    for (const [other, points] of result) {
+      if (other === id) continue;
+      for (const [c, d] of runs(points)) {
+        if ((Math.abs(c.x - d.x) < 1e-6) !== vertical) continue;
+        const oat = vertical ? c.x : c.y, olo = vertical ? Math.min(c.y, d.y) : Math.min(c.x, d.x), ohi = vertical ? Math.max(c.y, d.y) : Math.max(c.x, d.x);
+        if (Math.abs(oat - at) < TRACK && Math.min(hi, ohi) - Math.max(lo, olo) > 1) return true;
+      }
+    }
+    return false;
+  };
+  const portTaken = (p: Point, id: string) => [...result].some(([other, points]) => other !== id
+    && [points[0], points[points.length - 1]].some(q => Math.abs(q.x - p.x) + Math.abs(q.y - p.y) < TRACK));
+  for (const item of items) {
+    const points = result.get(item.edge.id);
+    if (!points || points.length < 4) continue;
+    const { from, to, sides } = item;
+    const a = centre(from), b = centre(to);
+    const options: Point[][] = [];
+    // Along the source's row, then down (or up) the target's column.
+    {
+      const exitX = b.x > a.x ? from.right : from.left, entryY = b.y > a.y ? to.top : to.bottom;
+      if ((b.x > from.right || b.x < from.left) && (a.y < to.top || a.y > to.bottom)) options.push([{ x: exitX, y: a.y }, { x: b.x, y: a.y }, { x: b.x, y: entryY }]);
+      const exitY = b.y > a.y ? from.bottom : from.top, entryX = b.x > a.x ? to.left : to.right;
+      if ((b.y > from.bottom || b.y < from.top) && (a.x < to.left || a.x > to.right)) options.push([{ x: a.x, y: exitY }, { x: a.x, y: b.y }, { x: entryX, y: b.y }]);
+    }
+    for (const route of options) {
+      const out = sideOf(from, route[0]), into = sideOf(to, route[route.length - 1]);
+      if (sides && !(sides.source.includes(out) && sides.target.includes(into))) continue;
+      if (portTaken(route[0], item.edge.id) || portTaken(route[route.length - 1], item.edge.id)) continue;
+      if (runs(route).some(([p, q]) => !clearOfCards(p, q, [from, to]) || alongOther(p, q, item.edge.id))) continue;
+      // The corner must be outside both cards, past a stub.
+      const corner = route[1];
+      if (Math.abs(corner.x - route[0].x) + Math.abs(corner.y - route[0].y) < STUB || Math.abs(corner.x - route[2].x) + Math.abs(corner.y - route[2].y) < STUB) continue;
+      result.set(item.edge.id, route);
+      break;
+    }
+  }
 }
