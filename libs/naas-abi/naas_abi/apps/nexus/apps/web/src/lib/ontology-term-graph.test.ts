@@ -110,7 +110,7 @@ test('server-resolved buckets classify terms whose parents sit in unloaded impor
   const ccoPerson = { id: 'https://www.commoncoreontologies.org/ont00001262', name: 'Person' };
   const human: DictionaryTerm = { id: 'abi:Person', name: 'Person', type: 'entity', equivalents: [ccoPerson],
     bfoBucket: 'http://purl.obolibrary.org/obo/BFO_0000040' };
-  const work: DictionaryTerm = { id: 'people:ActOfWorking', name: 'Act of Working', type: 'entity', parents: [plannedAct],
+  const work: DictionaryTerm = { id: 'abi:ActOfWorking', name: 'Act of Working', type: 'entity', parents: [plannedAct],
     bfoBucket: 'http://purl.obolibrary.org/obo/BFO_0000015', relations: [
       { property: { id: 'abi:hasParticipant', name: 'has participant' }, target: human, kind: 'restriction', constraint: 'some', sources: [source] },
     ] };
@@ -123,7 +123,7 @@ test('server-resolved buckets classify terms whose parents sit in unloaded impor
 
 test('a referenced class outside the workspace uses the bucket and label the server put on the link', () => {
   const office = { id: 'https://www.commoncoreontologies.org/ont00000468', name: 'Office Building', bfoBucket: 'http://purl.obolibrary.org/obo/BFO_0000040' };
-  const work: DictionaryTerm = { id: 'people:ActOfWorking', name: 'Act of Working', type: 'entity', bfoBucket: 'http://purl.obolibrary.org/obo/BFO_0000015', relations: [
+  const work: DictionaryTerm = { id: 'abi:ActOfWorking', name: 'Act of Working', type: 'entity', bfoBucket: 'http://purl.obolibrary.org/obo/BFO_0000015', relations: [
     { property: { id: 'abi:occursIn', name: 'occurs in' }, target: office, kind: 'restriction', constraint: 'some', sources: [source] },
   ] };
   const node = buildTermGraph(work, [work]).nodes.find(item => item.properties.iri === office.id);

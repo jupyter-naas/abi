@@ -80,7 +80,7 @@ This runs `onto2py.py` and overwrites `apps/api/ports/domain.py` entirely. Never
 
 ```turtle
 wsr:DroneUnit a owl:Class ;
-  rdfs:subClassOf wsr:Aircraft ;
+  rdfs:subClassOf abi:Aircraft ;
   rdfs:label "Drone Unit"@en ;
   skos:definition "An unmanned aerial vehicle tracked via ADS-B or RF signal." @en .
 ```

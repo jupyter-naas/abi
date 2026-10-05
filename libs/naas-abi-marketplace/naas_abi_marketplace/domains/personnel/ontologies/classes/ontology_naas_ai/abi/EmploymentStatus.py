@@ -1,10 +1,11 @@
 from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
-    Remuneration as _Remuneration,
+    EmploymentStatus as _EmploymentStatus,
 )
 
 
-class Remuneration(_Remuneration):
-    """Action class for Remuneration"""
+class EmploymentStatus(_EmploymentStatus):
+    """Action class for EmploymentStatus"""
 
     def actions(self):
         """Action method - implement your logic here"""
+        pass

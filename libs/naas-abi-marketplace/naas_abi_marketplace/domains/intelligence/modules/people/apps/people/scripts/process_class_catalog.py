@@ -23,19 +23,19 @@ CCO_NS = "https://www.commoncoreontologies.org/"
 PROCESS_SPECS: tuple[dict[str, str | Path | tuple[Path, ...]], ...] = (
     {
         "process_label": "Act of Working",
-        "process_class": f"{PEOPLE_NS}ActOfWorking",
+        "process_class": f"{ABI_NS}ActOfWorking",
         "process_ontology": ONTOLOGIES_DIR / "processes" / "ActOfWorkingProcess.ttl",
         "support_ontologies": (),
     },
     {
         "process_label": "Act of Studying",
-        "process_class": f"{PEOPLE_NS}ActOfStudying",
+        "process_class": f"{ABI_NS}ActOfStudying",
         "process_ontology": ONTOLOGIES_DIR / "processes" / "ActOfStudyingProcess.ttl",
         "support_ontologies": (),
     },
     {
         "process_label": "Act of Certification",
-        "process_class": f"{PEOPLE_NS}ActOfCertification",
+        "process_class": f"{ABI_NS}ActOfCertification",
         "process_ontology": ONTOLOGIES_DIR
         / "processes"
         / "ActOfCertificationProcess.ttl",
@@ -43,7 +43,7 @@ PROCESS_SPECS: tuple[dict[str, str | Path | tuple[Path, ...]], ...] = (
     },
     {
         "process_label": "Act of Profiling",
-        "process_class": f"{PEOPLE_NS}ActOfProfiling",
+        "process_class": f"{ABI_NS}ActOfProfiling",
         "process_ontology": ONTOLOGIES_DIR / "processes" / "ActOfProfilingProcess.ttl",
         "support_ontologies": (),
     },

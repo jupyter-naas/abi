@@ -8,3 +8,4 @@ class JobDescription(_JobDescription):
 
     def actions(self):
         """Action method - implement your logic here"""
+        pass

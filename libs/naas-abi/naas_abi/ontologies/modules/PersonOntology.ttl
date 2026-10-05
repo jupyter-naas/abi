@@ -33,27 +33,6 @@ abi:Person a owl:Class ;
     owl:equivalentClass cco:ont00001262 ;
     rdfs:subClassOf cco:ont00000562 .
 
-#################################################################
-# Object Properties
-#################################################################
-
-abi:hasSkill a owl:ObjectProperty ;
-    owl:inverseOf abi:isSkillOf ;
-    rdfs:subPropertyOf bfo:BFO_0000127 ;
-    rdfs:label "has skill"@en ;
-    skos:definition "A relation between a person and a professional skill they possess."@en ;
-    skos:example "John has the skill to play the piano."@en ;
-    rdfs:domain abi:Person ;
-    rdfs:range cco:ont00000089 .
-
-abi:isSkillOf a owl:ObjectProperty ;
-    owl:inverseOf abi:hasSkill ;
-    rdfs:subPropertyOf bfo:BFO_0000127 ;
-    rdfs:label "is skill of"@en ;
-    skos:definition "A relation between a professional skill and the person who possesses it."@en ;
-    skos:example "Playing the piano is a skill of John."@en ;
-    rdfs:domain cco:ont00000089 ;
-    rdfs:range abi:Person .
 
 #################################################################
 # Data Properties
@@ -79,7 +58,8 @@ abi:full_name a owl:DatatypeProperty ;
 
 abi:given_name a owl:DatatypeProperty ;
     rdfs:label "given name"@en ;
-    skos:definition "x given name y =Def x is a person & y is a string & y is the given name of x"@en ;
+    skos:altLabel "forename"@en ;
+    skos:definition "x given name y =Def x is a person & y is the name conferred on x individually, typically at or near birth, as distinct from the family name x shares with kin"@en ;
     skos:example "John"@en ;
     rdfs:domain abi:Person ;
     rdfs:range xsd:string .

@@ -1,10 +1,11 @@
 from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
-    EmploymentRecord as _EmploymentRecord,
+    Grade as _Grade,
 )
 
 
-class EmploymentRecord(_EmploymentRecord):
-    """Action class for EmploymentRecord"""
+class Grade(_Grade):
+    """Action class for Grade"""
 
     def actions(self):
         """Action method - implement your logic here"""
+        pass

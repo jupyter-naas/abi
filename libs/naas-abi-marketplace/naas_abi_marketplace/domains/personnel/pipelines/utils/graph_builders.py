@@ -10,7 +10,7 @@ employment.
 
 Same individual, two graphs: an act of employment is the act of working the
 people graph already holds (``act_of_working_uri``), typed
-``personnel:ActOfEmployment`` here.
+``abi:ActOfEmployment`` here.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ class PersonnelGraphContext(PeopleGraphContext):
 
     def set_employer(self, person: Person, org: Organization) -> None:
         """The organization's own record that it employs the person."""
-        self.graph.add((URIRef(person._uri), PERSONNEL.isEmployedBy, URIRef(org._uri)))
+        self.graph.add((URIRef(person._uri), ABI.isEmployedBy, URIRef(org._uri)))
 
     def ensure_service_line(self, label: str, org: Organization) -> ServiceLine:
         """A service line of one organization: itself an organization, not a label."""
@@ -70,7 +70,7 @@ class PersonnelGraphContext(PeopleGraphContext):
             creator=self.creator,
         )
         self.graph += line.rdf()
-        self.graph.add((URIRef(org._uri), PERSONNEL.hasServiceLine, URIRef(line._uri)))
+        self.graph.add((URIRef(org._uri), ABI.hasServiceLine, URIRef(line._uri)))
         self.service_lines[key] = line
         return line
 
@@ -89,7 +89,7 @@ class PersonnelGraphContext(PeopleGraphContext):
             creator=self.creator,
         )
         self.graph += grade.rdf()
-        self.graph.add((URIRef(person._uri), PERSONNEL.hasGrade, URIRef(grade._uri)))
+        self.graph.add((URIRef(person._uri), ABI.hasGrade, URIRef(grade._uri)))
         self.grades[key] = grade
         return grade
 
@@ -118,11 +118,11 @@ class PersonnelGraphContext(PeopleGraphContext):
         role = URIRef(individual_uri(str(PEOPLE), "OccupationRole", key))
         person_uri = URIRef(person._uri)
 
-        self.graph.add((act, RDF.type, PERSONNEL.ActOfEmployment))
+        self.graph.add((act, RDF.type, ABI.ActOfEmployment))
         self.graph.add((act, ABI.realizes, role))
-        self.graph.add((role, RDF.type, PERSONNEL.EmployeeRole))
-        self.graph.add((person_uri, PERSONNEL.hasEmployeeRole, role))
-        self.graph.add((role, PERSONNEL.isEmployeeRoleOf, person_uri))
+        self.graph.add((role, RDF.type, ABI.EmployeeRole))
+        self.graph.add((person_uri, ABI.hasEmployeeRole, role))
+        self.graph.add((role, ABI.isEmployeeRoleOf, person_uri))
         self.set_employer(person, org)
 
         position = JobPosition(
@@ -134,8 +134,8 @@ class PersonnelGraphContext(PeopleGraphContext):
             creator=self.creator,
         )
         self.graph += position.rdf()
-        self.graph.add((role, PERSONNEL.hasJobPosition, URIRef(position._uri)))
-        self.graph.add((URIRef(position._uri), PERSONNEL.isJobPositionOf, role))
+        self.graph.add((role, ABI.hasJobPosition, URIRef(position._uri)))
+        self.graph.add((URIRef(position._uri), ABI.isJobPositionOf, role))
         self.last_position_uri = position._uri
 
         if contract_type:
@@ -149,11 +149,11 @@ class PersonnelGraphContext(PeopleGraphContext):
             self.graph.add(
                 (
                     URIRef(contract._uri),
-                    PERSONNEL.contract_type,
+                    ABI.contract_type,
                     Literal(contract_type, datatype=XSD.string),
                 )
             )
-            self.graph.add((act, PERSONNEL.hasContract, URIRef(contract._uri)))
+            self.graph.add((act, ABI.hasContract, URIRef(contract._uri)))
 
         if remuneration_amount:
             remuneration = Remuneration(

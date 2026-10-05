@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 768aa5b7f9509d9c52231081064edec8b8963234c11704aca8a82f6098f9badc
+# onto2py-source-sha256: 9c7b85cecf97d202b05cfcd9afaa19b74550ad10ab56d50d8bb097a46765e079
 from __future__ import annotations
 
 import contextlib
@@ -317,11 +317,10 @@ class Person(RDFEntity):
         "first_name": "http://ontology.naas.ai/abi/first_name",
         "full_name": "http://ontology.naas.ai/abi/full_name",
         "given_name": "http://ontology.naas.ai/abi/given_name",
-        "has_skill": "http://ontology.naas.ai/abi/hasSkill",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "last_name": "http://ontology.naas.ai/abi/last_name",
     }
-    _object_properties: ClassVar[set[str]] = {"has_skill"}
+    _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
     first_name: (
@@ -355,7 +354,7 @@ class Person(RDFEntity):
         Annotated[
             str,
             Field(
-                description="x given name y =Def x is a person & y is a string & y is the given name of x"
+                description="x given name y =Def x is a person & y is the name conferred on x individually, typically at or near birth, as distinct from the family name x shares with kin"
             ),
         ]
         | None
@@ -378,17 +377,6 @@ class Person(RDFEntity):
         Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
-
-    # Object properties
-    has_skill: (
-        Annotated[
-            URIRef | str,
-            Field(
-                description="A relation between a person and a professional skill they possess."
-            ),
-        ]
-        | None
-    ) = None
 
 
 # Rebuild models to resolve forward references

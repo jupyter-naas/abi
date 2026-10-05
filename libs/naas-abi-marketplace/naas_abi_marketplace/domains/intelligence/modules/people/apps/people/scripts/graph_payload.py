@@ -14,7 +14,7 @@ drawn decides what appears at each distance:
                 enrollment record
     distance 3  the temporal instants bounding each temporal region
 
-``people:hasWorkLocation`` / ``people:hasStudyLocation`` (person → site)
+``abi:hasWorkLocation`` / ``abi:hasStudyLocation`` (person → site)
 are emitted with ``canvas=False``: they belong in the data, but drawing them would
 pull Site up to distance 1 and collapse the layering above.
 """
@@ -28,7 +28,7 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
 )
 
 # Any naas.ai vocabulary namespace, compacted to its own prefix:
-# http://ontology.naas.ai/people/Skill/x -> people:Skill/x
+# http://ontology.naas.ai/people/Skill/x -> abi:Skill/x
 _NAAS_NS = re.compile(r"^http://ontology\.naas\.ai/([a-zA-Z_]+)/(.+)$")
 
 
@@ -114,7 +114,7 @@ def build_graph_page_payload(
         props = [
             item
             for item in (
-                _prop("people:job_title", "job title", job_title),
+                _prop("abi:job_title", "job title", job_title),
                 _prop("abi:organizationLabel", "organization", organization_label),
             )
             if item
@@ -190,14 +190,14 @@ def build_graph_page_payload(
                 _entity_node(
                     role_id,
                     label=row["job_title"],
-                    class_uri=row.get("roleClass") or "people:OccupationRole",
+                    class_uri=row.get("roleClass") or "abi:OccupationRole",
                     class_label=row.get("roleClassLabel") or "Occupation Role",
                     bfo_bucket="Realizable",
                     properties=[
                         p
                         for p in (
                             _prop(
-                                "people:job_title", "job title", row.get("job_title")
+                                "abi:job_title", "job title", row.get("job_title")
                             ),
                         )
                         if p
@@ -208,7 +208,7 @@ def build_graph_page_payload(
             add_rel(
                 label,
                 role_id,
-                row.get("rolePredicate") or "people:hasOccupationRole",
+                row.get("rolePredicate") or "abi:hasOccupationRole",
                 row.get("rolePredicateLabel") or "has occupation role",
             )
 
@@ -233,7 +233,7 @@ def build_graph_page_payload(
             _entity_node(
                 working_id,
                 label=work.get("workingLabel") or f"{title} @ {org_label}",
-                class_uri="people:ActOfWorking",
+                class_uri="abi:ActOfWorking",
                 class_label="Act of Working",
                 bfo_bucket="Process",
                 is_working_hub=True,
@@ -242,11 +242,11 @@ def build_graph_page_payload(
                 properties=[
                     p
                     for p in (
-                        _prop("people:isActOfWorkingOf", "worker", subject),
-                        _prop("people:forOrganization", "organization", org_label),
-                        _prop("people:job_title", "job title", work.get("jobTitle")),
+                        _prop("abi:isActOfWorkingOf", "worker", subject),
+                        _prop("abi:forOrganization", "organization", org_label),
+                        _prop("abi:job_title", "job title", work.get("jobTitle")),
                         _prop(
-                            "people:employment_type",
+                            "abi:employment_type",
                             "employment type",
                             work.get("employmentType"),
                         ),
@@ -255,7 +255,7 @@ def build_graph_page_payload(
                         ),
                         _prop("abi:hasLastInstant", "end", work.get("temporalEnd")),
                         _prop(
-                            "people:duration_label",
+                            "abi:duration_label",
                             "duration",
                             work.get("durationLabel"),
                         ),
@@ -264,7 +264,7 @@ def build_graph_page_payload(
                 ],
             )
         )
-        add_rel(subject, working_id, "people:hasActOfWorking", "has act of working")
+        add_rel(subject, working_id, "abi:hasActOfWorking", "has act of working")
 
         # --- WHO: the employer --------------------------------------------
         org_id = compact_graph_id(work.get("org"))
@@ -278,7 +278,7 @@ def build_graph_page_payload(
                     bfo_bucket="Material Entity",
                 )
             )
-            add_rel(working_id, org_id, "people:forOrganization", "for organization")
+            add_rel(working_id, org_id, "abi:forOrganization", "for organization")
 
         # --- WHERE: the site of execution ---------------------------------
         site_id = compact_graph_id(work.get("site"))
@@ -298,7 +298,7 @@ def build_graph_page_payload(
             add_rel(
                 subject,
                 site_id,
-                "people:hasWorkLocation",
+                "abi:hasWorkLocation",
                 "has work location",
                 canvas=False,
             )
@@ -319,7 +319,7 @@ def build_graph_page_payload(
                         p
                         for p in (
                             _prop(
-                                "people:duration_label",
+                                "abi:duration_label",
                                 "duration",
                                 work.get("durationLabel"),
                             ),
@@ -367,7 +367,7 @@ def build_graph_page_payload(
                             p
                             for p in (
                                 _prop(
-                                    "people:instant_date",
+                                    "abi:instant_date",
                                     "instant date",
                                     work.get(date_key),
                                 ),
@@ -386,41 +386,41 @@ def build_graph_page_payload(
                 _entity_node(
                     role_id,
                     label=work["roleLabel"],
-                    class_uri="people:OccupationRole",
+                    class_uri="abi:OccupationRole",
                     class_label="Occupation Role",
                     bfo_bucket="Realizable",
                     properties=[
                         p
                         for p in (
                             _prop(
-                                "people:job_title", "job title", work.get("jobTitle")
+                                "abi:job_title", "job title", work.get("jobTitle")
                             ),
-                            _prop("people:forOrganization", "organization", org_label),
+                            _prop("abi:forOrganization", "organization", org_label),
                         )
                         if p
                     ],
                 )
             )
             add_rel(working_id, role_id, "abi:realizes", "realizes")
-            add_rel(subject, role_id, "people:hasOccupationRole", "has occupation role")
+            add_rel(subject, role_id, "abi:hasOccupationRole", "has occupation role")
 
         if mission_id and work.get("missionLabel"):
             add_entity(
                 _entity_node(
                     mission_id,
                     label=work["missionLabel"],
-                    class_uri="people:Mission",
+                    class_uri="abi:Mission",
                     class_label="Mission",
                     bfo_bucket="GDC",
                     properties=[
                         p
                         for p in (
                             _prop(
-                                "people:mission_content",
+                                "abi:mission_content",
                                 "mission content",
                                 work.get("missionContent"),
                             ),
-                            _prop("people:forOrganization", "organization", org_label),
+                            _prop("abi:forOrganization", "organization", org_label),
                         )
                         if p
                     ],
@@ -429,11 +429,11 @@ def build_graph_page_payload(
             add_rel(
                 subject,
                 mission_id,
-                "people:hasMissionCarried",
+                "abi:hasMissionCarried",
                 "carries mission",
             )
             if role_id:
-                add_rel(role_id, mission_id, "people:hasMission", "has mission")
+                add_rel(role_id, mission_id, "abi:hasMission", "has mission")
 
             # --- HOW WE KNOW: where the mission was read from -------------
             profile_id = compact_graph_id(work.get("profile"))
@@ -442,14 +442,14 @@ def build_graph_page_payload(
                     _entity_node(
                         profile_id,
                         label=work["profileLabel"],
-                        class_uri="people:ProfileDocument",
+                        class_uri="abi:ProfileDocument",
                         class_label="Profile Document",
                         bfo_bucket="GDC",
                         properties=[
                             p
                             for p in (
                                 _prop(
-                                    "people:source_url",
+                                    "abi:source_url",
                                     "source url",
                                     work.get("sourceUrl"),
                                 ),
@@ -461,13 +461,13 @@ def build_graph_page_payload(
                 add_rel(
                     subject,
                     profile_id,
-                    "people:hasProfileDocument",
+                    "abi:hasProfileDocument",
                     "has profile document",
                 )
                 add_rel(
                     mission_id,
                     profile_id,
-                    "people:isSourcedFrom",
+                    "abi:isSourcedFrom",
                     "is sourced from",
                 )
 
@@ -493,7 +493,7 @@ def build_graph_page_payload(
             _entity_node(
                 studying_id,
                 label=study.get("studyingLabel") or f"{program} @ {org_label}",
-                class_uri="people:ActOfStudying",
+                class_uri="abi:ActOfStudying",
                 class_label="Act of Studying",
                 bfo_bucket="Process",
                 started_at=study.get("temporalStart"),
@@ -501,21 +501,21 @@ def build_graph_page_payload(
                 properties=[
                     p
                     for p in (
-                        _prop("people:isActOfStudyingOf", "student", subject),
+                        _prop("abi:isActOfStudyingOf", "student", subject),
                         _prop(
-                            "people:forEducationalOrganization",
+                            "abi:forEducationalOrganization",
                             "organization",
                             org_label,
                         ),
                         _prop(
-                            "people:program_name", "program", study.get("programName")
+                            "abi:program_name", "program", study.get("programName")
                         ),
                         _prop(
                             "abi:hasFirstInstant", "start", study.get("temporalStart")
                         ),
                         _prop("abi:hasLastInstant", "end", study.get("temporalEnd")),
                         _prop(
-                            "people:duration_label",
+                            "abi:duration_label",
                             "duration",
                             study.get("durationLabel"),
                         ),
@@ -524,7 +524,7 @@ def build_graph_page_payload(
                 ],
             )
         )
-        add_rel(subject, studying_id, "people:hasActOfStudying", "has act of studying")
+        add_rel(subject, studying_id, "abi:hasActOfStudying", "has act of studying")
 
         org_id = compact_graph_id(study.get("org"))
         if org_id and org_label:
@@ -540,7 +540,7 @@ def build_graph_page_payload(
             add_rel(
                 studying_id,
                 org_id,
-                "people:forEducationalOrganization",
+                "abi:forEducationalOrganization",
                 "for educational organization",
             )
 
@@ -560,7 +560,7 @@ def build_graph_page_payload(
             add_rel(
                 subject,
                 site_id,
-                "people:hasStudyLocation",
+                "abi:hasStudyLocation",
                 "has study location",
                 canvas=False,
             )
@@ -580,7 +580,7 @@ def build_graph_page_payload(
                         p
                         for p in (
                             _prop(
-                                "people:duration_label",
+                                "abi:duration_label",
                                 "duration",
                                 study.get("durationLabel"),
                             ),
@@ -628,7 +628,7 @@ def build_graph_page_payload(
                             p
                             for p in (
                                 _prop(
-                                    "people:instant_date",
+                                    "abi:instant_date",
                                     "instant date",
                                     study.get(date_key),
                                 ),
@@ -645,14 +645,14 @@ def build_graph_page_payload(
                 _entity_node(
                     enrollment_id,
                     label=study.get("programName") or study["enrollmentLabel"],
-                    class_uri="people:EnrollmentRecord",
+                    class_uri="abi:EnrollmentRecord",
                     class_label="Enrollment Record",
                     bfo_bucket="GDC",
                     properties=[
                         p
                         for p in (
                             _prop(
-                                "people:program_name",
+                                "abi:program_name",
                                 "program",
                                 study.get("programName"),
                             ),
@@ -662,7 +662,7 @@ def build_graph_page_payload(
                 )
             )
             add_rel(
-                studying_id, enrollment_id, "people:hasEnrollment", "has enrollment"
+                studying_id, enrollment_id, "abi:hasEnrollment", "has enrollment"
             )
 
         role_id = compact_graph_id(study.get("role"))
@@ -671,19 +671,19 @@ def build_graph_page_payload(
                 _entity_node(
                     role_id,
                     label=study["roleLabel"],
-                    class_uri="people:StudentRole",
+                    class_uri="abi:StudentRole",
                     class_label="Student Role",
                     bfo_bucket="Realizable",
                     properties=[
                         p
                         for p in (
                             _prop(
-                                "people:program_name",
+                                "abi:program_name",
                                 "program",
                                 study.get("programName"),
                             ),
                             _prop(
-                                "people:forEducationalOrganization",
+                                "abi:forEducationalOrganization",
                                 "organization",
                                 org_label,
                             ),
@@ -693,7 +693,7 @@ def build_graph_page_payload(
                 )
             )
             add_rel(studying_id, role_id, "abi:realizes", "realizes")
-            add_rel(subject, role_id, "people:hasStudentRole", "has student role")
+            add_rel(subject, role_id, "abi:hasStudentRole", "has student role")
 
         degree_id = compact_graph_id(study.get("degree"))
         if degree_id and study.get("degreeLabel"):
@@ -701,12 +701,12 @@ def build_graph_page_payload(
                 _entity_node(
                     degree_id,
                     label=study["degreeLabel"],
-                    class_uri="people:AcademicDegree",
+                    class_uri="abi:AcademicDegree",
                     class_label="Academic Degree",
                     bfo_bucket="GDC",
                 )
             )
-            add_rel(studying_id, degree_id, "people:hasDegree", "has degree")
+            add_rel(studying_id, degree_id, "abi:hasDegree", "has degree")
 
     # --- HOW IT IS: skills, one node per person and skill ------------------
     # A skill exercised in several jobs is a single node several acts point at,
@@ -722,18 +722,18 @@ def build_graph_page_payload(
             _entity_node(
                 skill_id,
                 label=skill_label,
-                class_uri="people:Skill",
+                class_uri="abi:Skill",
                 class_label="Skill",
                 bfo_bucket="Quality",
                 properties=[
-                    p for p in (_prop("people:skill_name", "skill", skill_label),) if p
+                    p for p in (_prop("abi:skill_name", "skill", skill_label),) if p
                 ],
             )
         )
-        add_rel(subject, skill_id, "people:hasSkill", "has skill")
+        add_rel(subject, skill_id, "abi:hasSkill", "has skill")
         working_id = compact_graph_id(row.get("working"))
         if working_id and working_id in seen_workings:
-            add_rel(working_id, skill_id, "people:developsSkill", "develops skill")
+            add_rel(working_id, skill_id, "abi:developsSkill", "develops skill")
 
     canvas_relations = [rel for rel in relations if rel.get("canvas", True)]
 

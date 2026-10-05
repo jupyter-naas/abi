@@ -29,7 +29,7 @@ abi:ActOfMarketingAllianceProcess a owl:Ontology ;
   owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
   owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
   owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
-  rdfs:seeAlso <http://ontology.naas.ai/organizations/OrganizationOntology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/abi/OrganizationsOntology> ;
   abi:pythonPackage "naas_abi_marketplace.domains.intelligence.modules.organizations" ;
   abi:ontologyResource "ontologies/processes/ActOfMarketingAllianceProcess.ttl" ;
   abi:pythonResource "ontologies/processes/ActOfMarketingAllianceProcess.py" ;

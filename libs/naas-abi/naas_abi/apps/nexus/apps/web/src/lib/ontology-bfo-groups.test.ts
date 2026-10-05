@@ -5,13 +5,13 @@ import type { DictionaryNode, DictionaryTerm } from './ontology-dictionary-tree'
 
 const BFO = 'http://purl.obolibrary.org/obo/';
 const quality: DictionaryTerm = { id: `${BFO}BFO_0000019`, name: 'quality', type: 'entity' };
-const skill: DictionaryTerm = { id: 'people:Skill', name: 'Skill', type: 'entity', parents: [quality] };
+const skill: DictionaryTerm = { id: 'abi:Skill', name: 'Skill', type: 'entity', parents: [quality] };
 // Parent chain is outside the dictionary (CCO); only the server bucket classifies it.
-const work: DictionaryTerm = { id: 'people:ActOfWorking', name: 'Act of Working', type: 'entity',
+const work: DictionaryTerm = { id: 'abi:ActOfWorking', name: 'Act of Working', type: 'entity',
   parents: [{ id: 'cco:ont00000228', name: 'Planned Act' }], bfoBucket: `${BFO}BFO_0000015` };
 const person: DictionaryTerm = { id: 'abi:Person', name: 'Person', type: 'entity', bfoBucket: `${BFO}BFO_0000040` };
 const orphan: DictionaryTerm = { id: 'x:Orphan', name: 'Orphan', type: 'entity', parents: [{ id: 'cco:ont00000001', name: 'Elsewhere' }] };
-const property: DictionaryTerm = { id: 'people:hasSkill', name: 'has skill', type: 'relationship' };
+const property: DictionaryTerm = { id: 'abi:hasSkill', name: 'has skill', type: 'relationship' };
 
 const entity: DictionaryTerm = { id: `${BFO}BFO_0000001`, name: 'entity', type: 'entity' };
 const thing: DictionaryTerm = { id: 'x:Thing', name: 'Thing', type: 'entity', parents: [entity] };
@@ -64,7 +64,7 @@ test('classes nest under their nearest same-bucket ancestor reached through impo
   const CCO = 'https://www.commoncoreontologies.org/';
   const process: DictionaryTerm = { id: 'abi:Process', name: 'process', type: 'entity',
     equivalents: [{ id: `${BFO}BFO_0000015`, name: 'process' }], bfoBucket: `${BFO}BFO_0000015`, bfoAncestors: [`${BFO}BFO_0000015`, `${BFO}BFO_0000003`] };
-  const study: DictionaryTerm = { id: 'people:ActOfStudying', name: 'Act of Studying', type: 'entity',
+  const study: DictionaryTerm = { id: 'abi:ActOfStudying', name: 'Act of Studying', type: 'entity',
     parents: [{ id: `${CCO}ont00000228`, name: 'Planned Act' }], bfoBucket: `${BFO}BFO_0000015`,
     bfoAncestors: [`${CCO}ont00000228`, `${CCO}ont00000005`, `${BFO}BFO_0000015`, `${BFO}BFO_0000003`] };
   const material: DictionaryTerm = { id: 'abi:MaterialEntity', name: 'material entity', type: 'entity',
@@ -84,7 +84,7 @@ test('classes nest under their nearest same-bucket ancestor reached through impo
 
 test('classes the selection only references are grouped, flagged referenced', () => {
   const site: DictionaryTerm = { id: 'abi:Site', name: 'site', type: 'entity', equivalents: [{ id: `${BFO}BFO_0000029`, name: 'site' }], bfoBucket: `${BFO}BFO_0000029` };
-  const study: DictionaryTerm = { id: 'people:ActOfStudying', name: 'Act of Studying', type: 'entity', bfoBucket: `${BFO}BFO_0000015`,
+  const study: DictionaryTerm = { id: 'abi:ActOfStudying', name: 'Act of Studying', type: 'entity', bfoBucket: `${BFO}BFO_0000015`,
     relations: [
       { property: { id: 'abi:occursIn', name: 'occurs in' }, kind: 'restriction', sources: [],
         target: { id: 'cco:ont00000270', name: 'Educational Facility', bfoBucket: `${BFO}BFO_0000040`, bfoAncestors: [`${BFO}BFO_0000040`] } },
@@ -103,7 +103,7 @@ test('classes the selection only references are grouped, flagged referenced', ()
 test('restrictions a file states on classes declared elsewhere bring their targets in', () => {
   const region: DictionaryTerm = { id: 'abi:GeospatialRegion', name: 'Geospatial Region', type: 'entity', bfoBucket: `${BFO}BFO_0000029` };
   const file = { path: 'people/PeopleOntology.ttl', name: 'People', moduleName: 'people' };
-  const work: DictionaryTerm = { id: 'people:ActOfWorking', name: 'Act of Working', type: 'entity', sources: [{ path: 'abi/ABIOntology.ttl', name: 'ABI', moduleName: 'abi' }],
+  const work: DictionaryTerm = { id: 'abi:ActOfWorking', name: 'Act of Working', type: 'entity', sources: [{ path: 'abi/ABIOntology.ttl', name: 'ABI', moduleName: 'abi' }],
     relations: [{ property: { id: 'abi:occursIn', name: 'occurs in' }, kind: 'restriction', constraint: 'some', sources: [file], target: { id: region.id, name: region.name } }] };
   assert.deepEqual(referencedClasses([], [work, region], [file.path]).map(term => [term.id, term.referenced]), [['abi:GeospatialRegion', true]]);
   assert.deepEqual(referencedClasses([], [work, region], ['other.ttl']), []);

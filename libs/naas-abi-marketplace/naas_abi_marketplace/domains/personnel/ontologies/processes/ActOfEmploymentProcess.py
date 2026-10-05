@@ -1,18 +1,15 @@
-# onto2py-source-sha256: c0fd945fbaee379d95df0a9499189331e0ea409f2d443214bf8a5a84e5f5e640
+# onto2py-source-sha256: 0168a01eb4076bb71a0ed9e30fbed2b9718240a2750c08d06947dce7c31df3a2
 from __future__ import annotations
 
 import contextlib
 import datetime
 import os
 import uuid
+from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
-    Callable,
     ClassVar,
-    Iterable,
-    List,
-    Optional,
     Union,
     get_args,
     get_origin,
@@ -93,7 +90,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, List):
+        if origin in (list, list):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -311,38 +308,39 @@ class ActOfEmployment(RDFEntity):
     Everything the act of working states (organization, client, site, temporal region, occupation role, mission, skills, profile document) is inherited and stays in the people graph. The act of employment adds the employer's records: the employee role and the contract.
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/ActOfEmployment"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/ActOfEmployment"
     _name: ClassVar[str] = "Act of Employment"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_contract": "http://ontology.naas.ai/personnel/hasContract",
+        "has_contract": "http://ontology.naas.ai/abi/hasContract",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "realizes": "http://ontology.naas.ai/abi/realizes",
     }
     _object_properties: ClassVar[set[str]] = {"has_contract", "realizes"}
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.timezone.utc)
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    has_contract: Optional[
+    has_contract: (
         Annotated[
-            Union[URIRef, str],
+            URIRef | str,
             Field(
                 description="Relates an act of employment to the employment contract it concretizes."
             ),
         ]
-    ] = None
-    realizes: Optional[Annotated[Union[URIRef, str], Field()]] = None
+        | None
+    ) = None
+    realizes: Annotated[URIRef | str, Field()] | None = None
 
 
 # Rebuild models to resolve forward references

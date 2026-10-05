@@ -1,14 +1,14 @@
 {
   "files": {
-    "modules/OrganizationOntology.ttl": "fcbdc10a9564e93d822a42135f748686277af50d004f99acfbf7e031fd175bb5",
-    "processes/ActOfDistributionAgreementProcess.ttl": "3e68814662ce6010889c5ef83f82447f2ceef58a7ee059a20bd544127c49a73c",
-    "processes/ActOfJointVentureProcess.ttl": "f8d8534f9429486854f00d3382421b1ef3a27c31ede3c63f86f77c03e06ad2fc",
-    "processes/ActOfMarketingAllianceProcess.ttl": "0506bad01f56ce451c79d9f13d957553e2519aa2c63842e56d966e1a2d1bf19f",
-    "processes/ActOfOrganizationalAcquisitionProcess.ttl": "7ef14b1e37cdd92c75e418ba225a206f113f4919dc58c85b14739481a4cc3349",
-    "processes/ActOfOrganizationalMergerProcess.ttl": "a310d82879190fed29142e0681160ea227896ed0024396358051d88cf2417392",
-    "processes/ActOfPartnershipProcess.ttl": "4c1397490c05d083330875ab4b376ff82c970b47d14a24e44e649e62f7092ceb",
-    "processes/ActOfResearchCollaborationProcess.ttl": "67b9e9408a3307f4556c9c3f926ae28cfc59437ae401ecbabcd785a9088ac5b5",
-    "processes/ActOfSubsidiaryEstablishmentProcess.ttl": "f8b11f5834d250cd9acdc648eac31b621b0ec9f20329d5fdd123019342521591",
-    "processes/ActOfTechnologyLicensingProcess.ttl": "3867b51d979e812364545e91c375117cc8f9fc4657ff271fd277f069d4959954"
+    "modules/OrganizationOntology.ttl": "b6ce5e897f909b2f5673df5bd2ebf1a7725834fec9125d809e76489d2dc84522",
+    "processes/ActOfDistributionAgreementProcess.ttl": "cbb5e86121e1a0a4c5d2f7e3a042f8c578c98c8c2025d43a9fa9813ee02107af",
+    "processes/ActOfJointVentureProcess.ttl": "448eb9a843a64d35772f80c4289bb7d5709ec949f77e3354e38ab0ec3c684705",
+    "processes/ActOfMarketingAllianceProcess.ttl": "b528744f477aa997d43a9dd48590e7a0dbb508fbea0c2f00301d02d08f0fa3ca",
+    "processes/ActOfOrganizationalAcquisitionProcess.ttl": "4d55f5ec4b775e9a4fc399eb6562dd4cbbf577924ece677b6053bb05f7cc6fbc",
+    "processes/ActOfOrganizationalMergerProcess.ttl": "3857a14c244a190dc7f6a0691983739ce7e1e052ec172b7a6a6a70c35eee5421",
+    "processes/ActOfPartnershipProcess.ttl": "3a7a98ec498eb6763da28a1ef9abeb1c041b874a22c160ffd1798b3f90053bf2",
+    "processes/ActOfResearchCollaborationProcess.ttl": "5c3ad2e271579c63f0d0cb90aaaf5b710340fca6744fbc862895e906fff74351",
+    "processes/ActOfSubsidiaryEstablishmentProcess.ttl": "158a0d6dab57b0f2f518c9eebca727c1893201896468f64eef417026ed1b255c",
+    "processes/ActOfTechnologyLicensingProcess.ttl": "a56ab1cdf92c1697a3c10d6413dd7dd310b5de6c1aa5e094b988a638bbaa616f"
   }
 }

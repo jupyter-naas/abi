@@ -41,8 +41,8 @@ refuses to publish an email address or a phone number anywhere in the text.
 
 Contact details have one way through. A source states them on the person
 (`person.email`, `person.phone`, `person.linkedin_url`). The pipeline writes them
-as the `people:email_address`, `people:telephone_number` and
-`people:linkedin_url` data properties of `abi:Person`. The exporter puts them
+as the `abi:email_address`, `abi:telephone_number` and
+`abi:linkedin_url` data properties of `abi:Person`. The exporter puts them
 in the `email`, `phone` and `linkedin_url` columns of `people`, checked for
 shape, and only when `privacy.publish_contact_details` is true; otherwise those
 columns are left empty. The profile header shows each one that a person has,

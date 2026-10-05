@@ -8,20 +8,20 @@ const BFO = 'http://purl.obolibrary.org/obo/';
 const file = { path: '/m/ontologies/modules/People.ttl', name: 'People', moduleName: 'people' };
 const restriction = (property: string, id: string, name: string, bucket?: string) =>
   ({ property: { id: property, name: property }, target: { id, name, bfoBucket: bucket }, kind: 'restriction' as const, constraint: 'some', sources: [file] });
-const work: DictionaryTerm = { id: 'people:ActOfWorking', name: 'Act of Working', type: 'entity', sources: [file], bfoBucket: `${BFO}BFO_0000015`,
+const work: DictionaryTerm = { id: 'abi:ActOfWorking', name: 'Act of Working', type: 'entity', sources: [file], bfoBucket: `${BFO}BFO_0000015`,
   relations: [restriction('abi:occursIn', 'abi:GeospatialRegion', 'geospatial region', `${BFO}BFO_0000029`), restriction('abi:hasParticipant', 'abi:Person', 'Person')] };
-const study: DictionaryTerm = { id: 'people:ActOfStudying', name: 'Act of Studying', type: 'entity', sources: [file], bfoBucket: `${BFO}BFO_0000015`,
+const study: DictionaryTerm = { id: 'abi:ActOfStudying', name: 'Act of Studying', type: 'entity', sources: [file], bfoBucket: `${BFO}BFO_0000015`,
   relations: [restriction('abi:occursIn', 'abi:GeospatialRegion', 'geospatial region', `${BFO}BFO_0000029`)] };
 const person: DictionaryTerm = { id: 'abi:Person', name: 'Person', type: 'entity', sources: [{ ...file, path: '/abi.ttl' }], bfoBucket: `${BFO}BFO_0000040` };
-const skill: DictionaryTerm = { id: 'people:Skill', name: 'Skill', type: 'entity', sources: [file], bfoBucket: `${BFO}BFO_0000019` };
+const skill: DictionaryTerm = { id: 'abi:Skill', name: 'Skill', type: 'entity', sources: [file], bfoBucket: `${BFO}BFO_0000019` };
 const all = [work, study, person, skill];
 const fileTerms = [work, study, skill];
 const restrictions = dashboardRestrictions(all, [file.path]);
 const slices: ProcessSlice[] = [
-  { id: 'urn:Working', name: 'Working', path: '/m/ontologies/processes/Working.ttl', classes: ['people:ActOfWorking', 'abi:Person'],
-    restrictions: [{ subject: 'people:ActOfWorking', property: 'abi:occursIn', target: 'abi:GeospatialRegion' }, { subject: 'people:ActOfWorking', property: 'abi:hasParticipant', target: 'abi:Person' }] },
-  { id: 'urn:Studying', name: 'Studying', path: '/m/ontologies/processes/Studying.ttl', classes: ['people:ActOfStudying'],
-    restrictions: [{ subject: 'people:ActOfStudying', property: 'abi:occursIn', target: 'abi:GeospatialRegion' }] },
+  { id: 'urn:Working', name: 'Working', path: '/m/ontologies/processes/Working.ttl', classes: ['abi:ActOfWorking', 'abi:Person'],
+    restrictions: [{ subject: 'abi:ActOfWorking', property: 'abi:occursIn', target: 'abi:GeospatialRegion' }, { subject: 'abi:ActOfWorking', property: 'abi:hasParticipant', target: 'abi:Person' }] },
+  { id: 'urn:Studying', name: 'Studying', path: '/m/ontologies/processes/Studying.ttl', classes: ['abi:ActOfStudying'],
+    restrictions: [{ subject: 'abi:ActOfStudying', property: 'abi:occursIn', target: 'abi:GeospatialRegion' }] },
 ];
 const labels = (network: ReturnType<typeof buildFileNetwork>) => network.nodes.map(node => node.label).sort();
 

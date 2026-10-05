@@ -236,22 +236,21 @@ SERVICE_LINE = TopicResultRowDef(
     query="""PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX abi: <http://ontology.naas.ai/abi/>
-PREFIX personnel: <http://ontology.naas.ai/personnel/>
 SELECT ?uri ?value
 WHERE {
   VALUES ?uri { {{ uris }} }
-  ?line rdf:type personnel:ServiceLine ; abi:hasMemberPart ?uri ; rdfs:label ?value .
+  ?line rdf:type abi:ServiceLine ; abi:hasMemberPart ?uri ; rdfs:label ?value .
 }""",
 )
 GRADE = TopicResultRowDef(
     id="grade",
     label="Grade",
-    query="""PREFIX personnel: <http://ontology.naas.ai/personnel/>
+    query="""PREFIX abi: <http://ontology.naas.ai/abi/>
 SELECT ?uri ?value
 WHERE {
   VALUES ?uri { {{ uris }} }
-  ?uri personnel:hasGrade ?grade .
-  ?grade personnel:grade_value ?value .
+  ?uri abi:hasGrade ?grade .
+  ?grade abi:grade_value ?value .
 }""",
 )
 

@@ -50,7 +50,7 @@ GRAPH_SCRIPTS = (
 GRAPH_CSS = GRAPH_PAGE_DIR / "graph-page.css"
 GRAPH_SETTINGS = GRAPH_PAGE_DIR / "graph.yaml"
 SCOPE = ".profile-graph"
-PROFILE_SLUG = URIRef("http://ontology.naas.ai/people/profile_slug")
+PROFILE_SLUG = URIRef("http://ontology.naas.ai/abi/profile_slug")
 
 # What the graph page draws around one person: their acts of working, the
 # skills developed in them, and their acts of studying.

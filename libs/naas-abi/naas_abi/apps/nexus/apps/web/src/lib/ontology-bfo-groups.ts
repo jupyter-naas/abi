@@ -7,7 +7,7 @@ export type BfoBucketGroup = { bucket: BfoBucketDef; terms: DictionaryTerm[]; tr
 /**
  * Subclass hierarchy inside one bucket. A class sits under its nearest
  * ancestor from the same group, however far up the import chain that is:
- * people:ActOfStudying (-> CCO Planned Act -> bfo:process) goes under
+ * abi:ActOfStudying (-> CCO Planned Act -> bfo:process) goes under
  * abi:Process, which is equivalent to bfo:process. A class with no such
  * ancestor is a top-level entry of its bucket.
  */

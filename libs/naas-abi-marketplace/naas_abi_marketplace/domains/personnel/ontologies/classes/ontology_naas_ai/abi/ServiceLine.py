@@ -1,10 +1,11 @@
 from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
-    JobPosition as _JobPosition,
+    ServiceLine as _ServiceLine,
 )
 
 
-class JobPosition(_JobPosition):
-    """Action class for JobPosition"""
+class ServiceLine(_ServiceLine):
+    """Action class for ServiceLine"""
 
     def actions(self):
         """Action method - implement your logic here"""
+        pass

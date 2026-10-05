@@ -9,7 +9,7 @@ const restriction = (property: string, constraint: string, target: string) =>
 
 test('lists the class restrictions first, then those inherited from its parents', () => {
   const act: DictionaryTerm = { id: 'abi:Act', name: 'Act', type: 'entity', relations: [restriction('hasParticipant', 'some', 'Agent')] };
-  const work: DictionaryTerm = { id: 'people:ActOfWorking', name: 'Act of Working', type: 'entity', parents: [{ id: act.id, name: act.name }],
+  const work: DictionaryTerm = { id: 'abi:ActOfWorking', name: 'Act of Working', type: 'entity', parents: [{ id: act.id, name: act.name }],
     relations: [restriction('occursIn', 'some', 'GeospatialRegion'), { ...restriction('hasParticipant', 'some', 'Person'), kind: 'assertion' }] };
   const rows = classRestrictions(work, [act, work]);
   assert.deepEqual(rows.map(row => [row.declaredOn.name, row.property.name, row.constraint, row.target.name]), [

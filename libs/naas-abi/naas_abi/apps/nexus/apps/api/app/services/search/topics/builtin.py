@@ -19,14 +19,12 @@ from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema impo
 _PREFIXES = """PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX abi: <http://ontology.naas.ai/abi/>
-PREFIX people: <http://ontology.naas.ai/people/>
-PREFIX personnel: <http://ontology.naas.ai/personnel/>
 """
 
 _ACT_PERIOD = """  OPTIONAL {
     ?act abi:occupiesTemporalRegion ?temporal .
-    OPTIONAL { ?temporal abi:hasFirstInstant ?fi . ?fi people:instant_date ?start . }
-    OPTIONAL { ?temporal abi:hasLastInstant ?li . ?li people:instant_date ?end . }
+    OPTIONAL { ?temporal abi:hasFirstInstant ?fi . ?fi abi:instant_date ?start . }
+    OPTIONAL { ?temporal abi:hasLastInstant ?li . ?li abi:instant_date ?end . }
   }"""
 
 PERSON = SearchTopic(
@@ -45,11 +43,11 @@ WHERE {
   ?uri rdf:type abi:Person ;
        rdfs:label ?title .
   OPTIONAL {
-    ?uri people:hasProfileSummary ?summary .
-    OPTIONAL { ?summary people:headline_text ?headline . }
-    OPTIONAL { ?summary people:summary_content ?about . }
+    ?uri abi:hasProfileSummary ?summary .
+    OPTIONAL { ?summary abi:headline_text ?headline . }
+    OPTIONAL { ?summary abi:summary_content ?about . }
   }
-  OPTIONAL { ?uri people:hasSkill ?skill . ?skill rdfs:label ?skillLabel . }
+  OPTIONAL { ?uri abi:hasSkill ?skill . ?skill rdfs:label ?skillLabel . }
   FILTER(
     CONTAINS(LCASE(STR(?title)), LCASE("{{ q }}"))
     || (BOUND(?headline) && CONTAINS(LCASE(STR(?headline)), LCASE("{{ q }}")))
@@ -67,8 +65,8 @@ OFFSET {{ offset }}
 SELECT ?uri ?image
 WHERE {
   VALUES ?uri { {{ uris }} }
-  ?uri people:hasPortrait ?p .
-  ?p people:portrait_url ?image .
+  ?uri abi:hasPortrait ?p .
+  ?p abi:portrait_url ?image .
 }
 """,
     result_rows=(
@@ -80,7 +78,7 @@ WHERE {
 SELECT DISTINCT ?uri ?value
 WHERE {
   VALUES ?uri { {{ uris }} }
-  ?uri people:worksFor|personnel:isEmployedBy ?org .
+  ?uri abi:worksFor|abi:isEmployedBy ?org .
   ?org rdfs:label ?value .
 }
 """,
@@ -93,9 +91,9 @@ WHERE {
 SELECT DISTINCT ?uri ?value
 WHERE {
   VALUES ?uri { {{ uris }} }
-  ?uri people:hasActOfWorking ?act .
+  ?uri abi:hasActOfWorking ?act .
   ?act abi:realizes ?role .
-  ?role people:job_title ?value .
+  ?role abi:job_title ?value .
 }
 """,
         ),
@@ -107,9 +105,9 @@ WHERE {
 SELECT DISTINCT ?uri ?value
 WHERE {
   VALUES ?uri { {{ uris }} }
-  ?uri people:hasWorkLocation ?site .
-  OPTIONAL { ?site people:office_label ?office . }
-  OPTIONAL { ?site people:country_name ?country . }
+  ?uri abi:hasWorkLocation ?site .
+  OPTIONAL { ?site abi:office_label ?office . }
+  OPTIONAL { ?site abi:country_name ?country . }
   BIND(COALESCE(?office, ?country) AS ?value)
   FILTER(BOUND(?value))
 }
@@ -122,14 +120,14 @@ SELECT ?title ?subtitle ?snippet ?image ?url ?employer ?yearsOfExperience
 WHERE {
   {{ uri }} rdfs:label ?title .
   OPTIONAL {
-    {{ uri }} people:hasProfileSummary ?summary .
-    OPTIONAL { ?summary people:headline_text ?subtitle . }
-    OPTIONAL { ?summary people:summary_content ?snippet . }
-    OPTIONAL { ?summary people:years_of_experience ?yearsOfExperience . }
-    OPTIONAL { ?summary people:isSourcedFrom ?doc . ?doc people:source_url ?url . }
+    {{ uri }} abi:hasProfileSummary ?summary .
+    OPTIONAL { ?summary abi:headline_text ?subtitle . }
+    OPTIONAL { ?summary abi:summary_content ?snippet . }
+    OPTIONAL { ?summary abi:years_of_experience ?yearsOfExperience . }
+    OPTIONAL { ?summary abi:isSourcedFrom ?doc . ?doc abi:source_url ?url . }
   }
-  OPTIONAL { {{ uri }} people:hasPortrait ?p . ?p people:portrait_url ?image . }
-  OPTIONAL { {{ uri }} people:worksFor|personnel:isEmployedBy ?org . ?org rdfs:label ?employer . }
+  OPTIONAL { {{ uri }} abi:hasPortrait ?p . ?p abi:portrait_url ?image . }
+  OPTIONAL { {{ uri }} abi:worksFor|abi:isEmployedBy ?org . ?org rdfs:label ?employer . }
 }
 LIMIT 1
 """,
@@ -143,22 +141,22 @@ LIMIT 1
             + """
 SELECT ?title ?item ?subtitle ?snippet ?start ?end ?tags
 WHERE {
-  {{ uri }} people:hasActOfWorking ?act .
+  {{ uri }} abi:hasActOfWorking ?act .
   OPTIONAL {
     # The skills and languages this experience developed, one chip each.
     SELECT ?act (GROUP_CONCAT(DISTINCT ?quality; separator="\\n") AS ?tags)
     WHERE {
-      {{ uri }} people:hasActOfWorking ?act .
+      {{ uri }} abi:hasActOfWorking ?act .
       {
-        ?act people:developsSkill ?skill .
+        ?act abi:developsSkill ?skill .
         OPTIONAL { ?skill rdfs:label ?skillLabel . }
-        OPTIONAL { ?skill people:skill_name ?skillName . }
+        OPTIONAL { ?skill abi:skill_name ?skillName . }
         BIND(COALESCE(?skillLabel, ?skillName) AS ?quality)
       } UNION {
-        ?act people:developsLanguageCapability ?cap .
-        OPTIONAL { ?cap people:language_name ?language . }
+        ?act abi:developsLanguageCapability ?cap .
+        OPTIONAL { ?cap abi:language_name ?language . }
         OPTIONAL { ?cap rdfs:label ?capLabel . }
-        OPTIONAL { ?cap people:proficiency_level ?level . }
+        OPTIONAL { ?cap abi:proficiency_level ?level . }
         BIND(COALESCE(?language, ?capLabel) AS ?name)
         BIND(IF(BOUND(?level), CONCAT(?name, " (", ?level, ")"), ?name) AS ?quality)
       }
@@ -166,12 +164,12 @@ WHERE {
     }
     GROUP BY ?act
   }
-  OPTIONAL { ?act people:forOrganization ?item . ?item rdfs:label ?orgLabel . }
-  OPTIONAL { ?act people:forClient ?client . ?client rdfs:label ?clientLabel . }
+  OPTIONAL { ?act abi:forOrganization ?item . ?item rdfs:label ?orgLabel . }
+  OPTIONAL { ?act abi:forClient ?client . ?client rdfs:label ?clientLabel . }
   OPTIONAL {
     ?act abi:realizes ?role .
-    OPTIONAL { ?role people:job_title ?jobTitle . }
-    OPTIONAL { ?role people:hasMission ?mission . ?mission people:mission_content ?snippet . }
+    OPTIONAL { ?role abi:job_title ?jobTitle . }
+    OPTIONAL { ?role abi:hasMission ?mission . ?mission abi:mission_content ?snippet . }
   }
   OPTIONAL { ?act rdfs:label ?actLabel . }
 """
@@ -193,10 +191,10 @@ LIMIT {{ limit }}
             + """
 SELECT ?title ?item ?subtitle ?start ?end
 WHERE {
-  {{ uri }} people:hasActOfStudying ?act .
-  OPTIONAL { ?act people:forEducationalOrganization ?item . ?item rdfs:label ?subtitle . }
-  OPTIONAL { ?act people:hasEnrollment ?e . ?e people:program_name ?program . }
-  OPTIONAL { ?act people:hasDegree ?d . ?d rdfs:label ?degree . }
+  {{ uri }} abi:hasActOfStudying ?act .
+  OPTIONAL { ?act abi:forEducationalOrganization ?item . ?item rdfs:label ?subtitle . }
+  OPTIONAL { ?act abi:hasEnrollment ?e . ?e abi:program_name ?program . }
+  OPTIONAL { ?act abi:hasDegree ?d . ?d rdfs:label ?degree . }
   OPTIONAL { ?act rdfs:label ?actLabel . }
 """
             + _ACT_PERIOD
@@ -215,7 +213,7 @@ LIMIT {{ limit }}
             + """
 SELECT DISTINCT ?title
 WHERE {
-  {{ uri }} people:hasSkill ?skill .
+  {{ uri }} abi:hasSkill ?skill .
   ?skill rdfs:label ?title .
 }
 ORDER BY LCASE(STR(?title))
@@ -230,9 +228,9 @@ LIMIT {{ limit }}
             + """
 SELECT ?title ?subtitle
 WHERE {
-  {{ uri }} people:hasLanguageCapability ?cap .
-  OPTIONAL { ?cap people:language_name ?name . }
-  OPTIONAL { ?cap people:proficiency_level ?subtitle . }
+  {{ uri }} abi:hasLanguageCapability ?cap .
+  OPTIONAL { ?cap abi:language_name ?name . }
+  OPTIONAL { ?cap abi:proficiency_level ?subtitle . }
   BIND(COALESCE(?name, "Language") AS ?title)
 }
 LIMIT {{ limit }}
@@ -257,8 +255,8 @@ WHERE {
   ?uri rdf:type abi:Organization ;
        rdfs:label ?title .
   OPTIONAL {
-    ?act rdf:type people:ActOfWorking ; people:forOrganization ?uri .
-    ?person people:hasActOfWorking ?act .
+    ?act rdf:type abi:ActOfWorking ; abi:forOrganization ?uri .
+    ?person abi:hasActOfWorking ?act .
   }
   FILTER(CONTAINS(LCASE(STR(?title)), LCASE("{{ q }}")))
 }
@@ -277,8 +275,8 @@ OFFSET {{ offset }}
 SELECT ?uri (STR(COUNT(DISTINCT ?person)) AS ?value)
 WHERE {
   VALUES ?uri { {{ uris }} }
-  ?act people:forOrganization ?uri .
-  ?person people:hasActOfWorking ?act .
+  ?act abi:forOrganization ?uri .
+  ?person abi:hasActOfWorking ?act .
 }
 GROUP BY ?uri
 """,
@@ -291,8 +289,8 @@ GROUP BY ?uri
 SELECT ?uri (STR(COUNT(DISTINCT ?person)) AS ?value)
 WHERE {
   VALUES ?uri { {{ uris }} }
-  ?act people:forClient ?uri .
-  ?person people:hasActOfWorking ?act .
+  ?act abi:forClient ?uri .
+  ?person abi:hasActOfWorking ?act .
 }
 GROUP BY ?uri
 """,
@@ -303,7 +301,7 @@ GROUP BY ?uri
 SELECT ?title (COUNT(DISTINCT ?employee) AS ?people)
 WHERE {
   {{ uri }} rdfs:label ?title .
-  OPTIONAL { ?a people:forOrganization {{ uri }} . ?employee people:hasActOfWorking ?a . }
+  OPTIONAL { ?a abi:forOrganization {{ uri }} . ?employee abi:hasActOfWorking ?a . }
 }
 GROUP BY ?title
 LIMIT 1
@@ -319,8 +317,8 @@ LIMIT 1
 SELECT ?uri (STR(COUNT(DISTINCT ?person)) AS ?value)
 WHERE {
   VALUES ?uri { {{ uris }} }
-  ?act people:forClient ?uri .
-  ?person people:hasActOfWorking ?act .
+  ?act abi:forClient ?uri .
+  ?person abi:hasActOfWorking ?act .
 }
 GROUP BY ?uri
 """,
@@ -336,13 +334,13 @@ GROUP BY ?uri
             + """
 SELECT ?title ?item (SAMPLE(?jobTitle) AS ?subtitle) (MIN(?s) AS ?start) (MAX(?e) AS ?end)
 WHERE {
-  ?act people:forOrganization {{ uri }} .
-  ?item people:hasActOfWorking ?act ; rdfs:label ?title .
-  OPTIONAL { ?act abi:realizes ?role . ?role people:job_title ?jobTitle . }
+  ?act abi:forOrganization {{ uri }} .
+  ?item abi:hasActOfWorking ?act ; rdfs:label ?title .
+  OPTIONAL { ?act abi:realizes ?role . ?role abi:job_title ?jobTitle . }
   OPTIONAL {
     ?act abi:occupiesTemporalRegion ?t .
-    OPTIONAL { ?t abi:hasFirstInstant ?fi . ?fi people:instant_date ?s . }
-    OPTIONAL { ?t abi:hasLastInstant ?li . ?li people:instant_date ?e . }
+    OPTIONAL { ?t abi:hasFirstInstant ?fi . ?fi abi:instant_date ?s . }
+    OPTIONAL { ?t abi:hasLastInstant ?li . ?li abi:instant_date ?e . }
   }
 }
 GROUP BY ?item ?title
@@ -359,9 +357,9 @@ LIMIT {{ limit }}
             + """
 SELECT ?title ?item ?subtitle ?start ?end
 WHERE {
-  ?act people:forClient {{ uri }} .
-  ?item people:hasActOfWorking ?act ; rdfs:label ?title .
-  OPTIONAL { ?act people:forOrganization ?org . ?org rdfs:label ?subtitle . }
+  ?act abi:forClient {{ uri }} .
+  ?item abi:hasActOfWorking ?act ; rdfs:label ?title .
+  OPTIONAL { ?act abi:forOrganization ?org . ?org rdfs:label ?subtitle . }
 """
             + _ACT_PERIOD
             + """

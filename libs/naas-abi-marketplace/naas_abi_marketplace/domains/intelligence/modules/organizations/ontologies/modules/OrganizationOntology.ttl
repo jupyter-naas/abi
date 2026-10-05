@@ -9,7 +9,7 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-<http://ontology.naas.ai/organizations/OrganizationOntology> a owl:Ontology ;
+<http://ontology.naas.ai/abi/OrganizationsOntology> a owl:Ontology ;
     # One owl:imports statement per IRI, never a comma-separated object list:
     # onto2py's codegen pre-scan only matches an IRI directly after the
     # `owl:imports` keyword, so a continuation IRI is silently dropped and the
@@ -458,7 +458,7 @@ abi:OrganizationalAgreementRole a owl:Class ;
 # ontologies/processes/*.ttl. Do not edit between these markers: edit the
 # process files and re-run onto2py on the module.
 
-<http://ontology.naas.ai/organizations/OrganizationOntology>
+<http://ontology.naas.ai/abi/OrganizationsOntology>
   owl:imports <http://ontology.naas.ai/abi/GeospatialRegionOntology> .
 
 #################################################################
