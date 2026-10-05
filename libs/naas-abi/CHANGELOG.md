@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.78.0 (2026-10-05)
+
+### Features
+
+- **nexus-web**: Raise chat attachment upload limit from 5MB to 10MB
+  ([`0d51e97`](https://github.com/jupyter-naas/abi/commit/0d51e9702e5d3811bb4d87e66ba5fd556315ee4f))
+
+
 ## v2.77.0 (2026-10-04)
 
 
