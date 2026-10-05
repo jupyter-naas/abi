@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from 'react';
 import { Check, Search } from 'lucide-react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { listWorkspaces } from '@/lib/workspace-picker';
-import { getWorkspaceSwitchPath } from '@/lib/feature-access';
+import { getWorkspaceHomePath } from '@/lib/feature-access';
 import { markAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
 import { useWorkspaceStore, type Workspace } from '@/stores/workspace';
 import { WorkspaceMark, WorkspaceMarkFrame } from '../workspace-mark';
@@ -13,7 +13,6 @@ import { shellTokens } from '../tokens';
 
 export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
   const router = useRouter();
-  const pathname = usePathname();
   const [query, setQuery] = useState('');
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
@@ -32,14 +31,7 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
     setActiveConversation(null);
     markAppsSkipRestore();
     setCurrentWorkspace(workspace.id);
-    router.push(
-      getWorkspaceSwitchPath({
-        pathname,
-        targetWorkspaceId: workspace.id,
-        role: workspace.currentUserRole,
-        workspaceFlags: workspace.featureFlags,
-      }),
-    );
+    router.push(getWorkspaceHomePath(workspace.id));
     onPicked?.();
   };
 

@@ -73,6 +73,303 @@ def _run_ontology_check(ttl_file_path: str) -> None:
     raise ValueError("\n".join(lines))
 
 
+_BFO_NS = "http://purl.obolibrary.org/obo/"
+_BFO_CONTINUANT = rdflib.URIRef(f"{_BFO_NS}BFO_0000002")
+_BFO_PROCESS = rdflib.URIRef(f"{_BFO_NS}BFO_0000015")
+
+
+def _superclasses_with_equivalents(
+    g: rdflib.Graph,
+    cls: rdflib.URIRef,
+    cache: dict[rdflib.URIRef, frozenset[rdflib.URIRef]],
+) -> frozenset[rdflib.URIRef]:
+    """``cls`` and every class above it, following ``owl:equivalentClass`` both ways.
+
+    An ABI class declared equivalent to a BFO one (``abi:Site`` = ``BFO_0000029``)
+    shares that class's ancestry, so the walk has to cross the equivalence.
+    """
+    if cls in cache:
+        return cache[cls]
+    seen: set[rdflib.URIRef] = set()
+    todo = [cls]
+    while todo:
+        current = todo.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        for linked in (
+            *g.objects(current, rdflib.OWL.equivalentClass),
+            *g.subjects(rdflib.OWL.equivalentClass, current),
+            *g.objects(current, rdflib.RDFS.subClassOf),
+        ):
+            if isinstance(linked, rdflib.URIRef):
+                todo.append(linked)
+    cache[cls] = frozenset(seen)
+    return cache[cls]
+
+
+def _some_or_all_values_from_fillers(
+    g: rdflib.Graph, cls: rdflib.URIRef
+) -> list[rdflib.URIRef]:
+    """Named fillers of the restrictions ``cls`` itself declares."""
+    fillers: list[rdflib.URIRef] = []
+    for parent in g.objects(cls, rdflib.RDFS.subClassOf):
+        if (
+            not isinstance(parent, BNode)
+            or (parent, rdflib.RDF.type, rdflib.OWL.Restriction) not in g
+        ):
+            continue
+        for predicate in (rdflib.OWL.someValuesFrom, rdflib.OWL.allValuesFrom):
+            filler = g.value(parent, predicate)
+            if isinstance(filler, rdflib.URIRef):
+                fillers.append(filler)
+    return fillers
+
+
+class _ProcessLinks:
+    """How the classes of a graph are tied to the processes in it.
+
+    A class is *connected to a process* when a process class (under BFO process,
+    ``BFO_0000015``) is tied to it, in either direction, by one of:
+
+    - a restriction on the class whose filler is a process
+      (``Skill  isSkillDevelopedIn some Planned Act``), inherited ones included;
+    - a restriction on a process whose filler is the class
+      (``Act of Working  occursIn some Office Building``);
+    - an object property whose domain is one and whose range is the other.
+
+    The tie may be to the class itself or to a class above it, so a subclass of
+    ``Organization`` is connected when ``Organization`` is. The BFO roots and the
+    classes declared equivalent to them (``abi:MaterialEntity``, ``abi:Quality``...)
+    do not count as "above": a process that restricts on "some material entity"
+    would otherwise connect every material entity there is.
+    """
+
+    def __init__(self, g: rdflib.Graph) -> None:
+        self.g = g
+        self._above: dict[rdflib.URIRef, frozenset[rdflib.URIRef]] = {}
+        named = {
+            s
+            for s in g.subjects(rdflib.RDF.type, rdflib.OWL.Class)
+            if isinstance(s, rdflib.URIRef)
+        }
+        subclasses = {
+            s
+            for s in g.subjects(rdflib.RDFS.subClassOf, None)
+            if isinstance(s, rdflib.URIRef)
+        }
+        self.named = named
+        processes = {c for c in named | subclasses if self.is_process(c)}
+
+        # What each process is tied to: classes it restricts on, and classes that
+        # an object property joins it to.
+        self._tied_to_a_process: set[rdflib.URIRef] = set()
+        for process in processes:
+            self._tied_to_a_process.update(_some_or_all_values_from_fillers(g, process))
+        for prop in g.subjects(rdflib.RDF.type, rdflib.OWL.ObjectProperty):
+            domains = [
+                d
+                for d in g.objects(prop, rdflib.RDFS.domain)
+                if isinstance(d, rdflib.URIRef)
+            ]
+            ranges = [
+                r
+                for r in g.objects(prop, rdflib.RDFS.range)
+                if isinstance(r, rdflib.URIRef)
+            ]
+            for domain in domains:
+                for range_ in ranges:
+                    if self.is_process(domain):
+                        self._tied_to_a_process.add(range_)
+                    if self.is_process(range_):
+                        self._tied_to_a_process.add(domain)
+
+    def above(self, cls: rdflib.URIRef) -> frozenset[rdflib.URIRef]:
+        return _superclasses_with_equivalents(self.g, cls, self._above)
+
+    def is_process(self, cls: rdflib.URIRef) -> bool:
+        return _BFO_PROCESS in self.above(cls)
+
+    def is_continuant(self, cls: rdflib.URIRef) -> bool:
+        return _BFO_CONTINUANT in self.above(cls)
+
+    def is_bfo_root(self, cls: rdflib.URIRef) -> bool:
+        if str(cls).startswith(_BFO_NS) or cls == rdflib.OWL.Thing:
+            return True
+        return any(
+            isinstance(other, rdflib.URIRef) and str(other).startswith(_BFO_NS)
+            for other in (
+                *self.g.objects(cls, rdflib.OWL.equivalentClass),
+                *self.g.subjects(rdflib.OWL.equivalentClass, cls),
+            )
+        )
+
+    def is_unresolved(self, cls: rdflib.URIRef) -> bool:
+        """A class nothing in the graph says anything about (an import is missing)."""
+        return (
+            cls not in self.named
+            and (cls, rdflib.RDFS.subClassOf, None) not in self.g
+            and (cls, rdflib.OWL.equivalentClass, None) not in self.g
+        )
+
+    def is_connected(self, cls: rdflib.URIRef) -> bool:
+        lineage = [c for c in self.above(cls) if not self.is_bfo_root(c)]
+        # the class's own restrictions, inherited ones included, that name a process
+        if any(
+            self.is_process(filler)
+            for ancestor in lineage
+            for filler in _some_or_all_values_from_fillers(self.g, ancestor)
+        ):
+            return True
+        return any(c in self._tied_to_a_process for c in lineage)
+
+
+def continuants_without_process(
+    g: rdflib.Graph, classes: set[rdflib.URIRef] | None = None
+) -> list[rdflib.URIRef]:
+    """Continuant classes of ``g`` that no process is connected to.
+
+    A continuant is a class under BFO continuant (``BFO_0000002``: material entity,
+    site, generically dependent continuant, quality, role, disposition). See
+    ``_ProcessLinks`` for what *connected to a process* means.
+
+    ``classes`` are the ones to check (default: every named class of ``g``).
+    """
+    links = _ProcessLinks(g)
+    return [
+        cls
+        for cls in sorted(classes if classes is not None else links.named)
+        if not links.is_bfo_root(cls)
+        and links.is_continuant(cls)
+        and not links.is_process(cls)
+        and not links.is_connected(cls)
+    ]
+
+
+def restrictions_to_continuants_without_process(
+    g: rdflib.Graph, subjects: set[rdflib.URIRef] | None = None
+) -> list[tuple[rdflib.URIRef, rdflib.URIRef, rdflib.URIRef]]:
+    """Restrictions whose filler is a continuant that no process is connected to.
+
+    Returns ``(class, property, filler)`` for each restriction on a class that is
+    not a process (a restriction on a process is itself what ties its filler to
+    it) whose named filler is a continuant with no process connected to it, or a
+    class the graph knows nothing about, which is as good as unconnected.
+    ``Mission  isSourcedFrom some ProfileDocument`` is one when nothing ties
+    ``ProfileDocument`` to a process.
+
+    ``subjects`` are the classes whose restrictions are checked (default: every
+    class of ``g`` that has any).
+    """
+    links = _ProcessLinks(g)
+    if subjects is None:
+        subjects = {
+            s
+            for s in g.subjects(rdflib.RDFS.subClassOf, None)
+            if isinstance(s, rdflib.URIRef)
+        }
+    found: list[tuple[rdflib.URIRef, rdflib.URIRef, rdflib.URIRef]] = []
+    for subject in sorted(subjects):
+        if links.is_process(subject) or links.is_bfo_root(subject):
+            continue
+        for parent in g.objects(subject, rdflib.RDFS.subClassOf):
+            if (
+                not isinstance(parent, BNode)
+                or (parent, rdflib.RDF.type, rdflib.OWL.Restriction) not in g
+            ):
+                continue
+            prop = g.value(parent, rdflib.OWL.onProperty)
+            for predicate in (rdflib.OWL.someValuesFrom, rdflib.OWL.allValuesFrom):
+                filler = g.value(parent, predicate)
+                if (
+                    isinstance(filler, rdflib.URIRef)
+                    and isinstance(prop, rdflib.URIRef)
+                    and filler != subject
+                    and not links.is_bfo_root(filler)
+                    and not links.is_process(filler)
+                    and (links.is_continuant(filler) or links.is_unresolved(filler))
+                    and not links.is_connected(filler)
+                ):
+                    found.append((subject, prop, filler))
+    return found
+
+
+def check_continuants_connected_to_process(
+    ttl_file_path: str, *, raise_error: bool = True
+) -> list[dict[str, Any]]:
+    """Check that the continuants ``ttl_file_path`` declares are tied to a process.
+
+    Two things are checked, each an ERROR per offence:
+
+    - every continuant class the file declares is connected to a process
+      (``CONTINUANT_NOT_CONNECTED_TO_PROCESS``);
+    - every restriction the file states, on a class that is not a process, points
+      at a continuant that is connected to a process
+      (``RESTRICTION_TO_CONTINUANT_NOT_CONNECTED_TO_PROCESS``): a restriction is no
+      way to reach a process if the class it reaches has none.
+
+    The file is read with its ``owl:imports`` (resolved locally, as the ontology
+    checker does), so a class is judged against the processes it can see: a slice
+    that restricts on a class declared elsewhere, and that no process of the slice
+    reaches, is reported.
+
+    Returns the errors, as the ontology checker reports them, and raises
+    ``ValueError`` listing all of them unless ``raise_error`` is False.
+    """
+    from naas_abi_core.utils import validate_bfo_ontology as checker
+
+    main, parse_issues = checker.check_parse(ttl_file_path)
+    if main is None:
+        raise ValueError(parse_issues[0]["message"])
+    combined, _ = checker.load_imports(
+        main, os.path.dirname(os.path.abspath(ttl_file_path))
+    )
+    declared = {
+        s
+        for s in main.subjects(rdflib.RDF.type, rdflib.OWL.Class)
+        if isinstance(s, rdflib.URIRef)
+    }
+    stated_on = {
+        s
+        for s in main.subjects(rdflib.RDFS.subClassOf, None)
+        if isinstance(s, rdflib.URIRef)
+    }
+    issues = [
+        {
+            "severity": "ERROR",
+            "category": "CONTINUANT_NOT_CONNECTED_TO_PROCESS",
+            "subject": checker._short(cls, combined),
+            "message": (
+                f"Continuant '{checker._label(cls, combined)}' is not connected to any "
+                "process: no restriction links it to a process class (or the other way "
+                "round) and no object property joins them."
+            ),
+        }
+        for cls in continuants_without_process(combined, declared)
+    ]
+    issues.extend(
+        {
+            "severity": "ERROR",
+            "category": "RESTRICTION_TO_CONTINUANT_NOT_CONNECTED_TO_PROCESS",
+            "subject": f"{checker._short(cls, combined)} {checker._short(prop, combined)}",
+            "message": (
+                f"Restriction on '{checker._label(cls, combined)}' points to "
+                f"'{checker._label(filler, combined)}' ({checker._short(filler, combined)}), "
+                "a continuant that is not connected to any process."
+            ),
+        }
+        for cls, prop, filler in restrictions_to_continuants_without_process(
+            combined, stated_on
+        )
+    )
+    if issues and raise_error:
+        lines = [f"Continuants not connected to a process in {ttl_file_path}:"]
+        lines.extend(
+            f"  [{i['category']}] {i['subject']}: {i['message']}" for i in issues
+        )
+        raise ValueError("\n".join(lines))
+    return issues
+
 _CACHE_MARKER_PREFIX = "# onto2py-source-sha256: "
 # Bump this when the generator output format changes so previously cached
 # .py files are invalidated even when the source TTL hash matches.

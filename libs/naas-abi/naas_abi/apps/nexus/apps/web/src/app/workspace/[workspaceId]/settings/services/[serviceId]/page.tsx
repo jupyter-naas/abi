@@ -1,38 +1,21 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ExternalLink } from 'lucide-react';
-import { authFetch } from '@/stores/auth';
+import { ArrowLeft, ExternalLink } from 'lucide-react';
+import { useSuperadminAccess } from '@/hooks/use-superadmin-access';
 import { DOCKER_SERVICES, buildServiceUrl, resolveServiceHost } from '@/lib/docker-services';
+import { buttonVariants } from '@/components/ui/button';
+import { ServicesForbidden } from '../services-forbidden';
 
 export default function ServiceDetailPage() {
   const params = useParams();
   const serviceId = typeof params?.serviceId === 'string' ? params.serviceId : '';
+  const servicesPath = `/workspace/${params?.workspaceId}/settings/services`;
   const service = useMemo(() => DOCKER_SERVICES.find((s) => s.id === serviceId), [serviceId]);
 
-  const [authState, setAuthState] = useState<'checking' | 'authorized' | 'denied'>('checking');
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await authFetch('/api/admin/me');
-        if (!res.ok) {
-          if (!cancelled) setAuthState('denied');
-          return;
-        }
-        const data = await res.json();
-        if (cancelled) return;
-        setAuthState(data.is_superadmin ? 'authorized' : 'denied');
-      } catch {
-        if (!cancelled) setAuthState('denied');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const authState = useSuperadminAccess();
 
   if (authState === 'checking') {
     return (
@@ -42,22 +25,17 @@ export default function ServiceDetailPage() {
     );
   }
 
-  if (authState === 'denied') {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
-        <h1 className="text-xl font-semibold">Forbidden</h1>
-        <p className="max-w-md text-sm text-muted-foreground">
-          Platform superadmin role required. Set
-          <code className="mx-1 rounded bg-muted px-1 py-0.5">is_superadmin: true</code>
-          on the matching user in <code className="mx-1 rounded bg-muted px-1 py-0.5">config.local.yaml</code>
-          and restart the API to grant access.
-        </p>
-      </div>
-    );
-  }
+  if (authState === 'denied') return <ServicesForbidden />;
 
   if (!service) {
-    return <p className="p-6 text-sm text-muted-foreground">Service not found.</p>;
+    return (
+      <div className="space-y-3 p-6">
+        <Link href={servicesPath} className={buttonVariants({ variant: 'secondary' })}>
+          <ArrowLeft size={16} /> All services
+        </Link>
+        <p className="text-sm text-muted-foreground">Service not found.</p>
+      </div>
+    );
   }
 
   const url = buildServiceUrl(service, resolveServiceHost());
@@ -65,23 +43,30 @@ export default function ServiceDetailPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-shrink-0 items-baseline justify-between gap-4 border-b px-6 py-4">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold">{service.label}</h1>
-          <p className="truncate text-xs text-muted-foreground">
-            {service.description}
-            {embeddable ? `, embedded from ${url}` : ''}
-          </p>
+      <header className="flex flex-shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link href={servicesPath} className={buttonVariants({ variant: 'secondary' })}>
+            <ArrowLeft size={16} /> All services
+          </Link>
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold">{service.label}</h2>
+            <p className="truncate text-xs text-muted-foreground">
+              {service.description}
+              {embeddable ? `, embedded from ${url}` : ''}
+            </p>
+          </div>
         </div>
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex flex-shrink-0 items-center gap-1.5 rounded border px-3 py-1 text-xs hover:bg-accent"
-        >
-          <ExternalLink size={14} />
-          Open in new tab
-        </a>
+        <div className="flex shrink-0 items-center gap-2">
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonVariants({ variant: 'secondary' })}
+          >
+            <ExternalLink size={14} />
+            Open in new tab
+          </a>
+        </div>
       </header>
 
       <div className="flex-1 overflow-hidden">
@@ -90,7 +75,7 @@ export default function ServiceDetailPage() {
             <p className="max-w-md text-sm text-muted-foreground">
               <span className="font-medium text-foreground">{service.label}</span> can&apos;t be
               embedded here, it refuses to load inside a frame (
-              <code className="rounded bg-muted px-1 py-0.5">X-Frame-Options: DENY</code>). Open
+              <code className=" bg-muted px-1 py-0.5">X-Frame-Options: DENY</code>). Open
               it in a new tab instead.
             </p>
           </div>

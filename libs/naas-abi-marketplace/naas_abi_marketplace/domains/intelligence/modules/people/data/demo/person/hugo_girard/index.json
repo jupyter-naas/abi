@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-08-19 17:25",
+  "person": {
+    "first_name": "Hugo",
+    "last_name": "Girard",
+    "full_name": "Hugo Girard",
+    "linkedin_profile_url": "https://demo.example/profiles/hugo_girard"
+  },
+  "records": [
+    {
+      "process_type": "ActOfWorking",
+      "organization": "Demo",
+      "title": "Advisor",
+      "contract_type": null,
+      "site": "Remote",
+      "start": "2022-01-01",
+      "end": null,
+      "duration": "4 yrs",
+      "mission_label": "Coach Demo leaders on organizational design.",
+      "mission": "Coach Demo leaders on organizational design.",
+      "skills": [
+        "Coaching",
+        "Agile"
+      ],
+      "source": "https://demo.example/profiles/hugo_girard"
+    },
+    {
+      "process_type": "ActOfWorking",
+      "organization": "Leadership Co",
+      "title": "Co-Founder",
+      "contract_type": null,
+      "site": "Remote",
+      "start": "2023-11-01",
+      "end": null,
+      "duration": "2 yrs",
+      "mission_label": "Help tech leaders scale teams without losing culture.",
+      "mission": "Help tech leaders scale teams without losing culture.",
+      "skills": [
+        "Organizational Design"
+      ],
+      "source": "https://demo.example/profiles/hugo_girard"
+    },
+    {
+      "process_type": "ActOfWorking",
+      "organization": "Agile Partners",
+      "title": "Chief Agility Officer",
+      "contract_type": null,
+      "site": "Paris",
+      "start": "2013-09-01",
+      "end": "2015-02-28",
+      "duration": "1 yr",
+      "mission_label": "Introduced agile transformation programs for enterprises.",
+      "mission": "Introduced agile transformation programs for enterprises.",
+      "skills": [
+        "Agile",
+        "Coaching"
+      ],
+      "source": "https://demo.example/profiles/hugo_girard"
+    }
+  ],
+  "profile": {
+    "slug": "hugo_girard",
+    "headline": "Advisor - organizational design and agile coaching",
+    "about": "Helps engineering organizations change shape without losing the people in them.",
+    "years_of_experience": 16,
+    "organization": "Demo",
+    "location": {
+      "office": "Brussels",
+      "city": "Brussels",
+      "country": "Belgium",
+      "country_code": "BE"
+    },
+    "photo_path": "apps/people/web/assets/portraits/hugo_girard.svg",
+    "certifications": [
+      {
+        "name": "Certified Agile Coach",
+        "issuer": "Agile Partners",
+        "issue_date": "2014-11-01",
+        "status": "active"
+      }
+    ],
+    "languages": [],
+    "interests": [
+      {
+        "name": "Organizational design",
+        "description": "Writes a newsletter on team topologies.",
+        "kind": "topic"
+      }
+    ],
+    "recommendations": []
+  }
+}

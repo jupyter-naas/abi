@@ -8,14 +8,13 @@ import {
   Cpu,
   Download,
   HardDrive,
-  Blocks,
   Server,
   Shield,
   Users,
   Zap,
+  Search,
   type LucideIcon,
 } from 'lucide-react';
-import { DOCKER_SERVICES } from '@/lib/docker-services';
 
 export type SettingsNavItem = {
   href: string;
@@ -44,8 +43,8 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     items: [
       { href: '/settings/theme', label: 'Theme', icon: Brush },
       { href: '/settings/members', label: 'Members', icon: Users },
-      { href: '/settings/infrastructure', label: 'Infrastructure', icon: Blocks },
       { href: '/settings/servers', label: 'Servers', icon: Server },
+      { href: '/settings/services', label: 'Services', icon: Boxes },
       { href: '/settings/secrets', label: 'Secrets', icon: Shield },
       { href: '/settings/export', label: 'Data Export', icon: Download },
     ],
@@ -56,19 +55,12 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
       { href: '/settings/agents', label: 'Agents', icon: Bot },
       { href: '/settings/ontologies', label: 'Ontologies', icon: BrainCircuit },
       { href: '/settings/graphs', label: 'Graphs', icon: Network },
+      { href: '/settings/search', label: 'Search', icon: Search },
       { href: '/settings/skills', label: 'Skills', icon: Zap },
       { href: '/settings/apps', label: 'Apps', icon: AppWindow },
       { href: '/settings/models', label: 'Models', icon: Cpu },
       { href: '/settings/drives', label: 'Drives', icon: HardDrive },
     ],
-  },
-  {
-    label: 'Services',
-    items: DOCKER_SERVICES.map((service) => ({
-      href: `/settings/services/${service.id}`,
-      label: service.label,
-      icon: Boxes,
-    })),
   },
 ];
 

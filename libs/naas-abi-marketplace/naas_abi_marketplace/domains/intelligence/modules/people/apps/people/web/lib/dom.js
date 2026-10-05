@@ -1,0 +1,139 @@
+/** Small rendering helpers shared by the pages. */
+
+export const ICONS = {
+  search:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  place:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" width="14" height="14"><path d="M12 21s7-5.7 7-11a7 7 0 1 0-14 0c0 5.3 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+  link:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" width="16" height="16"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>',
+  expand:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="18" height="18"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>',
+  collapse:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="18" height="18"><path d="M4 9V6a2 2 0 0 1 2-2h3M20 9V6a2 2 0 0 0-2-2h-3M4 15v3a2 2 0 0 0 2 2h3M20 15v3a2 2 0 0 1-2 2h-3"/></svg>',
+  email:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
+  phone:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>',
+  linkedin_url:
+    '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" width="14" height="14"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/></svg>',
+  info:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" width="18" height="18"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
+};
+
+/** ``find_profile_header`` → ``Find Profile Header`` */
+export function formatQueryLabel(queryName) {
+  return String(queryName ?? "")
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+export function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char],
+  );
+}
+
+/** Same folding as the server: "Cédric" and "cedric" must be one word. */
+export function fold(value) {
+  return String(value ?? "")
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+}
+
+/**
+ * Mark the words the query matched, in text the reader is about to see.
+ *
+ * Folding is done per character so the marks land on the original string, with
+ * its accents and capitals intact.
+ */
+export function highlight(text, tokens, tag = "mark") {
+  const raw = String(text ?? "");
+  if (!tokens?.length || !raw) return escapeHtml(raw);
+  const folded = fold(raw);
+  if (folded.length !== raw.length) return escapeHtml(raw);
+
+  const ranges = [];
+  for (const match of folded.matchAll(/[a-z0-9+]+/g)) {
+    const token = tokens.find((candidate) => match[0].startsWith(candidate));
+    if (token) ranges.push([match.index, match.index + token.length]);
+  }
+  if (!ranges.length) return escapeHtml(raw);
+
+  let out = "";
+  let cursor = 0;
+  for (const [start, end] of ranges) {
+    out += escapeHtml(raw.slice(cursor, start));
+    out += `<${tag}>${escapeHtml(raw.slice(start, end))}</${tag}>`;
+    cursor = end;
+  }
+  return out + escapeHtml(raw.slice(cursor));
+}
+
+export function initials(name) {
+  const parts = String(name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  const last = parts.length > 1 ? parts[parts.length - 1] : "";
+  return ((parts[0][0] || "") + (last[0] || "")).toUpperCase();
+}
+
+/**
+ * A portrait, or the person's initials.
+ *
+ * The initials are rendered underneath rather than swapped in on error, so a
+ * portrait that 404s degrades to something readable instead of a broken icon.
+ */
+export function avatarHtml(person, size = "sm") {
+  const label = escapeHtml(person.full_name || "");
+  const fallback = escapeHtml(initials(person.full_name));
+  const image = person.photo_url
+    ? `<img src="${escapeHtml(person.photo_url)}" alt="" loading="lazy" />`
+    : "";
+  return `<span class="avatar avatar-${size}" role="img" aria-label="${label}">${fallback}${image}</span>`;
+}
+
+/**
+ * An organization's logo, or its initials.
+ *
+ * Same fallback-underneath pattern as avatarHtml: a name with no curated logo
+ * (data.organization_logos in config.yaml) still reads as something, and a
+ * logo file that 404s degrades to the initials rather than a broken icon.
+ */
+export function orgAvatarHtml(name, logoPath, size = "sm") {
+  if (!name) return "";
+  const label = escapeHtml(name);
+  const fallback = escapeHtml(initials(name));
+  const image = logoPath
+    ? `<img src="${escapeHtml(logoPath)}" alt="" loading="lazy" />`
+    : "";
+  return `<span class="avatar avatar-${size} avatar-org" role="img" aria-label="${label}">${fallback}${image}</span>`;
+}
+
+/**
+ * Country flags come from a CDN; without one the line simply has no flag.
+ * Removal on error is handled once, in shell.js, rather than with an inline
+ * handler that a content-security policy would block.
+ */
+export function flagHtml(countryCode) {
+  if (!countryCode || countryCode.length !== 2) return "";
+  const code = countryCode.toLowerCase();
+  return `<img class="result-flag" src="https://flagcdn.com/32x24/${code}.png" alt="" loading="lazy" />`;
+}
+
+export function yearOf(isoDate) {
+  return isoDate ? String(isoDate).slice(0, 4) : "";
+}
+
+/**
+ * A period as the source stated it: years, or the source's own duration label.
+ * "Present" only ever means an open end, never a guess.
+ */
+export function periodText(item, { presentLabel = "Present" } = {}) {
+  const start = yearOf(item.start);
+  const end = yearOf(item.end);
+  const span = start ? `${start} – ${end || presentLabel}` : end || "";
+  return [span, item.duration].filter(Boolean).join(" · ");
+}

@@ -1,5 +1,6 @@
 from naas_abi_marketplace.domains.personnel.apps.cockpit.log_payload import (
     ABI,
+    PEOPLE,
     PERSONNEL,
     RDF_TYPE,
     build_ledger_log_rows,
@@ -78,7 +79,7 @@ def test_working_process_is_an_insert_with_rdf_triples() -> None:
     assert {
         "subject": process,
         "predicate": RDF_TYPE,
-        "object": f"{PERSONNEL}ActOfWorking",
+        "object": f"{PEOPLE}ActOfWorking",
     } in events[0]["triples_added"]
     assert {
         "subject": process,

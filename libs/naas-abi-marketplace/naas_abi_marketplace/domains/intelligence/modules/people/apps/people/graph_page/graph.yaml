@@ -1,0 +1,50 @@
+# Settings for the person graph view (graph_page/GraphPage.js): the 7-bucket
+# canvas a profile opens on. A page that embeds the view may pass its own copy
+# of these settings.
+graph:
+  default_person_label: "Alice Dupont"
+  default_distance: 2
+  individual_search_min_chars: 3
+  max_processes_per_class: 10
+  scale: { min: 0.25, max: 2.5 }
+  node:
+    radius: 36
+    label_font_size: 11
+    label_line_height: 13
+    process_root_radius: 320
+  camera_distance: 2400
+  default_view: "3d"
+  params_session_key: "people-graph-params-v1"
+  view_labels: { 2d: "2D view", 3d: "3D view" }
+  distance_hint: "Hops out from the selected person. 1 shows what they bear or carry; 2 adds what those acts reach; 3 adds temporal boundary instants."
+  view_defaults:
+    2d: { clusterBy: "bucket", nodeMinGap: 150, zoom: 0.75, legend: false, toolbarLayout: row }
+    3d: { clusterBy: "bucket", linkDistance: 300, repulsion: 4500, nodeMinGap: 150, settleMs: 3000, zoom: 0.6, legend: false, toolbarLayout: row }
+  date_slicer:
+    storage_key: "people-graph-date-slicer-v1"
+  parameters:
+    toolbarLayout:
+      label: "Toolbar layout"
+      type: "select"
+      default: "row"
+      options:
+        - { value: "row", label: "Horizontal" }
+        - { value: "column", label: "Vertical" }
+      hint: "Arrange search and filters in a row or a column."
+    physics: { label: "Physics", type: "toggle", default: true, hint: "Run the force simulation." }
+    clusterBy:
+      label: "Cluster by"
+      type: "select"
+      default: "process"
+      options:
+        - { value: "none", label: "Nothing" }
+        - { value: "process", label: "Act of working" }
+        - { value: "bucket", label: "BFO bucket" }
+      hint: "Pull related nodes into groups."
+    clusterPull: { label: "Cluster pull", min: 0, max: 100, step: 5, default: 50, unit: "%", hint: "How tightly each group is drawn together." }
+    linkDistance: { label: "Link length", min: 80, max: 520, step: 10, default: 260, unit: "px", hint: "Target distance between connected nodes." }
+    repulsion: { label: "Repulsion", min: 200, max: 9000, step: 100, default: 3200, unit: "", hint: "How strongly nodes push away from one another." }
+    nodeMinGap: { label: "Node spacing", min: 0, max: 180, step: 5, default: 60, unit: "px", hint: "Minimum gap between nodes." }
+    settleMs: { label: "Settle time", min: 500, max: 12000, step: 500, default: 3000, unit: "ms", hint: "How long nodes move before the layout freezes." }
+    legend: { label: "BFO legend", type: "toggle", default: false, hint: "Show the BFO colour key." }
+    zoom: { label: "Default zoom", min: 0.25, max: 2.5, step: 0.05, default: 1, unit: "×", hint: "Initial and reset canvas scale." }

@@ -99,7 +99,7 @@
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
-  border-radius: var(--org-border-radius, 0px);
+  border-radius: 0;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-sm);
@@ -141,7 +141,7 @@
   margin-right: var(--space-3);
   padding: 6px;
   border: none;
-  border-radius: var(--org-border-radius, 0px);
+  border-radius: 0;
   background-color: transparent;
   color: var(--muted-foreground-hex);
   cursor: pointer;

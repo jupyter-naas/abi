@@ -1,0 +1,9 @@
+{
+  "files": {
+    "modules/PeopleOntology.ttl": "ead63cd206a0adffe200be0f75b5664ccd425ca5c9d183c31812df24f5a8a54e",
+    "processes/ActOfCertificationProcess.ttl": "27a7e390fbfe1aa06adce50c0c7cbb94923b69ab110943aed71ccbc41374a12b",
+    "processes/ActOfProfilingProcess.ttl": "46425af2fa12ec68569db5b268965c5c367e15d7a95f125ab5712cac9d63fd0d",
+    "processes/ActOfStudyingProcess.ttl": "6d741b0785285eb5636910e543ae0fe151349361a6456c824da92ad7ad655d03",
+    "processes/ActOfWorkingProcess.ttl": "cb815ef9d993e1ec9e6f240ea505e646e65050f0d5f569ffb7ffb4f922762799"
+  }
+}

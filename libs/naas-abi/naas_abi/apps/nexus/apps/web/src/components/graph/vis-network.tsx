@@ -7,10 +7,11 @@ import 'vis-network/styles/vis-network.css';
 import type { GraphNode, GraphEdge } from '@/stores/knowledge-graph';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { BFO_BUCKET_DEFS } from '@/lib/bfo-buckets';
+import { BFO_BUCKET_BY_TYPE, BFO_BUCKET_DEFS } from '@/lib/bfo-buckets';
+import { bfoZoneLayout, drawBfoZones, zoneBounds, type ZoneLayout } from './bfo-zone-layout';
 import { installOrthogonalEdges } from './orthogonal-network';
 import { compactNetworkPositions } from './compact-network-layout';
-import { fitReadableViewport, spacingViewport } from './network-viewport';
+import { fitBoundsViewport, fitReadableViewport, spacingViewport } from './network-viewport';
 import {
   INSTANCE_NODE_FONT,
   INSTANCE_NODE_SIZE,
@@ -827,6 +828,13 @@ interface VisNetworkProps {
    * nodes uniformly.
    */
   useBucketLayout?: boolean;
+  /**
+   * Place nodes in BFO zones, as in the BFO 7 Buckets diagram: occurrents in a
+   * band on top, continuants below, one zone per bucket. Fixed, no physics.
+   */
+  bfoZones?: boolean;
+  /** Which BFO zones are drawn: the Occurrents / Continuants bands and the 7 bucket zones. Both by default. */
+  bfoZonesVisible?: { topLevel: boolean; buckets: boolean };
   /** When true, nodes are drawn as circles instead of rectangular cards. */
   circularNodes?: boolean;
   /**
@@ -887,6 +895,8 @@ export function VisNetwork({
   viewStateKey,
   physicsEnabled = false,
   useBucketLayout = false,
+  bfoZones = false,
+  bfoZonesVisible,
   circularNodes = false,
   labelPlacement = 'inside',
   viewportLayoutKey,
@@ -894,8 +904,9 @@ export function VisNetwork({
   getNodeTitle,
   interactive = true,
 }: VisNetworkProps) {
-  const fixedLayout = suppliedFixedLayout || (nodeSpacing !== undefined && !layoutDirection && !physicsEnabled);
+  const fixedLayout = suppliedFixedLayout || bfoZones || (nodeSpacing !== undefined && !layoutDirection && !physicsEnabled);
   const containerRef = useRef<HTMLDivElement>(null);
+  const zoneLayoutRef = useRef<ZoneLayout | null>(null);
   const networkRef = useRef<Network | null>(null);
   const orthogonalRendererRef = useRef<ReturnType<typeof installOrthogonalEdges> | null>(null);
   const resizeBehaviorRef = useRef({ preserveZoomOnResize, selectedNodeId, focusOnSelection });
@@ -937,7 +948,14 @@ export function VisNetwork({
 
   const fitToCanvas = useCallback((duration = 300) => {
     const net = networkRef.current;
-    if (net) fitReadableViewport(net, minimumAutoFitScaleRef.current, duration);
+    if (!net) return;
+    const bounds = zoneLayoutRef.current && zoneBounds(zoneLayoutRef.current);
+    const el = containerRef.current;
+    if (bounds && el) {
+      fitBoundsViewport(net, bounds, { width: el.clientWidth, height: el.clientHeight }, minimumAutoFitScaleRef.current, duration);
+      return;
+    }
+    fitReadableViewport(net, minimumAutoFitScaleRef.current, duration);
   }, []);
 
   /** Re-fit the graph to the current canvas size (after layout / split changes). */
@@ -1051,15 +1069,27 @@ export function VisNetwork({
     return typeof found === 'string' ? found.trim() : undefined;
   }, []);
 
+  const nodeLayoutBox = useCallback((node: GraphNode) => (labelPlacement === 'top'
+    ? instanceNodeLayoutBox(node.label, node.properties.is_primary === true)
+    : computeNodeCardDimensions(wrapNodeLabelLines(node.label), Boolean(getNodeLogoUrl(node)))), [getNodeLogoUrl, labelPlacement]);
+
   const compactPositions = useMemo(() => {
-    if (nodeSpacing === undefined || suppliedFixedLayout || layoutDirection || physicsEnabled) return null;
+    if (nodeSpacing === undefined || suppliedFixedLayout || bfoZones || layoutDirection || physicsEnabled) return null;
     return compactNetworkPositions(nodes.map(node => ({
       id: node.id, label: node.label, group: node.type, primary: node.properties.is_primary === true,
-      ...(labelPlacement === 'top'
-        ? instanceNodeLayoutBox(node.label, node.properties.is_primary === true)
-        : computeNodeCardDimensions(wrapNodeLabelLines(node.label), Boolean(getNodeLogoUrl(node)))),
+      ...nodeLayoutBox(node),
     })), edges, nodeSpacing);
-  }, [nodes, edges, nodeSpacing, suppliedFixedLayout, layoutDirection, physicsEnabled, getNodeLogoUrl, labelPlacement]);
+  }, [nodes, edges, nodeSpacing, suppliedFixedLayout, bfoZones, layoutDirection, physicsEnabled, nodeLayoutBox]);
+
+  const zoneLayout = useMemo(() => {
+    if (!bfoZones) return null;
+    const byId = new Map(nodes.map(node => [node.id, node]));
+    return bfoZoneLayout(nodes.map(node => {
+      const box = nodeLayoutBox(node);
+      return { id: node.id, label: node.label, bucket: resolveNodeBucketKey(node, byId), width: box.width, height: box.height };
+    }), edges);
+  }, [bfoZones, nodes, edges, nodeLayoutBox]);
+  zoneLayoutRef.current = zoneLayout;
 
   // Fetch and cache logo images as data URIs so they can be embedded in SVG.
   useEffect(() => {
@@ -1132,7 +1162,7 @@ export function VisNetwork({
       const dark = document.documentElement.classList.contains('dark');
       const textColor = dimmed ? '#94a3b8' : (dark ? '#f4f4f5' : '#18181b');
       const strokeColor = dark ? '#18181b' : '#ffffff';
-      const hierPos = hierarchicalPositions?.get(node.id) ?? compactPositions?.get(node.id);
+      const hierPos = hierarchicalPositions?.get(node.id) ?? zoneLayout?.positions.get(node.id) ?? compactPositions?.get(node.id);
       return {
         id: node.id,
         label: labelLines.join('\n'),
@@ -1192,7 +1222,7 @@ export function VisNetwork({
     // logical width × height regardless of the supersample factor.
     const displaySize = Math.min(width, height) / 2;
 
-    const hierPos = hierarchicalPositions?.get(node.id) ?? compactPositions?.get(node.id);
+    const hierPos = hierarchicalPositions?.get(node.id) ?? zoneLayout?.positions.get(node.id) ?? compactPositions?.get(node.id);
     return {
       id: node.id,
       label: '',
@@ -1205,7 +1235,7 @@ export function VisNetwork({
       x: hierPos?.x ?? node.x,
       y: hierPos?.y ?? node.y,
     };
-  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri, hierarchicalPositions, compactPositions, anyNodeSelected, circularNodes, labelPlacement, systemOverview, processOverview]);
+  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri, hierarchicalPositions, zoneLayout, compactPositions, anyNodeSelected, circularNodes, labelPlacement, systemOverview, processOverview]);
 
   const toVisEdge = useCallback((edge: GraphEdge): Edge => {
     if (edge.properties?.layout_only) {
@@ -1775,6 +1805,27 @@ export function VisNetwork({
     edgesDataRef.current.clear();
     edgesDataRef.current.add(uniqueEdges.map(toVisEdge));
   }, [edges, toVisEdge]);
+
+  // BFO zones are painted under the nodes and edges, in canvas coordinates.
+  const showZoneBands = bfoZonesVisible?.topLevel ?? true;
+  const showZoneBuckets = bfoZonesVisible?.buckets ?? true;
+  useEffect(() => {
+    const net = networkRef.current;
+    if (!net || !zoneLayout) return;
+    const draw = (ctx: CanvasRenderingContext2D) => drawBfoZones(ctx, zoneLayout, BFO_BUCKET_BY_TYPE, {
+      dark: document.documentElement.classList.contains('dark'),
+      bands: showZoneBands,
+      zones: showZoneBuckets,
+    });
+    net.on('beforeDrawing', draw);
+    net.redraw();
+    return () => {
+      // The network may already be destroyed (unmount, Strict Mode remount): leave it alone then.
+      if (networkRef.current !== net) return;
+      net.off('beforeDrawing', draw);
+      net.redraw();
+    };
+  }, [zoneLayout, showZoneBands, showZoneBuckets]);
 
   useEffect(() => {
     const net = networkRef.current, container = containerRef.current;
