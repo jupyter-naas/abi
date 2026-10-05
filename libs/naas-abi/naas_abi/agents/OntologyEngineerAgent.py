@@ -77,7 +77,8 @@ Use the following ontology as the primary grounding source:
         ontology_path = (
             Path(__file__).resolve().parent.parent
             / "ontologies"
-            / "modules"
+            / "imports"
+            / "top-level"
             / "BFO7BucketsProcessOntology.ttl"
         )
 
@@ -86,7 +87,7 @@ Use the following ontology as the primary grounding source:
 
         return (
             "Ontology file not found at "
-            "`naas_abi/ontologies/modules/BFO7BucketsProcessOntology.ttl`."
+            "`naas_abi/ontologies/imports/top-level/BFO7BucketsProcessOntology.ttl`."
         )
 
     @classmethod
