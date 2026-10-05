@@ -2,13 +2,11 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
-import { MessageSquare, ChevronRight, MoreVertical, Edit2, Trash2, Star, Zap } from 'lucide-react';
+import { MessageSquare, ChevronRight, MoreVertical, Edit2, Star } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
-import { useSkillsStore } from '@/stores/skills';
-import { useAuthStore } from '@/stores/auth';
 import { CollapsibleSection } from '@/components/shell/sidebar/collapsible-section';
 import { SidebarNewItem } from '@/components/shell/sidebar/sidebar-new-item';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
@@ -30,8 +28,6 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [showAllAgents, setShowAllAgents] = useState(false);
   const [agentMenuId, setAgentMenuId] = useState<string | null>(null);
-  const [showAllSkills, setShowAllSkills] = useState(false);
-  const [skillMenuId, setSkillMenuId] = useState<string | null>(null);
 
   const {
     activeConversationId,
@@ -51,10 +47,6 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
 
   const { agents, setDefaultAgent, fetchAgents } = useAgentsStore();
   const canManageAgents = useFeature('agents');
-  const canUseSkills = useFeature('skills');
-  const { skillsByWorkspace, deleteSkill } = useSkillsStore();
-  const currentUserId = useAuthStore((s) => s.user?.id);
-  const setPendingComposerText = useWorkspaceStore((s) => s.setPendingComposerText);
   const safeAgents = useMemo(() => (Array.isArray(agents) ? agents : []), [agents]);
 
   const allConversations = useMemo(
@@ -104,33 +96,6 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const { visible: visibleAgents, hiddenCount: hiddenAgentCount } = useMemo(
     () => chatRosterSections(sortedAgents, showAllAgents),
     [sortedAgents, showAllAgents]
-  );
-
-  const sortedSkills = useMemo(() => {
-    const workspaceSkills = currentWorkspaceId
-      ? (skillsByWorkspace[currentWorkspaceId] ?? [])
-      : [];
-    return workspaceSkills
-      .filter((s) => s.enabled)
-      .sort((a, b) => {
-        const ta = a.lastUsedAt ? new Date(a.lastUsedAt).getTime() : 0;
-        const tb = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0;
-        if (ta !== tb) return tb - ta;
-        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-      });
-  }, [skillsByWorkspace, currentWorkspaceId]);
-
-  const SKILLS_PREVIEW_COUNT = 3;
-  const visibleSkills = showAllSkills ? sortedSkills : sortedSkills.slice(0, SKILLS_PREVIEW_COUNT);
-  const hiddenSkillCount = sortedSkills.length - SKILLS_PREVIEW_COUNT;
-
-  const handleUseSkill = useCallback(
-    (slug: string) => {
-      setPendingComposerText(`/${slug} `);
-      setMobilePendingChatSlug(NEW_CHAT_SLUG);
-      router.push(newChatPath(currentWorkspaceId));
-    },
-    [setPendingComposerText, setMobilePendingChatSlug, router, currentWorkspaceId]
   );
 
   const pinnedConvs = useMemo(() => conversations.filter((c) => c.pinned), [conversations]);
@@ -310,97 +275,6 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
           </button>
         )}
       </div>
-
-      {canUseSkills && (
-        <div className="chat-section-group">
-          <Link
-            href={getWorkspacePath(currentWorkspaceId, '/settings/skills')}
-            className={labelClass(true)}
-          >
-            Skills
-          </Link>
-          {sortedSkills.length === 0 && (
-            <p className="chat-section-hint">Type /create-skill in the chat and the Skills agent adds one</p>
-          )}
-          {visibleSkills.map((skill) => (
-            <div key={skill.id} className="chat-list-row-wrap">
-              <button
-                type="button"
-                onClick={() => handleUseSkill(skill.slug)}
-                title={skill.description || skill.name}
-                className={listRowClass()}
-              >
-                <Zap size={iconSize} className="chat-list-row-icon" />
-                <span className="chat-list-row-title">
-                  {skill.name}
-                  <span className="chat-list-row-skill-slug">/{skill.slug}</span>
-                </span>
-                <div
-                  className="chat-list-row-menu-trigger"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSkillMenuId(skillMenuId === skill.id ? null : skill.id);
-                  }}
-                  role="presentation"
-                >
-                  <MoreVertical size={12} />
-                </div>
-              </button>
-
-              {skillMenuId === skill.id && (
-                <>
-                  <div className="chat-context-menu-backdrop" onClick={() => setSkillMenuId(null)} />
-                  <div className="chat-context-menu">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSkillMenuId(null);
-                        router.push(getWorkspacePath(currentWorkspaceId, `/settings/skills/${skill.id}`));
-                      }}
-                      className="chat-context-menu-item"
-                    >
-                      <Edit2 size={12} />
-                      Edit skill
-                    </button>
-                    {(skill.scope !== 'user' || skill.userId === currentUserId) && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSkillMenuId(null);
-                          if (confirm(`Delete skill "/${skill.slug}"?`)) {
-                            void deleteSkill(skill.id).catch((err) =>
-                              alert(err instanceof Error ? err.message : 'Failed to delete skill')
-                            );
-                          }
-                        }}
-                        className="chat-context-menu-item is-destructive"
-                      >
-                        <Trash2 size={12} />
-                        Delete
-                      </button>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
-          {hiddenSkillCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowAllSkills(!showAllSkills)}
-              className={`chat-section-show-more${isMobilePanel ? ' is-mobile-panel' : ''}`}
-            >
-              <ChevronRight
-                size={iconSize}
-                className={`chat-section-show-more-chevron${showAllSkills ? ' is-expanded' : ''}`}
-              />
-              <span>{showAllSkills ? 'Show less' : `Show ${hiddenSkillCount} more`}</span>
-            </button>
-          )}
-        </div>
-      )}
 
       {pinnedConvs.length > 0 && (
         <div className="chat-section-group">
