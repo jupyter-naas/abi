@@ -23,7 +23,7 @@ export function OntologyFileNetwork({ workspaceId, path, fileTerms, restrictions
 }) {
   const [slices, setSlices] = useState<Slices | null>(null);
   const [selected, setSelected] = useState<{ path: string; ids: Set<string> }>({ path, ids: new Set() });
-  const [zoneBuckets, setZoneBuckets] = useState(true);
+  const [zoneBuckets, setZoneBuckets] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
