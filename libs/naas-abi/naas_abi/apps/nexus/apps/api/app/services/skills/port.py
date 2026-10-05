@@ -22,6 +22,10 @@ class SkillRecord:
     last_used_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    builtin: bool = False
+    when_to_use: str = ""
+    # Real package paths. Postgres prompt rows leave this empty.
+    files: tuple[str, ...] = ()
 
 
 @dataclass
