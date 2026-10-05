@@ -13,12 +13,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
 from naas_abi.ontologies.modules.ABIOntology import (
-    Organization,
-    Person,
     Site,
     TemporalInstant,
 )
 from naas_abi.ontologies.modules.ABIOntology import TemporalRegion as AbiTemporalRegion
+from naas_abi.ontologies.modules.OrganizationOntology import Organization
+from naas_abi.ontologies.modules.PersonOntology import Person
 from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.modules.PeopleOntology import (
     AcademicDegree,
     Certification,

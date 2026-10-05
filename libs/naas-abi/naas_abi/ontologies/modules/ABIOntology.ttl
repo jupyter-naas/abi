@@ -45,20 +45,6 @@ abi:concretizes a owl:ObjectProperty ;
     rdfs:label "concretizes"@en ;
     skos:definition "b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"@en .
 
-abi:continuantPartOf a owl:ObjectProperty ;
-    owl:equivalentProperty bfo:BFO_0000176 ;
-    owl:inverseOf abi:hasContinuantPart ;
-    rdfs:label "continuant part of"@en ;
-    skos:definition "b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t"@en ;
-    skos:example "The site of 45 avenue Kléber is a continuant part of Paris; Paris is a continuant part of Île-de-France; Île-de-France is a continuant part of France"@en .
-
-abi:hasContinuantPart a owl:ObjectProperty ;
-    owl:equivalentProperty bfo:BFO_0000178 ;
-    owl:inverseOf abi:continuantPartOf ;
-    rdfs:label "has continuant part"@en ;
-    skos:definition "b has continuant part c =Def c continuant part of b"@en ;
-    skos:example "France has continuant part Île-de-France"@en .
-
 abi:genericallyDependsOn a owl:ObjectProperty ;
     owl:equivalentProperty bfo:BFO_0000084 ;
     owl:inverseOf abi:isCarrierOf ;
@@ -197,25 +183,6 @@ abi:MaterialEntity a owl:Class ;
           owl:allValuesFrom abi:Disposition
         ] .
 
-abi:Person a owl:Class ;
-    rdfs:label "Person"@en ;
-    skos:altLabel "Human"@en ;
-    skos:definition "An Animal that is a member of the species Homo sapiens."@en ;
-    owl:equivalentClass cco:ont00001262 ;
-    rdfs:subClassOf cco:ont00000562 .
-
-abi:Organization a owl:Class ;
-    rdfs:label "Organization"@en ;
-    skos:definition "A Group of Agents which can be the bearer of roles, has members, and has a set of organization rules."@en ;
-    owl:equivalentClass cco:ont00001180 ;
-    rdfs:subClassOf cco:ont00000300 .
-
-abi:Agent a owl:Class ;
-    rdfs:label "Agent"@en ;
-    skos:definition "An Agent is a Material Entity that bears an Agent Capability."@en ;
-    owl:equivalentClass cco:ont00001017 ;
-    rdfs:subClassOf abi:MaterialEntity .
-
 # Site (WHERE)
 abi:Site a owl:Class ;
     owl:equivalentClass bfo:BFO_0000029 ;
@@ -223,127 +190,6 @@ abi:Site a owl:Class ;
     skos:definition "(Elucidation) A site is a three-dimensional immaterial entity whose boundaries either (partially or wholly) coincide with the boundaries of one or more material entities or have locations determined in relation to some material entity"@en ;
     skos:example "A hole in a portion of cheese; a rabbit hole; the Grand Canyon; the Piazza San Marco; the kangaroo-joey-containing hole of a kangaroo pouch; your left nostril (a fiat part - the opening - of your left nasal cavity); the lumen of your gut; the hold of a ship; the interior of the trunk of your car; hole in an engineered floor joist"@en ;
     rdfs:subClassOf bfo:BFO_0000141 .
-
-# Geospatial sites (WHERE, from the street to the continent)
-# Sites nest with continuant part of: a process occurs in the most precise
-# site, and the containing city, region and country are reached by climbing
-# abi:continuantPartOf (BFO does not declare it transitive, so queries use
-# abi:occursIn/abi:continuantPartOf*). Existential restrictions are stated
-# only where they hold by definition, as in CCO; the universal ones say what
-# may contain each site (and type continuant_part_of in the generated Python).
-abi:GeospatialRegion a owl:Class ;
-    owl:equivalentClass cco:ont00000472 ;
-    rdfs:label "geospatial region"@en ;
-    skos:definition "A Site that is at or near the surface of the Earth."@en ;
-    skos:example "Paris; Île-de-France; France; Europe; the site of an office building"@en ;
-    rdfs:subClassOf abi:Site .
-
-abi:GeospatialLocation a owl:Class ;
-    owl:equivalentClass cco:ont00000487 ;
-    rdfs:label "geospatial location"@en ;
-    skos:definition "A Geospatial Region that is at which an Entity or Event is located."@en ;
-    skos:example "The site of 45 avenue Kléber, Paris, at which an office building is located and an act of working occurs"@en ;
-    skos:scopeNote "Usually a continuant part of a local administrative region, but not by definition (a ship at sea, a research station in Antarctica), so no restriction requires it."@en ;
-    rdfs:subClassOf abi:GeospatialRegion ,
-        [ a owl:Restriction ;
-          owl:onProperty abi:continuantPartOf ;
-          owl:allValuesFrom [ a owl:Class ; owl:unionOf ( abi:Site abi:MaterialEntity ) ]
-        ] .
-
-abi:Continent a owl:Class ;
-    owl:equivalentClass cco:ont00000251 ;
-    rdfs:label "continent"@en ;
-    skos:definition "A Geospatial Region that is bounded by any of the Earth's main continuous expanses of land."@en ;
-    skos:example "Europe; Africa; North America"@en ;
-    skos:scopeNote "A country is not required to be part of a continent: some span two (Russia, Türkiye)."@en ;
-    rdfs:subClassOf abi:GeospatialRegion ,
-        [ a owl:Restriction ;
-          owl:onProperty abi:continuantPartOf ;
-          owl:allValuesFrom abi:GeospatialRegion
-        ] .
-
-abi:Country a owl:Class ;
-    owl:equivalentClass cco:ont00000139 ;
-    rdfs:label "country"@en ;
-    skos:altLabel "domain of a country"@en ;
-    skos:definition "A Government Domain that is associated with certain distinct political, ethnic, or cultural characteristics, and which delimits a Government that has legitimate authority over a Populace."@en ;
-    skos:example "France; the United Kingdom; Japan"@en ;
-    skos:scopeNote "The site a country's government has authority over, which is where things occur. Its land and waters (a material entity) and its government (an agent) are different entities."@en ;
-    rdfs:subClassOf abi:GeospatialRegion ,
-        [ a owl:Restriction ;
-          owl:onProperty abi:continuantPartOf ;
-          owl:allValuesFrom abi:GeospatialRegion
-        ] .
-
-abi:FirstOrderAdministrativeRegion a owl:Class ;
-    owl:equivalentClass cco:ont00000126 ;
-    rdfs:label "first-order administrative region"@en ;
-    skos:altLabel "state"@en , "province"@en , "region"@en ;
-    skos:definition "A Government Domain that is a primary administrative division of a Country."@en ;
-    skos:example "Île-de-France; California; Ontario; Bavaria"@en ;
-    rdfs:subClassOf abi:GeospatialRegion ,
-        [ a owl:Restriction ;
-          owl:onProperty abi:continuantPartOf ;
-          owl:someValuesFrom abi:Country
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty abi:continuantPartOf ;
-          owl:allValuesFrom abi:GeospatialRegion
-        ] .
-
-abi:SecondOrderAdministrativeRegion a owl:Class ;
-    owl:equivalentClass cco:ont00000405 ;
-    rdfs:label "second-order administrative region"@en ;
-    skos:altLabel "county"@en , "department"@en , "district"@en ;
-    skos:definition "A Government Domain that is a subdivision of a First-Order Administrative Region."@en ;
-    skos:example "Hauts-de-Seine; Los Angeles County; Upper Bavaria"@en ;
-    rdfs:subClassOf abi:GeospatialRegion ,
-        [ a owl:Restriction ;
-          owl:onProperty abi:continuantPartOf ;
-          owl:someValuesFrom abi:FirstOrderAdministrativeRegion
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty abi:continuantPartOf ;
-          owl:allValuesFrom abi:GeospatialRegion
-        ] .
-
-abi:LocalAdministrativeRegion a owl:Class ;
-    owl:equivalentClass cco:ont00000460 ;
-    rdfs:label "local administrative region"@en ;
-    skos:altLabel "municipality"@en ;
-    skos:definition "A Government Domain that delimits a local Government."@en ;
-    skos:example "Paris; Boulogne-Billancourt; a rural commune"@en ;
-    skos:scopeNote "Required to be part of a country only: not every municipality sits in a first-order region (Washington, D.C.)."@en ;
-    rdfs:subClassOf abi:GeospatialRegion ,
-        [ a owl:Restriction ;
-          owl:onProperty abi:continuantPartOf ;
-          owl:someValuesFrom abi:Country
-        ] ,
-        [ a owl:Restriction ;
-          owl:onProperty abi:continuantPartOf ;
-          owl:allValuesFrom abi:GeospatialRegion
-        ] .
-
-abi:City a owl:Class ;
-    owl:equivalentClass cco:ont00000887 ;
-    rdfs:label "city"@en ;
-    skos:definition "A Local Administrative Region in which a relatively large human population permanently resides; is designated as a city based on a particular administrative, legal, or historical status; and which delimits a local Government that typically oversees the provision of systems for sanitation, utilities, land usage, housing, and transportation."@en ;
-    skos:example "Paris; London; New York City"@en ;
-    rdfs:subClassOf abi:LocalAdministrativeRegion .
-
-abi:Town a owl:Class ;
-    owl:equivalentClass cco:ont00000071 ;
-    rdfs:label "town"@en ;
-    skos:definition "A Local Administrative Region in which a human population permanently resides that is typically larger than the population of a Village but smaller than that of a City; is designated as a town based on a particular administrative, legal, or historical status; and which delimits a local Government that typically exercises less power than that of a City Government."@en ;
-    skos:example "Fontainebleau; Windsor"@en ;
-    rdfs:subClassOf abi:LocalAdministrativeRegion .
-
-abi:Village a owl:Class ;
-    owl:equivalentClass cco:ont00000718 ;
-    rdfs:label "village"@en ;
-    skos:definition "A Local Administrative Region in which a human population permanently resides that is typically larger than the population of a hamlet but smaller than that of a Town."@en ;
-    skos:example "Giverny"@en ;
-    rdfs:subClassOf abi:LocalAdministrativeRegion .
 
 # Geospatial position (WHERE, as a point)
 # A point has no volume, so it is not a site and nothing occurs in it: a
@@ -383,43 +229,6 @@ abi:GenericallyDependentContinuant a owl:Class ;
           owl:onProperty abi:genericallyDependsOn ;
           owl:someValuesFrom abi:MaterialEntity
         ] .
-
-# Document Content Entity (HOW WE KNOW — document subhierarchy)
-abi:DocumentContentEntity a owl:Class ;
-    rdfs:label "Document Content Entity"@en ;
-    skos:altLabel "Document"@en ;
-    skos:definition "A generically dependent continuant that consists of a series of paragraphs of text or diagrams intended to be carried by physical pieces of paper or an electronic word processor file."@en ;
-    rdfs:subClassOf abi:GenericallyDependentContinuant .
-
-abi:Book a owl:Class ;
-    rdfs:label "Book"@en ;
-    skos:definition "A Document Content Entity that canonically appears as ink on paper or parchment, or other materials fastened together to hinge at one side."@en ;
-    rdfs:subClassOf abi:DocumentContentEntity .
-
-abi:Transcript a owl:Class ;
-    rdfs:label "Transcript"@en ;
-    skos:definition "A Document Content Entity that was originally recorded in a different medium."@en ;
-    rdfs:subClassOf abi:DocumentContentEntity .
-
-abi:Spreadsheet a owl:Class ;
-    rdfs:label "Spreadsheet"@en ;
-    skos:definition "A Document Content Entity that canonically appears as an interactive, tabular form."@en ;
-    rdfs:subClassOf abi:DocumentContentEntity .
-
-abi:Report a owl:Class ;
-    rdfs:label "Report"@en ;
-    skos:definition "A Document Content Entity that conveys an account of some event, situation, or the result of some observation or inquiry."@en ;
-    rdfs:subClassOf abi:DocumentContentEntity .
-
-abi:FormDocument a owl:Class ;
-    rdfs:label "Form Document"@en ;
-    skos:definition "A Document Content Entity that has Document Field Contents as parts."@en ;
-    rdfs:subClassOf abi:DocumentContentEntity .
-
-abi:JournalArticle a owl:Class ;
-    rdfs:label "Journal Article"@en ;
-    skos:definition "A Document Content Entity that is part of a Journal Issue."@en ;
-    rdfs:subClassOf abi:DocumentContentEntity .
 
 # Quality (HOW IT IS)
 abi:Quality a owl:Class ;
@@ -556,24 +365,6 @@ abi:TemporalInstant a owl:Class ;
 #################################################################
 # Data Properties
 #################################################################
-
-abi:first_name a owl:DatatypeProperty ;
-    rdfs:label "first name"@en ;
-    skos:definition "x first name y =Def x is a person & y is a string & y is the first name of x"@en ;
-    rdfs:domain abi:Person ;
-    rdfs:range xsd:string .
-
-abi:last_name a owl:DatatypeProperty ;
-    rdfs:label "last name"@en ;
-    skos:definition "x last name y =Def x is a person & y is a string & y is the last name of x"@en ;
-    rdfs:domain abi:Person ;
-    rdfs:range xsd:string .
-
-abi:full_name a owl:DatatypeProperty ;
-    rdfs:label "full name"@en ;
-    skos:definition "x full name y =Def x is a person & y is a string & y is the full name of x"@en ;
-    rdfs:domain abi:Person ;
-    rdfs:range xsd:string .
 
 abi:latitude a owl:DatatypeProperty ;
     rdfs:subPropertyOf cco:ont00001766 ;

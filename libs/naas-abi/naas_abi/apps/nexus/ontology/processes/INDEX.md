@@ -212,7 +212,7 @@ fuseki-server --loc=processes /nexus
 - **Auth Processes:** `authentication/README.md`
 - **Chat Processes:** `chat_conversation/README.md`
 - **Shared Entities:** `_shared/common_entities.ttl`
-- **BFO 7 Buckets:** `../BFO7Buckets.ttl`
+- **BFO 7 Buckets:** `naas_abi/ontologies/modules/BFO7BucketsProcessOntology.ttl` (imported by IRI `abi:BFO7Buckets`)
 - **Provider Alignment:** `../../docs/ONTOLOGY_PROVIDER_ALIGNMENT.md`
 - **SSE Standards:** `../../docs/SSE_STREAMING_STANDARDS.md`
 

@@ -1,31 +1,20 @@
-# onto2py-source-sha256: ae92bbba66e4cdc3626b09e7ee544d13bce979e46a231e50b4a816093222c2c9
+# onto2py-source-sha256: 1e07ae800ad38b8e6a2f8069830b78d8b3e7cf7a8186ee8865bc41c19b24f972
 from __future__ import annotations
 
 import contextlib
 import datetime
 import os
 import uuid
+from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
-    Callable,
     ClassVar,
-    Iterable,
-    List,
-    Optional,
     Union,
     get_args,
     get_origin,
 )
 
-from naas_abi.ontologies.modules.ABIOntology import (
-    TemporalRegion,
-)
-from naas_abi.ontologies.modules.GeospatialRegionOntology import (
-    GeospatialRegion,
-)
-from naas_abi.ontologies.modules.OrganizationOntology import Organization
-from naas_abi.ontologies.modules.PersonOntology import Person
 from pydantic import BaseModel, Field, ValidationError
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, XSD
@@ -101,7 +90,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, List):
+        if origin in (list, list):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -314,101 +303,31 @@ class RDFEntity(BaseModel):
         return g
 
 
-class ActOfStudying(RDFEntity):
+class Organization(RDFEntity):
     """
-    Act of Studying
+    Organization
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/people/ActOfStudying"
-    _name: ClassVar[str] = "Act of Studying"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Organization"
+    _name: ClassVar[str] = "Organization"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "developsLanguageCapability": "http://ontology.naas.ai/people/developsLanguageCapability",
-        "developsSkill": "http://ontology.naas.ai/people/developsSkill",
-        "for_educational_organization": "http://ontology.naas.ai/people/forEducationalOrganization",
-        "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
-        "hasSourceDocument": "http://ontology.naas.ai/people/hasSourceDocument",
-        "has_degree": "http://ontology.naas.ai/people/hasDegree",
-        "has_enrollment": "http://ontology.naas.ai/people/hasEnrollment",
-        "is_act_of_studying_of": "http://ontology.naas.ai/people/isActOfStudyingOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "occupiesTemporalRegion": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
-        "occursIn": "http://ontology.naas.ai/abi/occursIn",
-        "realizes": "http://ontology.naas.ai/abi/realizes",
     }
-    _object_properties: ClassVar[set[str]] = {
-        "developsLanguageCapability",
-        "developsSkill",
-        "for_educational_organization",
-        "hasParticipant",
-        "hasSourceDocument",
-        "has_degree",
-        "has_enrollment",
-        "is_act_of_studying_of",
-        "occupiesTemporalRegion",
-        "occursIn",
-        "realizes",
-    }
+    _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.timezone.utc)
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
-    # Object properties
-    developsLanguageCapability: Optional[Annotated[Union[URIRef, str], Field()]] = None
-    developsSkill: Optional[Annotated[Union[URIRef, str], Field()]] = None
-    for_educational_organization: Optional[
-        Annotated[
-            List[Union[Organization, URIRef, str]],
-            Field(
-                description="Relates an act of studying to the educational organization that participates as the training provider."
-            ),
-        ]
-    ] = None
-    hasParticipant: Optional[Annotated[List[Union[Person, URIRef, str]], Field()]] = (
-        None
-    )
-    hasSourceDocument: Optional[Annotated[Union[URIRef, str], Field()]] = None
-    has_degree: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="Relates an act of studying to the academic degree it concretizes."
-            ),
-        ]
-    ] = None
-    has_enrollment: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="Relates an act of studying to the enrollment record it concretizes."
-            ),
-        ]
-    ] = None
-    is_act_of_studying_of: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="Relates an act of studying to the person acquiring the curriculum."
-            ),
-        ]
-    ] = None
-    occupiesTemporalRegion: Optional[
-        Annotated[List[Union[TemporalRegion, URIRef, str]], Field()]
-    ] = None
-    occursIn: Optional[
-        Annotated[List[Union[GeospatialRegion, URIRef, str]], Field()]
-    ] = None
-    realizes: Optional[Annotated[Union[URIRef, str], Field()]] = None
-
 
 # Rebuild models to resolve forward references
-ActOfStudying.model_rebuild()
+Organization.model_rebuild()

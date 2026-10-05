@@ -17,7 +17,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from naas_abi.ontologies.modules.ABIOntology import Organization, Person
+from naas_abi.ontologies.modules.OrganizationOntology import Organization
+from naas_abi.ontologies.modules.PersonOntology import Person
 from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.graph_builders import (
     ABI,
     CCO,

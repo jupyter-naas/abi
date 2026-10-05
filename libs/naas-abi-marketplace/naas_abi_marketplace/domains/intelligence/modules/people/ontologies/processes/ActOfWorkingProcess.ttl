@@ -30,6 +30,9 @@ people:ActOfWorkingProcess a owl:Ontology ;
   # organization's own records (employee role, job position, contract) are
   # internal and specialize ActOfWorking elsewhere; this slice never names them.
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/PersonOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/GeospatialRegionOntology> ;
   owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
   owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
   owl:imports <https://www.commoncoreontologies.org/FacilityOntology> ;

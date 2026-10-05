@@ -25,6 +25,7 @@ people:ActOfProfilingProcess a owl:Ontology ;
   #   HOW IT IS    (episode skills stay on working/studying acts)
   #   HOW WE KNOW  ProfileDocument (input GDC at a retrievable URL)
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/PersonOntology> ;
   owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
   owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
   owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;

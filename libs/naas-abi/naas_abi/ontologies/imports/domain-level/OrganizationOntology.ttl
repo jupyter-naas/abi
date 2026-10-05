@@ -9,7 +9,7 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-<http://ontology.naas.ai/abi/OrganizationOntology> a owl:Ontology ;
+<http://ontology.naas.ai/abi/OrganizationDomainOntology> a owl:Ontology ;
     owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl>  ;
     dc:title "Organization Ontology"@en ;
     dc:description "Ontology for organizations."@en ;

@@ -1,4 +1,4 @@
-from naas_abi.ontologies.modules.ABIOntology import (
+from naas_abi.ontologies.modules.GeospatialRegionOntology import (
     Continent as _Continent,
 )
 

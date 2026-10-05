@@ -1,9 +1,8 @@
-# onto2py-source-sha256: 377e9a0d650827b8e2c774ebcc8cff90d116608892669e8b2a68743d977f5b28
+# onto2py-source-sha256: a9bbe5d47ed8e6d74624988f75df4f4adb681f23c6a996d12c7b3211974b6d9a
 from __future__ import annotations
 
 import contextlib
 import datetime
-import os
 import uuid
 from collections.abc import Callable, Iterable
 from typing import (
@@ -15,8 +14,9 @@ from typing import (
     get_origin,
 )
 
-from naas_abi_marketplace.domains.intelligence.modules.organizations.ontologies.modules.OrganizationOntology import (
-    Organization,
+from naas_abi.ontologies.modules.ABIOntology import (
+    MaterialEntity,
+    Site,
 )
 from pydantic import BaseModel, Field, ValidationError
 from rdflib import Graph, Literal, Namespace, URIRef
@@ -306,494 +306,422 @@ class RDFEntity(BaseModel):
         return g
 
 
-class ActOfPartnership(RDFEntity):
+class GeospatialRegion(Site, RDFEntity):
     """
-    Act of Partnership
+    geospatial region
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/ActOfPartnership"
-    _name: ClassVar[str] = "Act of Partnership"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/GeospatialRegion"
+    _name: ClassVar[str] = "geospatial region"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_alliance_participant": "http://ontology.naas.ai/abi/hasAllianceParticipant",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"has_alliance_participant"}
+    _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: (
+        Annotated[
+            datetime.datetime, Field(description="Date of creation of the resource.")
+        ]
+        | None
+    ) = None
+    creator: (
+        Annotated[
+            Any, Field(description="An entity responsible for making the resource.")
+        ]
+        | None
+    ) = None
+
+
+class GeospatialLocation(GeospatialRegion, RDFEntity):
+    """
+    geospatial location
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/GeospatialLocation"
+    _name: ClassVar[str] = "geospatial location"
+    _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: (
+        Annotated[
+            datetime.datetime, Field(description="Date of creation of the resource.")
+        ]
+        | None
+    ) = None
+    creator: (
+        Annotated[
+            Any, Field(description="An entity responsible for making the resource.")
+        ]
+        | None
+    ) = None
 
     # Object properties
-    has_alliance_participant: (
+    continuant_part_of: (
         Annotated[
-            list[Organization | URIRef | str],
+            list[MaterialEntity | Site | URIRef | str],
             Field(
-                description="Relates an act of alliance to an organization taking part in it. An alliance has two or more participants, none of which loses its separate identity."
+                description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t"
             ),
         ]
         | None
     ) = None
 
 
-class ActOfJointVenture(RDFEntity):
+class Continent(GeospatialRegion, RDFEntity):
     """
-    Act of Joint Venture
+    continent
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/ActOfJointVenture"
-    _name: ClassVar[str] = "Act of Joint Venture"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Continent"
+    _name: ClassVar[str] = "continent"
     _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_alliance_participant": "http://ontology.naas.ai/abi/hasAllianceParticipant",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"has_alliance_participant"}
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: (
+        Annotated[
+            datetime.datetime, Field(description="Date of creation of the resource.")
+        ]
+        | None
+    ) = None
+    creator: (
+        Annotated[
+            Any, Field(description="An entity responsible for making the resource.")
+        ]
+        | None
+    ) = None
 
     # Object properties
-    has_alliance_participant: (
+    continuant_part_of: (
         Annotated[
-            list[Organization | URIRef | str],
+            list[GeospatialRegion | URIRef | str],
             Field(
-                description="Relates an act of alliance to an organization taking part in it. An alliance has two or more participants, none of which loses its separate identity."
+                description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t"
             ),
         ]
         | None
     ) = None
 
 
-class ActOfMarketingAlliance(RDFEntity):
+class Country(GeospatialRegion, RDFEntity):
     """
-    Act of Marketing Alliance
+    country
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/ActOfMarketingAlliance"
-    _name: ClassVar[str] = "Act of Marketing Alliance"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Country"
+    _name: ClassVar[str] = "country"
     _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
+        "country_code": "http://ontology.naas.ai/abi/country_code",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_alliance_participant": "http://ontology.naas.ai/abi/hasAllianceParticipant",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"has_alliance_participant"}
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
 
     # Data properties
+    country_code: (
+        Annotated[
+            str,
+            Field(
+                description="x country code y =Def x is a country & y is the ISO 3166-1 alpha-2 code of x"
+            ),
+        ]
+        | None
+    ) = None
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: (
+        Annotated[
+            datetime.datetime, Field(description="Date of creation of the resource.")
+        ]
+        | None
+    ) = None
+    creator: (
+        Annotated[
+            Any, Field(description="An entity responsible for making the resource.")
+        ]
+        | None
+    ) = None
 
     # Object properties
-    has_alliance_participant: (
+    continuant_part_of: (
         Annotated[
-            list[Organization | URIRef | str],
+            list[GeospatialRegion | URIRef | str],
             Field(
-                description="Relates an act of alliance to an organization taking part in it. An alliance has two or more participants, none of which loses its separate identity."
+                description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t"
             ),
         ]
         | None
     ) = None
 
 
-class ActOfResearchCollaboration(RDFEntity):
+class FirstorderAdministrativeRegion(GeospatialRegion, RDFEntity):
     """
-    Research Collaborations represent formal partnerships focused on research and development activities.
+    first-order administrative region
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/ActOfResearchCollaboration"
-    _name: ClassVar[str] = "Act of Research Collaboration"
+    _class_uri: ClassVar[str] = (
+        "http://ontology.naas.ai/abi/FirstOrderAdministrativeRegion"
+    )
+    _name: ClassVar[str] = "first-order administrative region"
     _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_alliance_participant": "http://ontology.naas.ai/abi/hasAllianceParticipant",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"has_alliance_participant"}
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: (
+        Annotated[
+            datetime.datetime, Field(description="Date of creation of the resource.")
+        ]
+        | None
+    ) = None
+    creator: (
+        Annotated[
+            Any, Field(description="An entity responsible for making the resource.")
+        ]
+        | None
+    ) = None
 
     # Object properties
-    has_alliance_participant: (
+    continuant_part_of: (
         Annotated[
-            list[Organization | URIRef | str],
+            list[Country | GeospatialRegion | URIRef | str],
             Field(
-                description="Relates an act of alliance to an organization taking part in it. An alliance has two or more participants, none of which loses its separate identity."
+                description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t"
             ),
         ]
         | None
     ) = None
 
 
-class ActOfTechnologyLicensing(RDFEntity):
+class SecondorderAdministrativeRegion(GeospatialRegion, RDFEntity):
     """
-    Act of Technology Licensing
+    second-order administrative region
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/ActOfTechnologyLicensing"
-    _name: ClassVar[str] = "Act of Technology Licensing"
+    _class_uri: ClassVar[str] = (
+        "http://ontology.naas.ai/abi/SecondOrderAdministrativeRegion"
+    )
+    _name: ClassVar[str] = "second-order administrative region"
     _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_alliance_participant": "http://ontology.naas.ai/abi/hasAllianceParticipant",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"has_alliance_participant"}
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: (
+        Annotated[
+            datetime.datetime, Field(description="Date of creation of the resource.")
+        ]
+        | None
+    ) = None
+    creator: (
+        Annotated[
+            Any, Field(description="An entity responsible for making the resource.")
+        ]
+        | None
+    ) = None
 
     # Object properties
-    has_alliance_participant: (
+    continuant_part_of: (
         Annotated[
-            list[Organization | URIRef | str],
+            list[FirstorderAdministrativeRegion | GeospatialRegion | URIRef | str],
             Field(
-                description="Relates an act of alliance to an organization taking part in it. An alliance has two or more participants, none of which loses its separate identity."
+                description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t"
             ),
         ]
         | None
     ) = None
 
 
-class ActOfDistributionAgreement(RDFEntity):
+class LocalAdministrativeRegion(GeospatialRegion, RDFEntity):
     """
-    Act of Distribution Agreement
+    local administrative region
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/ActOfDistributionAgreement"
-    _name: ClassVar[str] = "Act of Distribution Agreement"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/LocalAdministrativeRegion"
+    _name: ClassVar[str] = "local administrative region"
     _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_alliance_participant": "http://ontology.naas.ai/abi/hasAllianceParticipant",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"has_alliance_participant"}
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: (
+        Annotated[
+            datetime.datetime, Field(description="Date of creation of the resource.")
+        ]
+        | None
+    ) = None
+    creator: (
+        Annotated[
+            Any, Field(description="An entity responsible for making the resource.")
+        ]
+        | None
+    ) = None
 
     # Object properties
-    has_alliance_participant: (
+    continuant_part_of: (
         Annotated[
-            list[Organization | URIRef | str],
+            list[Country | GeospatialRegion | URIRef | str],
             Field(
-                description="Relates an act of alliance to an organization taking part in it. An alliance has two or more participants, none of which loses its separate identity."
+                description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t"
             ),
         ]
         | None
     ) = None
 
 
-class StrategicAlliance(RDFEntity):
+class City(LocalAdministrativeRegion, RDFEntity):
     """
-    Strategic alliances are typically formalized through documents and agreements, making them apt to be represented as Descriptive Information Content Entities.
+    city
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/StrategicAlliance"
-    _name: ClassVar[str] = "Strategic Alliance"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/City"
+    _name: ClassVar[str] = "city"
     _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "is_alliance_agreement_of": "http://ontology.naas.ai/abi/isAllianceAgreementOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"is_alliance_agreement_of"}
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: (
+        Annotated[
+            datetime.datetime, Field(description="Date of creation of the resource.")
+        ]
+        | None
+    ) = None
+    creator: (
+        Annotated[
+            Any, Field(description="An entity responsible for making the resource.")
+        ]
+        | None
+    ) = None
 
     # Object properties
-    is_alliance_agreement_of: (
+    continuant_part_of: (
         Annotated[
-            URIRef | str,
+            list[Country | GeospatialRegion | URIRef | str],
             Field(
-                description="Relates an alliance agreement document to the act of alliance it records."
+                description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t"
             ),
         ]
         | None
     ) = None
 
 
-class Partnership(StrategicAlliance, RDFEntity):
+class Town(LocalAdministrativeRegion, RDFEntity):
     """
-    A partnership is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity.
+    town
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Partnership"
-    _name: ClassVar[str] = "Partnership"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Town"
+    _name: ClassVar[str] = "town"
     _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "is_alliance_agreement_of": "http://ontology.naas.ai/abi/isAllianceAgreementOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"is_alliance_agreement_of"}
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
+    created: (
+        Annotated[
+            datetime.datetime, Field(description="Date of creation of the resource.")
+        ]
+        | None
+    ) = None
+    creator: (
+        Annotated[
+            Any, Field(description="An entity responsible for making the resource.")
+        ]
+        | None
+    ) = None
 
     # Object properties
-    is_alliance_agreement_of: (
+    continuant_part_of: (
         Annotated[
-            URIRef | str,
+            list[Country | GeospatialRegion | URIRef | str],
             Field(
-                description="Relates an alliance agreement document to the act of alliance it records."
+                description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t"
             ),
         ]
         | None
     ) = None
 
 
-class JointVenture(StrategicAlliance, RDFEntity):
+class Village(LocalAdministrativeRegion, RDFEntity):
     """
-    A joint venture is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity.
+    village
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/JointVenture"
-    _name: ClassVar[str] = "Joint Venture"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Village"
+    _name: ClassVar[str] = "village"
     _property_uris: ClassVar[dict] = {
+        "continuant_part_of": "http://ontology.naas.ai/abi/continuantPartOf",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "is_alliance_agreement_of": "http://ontology.naas.ai/abi/isAllianceAgreementOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
-    _object_properties: ClassVar[set[str]] = {"is_alliance_agreement_of"}
+    _object_properties: ClassVar[set[str]] = {"continuant_part_of"}
 
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    is_alliance_agreement_of: (
+    created: (
         Annotated[
-            URIRef | str,
-            Field(
-                description="Relates an alliance agreement document to the act of alliance it records."
-            ),
+            datetime.datetime, Field(description="Date of creation of the resource.")
+        ]
+        | None
+    ) = None
+    creator: (
+        Annotated[
+            Any, Field(description="An entity responsible for making the resource.")
         ]
         | None
     ) = None
 
-
-class MarketingAlliance(StrategicAlliance, RDFEntity):
-    """
-    A marketing alliance is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity.
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/MarketingAlliance"
-    _name: ClassVar[str] = "Marketing Alliance"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "is_alliance_agreement_of": "http://ontology.naas.ai/abi/isAllianceAgreementOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {"is_alliance_agreement_of"}
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
     # Object properties
-    is_alliance_agreement_of: (
+    continuant_part_of: (
         Annotated[
-            URIRef | str,
+            list[Country | GeospatialRegion | URIRef | str],
             Field(
-                description="Relates an alliance agreement document to the act of alliance it records."
-            ),
-        ]
-        | None
-    ) = None
-
-
-class ResearchCollaboration(StrategicAlliance, RDFEntity):
-    """
-    A research collaboration is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity.
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/ResearchCollaboration"
-    _name: ClassVar[str] = "Research Collaboration"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "is_alliance_agreement_of": "http://ontology.naas.ai/abi/isAllianceAgreementOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {"is_alliance_agreement_of"}
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    is_alliance_agreement_of: (
-        Annotated[
-            URIRef | str,
-            Field(
-                description="Relates an alliance agreement document to the act of alliance it records."
-            ),
-        ]
-        | None
-    ) = None
-
-
-class TechnologyLicensing(StrategicAlliance, RDFEntity):
-    """
-    A technology licensing is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity.
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/TechnologyLicensing"
-    _name: ClassVar[str] = "Technology Licensing"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "is_alliance_agreement_of": "http://ontology.naas.ai/abi/isAllianceAgreementOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {"is_alliance_agreement_of"}
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    is_alliance_agreement_of: (
-        Annotated[
-            URIRef | str,
-            Field(
-                description="Relates an alliance agreement document to the act of alliance it records."
-            ),
-        ]
-        | None
-    ) = None
-
-
-class DistributionAgreement(StrategicAlliance, RDFEntity):
-    """
-    A distribution agreement is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity.
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/DistributionAgreement"
-    _name: ClassVar[str] = "Distribution Agreement"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "is_alliance_agreement_of": "http://ontology.naas.ai/abi/isAllianceAgreementOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {"is_alliance_agreement_of"}
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[
-        datetime.datetime | None,
-        Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.UTC)
-    creator: Annotated[
-        Any | None,
-        Field(description="An entity responsible for making the resource."),
-    ] = os.environ.get("USER")
-
-    # Object properties
-    is_alliance_agreement_of: (
-        Annotated[
-            URIRef | str,
-            Field(
-                description="Relates an alliance agreement document to the act of alliance it records."
+                description="b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t"
             ),
         ]
         | None
@@ -801,16 +729,13 @@ class DistributionAgreement(StrategicAlliance, RDFEntity):
 
 
 # Rebuild models to resolve forward references
-ActOfPartnership.model_rebuild()
-ActOfJointVenture.model_rebuild()
-ActOfMarketingAlliance.model_rebuild()
-ActOfResearchCollaboration.model_rebuild()
-ActOfTechnologyLicensing.model_rebuild()
-ActOfDistributionAgreement.model_rebuild()
-StrategicAlliance.model_rebuild()
-Partnership.model_rebuild()
-JointVenture.model_rebuild()
-MarketingAlliance.model_rebuild()
-ResearchCollaboration.model_rebuild()
-TechnologyLicensing.model_rebuild()
-DistributionAgreement.model_rebuild()
+GeospatialRegion.model_rebuild()
+GeospatialLocation.model_rebuild()
+Continent.model_rebuild()
+Country.model_rebuild()
+FirstorderAdministrativeRegion.model_rebuild()
+SecondorderAdministrativeRegion.model_rebuild()
+LocalAdministrativeRegion.model_rebuild()
+City.model_rebuild()
+Town.model_rebuild()
+Village.model_rebuild()

@@ -1,4 +1,4 @@
-# onto2py-source-sha256: c3398d830bfaf7a80f9e19c99c1966f3698226e3df7ad2c982baf48fda8fab8f
+# onto2py-source-sha256: 0c2b7d35009dcdfa2622c87555e62b4ecee2dd835018547677ad0c5a211b4124
 from __future__ import annotations
 
 import contextlib
@@ -20,17 +20,18 @@ from typing import (
 
 from naas_abi.ontologies.modules.ABIOntology import (
     Disposition,
-    DocumentContentEntity,
     GenericallyDependentContinuant,
-    GeospatialRegion,
     MaterialEntity,
-    Organization,
-    Person,
     Process,
     Quality,
     Role,
     TemporalRegion,
 )
+from naas_abi.ontologies.modules.GeospatialRegionOntology import (
+    GeospatialRegion,
+)
+from naas_abi.ontologies.modules.OrganizationOntology import Organization
+from naas_abi.ontologies.modules.PersonOntology import Person
 from pydantic import BaseModel, Field, ValidationError
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, XSD
@@ -1825,7 +1826,7 @@ class Mission(GenericallyDependentContinuant, RDFEntity):
     ] = None
 
 
-class Recommendation(DocumentContentEntity, RDFEntity):
+class Recommendation(GenericallyDependentContinuant, RDFEntity):
     """
     Two people, and both are required: the subject it generically depends on, and the author who wrote it. An anonymous testimonial is not a recommendation in this sense and must not be minted as one.
     """
@@ -1924,7 +1925,7 @@ class Recommendation(DocumentContentEntity, RDFEntity):
     ] = None
 
 
-class ProfileSummary(DocumentContentEntity, RDFEntity):
+class ProfileSummary(GenericallyDependentContinuant, RDFEntity):
     """
     Person-level, where people:Mission is job-level: the summary spans a career, a mission describes one act of working. Sourced from a ProfileDocument so every claim it carries stays traceable to where it was published.
     """
@@ -2034,7 +2035,7 @@ class ProfileSummary(DocumentContentEntity, RDFEntity):
     ] = None
 
 
-class ProfileDocument(DocumentContentEntity, RDFEntity):
+class ProfileDocument(GenericallyDependentContinuant, RDFEntity):
     """
     The provenance anchor of the demo graph: everything asserted from a profile page: missions, roles, skills, enrollments, degrees, certifications points back to the ProfileDocument it was read from.
     """

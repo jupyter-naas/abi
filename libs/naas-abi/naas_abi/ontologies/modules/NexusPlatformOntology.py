@@ -1,4 +1,4 @@
-# onto2py-source-sha256: ab9f9360621f47796b2e0d7e5c555708b44d6ce8b4cbf5061a2350f65c927554
+# onto2py-source-sha256: 6855e0b2cd6251de1f07b452e56969d4095135a6a6b936b33520f7dfa9f5b155
 from __future__ import annotations
 
 import contextlib
@@ -18,8 +18,6 @@ from naas_abi.ontologies.modules.ABIOntology import (
     Disposition,
     GenericallyDependentContinuant,
     MaterialEntity,
-    Organization,
-    Person,
     Process,
     Quality,
     Role,
@@ -27,6 +25,8 @@ from naas_abi.ontologies.modules.ABIOntology import (
     TemporalInstant,
     TemporalRegion,
 )
+from naas_abi.ontologies.modules.OrganizationOntology import Organization
+from naas_abi.ontologies.modules.PersonOntology import Person
 from pydantic import BaseModel, Field, ValidationError
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, XSD

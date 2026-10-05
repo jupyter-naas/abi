@@ -1,0 +1,56 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+abi:PersonOntology a owl:Ontology ;
+  owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+  dc:title "Person Ontology"@en ;
+  dc:description "The person (CCO Person) and its name data properties."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "WHO: a human being, aligned with the Common Core Ontologies Person."@en ;
+  rdfs:seeAlso <https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi/naas_abi/ontologies/modules/PersonOntology.ttl> ;
+  abi:pythonPackage "naas_abi" ;
+  abi:ontologyResource "ontologies/modules/PersonOntology.ttl" ;
+  abi:pythonResource "ontologies/modules/PersonOntology.py" ;
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-10-05"^^xsd:date .
+
+#################################################################
+# Classes
+#################################################################
+
+abi:Person a owl:Class ;
+    rdfs:label "Person"@en ;
+    skos:altLabel "Human"@en ;
+    skos:definition "An Animal that is a member of the species Homo sapiens."@en ;
+    owl:equivalentClass cco:ont00001262 ;
+    rdfs:subClassOf cco:ont00000562 .
+
+#################################################################
+# Data Properties
+#################################################################
+
+abi:first_name a owl:DatatypeProperty ;
+    rdfs:label "first name"@en ;
+    skos:definition "x first name y =Def x is a person & y is a string & y is the first name of x"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:string .
+
+abi:last_name a owl:DatatypeProperty ;
+    rdfs:label "last name"@en ;
+    skos:definition "x last name y =Def x is a person & y is a string & y is the last name of x"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:string .
+
+abi:full_name a owl:DatatypeProperty ;
+    rdfs:label "full name"@en ;
+    skos:definition "x full name y =Def x is a person & y is a string & y is the full name of x"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:string .

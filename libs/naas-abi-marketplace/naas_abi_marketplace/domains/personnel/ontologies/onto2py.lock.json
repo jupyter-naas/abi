@@ -1,6 +1,6 @@
 {
   "files": {
-    "modules/PersonnelOntology.ttl": "75d856d4a7254ab6be9277de80a3d533e32b97fce7ad079b83977b57b71c9fd4",
+    "modules/PersonnelOntology.ttl": "994cafc78f52598bfa9751998daeb0446fc3b2bb53643dba7001abcfe9db5726",
     "processes/ActOfEmploymentProcess.ttl": "52e9dc075d13954bdcc10d36d4af345dfe210050ef952833947d713bed2f9cb6"
   }
 }

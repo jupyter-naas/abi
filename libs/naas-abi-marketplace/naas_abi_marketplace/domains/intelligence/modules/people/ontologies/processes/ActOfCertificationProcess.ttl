@@ -32,6 +32,9 @@ people:ActOfCertificationProcess a owl:Ontology ;
   #   HOW WE KNOW  Certification (GDC, the credential the act concretizes),
   #                ProfileDocument (GDC, where the claim was published)
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/PersonOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/GeospatialRegionOntology> ;
   owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
   owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
   owl:imports <https://www.commoncoreontologies.org/FacilityOntology> ;

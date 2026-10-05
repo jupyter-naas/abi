@@ -15,6 +15,8 @@ personnel:PersonnelOntology a owl:Ontology ;
   # One owl:imports statement per IRI - onto2py's codegen pre-scan only matches
   # an IRI directly after the `owl:imports` keyword.
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/PersonOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
   owl:imports <https://www.commoncoreontologies.org/QualityOntology> ;
   owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
   owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
@@ -269,7 +271,8 @@ personnel:EmploymentRecord a owl:Class ;
     rdfs:comment "Generically dependent on the person: the same record can be copied between systems without ceasing to be the record of that person. Concretized by the Act of Working that the relationship consists in."@en .
 
 personnel:JobDescription a owl:Class ;
-    rdfs:subClassOf abi:DocumentContentEntity ,
+    rdfs:subClassOf cco:ont00002039 ,
+      abi:GenericallyDependentContinuant ,
       [ a owl:Restriction ; owl:onProperty abi:genericallyDependsOn ; owl:someValuesFrom abi:Organization ] ,
       [ a owl:Restriction ; owl:onProperty abi:participatesIn ; owl:someValuesFrom personnel:ActOfEmployment ] ;
     rdfs:label "Job Description"@en ;
@@ -291,7 +294,7 @@ personnel:EmploymentContract a owl:Class ;
       [ a owl:Restriction ; owl:onProperty abi:genericallyDependsOn ; owl:someValuesFrom abi:Person ] ,
       [ a owl:Restriction ; owl:onProperty abi:isConcretizedBy ; owl:someValuesFrom personnel:ActOfEmployment ] ;
     rdfs:label "Employment Contract"@en ;
-    skos:definition "A generically dependent continuant that specifies the terms under which a person works for an organization."@en ;
+    skos:definition "A document content entity that specifies the terms under which a person works for an organization."@en ;
     skos:example "Permanent contract CDI - Alice Dupont / naas.ai."@en .
 
 #################################################################

@@ -645,7 +645,8 @@ people:Certification a owl:Class ;
     rdfs:comment "Covers both certifications and licences: the difference is who may withhold it and what it permits, not what kind of entity it is. Where that distinction matters, state it with people:certification_status and the issuing organization."@en .
 
 people:Recommendation a owl:Class ;
-    rdfs:subClassOf abi:DocumentContentEntity ,
+    rdfs:subClassOf cco:ont00002039 ,
+      abi:GenericallyDependentContinuant ,
       [ a owl:Restriction ; owl:onProperty people:isRecommendationOf ; owl:someValuesFrom abi:Person ] ,
       [ a owl:Restriction ; owl:onProperty people:hasRecommendationAuthor ; owl:someValuesFrom abi:Person ] ,
       [ a owl:Restriction ; owl:onProperty abi:participatesIn ; owl:someValuesFrom people:ActOfProfiling ] ;
@@ -665,7 +666,8 @@ people:Portrait a owl:Class ;
     rdfs:comment "The individual carries the address of the image (people:portrait_url or people:portrait_path), never the bytes. Image data belongs in object storage."@en .
 
 people:ProfileSummary a owl:Class ;
-    rdfs:subClassOf abi:DocumentContentEntity ,
+    rdfs:subClassOf cco:ont00002039 ,
+      abi:GenericallyDependentContinuant ,
       [ a owl:Restriction ; owl:onProperty people:isProfileSummaryOf ; owl:someValuesFrom abi:Person ] ,
       [ a owl:Restriction ; owl:onProperty people:isSourcedFrom ; owl:someValuesFrom people:ProfileDocument ] ,
       [ a owl:Restriction ; owl:onProperty abi:participatesIn ; owl:someValuesFrom people:ActOfProfiling ] ;
@@ -675,7 +677,8 @@ people:ProfileSummary a owl:Class ;
     rdfs:comment "Person-level, where people:Mission is job-level: the summary spans a career, a mission describes one act of working. Sourced from a ProfileDocument so every claim it carries stays traceable to where it was published."@en .
 
 people:ProfileDocument a owl:Class ;
-  rdfs:subClassOf abi:DocumentContentEntity ,
+  rdfs:subClassOf cco:ont00002039 ,
+      abi:GenericallyDependentContinuant ,
     [ a owl:Restriction ; owl:onProperty abi:genericallyDependsOn ; owl:someValuesFrom abi:Person ] ;
   rdfs:label "Profile Document"@en ;
   skos:definition "A document content entity, published at a retrievable address, from which statements about a person's history are taken: what they did, where they studied, what they hold. Carried by the person the profile is about."@en ;
@@ -743,6 +746,9 @@ people:Skill a owl:Class ;
 # process files and re-run onto2py on the module.
 
 <http://ontology.naas.ai/people/PeopleOntology>
+  owl:imports <http://ontology.naas.ai/abi/GeospatialRegionOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/PersonOntology> ;
   owl:imports <https://www.commoncoreontologies.org/EventOntology> .
 
 #################################################################

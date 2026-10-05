@@ -26,6 +26,9 @@ people:ActOfStudyingProcess a owl:Ontology ;
   #   HOW IT IS    Skill, LanguageCapability (qualities) - what the student bears and develops in the act
   #   HOW WE KNOW  EnrollmentRecord, AcademicDegree, ProfileDocument (GDCs)
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/PersonOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/GeospatialRegionOntology> ;
   owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
   owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
   owl:imports <https://www.commoncoreontologies.org/FacilityOntology> ;

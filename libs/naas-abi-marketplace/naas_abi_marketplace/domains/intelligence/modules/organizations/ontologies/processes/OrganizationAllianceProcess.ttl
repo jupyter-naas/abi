@@ -16,7 +16,7 @@
     owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
     owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
     owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
-    owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
+    owl:imports <http://ontology.naas.ai/organizations/OrganizationOntology> ;
     rdfs:seeAlso <http://ontology.naas.ai/abi/OrganizationRestructuringProcess> ;
     abi:pythonPackage "naas_abi_marketplace.domains.intelligence.modules.organizations" ;
     abi:ontologyResource "ontologies/processes/OrganizationAllianceProcess.ttl" ;

@@ -271,7 +271,7 @@
       "symbols": 65,
       "sourcePaths": [
         "naas_abi/__init__.py",
-        "naas_abi/apply_nexus_platform_pipeline.py",
+        "naas_abi/scripts/apply_nexus_platform_pipeline.py",
         "naas_abi/cli.py"
       ]
     },

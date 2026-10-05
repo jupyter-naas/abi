@@ -1,0 +1,33 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+abi:OrganizationOntology a owl:Ontology ;
+  owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+  dc:title "Organization Ontology"@en ;
+  dc:description "The organization (CCO Organization)."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "WHO: a group of agents with members and organization rules, aligned with the Common Core Ontologies Organization."@en ;
+  rdfs:seeAlso <https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi/naas_abi/ontologies/modules/OrganizationOntology.ttl> ;
+  abi:pythonPackage "naas_abi" ;
+  abi:ontologyResource "ontologies/modules/OrganizationOntology.ttl" ;
+  abi:pythonResource "ontologies/modules/OrganizationOntology.py" ;
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-10-05"^^xsd:date .
+
+#################################################################
+# Classes
+#################################################################
+
+abi:Organization a owl:Class ;
+    rdfs:label "Organization"@en ;
+    skos:definition "A Group of Agents which can be the bearer of roles, has members, and has a set of organization rules."@en ;
+    owl:equivalentClass cco:ont00001180 ;
+    rdfs:subClassOf cco:ont00000300 .

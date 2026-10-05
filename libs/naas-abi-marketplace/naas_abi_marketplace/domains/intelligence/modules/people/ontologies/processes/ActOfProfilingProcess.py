@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 2ec6714c3995a16a932dc56364ec4d24f5aa0057e169ee963e51cbc625c27ea2
+# onto2py-source-sha256: fafc73a7a35f88c77aa95bc671561ae5d4b072e20595ed6791e65ad68db564ef
 from __future__ import annotations
 
 import contextlib
@@ -18,9 +18,7 @@ from typing import (
     get_origin,
 )
 
-from naas_abi.ontologies.modules.ABIOntology import (
-    Person,
-)
+from naas_abi.ontologies.modules.PersonOntology import Person
 from pydantic import BaseModel, Field, ValidationError
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, XSD

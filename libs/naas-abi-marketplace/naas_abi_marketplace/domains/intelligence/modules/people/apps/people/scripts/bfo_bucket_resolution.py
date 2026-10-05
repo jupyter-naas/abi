@@ -79,6 +79,10 @@ _ABI_ONTOLOGY_PATH = (
 # Bundled imports referenced by PeopleOntology / ABIOntology (same as Nexus _IMPORT_URI_TO_LOCAL).
 _BUCKET_INFERENCE_TTL_PATHS: tuple[Path, ...] = (
     _ABI_ONTOLOGY_PATH,
+    # Geospatial regions (city, country...) the processes occur in.
+    _ABI_ONTOLOGY_PATH.with_name("GeospatialRegionOntology.ttl"),
+    _ABI_ONTOLOGY_PATH.with_name("PersonOntology.ttl"),
+    _ABI_ONTOLOGY_PATH.with_name("OrganizationOntology.ttl"),
     _ABI_IMPORTS_DIR / "top-level" / "bfo-core.ttl",
     _ABI_IMPORTS_DIR / "mid-level" / "AgentOntology.ttl",
     _ABI_IMPORTS_DIR / "mid-level" / "QualityOntology.ttl",

@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 7b5df8690416d8a90dadaa90a837a1f74956ed97c0295c6e96b360e5e640c741
+# onto2py-source-sha256: 83f68db87883dfbb6e938dbdb2a4544e3d0e75f36d381409cd0cbb319c9d112e
 from __future__ import annotations
 
 import contextlib
@@ -20,15 +20,14 @@ from typing import (
 
 from naas_abi.ontologies.modules.ABIOntology import (
     Disposition,
-    DocumentContentEntity,
     GenericallyDependentContinuant,
     MaterialEntity,
-    Organization,
-    Person,
     Process,
     Quality,
     Role,
 )
+from naas_abi.ontologies.modules.OrganizationOntology import Organization
+from naas_abi.ontologies.modules.PersonOntology import Person
 from pydantic import BaseModel, Field, ValidationError
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, XSD
@@ -1011,7 +1010,7 @@ class ServiceLine(Organization, RDFEntity):
     ] = None
 
 
-class JobDescription(DocumentContentEntity, RDFEntity):
+class JobDescription(GenericallyDependentContinuant, RDFEntity):
     """
     Job Description
     """
