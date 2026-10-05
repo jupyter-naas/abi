@@ -48,6 +48,15 @@ const BFO_URI_TO_BUCKET: Record<string, keyof typeof BFO_COLORS> = {
   'BFO_0000031': 'GDC',
   'BFO_0000019': 'Quality',
   'BFO_0000017': 'Realizable',
+  // Continuant fiat boundaries (abi:GeospatialPosition is a fiat point) answer WHERE.
+  'http://purl.obolibrary.org/obo/BFO_0000140': 'Site',
+  'BFO_0000140': 'Site',
+  'http://purl.obolibrary.org/obo/BFO_0000142': 'Site',
+  'BFO_0000142': 'Site',
+  'http://purl.obolibrary.org/obo/BFO_0000146': 'Site',
+  'BFO_0000146': 'Site',
+  'http://purl.obolibrary.org/obo/BFO_0000147': 'Site',
+  'BFO_0000147': 'Site',
 };
 
 // Lowercase label → color bucket (covers common BFO/CCO labels)

@@ -333,6 +333,14 @@ _ABI_TO_BFO_BUCKET_ROOT: dict[str, str] = {
         ("TemporalInstant", "BFO_0000008"),  # zero-dim temporal region ⊆ temporal region
     )
 }
+# Continuant fiat boundaries (points, lines, surfaces) are no site in BFO, yet
+# they answer WHERE: abi:GeospatialPosition is a fiat point. The 7 buckets file
+# them under Site, as the BFO validator exempts them from the bucket rule.
+_FIAT_BOUNDARY_TO_SITE: dict[str, str] = {
+    f"{_BFO_NS}{bfo_id}": f"{_BFO_NS}BFO_0000029"
+    for bfo_id in ("BFO_0000140", "BFO_0000142", "BFO_0000146", "BFO_0000147")
+}
+_ABI_TO_BFO_BUCKET_ROOT.update(_FIAT_BOUNDARY_TO_SITE)
 _ABI_BUCKET_VALUES = " ".join(f"<{iri}>" for iri in _ABI_TO_BFO_BUCKET_ROOT)
 
 

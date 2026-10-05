@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { instanceDomainGraph, instanceDomainRelationsKey, instanceEgoGraph, termBfoBucketIri, termEgoGraph } from './detail-network';
+import { bfoBucketResolver, instanceDomainGraph, instanceDomainRelationsKey, instanceEgoGraph, termBfoBucketIri, termEgoGraph } from './detail-network';
 import type { DictionaryTerm } from './ontology-dictionary-tree';
 
 describe('instanceEgoGraph', () => {
@@ -86,5 +86,13 @@ describe('termBfoBucketIri', () => {
   it('is carried on the ego graph nodes', () => {
     const graph = termEgoGraph(work, [entity, process, act, work]);
     expect(graph.nodes.map(node => node.properties.bfo_parent_iri)).toEqual([process.id, process.id]);
+  });
+});
+
+describe('bfoBucketResolver', () => {
+  it('files a fiat point (abi:GeospatialPosition) under Site even when the server only reached entity', () => {
+    const position: DictionaryTerm = { id: 'abi:GeospatialPosition', name: 'geospatial position', type: 'entity',
+      parents: [{ id: 'http://purl.obolibrary.org/obo/BFO_0000147', name: 'fiat point' }], bfoBucket: 'http://purl.obolibrary.org/obo/BFO_0000001' };
+    expect(bfoBucketResolver([position], { entityFallback: true })(position.id)).toBe('http://purl.obolibrary.org/obo/BFO_0000029');
   });
 });

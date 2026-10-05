@@ -225,3 +225,27 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestFiatBoundaryBucket(unittest.TestCase):
+    """A fiat point is no site in BFO, but the 7 buckets file it under WHERE."""
+
+    def test_geospatial_position_is_filed_under_site(self) -> None:
+        from rdflib import Graph
+
+        graph = Graph().parse(
+            data="""
+            @prefix owl: <http://www.w3.org/2002/07/owl#> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            @prefix bfo: <http://purl.obolibrary.org/obo/> .
+            @prefix abi: <http://ontology.naas.ai/abi/> .
+            abi:GeospatialPosition a owl:Class ; rdfs:subClassOf bfo:BFO_0000147 .
+            bfo:BFO_0000147 rdfs:subClassOf bfo:BFO_0000140 .
+            bfo:BFO_0000140 rdfs:subClassOf bfo:BFO_0000141 .
+            """,
+            format="turtle",
+        )
+        site = "http://purl.obolibrary.org/obo/BFO_0000029"
+        position = "http://ontology.naas.ai/abi/GeospatialPosition"
+        self.assertEqual(ontology_service_module._bfo_bucket(graph, position), site)
+        self.assertEqual(ontology_service_module._find_bfo_ancestor(graph, position), site)
