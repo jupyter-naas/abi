@@ -2,6 +2,57 @@
 
 <!-- version list -->
 
+## v3.56.0 (2026-10-05)
+
+### Chores
+
+- Commit staged changes
+  ([`50d907d`](https://github.com/jupyter-naas/abi/commit/50d907d0cb5df755ed38cc2565adf0150a535c8a))
+
+- Update naas-abi version and improve people app API mount docs
+  ([`2916982`](https://github.com/jupyter-naas/abi/commit/29169822869cdc4a5f48332c5cbfff70a1cd46a7))
+
+### Features
+
+- **people-web**: Add tab overflow handling for results page tabs
+  ([`9d2b60b`](https://github.com/jupyter-naas/abi/commit/9d2b60ba0833e2cffa3fb24c5ad8fd1bf4c653ac))
+
+### Refactoring
+
+- Move wsr to a module
+  ([`4093027`](https://github.com/jupyter-naas/abi/commit/4093027f1485ef58ffbd2e6e2497df8d50a2757f))
+
+- **ontologies**: Improve module ontology consolidation and path resolution
+  ([`7d3bc9a`](https://github.com/jupyter-naas/abi/commit/7d3bc9a3eb346e7f116e1f0fa5839c4c6011e64e))
+
+- **ontologies**: Update and add DocumentContentEntity ontology modules and related classes
+  ([`fa6df3c`](https://github.com/jupyter-naas/abi/commit/fa6df3c6605687d2e814aa92e4c856c31e8898c1))
+
+- **ontologies**: Update and add multiple ontology classes and processes
+  ([`41f436a`](https://github.com/jupyter-naas/abi/commit/41f436a71c5cd42eba37f84a1fbb499a341dc4ca))
+
+- **ontologies**: Update multiple ontology and process modules
+  ([`41a95b3`](https://github.com/jupyter-naas/abi/commit/41a95b31bf70d199fc568d22e9db03e990eb8e3e))
+
+- **ontologies**: Update people and personnel ontologies and related scripts
+  ([`121a6b9`](https://github.com/jupyter-naas/abi/commit/121a6b990367f1590eada4250d47e2d73810bb3c))
+
+- **organizations**: Move intelligence ontologies to modules/organizations
+  ([`2e9ec7d`](https://github.com/jupyter-naas/abi/commit/2e9ec7d8a1f67e1836c60d76d84f10d589d78941))
+
+- **people**: Commit staged changes for intelligence people module
+  ([`b7ff703`](https://github.com/jupyter-naas/abi/commit/b7ff7031725e0193eecf01f044cc0bdf3a2199af))
+
+- **people**: Move personnel cockpit components and scripts to intelligence people module
+  ([`990c1f3`](https://github.com/jupyter-naas/abi/commit/990c1f3260c7fc3143a5214cd5c6cf2ed7dee9a3))
+
+- **people**: Update multiple scripts, pipelines, ontologies, and demos
+  ([`3c49986`](https://github.com/jupyter-naas/abi/commit/3c49986a2e7820e9024183c20cb9d3a6a71ebd9f))
+
+- **people/web/lib**: Update API base handling and avatar image URL
+  ([`8b51270`](https://github.com/jupyter-naas/abi/commit/8b51270b9c827057f25317aa762883707fb7527b))
+
+
 ## v3.55.0 (2026-10-01)
 
 
