@@ -11,7 +11,7 @@
 - [x] Event-triggered jobs dropped distinct events. `Nats-Msg-Id` is now a hash of the module-scoped trigger subject, the event subject and the event's own ID. Regression tests cover distinct events and two modules sharing a job name.
 - [x] Completed jobs could stay RUNNING. The final status is saved before ack/term, and a redelivery that finds a finished record is retired without running again. Progress writes and broker heartbeats are now separate tasks.
 - [x] Runs lost with their host on the last attempt stayed RUNNING. `reap_lost_runs` now fails them once heartbeats stop.
-- [ ] CI runs the broker job tests. **Partly fixed**: see item 14.
+- [x] CI runs the broker job tests. Fixed with item 14.
 
 Test run at `a582a19f6`: 101 job tests passed (SDK and engine, real broker included), none skipped.
 
@@ -147,7 +147,7 @@ Test run at `a582a19f6`: 101 job tests passed (SDK and engine, real broker inclu
 
 ## CI and tests
 
-- [ ] **14. Eight broker test suites run in no CI job.**
+- [x] **14. Eight broker test suites run in no CI job.**
   - **Problem:** these skip themselves when `nats-server` is missing, and the only job with a broker (`.github/workflows/standalone_sdk.yml`, `nats-integration`) doesn't list them:
     - `naas_abi_core/engine/engine_loaders/EngineJobLoader_integration_test.py` (the engine jobs suite the last review asked for)
     - `naas_abi_core/engine/nats_tracing_integration_test.py`
@@ -160,19 +160,22 @@ Test run at `a582a19f6`: 101 job tests passed (SDK and engine, real broker inclu
 
     All pass locally at `a582a19f6` on nats-server 2.14.7.
   - **Fix:** add them to the "Kernel services and their NATS clients over a real broker" step. Also have CI set a variable such as `ABI_REQUIRE_NATS_SERVER=1` that turns the "nats-server is not installed" skip into a failure, so a missing binary can't silently skip suites again.
+  - **Done:** the eight suites run in the "Kernel services" step; with `ABI_REQUIRE_NATS_SERVER=1` (set on the `nats-integration` job) a skip naming nats-server fails, through conftest hooks in core, the SDK tests and the standalone example (`naas_abi_core/engine/nats_test_server.py`, tested in `nats_test_server_test.py` and `tests/test_require_nats_server.py`).
 
-- [ ] **15. New files without colocated tests.**
+- [x] **15. New files without colocated tests.**
   - **Problem:**
     - `services/document/adapters/document_nats_codec.py` and `services/vector_store/adapters/vector_store_nats_codec.py` have no tests at all.
     - The SDK modules (`job_host.py`, `jobs.py`, `agent_host.py`, `discovery.py`, `claim_check.py`, `transport.py`, `module.py`, …) are tested only from `libs/naas-abi-sdk/tests/test_*.py`. That breaks the "each file has its `_test` file" rule.
   - **Fix:** add `document_nats_codec_test.py` and `vector_store_nats_codec_test.py` with round-trip cases: large integers stay exact, nested values, `None`, bytes. For the SDK, either move the per-file tests next to their modules or record the `tests/` layout as a deliberate exception in `libs/naas-abi-sdk/AGENTS.md`.
+  - **Done:** both codec tests added (sint64 bounds, 2^53+1 and beyond-int64 JSON integers, nested values, `None` versus `{}`, bytes, datetimes, refused values); the SDK `tests/` layout is recorded as an exception in its `AGENTS.md`.
 
 ## Cleanup
 
-- [ ] **16. The broker message-size rule exists in four copies, and Go-duration parsing in two.**
+- [x] **16. The broker message-size rule exists in four copies, and Go-duration parsing in two.**
   - **Problem:** message sizing appears in `naas_abi_core/engine/nats_rpc.py:165` (`message_size`), `naas_abi_sdk/messages.py` (`message_size`), `naas_abi_sdk/transport.py` (`_message_size`) and inline in `NatsRPCClient._do_request_async`. If the header framing changes and one copy is missed, a request passes the client check and the broker closes the connection. Separately, `job_host._seconds` repeats the duration parsing in `jobs.Every`.
   - **Fix:** keep one `message_size` in `naas_abi_sdk.messages` and import it everywhere. Expose one duration parser from `jobs.py` and use it in `scheduled_tick_ttl`.
-  - **Duration part done:** `jobs.go_duration_seconds` serves `Every`, `scheduled_tick_ttl` and the trigger TTL check; `job_host._seconds` is gone. (Nexus `jobs_schedule.go_duration_seconds` is a third copy, left as is.)
+  - [x] Message size: `naas_abi_sdk.messages.message_size` is the only copy; core's `nats_rpc` (both checks) and the SDK `Transport` import it. It now counts the header block for `{}` too, as nats-py sends one whenever headers are not None.
+  - [x] Duration parsing: `jobs.go_duration_seconds` serves `Every`, `scheduled_tick_ttl` and the trigger TTL check; `job_host._seconds` is gone. (Nexus `jobs_schedule.go_duration_seconds` is a third copy, left as is.)
 
 ## Notes (smaller, or decisions to record)
 
