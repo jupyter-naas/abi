@@ -27,6 +27,15 @@ stopping a module means stopping its process. Registering an instance id whose
 record expired or was evicted is a new registration (STARTING until its next
 initialized renewal).
 
+## Agent authorization
+`authorize_agent` with `new_invocation` false (status, event and cancel polls)
+is answered from the registry as this replica last read or wrote it, when that
+is under `snapshot_seconds` (1 s) old and allows the call. Leases are checked
+against the clock at use. A submit, and anything the snapshot would refuse,
+reads the registry, so a snapshot never refuses what the registry allows. An
+eviction or unregister through another replica can still let polls through for
+up to that second. Every read and successful write refreshes the snapshot.
+
 ## Tests
 Use `uv run pytest .../services/discovery --import-mode=importlib`. Unit tests inject
 a clock and a fake port; integration tests use native nats-server. Add port

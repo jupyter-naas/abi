@@ -139,7 +139,8 @@ Test run at `a582a19f6`: 101 job tests passed (SDK and engine, real broker inclu
     The drain loop below already waits for the thread, and the caller re-raises `CancelledError` (`stopped_by_host`).
   - **Test:** cancel twice during the grace wait; assert `interrupt()` was called and the runner returns only after the thread exits.
 
-- [ ] **13. Every agent status poll reads the whole discovery registry.** *Read in code.*
+- [x] **13. Every agent status poll reads the whole discovery registry.** *Read in code.*
+  - **Fixed:** the provider reuses an authorization per (caller token, agent) for 5 s, never past the token's `exp`, submits always ask; discovery answers polls from its last read or written snapshot (under 1 s old, refusals re-read). A snapshot refreshed by every read and write was chosen over a KV watch (remote agent ADR).
   - **Problem:** `_handle_operation` calls `_authorize` (`agent_host.py:162`) on every RPC, polls included. Discovery then reads and decodes the full registry snapshot (up to 512 KiB) from JetStream KV. Handles without pushed updates poll every 0.1 s, so 50 watchers make about 500 full registry reads per second.
   - **Fix:** cache the authorization per (caller token, agent name) for a short TTL, bounded by the token's expiry. Keep `submit` (`new_invocation=True`) always going to discovery. On the discovery side, serve `authorize_agent` from an in-memory registry kept current by a KV watch instead of fetching the snapshot per call.
 

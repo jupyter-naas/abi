@@ -18,6 +18,8 @@ Modules register and resolve through SDK facades. Start with one registry owner;
 make standalone hosting possible without importing core into client packages.
 The initial JetStream adapter stores a single CAS-protected protobuf snapshot.
 It reads through the stream leader and filters expired instances on every lookup.
+Agent authorization polls are the exception: see "Authorization without a
+registry read per poll" in the remote agent ADR.
 Physical TTL deletion is not required for correctness. Writes prune expired
 records. Bound the registry to 256 live instances and 512 KiB; this deliberately
 trades throughput/scale for atomic graph validation and straightforward recovery.
