@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAppState } from "@/components/AppProvider";
 import { hrefFor } from "@/lib/routes";
 import { highlightSearchNeedle } from "@/lib/highlightSearchNeedle";
+import { prefetchOn, prefetchPost, prefetchUser } from "@/lib/userSearch";
 import {
   rankTweets,
   TWEET_RESULTS_PAGE_SIZE,
@@ -215,6 +216,7 @@ export function TweetResults({
                     <Link
                       className="result-author"
                       href={hrefFor("users", { user: hit.username })}
+                      {...prefetchOn(() => prefetchUser(hit.username))}
                     >
                       {highlightSearchNeedle(hit.username, submitted)}
                     </Link>
@@ -236,6 +238,7 @@ export function TweetResults({
                       from: "tweets",
                       q: submitted,
                     })}
+                    {...prefetchOn(() => prefetchPost(hit.id!))}
                   >
                     {title || "-"}
                   </Link>

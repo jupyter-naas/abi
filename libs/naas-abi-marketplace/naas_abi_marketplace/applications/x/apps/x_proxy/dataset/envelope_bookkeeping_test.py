@@ -19,6 +19,7 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
     ENVELOPES_V1,
     X_DATASET_NAMESPACE,
     ensure_x_datasets,
+    envelope_paths_in_dataset,
 )
 
 
@@ -66,3 +67,28 @@ def test_envelope_bookkeeping_diff_pending_and_in_sync(tmp_path: Path) -> None:
     assert after["pending_ingest"] == []
     assert after["ingested_not_in_storage"] == []
     assert after["in_sync"] is True
+
+
+def test_envelope_paths_in_dataset_bulk_lookup(tmp_path: Path) -> None:
+    dataset = _dataset(tmp_path)
+    rel_a = f"{ENVELOPE_PREFIX}/2026-09-01T12_00_00Z_a.json"
+    rel_b = f"{ENVELOPE_PREFIX}/2026-09-01T12_00_00Z_b.json"
+    ensure_x_datasets(dataset)
+    dataset.write(
+        ENVELOPES_V1,
+        [
+            {
+                "envelope_path": rel_a,
+                "query_slug": "a",
+                "ingested_at": "2026-09-01T12:00:00+00:00",
+                "started_at": "",
+                "ended_at": "",
+            }
+        ],
+        namespace=X_DATASET_NAMESPACE,
+        mode="upsert",
+    )
+
+    found = envelope_paths_in_dataset(dataset, [rel_a, rel_b])
+
+    assert found == {rel_a}

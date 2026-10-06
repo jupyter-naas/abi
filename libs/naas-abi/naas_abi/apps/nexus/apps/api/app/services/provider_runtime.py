@@ -759,7 +759,11 @@ async def complete_with_abi(
             config.model,
             (getattr(config, "llm_model", None) or "").strip() or None,
         )
-        agent = _duplicate_inprocess_agent(template_agent, thread_id)
+        import asyncio
+
+        agent = await asyncio.to_thread(
+            _duplicate_inprocess_agent, template_agent, thread_id
+        )
         if llm_model:
             _retarget_inprocess_chat_model(agent, llm_model)
 
@@ -1577,7 +1581,9 @@ async def stream_with_abi_inprocess(
     # (the previous behaviour) caused cross-conversation response leakage when
     # two requests overlapped — see jupyter-naas/abi#991.
     assert thread_id is not None, "thread_id is required"
-    agent = _duplicate_inprocess_agent(template_agent, thread_id)
+    agent = await asyncio.to_thread(
+        _duplicate_inprocess_agent, template_agent, thread_id
+    )
     if llm_model:
         try:
             _retarget_inprocess_chat_model(agent, llm_model)

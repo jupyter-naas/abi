@@ -18,7 +18,7 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.data_store import (
     storage_has_datasets,
 )
 from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import DATA_ROOT
-from naas_abi_marketplace.domains.personnel.paths import (
+from naas_abi_marketplace.domains.personnel.utils.paths import (
     cockpit_storage_prefix,
     module_datastore_path,
     module_graph_name,
@@ -26,7 +26,7 @@ from naas_abi_marketplace.domains.personnel.paths import (
 
 
 def demo_graph_path() -> Path:
-    from naas_abi_marketplace.domains.personnel.paths import DEMO_GRAPH_FILE
+    from naas_abi_marketplace.domains.personnel.utils.paths import DEMO_GRAPH_FILE
 
     return DEMO_GRAPH_FILE
 
@@ -79,10 +79,14 @@ def resolve_apps_data_root(
     if storage_has_datasets(datastore_path=resolved_datastore):
         return "object_storage", Path(storage_prefix)
 
-    if object_storage is not None and _storage_has_prefix(object_storage, storage_prefix):
+    if object_storage is not None and _storage_has_prefix(
+        object_storage, storage_prefix
+    ):
         return "object_storage", Path(storage_prefix)
 
-    if triple_store is not None and _triplestore_has_personnel(triple_store, resolved_graph):
+    if triple_store is not None and _triplestore_has_personnel(
+        triple_store, resolved_graph
+    ):
         logger.info(
             "personnel data: TripleStore graph populated; "
             "cockpit still expects ObjectStorage datasets — run make demo-data"

@@ -51,7 +51,7 @@ abi dev up
 
 ### Web UI
 
-The main interface. Chat with Abi, switch agents, manage your workspace, and access your knowledge graph. Open [http://localhost:3042](http://localhost:3042) and log in with `admin@example.com` / `Admin1234!`.
+The main interface. Chat with Abi, switch agents, manage your workspace, and access your knowledge graph. Open [http://localhost:3042](http://localhost:3042) and log in as `admin@example.com` with the password generated into `.env` (`NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`).
 
 <div align="center">
   <img src="docs/site/static/abi/Screenshot_Local_WebUI.png" alt="ABI web UI" width="800">
@@ -183,10 +183,10 @@ api        http://127.0.0.1:9879   ● ready
 dagster    http://127.0.0.1:11000  ● ready
 nexus-web  http://127.0.0.1:12000  ● ready
 
-Login: admin@example.com / admin
+Login: admin@example.com / <generated password>
 ```
 
-The default admin credentials (`admin@example.com` / `admin`) are written to `.env` on first boot and picked up by the Nexus seed.
+The admin password is generated for this project and written to `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`; the Nexus seed picks it up on first boot. There is no default password.
 
 ### Hotkeys
 

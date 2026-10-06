@@ -7,10 +7,10 @@ written under that entry's ``prefix`` (the JSON files
 :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode to map the full
 SearchQuery / SearchResultSet / SearchRecentTweets structure into the graph.
 This is the event-system pay-off: the search workflow only fetches and saves;
-the put event then drives graph mapping, DuckLake dataset sync, and (when
-``app_publish: true``) republish of the Recent Tweets app (``x/apps/x_proxy/``)
-here — with no polling. App republish is off by default; the hourly
-``x_build_app_x_proxy`` schedule keeps the dashboard fresh instead.
+the put event then drives graph mapping (when needed), **always** DuckLake
+dataset sync, and **republish** of the Recent Tweets app (``x/apps/x_proxy/``)
+on each put-driven job. The hourly ``x_build_app_x_proxy`` schedule remains a
+backstop when ``app_publish`` is off on manual replay only.
 
 Each entry's sensor, watched prefix and ingestion knobs (persist, events drained
 per tick, evaluation interval) come from the ``search_recent_tweets_event`` list
@@ -47,6 +47,7 @@ from naas_abi_marketplace.applications.x.orchestrations.utils import (
     launchpad_override,
     run_search_pipeline_for_file,
     safe_name,
+    search_envelope_fully_projected,
     search_envelope_ingested,
 )
 
@@ -209,12 +210,13 @@ def _dataset_sync_search_envelope(
     *,
     context=None,
 ) -> dict:
-    from naas_abi_marketplace.applications.x.orchestrations.utils._common import (
-        sync_x_dataset_paths,
+    """Project one envelope into ``envelopes_v1`` (ObjectPut path — not deferred)."""
+    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.sync import (
+        sync_envelope_paths,
     )
 
     file_path = ingested["file_path"]
-    dataset_sync = sync_x_dataset_paths(module, [file_path], context=context)
+    dataset_sync = sync_envelope_paths(module, [file_path])
     return {**ingested, "dataset": dataset_sync}
 
 
@@ -401,18 +403,29 @@ def _build_search_recent_tweets_event_sensor(
                     f"metadata probe failed for {prefix}/{key} ({exc}); "
                     f"enqueuing anyway rather than risk dropping the event"
                 )
-            # New envelopes: map + dataset sync in the job. Skip re-runs when
-            # the graph already has this path (idempotent re-map would no-op).
-            # Graph without ``envelopes_v1`` is caught by
-            # XSearchRecentTweetsFilesOrchestration (scheduled reprocess), not
-            # here — ObjectPut is consumed once per write.
+            # ObjectPut: always run dataset sync + app publish unless fully
+            # projected (graph + envelopes_v1). Skip graph map when already mapped.
             file_path = posixpath.join(prefix, key)
-            if search_envelope_ingested(module, file_path):
+            if search_envelope_fully_projected(module, file_path):
                 logger.info(
                     f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
-                    f"skipping {file_path}; already mapped into the graph"
+                    f"skipping {file_path}; graph and envelopes_v1 are current"
                 )
                 continue
+            pipeline_cfg: dict = {
+                "prefix": prefix,
+                "key": key,
+                # Enforce dashboard rebuild on every put-driven run (overrides
+                # entry app_publish=false; hourly schedule remains a backstop).
+                "app_publish": True,
+            }
+            if search_envelope_ingested(module, file_path):
+                pipeline_cfg["skip_graph_map"] = True
+                logger.info(
+                    f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
+                    f"ObjectPut dataset sync (+ app publish) for {file_path} "
+                    f"(graph already mapped)"
+                )
             run_requests.append(
                 dg.RunRequest(
                     # Run-key includes prefix+key so the same envelope can't be
@@ -421,7 +434,7 @@ def _build_search_recent_tweets_event_sensor(
                     run_key=f"{job_name}:{prefix}:{key}",
                     run_config={
                         "ops": {
-                            pipeline_op_name: {"config": {"prefix": prefix, "key": key}}
+                            pipeline_op_name: {"config": pipeline_cfg}
                         }
                     },
                 )

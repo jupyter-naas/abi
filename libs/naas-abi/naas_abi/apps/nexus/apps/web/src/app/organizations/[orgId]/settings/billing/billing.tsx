@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { CreditCard, Check, Zap, Building2, Sparkles, AlertCircle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
+import { buttonVariants } from '@/components/ui/button';
 import '../components/org-settings-components.css';
 import './billing.css';
 
@@ -160,18 +161,18 @@ export default function OrganizationBillingPage() {
 
       {/* Error Alert */}
       {error && (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4">
+        <div className="border border-destructive/30 bg-destructive/10 p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-red-500 mt-0.5" />
+              <AlertCircle className="mt-0.5 h-5 w-5 text-destructive" />
               <div>
-                <p className="font-medium text-red-500">Feature Not Available</p>
-                <p className="text-sm text-red-500/90 mt-1">{error}</p>
+                <p className="font-medium text-destructive">Feature Not Available</p>
+                <p className="mt-1 text-sm text-destructive/90">{error}</p>
               </div>
             </div>
             <button
               onClick={() => setError(null)}
-              className="text-red-500 hover:text-red-600"
+              className="text-destructive hover:text-destructive/80"
             >
               <X size={18} />
             </button>
@@ -180,7 +181,7 @@ export default function OrganizationBillingPage() {
       )}
 
       {/* Current plan */}
-      <div className="rounded-xl border bg-card p-6">
+      <div className=" border bg-card p-6">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-muted-foreground">Current Plan</p>
@@ -196,9 +197,9 @@ export default function OrganizationBillingPage() {
           )}
         </div>
         {usage && (
-          <div className="mt-4 h-2 rounded-full bg-secondary">
+          <div className="mt-4 h-2 bg-secondary">
             <div
-              className="h-2 rounded-full bg-primary"
+              className="h-2 bg-primary"
               style={{ width: `${(usage.used / usage.limit) * 100}%` }}
             />
           </div>
@@ -216,18 +217,18 @@ export default function OrganizationBillingPage() {
               <div
                 key={plan.id}
                 className={cn(
-                  'relative rounded-xl border bg-card p-6',
+                  'relative border bg-card p-6',
                   plan.popular && 'border-primary',
                   isCurrent && 'ring-2 ring-primary'
                 )}
               >
                 {plan.popular && (
-                  <span className="absolute -top-3 left-4 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
+                  <span className="absolute -top-3 left-4 bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
                     Popular
                   </span>
                 )}
                 <div className="mb-4 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <div className="flex h-10 w-10 items-center justify-center bg-primary/10 text-primary">
                     <Icon size={20} />
                   </div>
                   <div>
@@ -256,11 +257,9 @@ export default function OrganizationBillingPage() {
                   onClick={() => handleUpgrade(plan.id)}
                   disabled={isCurrent || loading}
                   className={cn(
-                    'w-full rounded-lg py-2 text-sm font-medium transition-colors',
-                    isCurrent
-                      ? 'bg-secondary text-muted-foreground'
-                      : 'bg-primary text-primary-foreground hover:bg-primary/90',
-                    loading && 'opacity-50 cursor-not-allowed'
+                    buttonVariants({ variant: isCurrent ? 'secondary' : 'primary' }),
+                    'w-full',
+                    isCurrent && 'text-muted-foreground'
                   )}
                 >
                   {isCurrent ? 'Current Plan' : loading ? 'Processing...' : 'Upgrade'}
@@ -272,9 +271,9 @@ export default function OrganizationBillingPage() {
       </div>
 
       {/* Payment method */}
-      <div className="rounded-xl border bg-card p-6">
+      <div className=" border bg-card p-6">
         <h3 className="mb-4 font-semibold">Payment Method</h3>
-        <div className="flex items-center justify-between rounded-lg border bg-secondary/30 p-4">
+        <div className="flex items-center justify-between border bg-secondary/30 p-4">
           <div className="flex items-center gap-3">
             <CreditCard size={24} className="text-muted-foreground" />
             <div>
@@ -287,10 +286,7 @@ export default function OrganizationBillingPage() {
           <button
             onClick={handleAddPaymentMethod}
             disabled={loading}
-            className={cn(
-              'rounded-lg border bg-card px-4 py-2 text-sm font-medium hover:bg-secondary',
-              loading && 'opacity-50 cursor-not-allowed'
-            )}
+            className={buttonVariants({ variant: 'secondary' })}
           >
             Add Card
           </button>
@@ -298,7 +294,7 @@ export default function OrganizationBillingPage() {
       </div>
 
       {/* Billing history */}
-      <div className="rounded-xl border bg-card p-6">
+      <div className=" border bg-card p-6">
         <h3 className="mb-4 font-semibold">Billing History</h3>
         <p className="text-sm text-muted-foreground">
           No invoices yet. Your billing history will appear here after you upgrade.

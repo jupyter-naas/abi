@@ -290,3 +290,46 @@ class ImportBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             str(graph.value(URIRef("urn:dependency-type"), RDFS.label)), "Dependency label"
         )
+
+    def test_aliased_imports_resolve_from_bundled_dir_only(self) -> None:
+        # Standard upper ontologies (BFO, CCO) ship with the package, outside any
+        # workspace catalog. An aliased import reaches them, transitively; an
+        # IRI that is not aliased never does.
+        bundled = Path(self.temp.name) / "bundled"
+        (bundled / "mid-level").mkdir(parents=True)
+        (bundled / "top-level").mkdir(parents=True)
+        (bundled / "mid-level" / "Upper.ttl").write_text(
+            PREFIXES
+            + "<https://example.org/upper> a owl:Ontology; owl:imports <https://example.org/root> . "
+            + '<urn:upper-type> a owl:Class; rdfs:label "Upper label"; rdfs:subClassOf <urn:root-type> .'
+        )
+        (bundled / "top-level" / "Root.ttl").write_text(
+            PREFIXES
+            + "<https://example.org/root> a owl:Ontology . "
+            + '<urn:root-type> a owl:Class; rdfs:label "Root label" .'
+        )
+        (bundled / "mid-level" / "Unaliased.ttl").write_text(
+            PREFIXES + '<urn:unaliased-type> a owl:Class; rdfs:label "Unaliased label" .'
+        )
+        self.public.write_text(
+            PREFIXES
+            + "<urn:public> a owl:Ontology; owl:imports <https://example.org/upper>, <https://example.org/unaliased> ."
+        )
+        graph = load_catalog_import_graph(
+            str(self.public),
+            [str(self.public)],
+            {
+                "https://example.org/upper": "mid-level/Upper.ttl",
+                "https://example.org/root": "top-level/Root.ttl",
+            },
+            bundled_dir=str(bundled),
+        )
+        self.assertEqual(str(graph.value(URIRef("urn:upper-type"), RDFS.label)), "Upper label")
+        self.assertEqual(str(graph.value(URIRef("urn:root-type"), RDFS.label)), "Root label")
+        self.assertIsNone(graph.value(URIRef("urn:unaliased-type"), RDFS.label))
+        # Without a bundled dir, the alias stays an unresolved reference.
+        clear_catalog_import_caches()
+        bare = load_catalog_import_graph(
+            str(self.public), [str(self.public)], {"https://example.org/upper": "mid-level/Upper.ttl"}
+        )
+        self.assertIsNone(bare.value(URIRef("urn:upper-type"), RDFS.label))

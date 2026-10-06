@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildOntologyDashboard, dashboardTerms, dashboardRoute, dashboardCoverage, dashboardOntologies, dashboardKindRoute, type OntologyDeclaration } from './ontology-dashboard';
+import { buildOntologyDashboard, dashboardTerms, dashboardRoute, dashboardFilesRoute, dashboardCoverage, dashboardOntologies, dashboardKindRoute, dashboardRestrictions, type OntologyDeclaration } from './ontology-dashboard';
 import type { DictionaryTerm } from './ontology-dictionary-tree';
 
 const a = {path:'/allowed/a.ttl',name:'A ontology',moduleName:'a'};
@@ -38,13 +38,37 @@ test('dashboard drill-down preserves accumulated scope and visualization setting
   const next=dashboardRoute(query,a.path);
   assert.equal(next.get('view'),'overview');
   assert.equal(next.get('dashboardFile'),a.path);
-  assert.deepEqual(next.getAll('dictionaryFile'),['/a.ttl','/b.ttl']);
+  // The opened ontology becomes the sidebar's file selection.
+  assert.deepEqual(next.getAll('dictionaryFile'),[a.path]);
   assert.deepEqual(next.getAll('systemFilter'),['system']);
   assert.equal(next.get('termFilter'),'annotation');
   assert.equal(next.get('spacing'),'compact');
   assert.equal(next.get('connectors'),'orthogonal');
   for (const key of ['term','termType','system','subsystem','process']) assert.equal(next.has(key),false);
-  assert.equal(dashboardRoute(next.toString()).has('dashboardFile'),false);
+  const back=dashboardRoute(next.toString());
+  assert.equal(back.has('dashboardFile'),false);
+  // Leaving clears the mirrored selection, keeps the other filters.
+  assert.deepEqual(back.getAll('dictionaryFile'),[]);
+  assert.deepEqual(back.getAll('systemFilter'),['system']);
+  // A selection changed in the sidebar meanwhile is the user's: kept.
+  const changed=new URLSearchParams(next); changed.append('dictionaryFile','/b.ttl');
+  assert.deepEqual(dashboardRoute(changed.toString()).getAll('dictionaryFile'),[a.path,'/b.ttl']);
+});
+
+test('the sidebar file picker keeps the open ontology in step with its selection', () => {
+  const open=dashboardRoute('view=overview&systemFilter=system',a.path);
+  // Picking another ontology alone opens that one, not a file that is no longer in scope.
+  const swapped=dashboardFilesRoute(open.toString(),[b.path]);
+  assert.equal(swapped.get('dashboardFile'),b.path);
+  assert.deepEqual(swapped.getAll('dictionaryFile'),[b.path]);
+  assert.deepEqual(swapped.getAll('systemFilter'),['system']);
+  // Adding a second one, or clearing the picker, returns to the overview of the selection.
+  const both=dashboardFilesRoute(open.toString(),[a.path,b.path]);
+  assert.equal(both.has('dashboardFile'),false);
+  assert.deepEqual(both.getAll('dictionaryFile'),[a.path,b.path]);
+  assert.equal(dashboardFilesRoute(open.toString(),[]).has('dashboardFile'),false);
+  // On the overview, picking files filters it and opens nothing.
+  assert.equal(dashboardFilesRoute('view=overview',[a.path]).has('dashboardFile'),false);
 });
 
 test('coverage excludes display fallbacks, deduplicates shared declarations and scopes metadata to files', () => {
@@ -74,9 +98,34 @@ test('ontology KPI toggles and drill-down preserve workspace filters and navigat
   const file=dashboardRoute(ontology.toString(),a.path);
   assert.equal(file.has('dashboardType'),false);
   assert.equal(file.get('dashboardFile'),a.path);
+  // The drill-down selects the opened ontology in the sidebar.
+  assert.deepEqual(file.getAll('dictionaryFile'),[a.path]);
+  for (const result of [ontology,classes]) assert.deepEqual(result.getAll('dictionaryFile'),['/a.ttl']);
   for (const result of [ontology,classes,file]) {
-    assert.deepEqual(result.getAll('dictionaryFile'),['/a.ttl']);
     assert.deepEqual(result.getAll('systemFilter'),['abi']);
     assert.equal(result.get('spacing'),'compact');
   }
+});
+
+test('restrictions belong to the file that states them, once each', () => {
+  const restricted: DictionaryTerm = {id:'https://example.org/person',name:'Person',type:'entity',sources:[a],relations:[
+    {property:{id:'p:hasDesk',name:'has desk'},target:{id:'x:Desk',name:'Desk'},kind:'restriction',constraint:'some',sources:[b]},
+    {property:{id:'p:hasDesk',name:'has desk'},target:{id:'x:Desk',name:'Desk'},kind:'restriction',constraint:'some',sources:[a]},
+    {property:{id:'p:knows',name:'knows'},target:{id:'x:Other',name:'Other'},kind:'assertion',sources:[b]},
+  ]};
+  // Declared in a, restricted in b: b counts it.
+  assert.deepEqual(dashboardRestrictions([restricted],[b.path]).map(item=>item.target.name),['Desk']);
+  const both=dashboardRestrictions([restricted,restricted],[a.path,b.path]);
+  assert.equal(both.length,1);
+  assert.deepEqual(both[0].sources.map(source=>source.path).sort(),[a.path,b.path]);
+  assert.equal(dashboardRestrictions([restricted],['/elsewhere.ttl']).length,0);
+});
+
+test('the restriction KPI toggles like the ontology one', () => {
+  const base='view=overview&termFilter=entity&dictionaryFile=%2Fa.ttl';
+  const on=dashboardKindRoute(base,'restriction');
+  assert.equal(on.get('dashboardType'),'restriction');
+  assert.equal(on.get('termFilter'),'all');
+  assert.equal(dashboardKindRoute(on.toString(),'restriction').has('dashboardType'),false);
+  assert.equal(dashboardKindRoute(on.toString(),'ontology').get('dashboardType'),'ontology');
 });

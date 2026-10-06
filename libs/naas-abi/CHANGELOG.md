@@ -2,6 +2,228 @@
 
 <!-- version list -->
 
+## v2.79.1 (2026-10-06)
+
+### Bug Fixes
+
+- **nexus**: Forward the content type through the app-html proxy
+  ([`e980bf0`](https://github.com/jupyter-naas/abi/commit/e980bf092cf4aa0935c1a87785eee1fea2006a8c))
+
+
+## v2.79.0 (2026-10-05)
+
+### Bug Fixes
+
+- Onto2py code generated
+  ([`3d4283a`](https://github.com/jupyter-naas/abi/commit/3d4283a305bf04794270d4704c3975be63f76e35))
+
+- **ontology-file-network**: Correct initial state of zoneBuckets to false
+  ([`9011c2a`](https://github.com/jupyter-naas/abi/commit/9011c2a845dde8f8fa1b45d32029491b3209e63a))
+
+### Chores
+
+- Commit staged changes
+  ([`50d907d`](https://github.com/jupyter-naas/abi/commit/50d907d0cb5df755ed38cc2565adf0150a535c8a))
+
+- Run onto2py on NaasABIOntology (conso processes)
+  ([`10995d2`](https://github.com/jupyter-naas/abi/commit/10995d2e1b981761dae8946d2da3fee90379055e))
+
+### Features
+
+- **graph**: Add BFO edge rules and orthogonal grid routing
+  ([`aacad22`](https://github.com/jupyter-naas/abi/commit/aacad227ed0f3ab02036357a67ac9c07a20b668c))
+
+- **graph**: Enhance BFO edge routing and zone layout
+  ([`2941235`](https://github.com/jupyter-naas/abi/commit/2941235726aeadc28a3b33575ff493169379ce32))
+
+- **ontology**: Add ancestor classification for BFO buckets
+  ([`70ab431`](https://github.com/jupyter-naas/abi/commit/70ab43175b0c2b11e159a5b0e4eb21024999ec41))
+
+### Refactoring
+
+- **ontologies**: Add action classes for geospatial and administrative regions
+  ([`4dbffc8`](https://github.com/jupyter-naas/abi/commit/4dbffc8b5876b5e91593f8794ebef9d08ad196b4))
+
+- **ontologies**: Add new ontology-related modules and tests
+  ([`5e9ec6a`](https://github.com/jupyter-naas/abi/commit/5e9ec6a19162fe5263bf7bdcd203f22bb3eb33e4))
+
+- **ontologies**: Improve module ontology consolidation and path resolution
+  ([`7d3bc9a`](https://github.com/jupyter-naas/abi/commit/7d3bc9a3eb346e7f116e1f0fa5839c4c6011e64e))
+
+- **ontologies**: Update and add DocumentContentEntity ontology modules and related classes
+  ([`fa6df3c`](https://github.com/jupyter-naas/abi/commit/fa6df3c6605687d2e814aa92e4c856c31e8898c1))
+
+- **ontologies**: Update and add multiple ontology classes and processes
+  ([`41f436a`](https://github.com/jupyter-naas/abi/commit/41f436a71c5cd42eba37f84a1fbb499a341dc4ca))
+
+- **ontologies**: Update multiple ontology and process modules
+  ([`41a95b3`](https://github.com/jupyter-naas/abi/commit/41a95b31bf70d199fc568d22e9db03e990eb8e3e))
+
+- **ontologies**: Update ontology imports and remove deprecated classes
+  ([`e85d98a`](https://github.com/jupyter-naas/abi/commit/e85d98a3e14953923aa6d21a17a972b10d14c01d))
+
+- **ontology**: Add process slices endpoint and tests
+  ([`d4ef150`](https://github.com/jupyter-naas/abi/commit/d4ef150dadf9489329134745d007e99c5f0c69b7))
+
+- **ontology**: Add support for fiat boundary buckets in BFO ontology
+  ([`f47b04a`](https://github.com/jupyter-naas/abi/commit/f47b04a6811fb85bbc946f705af1909fa07a4188))
+
+- **ontology**: Update ontology page and graph components
+  ([`6dfcceb`](https://github.com/jupyter-naas/abi/commit/6dfcceb5aefce63a2e2b4aaf27870d84e9904a2d))
+
+- **ontology**: Update sidebar file picker to sync with dashboard selection
+  ([`0d79ee2`](https://github.com/jupyter-naas/abi/commit/0d79ee232f2784a9356c264f4a6e6afae58acaa0))
+
+- **search**: Enhance topics builtin queries and enrich data
+  ([`08fcf76`](https://github.com/jupyter-naas/abi/commit/08fcf76e6360fc70d2f9c80e45e3cb35c37ccc6e))
+
+### Testing
+
+- **graph**: Add tests for facing cards and improve orthogonal grid routing
+  ([`1fb54b6`](https://github.com/jupyter-naas/abi/commit/1fb54b606c90329b43d24208bfba38b77e0ef568))
+
+
+## v2.78.0 (2026-10-05)
+
+### Features
+
+- **nexus-web**: Raise chat attachment upload limit from 5MB to 10MB
+  ([`0d51e97`](https://github.com/jupyter-naas/abi/commit/0d51e9702e5d3811bb4d87e66ba5fd556315ee4f))
+
+
+## v2.77.0 (2026-10-04)
+
+
+## v2.76.0 (2026-10-02)
+
+### Features
+
+- **settings**: Update Nexus settings design system and UI components
+  ([`f0fa360`](https://github.com/jupyter-naas/abi/commit/f0fa360ecffc894981b2d31f152a5a62190b8efb))
+
+- **settings-cache**: Add 24h API cache for settings pages with manual reload
+  ([`df9a6b0`](https://github.com/jupyter-naas/abi/commit/df9a6b058dfcc031f4694a8e6620e5befe3261ec))
+
+- **settings-cache**: Add 24h caching middleware for Nexus settings API
+  ([`43b9ebc`](https://github.com/jupyter-naas/abi/commit/43b9ebc5061ea53c5daca65a0332a17ad1e07be4))
+
+### Refactoring
+
+- **settings**: Large refactor of Nexus settings UI and components
+  ([`2a04ea2`](https://github.com/jupyter-naas/abi/commit/2a04ea2c8bd406f2671cd40975ca01117ec6bc90))
+
+- **settings**: Update components settings cache and remove reload button from org header
+  ([`13b5afc`](https://github.com/jupyter-naas/abi/commit/13b5afcaed8c38983517a2ed53415455f0620047))
+
+- **settings**: Update nexus settings design system and related components
+  ([`4daec20`](https://github.com/jupyter-naas/abi/commit/4daec2050a5761d2702aa464c25ea3a6f760025b))
+
+
+## v2.75.0 (2026-10-01)
+
+### Bug Fixes
+
+- **nexus**: Update workspace navigation to use home path
+  ([`e065406`](https://github.com/jupyter-naas/abi/commit/e065406295fd5358a11b7aaba0795f9e04c9b628))
+
+- **search-section**: Remove unused imports and clean up unused variables
+  ([`760e2c7`](https://github.com/jupyter-naas/abi/commit/760e2c7a8d1435dbee9580e894137121269bf3c1))
+
+### Features
+
+- Init search
+  ([`9f6f600`](https://github.com/jupyter-naas/abi/commit/9f6f60002fe6279b06d26a545cad5b436276e2b6))
+
+- **search**: Add and reorder search section in sidebar navigation
+  ([`e50bfb6`](https://github.com/jupyter-naas/abi/commit/e50bfb66ed86556448c59c776ce3cb0012582beb))
+
+- **search**: Add workspace access requirement to topic endpoints
+  ([`bfe45fa`](https://github.com/jupyter-naas/abi/commit/bfe45fa8af5cab7878208cee226d5f30b5e5dbfe))
+
+- **search**: Improve safeImage to resolve API base URL
+  ([`ad2c8a9`](https://github.com/jupyter-naas/abi/commit/ad2c8a9b4b5e3a81c02d5e3fdb1276286fe51343))
+
+- **search-nexus**: Add client vs employer distinction and improve search topics
+  ([`ed746ff`](https://github.com/jupyter-naas/abi/commit/ed746ff428079e8385426ae7bc223f5416af47a0))
+
+### Refactoring
+
+- **agents**: Simplify agents page by removing unused code and hooks
+  ([`094e9c7`](https://github.com/jupyter-naas/abi/commit/094e9c74775fab34e7d84c684931c54209c3e182))
+
+
+## v2.74.0 (2026-09-30)
+
+
+## v2.73.5 (2026-09-24)
+
+### Bug Fixes
+
+- **auth**: Lock registration, guard Ollama routes, enforce sign-in rate limits
+  ([`df2a296`](https://github.com/jupyter-naas/abi/commit/df2a296a88ca4d3da6a1846cc175b76d46525edb))
+
+
+## v2.73.4 (2026-09-24)
+
+### Bug Fixes
+
+- **auth**: Remove default admin passwords and API key
+  ([`731802c`](https://github.com/jupyter-naas/abi/commit/731802cce3fe0aaf3367331ee8216df78a2cbbf9))
+
+### Testing
+
+- **auth**: Generate the custom seed password instead of a literal
+  ([`dae7107`](https://github.com/jupyter-naas/abi/commit/dae71072ab2bd36b611ec59d783708d2846b411c))
+
+
+## v2.73.3 (2026-09-24)
+
+### Bug Fixes
+
+- **api**: Remove the /token endpoint that issued ABI_API_KEY
+  ([`101085f`](https://github.com/jupyter-naas/abi/commit/101085f5dbcd209a7d8614b858f7a75fe9ff23cb))
+
+### Code Style
+
+- **naas_abi**: Sort imports after the tools move
+  ([`d0b1e77`](https://github.com/jupyter-naas/abi/commit/d0b1e77cb9de0f1ea414816a2e5b0535d0f77935))
+
+### Refactoring
+
+- Nexus shell
+  ([`9386e60`](https://github.com/jupyter-naas/abi/commit/9386e60a2af4d2a350120bab7d0b1273142728a5))
+
+- **naas_abi**: Move agents/tools to the module root
+  ([`36f6284`](https://github.com/jupyter-naas/abi/commit/36f628425ac59121c8c85bab53a5e0fa40002785))
+
+
+## v2.73.2 (2026-09-23)
+
+### Bug Fixes
+
+- **nexus**: Renew user sessions automatically
+  ([#1251](https://github.com/jupyter-naas/abi/pull/1251),
+  [`d331489`](https://github.com/jupyter-naas/abi/commit/d3314893a7b21e18c49e8f6d59aa7c533903b77b))
+
+
+## v2.73.1 (2026-09-22)
+
+### Bug Fixes
+
+- **nexus/files**: Render markdown and CSV cleanly in preview.
+  ([#1295](https://github.com/jupyter-naas/abi/pull/1295),
+  [`93a2d87`](https://github.com/jupyter-naas/abi/commit/93a2d87e4df01514f43e57ac160217d0834f3754))
+
+
+## v2.73.0 (2026-09-22)
+
+### Features
+
+- **nexus**: Native Sheets editor, formulas, resizing, and SheetsAgent
+  ([#1297](https://github.com/jupyter-naas/abi/pull/1297),
+  [`135967f`](https://github.com/jupyter-naas/abi/commit/135967f33be441c7afa9f4d82e7f1f40a4c7c465))
+
+
 ## v2.72.5 (2026-09-22)
 
 ### Bug Fixes

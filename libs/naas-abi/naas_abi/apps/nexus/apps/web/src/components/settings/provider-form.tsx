@@ -139,7 +139,7 @@ export function ProviderForm({ provider, onSave, onCancel }: ProviderFormProps) 
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="My Claude Provider"
-            className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
 
@@ -152,7 +152,7 @@ export function ProviderForm({ provider, onSave, onCancel }: ProviderFormProps) 
               setType(e.target.value as ProviderType);
               setModel(defaultModels[e.target.value as ProviderType][0] || '');
             }}
-            className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
           >
             {providerTypes.map((t) => (
               <option key={t.value} value={t.value}>
@@ -171,7 +171,7 @@ export function ProviderForm({ provider, onSave, onCancel }: ProviderFormProps) 
               value={endpoint}
               onChange={(e) => setEndpoint(e.target.value)}
               placeholder="http://localhost:11434"
-              className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
         )}
@@ -185,7 +185,7 @@ export function ProviderForm({ provider, onSave, onCancel }: ProviderFormProps) 
               <select
                 value={apiKeySecretKey}
                 onChange={(e) => setApiKeySecretKey(e.target.value)}
-                className="w-full rounded-lg border bg-background pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                className="w-full border bg-background pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
               >
                 <option value="">Select a secret...</option>
                 {apiKeySecrets.map((s) => (
@@ -212,7 +212,7 @@ export function ProviderForm({ provider, onSave, onCancel }: ProviderFormProps) 
               <select
                 value={accountIdSecretKey}
                 onChange={(e) => setAccountIdSecretKey(e.target.value)}
-                className="w-full rounded-lg border bg-background pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                className="w-full border bg-background pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
               >
                 <option value="">Select a secret...</option>
                 {accountIdSecrets.map((s) => (
@@ -236,7 +236,7 @@ export function ProviderForm({ provider, onSave, onCancel }: ProviderFormProps) 
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                className="w-full border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
               >
                 {getModelsForType().map((m) => (
                   <option key={m} value={m}>
@@ -250,7 +250,7 @@ export function ProviderForm({ provider, onSave, onCancel }: ProviderFormProps) 
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 placeholder={type === 'ollama' || type === 'abi' ? 'No models found - run ollama pull <model>' : 'model-name'}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                className="w-full border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
               />
             )}
             {(type === 'ollama' || type === 'abi') && (
@@ -258,7 +258,7 @@ export function ProviderForm({ provider, onSave, onCancel }: ProviderFormProps) 
                 type="button"
                 onClick={fetchOllamaModels}
                 disabled={loadingModels}
-                className="flex items-center justify-center rounded-lg border bg-background px-3 hover:bg-secondary"
+                className="flex items-center justify-center border bg-background px-3 hover:bg-secondary"
               >
                 <RefreshCw size={14} className={loadingModels ? 'animate-spin' : ''} />
               </button>
@@ -272,14 +272,14 @@ export function ProviderForm({ provider, onSave, onCancel }: ProviderFormProps) 
         <button
           type="button"
           onClick={onCancel}
-          className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary"
         >
           <X size={16} />
           Cancel
         </button>
         <button
           type="submit"
-          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          className="flex items-center gap-2 bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           <Check size={16} />
           {isEditing ? 'Save Changes' : 'Add Provider'}

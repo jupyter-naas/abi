@@ -8,8 +8,8 @@
  * falling back to localhost. The port comes from each service's published
  * docker-compose port; there is no per-service host override.
  *
- * Services without a published host port (e.g. graph-explorer, only reachable
- * via Caddy) are intentionally omitted.
+ * Services without a published host port are reached through their Caddy
+ * subdomain (Forgejo at git.<host>, Coder at coder.<host>).
  *
  * Services that need a login (RabbitMQ, Fuseki) are not auto-authenticated:
  * their credentials live in .env but aren't passed into the nexus-web
@@ -22,7 +22,10 @@ export interface DockerService {
   id: string;
   label: string;
   description: string;
-  port: number;
+  /** Published host port. Omitted for services reached through a Caddy subdomain. */
+  port?: number;
+  /** Caddy subdomain of the Nexus host (e.g. `git` → https://git.<host>), used when there is no port. */
+  subdomain?: string;
   path?: string;
   /**
    * False when the service refuses to be rendered in an iframe (sends
@@ -80,6 +83,20 @@ export const DOCKER_SERVICES: DockerService[] = [
     port: 8501,
   },
   {
+    id: 'forgejo',
+    label: 'Forgejo',
+    description: 'Git repositories',
+    subdomain: 'git',
+    embeddable: false, // sends X-Frame-Options: SAMEORIGIN
+  },
+  {
+    id: 'coder',
+    label: 'Coder',
+    description: 'Cloud coding workspaces',
+    subdomain: 'coder',
+    embeddable: false, // refuses to be framed by another origin
+  },
+  {
     id: 'yasgui',
     label: 'YasGUI',
     description: 'SPARQL query editor',
@@ -108,6 +125,10 @@ export function resolveServiceHost(): string {
 
 /** Build a service's URL against the currently reachable host. */
 export function buildServiceUrl(service: DockerService, host: string, protocol?: string): string {
+  if (service.port === undefined && service.subdomain) {
+    // Caddy serves subdomains over TLS only.
+    return `https://${service.subdomain}.${host}${service.path ?? ''}`;
+  }
   const resolvedProtocol = protocol || process.env.NEXT_PUBLIC_WEB_PROTOCOL || 'http';
   return `${resolvedProtocol}://${host}:${service.port}${service.path ?? ''}`;
 }

@@ -50,6 +50,8 @@ export function AppView({ page }: Props) {
   const {
     data,
     error,
+    dashboardsReady,
+    ensureDashboards,
     scenarioId,
     setScenarioId,
     querySlug,
@@ -83,6 +85,13 @@ export function AppView({ page }: Props) {
     setOrigin(params.from);
     setExpanded(params.expand);
   }, []);
+
+  // Only the Count / Search Recent Tweets pages chart the published dashboards,
+  // so only they pay for downloading them.
+  const needsDashboards = page === "count" || page === "search";
+  useEffect(() => {
+    if (needsDashboards) ensureDashboards();
+  }, [needsDashboards, ensureDashboards]);
 
   // Coming back to a section lands on the page last visited in it.
   useEffect(() => {
@@ -207,12 +216,18 @@ export function AppView({ page }: Props) {
   // Links out of this page keep the state the target page honours: switching
   // Posts subpages carries the filters over. The Users link means "go to the
   // search", so it keeps the needle but not the author currently open.
-  const hrefOf = (target: PageKey) =>
-    hrefFor(target, {
-      q: needle,
+  // Search Users and Search Tweets each have their own query; switching between
+  // them starts with an empty search box.
+  const hrefOf = (target: PageKey) => {
+    const keepSearchNeedle =
+      (page === "users" && target === "users") ||
+      (page === "tweets" && target === "tweets");
+    return hrefFor(target, {
+      q: keepSearchNeedle ? needle : undefined,
       scenario: scenarioId,
       query: querySlug,
     });
+  };
 
   const builtLabel = useMemo(() => {
     if (!data?.updatedAt) return null;
@@ -304,14 +319,17 @@ export function AppView({ page }: Props) {
     >
       {snapshotWarning}
       <div className="page-wrap">
-        {page === "count" ? (
+        {needsDashboards && !dashboardsReady ? (
+          <LoadingScreen label="Loading dashboards" />
+        ) : null}
+        {page === "count" && dashboardsReady ? (
           <CountPage
             data={data.count}
             querySlug={querySlug}
             scenarioId={scenarioId}
           />
         ) : null}
-        {page === "search" ? (
+        {page === "search" && dashboardsReady ? (
           <SearchPage
             data={data.search}
             querySlug={querySlug}

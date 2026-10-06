@@ -201,6 +201,32 @@ def search_envelope_ingested(
     return bool(rows)
 
 
+def envelope_paths_in_dataset(module, file_paths: list[str]) -> set[str]:
+    """Subset of *file_paths* already recorded in ``x.envelopes_v1``.
+
+    Fails open (empty set) when Dataset Service is unavailable or the probe
+    errors, matching :func:`search_envelope_in_dataset` per-path behaviour.
+    """
+    try:
+        if not module.engine.services.dataset_available():
+            return set()
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
+            envelope_paths_in_dataset as lookup_envelope_paths,
+        )
+
+        return lookup_envelope_paths(
+            module.engine.services.dataset,
+            file_paths,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "envelope_paths_in_dataset: bulk probe failed (%s); "
+            "treating all paths as not ingested",
+            exc,
+        )
+        return set()
+
+
 def search_envelope_in_dataset(module, file_path: str) -> bool:
     """True when *file_path* is recorded in ``x.envelopes_v1``.
 
@@ -603,11 +629,39 @@ def run_count_for_query(module, query: str) -> dict:
                 f"{file_path!r} ({exc})"
             )
 
+    dataset_sync: dict | None = None
+    paths_to_sync = [
+        str(path).strip()
+        for path in output.get("file_paths", [])
+        if str(path or "").strip()
+    ] + [
+        str(entry.get("file_path") or "").strip()
+        for entry in output.get("partial_file_paths", [])
+        if str(entry.get("file_path") or "").strip()
+    ]
+    if paths_to_sync:
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
+            x_dataset_sync_enabled,
+        )
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.sync import (
+            sync_envelope_paths,
+        )
+
+        if x_dataset_sync_enabled(module):
+            try:
+                dataset_sync = sync_envelope_paths(module, paths_to_sync)
+            except Exception as exc:  # noqa: BLE001 — graph counts still mapped
+                logger.warning(
+                    f"run_count_for_query[{query!r}]: dataset sync failed "
+                    f"({exc}); count graph was still updated"
+                )
+
     return {
         "query": query,
         "buckets": output.get("total_buckets", 0),
         "mapped": mapped,
         "partial_mapped": partial_mapped,
+        "dataset_sync": dataset_sync,
     }
 
 

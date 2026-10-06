@@ -38,3 +38,20 @@ export function fitReadableViewport(
   network.moveTo({ ...previous, animation: false });
   network.moveTo({ ...target, animation });
 }
+
+/** Frame a canvas rectangle (e.g. drawn BFO zones), not just the nodes, under the same readable minimum. */
+export function fitBoundsViewport(
+  network: Pick<Network, 'moveTo'>,
+  bounds: { x: number; y: number; width: number; height: number },
+  viewport: { width: number; height: number },
+  minimumScale: number,
+  duration: number,
+) {
+  if (bounds.width <= 0 || bounds.height <= 0 || viewport.width <= 0 || viewport.height <= 0) return;
+  const fit = Math.min(viewport.width / bounds.width, viewport.height / bounds.height) * 0.96;
+  network.moveTo({
+    scale: Math.max(minimumScale, fit),
+    position: { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 },
+    animation: duration > 0 ? { duration, easingFunction: 'easeInOutQuad' } : false,
+  });
+}

@@ -1959,7 +1959,7 @@ async def put_document(
             email=author_email,
             username=username,
         )
-        from naas_abi.agents.tools.documents_commands import normalize_document_flow
+        from naas_abi.tools.documents_commands import normalize_document_flow
 
         html = normalize_document_flow(body.html)
         sidecar_ok = _write_document_via_sidecar(
@@ -2051,7 +2051,7 @@ def _save_live_document_html(
     sidecar_base: str | None,
     sidecar_secret: str | None,
 ) -> tuple[str | None, str]:
-    from naas_abi.agents.tools.documents_commands import normalize_document_flow
+    from naas_abi.tools.documents_commands import normalize_document_flow
 
     html = normalize_document_flow(html)
     sc.ensure_user(
@@ -3147,7 +3147,7 @@ async def list_seed_templates(
 
 
 def _mutation_outline(html: str) -> tuple[list[SectionOutlineItem], list[str | None]]:
-    from naas_abi.agents.tools.documents_tools import (
+    from naas_abi.tools.documents_tools import (
         _section_outline_items,
         _split_sections,
     )
@@ -3324,7 +3324,7 @@ async def insert_section(
     db: AsyncSession = Depends(get_db),
 ) -> SectionMutationResponse:
     """Insert a section after ``after_index`` (-1 appends). Same mutation as the agent tool."""
-    from naas_abi.agents.tools.documents_tools import _insert_section_html
+    from naas_abi.tools.documents_tools import _insert_section_html
 
     await require_workspace_access(current_user.id, body.workspace_id)
     return await _run_section_html_mutation(
@@ -3352,7 +3352,7 @@ async def delete_section(
     db: AsyncSession = Depends(get_db),
 ) -> SectionMutationResponse:
     """Delete the section at index. Refuses the last section."""
-    from naas_abi.agents.tools.documents_tools import _delete_section_html
+    from naas_abi.tools.documents_tools import _delete_section_html
 
     await require_workspace_access(current_user.id, body.workspace_id)
     return await _run_section_html_mutation(
@@ -3375,7 +3375,7 @@ async def duplicate_section(
     db: AsyncSession = Depends(get_db),
 ) -> SectionMutationResponse:
     """Duplicate the section at index and insert the copy after it."""
-    from naas_abi.agents.tools.documents_tools import _duplicate_section_html
+    from naas_abi.tools.documents_tools import _duplicate_section_html
 
     await require_workspace_access(current_user.id, body.workspace_id)
     return await _run_section_html_mutation(
@@ -3398,7 +3398,7 @@ async def reorder_sections(
     db: AsyncSession = Depends(get_db),
 ) -> SectionMutationResponse:
     """Move one section (from_index/to_index) or apply a full ``order`` permutation."""
-    from naas_abi.agents.tools.documents_tools import _reorder_sections_html
+    from naas_abi.tools.documents_tools import _reorder_sections_html
 
     await require_workspace_access(current_user.id, body.workspace_id)
     return await _run_section_html_mutation(
@@ -3426,7 +3426,7 @@ async def get_document_outline(
     db: AsyncSession = Depends(get_db),
 ) -> DocumentOutlineResponse:
     """Heading outline (Pandoc Header walk). Not the leftover section list."""
-    from naas_abi.agents.tools.documents_commands import heading_outline
+    from naas_abi.tools.documents_commands import heading_outline
 
     await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
@@ -3486,7 +3486,7 @@ async def apply_document_commands_route(
     db: AsyncSession = Depends(get_db),
 ) -> DocumentCommandsResponse:
     """Google Docs batchUpdate analog on the HTML store. See COMMANDS.md."""
-    from naas_abi.agents.tools.documents_commands import apply_document_commands
+    from naas_abi.tools.documents_commands import apply_document_commands
 
     await require_workspace_access(current_user.id, body.workspace_id)
     if not _SLUG_RE.match(slug):
@@ -3513,7 +3513,7 @@ async def apply_document_commands_route(
         mutate=_mutate,
         message=f"feat(document): apply commands in {slug}",
     )
-    from naas_abi.agents.tools.documents_commands import (
+    from naas_abi.tools.documents_commands import (
         heading_outline,
         last_rename_document_title,
     )

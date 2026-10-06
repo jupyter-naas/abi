@@ -33,7 +33,7 @@ import { Card } from './components/card';
 import { EventIcon, formatEventName } from './components/event-icon';
 import { UpdateStatus } from './components/update-status';
 import { formatDateTime, formatDuration, formatNumber, formatRelative } from './lib/format';
-import { getApiUrl } from '@/lib/config';
+import { authFetch, useAuthStore } from '@/stores/auth';
 import type {
   AnalyticsEvent,
   ChatAgentRow,
@@ -74,6 +74,32 @@ function initialFilters(): FilterValue {
   };
 }
 
+function usePersistedAuthReady(): boolean {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (useAuthStore.persist.hasHydrated()) {
+      setReady(true);
+      return;
+    }
+    return useAuthStore.persist.onFinishHydration(() => setReady(true));
+  }, []);
+  return ready;
+}
+
+async function readJson<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    let detail = '';
+    try {
+      const body = (await response.json()) as { detail?: unknown };
+      if (typeof body?.detail === 'string') detail = body.detail;
+    } catch {
+      // Non-JSON error bodies stay as a status-only message.
+    }
+    throw new Error(detail ? `${detail} (${response.status})` : `Request failed (${response.status})`);
+  }
+  return response.json() as Promise<T>;
+}
+
 function buildQuery(filters: FilterValue): string {
   const p = new URLSearchParams();
   p.set('scenario_id', filters.scenario_id);
@@ -103,24 +129,43 @@ export default function AnalyticsPage() {
   const [usersDir, setUsersDir] = useState<{ user_email: string; user_id: string; workspace_ids: string[] }[]>([]);
   const [workspaceDir, setWorkspaceDir] = useState<{ workspace_id: string; workspace_name: string }[]>([]);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const authReady = usePersistedAuthReady();
 
   // Bootstrap directories + scenario catalog (independent of scenario filter).
   useEffect(() => {
-    const api = getApiUrl();
-    fetch(`${api}/api/analytics/scenarios`)
-      .then((r) => r.json())
-      .then((d: ScenariosResponse) => setScenarios(d.scenarios ?? []))
-      .catch(() => setScenarios([]));
-    fetch(`${api}/api/analytics/users?scenario_id=${filters.scenario_id}`)
-      .then((r) => r.json())
-      .then((d: UsersDirectory) => setUsersDir(d.directory ?? []))
-      .catch(() => setUsersDir([]));
-    fetch(`${api}/api/analytics/workspaces?scenario_id=${filters.scenario_id}`)
-      .then((r) => r.json())
-      .then((d: WorkspacesDirectory) => setWorkspaceDir(d.directory ?? []))
-      .catch(() => setWorkspaceDir([]));
+    if (!authReady) return;
+    let cancelled = false;
+    const scenarioId = filters.scenario_id;
+    authFetch('/api/analytics/scenarios')
+      .then((r) => readJson<ScenariosResponse>(r))
+      .then((d) => {
+        if (!cancelled) setScenarios(d.scenarios ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setScenarios([]);
+      });
+    authFetch(`/api/analytics/users?scenario_id=${scenarioId}`)
+      .then((r) => readJson<UsersDirectory>(r))
+      .then((d) => {
+        if (!cancelled) setUsersDir(d.directory ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setUsersDir([]);
+      });
+    authFetch(`/api/analytics/workspaces?scenario_id=${scenarioId}`)
+      .then((r) => readJson<WorkspacesDirectory>(r))
+      .then((d) => {
+        if (!cancelled) setWorkspaceDir(d.directory ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setWorkspaceDir([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Directories follow the initial scenario only; filter changes reload each tab.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authReady]);
 
   const handleUserPick = useCallback((email: string) => {
     setFilters((f) => ({ ...f, user_email: email }));
@@ -243,8 +288,10 @@ function useAnalytics<T>(
   const [error, setError] = useState<string | null>(null);
 
   const extraKey = extra ? JSON.stringify(extra) : '';
+  const authReady = usePersistedAuthReady();
 
   useEffect(() => {
+    if (!authReady) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -254,13 +301,10 @@ function useAnalytics<T>(
       Object.entries(extra).forEach(([k, v]) => p.set(k, v));
     }
     const qs = p.toString();
-    const url = `${getApiUrl()}${path}${qs ? `?${qs}` : ''}`;
+    const url = `${path}${qs ? `?${qs}` : ''}`;
 
-    fetch(url)
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`Request failed (${r.status})`);
-        return r.json();
-      })
+    authFetch(url)
+      .then((r) => readJson<T>(r))
       .then((d) => {
         if (!cancelled) setData(d);
       })
@@ -274,7 +318,7 @@ function useAnalytics<T>(
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, buildQuery(filters), extraKey]);
+  }, [authReady, path, buildQuery(filters), extraKey]);
 
   return { data, loading, error };
 }
@@ -1087,16 +1131,16 @@ function ChatDetailFullPage({
   const [copied, setCopied] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
+  const authReady = usePersistedAuthReady();
+
   useEffect(() => {
+    if (!authReady) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`${getApiUrl()}/api/analytics/chats/${encodeURIComponent(conversationId)}`)
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`Request failed (${r.status})`);
-        return r.json();
-      })
-      .then((d: ChatDetail) => {
+    authFetch(`/api/analytics/chats/${encodeURIComponent(conversationId)}`)
+      .then((r) => readJson<ChatDetail>(r))
+      .then((d) => {
         if (!cancelled) setData(d);
       })
       .catch((e) => {
@@ -1108,7 +1152,7 @@ function ChatDetailFullPage({
     return () => {
       cancelled = true;
     };
-  }, [conversationId]);
+  }, [authReady, conversationId]);
 
   const handleCopy = async () => {
     if (!data) return;

@@ -103,6 +103,19 @@ function cell(row: Record<string, unknown>, key: string): string {
 
 const DATASET_POSTS_SEARCH = "/app-html/x/apps/x_proxy/dataset/posts/search.json";
 
+/**
+ * Every hit the search pages have shown this session, by tweet id - so a post
+ * opened from a result paints from what is already on screen while its full
+ * record (media, full text) loads. Capped like a cache, not kept forever.
+ */
+const shownHits = new Map<string, TweetHit>();
+const MAX_SHOWN_HITS = 2000;
+
+function rememberHits(hits: TweetHit[]): void {
+  if (shownHits.size + hits.length > MAX_SHOWN_HITS) shownHits.clear();
+  for (const hit of hits) if (hit.id) shownHits.set(hit.id, hit);
+}
+
 export type TweetSearchPage = {
   count: number;
   page: number;
@@ -154,11 +167,13 @@ export async function loadTweetSearchPage(
     per_page?: number;
     posts?: Record<string, unknown>[];
   };
+  const hits = (doc.posts || []).map((row) => hitFromSearchPost(row));
+  rememberHits(hits);
   return {
     count: Number(doc.count) || 0,
     page: Number(doc.page) || 0,
     perPage: Number(doc.per_page) || TWEET_RESULTS_PAGE_SIZE,
-    hits: (doc.posts || []).map((row) => hitFromSearchPost(row)),
+    hits,
   };
 }
 
@@ -245,7 +260,11 @@ export function findHit(
   tweetId: string | null,
 ): TweetHit | null {
   if (!tweetId) return null;
-  return tweetHits(tables).find((hit) => hit.id === tweetId) || null;
+  return (
+    shownHits.get(tweetId) ||
+    tweetHits(tables).find((hit) => hit.id === tweetId) ||
+    null
+  );
 }
 
 /** A hit as the row shape the post card renders. */

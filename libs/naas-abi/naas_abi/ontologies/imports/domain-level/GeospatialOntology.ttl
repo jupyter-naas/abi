@@ -22,13 +22,6 @@
 #    Classes
 #################################################################
 
-abi:Country a owl:Class ;
-    rdfs:subClassOf cco:ont00000472 ;
-    rdfs:label "Country" ;
-    skos:definition "A Geospatial Region that is a distinct territorial body or political entity recognized as an independent nation." ;
-    skos:example "United States, France, Japan" ;
-    rdfs:comment "A country is a distinct region with recognized boundaries and political governance, making it a suitable subclass of cco:GeospatialRegion." .
-
 abi:Address rdf:type owl:Class ;
     rdfs:subClassOf cco:ont00000686 ;
     rdfs:label "Address" ;
@@ -42,14 +35,3 @@ abi:ZIPCode rdf:type owl:Class ;
     skos:definition "A Designative Information Content Entity that consists of a string of characters used to identify a postal delivery area." ;
     skos:example "92130" ;
     rdfs:comment "A ZIP Code is a structured string of characters used to identify a postal delivery area for mail sorting and delivery purposes." .
-
-#################################################################
-#    Datatype Properties
-#################################################################
-
-abi:country_code a owl:DatatypeProperty ;
-    rdfs:domain abi:Country ;
-    rdfs:range xsd:string ;
-    rdfs:label "Country Code" ;
-    skos:definition "The ISO 3166-1 alpha-2 code for the country." ;
-    skos:example "US, FR, JP" .

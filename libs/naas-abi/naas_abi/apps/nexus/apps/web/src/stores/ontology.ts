@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { createDeferredStorage } from '@/lib/deferred-storage';
 import { useWorkspaceStore } from './workspace';
 import { getApiUrl } from '@/lib/config';
 import { ontologyApiQuery } from '@/lib/ontology-query';
@@ -633,6 +634,7 @@ export const useOntologyStore = create<OntologyState>()(
     }),
     {
       name: 'nexus-ontology',
+      storage: createDeferredStorage(),
       partialize: (state) => ({
         items: state.items,
         expandedFolders: state.expandedFolders,

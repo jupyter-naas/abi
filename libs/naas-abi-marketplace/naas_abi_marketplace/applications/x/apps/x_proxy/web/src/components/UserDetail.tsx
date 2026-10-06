@@ -90,7 +90,10 @@ function ingestedPostCount(
   known: UserRow | null,
   profile: UserProfile | null,
   bundleCounts: Record<FeedTab, number>,
+  postsLoaded: boolean,
 ): number {
+  if (postsLoaded && profile?.posts != null) return profile.posts;
+  if (postsLoaded && bundleCounts.all > 0) return bundleCounts.all;
   if (known?.posts != null) return known.posts;
   if (profile?.posts != null) return profile.posts;
   return bundleCounts.all;
@@ -150,7 +153,12 @@ export function UserDetail({
   const profile = feed.profile || profileFromKnown(known);
   const rows = feed.rows;
   const postsLoaded = Boolean(bundle) && !bundleLoading;
-  const ingestedTotal = ingestedPostCount(known, feed.profile, feed.counts);
+  const ingestedTotal = ingestedPostCount(
+    known,
+    feed.profile,
+    feed.counts,
+    postsLoaded,
+  );
   const lastPostAt =
     profile?.last_post_at || feed.profile?.last_post_at || rows[0]?.created_at || "";
   const firstPostAt =

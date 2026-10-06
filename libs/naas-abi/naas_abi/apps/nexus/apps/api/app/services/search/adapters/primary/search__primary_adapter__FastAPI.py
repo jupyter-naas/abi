@@ -24,8 +24,12 @@ from naas_abi.apps.nexus.apps.api.app.services.search.search__schema import (
     WebSearchResultData,
 )
 from naas_abi.apps.nexus.apps.api.app.services.search.service import SearchService
+from naas_abi.apps.nexus.apps.api.app.services.search.topics.adapters.primary.topics__primary_adapter__FastAPI import (  # noqa: E501
+    router as topics_router,
+)
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
+router.include_router(topics_router, prefix="/topics")
 
 
 class SearchFastAPIPrimaryAdapter:

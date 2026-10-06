@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { createDeferredStorage } from '@/lib/deferred-storage';
 
 export interface AgentTool {
   id: string;
@@ -605,6 +606,7 @@ export const useAgentsStore = create<AgentsState>()(
     }),
     {
       name: 'nexus-agents',
+      storage: createDeferredStorage(),
     }
   )
 );

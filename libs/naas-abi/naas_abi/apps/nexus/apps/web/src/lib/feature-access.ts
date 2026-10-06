@@ -13,6 +13,7 @@ export type FeatureKey =
   | 'code'
   | 'slides'
   | 'documents'
+  | 'sheets'
   | 'settings'
   | 'settings.workspace'
   | 'settings.organization';
@@ -34,6 +35,7 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'code',
   'slides',
   'documents',
+  'sheets',
   'settings',
   'settings.workspace',
   'settings.organization',
@@ -47,8 +49,8 @@ const OPT_IN_FEATURES: FeatureKey[] = ['code'];
 const DEFAULT_ROLE_BASELINE: Record<string, FeatureKey[]> = {
   owner: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
   admin: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
-  member: ['maps', 'chat', 'files', 'datasets', 'skills', 'slides', 'documents'],
-  viewer: ['maps', 'chat', 'files', 'datasets', 'skills', 'slides', 'documents'],
+  member: ['maps', 'chat', 'files', 'datasets', 'skills', 'slides', 'documents', 'sheets'],
+  viewer: ['maps', 'chat', 'files', 'datasets', 'skills', 'slides', 'documents', 'sheets'],
 };
 
 const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
@@ -66,6 +68,7 @@ const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
   code: '/code',
   slides: '/slides',
   documents: '/documents',
+  sheets: '/sheets',
   settings: '/settings',
   'settings.workspace': '/settings',
   'settings.organization': '/organization',
@@ -151,6 +154,9 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   if (firstSegment === 'documents') {
     return 'documents';
   }
+  if (firstSegment === 'sheets') {
+    return 'sheets';
+  }
   if (firstSegment === 'apps') {
     return 'apps';
   }
@@ -225,8 +231,14 @@ export function getFirstAllowedWorkspacePath(params: {
   return `/workspace/${params.workspaceId}/chat`;
 }
 
+/** Where picking another workspace lands: its Home, which every workspace has. */
+export function getWorkspaceHomePath(workspaceId: string): string {
+  return `/workspace/${workspaceId}/home`;
+}
+
 /**
- * Destination when switching workspaces from the current URL.
+ * Destination when the current URL must move to another workspace (e.g. an
+ * unknown workspace in the URL falls back to the first one).
  *
  * Stays on the same product surface (apps stays apps) and drops resource ids
  * (a chat thread, an opened app) that belong to the previous workspace.

@@ -1,0 +1,76 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+
+abi:ActOfJointVentureProcess a owl:Ontology ;
+  # Slice: the act and the document that records it. Shared vocabulary
+  # (StrategicAlliance, participant and record properties,
+  # OrganizationalAgreementRole) lives in the module OrganizationOntology,
+  # which this slice does NOT import (the module consolidates this file).
+  #
+  # Seven-bucket mapping for one joint venture:
+  #   WHO          Organization (two or more parties, each remaining a distinct legal entity)
+  #   WHAT         ActOfJointVenture (the process itself)
+  #   WHEN         TemporalRegion, from the agreement's effective date to its end
+  #   WHERE        GeospatialRegion (Site - the country, region or city the act occurs in)
+  #   WHY          OrganizationalAgreementRole (SDC) - the role each party bears under the agreement
+  #   HOW IT IS    not stated: no quality is specific to this act
+  #   HOW WE KNOW  JointVenture (the alliance agreement, a descriptive ICE)
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/GeospatialRegionOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/abi/OrganizationsOntology> ;
+  abi:pythonPackage "naas_abi_marketplace.domains.intelligence.modules.organizations" ;
+  abi:ontologyResource "ontologies/processes/ActOfJointVentureProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/ActOfJointVentureProcess.py" ;
+  dc:title "Act of Joint Venture Process Ontology"@en ;
+  dc:description "Process slice for the act of joint venture: a CCO Planned Act with organizations as participants, occurring in a geospatial region over a temporal region, realizing the agreement roles the parties bear, and documented by its joint venture record."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Process slice for Act of Joint Venture. Reuses the shared organization vocabulary."@en ;
+  dc11:contributor "Florent Ravenel", "Alice Dupont", "Emma Petit", "Grace Lambert" ;
+  dc11:date "2026-10-05"^^xsd:date .
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfJointVenture a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasAllianceParticipant ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:OrganizationalAgreementRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasAllianceAgreement ; owl:someValuesFrom abi:JointVenture ] ;
+  rdfs:label "Act of Joint Venture"@en ;
+  skos:definition "Planned act wherein two or more organizations come together to undertake a specific project or business activity, sharing resources, risks, and rewards, while maintaining their distinct legal identities."@en ;
+  skos:example "A joint venture between automotive companies to develop electric vehicles"@en ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:JointVenture a owl:Class ;
+  # StrategicAlliance is declared in the module, which this slice does not import:
+  # its parent is stated too, so the class reaches its bucket from the slice alone.
+  rdfs:subClassOf abi:StrategicAlliance ,
+    cco:ont00000853 ; # Descriptive Information Content Entity
+  rdfs:label "Joint Venture"@en ;
+  skos:definition "Details a planned act in which two or more organizations come together to undertake a specific project or business activity, sharing resources, risks, and rewards, while maintaining their distinct legal identities."@en ;
+  skos:example "A joint venture between automotive companies to develop electric vehicles"@en ;
+  rdfs:comment "A joint venture is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW IT IS
+#################################################################

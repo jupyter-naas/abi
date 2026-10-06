@@ -26,9 +26,6 @@ export function OntologyUsedIn({term, terms, basePath}: {term: DictionaryTerm; t
     <section className="ontology-context-network">
       <h2>Network</h2>
       <TermDetailNetwork term={term} terms={terms} basePath={basePath} />
-      {!related.incoming.length && !related.outgoing.length && (
-        <p className="ontology-context-note">No network to display.</p>
-      )}
     </section>
     <section className="ontology-context-used">
     <h2>Used in <span>{references.length}</span></h2>

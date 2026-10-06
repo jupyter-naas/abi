@@ -2,12 +2,23 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Search, RefreshCw } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { invalidateGraphExplorer } from '@/stores/graph-explorer';
 import { useOntologyStore } from '@/stores/ontology';
-import './resource-access.css';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  SettingsLoading,
+  SettingsNotice,
+  SettingsPageHeader,
+  SettingsFilterSelect,
+  SettingsTableToolbar,
+  countLabel,
+  SettingsSection,
+  settingsTable,
+} from '@/components/settings/settings-ui';
 
 type Kind = 'ontologies' | 'graphs';
 type Policy = {
@@ -54,6 +65,8 @@ export function ResourceAccessEditor({
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [draft, setDraft] = useState<Policy>({});
   const [search, setSearch] = useState('');
+  const [accessFilter, setAccessFilter] = useState('all');
+  const [availabilityFilter, setAvailabilityFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -178,125 +191,144 @@ export function ResourceAccessEditor({
     });
   }
   const catalog = snapshot?.catalog || [];
-  const rows = catalog.filter((item) =>
-    `${item.name} ${item.description}`
-      .toLowerCase()
-      .includes(search.toLowerCase()),
-  );
+  // Effective access of a row under the current (unsaved) draft.
+  const accessOf = (item: Entry): 'enabled' | 'disabled' | 'edit' | 'read' | 'none' => {
+    if (kind === 'ontologies') return draft.enabled?.includes(item.id) ? 'enabled' : 'disabled';
+    const owned = !!draft.include_owned && !!item.owned;
+    if (!item.read_only && (owned || draft.write?.includes(item.id))) return 'edit';
+    if (draft.read_all || owned || draft.read?.includes(item.id)) return 'read';
+    return 'none';
+  };
+  const rows = catalog.filter((item) => {
+    if (accessFilter !== 'all' && accessOf(item) !== accessFilter) return false;
+    if (availabilityFilter === 'available' && !item.available) return false;
+    if (availabilityFilter === 'unavailable' && item.available) return false;
+    return `${item.name} ${item.description}`.toLowerCase().includes(search.toLowerCase());
+  });
   const enabledCount =
     kind === 'ontologies'
       ? (draft.enabled || []).length
-      : catalog.filter(
-          (item) =>
-            draft.read_all ||
-            (draft.include_owned && item.owned) ||
-            draft.read?.includes(item.id) ||
-            draft.write?.includes(item.id),
-        ).length;
+      : catalog.filter((item) => accessOf(item) !== 'none').length;
+  const editableCount = kind === 'graphs' ? catalog.filter((item) => accessOf(item) === 'edit').length : 0;
+  const unavailableCount = catalog.filter((item) => !item.available).length;
+  const noun = kind === 'ontologies' ? 'ontology' : 'graph';
+  const meta = [
+    countLabel(rows.length, catalog.length, noun, kind === 'ontologies' ? 'ontologies' : 'graphs'),
+    kind === 'ontologies' ? `${enabledCount} enabled` : `${enabledCount} readable · ${editableCount} editable`,
+    unavailableCount ? `${unavailableCount} unavailable` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const th = settingsTable.th;
+  const checkCol = 'w-20 text-center';
 
   return (
-    <section className="resource-access" aria-busy={loading || saving}>
-      <header className="resource-access-heading">
-        <div>
-          <h1>{title}</h1>
-          <p>
-            {kind === 'ontologies'
-              ? 'Choose the ontologies available in this workspace.'
-              : 'Choose the named graphs this workspace can read and edit.'}
-          </p>
-        </div>
-        <div className="resource-access-actions">
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={loading || saving}
-            title="Reload assignments"
-          >
-            <RefreshCw size={14} /> Reload
-          </button>
-          <button
-            type="button"
-            className="resource-access-save"
-            onClick={() => void save()}
-            disabled={!dirty || saving || loading}
-          >
-            {saving ? 'Saving…' : 'Save changes'}
-          </button>
-        </div>
-      </header>
+    <section className="space-y-4" aria-busy={loading || saving}>
+      <SettingsPageHeader
+        title={title}
+        badge={snapshot ? (kind === 'ontologies' ? `${enabledCount} enabled` : `${enabledCount} readable`) : undefined}
+        description={
+          kind === 'ontologies'
+            ? 'Choose the ontologies available in this workspace.'
+            : 'Choose the named graphs this workspace can read and edit.'
+        }
+        actions={
+          <>
+            <Button onClick={() => void save()} disabled={!dirty || saving || loading}>
+              {saving ? 'Saving…' : 'Save changes'}
+            </Button>
+          </>
+        }
+      />
       {error && (
-        <div className="resource-access-error" role="alert">
-          {error}
-        </div>
+        <SettingsNotice tone="error">
+          <span role="alert">{error}</span>
+        </SettingsNotice>
       )}
-      {saved && <p role="status">Assignments saved.</p>}
+      {saved && (
+        <SettingsNotice tone="success">
+          <span role="status">Assignments saved.</span>
+        </SettingsNotice>
+      )}
       {loading ? (
-        <p role="status">Loading {title.toLowerCase()}…</p>
+        <SettingsLoading label={`Loading ${title.toLowerCase()}…`} />
       ) : (
         snapshot && (
           <>
             {kind === 'graphs' && (
-              <fieldset className="resource-access-options" disabled={saving}>
-                <legend>Workspace access</legend>
-                <label>
-                  <input
-                    type="checkbox"
+              <SettingsSection title="Workspace access">
+                <fieldset className="flex flex-col gap-2.5" disabled={saving}>
+                  <Checkbox
                     checked={!!draft.read_all}
-                    onChange={(e) =>
-                      changeOptions({ read_all: e.target.checked })
-                    }
-                  />{' '}
-                  Read all graphs, including future graphs
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
+                    onCheckedChange={(checked) => changeOptions({ read_all: checked })}
+                    label="Read all graphs, including future graphs"
+                  />
+                  <Checkbox
                     checked={!!draft.include_owned}
-                    onChange={(e) =>
+                    onCheckedChange={(checked) =>
                       changeOptions({
-                        include_owned: e.target.checked,
-                        allow_create: e.target.checked && draft.allow_create,
+                        include_owned: checked,
+                        allow_create: checked && draft.allow_create,
                       })
                     }
-                  />{' '}
-                  Include graphs created in this workspace
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
+                    label="Include graphs created in this workspace"
+                  />
+                  <Checkbox
                     checked={!!draft.allow_create && !!draft.include_owned}
                     disabled={!draft.include_owned}
-                    onChange={(e) =>
-                      changeOptions({ allow_create: e.target.checked })
-                    }
-                  />{' '}
-                  Allow members to create graphs
-                </label>
-              </fieldset>
+                    onCheckedChange={(checked) => changeOptions({ allow_create: checked })}
+                    label="Allow members to create graphs"
+                  />
+                </fieldset>
+              </SettingsSection>
             )}
-            <div className="resource-access-toolbar">
-              <label className="resource-access-search">
-                <Search size={14} />
-                <input
-                  aria-label={`Search ${title.toLowerCase()}`}
-                  placeholder={`Search ${title.toLowerCase()}…`}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </label>
-              <span>
-                {enabledCount} enabled · {catalog.length} listed
-              </span>
-            </div>
-            <div className="resource-access-table-wrap">
-              <table>
+            <SettingsTableToolbar
+              search={search}
+              onSearchChange={setSearch}
+              searchPlaceholder={`Search ${title.toLowerCase()}…`}
+              filters={
+                <>
+                  <SettingsFilterSelect
+                    label={kind === 'ontologies' ? 'Status' : 'Access'}
+                    value={accessFilter}
+                    onChange={setAccessFilter}
+                    options={
+                      kind === 'ontologies'
+                        ? [
+                            { value: 'all', label: 'All statuses' },
+                            { value: 'enabled', label: 'Enabled' },
+                            { value: 'disabled', label: 'Disabled' },
+                          ]
+                        : [
+                            { value: 'all', label: 'All access' },
+                            { value: 'edit', label: 'Read & edit' },
+                            { value: 'read', label: 'Read only' },
+                            { value: 'none', label: 'No access' },
+                          ]
+                    }
+                  />
+                  <SettingsFilterSelect
+                    label="Availability"
+                    value={availabilityFilter}
+                    onChange={setAvailabilityFilter}
+                    options={[
+                      { value: 'all', label: 'All availability' },
+                      { value: 'available', label: 'Available' },
+                      { value: 'unavailable', label: 'Unavailable' },
+                    ]}
+                  />
+                </>
+              }
+              meta={meta}
+            />
+            <div className={settingsTable.wrapper}>
+              <table className={settingsTable.table}>
                 <thead>
-                  <tr>
-                    <th>
-                      {kind === 'ontologies' ? 'Ontology' : 'Named graph'}
-                    </th>
-                    <th>{kind === 'ontologies' ? 'Enabled' : 'Read'}</th>
-                    {kind === 'graphs' && <th>Edit</th>}
+                  <tr className={settingsTable.headRow}>
+                    <th className={th}>{kind === 'ontologies' ? 'Ontology' : 'Named graph'}</th>
+                    <th className={cn(th, checkCol)}>{kind === 'ontologies' ? 'Enabled' : 'Read'}</th>
+                    {kind === 'graphs' && <th className={cn(th, checkCol)}>Edit</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -308,34 +340,29 @@ export function ResourceAccessEditor({
                       !!draft.read?.includes(item.id) ||
                       !!draft.write?.includes(item.id);
                     return (
-                      <tr key={item.id}>
-                        <td>
-                          <strong>{item.name}</strong>
-                          <span>{item.description}</span>
+                      <tr key={item.id} className={settingsTable.row}>
+                        <td className={settingsTable.td}>
+                          <p className="break-words font-medium">{item.name}</p>
+                          <p className="break-words text-xs text-muted-foreground">{item.description}</p>
                           {!item.available && (
-                            <small>
-                              Unavailable · remove the assignment if no longer
-                              needed
-                            </small>
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                              Unavailable · remove the assignment if no longer needed
+                            </p>
                           )}
                         </td>
                         {kind === 'ontologies' ? (
-                          <td>
-                            <input
-                              type="checkbox"
+                          <td className={cn(settingsTable.td, checkCol)}>
+                            <Checkbox
                               aria-label={`Enable ${item.name}`}
                               checked={!!draft.enabled?.includes(item.id)}
                               disabled={saving}
-                              onChange={(e) =>
-                                toggleOntology(item.id, e.target.checked)
-                              }
+                              onCheckedChange={(checked) => toggleOntology(item.id, checked)}
                             />
                           </td>
                         ) : (
                           <>
-                            <td>
-                              <input
-                                type="checkbox"
+                            <td className={cn(settingsTable.td, checkCol)}>
+                              <Checkbox
                                 aria-label={`Read ${item.name}`}
                                 title={
                                   draft.read_all
@@ -346,14 +373,11 @@ export function ResourceAccessEditor({
                                 }
                                 checked={readable}
                                 disabled={saving || !!draft.read_all || owned}
-                                onChange={(e) =>
-                                  toggleGraph(item.id, 'read', e.target.checked)
-                                }
+                                onCheckedChange={(checked) => toggleGraph(item.id, 'read', checked)}
                               />
                             </td>
-                            <td>
-                              <input
-                                type="checkbox"
+                            <td className={cn(settingsTable.td, checkCol)}>
+                              <Checkbox
                                 aria-label={`Edit ${item.name}`}
                                 title={
                                   item.read_only
@@ -362,18 +386,9 @@ export function ResourceAccessEditor({
                                       ? 'Included as a workspace-owned graph'
                                       : undefined
                                 }
-                                checked={
-                                  !item.read_only &&
-                                  (owned || !!draft.write?.includes(item.id))
-                                }
+                                checked={!item.read_only && (owned || !!draft.write?.includes(item.id))}
                                 disabled={saving || item.read_only || owned}
-                                onChange={(e) =>
-                                  toggleGraph(
-                                    item.id,
-                                    'write',
-                                    e.target.checked,
-                                  )
-                                }
+                                onCheckedChange={(checked) => toggleGraph(item.id, 'write', checked)}
                               />
                             </td>
                           </>
@@ -384,19 +399,16 @@ export function ResourceAccessEditor({
                 </tbody>
               </table>
               {rows.length === 0 && (
-                <p className="resource-access-empty">
-                  {search
-                    ? 'No matching resources.'
-                    : 'No resources available.'}
+                <p className="p-6 text-center text-sm text-muted-foreground">
+                  {catalog.length ? 'No resources match the current search and filters.' : 'No resources available.'}
                 </p>
               )}
             </div>
-            <p className="resource-access-note">
+            <p className="text-xs leading-relaxed text-muted-foreground">
               {snapshot.updated_by
                 ? 'Admin changes are saved for this workspace.'
                 : 'Initial assignments come from configuration.'}{' '}
-              Changes apply when saved. Configuration changes do not overwrite
-              saved assignments.
+              Changes apply when saved. Configuration changes do not overwrite saved assignments.
               {kind === 'graphs' && ' Viewers retain read-only access.'}
             </p>
           </>

@@ -5,7 +5,8 @@
 
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { clearAuthFlagCookie, mergeAuthPersistedState, setAuthFlagCookie } from '@/lib/auth-session';
+import { discardDeferredStorage } from '@/lib/deferred-storage';
+import { clearAuthFlagCookie, mergeAuthPersistedState, setAuthFlagCookie, shouldRefreshAccessToken } from '@/lib/auth-session';
 import { getSafeStorage } from '@/lib/safe-storage';
 
 export interface User {
@@ -44,10 +45,17 @@ export interface AuthState {
 }
 
 import { getApiUrl } from '@/lib/config';
+import {
+  SETTINGS_CACHE_HEADER,
+  fetchWithSettingsCacheFallback,
+  shouldUseSettingsCache,
+} from '@/lib/settings-cache';
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      let refreshPromise: Promise<boolean> | null = null;
+      return {
       // Initial state
       user: null,
       token: null,
@@ -277,6 +285,8 @@ export const useAuthStore = create<AuthState>()(
           'nexus-knowledge-graph',
           'nexus-servers',
         ];
+        // Queued deferred writes would otherwise re-create these keys.
+        discardDeferredStorage(storeKeys);
         for (const key of storeKeys) {
           try { localStorage.removeItem(key); } catch { /* SSR safe */ }
         }
@@ -297,36 +307,49 @@ export const useAuthStore = create<AuthState>()(
         set({ error: null });
       },
 
-      // Silently exchange the refresh token for a new access token.
-      // Returns true on success, false if the refresh token is missing or rejected.
-      refreshAccessToken: async (): Promise<boolean> => {
-        const { refreshToken } = get();
-        if (!refreshToken) return false;
+      // Share rotation within a tab, and serialize it across tabs where supported.
+      refreshAccessToken: (): Promise<boolean> => {
+        if (refreshPromise) return refreshPromise;
+        const originalRefreshToken = get().refreshToken;
+        const refresh = async (): Promise<boolean> => {
+          // Another tab may have rotated or logged out while we waited for the lock.
+          syncPersistedAuthSession();
+          const { refreshToken } = get();
+          if (!refreshToken) return false;
+          if (refreshToken !== originalRefreshToken) return Boolean(get().token);
 
-        try {
-          const apiBase = getApiUrl();
-          const response = await fetch(`${apiBase}/api/auth/refresh`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refresh_token: refreshToken }),
-          });
-
-          if (!response.ok) {
-            // Refresh token is expired or invalid — force full logout
-            set({ user: null, token: null, refreshToken: null, isAuthenticated: false });
+          try {
+            const response = await fetch(`${getApiUrl()}/api/auth/refresh`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ refresh_token: refreshToken }),
+              signal: AbortSignal.timeout(15000),
+            });
+            // A login/logout during this request owns the newer state.
+            syncPersistedAuthSession();
+            if (get().refreshToken !== refreshToken) return false;
+            if (!response.ok) {
+              if (response.status === 401 || response.status === 403) get().logout();
+              return false;
+            }
+            const data = await response.json();
+            if (get().refreshToken !== refreshToken) return false;
+            if (!data.access_token || !data.refresh_token) return false;
+            set({ token: data.access_token, refreshToken: data.refresh_token, isAuthenticated: true });
+            setAuthFlagCookie();
+            return true;
+          } catch {
+            // Offline, timeout, or server failure: keep credentials for the next attempt.
             return false;
           }
-
-          const data = await response.json();
-          set({
-            token: data.access_token,
-            refreshToken: data.refresh_token ?? null,
-          });
-          return true;
-        } catch {
-          // Network error — don't clear state, let the caller decide
-          return false;
-        }
+        };
+        refreshPromise = (async () => {
+          if (typeof navigator !== 'undefined' && navigator.locks) {
+            return await navigator.locks.request('nexus-auth-refresh', refresh);
+          }
+          return await refresh();
+        })().finally(() => { refreshPromise = null; });
+        return refreshPromise;
       },
 
       // Check if current token is valid; silently refreshes if expired.
@@ -337,8 +360,7 @@ export const useAuthStore = create<AuthState>()(
         if (!token) {
           const refreshed = await get().refreshAccessToken();
           if (!refreshed) {
-            set({ isAuthenticated: false, user: null });
-            return false;
+            return get().isAuthenticated;
           }
         }
 
@@ -351,24 +373,28 @@ export const useAuthStore = create<AuthState>()(
             },
           });
 
+          if (get().token !== currentToken) return get().isAuthenticated;
           if (response.status === 401) {
             // Access token rejected — try refresh once
             const refreshed = await get().refreshAccessToken();
             if (!refreshed) {
-              set({ isAuthenticated: false, user: null, token: null });
-              return false;
+              if (!get().refreshToken) get().logout();
+              return get().isAuthenticated;
             }
             // Retry /me with the new token
             const newToken = get().token;
             const retryResponse = await fetch(`${apiBase}/api/auth/me`, {
               headers: { 'Authorization': `Bearer ${newToken}` },
             });
+            if (get().token !== newToken) return get().isAuthenticated;
             if (!retryResponse.ok) {
-              set({ isAuthenticated: false, user: null, token: null, refreshToken: null });
-              return false;
+              if (retryResponse.status === 401 || retryResponse.status === 403) get().logout();
+              return get().isAuthenticated;
             }
             const retryUser = await retryResponse.json();
+            if (get().token !== newToken) return get().isAuthenticated;
             const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
+            setAuthFlagCookie();
             set({ user: { ...retryUser, avatar: normalizeAvatar(retryUser?.avatar) }, isAuthenticated: true });
             return true;
           }
@@ -379,7 +405,9 @@ export const useAuthStore = create<AuthState>()(
           }
 
           const user = await response.json();
+          if (get().token !== currentToken) return get().isAuthenticated;
           const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
+          setAuthFlagCookie();
           set({ user: { ...user, avatar: normalizeAvatar(user?.avatar) }, isAuthenticated: true });
           return true;
         } catch {
@@ -387,7 +415,8 @@ export const useAuthStore = create<AuthState>()(
           return get().isAuthenticated;
         }
       },
-    }),
+    };
+    },
     {
       name: 'nexus-auth',
       storage: createJSONStorage(() => getSafeStorage()),
@@ -421,11 +450,20 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
   // Prepend API_BASE if URL is relative
   const fullUrl = url.startsWith('http') ? url : `${apiBase}${url}`;
 
-  const makeRequest = (tok: string | null) => {
-    const headers = new Headers(options.headers);
-    if (tok) headers.set('Authorization', `Bearer ${tok}`);
-    return fetch(fullUrl, { ...options, headers });
-  };
+  // Settings pages read through the backend's 24h settings cache (see lib/settings-cache).
+  const wantSettingsCache =
+    typeof window !== 'undefined' &&
+    fullUrl.startsWith(apiBase) &&
+    !new Headers(options.headers).has(SETTINGS_CACHE_HEADER) &&
+    shouldUseSettingsCache(window.location.pathname, options.method);
+
+  const makeRequest = (tok: string | null) =>
+    fetchWithSettingsCacheFallback(wantSettingsCache, (useCache) => {
+      const headers = new Headers(options.headers);
+      if (tok) headers.set('Authorization', `Bearer ${tok}`);
+      if (useCache) headers.set(SETTINGS_CACHE_HEADER, '1');
+      return fetch(fullUrl, { ...options, headers });
+    });
 
   // Surface in-flight activity to the UI (e.g. ApiStatusIndicator pulses while busy).
   const { useNetworkActivityStore } = await import('./network-activity');
@@ -433,18 +471,25 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
   begin();
 
   try {
-    const response = await makeRequest(useAuthStore.getState().token);
+    if (shouldRefreshAccessToken(useAuthStore.getState().token)) {
+      await useAuthStore.getState().refreshAccessToken();
+    }
+    const requestToken = useAuthStore.getState().token;
+    const response = await makeRequest(requestToken);
 
     if (response.status === 401) {
       // Try a silent token refresh
-      const refreshed = await useAuthStore.getState().refreshAccessToken();
+      const refreshed = useAuthStore.getState().token !== requestToken
+        ? Boolean(useAuthStore.getState().token)
+        : await useAuthStore.getState().refreshAccessToken();
       if (refreshed) {
         // Retry the original request with the new token
         return await makeRequest(useAuthStore.getState().token);
       }
 
-      // Refresh failed — full logout
-      console.warn('Auth token expired and refresh failed, logging out...');
+      // Temporary refresh failures must not destroy a recoverable session.
+      if (useAuthStore.getState().refreshToken) return response;
+
       useAuthStore.getState().logout();
       // Skip redirect if already on an auth route — otherwise we trigger a
       // reload loop with stores that auto-fetch on hydration.
@@ -456,5 +501,27 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
     return response;
   } finally {
     end();
+  }
+}
+
+/** Adopt rotations and explicit logout from other tabs before using shared credentials. */
+export function syncPersistedAuthSession(): void {
+  try {
+    const raw = getSafeStorage().getItem('nexus-auth');
+    if (!raw) return;
+    const { state } = JSON.parse(raw);
+    if (!state || !('refreshToken' in state)) return;
+    const current = useAuthStore.getState();
+    if (current.token === state.token && current.refreshToken === state.refreshToken) return;
+    useAuthStore.setState({
+      user: state.user ?? null,
+      token: state.token ?? null,
+      refreshToken: state.refreshToken ?? null,
+      isAuthenticated: Boolean(state.isAuthenticated),
+    });
+    if (state.isAuthenticated) setAuthFlagCookie();
+    else clearAuthFlagCookie();
+  } catch {
+    // An unreadable storage snapshot must not replace a live session.
   }
 }
