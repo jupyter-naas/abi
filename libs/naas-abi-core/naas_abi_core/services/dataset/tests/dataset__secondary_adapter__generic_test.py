@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
@@ -371,13 +372,18 @@ class DatasetSecondaryAdapterContract(ABC):
             mode="upsert",
         )
 
-        historical = adapter.query(
+        sql = (
             "SELECT c.sha, p.label FROM github_commits c "
-            "JOIN projects p USING (project_id) ORDER BY c.sha",
-            namespace="acme",
-            snapshot_id=coherent_snapshot.snapshot_id,
+            "JOIN projects p USING (project_id) ORDER BY c.sha"
+        )
+        historical = adapter.query(
+            sql, namespace="acme", snapshot_id=coherent_snapshot.snapshot_id
         )
         assert historical.rows == [{"sha": "old", "label": "before"}]
+        with adapter.query_stream(
+            sql, namespace="acme", snapshot_id=coherent_snapshot.snapshot_id
+        ) as streamed:
+            assert list(streamed.rows) == historical.rows
         snapshots = adapter.list_snapshots()
         assert [item.snapshot_id for item in snapshots] == sorted(
             item.snapshot_id for item in snapshots
@@ -441,6 +447,37 @@ class DatasetSecondaryAdapterContract(ABC):
             ) as result,
         ):
             list(result.rows)
+
+    def test_an_unread_query_stream_holds_up_neither_writes_nor_reads(
+        self, adapter: IDatasetPort
+    ):
+        """A stream its reader stopped reading (an export whose browser went
+        away; its transfer only expires after 60 s idle) must not block the
+        catalog: a write made meanwhile finishes, then reads do. The stream
+        keeps the rows of the snapshot it opened on."""
+        adapter.create(self._spec())
+        adapter.write("github_commits", list(self._commits(3)), namespace="acme")
+        # Several MiB, more than the transfer buffers hold: over NATS the
+        # producer waits on this reader.
+        sql = (
+            "SELECT c.sha, r.range AS n, repeat('x', 100) AS pad "
+            "FROM github_commits c, range(20000) r"
+        )
+
+        def write_then_read() -> tuple[int, int]:
+            adapter.write(
+                "github_commits", list(self._commits(1, start=3)), namespace="acme"
+            )
+            adapter.describe("github_commits", namespace="acme")
+            return self._totals(adapter)
+
+        # The stream exits first, so a blocked write is released on failure.
+        with (
+            ThreadPoolExecutor(max_workers=1) as pool,
+            adapter.query_stream(sql, namespace="acme") as result,
+        ):
+            assert pool.submit(write_then_read).result(timeout=10) == (4, 6)
+            assert sum(1 for _ in result.rows) == 3 * 20000
 
     def test_integers_round_trip_exactly_and_stay_integers(self, adapter: IDatasetPort):
         big = 2**60 + 1  # not representable as a double
