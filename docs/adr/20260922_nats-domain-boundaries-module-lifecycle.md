@@ -75,3 +75,10 @@ are programming boundaries, not security authorization.
 
 The model registry now has network lookup/inference proxies; local registration
 remains a bootstrap operation. See [Remote model registry](20260924_remote-model-registry.md).
+
+## 2026-10-06 follow-up
+
+**Kernel jobs.** A job that maintains a service's own data runs on the owner, like
+its endpoints: dataset compaction gets the engine's dataset service, with no RPC
+hop or deadline. A job one domain runs against another is a dependency and uses
+the facades: the PostgreSQL event archive writes datasets over NATS.

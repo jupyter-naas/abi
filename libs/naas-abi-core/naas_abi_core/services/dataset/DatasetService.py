@@ -23,6 +23,12 @@ from naas_abi_core.services.dataset.ontologies.classes.ontology_naas_ai.abi.data
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
+def _deadline(timeout_seconds: float | None) -> dict[str, float]:
+    """A caller's deadline, passed on only when given: an adapter written
+    before the keyword keeps working for every call without one."""
+    return {} if timeout_seconds is None else {"timeout_seconds": timeout_seconds}
+
+
 class DatasetService(ServiceBase, IDatasetPort):
     """Named tables with a partition spec, queried with SQL.
 
@@ -92,8 +98,14 @@ class DatasetService(ServiceBase, IDatasetPort):
         *,
         namespace: str = "default",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> QueryResult:
-        return self.__adapter.query(sql, namespace=namespace, snapshot_id=snapshot_id)
+        return self.__adapter.query(
+            sql,
+            namespace=namespace,
+            snapshot_id=snapshot_id,
+            **_deadline(timeout_seconds),
+        )
 
     @contextmanager
     def query_stream(
@@ -108,11 +120,27 @@ class DatasetService(ServiceBase, IDatasetPort):
         ) as result:
             yield result
 
-    def compact(self, name: str, *, namespace: str = "default") -> QueryResult:
-        return self.__adapter.compact(name, namespace=namespace)
+    def compact(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
+        return self.__adapter.compact(
+            name, namespace=namespace, **_deadline(timeout_seconds)
+        )
 
-    def flush(self, name: str, *, namespace: str = "default") -> QueryResult:
-        return self.__adapter.flush(name, namespace=namespace)
+    def flush(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
+        return self.__adapter.flush(
+            name, namespace=namespace, **_deadline(timeout_seconds)
+        )
 
     def inlined_row_count(self, name: str, *, namespace: str = "default") -> int:
         return self.__adapter.inlined_row_count(name, namespace=namespace)

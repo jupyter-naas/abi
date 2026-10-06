@@ -440,16 +440,28 @@ class NATSConfiguration(BaseModel):
     Process-local model registration is available only to modules, never as
     an injected cross-domain dependency. See the network-boundaries ADR.
 
+    Kernel jobs follow the same line. A job that maintains a service's own
+    data (dataset compaction) runs on the owner, like its endpoints. A job
+    that one domain runs against another (the PostgreSQL event archive writing
+    datasets) is a dependency, so it uses the facades.
+
+    A facade call waits ``client_timeout_seconds`` for its reply. Operations
+    that can take longer (dataset ``compact``, ``flush``, ``query``) accept a
+    deadline per call.
+
     See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
     ("Decisions locked in" -- Stage 1's JWT is deliberately minimal).
 
     nats:
       nats_url: "nats://127.0.0.1:4222"
       jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+      client_timeout_seconds: 10
     """
 
     nats_url: str = "nats://127.0.0.1:4222"
     jwt_secret: str
+    # How long an engine's facades wait for a reply (calls without their own deadline).
+    client_timeout_seconds: float = Field(default=10.0, gt=0, allow_inf_nan=False)
     discovery: DiscoveryConfiguration | None = None
     object_storage_streaming: NATSStreamingConfiguration = Field(
         default_factory=NATSStreamingConfiguration

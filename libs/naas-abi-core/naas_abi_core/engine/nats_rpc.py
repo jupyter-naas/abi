@@ -411,11 +411,15 @@ class NatsRPCClient:
     # RPC plumbing.
     # ------------------------------------------------------------------
 
-    def _context(self) -> common_pb2.CallContext:
+    def _context(self, timeout_seconds: float | None = None) -> common_pb2.CallContext:
+        """The call's context; ``timeout_seconds`` as passed to ``_call``."""
         return common_pb2.CallContext(
             trace_id=str(uuid.uuid4()),
-            timeout_ms=int(self._timeout_seconds * 1000),
+            timeout_ms=int(self._deadline(timeout_seconds) * 1000),
         )
+
+    def _deadline(self, timeout_seconds: float | None) -> float:
+        return self._timeout_seconds if timeout_seconds is None else timeout_seconds
 
     def _call(
         self,
@@ -424,7 +428,11 @@ class NatsRPCClient:
         response_cls: type[_ResponseT],
         *,
         transfer: TransferTrace | None = None,
+        timeout_seconds: float | None = None,
     ) -> _ResponseT:
+        """One request/reply. ``timeout_seconds`` replaces the client's default
+        deadline for this call only (a long operation); overflow chunks keep
+        the default, each being small."""
         payload = request.SerializeToString()
         with self._call_lock:
             token = self._current_token()
@@ -448,7 +456,9 @@ class NatsRPCClient:
             upload = None
             try:
                 try:
-                    msg = self._rpc_request(subject, payload, headers)
+                    msg = self._rpc_request(
+                        subject, payload, headers, timeout_seconds=timeout_seconds
+                    )
                 except NatsRPCPayloadTooLargeError as exc:
                     if not exc.unsent:
                         raise
@@ -457,7 +467,10 @@ class NatsRPCClient:
                         timeout=self._overflow_timeout(len(payload)),
                     )
                     msg = self._rpc_request(
-                        subject, b"", {**headers, overflow.REQUEST_HEADER: upload}
+                        subject,
+                        b"",
+                        {**headers, overflow.REQUEST_HEADER: upload},
+                        timeout_seconds=timeout_seconds,
                     )
                 reply_headers = msg.headers or {}
                 if overflow.REPLY_HEADER in reply_headers and not (
@@ -482,7 +495,9 @@ class NatsRPCClient:
         headers: dict[str, str],
         *,
         retry_no_responders: bool = True,
+        timeout_seconds: float | None = None,
     ) -> Any:
+        deadline = self._deadline(timeout_seconds)
         return self._run_coro(
             asyncio.wait_for(
                 self._do_request_async(
@@ -490,9 +505,11 @@ class NatsRPCClient:
                     payload,
                     headers,
                     retry_no_responders=retry_no_responders,
+                    timeout_seconds=deadline,
                 ),
-                timeout=self._timeout_seconds,
-            )
+                timeout=deadline,
+            ),
+            timeout=deadline + 1.0,
         )
 
     @staticmethod
@@ -670,6 +687,7 @@ class NatsRPCClient:
         headers: dict[str, str],
         *,
         retry_no_responders: bool = True,
+        timeout_seconds: float | None = None,
     ):
         nc = await self._ensure_connection_async()
         # NATS counts the HPUB header block as part of the message size. nats-py's
@@ -692,7 +710,7 @@ class NatsRPCClient:
                 subject,
                 payload,
                 headers=headers,
-                timeout=self._timeout_seconds,
+                timeout=self._deadline(timeout_seconds),
                 retry_seconds=no_responders.RETRY_SECONDS if retry_no_responders else 0,
             )
         except MaxPayloadError as exc:

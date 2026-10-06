@@ -47,14 +47,19 @@ class IDatasetPort:
     def describe(name, *, namespace="default") -> DatasetInfo
     def list(*, namespace=None) -> list[DatasetInfo]
     def write(name, rows, *, namespace="default", mode="append"|"replace"|"upsert", snapshot_id=None) -> DatasetInfo
-    def query(sql, *, namespace="default", snapshot_id=None) -> QueryResult
+    def query(sql, *, namespace="default", snapshot_id=None, timeout_seconds=None) -> QueryResult
     def query_stream(sql, *, namespace="default", snapshot_id=None) -> ContextManager[RowStream]
-    def compact(name, *, namespace="default") -> QueryResult
-    def flush(name, *, namespace="default") -> QueryResult
+    def compact(name, *, namespace="default", timeout_seconds=None) -> QueryResult
+    def flush(name, *, namespace="default", timeout_seconds=None) -> QueryResult
     def inlined_row_count(name, *, namespace="default") -> int
     def list_snapshots() -> list[DatasetSnapshotInfo]
     def drop(name, *, namespace="default") -> None
 ```
+
+`timeout_seconds` is how long the caller waits when the adapter calls another
+process (the NATS client); DuckLake runs to completion and ignores it. `None`
+keeps the adapter's default. `DatasetService` passes it on only when given, so
+an adapter written before the keyword keeps working for other calls.
 
 `DatasetSpec` carries `name`, `namespace`, columns (`string|integer|bigint|double|boolean|date|timestamp|json`), partitions (`column` + `identity|year|month|day`), and `primary_key`. Primary-key columns must exist. DuckLake does not enforce uniqueness; the key only defines `MERGE INTO` matching for upsert, and ordinary appends can create duplicate keys.
 
@@ -178,6 +183,12 @@ Every connection attaches with `AUTOMATIC_MIGRATION`, so the adapter initializes
   because it can contain writes or multiple statements.
   Optional op config selects `namespace` and `name`; otherwise it processes all
   service datasets. See `../../apps/dagster/AGENTS.md` for run config and semantics.
+- In NATS mode the engine hosts the same maintenance as kernel jobs
+  (`DatasetMaintenanceJobs`, owner `naas_abi_core.dataset`: `dataset_compaction`
+  daily at 02:00 UTC, `dataset_catalog_monitor` hourly), and Dagster skips its
+  app. The jobs get the engine's own dataset service, so compaction makes no RPC
+  hop. When the dataset is itself `nats_rpc` to another engine, `flush` and
+  `compact` wait `MAINTENANCE_CALL_TIMEOUT` (6 h), not the client's default.
 - `inlined_row_count` reads DuckLake's inline-table registry and counts insertion
   records across schema versions, including deleted/historical records still in
   the inline tables. It does not scan Parquet. It excludes separate inline delete
@@ -257,7 +268,10 @@ port. Wire contracts live under `naas_abi_core/proto/dataset/v1/`.
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
-mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
+mapping in the adapter. `query`, `flush` and `compact` pass a caller's
+`timeout_seconds` to `_call` and to the request's `CallContext`; other calls
+use the client's `timeout_seconds` (`nats.client_timeout_seconds` for the
+engine's facades). Primaries use `respond_protobuf` for bounded replies.
 Requests and replies above the broker limit (8 MiB, or lower) overflow as
 transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
 that, at the overflow host's capacity, or with an older peer, the call fails

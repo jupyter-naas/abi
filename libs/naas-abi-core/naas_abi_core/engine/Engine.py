@@ -317,7 +317,13 @@ class Engine(IEngine):
         return nats is not None and nats.jobs.enabled
 
     def job_owners(self) -> dict[str, object]:
-        """Modules plus kernel job owners (NATS mode only), keyed by owner id."""
+        """Modules plus kernel job owners (NATS mode only), keyed by owner id.
+
+        Dataset maintenance works on the dataset service's own data, so it gets
+        this engine's service, like the endpoints do: no NATS hop, no RPC
+        deadline. A job one domain runs against another (the event archive
+        writing datasets) is a dependency and gets the facades
+        (``NATSConfiguration``)."""
         owners: dict[str, object] = dict(self.__modules)
         if self.__configuration.nats is None:
             return owners
@@ -327,7 +333,7 @@ class Engine(IEngine):
                 DatasetMaintenanceJobs,
             )
 
-            owners[DATASET_JOBS_OWNER] = DatasetMaintenanceJobs(self.services.dataset)
+            owners[DATASET_JOBS_OWNER] = DatasetMaintenanceJobs(self.__services.dataset)
         # A service's adapter may host its own maintenance jobs (the PostgreSQL
         # event log archives itself into the Dataset Service).
         for service in self.__services.all:

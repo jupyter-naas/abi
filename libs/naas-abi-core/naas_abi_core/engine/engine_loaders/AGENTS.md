@@ -22,6 +22,15 @@ Do not wire client wrappers to event services when their server-side domain
 already emits events. Raw-adapter endpoints (cache/vector/event) have explicit
 facade wiring. Only the triple-store owner bootstraps schema state.
 
+Facades wait `nats.client_timeout_seconds` (default 10) for a reply; a route
+configured to another engine (`adapter: nats_rpc`) keeps its own `timeout_seconds`.
+Long dataset operations pass a deadline per call instead.
+
+Kernel jobs (`Engine.job_owners`): dataset maintenance gets the engine's own
+dataset service, like its endpoints. Jobs that service adapters offer
+(`job_owners(services)`, such as the PostgreSQL event archive) work across
+domains, so they receive the facades.
+
 ## Tests
 Run EngineNATSLoader_test.py, EngineNATSDependencies_test.py, and the engine's
 optional-NATS/shutdown tests. `make demo-sdk` verifies real broker traffic,

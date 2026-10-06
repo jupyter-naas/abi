@@ -233,3 +233,28 @@ def test_non_truthy_env_leaves_the_configured_value_alone(
     monkeypatch.setenv("ABI_SKIP_ONTOLOGY_LOADING", value)
 
     assert _global_config(_dotenv(tmp_path)).skip_ontology_loading is False
+
+
+def test_nats_client_calls_wait_ten_seconds_unless_configured():
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        NATSConfiguration,
+    )
+
+    assert NATSConfiguration(jwt_secret="test").client_timeout_seconds == 10.0
+    assert (
+        NATSConfiguration(
+            jwt_secret="test", client_timeout_seconds=120
+        ).client_timeout_seconds
+        == 120.0
+    )
+
+
+@pytest.mark.parametrize("value", [0, -1, float("nan"), float("inf")])
+def test_nats_client_timeout_must_be_a_positive_finite_number(value):
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        NATSConfiguration,
+    )
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        NATSConfiguration(jwt_secret="test", client_timeout_seconds=value)

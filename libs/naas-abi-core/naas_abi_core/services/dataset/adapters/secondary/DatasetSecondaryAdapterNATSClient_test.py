@@ -65,6 +65,32 @@ def test_context_manager_calls_close():
     assert closed == [True]
 
 
+@pytest.mark.parametrize(
+    "operation, response",
+    [
+        ("compact", dataset_pb2.CompactResponse()),
+        ("flush", dataset_pb2.FlushResponse()),
+        ("query", dataset_pb2.QueryResponse()),
+    ],
+)
+def test_long_operations_send_the_callers_deadline(operation, response):
+    client = DatasetSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", JWT_SECRET, "api", timeout_seconds=10.0
+    )
+    sent = []
+
+    def fake_call(subject, request, response_cls, **kwargs):
+        sent.append((request.context.timeout_ms, kwargs.get("timeout_seconds")))
+        return response
+
+    client._call = fake_call  # type: ignore[method-assign]
+
+    getattr(client, operation)("events", timeout_seconds=3600.0)
+    getattr(client, operation)("events")
+
+    assert sent == [(3_600_000, 3600.0), (10_000, None)]
+
+
 # ---------------------------------------------------------------------------
 # Error-code -> exception mapping. Must stay exactly symmetric with how
 # DatasetPrimaryAdapterNATS encodes DatasetError.
@@ -350,6 +376,67 @@ def test_wrong_secret_surfaces_as_runtime_error(nats_url, tmp_path):
     try:
         with pytest.raises(RuntimeError, match="UNAUTHENTICATED"):
             client.inlined_row_count("does-not-matter")
+    finally:
+        client.close()
+        server.stop()
+
+
+@pytest.mark.integration
+def test_maintenance_outlasts_the_client_timeout_through_the_job_path(nats_url):
+    """Nightly compaction over NATS is not cut at the facade's default deadline."""
+    from unittest.mock import Mock
+
+    from naas_abi_core.module.jobs import JobContext
+    from naas_abi_core.services.dataset.DatasetMaintenanceJobs import (
+        DatasetMaintenanceJobs,
+    )
+    from naas_abi_core.services.dataset.DatasetPort import (
+        DatasetInfo,
+        IDatasetPort,
+        QueryResult,
+    )
+    from naas_abi_core.services.dataset.DatasetService import DatasetService
+
+    def slow(name, *, namespace="default", **_):
+        time.sleep(0.8)
+        return QueryResult(columns=["files"], rows=[{"files": 1}])
+
+    backend = Mock(spec=IDatasetPort)
+    backend.list.return_value = [
+        DatasetInfo(
+            name="events",
+            namespace="default",
+            columns=(),
+            partitions=(),
+            primary_key=(),
+            snapshot_id=1,
+            location="",
+        )
+    ]
+    backend.inlined_row_count.return_value = 0
+    backend.flush.side_effect = slow
+    backend.compact.side_effect = slow
+    server = _PrimaryAdapterServer(nats_url, JWT_SECRET, DatasetService(backend))
+    server.start()
+    client = DatasetSecondaryAdapterNATSClient(
+        nats_url=nats_url,
+        jwt_secret=JWT_SECRET,
+        service_identity="engine",
+        timeout_seconds=0.3,
+    )
+    try:
+        assert client.inlined_row_count("events") == 0  # warm the connection
+        with pytest.raises(TimeoutError):  # the client's default alone is too short
+            client.compact("events")
+
+        jobs = DatasetMaintenanceJobs(
+            DatasetService(client), call_timeout=timedelta(seconds=10)
+        )
+        ctx = JobContext("run-1", "dataset_compaction", 1, {"kind": "manual"}, {})
+
+        assert jobs.compact(ctx) == {"datasets_processed": 1}
+        assert backend.flush.call_count == 1
+        assert backend.compact.call_count == 2
     finally:
         client.close()
         server.stop()

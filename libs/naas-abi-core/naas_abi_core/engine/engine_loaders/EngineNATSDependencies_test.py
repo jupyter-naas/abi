@@ -16,6 +16,8 @@ from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
+from naas_abi_core.services.secret.Secret import Secret
+from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
 
 
 def test_domains_receive_only_network_dependencies_and_no_local_model_objects(tmp_path):
@@ -104,5 +106,41 @@ def test_existing_remote_route_is_retained():
     try:
         dependencies = wiring.build(IEngine.Services(kv=KeyValueService(remote)))
         assert dependencies.kv.adapter is remote
+    finally:
+        wiring.close()
+
+
+def test_facades_wait_as_long_as_the_configuration_says(tmp_path):
+    from naas_abi_core.services.dataset.DatasetService import DatasetService
+    from naas_abi_core.services.keyvalue.adapters.secondary.KeyValueSecondaryAdapterNATSClient import (
+        KeyValueSecondaryAdapterNATSClient,
+    )
+
+    upstream = KeyValueSecondaryAdapterNATSClient(
+        "nats://upstream:4222", "x" * 32, "engine", timeout_seconds=3.0
+    )
+    owners = IEngine.Services(
+        object_storage=ObjectStorageService(MagicMock()),
+        dataset=DatasetService(MagicMock()),
+        kv=KeyValueService(upstream),
+        secret=Secret([MagicMock(spec=ISecretAdapter)]),
+        cache=CacheService([("hot", CacheFSAdapter(str(tmp_path / "hot")))]),
+    )
+    config = NATSConfiguration(jwt_secret="x" * 32, client_timeout_seconds=120)
+    wiring = EngineNATSDependencies(config)
+    try:
+        dependencies = wiring.build(owners)
+
+        built = [
+            dependencies.object_storage.adapter,
+            dependencies.dataset.adapter,
+            *dependencies.secret.adapters,
+            *(adapter for _, adapter in dependencies.cache.adapters),
+        ]
+        assert all(isinstance(client, NatsRPCClient) for client in built)
+        assert {client._timeout_seconds for client in built} == {120.0}
+        # A route configured to another engine keeps its own setting.
+        assert dependencies.kv.adapter is upstream
+        assert upstream._timeout_seconds == 3.0
     finally:
         wiring.close()

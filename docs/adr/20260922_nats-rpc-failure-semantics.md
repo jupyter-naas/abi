@@ -94,3 +94,25 @@ Parameterized unit tests cover all twelve RPC adapter pairs, both error envelope
 shapes, cancellation, and non-replay. Local broker tests exercise 8 MiB and lower
 broker caps, connection reuse after rejection, and a write finishing after its
 client deadline. Bus tests cover non-replay for publish and enqueue.
+
+## 2026-10-06 follow-up: deadlines per call
+
+In NATS mode every engine facade used the clients' 10-second default. Nightly
+dataset compaction ran over NATS, so on real data the job failed after 10 s while
+the owner kept compacting. Large dataset queries hit the same limit.
+
+- `NatsRPCClient._call` and `_context` take `timeout_seconds`: it replaces the
+  client's default for that call, in both the reply wait and the request's
+  `CallContext.timeout_ms`. Overflow chunks keep the default; each is small.
+- `IDatasetPort.query`, `flush` and `compact` take `timeout_seconds`, the
+  caller's deadline. The NATS client passes it to `_call`. DuckLake runs to
+  completion and ignores it. `DatasetService` passes it on only when given, so
+  adapters written before the keyword keep working for every other call.
+- `nats.client_timeout_seconds` (default 10) sets the engine facades' default.
+  A route configured to another engine (`adapter: nats_rpc`) keeps its own.
+- `DatasetMaintenanceJobs` gets the engine's own dataset service, so there is no
+  hop at all (see the domain-boundaries ADR). When the dataset is itself remote,
+  `flush` and `compact` wait `MAINTENANCE_CALL_TIMEOUT` (6 h).
+
+A call that outlives its deadline is still not replayed: the owner may finish it
+afterwards, as before.

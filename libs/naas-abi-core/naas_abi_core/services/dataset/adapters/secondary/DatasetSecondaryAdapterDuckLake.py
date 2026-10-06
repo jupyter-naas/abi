@@ -549,6 +549,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         *,
         namespace: str = "default",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,  # in process: runs to completion
     ) -> QueryResult:
         if snapshot_id is None:
             return self._read(lambda con: self._run_query(con, sql, namespace))
@@ -733,7 +734,13 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         finally:
             con.close()
 
-    def flush(self, name: str, *, namespace: str = "default") -> QueryResult:
+    def flush(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,  # in process: runs to completion
+    ) -> QueryResult:
         result = self._maintain(name, namespace=namespace, flush=True)
         # Flush can drop inline tables from older schema versions. New reads
         # must attach again; existing cursors retain their connection reference.
@@ -743,7 +750,13 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             self._snapshot_connections.clear()
         return result
 
-    def compact(self, name: str, *, namespace: str = "default") -> QueryResult:
+    def compact(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,  # in process: runs to completion
+    ) -> QueryResult:
         return self._maintain(name, namespace=namespace, flush=False)
 
     def _maintain(self, name: str, *, namespace: str, flush: bool) -> QueryResult:
