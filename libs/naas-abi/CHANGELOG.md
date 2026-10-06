@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.79.1 (2026-10-06)
+
+### Bug Fixes
+
+- **nexus**: Forward the content type through the app-html proxy
+  ([`e980bf0`](https://github.com/jupyter-naas/abi/commit/e980bf092cf4aa0935c1a87785eee1fea2006a8c))
+
+
 ## v2.79.0 (2026-10-05)
 
 ### Bug Fixes
