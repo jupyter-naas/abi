@@ -239,6 +239,28 @@ def test_job_owners_include_kernel_dataset_jobs_in_nats_mode():
     assert "naas_abi_core.dataset" not in job_owners(no_nats)
 
 
+def test_job_owners_are_the_engine_s_when_the_platform_proxy_lists_them():
+    """Agent memory and the jobs service adapters offer (activity log copy, event
+    archive) appear in the Jobs tab, so an admin can run them."""
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.factory import job_owners
+
+    kernel = {
+        "acme.jobs": NS(jobs=()),
+        "naas_abi_core.agent_memory": NS(jobs=()),
+        "naas_abi_core.activity_log": NS(jobs=()),
+    }
+    engine = NS(
+        modules={"acme.jobs": kernel["acme.jobs"]},
+        configuration=NS(nats=NS(discovery=None)),
+        services=NS(dataset_available=lambda: False),
+        job_owners=lambda: dict(kernel),
+    )
+
+    owners = job_owners(engine)
+
+    assert {k: owners[k] for k in kernel} == kernel
+
+
 def test_agents_without_nats_name_what_is_off():
     from naas_abi.apps.nexus.apps.api.app.services.sysadmin.factory import build_agents_admin
     from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import SourceUnavailable
