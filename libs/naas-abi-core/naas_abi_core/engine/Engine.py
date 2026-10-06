@@ -299,9 +299,10 @@ class Engine(IEngine):
         """Stop every started primary adapter.
 
         The shared (queue-grouped) subscriptions end first, so new requests go to
-        the next engine. The sessions this engine owns (transfers, model streams,
-        overflow replies) go on for up to ``drain_seconds``, then close. Without
-        time to drain (fencing), everything stops at once.
+        the next engine. The calls already received and the sessions this engine
+        owns (transfers, model streams, overflow replies) go on for up to
+        ``drain_seconds``, then close. Without time to drain (fencing), everything
+        stops at once.
         """
         from naas_abi_core.engine import nats_runtime
         from naas_abi_core.engine.nats_sessions import SessionHost, wait_for_sessions
@@ -478,7 +479,7 @@ class Engine(IEngine):
         set_default_event_service(None)
         from naas_abi_core.engine import nats_runtime
 
-        # Sessions this engine owns finish (or reach the deadline) after the release.
+        # Calls received and sessions owned finish (or time out) after the release.
         self.__stop_serving(
             ownership.settings.drain_seconds if ownership is not None else 0
         )

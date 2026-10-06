@@ -30,7 +30,13 @@ from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
-from naas_abi_core.engine.nats_sessions import SessionHost, session_owner, until
+from naas_abi_core.engine.nats_sessions import (
+    ServicePrimary,
+    SessionHost,
+    session_owner,
+    stop_delivery,
+    until,
+)
 from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.telemetry import ServedTransfer, serve_transfer
@@ -147,6 +153,8 @@ async def drain_shared(subscriptions: list[Any], shared: list[Any]) -> None:
     draining, shared[:] = list(shared), []
     for sub in draining:
         subscriptions.remove(sub)
+    await stop_delivery(draining)  # before draining: nothing more can arrive
+    for sub in draining:
         await sub.drain()
 
 
@@ -541,33 +549,26 @@ class TransferHost(SessionHost):
             return response
 
 
-class ServiceWithTransfers(SessionHost):
+class ServiceWithTransfers(ServicePrimary):
     """A primary adapter: a NATS micro service whose streams use a TransferHost.
 
     Subclasses set ``_service`` (the started micro service, or None),
     ``_transfer`` and ``_dispatch`` (the domain's worker pool).
     """
 
-    _service: Any
     _transfer: TransferHost
-    _dispatch: Any
 
     async def stop_accepting(self) -> None:
-        """End the endpoints (queue groups) and ``open``; transfers go on."""
+        """End ``open`` and the endpoints (queue groups); the calls received and
+        the transfers go on."""
         await self._transfer.stop_accepting()
-        service, self._service = self._service, None
-        if service is not None:
-            await service.stop()
+        await super().stop_accepting()
 
     async def sessions_finished(self) -> None:
+        await super().sessions_finished()
         await self._transfer.sessions_finished()
 
     async def stop(self) -> None:
-        """Deregister the service, draining its subscriptions."""
+        """Deregister the service now, after the transfers."""
         await self._transfer.stop()
-        service, self._service = self._service, None
-        try:
-            if service is not None:
-                await service.stop()
-        finally:
-            self._dispatch.close()
+        await super().stop()

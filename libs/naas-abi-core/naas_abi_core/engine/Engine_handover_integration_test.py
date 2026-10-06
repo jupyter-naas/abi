@@ -259,6 +259,98 @@ def test_a_stuck_transfer_is_closed_at_the_drain_deadline(broker, engine_dir):
         loop.close()
 
 
+@contextmanager
+def serving(url: str, primary) -> Iterator[None]:
+    """``primary`` served from its own connection and loop: another engine's."""
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=loop.run_forever, daemon=True)
+    thread.start()
+
+    def run(coro):
+        return asyncio.run_coroutine_threadsafe(coro, loop).result(10)
+
+    nc = run(nats.connect(url))
+    run(primary.start(nc))
+    try:
+        yield
+    finally:
+        run(primary.stop())
+        run(nc.close())
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(5)
+
+
+# --- one-shot calls at shutdown ------------------------------------------------------------
+
+
+def test_a_one_shot_call_in_progress_at_shutdown_is_answered(
+    broker, engine_dir, monkeypatch
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from unittest.mock import Mock
+
+    from naas_abi_core.services.keyvalue.adapters.primary.keyvalue__primary_adapter__NATS import (
+        KeyValuePrimaryAdapterNATS,
+    )
+    from naas_abi_core.services.keyvalue.adapters.secondary.KeyValueSecondaryAdapterNATSClient import (
+        KeyValueSecondaryAdapterNATSClient,
+    )
+    from naas_abi_core.services.keyvalue.adapters.secondary.PythonAdapter import (
+        PythonAdapter,
+    )
+    from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
+
+    engine = new_engine(broker, drain_seconds=30)
+    engine.load()
+    engine.services.kv.set("slow", b"answered")
+    handling, answer = threading.Event(), threading.Event()
+    get = KeyValueService.get
+
+    def slow_get(self, key):
+        if key == "slow":
+            handling.set()
+            answer.wait(20)
+        return get(self, key)
+
+    monkeypatch.setattr(KeyValueService, "get", slow_get)
+    # The next engine, which counts the calls it answers.
+    store = PythonAdapter()
+    store.set("slow", b"answered")
+    next_engine = Mock(wraps=store)
+    client = KeyValueSecondaryAdapterNATSClient(
+        broker, SECRET, "caller", timeout_seconds=20
+    )
+    stopping = threading.Thread(target=engine.shutdown)
+    try:
+        with ThreadPoolExecutor(1) as calls:
+            reading = calls.submit(client.get, "slow")
+            assert handling.wait(10)
+            with serving(broker, KeyValuePrimaryAdapterNATS(next_engine, SECRET)):
+                started = time.monotonic()
+                stopping.start()
+                # New calls stop reaching this engine...
+                deadline = time.monotonic() + 10
+                while True:
+                    assert time.monotonic() < deadline, "the engine kept taking calls"
+                    before = next_engine.exists.call_count
+                    for _ in range(5):
+                        assert client.exists("slow")
+                    if next_engine.exists.call_count - before == 5:
+                        break
+                # ...and it waits for the one in progress.
+                time.sleep(0.3)
+                assert stopping.is_alive()
+                answer.set()
+                assert reading.result(20) == b"answered"
+                stopping.join(15)
+                assert not stopping.is_alive()
+                assert time.monotonic() - started < 15  # well before the deadline
+    finally:
+        answer.set()
+        client.close()
+        engine.shutdown()
+
+
 # --- a client engine -----------------------------------------------------------------------
 
 
@@ -274,25 +366,11 @@ def document_owner(url: str, path: Path) -> Iterator[None]:
     )
     from naas_abi_core.services.document.DocumentService import DocumentService
 
-    loop = asyncio.new_event_loop()
-    thread = threading.Thread(target=loop.run_forever, daemon=True)
-    thread.start()
-
-    def run(coro):
-        return asyncio.run_coroutine_threadsafe(coro, loop).result(10)
-
-    nc = run(nats.connect(url))
     primary = DocumentPrimaryAdapterNATS(
         DocumentService._for_engine(DocumentSecondaryAdapterSQLite(str(path))), SECRET
     )
-    run(primary.start(nc))
-    try:
+    with serving(url, primary):
         yield
-    finally:
-        run(primary.stop())
-        run(nc.close())
-        loop.call_soon_threadsafe(loop.stop)
-        thread.join(5)
 
 
 def test_a_client_engine_opens_no_local_backend(broker, engine_dir, tmp_path):

@@ -6,10 +6,12 @@ In an engine that id is the engine's instance id, the one its lease is held
 under (docs/adr/20261006_single-serving-engine.md): hosts built inside
 ``owned_by(instance_id)`` take it.
 
-At a handover the engine ends its shared (queue-grouped) subscriptions first,
-so new requests reach the next engine. A ``SessionHost`` keeps its owner-scoped
-subjects until its sessions finish, or until the drain deadline passes
-(``nats.engine.drain_seconds``), then closes what is left.
+At a handover the engine ends its shared (queue-grouped) subscriptions first
+(``stop_delivery``), so new requests reach the next engine. A ``SessionHost``
+keeps its owner-scoped subjects until its sessions finish, or until the drain
+deadline passes (``nats.engine.drain_seconds``), then closes what is left. A
+kernel primary (``ServicePrimary``) counts the one-shot calls it has received as
+sessions.
 
 No NATS import: the engine loads this module in every mode.
 """
@@ -22,6 +24,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
+from typing import Any
 from uuid import uuid4
 
 from naas_abi_core import logger
@@ -64,6 +67,29 @@ async def until(done: Callable[[], bool]) -> None:
         await asyncio.sleep(POLL_SECONDS)
 
 
+async def stop_delivery(subscriptions: Iterable[Any]) -> None:
+    """End nats-py ``subscriptions`` at the broker, keeping what it delivered.
+
+    Returns once the broker has processed the UNSUBs: every message it sent them
+    is in their pending queues, which they go on handling. ``Subscription.drain``
+    is then safe. On its own it is not: it writes its PING before its UNSUB (a
+    PING skips the client's pending buffer), so a message the broker routes in
+    between arrives after the drain removed the subscription and is dropped
+    (reproduced with concurrent requests on nats-server 2.14).
+
+    Reaches into nats-py: ``Subscription._conn`` and ``_id``,
+    ``Client._send_unsubscribe`` and ``_flush_pending``.
+    """
+    connections: dict[int, Any] = {}
+    for subscription in subscriptions:
+        nc = subscription._conn
+        await nc._send_unsubscribe(subscription._id)
+        connections[id(nc)] = nc
+    for nc in connections.values():
+        await nc._flush_pending(force_flush=True)  # on the socket...
+        await nc.flush()  # ...and processed by the broker
+
+
 class SessionHost(ABC):
     """A NATS endpoint whose sessions outlive its shared subscriptions."""
 
@@ -80,17 +106,62 @@ class SessionHost(ABC):
         """End every subscription and close the sessions still open."""
 
 
+class ServicePrimary(SessionHost):
+    """A kernel primary adapter: one NATS micro service, ``_service`` (a
+    ``nats_tracing.TracedService``, None until started), whose handlers run on
+    ``_dispatch``, the domain's worker pool.
+
+    The one-shot calls it has received are its sessions: at a handover its
+    endpoints stop taking calls, which go to the next engine, and it answers
+    those it already has.
+    """
+
+    _service: Any
+    _dispatch: Any
+
+    async def stop_accepting(self) -> None:
+        if self._service is not None:
+            await self._service.stop_accepting()
+
+    async def sessions_finished(self) -> None:
+        if self._service is not None:
+            await self._service.requests_finished()
+
+    async def stop(self) -> None:
+        """Deregister the service now: a call still running is cancelled."""
+        service, self._service = self._service, None
+        try:
+            if service is not None:
+                await service.stop()
+        finally:
+            self._dispatch.close()
+
+
 async def wait_for_sessions(
     hosts: Iterable[SessionHost], deadline_seconds: float
 ) -> bool:
     """Wait for every host's sessions to finish, for up to ``deadline_seconds``.
 
     True when they all finished, False when the deadline passed first.
+
+    Waits twice: a call answered during the first wait may have opened a session
+    on a host already done, by parking its overflowing reply there. After the
+    first wait no call is left to open one.
     """
-    waits = [asyncio.ensure_future(host.sessions_finished()) for host in hosts]
-    if not waits:
+    hosts = list(hosts)
+    if not hosts:
         return True
-    done, pending = await asyncio.wait(waits, timeout=max(0.0, deadline_seconds))
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max(0.0, deadline_seconds)
+    for _ in range(2):
+        if not await _wait_once(hosts, deadline - loop.time()):
+            return False
+    return True
+
+
+async def _wait_once(hosts: list[SessionHost], seconds: float) -> bool:
+    waits = [asyncio.ensure_future(host.sessions_finished()) for host in hosts]
+    done, pending = await asyncio.wait(waits, timeout=max(0.0, seconds))
     for task in pending:
         task.cancel()
     await asyncio.gather(*pending, return_exceptions=True)

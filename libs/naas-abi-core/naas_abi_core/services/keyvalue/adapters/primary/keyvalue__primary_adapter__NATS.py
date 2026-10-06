@@ -40,6 +40,7 @@ from naas_abi_core.engine.nats_rpc import (
     request_payload,
     respond_protobuf,
 )
+from naas_abi_core.engine.nats_sessions import ServicePrimary
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.keyvalue.v1 import keyvalue_pb2
@@ -69,7 +70,7 @@ _RequestT = TypeVar("_RequestT", bound=Message)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
 
 
-class KeyValuePrimaryAdapterNATS:
+class KeyValuePrimaryAdapterNATS(ServicePrimary):
     """Serves keyvalue over NATS RPC (request/reply).
 
     Wraps a real adapter *or* the domain service and registers one NATS
