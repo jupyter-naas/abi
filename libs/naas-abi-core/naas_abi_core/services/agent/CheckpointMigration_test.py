@@ -12,6 +12,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 from naas_abi_core.services.agent.CheckpointMigration import (
     migrate_checkpoints,
+    postgres_source,
     postgres_thread_ids,
 )
 from naas_abi_core.services.agent.DocumentCheckpointSaver import (
@@ -25,6 +26,7 @@ from naas_abi_core.services.agent.tests.checkpoint_saver__generic_test import (
     approval_graph,
     thread,
 )
+from naas_abi_core.services.agent.tests.langgraph_postgres import langgraph_postgres
 from naas_abi_core.services.agent.tests.legacy_checkpoints import v1_saver
 from naas_abi_core.services.document.DocumentFactory import DocumentFactory
 from naas_abi_core.services.document.DocumentService import DocumentService
@@ -148,6 +150,68 @@ def test_selected_threads_only(source, target):
     assert {i.config["configurable"]["thread_id"] for i in everything(target)} == {
         "nested"
     }
+
+
+def test_an_applied_run_counts_what_the_target_lacked(source, target):
+    summary = migrate_checkpoints(source, target)
+    assert summary.missing == summary.copied == len(everything(source))
+
+
+def test_a_dry_run_against_the_target_reports_without_writing(source, target):
+    approval_graph().compile(checkpointer=target).invoke(
+        {"log": ["fresh"]}, thread("pending")
+    )
+    before = everything(target)
+
+    summary = migrate_checkpoints(source, target, apply=False)
+
+    assert summary.diverged == ["pending"]
+    assert (summary.missing, summary.present, summary.copied) == (
+        len(everything(source)),
+        0,
+        0,
+    )
+    assert len(everything(target)) == len(before)
+
+
+def test_a_dry_run_after_the_copy_finds_everything_present(source, target):
+    migrate_checkpoints(source, target)
+
+    summary = migrate_checkpoints(source, target, apply=False)
+
+    assert (summary.present, summary.missing, summary.copied) == (
+        len(everything(source)),
+        0,
+        0,
+    )
+    assert summary.diverged == []
+
+
+@pytest.fixture
+def postgres_url():
+    with langgraph_postgres() as url:
+        yield url
+
+
+def test_postgres_source_reads_langgraph_s_tables(postgres_url, target):
+    from langgraph.checkpoint.postgres import PostgresSaver
+
+    with PostgresSaver.from_conn_string(postgres_url) as saver:
+        approval_graph().compile(checkpointer=saver).invoke(
+            {"log": ["start"]}, thread("pending")
+        )
+
+    with postgres_source(postgres_url) as (source, thread_ids):
+        assert thread_ids == ["pending"]
+        summary = migrate_checkpoints(source, target, threads=thread_ids)
+
+    assert summary.copied == summary.checkpoints > 0
+    resumed = (
+        approval_graph()
+        .compile(checkpointer=target)
+        .invoke(Command(resume="yes"), thread("pending"))
+    )
+    assert resumed["log"] == ["start", "approved:yes"]
 
 
 def test_postgres_thread_ids_come_from_the_checkpoints_table():

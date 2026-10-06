@@ -80,7 +80,7 @@ Test run at `a582a19f6`: 101 job tests passed (SDK and engine, real broker inclu
   - **Fix:** don't hold the lock while waiting on the consumer. Under the shared lock, run the query and spool results to a temporary file (Arrow IPC or Parquet). Release the lock, then stream from the file.
   - **Test:** open a stream, don't consume it, then issue a write; the write must finish promptly.
 
-- [ ] **6. Agents in an engine ignore `POSTGRES_URL` and silently lose conversation history.** *Read in code.*
+- [x] **6. Agents in an engine ignore `POSTGRES_URL` and silently lose conversation history.** *Read in code. Fixed locally, not pushed.*
   - **Problem:** `create_checkpointer` (`libs/naas-abi-core/naas_abi_core/services/agent/Agent.py:357`) now returns the engine's Document Service checkpointer whenever one is loaded, ahead of `POSTGRES_URL`. A deployment that kept history in Postgres starts with empty threads until someone runs `abi agent migrate-memory --apply`. If the Document Service is on SQLite, each replica also has its own memory. Only `AGENTS.md` mentions this.
   - **Decision:** every deployment moves to NATS, so as soon as this release ships, all engines use the Document Service checkpointer. Until an admin runs the migration job, users' earlier conversations have no memory: their old thread ids are not found. The admin runs the job from the System app at release time.
   - **Fix:** keep the new default and make the migration something an admin runs from the Nexus System app, as a kernel job. Most of the pieces exist:
@@ -93,11 +93,11 @@ Test run at `a582a19f6`: 101 job tests passed (SDK and engine, real broker inclu
     - `agent_memory_migrate`: no trigger, so it runs only from **Run now**. Payload `{"from": "postgres" | "documents-v1", "threads": [...], "apply": false}`. With the default `apply: false` it is a dry run, and the report becomes the run's result in the Jobs tab. Read `POSTGRES_URL` from the engine's secrets, never from the payload: payloads are stored on the run record and shown in the UI.
     - `prune-memory` fits the same owner as a scheduled job.
 
-    - [ ] Add `AgentMemoryJobs` with `agent_memory_migrate` (and `prune-memory` on a schedule).
-    - [ ] **Window between deploy and migration.** A user who continues an old conversation before the job runs starts that thread from empty. The migration then reports the thread as `diverged`: its newer head hides the copied history, and the dry run lists it. Two options:
+    - [x] Add `AgentMemoryJobs` with `agent_memory_migrate` (and `prune-memory` on a schedule). *Done:* registered in `Engine.job_owners()` when the document saver is bound; `agent_memory_prune` runs daily at 03:00 UTC; the Jobs tab now lists `Engine.job_owners()`, so Run now finds kernel jobs.
+    - [x] **Window between deploy and migration.** A user who continues an old conversation before the job runs starts that thread from empty. The migration then reports the thread as `diverged`: its newer head hides the copied history, and the dry run lists it. *Decided: accept it,* with the runbook step in `docs/migrate-to-nats.md`, the ADR and the changelog. Two options:
       - Accept it: put "run `agent_memory_migrate` (dry run, then apply) right after deploy" in the release runbook, and keep the window short.
       - Close it: while `POSTGRES_URL` is set, have the checkpointer copy a thread from Postgres the first time it reads it.
-    - [ ] Amend `docs/adr/20261002_engine-agent-memory-in-documents.md`. Its rollout paragraph still says to stop the engines and run the CLI; replace that with the admin job at release. Add a changelog note. `abi agent migrate-memory` stays as an ops tool, and every deployment being on NATS means the job is always available.
+    - [x] Amend `docs/adr/20261002_engine-agent-memory-in-documents.md`. Its rollout paragraph still says to stop the engines and run the CLI; replace that with the admin job at release. Add a changelog note. `abi agent migrate-memory` stays as an ops tool, and every deployment being on NATS means the job is always available. *Done:* ADR amended (rollout, jobs, retention); upgrade note in `libs/naas-abi-core/CHANGELOG.md`.
 
 - [x] **7. A rolling deploy that adds or changes a job or agent cannot start.** *Read in code. Fixed locally in `d8dbc6de8`, not pushed.*
   - **Fixed:** `d8dbc6de8` alone still compared every live replica of the contract. Now only one generation (same rollout id, or none) must match; a rollout's new or changed jobs, agents and models wait STAGED for its cohort. `run_module` with a rollout id starts the job host only once READY/DEGRADED (schedules and consumers are module-wide), and the System job list skips staged instances (discovery ADR, "Descriptors across generations").

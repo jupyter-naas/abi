@@ -348,7 +348,8 @@ def jobs_project(configuration: Any) -> str:
 
 def job_owners(engine: Any) -> dict[str, Any]:
     """What the engine hosts jobs for (``Engine.job_owners``) as the API sees it:
-    the loaded modules, this platform module, and the kernel dataset jobs."""
+    the loaded modules, this platform module, and the kernel jobs (dataset
+    maintenance, agent memory, and those service adapters offer)."""
     owners: dict[str, Any] = dict(engine.modules)
     try:
         from naas_abi import ABIModule
@@ -356,6 +357,9 @@ def job_owners(engine: Any) -> dict[str, Any]:
         owners.setdefault("naas_abi", ABIModule.get_instance())
     except Exception:  # noqa: BLE001 - not loaded (tests, standalone API)
         pass
+    if callable(getattr(engine, "job_owners", None)):  # the platform module's proxy
+        owners.update(engine.job_owners())
+        return owners
     try:
         dataset = engine.configuration.nats is not None and engine.services.dataset_available()
     except Exception:  # noqa: BLE001

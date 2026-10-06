@@ -147,6 +147,32 @@ In this phase every engine keeps its services and adds NATS on top.
 The API and Dagster both start an engine from the same `config.yaml`, so both
 serve every service. That is safe with the shared backends of `abi deploy local`.
 
+### Right after the restart: copy agent memory
+
+In NATS mode, engine agents keep their conversation memory in the Document
+Service. Earlier memory stays where it was until you copy it. Do it right
+after the restart, as a super admin, in the Nexus System app: **Jobs** tab,
+**Run now** with a JSON payload. Each run is audited, and its report is the
+run's result.
+
+1. **Agent memory** (`naas_abi_core.agent_memory`, job `agent_memory_migrate`).
+   Until it runs, users' earlier conversations have no memory.
+   - Run it with `{}`. This is a dry run against the `POSTGRES_URL` database:
+     check `threads`, `missing` and `diverged`.
+   - Run it with `{"apply": true}`. Running it again copies nothing.
+   - A thread listed in `diverged` was continued before the copy, so its newer
+     messages hide the copied history. Keeping the window short avoids this.
+   - Memory that an older release kept in documents (schema 1) copies with
+     `{"from": "documents-v1"}`. `"threads": [...]` limits a run to some
+     threads.
+   - The engine reads `POSTGRES_URL` from its secrets or environment. Never put
+     a connection string in the payload: payloads are shown in the UI.
+
+From then on, `agent_memory_prune` runs daily and keeps each thread's newest
+20 checkpoints; the conversation stays whole in them. Without NATS mode no
+engine hosts jobs: stop the engines and run `abi agent migrate-memory` (a dry
+run, then `--apply`).
+
 ### Tuning
 
 These keys have working defaults; change them only when needed.

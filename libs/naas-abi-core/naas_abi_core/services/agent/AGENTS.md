@@ -23,6 +23,7 @@ Orchestration layer binding a chat model to tools and sub-agents. Handles:
 | `SqliteCheckpointSaver` | `SqliteCheckpointSaver.py` | SQLite-backed LangGraph checkpointer (survives restarts) |
 | `DocumentCheckpointSaver` | `DocumentCheckpointSaver.py` | Engine agent memory in the Document Service (sync + async LangGraph API); `LegacyDocumentCheckpointReader` reads schema 1 |
 | `migrate_checkpoints` | `CheckpointMigration.py` | One-shot copy of LangGraph threads into document schema 2 (from PostgresSaver or schema 1) |
+| `AgentMemoryJobs` | `AgentMemoryJobs.py` | Kernel jobs `agent_memory_migrate` (Run now) and `agent_memory_prune` (daily) |
 
 ## `Agent` Constructor
 
@@ -153,6 +154,14 @@ in order: the engine's agent checkpointer when an engine is loaded, else a share
   `--source-url`, or `--from documents-v1`; `--namespace`/`--agent-id` for
   another scope). Idempotent. Stop the engines first: threads they served on
   documents before the copy are reported as `diverged`.
+- In NATS mode the engine hosts both as jobs (`AgentMemoryJobs`, owner
+  `naas_abi_core.agent_memory`, registered by `Engine.job_owners` when the
+  document saver is bound). `agent_memory_migrate` runs from the System app's
+  Jobs tab at release, engines running: `{}` is a dry run that also lists
+  `diverged` threads, `{"apply": true}` copies. Payload keys: `from`,
+  `threads`, `apply`. `POSTGRES_URL` comes from the engine's secrets, then the
+  environment, never the payload. `agent_memory_prune` runs daily at 03:00 UTC
+  with the CLI's defaults.
 - `SqliteCheckpointSaver` is available for file-backed persistence.
 - Conversation state keyed by `thread_id` on `AgentSharedState`.
 
@@ -183,6 +192,7 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/test_agent_memory.
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/DocumentCheckpointSaver_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_document_memory_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/CheckpointMigration_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/AgentMemoryJobs_test.py
 ```
 
 `tests/checkpoint_saver__generic_test.py` is the saver contract, held to LangGraph's
@@ -198,6 +208,9 @@ Integration tests (require infra):
 
 - `OpencodeAgent_integration_test.py` — running OpenCode IDE server.
 - `test_postgres_integration.py` — running PostgreSQL.
+- `CheckpointMigration_test.py` / `AgentMemoryJobs_test.py` copy from LangGraph's
+  PostgreSQL tables in a throwaway schema when `DOCUMENT_TEST_POSTGRES_DSN` is
+  set (`tests/langgraph_postgres.py`); they skip otherwise.
 
 ## Adding a new agent type
 

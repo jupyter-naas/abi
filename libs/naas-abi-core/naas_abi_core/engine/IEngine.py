@@ -270,3 +270,8 @@ class IEngine:
     @property
     def modules(self) -> dict[str, BaseModule]:
         return self.__modules
+
+    def job_owners(self) -> dict[str, object]:
+        """What this engine hosts jobs for, keyed by owner id: its modules here;
+        ``Engine`` adds the kernel owners."""
+        return dict(self.modules)

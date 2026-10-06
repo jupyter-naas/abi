@@ -2,6 +2,18 @@
 
 <!-- version list -->
 
+### Upgrade notes
+
+- **Agent memory moves to the Document Service.** In NATS mode, engine agents
+  keep conversation memory in the Document Service, not in the `POSTGRES_URL`
+  database. Right after deploying, a super admin runs `agent_memory_migrate`
+  from the Nexus System app (Jobs tab, Run now): `{}` for a dry run, then
+  `{"apply": true}`. Until then, earlier conversations have no memory, and a
+  thread continued in between is reported as `diverged`. Without NATS mode,
+  use `abi agent migrate-memory`. `agent_memory_prune` now runs daily and keeps
+  each thread's newest 20 checkpoints.
+- Runbook: `docs/migrate-to-nats.md`.
+
 ## v2.41.0 (2026-10-01)
 
 

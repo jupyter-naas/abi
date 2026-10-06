@@ -46,15 +46,10 @@ def list():
 @contextmanager
 def _postgres_memory(url: str) -> Iterator[tuple[Any, Sequence[str]]]:
     """LangGraph's PostgreSQL saver on ``url`` and its thread IDs, read only."""
-    from langgraph.checkpoint.postgres import PostgresSaver
-    from naas_abi_core.services.agent.CheckpointMigration import postgres_thread_ids
-    from psycopg import Connection
-    from psycopg.rows import dict_row
+    from naas_abi_core.services.agent.CheckpointMigration import postgres_source
 
-    with Connection.connect(
-        url, autocommit=True, prepare_threshold=0, row_factory=dict_row
-    ) as connection:
-        yield PostgresSaver(connection), postgres_thread_ids(connection)
+    with postgres_source(url) as opened:
+        yield opened
 
 
 def _documents(namespace: str) -> Any:

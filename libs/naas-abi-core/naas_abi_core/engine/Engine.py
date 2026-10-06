@@ -412,6 +412,17 @@ class Engine(IEngine):
             )
 
             owners[DATASET_JOBS_OWNER] = DatasetMaintenanceJobs(self.__services.dataset)
+        if self.__agent_checkpointer is not None:
+            # Set only to the Document Service saver (__bind_agent_memory).
+            from naas_abi_core.services.agent.AgentMemoryJobs import (
+                AGENT_MEMORY_JOBS_OWNER,
+                AgentMemoryJobs,
+            )
+
+            owners[AGENT_MEMORY_JOBS_OWNER] = AgentMemoryJobs.for_engine(
+                self.__agent_checkpointer,  # type: ignore[arg-type]
+                self.__services,
+            )
         # A service's adapter may host its own maintenance jobs (the PostgreSQL
         # event log archives itself into the Dataset Service).
         for service in self.__services.all:

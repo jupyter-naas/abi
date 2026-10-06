@@ -5,6 +5,9 @@ Accepted. Amends `20260922_document-service-checkpoints.md`, which left the
 synchronous core Agent on PostgreSQL or in-memory checkpoints and stored each
 checkpoint as one full snapshot.
 
+Amended 2026-10-06: the migration is an engine job an admin runs at release,
+with the engines running, and pruning runs daily (Migration, Consequences).
+
 ## Date
 2026-10-02
 
@@ -106,6 +109,22 @@ How engine agents share checkpoints today, which this decision must preserve:
   schema 1 (`--from documents-v1`). It reads the source through LangGraph's
   public saver API and writes through `put`/`put_writes`, oldest first and only
   what is missing: a dry run unless `--apply`, idempotent and resumable.
+- **Migration and retention as engine jobs.** In NATS mode, when the document
+  saver backs agent memory, `Engine.job_owners` hosts `AgentMemoryJobs` (owner
+  `naas_abi_core.agent_memory`) over the same code:
+  - `agent_memory_migrate` has no trigger; a super admin runs it from the Nexus
+    System app (Jobs tab, Run now, audited). Payload
+    `{"from": "postgres" | "documents-v1", "threads": [...], "apply": false}`.
+    The default is a dry run whose report is the run's result. It reads the
+    target too, so it counts the checkpoints present and missing and lists
+    `diverged` threads. The PostgreSQL database is the engine's `POSTGRES_URL`
+    (its secret service, then the environment), never a payload value: payloads
+    are kept on the run record and shown in the UI, and errors are redacted.
+  - `agent_memory_prune` runs daily at 03:00 UTC with the CLI's defaults
+    (`keep_last` 20, values younger than 60 s kept, applied). A manual run takes
+    `keep_last`, `threads`, `min_age_seconds` and `apply`.
+
+  `abi agent migrate-memory` and `abi agent prune-memory` stay as ops tools.
 - **Viewer.** The Nexus System app reads both schemas without deserializing:
   `references`, `batches` and `raw_channel_values` give the typed values, which
   its own decoder renders. Listing pages read only each conversation's tail;
@@ -119,10 +138,16 @@ How engine agents share checkpoints today, which this decision must preserve:
 - A step writes more, smaller documents (about 23 per turn of a core Agent) and a
   read takes a few batched queries (checkpoint, values level by level, writes)
   instead of one.
-- Production rollout: stop the engines (API and Dagster), run the migration as
-  a dry run and then with `--apply` on the new release, then start them. A
-  thread that a new engine served on documents before the copy is reported as
-  `diverged`: its newer head hides the migrated history.
+- Production rollout: deploy the release with the engines running. Right
+  after, a super admin runs `agent_memory_migrate` from the System app, first
+  as a dry run (`{}`), then with `{"apply": true}`
+  (`docs/migrate-to-nats.md`). Until then, earlier conversations have no
+  memory: their threads are not found. This window is accepted and kept short
+  by the runbook; it is not closed by copying a thread from PostgreSQL on its
+  first read. A thread a user continued during the window is reported as
+  `diverged`: its newer head hides the migrated history. Without NATS mode no
+  engine hosts jobs: stop the engines and run `abi agent migrate-memory`
+  instead.
 - Rollback is the previous release: the PostgreSQL tables still hold history up
   to the switch, but not the conversations held after it. A release before
   schema 2 does not read schema 2 documents.
@@ -131,8 +156,12 @@ How engine agents share checkpoints today, which this decision must preserve:
   documents are create-only and values content-addressed, so nothing is
   overwritten or torn. There is still no run lease, and deleting a thread
   requires its runs to be stopped.
-- Superseded values (an element a later step removed) stay until the thread is
-  deleted. Retention and pruning remain future work.
+- Superseded values (an element a later step removed) stay until the daily
+  prune drops the checkpoints that reference them, or the thread is deleted.
+  The prune runs while engines serve. The 60-second grace and the kept head
+  protect a running turn, except in one rare case: a turn on the thread being
+  pruned writes a value identical to one that only pruned checkpoints held.
+  The value counts as stored, then the prune deletes it.
 - Engine agent memory appears in the Document explorer under
   `naas_abi_core.services.agent`. Native `abi dev` memory now survives restarts.
 - Migrated pending writes have an empty `task_path`: LangGraph's `get_tuple`
@@ -143,3 +172,6 @@ How engine agents share checkpoints today, which this decision must preserve:
   engine saver (sync and async API) and the SDK saver on one document backend;
   agent scenarios run against the old shared saver and the document saver
   across restarts and must match; a 30-turn chat asserts flat bytes per turn.
+  The jobs are tested for their payloads, dry runs, redaction, cancellation and
+  pruning, and copy from a real PostgreSQL when `DOCUMENT_TEST_POSTGRES_DSN` is
+  set.
