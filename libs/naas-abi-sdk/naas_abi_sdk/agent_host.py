@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
 import math
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import partial
@@ -32,6 +34,11 @@ MAX_ACTIVE_RUNS = 200
 # Event data pushed inline up to this (and a quarter of the broker limit);
 # above it only the part count, which the submitter reads with EventRequest.
 INLINE_UPDATE_BYTES = 32 * 1024
+# Discovery's answer for a caller token and agent is reused this long for
+# status, event and cancel requests, never past the token's expiry. A submit
+# always asks discovery, which checks this provider is READY.
+AUTHORIZATION_SECONDS = 5.0
+MAX_AUTHORIZATIONS = 1024
 
 
 @dataclass
@@ -70,6 +77,23 @@ def _hash(*values: str) -> str:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _token_expiry(token: str) -> float:
+    """The `exp` claim of a service token (a JWT), or 0 without a readable one.
+
+    Unverified, which is enough here: it only bounds how long discovery's
+    answer for this exact token is reused.
+    """
+    try:
+        part = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
+        exp = claims["exp"]
+    except (IndexError, KeyError, TypeError, ValueError):
+        return 0.0
+    if isinstance(exp, bool) or not isinstance(exp, (int, float)):
+        return 0.0
+    return float(exp) if math.isfinite(exp) else 0.0
 
 
 def agent_runs_collection(project: str) -> str:
@@ -112,6 +136,8 @@ class AgentHost:
         self.events_collection = agent_events_collection(session.client.project)
         self._membership = (0.0, set())
         self._membership_lock = asyncio.Lock()
+        # (caller token, agent) -> (reuse until, caller identity, caller admin)
+        self._authorized: dict[tuple[str, str], tuple[float, str, bool]] = {}
         self.runs: dict[str, _Run] = {}
         self.subscriptions = []
         self._bound_to = ""  # the instance id the subscriptions serve
@@ -164,6 +190,10 @@ class AgentHost:
     ) -> tuple[str, bool]:
         """The caller's identity, and whether it is a platform administrator
         (discovery's admin identities), as discovery vouches for both."""
+        now = asyncio.get_running_loop().time()
+        cached = self._authorized.get((token, name))
+        if not new_invocation and cached is not None and now < cached[0]:
+            return cached[1], cached[2]
         response = await self.session.client._call(
             "authorize_agent",
             discovery_pb.AuthorizeAgentRequest(
@@ -175,7 +205,22 @@ class AgentHost:
             ),
             discovery_pb.AuthorizeAgentResponse,
         )
+        self._remember(token, name, response.caller_identity, response.caller_admin)
         return response.caller_identity, response.caller_admin
+
+    def _remember(self, token: str, name: str, identity: str, admin: bool) -> None:
+        lifetime = min(AUTHORIZATION_SECONDS, _token_expiry(token) - time.time())
+        if lifetime <= 0:
+            return
+        now = asyncio.get_running_loop().time()
+        self._authorized.pop((token, name), None)
+        if len(self._authorized) >= MAX_AUTHORIZATIONS:
+            self._authorized = {
+                key: value for key, value in self._authorized.items() if value[0] > now
+            }
+        while len(self._authorized) >= MAX_AUTHORIZATIONS:  # oldest first
+            del self._authorized[next(iter(self._authorized))]
+        self._authorized[(token, name)] = (now + lifetime, identity, admin)
 
     async def _handle(self, name: str, operation: str, msg) -> None:
         # Runs started by a submit inherit this span (their task copies the context).
