@@ -38,6 +38,7 @@ from naas_abi_core.engine.nats_rpc import (
     request_payload,
     respond_protobuf,
 )
+from naas_abi_core.engine.nats_sessions import ServicePrimary
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.source_control.v1 import source_control_pb2
@@ -252,7 +253,7 @@ def _merge_result_to_pb(result: MergeResult) -> source_control_pb2.MergeResult:
     return pb
 
 
-class SourceControlPrimaryAdapterNATS:
+class SourceControlPrimaryAdapterNATS(ServicePrimary):
     """Serves source_control over NATS RPC (request/reply).
 
     Wraps a real adapter *or* the domain service and registers one NATS
