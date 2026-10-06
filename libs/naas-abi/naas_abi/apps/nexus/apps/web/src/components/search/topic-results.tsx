@@ -62,18 +62,7 @@ export function TopicResults({
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{item.title}</div>
                 {item.subtitle && <div className="truncate text-xs text-muted-foreground">{item.subtitle}</div>}
-                {item.rows?.length > 0 && (
-                  <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
-                    {item.rows.map(row => (
-                      <div key={row.id} className="flex min-w-0 max-w-full gap-1">
-                        <dt className="flex-shrink-0 text-muted-foreground">{row.label}</dt>
-                        <dd className="truncate">
-                          {isWebUrl(row.value) ? <ExternalValue url={row.value} /> : row.value}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
+                <TopicRows rows={item.rows} />
                 {item.snippet && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{item.snippet}</p>}
               </div>
             </Link>
@@ -92,6 +81,23 @@ export function TopicResults({
         </button>
       )}
     </div>
+  );
+}
+
+/** A result's metadata rows (Organization, Role, LinkedIn…); web addresses open in a new tab. */
+export function TopicRows({ rows }: { rows?: { id: string; label: string; value: string }[] | null }) {
+  if (!rows?.length) return null;
+  return (
+    <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
+      {rows.map(row => (
+        <div key={row.id} className="flex min-w-0 max-w-full gap-1">
+          <dt className="flex-shrink-0 text-muted-foreground">{row.label}</dt>
+          <dd className="truncate">
+            {isWebUrl(row.value) ? <ExternalValue url={row.value} /> : row.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

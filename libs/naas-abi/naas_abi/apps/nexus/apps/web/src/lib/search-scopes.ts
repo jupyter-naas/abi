@@ -41,6 +41,8 @@ export interface ScopeHit {
   subtitle?: string | null;
   snippet?: string | null;
   image?: string | null;
+  /** A topic's metadata rows (Organization, Role, LinkedIn…), shown as in the topic's own results. */
+  rows?: { id: string; label: string; value: string }[];
   action: ScopeHitAction | null;
 }
 

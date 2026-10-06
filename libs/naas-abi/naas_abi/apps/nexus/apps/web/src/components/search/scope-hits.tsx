@@ -9,6 +9,7 @@ import { searchHref } from '@/lib/search-topics';
 import { useFilesStore } from '@/stores/files';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { TopicAvatar } from './topic-avatar';
+import { TopicRows } from './topic-results';
 
 /** Hits of any scope: one row shape, opened the way their feature opens them. */
 export function ScopeHits({ workspaceId, hits, compact = false }: { workspaceId: string; hits: ScopeHit[]; compact?: boolean }) {
@@ -34,7 +35,9 @@ function HitRow({ workspaceId, hit, compact }: { workspaceId: string; hit: Scope
           {hit.action?.kind === 'external' && <ExternalLink size={11} className="flex-shrink-0 text-muted-foreground" />}
         </div>
         {hit.subtitle && <div className="truncate text-xs text-muted-foreground">{hit.subtitle}</div>}
-        {hit.snippet && !compact && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{hit.snippet}</p>}
+        {/* The same information as the scope's own results, compact or not. */}
+        <TopicRows rows={hit.rows} />
+        {hit.snippet && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{hit.snippet}</p>}
       </div>
     </>
   );
