@@ -85,3 +85,24 @@ deadline.
   instance id (see the discovery ADR, "Lease loss keeps the instance id"), so
   its in-flight runs keep their owner: status, events and cancel still reach
   them, and their conversation claims stay held.
+
+## Authorization without a registry read per poll (2026-10-06)
+
+Every agent RPC asked discovery to authorize the caller, and discovery read and
+decoded the whole registry snapshot (up to 512 KiB) for each one. A handle
+without pushed updates polls every 0.1 s, so 50 of them made about 500 full
+reads per second.
+
+- The provider reuses discovery's answer for a caller token and agent for
+  5 seconds on status, event and cancel, never past the token's `exp` (read
+  from the token discovery already verified). Refusals are not reused. Every
+  submit still asks discovery, which checks the provider is `READY`.
+- Discovery answers those polls from the registry as that replica last read or
+  wrote it, when under a second old and when it allows the call. Leases are
+  checked against the clock. A submit or a refusal reads the registry, so the
+  snapshot only ever lets a poll through for up to a second after another
+  replica evicted or unregistered the provider.
+- A KV watch keeping every replica's copy current was considered. It adds a
+  long-lived consumer per replica and reconnect handling for a gain the
+  provider-side cache already delivers; the snapshot is refreshed by every
+  renewal this replica handles anyway.

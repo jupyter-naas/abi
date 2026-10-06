@@ -521,6 +521,142 @@ def test_platform_admins_may_cancel_another_callers_run():
     asyncio.run(scenario())
 
 
+def _token(identity="caller", expires_in=3600.0):
+    """A service token's shape (a JWT); the provider never checks the signature."""
+    import base64
+    import json
+    import time
+
+    claims = {"sub": identity, "exp": time.time() + expires_in}
+    body = base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b"=")
+    return f"header.{body.decode()}.signature"
+
+
+def authorizing(identity="caller", admin=False):
+    """A host whose discovery authorizes every call, counting them."""
+    from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
+
+    owner = host(Documents(), Handler())
+    owner.session.lease_token = "l" * 32
+    owner.session.client._call = AsyncMock(
+        return_value=discovery_pb.AuthorizeAgentResponse(
+            caller_identity=identity, caller_admin=admin
+        )
+    )
+    return owner
+
+
+def test_polls_reuse_discovery_authorization_and_submits_always_ask():
+    async def scenario():
+        owner = authorizing(admin=True)
+        token = _token()
+        for _ in range(5):  # status and event polls
+            assert await owner._authorize("agent", token, False) == ("caller", True)
+        assert owner.session.client._call.await_count == 1
+        # Every submit asks discovery (it checks the provider is READY).
+        await owner._authorize("agent", token, True)
+        await owner._authorize("agent", token, True)
+        assert owner.session.client._call.await_count == 3
+        # Per caller token and agent.
+        await owner._authorize("other-agent", token, False)
+        await owner._authorize("agent", _token(expires_in=60), False)
+        assert owner.session.client._call.await_count == 5
+        await owner._authorize("agent", token, False)
+        assert owner.session.client._call.await_count == 5
+
+    asyncio.run(scenario())
+
+
+def test_an_authorization_ends_when_the_token_expires():
+    async def scenario():
+        owner = authorizing()
+        expiring = _token(expires_in=0.05)
+        await owner._authorize("agent", expiring, False)
+        await owner._authorize("agent", expiring, False)
+        assert owner.session.client._call.await_count == 1
+        await asyncio.sleep(0.1)  # well within the reuse window
+        await owner._authorize("agent", expiring, False)
+        assert owner.session.client._call.await_count == 2
+
+    asyncio.run(scenario())
+
+
+def test_an_authorization_is_reused_for_a_short_window(monkeypatch):
+    monkeypatch.setattr("naas_abi_sdk.agent_host.AUTHORIZATION_SECONDS", 0.05)
+
+    async def scenario():
+        owner = authorizing()
+        lasting = _token()
+        await owner._authorize("agent", lasting, False)
+        await owner._authorize("agent", lasting, False)
+        assert owner.session.client._call.await_count == 1
+        await asyncio.sleep(0.1)
+        await owner._authorize("agent", lasting, False)
+        assert owner.session.client._call.await_count == 2
+
+    asyncio.run(scenario())
+
+
+def test_refusals_and_unreadable_tokens_are_never_reused():
+    async def scenario():
+        owner = authorizing()
+        owner.session.client._call.side_effect = RPCError("UNAUTHENTICATED", "bad")
+        for _ in range(2):
+            with pytest.raises(RPCError, match="UNAUTHENTICATED"):
+                await owner._authorize("agent", _token(), False)
+        assert owner.session.client._call.await_count == 2
+
+        owner = authorizing()
+        for token in ("opaque", "a.bm90IGpzb24.c", _token(expires_in=-1)):
+            await owner._authorize("agent", token, False)
+            await owner._authorize("agent", token, False)
+        assert owner.session.client._call.await_count == 6
+
+    asyncio.run(scenario())
+
+
+def test_remembered_authorizations_are_bounded(monkeypatch):
+    monkeypatch.setattr("naas_abi_sdk.agent_host.MAX_AUTHORIZATIONS", 3)
+
+    async def scenario():
+        owner = authorizing()
+        tokens = [_token(f"caller-{i}") for i in range(5)]
+        for token in tokens:
+            await owner._authorize("agent", token, False)
+        assert len(owner._authorized) == 3
+        # The most recent ones are kept.
+        await owner._authorize("agent", tokens[-1], False)
+        assert owner.session.client._call.await_count == 5
+
+    asyncio.run(scenario())
+
+
+def test_status_polls_over_rpc_reach_discovery_once():
+    from naas_abi_sdk.agent_host import _hash
+
+    async def scenario():
+        owner = authorizing()
+        docs = owner.documents
+        key = _hash("agent", "id")
+        await owner._submit("agent", key, "caller", request())
+        token = _token()
+        for _ in range(3):
+            msg, sent = _rpc(
+                owner, "status", pb.StatusRequest(invocation_id="id", output_format=2)
+            )
+            msg.headers["Nats-Auth-Token"] = token
+            await owner._handle_operation("agent", "status", msg)
+            assert pb.StatusResponse.FromString(sent[0]).invocation.status == "RUNNING"
+        assert owner.session.client._call.await_count == 1
+        owner.handlers["agent"].finish.set()
+        await owner.runs[key].task
+        assert (await docs.get(owner.runs_collection, key)).data["status"] == (
+            "SUCCEEDED"
+        )
+
+    asyncio.run(scenario())
+
+
 class Wire:
     """The owner's connection, recording what it publishes."""
 

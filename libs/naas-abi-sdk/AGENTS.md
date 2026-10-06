@@ -91,6 +91,9 @@ Agent output format 2 stores immutable document fragments and manifests before
 publishing the run sequence cursor. Never truncate events or retry uncertain
 writes. Preserve caller authorization on fragment reads and output-format
 negotiation. Membership caches are bounded to one second, not a lease interval.
+`AgentHost` reuses discovery's authorization of a (caller token, agent) for
+status, event and cancel for `AUTHORIZATION_SECONDS` (5 s), never past the
+token's `exp`, and never caches a refusal. A submit always asks discovery.
 
 `agents/` (extra `[agent]`) is the core Agent/IntentAgent behaviour, async and
 core-free: same graph node names, prompts, callbacks, hooks and stream_invoke

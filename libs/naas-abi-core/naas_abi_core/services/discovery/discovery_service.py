@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import math
 import re
@@ -83,18 +84,26 @@ class DiscoveryService:
         lease_seconds: float = 20,
         clock: Callable[[], float] = time.time,
         admin_identities: Iterable[str] = DEFAULT_ADMIN_IDENTITIES,
+        snapshot_seconds: float = 1.0,
     ):
         if not math.isfinite(lease_seconds) or lease_seconds < 1:
             raise ValueError("lease_seconds must be finite and at least 1")
+        if not math.isfinite(snapshot_seconds) or snapshot_seconds < 0:
+            raise ValueError("snapshot_seconds must be finite and not negative")
         admins = frozenset(admin_identities)
         if not all(admins) or not all(isinstance(a, str) for a in admins):
             raise ValueError("admin identities must be non-empty names")
         self.registry, self.lease_seconds, self.clock = registry, lease_seconds, clock
         self.admin_identities = admins
+        # The registry as this replica last read or wrote it, and when. Agent
+        # polls are allowed from it for snapshot_seconds (see authorize_agent).
+        self.snapshot_seconds = snapshot_seconds
+        self._snapshot: tuple[float, pb.RegistryState] | None = None
 
     async def _read(self) -> tuple[pb.RegistryState, int]:
         data, revision = await self.registry.read()
         state = pb.RegistryState.FromString(data)
+        self._snapshot = (self.clock(), state)  # never mutated: callers get copies
         live = [r for r in state.records if r.instance.expires_at > self.clock()]
         return pb.RegistryState(records=live), revision
 
@@ -385,6 +394,7 @@ class DiscoveryService:
                 await self.registry.compare_and_swap(payload, revision)
             except RevisionConflict:
                 continue
+            self._snapshot = (self.clock(), state)
             return result
         raise DiscoveryError(
             "REGISTRY_BUSY", "Concurrent registry updates; retry control operation"
@@ -545,12 +555,45 @@ class DiscoveryService:
     async def authorize_agent(
         self, req: pb.AuthorizeAgentRequest, owner: str
     ) -> pb.AuthorizeAgentResponse:
+        if not req.new_invocation:
+            # Status, event and cancel polls are allowed from a recent snapshot
+            # instead of a full registry read. A submit (which needs READY), or
+            # anything the snapshot would refuse, reads the registry.
+            recent = self._recent_record(req.instance_id)
+            if recent is not None:
+                with contextlib.suppress(DiscoveryError):
+                    return self._authorize_agent(recent, req, owner)
         state, _ = await self._read()
         self._ready(state)
         record = next(
             (r for r in state.records if r.instance.instance_id == req.instance_id),
             None,
         )
+        return self._authorize_agent(record, req, owner)
+
+    def _recent_record(self, instance_id: str) -> pb.RegistryRecord | None:
+        """The instance's live record in a snapshot under snapshot_seconds old."""
+        if self._snapshot is None:
+            return None
+        taken, state = self._snapshot
+        now = self.clock()
+        if not 0 <= now - taken < self.snapshot_seconds:
+            return None
+        return next(
+            (
+                r
+                for r in state.records
+                if r.instance.instance_id == instance_id and r.instance.expires_at > now
+            ),
+            None,
+        )
+
+    def _authorize_agent(
+        self,
+        record: pb.RegistryRecord | None,
+        req: pb.AuthorizeAgentRequest,
+        owner: str,
+    ) -> pb.AuthorizeAgentResponse:
         if record is None:
             raise DiscoveryError("LEASE_EXPIRED", "Provider registration expired")
         self._authorize(record, req.lease_token, owner)

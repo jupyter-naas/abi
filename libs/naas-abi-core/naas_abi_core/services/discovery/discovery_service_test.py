@@ -449,3 +449,138 @@ def test_first_rollout_becomes_ready_and_a_missing_dependency_blocks_cutover():
             )
 
     asyncio.run(scenario())
+
+
+class CountingRegistry(MemoryRegistry):
+    """Counts full snapshot reads (each one up to 512 KiB from JetStream)."""
+
+    def __init__(self):
+        super().__init__()
+        self.reads = 0
+
+    async def read(self):
+        self.reads += 1
+        return await super().read()
+
+
+def _provider(instance="instance"):
+    req = registration("provider", instance)
+    req.descriptor.agents.add(
+        name="Researcher", contract_major=1, capabilities=["agent.invoke.v1"]
+    )
+    return req
+
+
+def _poll(req, new_invocation=False):
+    return pb.AuthorizeAgentRequest(
+        instance_id=req.instance_id,
+        lease_token=req.lease_token,
+        agent_name="Researcher",
+        new_invocation=new_invocation,
+    )
+
+
+def test_agent_polls_are_authorized_from_a_recent_snapshot():
+    async def scenario():
+        now = [0.0]
+        registry = CountingRegistry()
+        service = DiscoveryService(registry, clock=lambda: now[0])
+        req = _provider()
+        await _up(service, req)
+        reads = registry.reads
+        for _ in range(50):  # status and event polls
+            await service.authorize_agent(_poll(req), "owner")
+        assert registry.reads == reads
+        # A submit always reads the registry: it needs the provider READY.
+        await service.authorize_agent(_poll(req, new_invocation=True), "owner")
+        assert registry.reads == reads + 1
+        # The snapshot is reused for at most a second.
+        now[0] += 1
+        await service.authorize_agent(_poll(req), "owner")
+        await service.authorize_agent(_poll(req), "owner")
+        assert registry.reads == reads + 2
+
+    asyncio.run(scenario())
+
+
+def test_a_snapshot_never_refuses_what_the_registry_allows():
+    async def scenario():
+        registry = CountingRegistry()
+        # Two discovery replicas share one registry.
+        first = DiscoveryService(registry, clock=lambda: 0.0)
+        second = DiscoveryService(registry, clock=lambda: 0.0)
+        await _up(first, _provider("old"))
+        await first.authorize_agent(_poll(_provider("old")), "owner")
+        # Registered through the other replica after that snapshot.
+        late = _provider("late")
+        await _up(second, late)
+        await first.authorize_agent(_poll(late), "owner")
+        # Registered again with a new lease token after an eviction.
+        await second.evict(pb.EvictRequest(instance_id="late"), "api")
+        late.lease_token = "b" * 40
+        await _up(second, late)
+        await first.authorize_agent(_poll(late), "owner")
+
+    asyncio.run(scenario())
+
+
+def test_registry_changes_end_snapshot_answers():
+    async def scenario():
+        now = [0.0]
+        registry = CountingRegistry()
+        first = DiscoveryService(registry, lease_seconds=5, clock=lambda: now[0])
+        second = DiscoveryService(registry, lease_seconds=5, clock=lambda: now[0])
+        evicted, gone, lapsed = (_provider(i) for i in ("evicted", "gone", "lapsed"))
+        keeper = _provider("keeper")
+        for req in (evicted, gone, lapsed, keeper):
+            await _up(first, req)
+            await first.authorize_agent(_poll(req), "owner")
+        # A change through this replica applies at once.
+        await first.evict(pb.EvictRequest(instance_id="evicted"), "api")
+        with pytest.raises(DiscoveryError, match="LEASE_EXPIRED"):
+            await first.authorize_agent(_poll(evicted), "owner")
+        # A change through another replica: the snapshot allows it for at most
+        # a second, then a fresh read refuses it.
+        await second.unregister(
+            pb.UnregisterRequest(instance_id="gone", lease_token=gone.lease_token),
+            "owner",
+        )
+        now[0] = 0.5
+        await first.authorize_agent(_poll(gone), "owner")
+        now[0] = 1.0
+        with pytest.raises(DiscoveryError, match="LEASE_EXPIRED"):
+            await first.authorize_agent(_poll(gone), "owner")
+        # Leases are checked against the clock, not the snapshot's time.
+        now[0] = 4.5
+        await first.renew(
+            pb.RenewRequest(instance_id="keeper", lease_token=keeper.lease_token),
+            "owner",
+        )
+        now[0] = 5.2  # "lapsed" expired at 5; the snapshot is from 4.5
+        with pytest.raises(DiscoveryError, match="LEASE_EXPIRED"):
+            await first.authorize_agent(_poll(lapsed), "owner")
+        await first.authorize_agent(_poll(keeper), "owner")
+
+    asyncio.run(scenario())
+
+
+def test_snapshot_refusals_are_rechecked_and_still_refused():
+    async def scenario():
+        registry = CountingRegistry()
+        service = DiscoveryService(registry, clock=lambda: 0.0)
+        req = _provider()
+        await _up(service, req)
+        reads = registry.reads
+        wrong = _poll(req)
+        wrong.lease_token = "wrong"
+        with pytest.raises(DiscoveryError, match="PERMISSION_DENIED"):
+            await service.authorize_agent(wrong, "owner")
+        with pytest.raises(DiscoveryError, match="PERMISSION_DENIED"):
+            await service.authorize_agent(_poll(req), "intruder")
+        missing = _poll(req)
+        missing.agent_name = "Missing"
+        with pytest.raises(DiscoveryError, match="AGENT_NOT_FOUND"):
+            await service.authorize_agent(missing, "owner")
+        assert registry.reads == reads + 3
+
+    asyncio.run(scenario())
