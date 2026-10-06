@@ -48,8 +48,12 @@ PERSON = SearchTopic(
     source="builtin",
     results_query=_PREFIXES
     + """
+# The snippet says why a person matched when the card cannot show it (a client, a
+# school, a skill, a summary, a mission); otherwise it is their summary, since a
+# match on the name or headline is visible as it is. An empty query searched
+# nothing, so there is nothing to explain: no snippet.
 SELECT ?uri ?title (SAMPLE(?headline) AS ?subtitle)
-       (COALESCE(SAMPLE(?evidence), SAMPLE(?about)) AS ?snippet)
+       (COALESCE(SAMPLE(?why), SAMPLE(?about)) AS ?snippet)
 WHERE {
   {
     # Every text a person is known by, weighted by how much a match on it says:
@@ -67,8 +71,9 @@ WHERE {
           BIND(2 AS ?weight)
         }
         UNION {
+          # No snippet: the card's Organization row names the organization.
           ?uri abi:hasActOfWorking/abi:forOrganization ?organization . ?organization rdfs:label ?text .
-          BIND(2 AS ?weight) BIND(CONCAT("Experience: ", ?text) AS ?found)
+          BIND(2 AS ?weight)
         }
         UNION {
           ?uri abi:hasActOfWorking/abi:forClient ?client . ?client rdfs:label ?text .
@@ -79,8 +84,9 @@ WHERE {
           BIND(3 AS ?weight) BIND(CONCAT("Education: ", ?text) AS ?found)
         }
         UNION {
+          # No snippet: the card's Role row shows the title.
           ?uri abi:hasActOfWorking/abi:realizes/abi:job_title ?text .
-          BIND(3 AS ?weight) BIND(CONCAT("Role: ", ?text) AS ?found)
+          BIND(3 AS ?weight)
         }
         UNION {
           ?uri abi:hasSkill ?skill . ?skill rdfs:label ?text .
@@ -101,10 +107,14 @@ WHERE {
     GROUP BY ?uri
   }
   ?uri rdfs:label ?title .
+  # Why the person matched, when the card cannot show it: only for a query, and
+  # not for a match on the name or headline (visible as it is).
+  BIND(IF(STRLEN("{{ q }}") > 0 && ?rank > 1, ?evidence, ?none) AS ?why)
   OPTIONAL {
     ?uri abi:hasProfileSummary ?summary .
     OPTIONAL { ?summary abi:headline_text ?headline . }
-    OPTIONAL { ?summary abi:summary_content ?about . }
+    # The summary stands in for an explanation, so not for an empty query either.
+    OPTIONAL { ?summary abi:summary_content ?about . FILTER(STRLEN("{{ q }}") > 0) }
   }
 }
 GROUP BY ?uri ?title ?rank

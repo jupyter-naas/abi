@@ -180,10 +180,10 @@ class SearchTopicService:
             "results",
             {"q": query.strip(), "limit": COUNT_LIMIT, "offset": 0},
         )
-        rows, total = await asyncio.gather(
-            asyncio.to_thread(store.select, sparql),
-            asyncio.to_thread(self._count, store, count_query(counted), topic.id),
-        )
+        # One after the other: rdflib's SPARQL parser is not thread-safe, and a
+        # store may be an in-memory rdflib graph.
+        rows = await asyncio.to_thread(store.select, sparql)
+        total = await asyncio.to_thread(self._count, store, count_query(counted), topic.id)
         items: list[TopicResultItem] = []
         seen: set[str] = set()
         for row in rows:

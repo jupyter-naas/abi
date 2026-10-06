@@ -181,6 +181,10 @@ class TestExecution:
         }
         # No employer stated: the current organization is the one of an open role.
         assert rows["Consultant"] == {"Organization": "Firm"}
+
+        # An empty query searched nothing: no snippet, not even a summary.
+        everyone = await service.search(WS, "person", "", GraphQueryTripleStoreAdapter(graph))
+        assert [item.snippet for item in everyone.items] == [None, None, None, None]
         # Organizations and roles rank before the free text of a summary.
         assert [item.title for item in results.items][-1] == "Partner"
 
