@@ -37,6 +37,22 @@ def test_every_is_a_go_duration_of_at_least_a_second():
             Every(bad)
 
 
+def test_one_go_duration_parser_serves_every_and_tick_ttls():
+    from naas_abi_sdk.job_host import scheduled_tick_ttl
+    from naas_abi_sdk.jobs import go_duration_seconds
+
+    assert go_duration_seconds("1h30m") == 5400
+    assert go_duration_seconds("1.5s") == 1.5
+    assert go_duration_seconds("250ms") == 0.25
+    for bad in ("soon", "", "10", "1h junk"):
+        with pytest.raises(ValueError):
+            go_duration_seconds(bad)
+    assert scheduled_tick_ttl(Every("90s")) == "90s"
+    assert scheduled_tick_ttl(Every("1m30s")) == "90s"
+    assert scheduled_tick_ttl(Every("2s")) == "60s"  # at least a minute
+    assert scheduled_tick_ttl(Every("6h")) == "3600s"  # at most an hour
+
+
 def test_on_event_targets_an_event_type_or_a_raw_subject():
     import hashlib
 

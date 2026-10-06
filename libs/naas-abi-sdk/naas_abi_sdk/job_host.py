@@ -4,8 +4,11 @@ One durable pull consumer per job is shared by every replica, so each trigger
 reaches one replica; ``max_ack_pending`` bounds concurrency across replicas.
 Delivery is at-least-once: a crash or missed ack redelivers the trigger.
 Finished run records are pruned (``JobRetention``); active ones never are.
-A run whose host stopped on its last attempt is never redelivered, so the
-host's upkeep fails it once its heartbeats stop (``reap_lost_runs``).
+Attempts are handler starts recorded on the run, not deliveries: a delivery
+that cannot read or write its run (the store is down) is retried with backoff
+and uses none. A run whose host stopped on its last attempt, or whose trigger
+expired (``Nats-TTL``) before its retry, is never run again, so the host's
+upkeep fails it (``reap_lost_runs``).
 """
 
 from __future__ import annotations
@@ -15,7 +18,6 @@ import contextlib
 import hashlib
 import json
 import logging
-import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -31,6 +33,7 @@ from naas_abi_sdk.jobs import (
     JobRetention,
     JobRun,
     OnEvent,
+    go_duration_seconds,
     job_subjects,
     run_key,
     runs_collection,
@@ -47,34 +50,66 @@ MANUAL_TRIGGER_TTL = "168h"
 EVENT_TRIGGER_TTL = "24h"
 MAX_SCHEDULED_TICK_TTL_SECONDS = 3600
 DEFAULT_RETENTION = JobRetention()
+# What makes two schedule messages the same schedule (anything else is NATS's own).
+SCHEDULE_HEADERS = (
+    "Nats-Schedule",
+    "Nats-Schedule-Time-Zone",
+    "Nats-Schedule-Target",
+    "Nats-Schedule-TTL",
+    TRIGGER_HEADER,
+)
+WRONG_LAST_SEQUENCE = 10071  # JetStream: Nats-Expected-Last-Subject-Sequence failed
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _fired_at(msg: Any) -> str:
+def _stored_at(msg: Any) -> datetime | None:
     """When JetStream stored the trigger (its schedule fired, or someone triggered it)."""
     stamp = getattr(getattr(msg, "metadata", None), "timestamp", None)
-    if isinstance(stamp, datetime):
-        if stamp.tzinfo is None:
-            stamp = stamp.replace(tzinfo=timezone.utc)
-        return stamp.astimezone(timezone.utc).isoformat()
-    return _now()
+    if not isinstance(stamp, datetime):
+        return None
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp.astimezone(timezone.utc)
 
 
-def _seconds(go_duration: str) -> float:
-    units = {"ns": 1e-9, "us": 1e-6, "µs": 1e-6, "ms": 1e-3, "s": 1, "m": 60, "h": 3600}
-    return sum(
-        float(n) * units[u]
-        for n, u in re.findall(r"(\d+(?:\.\d+)?)(ns|us|µs|ms|s|m|h)", go_duration)
-    )
+def _fired_at(msg: Any) -> str:
+    return (_stored_at(msg) or datetime.now(timezone.utc)).isoformat()
+
+
+def _same_trigger(run: dict[str, Any], msg: Any) -> bool:
+    """Whether a run record belongs to this trigger message.
+
+    Run ids reuse stream sequences, so a recreated jobs stream hands new triggers
+    the ids of old runs. Records from before ``fired_at`` count as a match.
+    """
+    recorded, stored = run.get("fired_at"), _stored_at(msg)
+    return not recorded or stored is None or recorded == stored.isoformat()
+
+
+def _expires_within(msg: Any, seconds: float) -> bool:
+    """Whether the trigger leaves the stream (its ``Nats-TTL``) within ``seconds``."""
+    stored = _stored_at(msg)
+    ttl = str((msg.headers or {}).get("Nats-TTL", ""))
+    if stored is None or not ttl:
+        return False
+    try:
+        lifetime = float(ttl) if ttl.isdigit() else go_duration_seconds(ttl)
+    except ValueError:  # "never"
+        return False
+    deadline = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+    return stored + timedelta(seconds=lifetime) <= deadline
 
 
 def scheduled_tick_ttl(trigger: Cron | Every) -> str:
     """Unprocessed ticks expire: a module back after days runs once, not per missed tick."""
     if isinstance(trigger, Every):
-        ttl = max(60, min(_seconds(trigger.interval), MAX_SCHEDULED_TICK_TTL_SECONDS))
+        ttl = max(
+            60,
+            min(go_duration_seconds(trigger.interval), MAX_SCHEDULED_TICK_TTL_SECONDS),
+        )
     else:
         ttl = MAX_SCHEDULED_TICK_TTL_SECONDS
     return f"{int(ttl)}s"
@@ -126,6 +161,7 @@ class JobHost:
         close_cancel_seconds: float = 15.0,
         retention: JobRetention | None = DEFAULT_RETENTION,
         lost_after_seconds: float = 300.0,
+        completion_error_after_seconds: float = 60.0,
     ):
         self.transport, self.documents = transport, documents
         self.module_id, self.project = module_id, project
@@ -143,6 +179,8 @@ class JobHost:
         self.close_cancel_seconds = close_cancel_seconds
         self.retention = retention
         self.lost_after_seconds = lost_after_seconds
+        # A completion still unsaved after this long is logged as an error.
+        self.completion_error_after_seconds = completion_error_after_seconds
         self.collection = runs_collection(project)
         self._running: dict[str, JobContext] = {}
         self._work: dict[str, asyncio.Task] = {}
@@ -188,7 +226,9 @@ class JobHost:
                     ack_policy=AckPolicy.EXPLICIT,
                     deliver_policy=DeliverPolicy.NEW,
                     ack_wait=self.ack_wait_seconds,
-                    max_deliver=descriptor.max_attempts,
+                    # Unlimited: the host counts attempts on the run, so deliveries
+                    # deferred while the store is down use none. Triggers expire.
+                    max_deliver=-1,
                     max_ack_pending=descriptor.max_concurrency,
                 ),
             )
@@ -312,16 +352,55 @@ class JobHost:
                 "Nats-Schedule-TTL": scheduled_tick_ttl(trigger),
                 TRIGGER_HEADER: "schedule",
             }
-            await js.publish(
-                subjects.schedule(index),
-                b"{}",
-                headers=headers,
-                stream=stream_name(self.project),
-            )
+            await self._ensure_schedule(js, subjects.schedule(index), headers)
         for index in range(len(schedules), MAX_TRIGGERS):
             await js.purge_stream(
                 stream_name(self.project), subject=subjects.schedule(index)
             )
+
+    async def _ensure_schedule(
+        self, js: Any, subject: str, headers: dict[str, str]
+    ) -> None:
+        """Publish a schedule only when it is missing or changed.
+
+        Replacing a schedule message restarts an ``@every`` interval: hosts that
+        restart more often than the interval would keep it from ever firing. The
+        publish expects the sequence just read, so hosts starting together write
+        it once; the loser reads it again.
+        """
+        from nats.js.errors import BadRequestError, NotFoundError
+
+        stream = stream_name(self.project)
+        wanted = {name: headers.get(name) for name in SCHEDULE_HEADERS}
+        for _ in range(3):
+            try:
+                current = await js.get_last_msg(stream, subject)
+            except NotFoundError:
+                sequence = 0
+            else:
+                found = current.headers or {}
+                if {name: found.get(name) for name in SCHEDULE_HEADERS} == wanted:
+                    return
+                sequence = current.seq
+            try:
+                await js.publish(
+                    subject,
+                    b"{}",
+                    headers={
+                        **headers,
+                        "Nats-Expected-Last-Subject-Sequence": str(sequence),
+                    },
+                    stream=stream,
+                )
+                return
+            except BadRequestError as error:
+                if error.err_code != WRONG_LAST_SEQUENCE:
+                    raise
+        logger.warning(
+            "Schedule %s kept changing while it was reconciled; "
+            "keeping the one another host wrote",
+            subject,
+        )
 
     async def bridge_event(
         self,
@@ -413,41 +492,40 @@ class JobHost:
             await asyncio.sleep(interval)
 
     async def reap_lost_runs(self, now: datetime | None = None) -> int:
-        """Fail the runs lost with their host; returns how many.
+        """Fail the runs nothing will finish; returns how many.
 
-        A RUNNING run on its last attempt whose heartbeats stopped more than
-        ``lost_after_seconds`` ago is never redelivered (``max_deliver``), so
-        nothing else would ever finish its record. Runs with attempts left are
-        JetStream's: their redelivery updates the record.
+        - A RUNNING run on its last attempt whose heartbeats stopped more than
+          ``lost_after_seconds`` ago: its host stopped and no attempt is left.
+        - A RUNNING run with attempts left and heartbeats stopped as long, or a
+          RETRYING run past its retry time, whose trigger left the stream (its
+          ``Nats-TTL`` passed): nothing can redeliver it.
+
+        Other runs with attempts left are JetStream's: their redelivery updates
+        the record. Runs on this host are never touched.
         """
         now = now or datetime.now(timezone.utc)
         cutoff = (now - timedelta(seconds=self.lost_after_seconds)).isoformat()
         reaped = 0
-        for name in self.handlers:
+        for name, (descriptor, _) in self.handlers.items():
             page = await self.documents.find(
                 self.collection,
-                where=[("job", "eq", name), ("status", "eq", "RUNNING")],
+                where=[("job", "eq", name), ("status", "in", ["RUNNING", "RETRYING"])],
                 limit=1000,
             )
             for doc in page.items:
-                run = doc.data
-                last_seen = run.get("heartbeat_at") or run.get("started_at") or ""
-                if (
-                    doc.id in self._running
-                    or run.get("attempt", 1) < run.get("max_attempts", 1)
-                    or not last_seen
-                    or last_seen >= cutoff
-                ):
+                if doc.id in self._running:
+                    continue
+                error = await self._lost(descriptor, doc.id, doc.data, now, cutoff)
+                if error is None:
                     continue
                 try:
                     await self.documents.put(
                         self.collection,
                         doc.id,
                         {
-                            **run,
+                            **doc.data,
                             "status": "FAILED",
-                            "error": f"Lost: no heartbeat since {last_seen} "
-                            "(its host stopped before the run finished)",
+                            "error": error,
                             "finished_at": now.isoformat(),
                         },
                         if_version=doc.version,
@@ -456,6 +534,47 @@ class JobHost:
                 except (DocumentNotFound, VersionConflict):
                     continue  # its host is alive after all, or another replica reaped it
         return reaped
+
+    async def _lost(
+        self,
+        descriptor: JobDescriptor,
+        run_id: str,
+        run: dict[str, Any],
+        now: datetime,
+        cutoff: str,
+    ) -> str | None:
+        """Why nothing will finish this run, or None while something still can."""
+        last_seen = run.get("heartbeat_at") or run.get("started_at") or ""
+        if run.get("status") == "RETRYING":
+            due = run.get("retry_at") or last_seen
+            if not due or due > now.isoformat():
+                return None
+            error = "Trigger expired before it could be retried"
+        else:
+            if not last_seen or last_seen >= cutoff:
+                return None
+            lost = f"Lost: no heartbeat since {last_seen}"
+            if run.get("attempt", 1) >= run.get("max_attempts", 1):
+                return f"{lost} (its host stopped before the run finished)"
+            error = f"{lost}, and its trigger expired before it could be retried"
+        return error if await self._trigger_gone(descriptor, run_id, run) else None
+
+    async def _trigger_gone(
+        self, descriptor: JobDescriptor, run_id: str, run: dict[str, Any]
+    ) -> bool:
+        """Whether the run's trigger message left the jobs stream."""
+        from nats.js.errors import NotFoundError
+
+        sequence = str(run.get("sequence") or run_id.rpartition(":")[2])
+        if not sequence.isdigit():
+            return False
+        js = (await self.transport.connect()).jetstream()
+        try:
+            stored = await js.get_msg(stream_name(self.project), int(sequence))
+        except NotFoundError:
+            return True
+        # A recreated stream reuses sequences: another job's message is not its trigger.
+        return stored.subject != self._subjects(descriptor).trigger
 
     async def prune(self, now: datetime | None = None) -> int:
         """One retention pass over this host's jobs; returns the runs deleted.
@@ -524,8 +643,14 @@ class JobHost:
         )
 
     async def _save(
-        self, run_id: str, fields: dict[str, Any], *, only_running: bool = False
+        self,
+        run_id: str,
+        fields: dict[str, Any],
+        *,
+        only_running: bool = False,
+        replace: bool = False,
     ) -> None:
+        """Merge ``fields`` into the run (CAS); ``replace`` drops what was there."""
         for _ in range(3):
             try:
                 existing = await self.documents.get(self.collection, run_id)
@@ -544,11 +669,12 @@ class JobHost:
                     continue
             if only_running and existing.data.get("status") != "RUNNING":
                 return
+            data = {"created_at": _now()} if replace else existing.data
             try:
                 await self.documents.put(
                     self.collection,
                     run_id,
-                    {**existing.data, **fields},
+                    {**data, **fields},
                     if_version=existing.version,
                 )
                 return
@@ -578,6 +704,14 @@ class JobHost:
     async def _save_completion(
         self, run_id: str, fields: dict[str, Any], heartbeat: asyncio.Task
     ) -> None:
+        """Save a finished run, retrying until the store takes it.
+
+        The run keeps its delivery (and its concurrency slot) meanwhile: acking
+        before the result is saved could lose it, nak'ing would run it again.
+        Past ``completion_error_after_seconds`` each retry logs an error.
+        """
+        loop = asyncio.get_running_loop()
+        failing_since: float | None = None
         while True:
             if heartbeat.done():
                 await heartbeat
@@ -585,8 +719,18 @@ class JobHost:
                 await self._save(run_id, fields)
                 return
             except Exception:
-                logger.warning(
-                    "Job completion persistence failed; retrying", exc_info=True
+                if failing_since is None:
+                    failing_since = loop.time()
+                outage = loop.time() - failing_since
+                logger.log(
+                    logging.ERROR
+                    if outage >= self.completion_error_after_seconds
+                    else logging.WARNING,
+                    "Job run %s could not save its completion for %.0fs; retrying "
+                    "(it keeps its concurrency slot until the store recovers)",
+                    run_id,
+                    outage,
+                    exc_info=True,
                 )
                 if self._closing or heartbeat.done():
                     raise
@@ -616,7 +760,7 @@ class JobHost:
             "abi.module.id": self.module_id,
             "abi.job.name": descriptor.name,
             "abi.job.run_id": run_key(descriptor.name, msg.metadata.sequence.stream),
-            "abi.job.attempt": msg.metadata.num_delivered,
+            "abi.job.delivery": msg.metadata.num_delivered,
         }
         with server_span(
             getattr(msg, "subject", ""),
@@ -629,24 +773,8 @@ class JobHost:
             if status not in ("SUCCEEDED", "SKIPPED", "CANCELLED"):
                 record_error(status)
 
-    async def _handle_delivery(
-        self, descriptor: JobDescriptor, handler: Any, msg: Any
-    ) -> str:
-        sequence, attempt = msg.metadata.sequence.stream, msg.metadata.num_delivered
-        run_id = run_key(descriptor.name, sequence)
-        try:
-            existing = await self.documents.get(self.collection, run_id)
-        except DocumentNotFound:
-            pass
-        else:
-            if existing.data.get("status") in TERMINAL_STATUSES:
-                status = existing.data["status"]
-                await self._retire(msg, status)
-                return status
-        headers = msg.headers or {}
-        trigger = {"kind": headers.get(TRIGGER_HEADER, "manual")}
-        if headers.get("Nats-Scheduler"):
-            trigger["scheduler"] = headers["Nats-Scheduler"]
+    async def _payload(self, msg: Any) -> dict[str, Any]:
+        """The trigger's payload, read back from its claim check when large."""
         from naas_abi_sdk import claim_check
 
         data = msg.data
@@ -656,28 +784,87 @@ class JobHost:
             payload = json.loads(data) if data else {}
         except (ValueError, UnicodeDecodeError):
             payload = {"raw": data.decode(errors="replace")}
-        if not isinstance(payload, dict):
-            payload = {"value": payload}
-        context = JobContext(run_id, descriptor.name, attempt, trigger, payload)
-        await self._save(
+        return payload if isinstance(payload, dict) else {"value": payload}
+
+    async def _defer(
+        self, msg: Any, run_id: str, delivery: int, error: Exception
+    ) -> str:
+        """The run could not be read or recorded: redeliver later, using no attempt."""
+        delay = self._backoff(delivery)
+        logger.error(
+            "Job run %s could not start (delivery %d): %s; redelivering in %gs",
             run_id,
-            {
-                "job": descriptor.name,
-                "run_id": run_id,
-                "module_id": self.module_id,
-                "status": "RUNNING",
-                "attempt": attempt,
-                "max_attempts": descriptor.max_attempts,
-                "trigger": trigger,
-                "payload": payload,
-                "instance": self.instance_id,
-                "fired_at": _fired_at(msg),
-                "started_at": _now(),
-                "heartbeat_at": _now(),
-                "trace_id": current_trace_id(),
-                "error": "",
-            },
+            delivery,
+            error,
+            delay,
+            exc_info=error,
         )
+        await msg.nak(delay=delay)
+        return "DEFERRED"
+
+    async def _handle_delivery(
+        self, descriptor: JobDescriptor, handler: Any, msg: Any
+    ) -> str:
+        sequence, delivery = msg.metadata.sequence.stream, msg.metadata.num_delivered
+        run_id = run_key(descriptor.name, sequence)
+        try:
+            existing = await self.documents.get(self.collection, run_id)
+        except DocumentNotFound:
+            existing = None
+        except Exception as exc:  # noqa: BLE001 - logged and redelivered by _defer
+            return await self._defer(msg, run_id, delivery, exc)
+        # A recreated stream reuses sequences: an older trigger's run is replaced.
+        replace = existing is not None and not _same_trigger(existing.data, msg)
+        if existing is not None and not replace:
+            if existing.data.get("status") in TERMINAL_STATUSES:
+                status = existing.data["status"]
+                await self._retire(msg, status)
+                return status
+            # Attempts are handler starts recorded on the run, not deliveries.
+            attempt = int(existing.data.get("attempt") or 0) + 1
+            if attempt > descriptor.max_attempts:
+                # Its last attempt never finished: the upkeep fails the run once
+                # its heartbeats stop (reap_lost_runs).
+                logger.warning(
+                    "Job run %s used its %d attempts; dropping delivery %d",
+                    run_id,
+                    descriptor.max_attempts,
+                    delivery,
+                )
+                await msg.term()
+                return str(existing.data.get("status"))
+        else:
+            attempt = 1
+        headers = msg.headers or {}
+        trigger = {"kind": headers.get(TRIGGER_HEADER, "manual")}
+        if headers.get("Nats-Scheduler"):
+            trigger["scheduler"] = headers["Nats-Scheduler"]
+        try:
+            payload = await self._payload(msg)
+            await self._save(
+                run_id,
+                {
+                    "job": descriptor.name,
+                    "run_id": run_id,
+                    "module_id": self.module_id,
+                    "status": "RUNNING",
+                    "attempt": attempt,
+                    "max_attempts": descriptor.max_attempts,
+                    "trigger": trigger,
+                    "payload": payload,
+                    "instance": self.instance_id,
+                    "sequence": sequence,
+                    "fired_at": _fired_at(msg),
+                    "started_at": _now(),
+                    "heartbeat_at": _now(),
+                    "trace_id": current_trace_id(),
+                    "error": "",
+                },
+                replace=replace,
+            )
+        except Exception as exc:  # noqa: BLE001 - logged and redelivered by _defer
+            return await self._defer(msg, run_id, delivery, exc)
+        context = JobContext(run_id, descriptor.name, attempt, trigger, payload)
         self._running[run_id] = context
         heartbeat = asyncio.create_task(self._heartbeat(msg))
         progress = asyncio.create_task(self._persist_progress(context))
@@ -724,11 +911,19 @@ class JobHost:
                 and attempt < descriptor.max_attempts
             ):
                 status = "RETRYING"
+            retry_delay = self._backoff(attempt)
+            if status == "RETRYING" and _expires_within(msg, retry_delay):
+                # JetStream would never redeliver it: the run would stay RETRYING.
+                status = "FAILED"
+                error = f"Trigger expired before it could be retried; {error}"
             fields: dict[str, Any] = {
                 "status": status,
                 "logs": list(context.logs),
                 "error": error,
             }
+            if status == "RETRYING":
+                retry_at = datetime.now(timezone.utc) + timedelta(seconds=retry_delay)
+                fields["retry_at"] = retry_at.isoformat()
             if status in TERMINAL_STATUSES:
                 fields["finished_at"] = _now()
             if status in ("SUCCEEDED", "SKIPPED"):
@@ -745,7 +940,7 @@ class JobHost:
             progress.cancel()
             await asyncio.gather(progress, return_exceptions=True)
             if status == "RETRYING":
-                await msg.nak(delay=self._backoff(attempt))
+                await msg.nak(delay=retry_delay)
             else:
                 await self._retire(msg, status)
             return status
