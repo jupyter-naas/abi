@@ -893,3 +893,63 @@ def test_a_store_outage_when_a_trigger_arrives_uses_no_attempt(broker):
 
     assert docs.failures == 0 and attempts == [1]
     assert docs.runs("fragile")[0]["attempt"] == 1
+
+
+def test_a_trigger_for_a_new_job_sent_before_its_host_starts_runs_once(broker):
+    """A staged generation's consumers exist before it can serve (rollouts)."""
+    docs = Documents()
+    executions = []
+
+    async def handler(ctx):
+        executions.append(ctx.run_id)
+
+    serving_tick = JobDescriptor("tick", triggers=(Every("1h"),))
+    staged_tick = JobDescriptor("tick", triggers=(Every("2h"),), max_concurrency=3)
+    fresh = JobDescriptor("fresh", triggers=(Every("1h"),))
+    tick = job_subjects(PROJECT, MODULE, "tick")
+
+    async def scenario():
+        nc = await Transport(broker, "t").connect()
+        js = nc.jetstream()
+        stream = stream_name(PROJECT)
+        caller = Transport(broker, "t")
+        serving = _host(broker, docs, [(serving_tick, handler)], instance_id="v1")
+        staged = _host(
+            broker, docs, [(staged_tick, handler), (fresh, handler)], instance_id="v2"
+        )
+        try:
+            await serving.start()
+            schedule = await js.get_last_msg(stream, tick.schedule(0))
+            await staged.prepare()
+            # The serving generation keeps its schedules and consumer limits.
+            assert (await js.get_last_msg(stream, tick.schedule(0))).seq == (
+                schedule.seq
+            )
+            assert (
+                await js.consumer_info(stream, tick.consumer)
+            ).config.max_ack_pending == 1
+            with pytest.raises(NotFoundError):
+                await js.get_last_msg(
+                    stream, job_subjects(PROJECT, MODULE, "fresh").schedule(0)
+                )
+            # Cutover: a caller triggers the new job before the new host fetches.
+            run = await JobProxy(caller, PROJECT, MODULE, fresh, docs).trigger()
+            await asyncio.sleep(0.5)
+            assert executions == []  # a prepared host runs nothing
+            await staged.start()
+            record = await run.wait(timeout=8, poll_seconds=0.05)
+            limits = (await js.consumer_info(stream, tick.consumer)).config
+            return record, limits.max_ack_pending
+        finally:
+            for host in (staged, serving):
+                await host.close()
+                await host.transport.close()
+            await caller.close()
+            await nc.close()
+
+    record, max_ack_pending = asyncio.run(scenario())
+
+    assert record["status"] == "SUCCEEDED"
+    assert executions == [record["run_id"]]
+    assert len(docs.runs("fresh")) == 1
+    assert max_ack_pending == 3  # start() applies the new generation's limits

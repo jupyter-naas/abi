@@ -95,9 +95,14 @@ consumer limits and run its jobs before its cohort is up. The SDK runner of a
 process with a rollout id therefore starts its job host only once discovery
 reports it `READY` or `DEGRADED`, and never if it is asked to drain first. The
 System app's job list skips staged instances and prefers the serving
-generation's definition over a draining one's. A trigger for a brand-new job
-sent between the cutover and the new host's start (at most one heartbeat) has
-no consumer yet and is not delivered.
+generation's definition over a draining one's.
+
+Before its instance can serve, that process creates the job consumers that are
+missing (`JobHost.prepare`) and changes nothing else. A consumer only delivers
+triggers stored after it exists, so a trigger for a brand-new job sent between
+the cutover and the host's start (up to one heartbeat) used to be skipped. It
+now waits for the host. Existing consumers, schedules and event bridges stay
+with the serving generation until the host starts.
 
 ## Lease loss keeps the instance id (2026-10-06)
 

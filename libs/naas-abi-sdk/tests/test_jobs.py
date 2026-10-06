@@ -261,6 +261,9 @@ def _staging(monkeypatch, events):
         def __init__(self, *args, **kwargs):
             pass
 
+        async def prepare(self):
+            events.append("consumers")
+
         async def start(self):
             events.append("jobs")
 
@@ -315,7 +318,9 @@ def test_a_staged_generation_hosts_its_jobs_only_after_the_cutover(monkeypatch):
             ),
         )
     )
-    assert seen == ["register", "renew", "jobs"]
+    # Its consumers exist before it can serve: no trigger sent after the cutover
+    # is skipped while the host starts.
+    assert seen == ["register", "consumers", "renew", "jobs"]
     assert events[-1] == "jobs closed"
 
 
@@ -366,7 +371,7 @@ def test_a_staged_generation_that_drains_never_hosts_its_jobs(monkeypatch):
         )
         is None
     )
-    assert "jobs" not in events
+    assert "jobs" not in events and "consumers" in events
 
 
 def test_failing_to_host_jobs_after_the_cutover_stops_the_module(monkeypatch):

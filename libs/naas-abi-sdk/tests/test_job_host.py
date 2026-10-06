@@ -1574,6 +1574,56 @@ def test_consumers_leave_attempts_to_the_host():
     assert added[0].max_deliver == -1
 
 
+def test_prepare_only_creates_the_consumers_that_are_missing():
+    calls = []
+    existing = job_subjects(PROJECT, MODULE, "kept").consumer
+
+    class _JS:
+        async def stream_info(self, name):
+            return SimpleNamespace(
+                config=SimpleNamespace(allow_msg_schedules=True, allow_msg_ttl=True)
+            )
+
+        async def consumer_info(self, stream, consumer):
+            from nats.js.errors import NotFoundError
+
+            if consumer != existing:
+                raise NotFoundError(code=404, err_code=10014)
+            return SimpleNamespace()
+
+        async def add_consumer(self, stream, config):
+            calls.append(("add", config.durable_name, config))
+
+        def __getattr__(self, name):  # schedules, purges and fetches
+            calls.append((name,))
+            raise AssertionError(f"prepare must not call {name}")
+
+    class _NC:
+        def jetstream(self):
+            return _JS()
+
+    class _T:
+        async def connect(self):
+            return _NC()
+
+    async def handler(ctx):
+        return None
+
+    jobs = {
+        name: (JobDescriptor(name, triggers=(Every("1h"),), max_concurrency=2), handler)
+        for name in ("kept", "added")
+    }
+    host = JobHost(_T(), Documents(), MODULE, PROJECT, jobs, retention=None)
+    asyncio.run(host.prepare())
+
+    added = job_subjects(PROJECT, MODULE, "added")
+    assert [call[:2] for call in calls] == [("add", added.consumer)]
+    config = calls[0][2]
+    assert config.filter_subject == added.trigger
+    assert (config.max_ack_pending, config.max_deliver) == (2, -1)
+    assert not host._consumers and not host._loops
+
+
 def test_a_long_completion_outage_is_logged_as_an_error(caplog):
     class CompletionOutage(Documents):
         failures = 8
