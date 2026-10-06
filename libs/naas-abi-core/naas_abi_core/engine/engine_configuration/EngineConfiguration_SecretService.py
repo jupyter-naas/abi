@@ -172,6 +172,13 @@ class SecretAdapterConfiguration(GenericLoader):
         else:
             return super().load()
 
+    def local_storage(self) -> str | None:
+        """Secrets are deployment configuration, the same for every engine of a
+        deploy (single-serving-engine ADR)."""
+        if self.adapter == "custom":
+            return self.custom_local_storage()
+        return None  # dotenv, naas, base64; nats_rpc is another engine's
+
 
 class SecretServiceConfiguration(BaseModel):
     secret_adapters: list[SecretAdapterConfiguration]

@@ -50,6 +50,25 @@ ON_DEMAND_SERVICES: tuple[type, ...] = (
 )
 
 
+# Each on-demand service and its name under ``services:`` in the configuration.
+SERVICE_NAMES: dict[type, str] = {
+    ActivityLogService: "activity_log",
+    BusService: "bus",
+    CacheService: "cache",
+    DatasetService: "dataset",
+    DocumentService: "document",
+    EmailService: "email",
+    EventService: "event",
+    KeyValueService: "kv",
+    ObjectStorageService: "object_storage",
+    Secret: "secret",
+    TripleStoreService: "triple_store",
+    VectorStoreService: "vector_store",
+}
+# Loaded whatever the modules declare (see load_services).
+ALWAYS_LOADED = ("coding_environment", "source_control")
+
+
 class EngineServiceLoader:
     __configuration: EngineConfiguration
 
@@ -86,9 +105,22 @@ class EngineServiceLoader:
             emit_message_events=self.__configuration.services.bus.emit_message_events,
         )
 
-    def load_services(
+    def local_backends(
         self, module_dependencies: dict[str, ModuleDependencies]
-    ) -> IEngine.Services:
+    ) -> dict[str, str]:
+        """Of the services this engine will load, those whose data stays on this
+        host, and where (docs/adr/20261006_single-serving-engine.md)."""
+        services_to_load = self._services_to_load(module_dependencies)
+        owned = [
+            name
+            for service_type, name in SERVICE_NAMES.items()
+            if self._should_load_service(service_type, services_to_load)
+        ]
+        return self.__configuration.services.local_backends([*owned, *ALWAYS_LOADED])
+
+    def _services_to_load(
+        self, module_dependencies: dict[str, ModuleDependencies]
+    ) -> list[type]:
         services_to_load: list[type] = []
 
         for module_dependency in module_dependencies.values():
@@ -103,7 +135,18 @@ class EngineServiceLoader:
                     services_to_load.append(ObjectStorageService)
                 elif entry.adapter == "keyvalue":
                     services_to_load.append(KeyValueService)
-        services_to_load = list(set(services_to_load))
+        if (
+            ActivityLogService in services_to_load
+            and self.__configuration.services.activity_log.activity_log_adapter.adapter
+            == "document"
+        ):
+            services_to_load.append(DocumentService)
+        return list(set(services_to_load))
+
+    def load_services(
+        self, module_dependencies: dict[str, ModuleDependencies]
+    ) -> IEngine.Services:
+        services_to_load = self._services_to_load(module_dependencies)
         logger.debug(f"Services to load: {services_to_load}")
 
         services = IEngine.Services(

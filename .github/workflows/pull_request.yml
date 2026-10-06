@@ -38,6 +38,12 @@ jobs:
           UV_PYTHON: ${{ matrix.python-version }}
           DOCUMENT_TEST_POSTGRES_DSN: postgresql://document_test:document_test@localhost:5432/document_test
         run: make test-document-core
+      - name: Run the event log and activity log on PostgreSQL
+        env:
+          UV_PYTHON: ${{ matrix.python-version }}
+          DOCUMENT_TEST_POSTGRES_DSN: postgresql://document_test:document_test@localhost:5432/document_test
+          EVENT_TEST_POSTGRES_DSN: postgresql://document_test:document_test@localhost:5432/document_test
+        run: make test-event-core
 
   check:
     runs-on: ubuntu-latest
