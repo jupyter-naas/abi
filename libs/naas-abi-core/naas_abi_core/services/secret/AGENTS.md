@@ -106,6 +106,11 @@ memory; results that should not be require streaming or a storage reference. No 
 a timeout can hide a completed operation. Reconcile its outcome before retrying.
 `close()` releases only the client's transport, including for vector storage.
 
+In NATS mode a fanout may mix local adapters and `nats_rpc` ones
+(`[dotenv, nats_rpc]`): the engine serves only the local adapters, and its
+modules read them through the engine's endpoint before the `nats_rpc` upstream,
+in the configured order (`engine/engine_loaders/AGENTS.md`).
+
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
 The latter uses a local `nats-server` executable without Docker.

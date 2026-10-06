@@ -25,7 +25,8 @@ Process-local model registration is retained solely for local module bootstrap;
 it is absent from the domain dependency view and from the standalone SDK.
 A domain cannot obtain live model objects by falling back to local registry calls.
 External NATS adapters keep their explicitly configured routes. Mixed local/remote
-secret fanout is rejected because it can route a globally named endpoint into itself.
+secret fanout is rejected because it can route a globally named endpoint into itself
+(superseded on 2026-10-06, see the follow-up below).
 
 The cache can use the existing KV service with `adapter: keyvalue` and object
 storage with `adapter: object_storage`. Those dependencies are loaded transitively.
@@ -77,6 +78,15 @@ The model registry now has network lookup/inference proxies; local registration
 remains a bootstrap operation. See [Remote model registry](20260924_remote-model-registry.md).
 
 ## 2026-10-06 follow-up
+
+**Mixed secret fanout is supported again.** Rejecting `[dotenv, nats_rpc]` broke
+configurations that stage 1 ran: the engine served its local secrets and read
+the rest upstream. The danger was serving a fanout that contains a proxy on the
+global subject, which can route into itself. So the endpoint now serves a view
+of the local adapters only, wired to the owner's events. The facade reads them
+through one client to this engine's endpoint, where the first local adapter
+stood, and keeps the remote adapters for upstream reads. An all-local fanout is
+served whole; an all-remote one is not served.
 
 **Kernel jobs.** A job that maintains a service's own data runs on the owner, like
 its endpoints: dataset compaction gets the engine's dataset service, with no RPC

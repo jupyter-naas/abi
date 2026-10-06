@@ -16,6 +16,9 @@ from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
+from naas_abi_core.services.secret.adaptors.secondary.SecretSecondaryAdapterNATSClient import (
+    SecretSecondaryAdapterNATSClient,
+)
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
 
@@ -142,5 +145,89 @@ def test_facades_wait_as_long_as_the_configuration_says(tmp_path):
         # A route configured to another engine keeps its own setting.
         assert dependencies.kv.adapter is upstream
         assert upstream._timeout_seconds == 3.0
+    finally:
+        wiring.close()
+
+
+# --- secret fanout: the local part is this engine's, the remote part upstream's
+
+
+def _upstream_secret() -> SecretSecondaryAdapterNATSClient:
+    return SecretSecondaryAdapterNATSClient("nats://upstream:4222", "x" * 32, "engine")
+
+
+def _secret_view(*adapters) -> tuple[EngineNATSDependencies, list]:
+    wiring = EngineNATSDependencies(
+        NATSConfiguration(nats_url="nats://engine:4222", jwt_secret="x" * 32)
+    )
+    dependencies = wiring.build(IEngine.Services(secret=Secret(list(adapters))))
+    return wiring, dependencies.secret.adapters
+
+
+def _is_own_endpoint(adapter) -> bool:
+    return (
+        isinstance(adapter, SecretSecondaryAdapterNATSClient)
+        and adapter._nats_url == "nats://engine:4222"
+    )
+
+
+def test_a_local_secret_fanout_is_read_through_this_engines_endpoint():
+    wiring, view = _secret_view(
+        MagicMock(spec=ISecretAdapter), MagicMock(spec=ISecretAdapter)
+    )
+    try:
+        assert len(view) == 1 and _is_own_endpoint(view[0])
+    finally:
+        wiring.close()
+
+
+def test_a_remote_secret_fanout_keeps_its_upstream_routes():
+    first, second = _upstream_secret(), _upstream_secret()
+    wiring, view = _secret_view(first, second)
+    try:
+        assert view == [first, second]
+    finally:
+        wiring.close()
+
+
+def test_a_mixed_secret_fanout_reads_locally_first_then_upstream():
+    """Stage 1's ``[dotenv, nats_rpc]``: the local part is served by this engine,
+    nats_rpc still reads upstream, in the configured order."""
+    upstream = _upstream_secret()
+    wiring, view = _secret_view(MagicMock(spec=ISecretAdapter), upstream)
+    try:
+        assert len(view) == 2
+        assert _is_own_endpoint(view[0])
+        assert view[1] is upstream
+    finally:
+        wiring.close()
+    assert not wiring.clients
+
+
+def test_a_mixed_secret_fanout_keeps_the_upstream_position():
+    upstream = _upstream_secret()
+    wiring, view = _secret_view(
+        upstream, MagicMock(spec=ISecretAdapter), MagicMock(spec=ISecretAdapter)
+    )
+    try:
+        assert len(view) == 2
+        assert view[0] is upstream
+        assert _is_own_endpoint(view[1])
+    finally:
+        wiring.close()
+
+
+def test_a_mixed_secret_fanout_falls_through_to_upstream(monkeypatch):
+    upstream = _upstream_secret()
+    wiring = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
+    try:
+        dependencies = wiring.build(
+            IEngine.Services(secret=Secret([MagicMock(spec=ISecretAdapter), upstream]))
+        )
+        own, _ = dependencies.secret.adapters
+        monkeypatch.setattr(own, "get", lambda key, default=None: default)
+        monkeypatch.setattr(upstream, "get", lambda key, default=None: f"up:{key}")
+
+        assert dependencies.secret.get("TOKEN") == "up:TOKEN"
     finally:
         wiring.close()
