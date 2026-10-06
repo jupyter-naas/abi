@@ -62,8 +62,9 @@ WHERE {
         { ?uri rdfs:label ?text . BIND(0 AS ?weight) }
         UNION { ?uri abi:hasProfileSummary/abi:headline_text ?text . BIND(1 AS ?weight) }
         UNION {
+          # No snippet: the card's Organization row already names the employer.
           ?uri abi:worksFor|abi:isEmployedBy ?organization . ?organization rdfs:label ?text .
-          BIND(2 AS ?weight) BIND(CONCAT("Organization: ", ?text) AS ?found)
+          BIND(2 AS ?weight)
         }
         UNION {
           ?uri abi:hasActOfWorking/abi:forOrganization ?organization . ?organization rdfs:label ?text .
@@ -130,7 +131,16 @@ WHERE {
 SELECT DISTINCT ?uri ?value
 WHERE {
   VALUES ?uri { {{ uris }} }
-  ?uri abi:worksFor|abi:isEmployedBy ?org .
+  # The current organization: the employer, or else the organization of a role
+  # still open (no last instant), for a person the source gives no employer.
+  {
+    ?uri abi:worksFor|abi:isEmployedBy ?org .
+  } UNION {
+    ?uri abi:hasActOfWorking ?act .
+    ?act abi:forOrganization ?org .
+    FILTER NOT EXISTS { ?act abi:occupiesTemporalRegion ?t . ?t abi:hasLastInstant ?li . }
+    FILTER NOT EXISTS { ?uri abi:worksFor|abi:isEmployedBy ?employer . }
+  }
   ?org rdfs:label ?value .
 }
 """,
@@ -168,12 +178,25 @@ WHERE {
 }
 """,
         ),
+        TopicResultRowDef(
+            id="linkedin",
+            label="LinkedIn",
+            query=_PREFIXES
+            + """
+SELECT DISTINCT ?uri ?value
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?uri abi:linkedin_url ?value .
+}
+""",
+        ),
     ),
     header_query=_PREFIXES
     + """
-SELECT ?title ?subtitle ?snippet ?image ?url ?employer ?yearsOfExperience
+SELECT ?title ?subtitle ?snippet ?image ?url ?employer ?yearsOfExperience ?linkedin
 WHERE {
   {{ uri }} rdfs:label ?title .
+  OPTIONAL { {{ uri }} abi:linkedin_url ?linkedin . }
   OPTIONAL {
     {{ uri }} abi:hasProfileSummary ?summary .
     OPTIONAL { ?summary abi:headline_text ?subtitle . }
@@ -400,6 +423,19 @@ WHERE {
 }
 """,
     result_rows=(
+        TopicResultRowDef(
+            id="website",
+            label="Website",
+            query=_PREFIXES
+            + """
+SELECT DISTINCT ?uri ?value
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?uri abi:hasWebsite ?w .
+  ?w abi:website_url ?value .
+}
+""",
+        ),
         TopicResultRowDef(
             id="people",
             label="People",

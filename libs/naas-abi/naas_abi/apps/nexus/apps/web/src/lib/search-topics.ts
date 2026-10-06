@@ -174,6 +174,16 @@ export function initials(label: string): string {
 }
 
 /** "2019-10-01" → "Oct 2019"; open-ended periods read "– present". */
+/** A value that is a web address (a LinkedIn profile, a website) and can open in a new tab. */
+export function isWebUrl(value: string | null | undefined): value is string {
+  return !!value && /^https?:\/\/\S+$/i.test(value.trim());
+}
+
+/** A web address as people read it: no scheme, no "www.", no trailing slash. */
+export function displayUrl(value: string): string {
+  return value.trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, '');
+}
+
 export function formatPeriod(start: string | null, end: string | null): string | null {
   const fmt = (value: string) => {
     const date = new Date(value);

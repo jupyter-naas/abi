@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink, Loader2 } from 'lucide-react';
-import { formatPeriod, type TopicDetail, type TopicSectionItem, type TopicSectionResult } from '@/lib/search-topics';
+import { displayUrl, formatPeriod, isWebUrl, type TopicDetail, type TopicSectionItem, type TopicSectionResult } from '@/lib/search-topics';
 import { SparqlDisclosure } from './sparql-disclosure';
 import { TopicAvatar } from './topic-avatar';
 
@@ -57,7 +57,11 @@ export function TopicDetailView({ detail, loading, error, backHref, linkFor }: {
           {detail.facts.map(fact => (
             <div key={fact.key} className="min-w-0">
               <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{fact.label}</dt>
-              <dd className="truncate" title={fact.value}>{fact.value}</dd>
+              <dd className="truncate" title={fact.value}>
+                {isWebUrl(fact.value)
+                  ? <a href={fact.value} target="_blank" rel="noopener noreferrer" className="text-workspace-accent hover:underline">{displayUrl(fact.value)}</a>
+                  : fact.value}
+              </dd>
             </div>
           ))}
         </dl>

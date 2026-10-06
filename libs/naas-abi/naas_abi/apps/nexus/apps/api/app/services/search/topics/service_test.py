@@ -155,7 +155,8 @@ class TestExecution:
                 abi:hasActOfWorking <http://x/act> .
             <http://x/act> abi:forOrganization <http://x/firm> ; abi:forClient <http://x/edf> .
             <http://x/director> rdf:type abi:Person ; rdfs:label "Director" ;
-                abi:worksFor <http://x/edf> .
+                abi:worksFor <http://x/edf> ;
+                abi:linkedin_url "https://www.linkedin.com/in/director" .
             <http://x/partner> rdf:type abi:Person ; rdfs:label "Partner" ;
                 abi:hasProfileSummary <http://x/summary> .
             <http://x/summary> abi:summary_content "Audits energy groups such as EDF." .
@@ -167,9 +168,19 @@ class TestExecution:
         snippets = {item.title: item.snippet for item in results.items}
         assert snippets == {
             "Consultant": "Client: EDF R&D",
-            "Director": "Organization: EDF R&D",
+            # The employer is the card's Organization row, not repeated as a snippet.
+            "Director": None,
             "Partner": "Audits energy groups such as EDF.",
         }
+        rows = {
+            item.title: {row.label: row.value for row in item.rows} for item in results.items
+        }
+        assert rows["Director"] == {
+            "Organization": "EDF R&D",
+            "LinkedIn": "https://www.linkedin.com/in/director",
+        }
+        # No employer stated: the current organization is the one of an open role.
+        assert rows["Consultant"] == {"Organization": "Firm"}
         # Organizations and roles rank before the free text of a summary.
         assert [item.title for item in results.items][-1] == "Partner"
 

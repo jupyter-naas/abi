@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { SearchTopic, TopicResultItem } from '@/lib/search-topics';
+import { displayUrl, isWebUrl, type SearchTopic, type TopicResultItem } from '@/lib/search-topics';
 import { SparqlDisclosure } from './sparql-disclosure';
 import { TopicAvatar } from './topic-avatar';
 
@@ -67,7 +67,9 @@ export function TopicResults({
                     {item.rows.map(row => (
                       <div key={row.id} className="flex min-w-0 max-w-full gap-1">
                         <dt className="flex-shrink-0 text-muted-foreground">{row.label}</dt>
-                        <dd className="truncate">{row.value}</dd>
+                        <dd className="truncate">
+                          {isWebUrl(row.value) ? <ExternalValue url={row.value} /> : row.value}
+                        </dd>
                       </div>
                     ))}
                   </dl>
@@ -90,5 +92,29 @@ export function TopicResults({
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * A web address inside a result card. The card is itself a link, and a link
+ * cannot hold another, so this opens the address in a new tab on its own click.
+ */
+function ExternalValue({ url }: { url: string }) {
+  const open = (event: React.SyntheticEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+  return (
+    <span
+      role="link"
+      tabIndex={0}
+      title={url}
+      onClick={open}
+      onKeyDown={event => { if (event.key === 'Enter') open(event); }}
+      className="cursor-pointer text-workspace-accent hover:underline"
+    >
+      {displayUrl(url)}
+    </span>
   );
 }
