@@ -410,6 +410,30 @@ class DatasetSecondaryAdapterContract(ABC):
             adapter.describe("github_commits", namespace="acme")
         assert adapter.list(namespace="acme") == []
 
+    def test_long_operations_accept_a_callers_deadline(self, adapter: IDatasetPort):
+        adapter.create(self._spec())
+        adapter.write(
+            "github_commits",
+            [
+                {
+                    "sha": "a",
+                    "project_id": "p",
+                    "author_date": "2026-08-02",
+                    "additions": 1,
+                    "deletions": 0,
+                }
+            ],
+            namespace="acme",
+        )
+
+        adapter.flush("github_commits", namespace="acme", timeout_seconds=60.0)
+        adapter.compact("github_commits", namespace="acme", timeout_seconds=60.0)
+        result = adapter.query(
+            "SELECT sha FROM github_commits", namespace="acme", timeout_seconds=60.0
+        )
+
+        assert result.rows == [{"sha": "a"}]
+
     # --- streamed reads (docs/adr/20261003_nats-streamed-results.md)
 
     def test_query_stream_reads_the_rows_query_returns(self, adapter: IDatasetPort):

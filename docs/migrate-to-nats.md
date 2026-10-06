@@ -153,6 +153,7 @@ These keys have working defaults; change them only when needed.
 
 | Key | Default | Purpose |
 |---|---|---|
+| `nats.client_timeout_seconds` | 10 | How long the engine's own service calls wait for a reply. Long dataset operations (`compact`, `flush`, `query`) can pass their own deadline. |
 | `nats.object_storage_streaming.chunk_bytes` | 64 KiB | Chunk size for object transfers. |
 | `nats.object_storage_streaming.max_upload_bytes` | none | Largest object accepted over NATS. |
 | `nats.object_storage_streaming.max_sessions` | 32 | Concurrent transfers per engine. |

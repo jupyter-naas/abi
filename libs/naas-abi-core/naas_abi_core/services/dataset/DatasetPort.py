@@ -252,8 +252,14 @@ class IDatasetPort(ABC):
         *,
         namespace: str = "default",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> QueryResult:
-        """Run SQL against datasets in ``namespace``. Tables are registered by dataset name."""
+        """Run SQL against datasets in ``namespace``. Tables are registered by dataset name.
+
+        ``timeout_seconds`` (here, ``flush`` and ``compact``): how long the
+        caller waits when the adapter calls another process; an in-process
+        adapter runs to completion. ``None`` keeps the adapter's default.
+        """
 
     @contextmanager
     def query_stream(
@@ -272,7 +278,13 @@ class IDatasetPort(ABC):
         yield RowStream(columns=result.columns, rows=iter(result.rows))
 
     @abstractmethod
-    def flush(self, name: str, *, namespace: str = "default") -> QueryResult:
+    def flush(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
         """Materialize inlined data as Parquet while preserving snapshot history."""
 
     @abstractmethod
@@ -283,7 +295,13 @@ class IDatasetPort(ABC):
         """
 
     @abstractmethod
-    def compact(self, name: str, *, namespace: str = "default") -> QueryResult:
+    def compact(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
         """Merge eligible small files within partitions, preserving snapshots.
 
         Returns adapter maintenance statistics. Does not flush inlined rows,

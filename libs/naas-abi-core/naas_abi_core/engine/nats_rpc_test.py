@@ -235,6 +235,34 @@ def test_timeout_cancels_local_wait_without_replaying(client):
     assert nc.request.await_count == 1
 
 
+def test_a_call_deadline_replaces_the_client_default_for_that_call(client):
+    async def slow_request(*args, **kwargs):
+        await asyncio.sleep(0.2)
+        return SimpleNamespace(data=b"", headers={})
+
+    client._timeout_seconds = 0.05
+    nc = connection(client, side_effect=slow_request)
+
+    response = client._call(
+        "abi.test",
+        keyvalue_pb2.GetRequest(key="k"),
+        keyvalue_pb2.GetResponse,
+        timeout_seconds=2.0,
+    )
+
+    assert response == keyvalue_pb2.GetResponse()
+    assert nc.request.await_args.kwargs["timeout"] == 2.0
+    with pytest.raises(TimeoutError):  # the next call keeps the default
+        call(client)
+
+
+def test_the_call_context_carries_the_calls_deadline(client):
+    client._timeout_seconds = 3.0
+
+    assert client._context().timeout_ms == 3000
+    assert client._context(timeout_seconds=7200.0).timeout_ms == 7_200_000
+
+
 def test_concurrent_requests_share_connection_without_serializing(client):
     from concurrent.futures import ThreadPoolExecutor
 
