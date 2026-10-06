@@ -1,18 +1,54 @@
-"""A local ``nats-server`` for tests, without Docker."""
+"""A local ``nats-server`` for tests, without Docker.
+
+With ``ABI_REQUIRE_NATS_SERVER=1`` (set in CI), a test skipped because
+nats-server is missing fails instead, so a broker suite cannot pass silently.
+A conftest enables it by importing ``pytest_runtest_makereport`` from here.
+"""
 
 from __future__ import annotations
 
+import os
 import shutil
 import socket
 import subprocess
 import time
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
+
+import pytest
+
+REQUIRE_NATS_SERVER = "ABI_REQUIRE_NATS_SERVER"
 
 
 def nats_server_binary() -> str | None:
     return shutil.which("nats-server")
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(
+    item: pytest.Item, call: pytest.CallInfo[None]
+) -> Generator[None, pytest.TestReport, pytest.TestReport]:
+    """Fail a skip whose reason names nats-server when the broker is required.
+
+    libs/naas-abi-sdk/tests/conftest.py mirrors this (the SDK stays core-free).
+    """
+    report = yield
+    if (
+        report.skipped
+        and not hasattr(report, "wasxfail")
+        and os.environ.get(REQUIRE_NATS_SERVER) == "1"
+    ):
+        longrepr: Any = report.longrepr
+        reason = str(longrepr[2] if isinstance(longrepr, tuple) else longrepr)
+        if "nats-server" in reason:
+            report.outcome = "failed"
+            report.longrepr = (
+                f"{REQUIRE_NATS_SERVER}=1 requires nats-server, "
+                f"but this test was skipped: {reason}"
+            )
+    return report
 
 
 @contextmanager
