@@ -39,6 +39,36 @@ def test_waiting_stream_wakes_on_producer_completion():
     asyncio.run(scenario())
 
 
+def test_a_stream_open_at_the_handover_goes_on_until_it_ends():
+    from unittest.mock import AsyncMock, MagicMock
+
+    async def scenario():
+        primary = ModelRegistryNATS(Mock(), "test")
+        shared, owned = MagicMock(), MagicMock()
+        shared.drain, owned.drain = AsyncMock(), AsyncMock()
+        owned.unsubscribe = AsyncMock()
+        primary.subscriptions = [shared, owned]
+        primary.shared_subscriptions = [shared]
+        stream = _Stream("caller")
+        stream.task = asyncio.create_task(asyncio.Event().wait())
+        primary.streams["id"] = stream
+
+        await primary.stop_accepting()
+        shared.drain.assert_awaited_once()
+        owned.drain.assert_not_awaited()
+        assert primary.subscriptions == [owned]
+
+        finishing = asyncio.create_task(primary.sessions_finished())
+        await asyncio.sleep(0.2)
+        assert not finishing.done()
+        await primary._close("id")
+        await asyncio.wait_for(finishing, 1)
+        await primary.stop()
+        owned.unsubscribe.assert_awaited_once()
+
+    asyncio.run(scenario())
+
+
 def test_provider_errors_are_sanitized_and_mapped():
     from types import SimpleNamespace
     from unittest.mock import AsyncMock

@@ -58,7 +58,11 @@ from naas_abi_core.engine.nats_rpc import (
     respond_protobuf,
 )
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
-from naas_abi_core.engine.nats_transfer import TransferHost, thread_frames
+from naas_abi_core.engine.nats_transfer import (
+    ServiceWithTransfers,
+    TransferHost,
+    thread_frames,
+)
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
 from naas_abi_core.services.triple_store.adapters.triple_store_nats_contract import (
@@ -193,7 +197,7 @@ def _query_result_to_pb(result: object) -> triple_store_pb2.QueryResult:
     raise TypeError(f"Unsupported query() result type: {type(result)!r}")
 
 
-class TripleStorePrimaryAdapterNATS:
+class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
     """Serves triple_store over NATS RPC (request/reply).
 
     Wraps a real ``ITripleStorePort`` adapter *or* the domain service
@@ -299,17 +303,6 @@ class TripleStorePrimaryAdapterNATS:
         )
         self._service = service
         await self._transfer.start(nc)
-
-    async def stop(self) -> None:
-        """Deregister the service, draining its subscriptions."""
-        await self._transfer.stop()
-        service = self._service
-        self._service = None
-        try:
-            if service is not None:
-                await service.stop()
-        finally:
-            self._dispatch.close()
 
     # ------------------------------------------------------------------
     # Streamed reads: one transfer session per stream, produced on its own

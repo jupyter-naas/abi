@@ -52,7 +52,11 @@ from naas_abi_core.engine.nats_rpc import (
     respond_protobuf,
 )
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
-from naas_abi_core.engine.nats_transfer import TransferHost, thread_frames
+from naas_abi_core.engine.nats_transfer import (
+    ServiceWithTransfers,
+    TransferHost,
+    thread_frames,
+)
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
 from naas_abi_core.services.vector_store.adapters.vector_store_nats_contract import (
@@ -98,7 +102,7 @@ _RequestT = TypeVar("_RequestT", bound=Message)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
 
 
-class VectorStorePrimaryAdapterNATS:
+class VectorStorePrimaryAdapterNATS(ServiceWithTransfers):
     """Serves a raw ``IVectorStorePort`` over NATS RPC (request/reply).
 
     Registers one NATS micro-service endpoint per ``IVectorStorePort``
@@ -253,17 +257,6 @@ class VectorStorePrimaryAdapterNATS:
         )
         self._service = service
         await self._transfer.start(nc)
-
-    async def stop(self) -> None:
-        """Deregister the service, draining its subscriptions."""
-        await self._transfer.stop()
-        service = self._service
-        self._service = None
-        try:
-            if service is not None:
-                await service.stop()
-        finally:
-            self._dispatch.close()
 
     # ------------------------------------------------------------------
     # Streamed listing: one transfer session per stream, produced on its own

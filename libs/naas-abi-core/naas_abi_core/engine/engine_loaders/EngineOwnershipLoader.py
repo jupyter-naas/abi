@@ -71,9 +71,11 @@ class EngineOwnershipLoader:
         ownership_factory: OwnershipFactory | None = None,
         on_lost: Callable[[], None] = _terminate_process,
         local_backends: Mapping[str, str] | None = None,
+        instance_id: str | None = None,
     ):
         """``local_backends``: the owned services whose data stays on this host,
-        and where. A deploy (rollout id) refuses to start with any."""
+        and where. A deploy (rollout id) refuses to start with any.
+        ``instance_id``: the engine's, which the lease is held under."""
         self.configuration = configuration
         self.local_backends = dict(local_backends or {})
         self.settings = configuration.engine.resolved(
@@ -81,7 +83,8 @@ class EngineOwnershipLoader:
         )
         # An auto engine never stands by, whatever the rollout.
         self.holder = this_process(
-            self.settings.rollout_id if self.settings.role == "serve" else ""
+            self.settings.rollout_id if self.settings.role == "serve" else "",
+            instance_id,
         )
         self.instance_id = self.holder.instance_id
         self.loop_thread_name = LOOP_THREAD_NAME

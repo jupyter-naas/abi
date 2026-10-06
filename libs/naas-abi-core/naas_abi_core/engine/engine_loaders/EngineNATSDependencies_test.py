@@ -231,3 +231,37 @@ def test_a_mixed_secret_fanout_falls_through_to_upstream(monkeypatch):
         assert dependencies.secret.get("TOKEN") == "up:TOKEN"
     finally:
         wiring.close()
+
+
+def test_a_client_engine_gets_the_facades_a_serving_engine_gives_its_modules():
+    owners = MagicMock()  # every service, none of them a NATS client yet
+    owners.cache.adapters = [("hot", object()), ("cold", object())]
+    serving = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
+    client = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
+
+    def shape(services: IEngine.Services) -> list:
+        return [
+            (
+                type(service),
+                type(getattr(service, "adapter", None)),
+                [
+                    type(a[1] if isinstance(a, tuple) else a)
+                    for a in getattr(service, "adapters", [])
+                ],
+                getattr(service, "services_wired", None),
+            )
+            for service in services.all
+        ]
+
+    try:
+        facades = client.build_clients(
+            MagicMock(), cache_tiers=["hot", "cold"], emit_message_events=True
+        )
+        assert shape(facades) == shape(serving.build(owners))
+        assert client.module_services is facades
+        assert [tier for tier, _ in facades.cache.adapters] == ["hot", "cold"]
+        assert facades.bus.emit_message_events
+    finally:
+        serving.close()
+        client.close()
+    assert not client.clients

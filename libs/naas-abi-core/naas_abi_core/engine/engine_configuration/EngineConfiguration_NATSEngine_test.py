@@ -16,6 +16,12 @@ def test_an_engine_serves_by_default_with_a_twenty_second_lease():
     assert settings.rollout_id == ""
     assert settings.lease_seconds == 20
     assert settings.standby_timeout_seconds == 900
+    # As long as a transfer may stay idle before it expires.
+    assert settings.drain_seconds == 60
+
+
+def test_a_drain_of_zero_closes_sessions_at_once():
+    assert engine(drain_seconds=0).drain_seconds == 0
 
 
 @pytest.mark.parametrize(
@@ -28,6 +34,8 @@ def test_an_engine_serves_by_default_with_a_twenty_second_lease():
         {"lease_seconds": 0.5},
         {"lease_seconds": float("inf")},
         {"standby_timeout_seconds": 0},
+        {"drain_seconds": -1},
+        {"drain_seconds": float("inf")},
         {"unknown": True},
     ],
 )
