@@ -3,7 +3,7 @@
 Ids are ``<module_id>`` and ``<module_id>/<instance_id>`` (neither may contain
 ``/``). Reading an instance shows its descriptor as JSON. Deleting evicts the
 registration (``DiscoveryClient.evict``, admin identities only): a live module
-registers again under a new instance id on its next heartbeat, so eviction is
+registers again under the same instance id on its next heartbeat, so eviction is
 for crashed or stuck registrations. Nothing is written here: modules register
 themselves.
 

@@ -114,6 +114,7 @@ class AgentHost:
         self._membership_lock = asyncio.Lock()
         self.runs: dict[str, _Run] = {}
         self.subscriptions = []
+        self._bound_to = ""  # the instance id the subscriptions serve
         self.accept_lock = asyncio.Lock()
         self.closing = False
 
@@ -129,6 +130,8 @@ class AgentHost:
             await self._bind()
 
     async def _bind(self) -> None:
+        if self.subscriptions and self._bound_to == self.session.instance_id:
+            return  # registered again under the same id: still served
         nc = await self.session.client.transport.connect()
         pending = []
         try:
@@ -151,6 +154,7 @@ class AgentHost:
                 await sub.unsubscribe()
             raise
         old, self.subscriptions = self.subscriptions, pending
+        self._bound_to = self.session.instance_id
         self._membership = (0.0, set())
         for sub in old:
             await sub.drain()

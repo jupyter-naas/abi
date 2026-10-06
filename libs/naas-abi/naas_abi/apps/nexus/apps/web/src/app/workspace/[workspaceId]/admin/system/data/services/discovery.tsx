@@ -277,5 +277,5 @@ export const discoveryView: ServiceView = {
   ],
   preview: (detail) => (detail.view?.type === 'status' ? <DiscoveryPreview detail={detail} /> : null),
   deleteWarning: () =>
-    'This evicts the registration from discovery. A module that is still alive registers again under a new instance id on its next heartbeat, so evict crashed or stuck instances.',
+    'This evicts the registration from discovery. A module that is still alive registers again under the same instance id on its next heartbeat, so evict crashed or stuck instances.',
 };
