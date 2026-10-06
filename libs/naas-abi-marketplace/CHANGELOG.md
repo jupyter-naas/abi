@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.57.1 (2026-10-06)
+
+### Bug Fixes
+
+- **people**: Remove deprecated cco:ont00000562 type from Person individuals
+  ([`8637f71`](https://github.com/jupyter-naas/abi/commit/8637f716b6f0f41918fc88000cc38f40b74739ac))
+
+
 ## v3.57.0 (2026-10-05)
 
 ### Features
