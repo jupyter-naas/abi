@@ -31,7 +31,10 @@ failed and is not replayed. A failed lookup keeps the claim. This process never
 treats its own instance as absent. A provider process accepts at most 200 live
 runs, shared by every agent it hosts. `invoke` and `stream_invoke` send a 300
 second deadline unless the caller passes `timeout`; `deadline_seconds` 0 on
-submit still means no deadline. Core Agent/IntentAgent compatibility belongs in core's
+submit still means no deadline. The 300 second idle watchdog cancels a streamed
+run with no new event, and any run without a deadline. An unstreamed run (invoke
+mode, or a handler without `stream_invoke`) reports nothing until it returns, so
+its deadline alone bounds it. Core Agent/IntentAgent compatibility belongs in core's
 RemoteAgentAdapter; only agent_tools imports optional LangChain dependencies.
 Agent streaming preserves string event/data pairs and sequence-based replay.
 

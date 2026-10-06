@@ -72,6 +72,10 @@ deadline.
   `timeout`. An explicit `timeout` in the 1 to 3600 second range replaces it.
   `submit(deadline_seconds=0)` still means no deadline; the 300 second idle
   watchdog then applies.
+- The idle watchdog covers streamed runs and runs without a deadline. An
+  unstreamed run (invoke mode, or a handler without `stream_invoke`) records
+  no progress until its handler returns, so a deadline, when there is one,
+  bounds it alone: `invoke(prompt, timeout=1800)` may run for 30 minutes.
 - A draining provider refuses new submits and lets an accepted run finish.
   That run releases its conversation claim when it completes. The draining
   instance stays listed, so another replica does not treat the claim as
