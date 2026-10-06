@@ -125,6 +125,7 @@ help:
 	@echo "  test-integration-core    Run core integration tests (testcontainers)"
 	@echo "  test-document-core       Run document tests (set DOCUMENT_TEST_POSTGRES_DSN for PostgreSQL)"
 	@echo "  test-event-core          Run event and activity log tests (set EVENT_TEST_POSTGRES_DSN, DOCUMENT_TEST_POSTGRES_DSN)"
+	@echo "  test-agent-memory-core   Run agent memory migration tests (set DOCUMENT_TEST_POSTGRES_DSN for PostgreSQL)"
 	@echo "  test-api-init            Test API initialization with production secrets"
 	@echo "  test-api-init-container  Test API initialization in containerized environment"
 	@echo "  ftest                    Interactive test selector using fzf (fuzzy finder)"
@@ -574,6 +575,12 @@ test-event-core:
 	@ uv run --project libs/naas-abi-core --all-extras python -m pytest -c libs/naas-abi-core/pyproject.toml --import-mode=importlib libs/naas-abi-core/naas_abi_core/services/event libs/naas-abi-core/naas_abi_core/services/activity_log libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_EventService_test.py libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_ActivityLogService_test.py -q
 
 .PHONY: test-event-core
+
+# Agent memory jobs and checkpoint migration, from PostgreSQL when the DSN is set
+test-agent-memory-core:
+	@ uv run --project libs/naas-abi-core --all-extras python -m pytest -c libs/naas-abi-core/pyproject.toml --import-mode=importlib libs/naas-abi-core/naas_abi_core/services/agent/AgentMemoryJobs_test.py libs/naas-abi-core/naas_abi_core/services/agent/CheckpointMigration_test.py -q
+
+.PHONY: test-agent-memory-core
 
 # Test API initialization with production secrets
 test-api-init: deps
