@@ -50,6 +50,22 @@ def _cohort(req: pb.RegisterRequest) -> tuple[str, ...]:
     return ()
 
 
+def _depends_on_itself(
+    graph: dict[tuple[str, int], list[tuple[str, int]]], root: tuple[str, int]
+) -> bool:
+    """Whether ``root`` reaches itself through the dependency ``graph``."""
+    seen: set[tuple[str, int]] = set()
+    pending = list(graph.get(root, ()))
+    while pending:
+        node = pending.pop()
+        if node == root:
+            return True
+        if node not in seen:
+            seen.add(node)
+            pending.extend(graph.get(node, ()))
+    return False
+
+
 JOB_TRIGGER_KINDS = ("cron", "every", "event")
 
 # Service identities allowed to evict registrations: the Nexus API (System app)
@@ -108,15 +124,24 @@ class DiscoveryService:
         return pb.RegistryState(records=live), revision
 
     def _apply_rollouts(self, state: pb.RegistryState) -> dict[str, str]:
-        """Choose the serving rollout per module id and drain the one it replaces.
+        """Choose the serving generation per module id and drain the ones it replaces.
 
         A rollout is every live instance that shares a rollout id. It becomes
         eligible once each of its module ids has an initialized instance and
         each dependency is either inside that rollout or already initialized
         outside it. The latest eligible rollout for a module id is the one that
-        serves. Older complete rollouts, and instances with no rollout id, are
-        marked draining. An incomplete rollout stays up so a partial deploy
-        cannot take traffic away from the current one.
+        serves. Older rollouts, complete or not, and instances with no rollout
+        id, are marked draining. A newer incomplete rollout stays up so a
+        partial deploy cannot take traffic away from the current one.
+
+        A module id with no eligible rollout keeps the generation that served
+        it at the last registry write (statuses are stored in the snapshot),
+        so a serving rollout that became incomplete, for example because every
+        instance of another of its modules expired, keeps serving. Failing
+        that, the oldest generation with an initialized instance serves.
+        Instances with no rollout id always serve and count as the oldest.
+
+        Returns the serving rollout id per module id ("" for no rollout id).
         """
         groups: dict[str, list[pb.RegistryRecord]] = {}
         for record in state.records:
@@ -147,9 +172,32 @@ class DiscoveryService:
             winner = serving.get(module_id)
             if winner is None or record.rollout_id == winner:
                 continue
-            if record.rollout_id and not complete.get(record.rollout_id, False):
+            rollout = record.rollout_id
+            if (
+                rollout
+                and not complete[rollout]
+                and (starts[rollout], rollout) > (starts[winner], winner)
+            ):
                 continue
             record.draining = True
+        candidates: dict[str, dict[str, bool]] = {}
+        for record in state.records:
+            module_id = record.instance.descriptor.module_id
+            if module_id in serving or record.draining or not record.initialized:
+                continue
+            served = not record.rollout_id or record.instance.status in (
+                "READY",
+                "DEGRADED",
+            )
+            generations = candidates.setdefault(module_id, {})
+            generations[record.rollout_id] = (
+                generations.get(record.rollout_id, False) or served
+            )
+        for module_id, generations in candidates.items():
+            serving[module_id] = min(
+                (not served, starts.get(rollout, -math.inf), rollout)
+                for rollout, served in generations.items()
+            )[2]
         return serving
 
     def _rollout_complete(
@@ -190,25 +238,13 @@ class DiscoveryService:
                     return False
         return True
 
-    def _staged(
-        self,
-        record: pb.RegistryRecord,
-        state: pb.RegistryState,
-        serving: dict[str, str],
-    ) -> bool:
-        """A new generation waits while the current one of that module is still up."""
+    @staticmethod
+    def _staged(record: pb.RegistryRecord, serving: dict[str, str]) -> bool:
+        """A rollout's instance waits while another generation serves its module."""
         if record.draining or not record.initialized or not record.rollout_id:
             return False
         module_id = record.instance.descriptor.module_id
-        if record.rollout_id == serving.get(module_id):
-            return False
-        return any(
-            other is not record
-            and not other.draining
-            and other.instance.descriptor.module_id == module_id
-            and other.rollout_id != record.rollout_id
-            for other in state.records
-        )
+        return serving.get(module_id, record.rollout_id) != record.rollout_id
 
     def _ready(self, state: pb.RegistryState) -> None:
         serving = self._apply_rollouts(state)
@@ -218,7 +254,7 @@ class DiscoveryService:
                 record.instance.status = "DRAINING"
             elif not record.initialized:
                 record.instance.status = "STARTING"
-            elif self._staged(record, state, serving):
+            elif self._staged(record, serving):
                 record.instance.status = "STAGED"
             else:
                 record.instance.status = "DEGRADED"
@@ -323,7 +359,6 @@ class DiscoveryService:
             "INVALID_ARGUMENT",
             "Invalid model descriptor",
         )
-        graph = {}
         for record in state.records:
             other = record.instance.descriptor
             if req.rollout_id and record.rollout_id == req.rollout_id:
@@ -347,30 +382,57 @@ class DiscoveryService:
                     "DESCRIPTOR_CONFLICT",
                     "Replicas of a contract in one rollout must declare identical dependencies, agents, jobs and models",
                 )
-            graph[(other.module_id, other.contract_major)] = [
-                (x.module_id, x.contract_major) for x in other.dependencies
-            ]
-        graph[(d.module_id, d.contract_major)] = [
-            (x.module_id, x.contract_major) for x in d.dependencies
-        ]
-        visiting, done = set(), set()
+        self._refuse_cycles(req, state)
 
-        def visit(node):
+    def _refuse_cycles(self, req: pb.RegisterRequest, state: pb.RegistryState) -> None:
+        """Refuse a registration whose module would depend on itself.
+
+        Generations replace each other, so their edges are not merged: a
+        rollout may reverse a dependency between the modules it replaces. The
+        registering generation (its rollout id, or none) is checked with its
+        own edges for the module ids it replaces, and the serving generation's
+        for the others. Each other live generation is then checked in turn in
+        place of the serving one for its module ids, as it could serve beside
+        this one. Only a cycle through the registering module refuses it.
+        Draining instances are ignored.
+        """
+        d = req.descriptor
+        root = (d.module_id, d.contract_major)
+        probe = pb.RegistryState()
+        probe.CopyFrom(state)
+        serving = self._apply_rollouts(probe)
+        edges: dict[str, dict[tuple[str, int], list[tuple[str, int]]]] = {}
+        cohorts: dict[str, set[str]] = {}
+        for record in probe.records:
+            if record.draining:
+                continue
+            other = record.instance.descriptor
+            edges.setdefault(record.rollout_id, {})[
+                (other.module_id, other.contract_major)
+            ] = [(x.module_id, x.contract_major) for x in other.dependencies]
+            cohorts[record.rollout_id] = set(record.rollout_modules)
+        own = edges.pop(req.rollout_id, {})
+        own[root] = [(x.module_id, x.contract_major) for x in d.dependencies]
+        replaced = set(_cohort(req))
+        current = {
+            node: deps
+            for rollout, nodes in edges.items()
+            for node, deps in nodes.items()
+            if serving.get(node[0]) == rollout and node[0] not in replaced
+        }
+        views = [current]
+        for rollout, nodes in edges.items():
+            view = {
+                n: deps for n, deps in current.items() if n[0] not in cohorts[rollout]
+            }
+            view.update((n, deps) for n, deps in nodes.items() if n[0] not in replaced)
+            views.append(view)
+        for view in views:
             _require(
-                node not in visiting,
+                not _depends_on_itself({**view, **own}, root),
                 "DEPENDENCY_CYCLE",
                 "Required modules form a cycle",
             )
-            if node in done:
-                return
-            visiting.add(node)
-            for child in graph.get(node, []):
-                visit(child)
-            visiting.remove(node)
-            done.add(node)
-
-        for node in graph:
-            visit(node)
 
     @staticmethod
     def _authorize(record: pb.RegistryRecord, token: str, owner: str) -> None:
