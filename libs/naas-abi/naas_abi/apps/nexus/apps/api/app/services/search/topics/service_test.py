@@ -141,6 +141,38 @@ class TestExecution:
         results = await service.search(WS, "person", "ALICE", store)
         assert [i.uri for i in results.items] == [ALICE]
 
+    async def test_matches_what_people_worked_on_not_only_their_name(
+        self, service: SearchTopicService
+    ) -> None:
+        graph = Graph().parse(
+            data="""
+            @prefix abi: <http://ontology.naas.ai/abi/> .
+            @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            <http://x/edf> rdfs:label "EDF R&D" .
+            <http://x/firm> rdfs:label "Firm" .
+            <http://x/consultant> rdf:type abi:Person ; rdfs:label "Consultant" ;
+                abi:hasActOfWorking <http://x/act> .
+            <http://x/act> abi:forOrganization <http://x/firm> ; abi:forClient <http://x/edf> .
+            <http://x/director> rdf:type abi:Person ; rdfs:label "Director" ;
+                abi:worksFor <http://x/edf> .
+            <http://x/partner> rdf:type abi:Person ; rdfs:label "Partner" ;
+                abi:hasProfileSummary <http://x/summary> .
+            <http://x/summary> abi:summary_content "Audits energy groups such as EDF." .
+            <http://x/other> rdf:type abi:Person ; rdfs:label "Other" .
+        """,
+            format="turtle",
+        )
+        results = await service.search(WS, "person", "edf", GraphQueryTripleStoreAdapter(graph))
+        snippets = {item.title: item.snippet for item in results.items}
+        assert snippets == {
+            "Consultant": "Client: EDF R&D",
+            "Director": "Organization: EDF R&D",
+            "Partner": "Audits energy groups such as EDF.",
+        }
+        # Organizations and roles rank before the free text of a summary.
+        assert [item.title for item in results.items][-1] == "Partner"
+
     async def test_has_more_pages(self, service: SearchTopicService, store) -> None:
         page = await service.search(WS, "person", "", store, limit=3)
         assert len(page.items) == 3 and page.has_more

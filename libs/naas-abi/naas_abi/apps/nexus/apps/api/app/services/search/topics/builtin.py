@@ -48,24 +48,66 @@ PERSON = SearchTopic(
     source="builtin",
     results_query=_PREFIXES
     + """
-SELECT ?uri ?title (SAMPLE(?headline) AS ?subtitle) (SAMPLE(?about) AS ?snippet)
+SELECT ?uri ?title (SAMPLE(?headline) AS ?subtitle)
+       (COALESCE(SAMPLE(?evidence), SAMPLE(?about)) AS ?snippet)
 WHERE {
-  ?uri rdf:type abi:Person ;
-       rdfs:label ?title .
+  {
+    # Every text a person is known by, weighted by how much a match on it says:
+    # the name first, then the headline, the organizations, roles and skills, and
+    # last the free text of a summary or a mission.
+    SELECT ?uri (MIN(?weight) AS ?rank) (SAMPLE(?found) AS ?evidence)
+    WHERE {
+      ?uri rdf:type abi:Person .
+      {
+        { ?uri rdfs:label ?text . BIND(0 AS ?weight) }
+        UNION { ?uri abi:hasProfileSummary/abi:headline_text ?text . BIND(1 AS ?weight) }
+        UNION {
+          ?uri abi:worksFor|abi:isEmployedBy ?organization . ?organization rdfs:label ?text .
+          BIND(2 AS ?weight) BIND(CONCAT("Organization: ", ?text) AS ?found)
+        }
+        UNION {
+          ?uri abi:hasActOfWorking/abi:forOrganization ?organization . ?organization rdfs:label ?text .
+          BIND(2 AS ?weight) BIND(CONCAT("Experience: ", ?text) AS ?found)
+        }
+        UNION {
+          ?uri abi:hasActOfWorking/abi:forClient ?client . ?client rdfs:label ?text .
+          BIND(2 AS ?weight) BIND(CONCAT("Client: ", ?text) AS ?found)
+        }
+        UNION {
+          ?uri abi:hasActOfStudying/abi:forEducationalOrganization ?school . ?school rdfs:label ?text .
+          BIND(3 AS ?weight) BIND(CONCAT("Education: ", ?text) AS ?found)
+        }
+        UNION {
+          ?uri abi:hasActOfWorking/abi:realizes/abi:job_title ?text .
+          BIND(3 AS ?weight) BIND(CONCAT("Role: ", ?text) AS ?found)
+        }
+        UNION {
+          ?uri abi:hasSkill ?skill . ?skill rdfs:label ?text .
+          BIND(3 AS ?weight) BIND(CONCAT("Skill: ", ?text) AS ?found)
+        }
+        UNION {
+          ?uri abi:hasProfileSummary/abi:summary_content ?text .
+          BIND(4 AS ?weight) BIND(?text AS ?found)
+        }
+        UNION {
+          ?uri abi:hasActOfWorking/abi:realizes/abi:hasMission ?mission .
+          { ?mission rdfs:label ?text } UNION { ?mission abi:mission_content ?text } UNION { ?mission abi:mission_context ?text }
+          BIND(5 AS ?weight) BIND(CONCAT("Mission: ", ?text) AS ?found)
+        }
+      }
+      FILTER(CONTAINS(LCASE(STR(?text)), LCASE("{{ q }}")))
+    }
+    GROUP BY ?uri
+  }
+  ?uri rdfs:label ?title .
   OPTIONAL {
     ?uri abi:hasProfileSummary ?summary .
     OPTIONAL { ?summary abi:headline_text ?headline . }
     OPTIONAL { ?summary abi:summary_content ?about . }
   }
-  OPTIONAL { ?uri abi:hasSkill ?skill . ?skill rdfs:label ?skillLabel . }
-  FILTER(
-    CONTAINS(LCASE(STR(?title)), LCASE("{{ q }}"))
-    || (BOUND(?headline) && CONTAINS(LCASE(STR(?headline)), LCASE("{{ q }}")))
-    || (BOUND(?skillLabel) && CONTAINS(LCASE(STR(?skillLabel)), LCASE("{{ q }}")))
-  )
 }
-GROUP BY ?uri ?title
-ORDER BY LCASE(STR(?title))
+GROUP BY ?uri ?title ?rank
+ORDER BY ?rank LCASE(STR(?title))
 LIMIT {{ limit }}
 OFFSET {{ offset }}
 """,
