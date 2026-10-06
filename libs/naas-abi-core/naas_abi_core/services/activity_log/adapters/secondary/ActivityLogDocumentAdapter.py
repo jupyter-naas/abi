@@ -189,5 +189,21 @@ class ActivityLogDocumentAdapter(IActivityLogAdapter):
     def list_actors(self) -> list[str]:
         return [doc.id for doc in self._store().iterate(ACTORS)]
 
+    def job_owners(self, services: Any) -> dict[str, Any]:
+        """``activity_log_migrate``, the copy of the per-actor SQLite logs this
+        adapter replaced (``Engine.job_owners`` collects these from adapters)."""
+        if not services.document_available():
+            return {}
+        from naas_abi_core.services.activity_log.adapters.secondary.ActivityLogSqliteCopy import (
+            ACTIVITY_LOG_JOBS_OWNER,
+            ActivityLogCopyJobs,
+        )
+
+        return {
+            ACTIVITY_LOG_JOBS_OWNER: ActivityLogCopyJobs(
+                self, services.document.for_namespace(NAMESPACE)
+            )
+        }
+
     def shutdown(self) -> None:
         """Nothing to release: the Document Service belongs to the engine."""

@@ -79,10 +79,26 @@ service. The default event adapter stays SQLite for development.
 ## Consequences
 - With PostgreSQL documents and the PostgreSQL event log, a deploy with a rollout
   id passes the shared-backend check.
-- **Existing activity logs are not migrated.** Engines on the new default start
-  with an empty activity log in documents; the per-actor SQLite files under
-  `storage/activity_log` stay on disk. An installation that needs the history
-  keeps `adapter: sqlite` until it is copied.
+- **Existing activity logs are copied by a job.** Engines on the new default
+  start with an empty activity log in documents; the per-actor SQLite files
+  under `storage/activity_log` stay on disk. The document adapter offers
+  `activity_log_migrate` (owner `naas_abi_core.activity_log`, Run now only, in
+  NATS mode) to copy them:
+  - Payload `{"data_dir": "storage/activity_log", "apply": false}`; the
+    default is a dry run that counts each actor's events. `data_dir` must
+    resolve inside the engine's `storage` directory.
+  - Events are recorded in their SQLite order, so they get new `seq` numbers,
+    after any event recorded since the switch.
+  - A mark per source directory and actor (`sqlite_copies`) keeps the last
+    SQLite row copied, saved after each batch of 500. Events written after the
+    last mark, when a run stopped in between, are matched by content, so a
+    re-run copies only what is missing and nothing twice.
+  - Events whose values the Document Service refuses (a non-finite number, an
+    integer above 64 bits) are skipped and listed in the result; a dry run
+    lists them too. Any other error stops the run, which resumes when run
+    again.
+
+  Until the job has run, the earlier history is only in the SQLite files.
 - **Event throughput.** Appends are serialized by the advisory lock: one short
   transaction each, a few milliseconds on PostgreSQL, against well under a
   millisecond on local SQLite. Every service write that publishes an event pays

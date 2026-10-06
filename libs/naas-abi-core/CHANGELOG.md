@@ -12,6 +12,9 @@
   thread continued in between is reported as `diverged`. Without NATS mode,
   use `abi agent migrate-memory`. `agent_memory_prune` now runs daily and keeps
   each thread's newest 20 checkpoints.
+- **Activity log history.** The activity log now defaults to the Document
+  Service. To keep the per-actor SQLite history, run `activity_log_migrate`
+  with `{"data_dir": "storage/activity_log"}`, then add `"apply": true`.
 - Runbook: `docs/migrate-to-nats.md`.
 
 ## v2.41.0 (2026-10-01)
