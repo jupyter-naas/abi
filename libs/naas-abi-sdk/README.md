@@ -268,7 +268,7 @@ jitter. `module.discovery_status` exposes last-confirmed readiness and becomes
 UNAVAILABLE after confirmation expires. Dependency loss yields DEGRADED on the
 registry without killing independent module work. Every ModuleProxy lookup queries
 fresh state; missing, incompatible and not-ready modules have distinct RPC error
-codes. Recovery after lease loss uses a new instance identity. A rollout id
+codes. Recovery after lease loss keeps the instance id with a fresh lease. A rollout id
 and its module list cut a deploy over together: the previous generation stays
 ready until every listed module is up, then it drains. `SIGTERM` stops new
 work, finishes runs and jobs already started, and unregisters. A hard crash is

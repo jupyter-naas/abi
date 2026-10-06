@@ -100,17 +100,17 @@ def test_registry_auth_expiry_restart_and_sdk_dependency_runner(broker):  # noqa
                 while True:
                     try:
                         instances = await client.get_module("research")
-                        if (
-                            instances[0].status == "READY"
-                            and instances[0].instance_id != initial_id
-                        ):
-                            return
+                        if instances[0].status == "READY":
+                            return instances
                     except RPCError as exc:
                         if exc.code != "MODULE_NOT_FOUND":
                             raise
                     await asyncio.sleep(0.05)
 
-            await asyncio.wait_for(wait_recovery(), 5)
+            # The lease expired while discovery was down: the provider
+            # registered again under its instance id, with a fresh lease.
+            recovered = await asyncio.wait_for(wait_recovery(), 5)
+            assert [i.instance_id for i in recovered] == [initial_id]
             stop.set()
             await provider_task
             with pytest.raises(RPCError, match="MODULE_NOT_FOUND"):
@@ -197,7 +197,7 @@ def test_admins_evict_a_live_instance_which_registers_again(broker):  # noqa: F8
         )
         try:
             await session.start()
-            first = session.instance_id
+            first, lease_token = session.instance_id, session.lease_token
             client = discovery.DiscoveryClient(admin, "evict")
 
             with pytest.raises(transport_module.RPCError, match="PERMISSION_DENIED"):
@@ -205,21 +205,16 @@ def test_admins_evict_a_live_instance_which_registers_again(broker):  # noqa: F8
             evicted = await client.evict(first)
             assert (evicted.module_id, evicted.instance_id) == ("research", first)
 
-            # The heartbeat (at most a quarter lease) sees LEASE_EXPIRED and registers anew.
+            # The heartbeat (at most a quarter lease) sees LEASE_EXPIRED and
+            # registers again, under the same instance id with a fresh lease.
             for _ in range(60):
                 instances, _ = await client.list_modules()
-                if (
-                    [i.instance_id for i in instances]
-                    == [session.instance_id]
-                    != [first]
-                ):
+                if instances:
                     break
                 await asyncio.sleep(0.1)
-            instances, _ = await client.list_modules()
-            assert [i.instance_id for i in instances] == [session.instance_id]
-            assert session.instance_id != first
-            with pytest.raises(transport_module.RPCError, match="INSTANCE_NOT_FOUND"):
-                await client.evict(first)
+            assert [i.instance_id for i in instances] == [first]
+            assert session.instance_id == first
+            assert session.lease_token != lease_token
         finally:
             await session.close()
             await module.close()

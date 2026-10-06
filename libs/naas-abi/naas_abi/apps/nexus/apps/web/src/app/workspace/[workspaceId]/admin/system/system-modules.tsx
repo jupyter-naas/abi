@@ -181,7 +181,7 @@ export function SystemModules({
           entry={evicting}
           noun="instance"
           verb="Evict"
-          warning="Its registration is removed from discovery. A live process registers again under a new instance id on its next heartbeat, so evicting is for crashed or stuck registrations; runs it owns are not stopped."
+          warning="Its registration is removed from discovery. A live process registers again under the same instance id on its next heartbeat, so evicting is for crashed or stuck registrations; runs it owns are not stopped."
           onConfirm={evict}
           onClose={() => setEvicting(null)}
         />

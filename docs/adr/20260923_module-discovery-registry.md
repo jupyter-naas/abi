@@ -74,3 +74,26 @@ for runs and jobs that already started. A finished agent run releases its
 conversation claim. The process then unregisters. A draining instance stays in
 discovery until it exits, so a claim held by a live run is not treated as
 abandoned. A hard kill still falls through to lease expiry.
+
+## Lease loss keeps the instance id (2026-10-06)
+
+This supersedes "expired leases get a fresh instance identity on recovery"
+above. When a renewal fails with `LEASE_EXPIRED` (the lease ran out, or an
+admin evicted the registration), the SDK session registers again under the
+same instance id with a new lease token. Discovery treats it as a new
+registration: `STARTING` until the next renewal reports it initialized.
+
+The instance id is the address of everything the process serves: agent and
+model subjects, the `owner` of its agent runs and conversation claims, and the
+`instance` on its job runs. A fresh id left those pointing at an id no lookup
+listed, so cancel and status of in-flight runs failed with `OWNER_UNAVAILABLE`,
+`events()` raised, a model host stayed subscribed to the old subjects, and the
+process could release its own live claims as abandoned and mark their runs
+`OWNER_GONE`. Keeping the id keeps all of them valid without rewriting records.
+
+Rewriting `owner` on each in-flight run and claim (a CAS per record) and keeping
+the old subjects subscribed until those runs end was the alternative. It needs
+the same treatment in every host, races each run's own writes, and still
+leaves callers holding the old id. While the registration is absent, other
+replicas see the owner as gone, as before: a submit to one of its conversations
+in that window can release the claim and fail the run as `OWNER_GONE`.

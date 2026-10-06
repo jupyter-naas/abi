@@ -349,6 +349,33 @@ def test_failed_rebind_rolls_back_partial_subscriptions():
     asyncio.run(scenario())
 
 
+def test_registering_again_under_the_same_id_keeps_the_endpoints():
+    async def scenario():
+        owner = host(Documents(), Handler())
+        nc = AsyncMock()
+        first = [AsyncMock() for _ in range(4)]  # submit, status, cancel, event
+        nc.subscribe.side_effect = first
+        owner.session.client.transport = SimpleNamespace(
+            connect=AsyncMock(return_value=nc)
+        )
+        await owner._bind()
+        # Discovery lost the lease and the session registered the same id again.
+        await owner._bind()
+        assert owner.subscriptions == first
+        assert nc.subscribe.await_count == 4
+        for sub in first:
+            sub.drain.assert_not_awaited()
+        # A different instance id still moves the endpoints.
+        owner.session.instance_id = "moved"
+        nc.subscribe.side_effect = [AsyncMock() for _ in range(4)]
+        await owner._bind()
+        assert nc.subscribe.await_count == 8
+        for sub in first:
+            sub.drain.assert_awaited_once()
+
+    asyncio.run(scenario())
+
+
 def test_no_deadline_agent_times_out_after_inactivity_and_releases_slot():
     async def scenario():
         docs, handler = Documents(), Handler()

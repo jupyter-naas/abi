@@ -155,7 +155,7 @@ class DiscoveryClient:
         """Remove a registration now (platform admin identities only).
 
         A live instance's next renewal fails with LEASE_EXPIRED and its session
-        registers again under a new instance id.
+        registers again under the same instance id.
         """
         result = await self._call(
             "evict", pb.EvictRequest(instance_id=instance_id), pb.EvictResponse
@@ -387,7 +387,9 @@ class DiscoverySession:
                         raise
                     self.status = "UNAVAILABLE"
                     async with self._lock:
-                        self.instance_id, self.lease_token = str(uuid4()), uuid4().hex
+                        # A fresh lease for the same instance id, so the runs
+                        # and endpoints this process owns keep their address.
+                        self.lease_token = uuid4().hex
                         await self.register()
                 failures = unexpected = 0
             except RPCError as exc:

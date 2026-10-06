@@ -186,6 +186,53 @@ def test_retry_schedule_recovers_before_lease_expiry(monkeypatch):
     asyncio.run(scenario())
 
 
+def test_a_lost_lease_registers_again_under_the_same_instance_id(monkeypatch):
+    async def scenario():
+        sleep = asyncio.sleep
+
+        async def fast_sleep(delay):
+            await sleep(0)
+
+        monkeypatch.setattr("naas_abi_sdk.discovery.asyncio.sleep", fast_sleep)
+        client = DiscoveryClient(AsyncMock())
+        session = DiscoverySession(
+            client, pb.ModuleDescriptor(module_id="a", contract_major=1)
+        )
+        first_id, first_token = session.instance_id, session.lease_token
+        bound = []
+
+        async def bind():
+            bound.append(session.instance_id)
+
+        session.on_registered = bind
+        sent = []
+
+        async def call(subject, request, response_type):
+            operation = subject.rsplit(".", 1)[1]
+            sent.append((operation, request))
+            if operation == "renew" and len(sent) == 1:
+                raise RPCError("LEASE_EXPIRED", "evicted")
+            if operation == "register":
+                return pb.RegisterResponse(
+                    instance=pb.Instance(status="STARTING"), lease_seconds=20
+                )
+            raise asyncio.CancelledError()  # ends the heartbeat
+
+        client.transport.call.side_effect = call
+        with pytest.raises(asyncio.CancelledError):
+            await session._heartbeat()
+
+        assert [operation for operation, _ in sent] == ["renew", "register", "renew"]
+        registered = sent[1][1]
+        # Same identity, so whatever this process serves keeps its address.
+        assert registered.instance_id == session.instance_id == first_id
+        assert registered.lease_token == session.lease_token != first_token
+        assert sent[2][1].instance_id == first_id
+        assert bound == [first_id]
+
+    asyncio.run(scenario())
+
+
 def test_evict_calls_the_admin_operation_and_returns_the_instance():
     transport = AsyncMock()
     transport.call.return_value = pb.EvictResponse(

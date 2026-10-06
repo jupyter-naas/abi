@@ -28,7 +28,10 @@ AgentProxy and AgentHost use document CAS for durable invocations. A conversatio
 claim is released when its owner instance is absent from a successful discovery
 lookup, so that thread can accept a new run. The orphaned invocation is marked
 failed and is not replayed. A failed lookup keeps the claim. This process never
-treats its own instance as absent. A provider process accepts at most 200 live
+treats its own instance as absent. A lost lease (expiry or eviction) registers
+the same instance id again with a fresh lease token, so run owners, claims and
+agent and model subjects stay valid; `AgentHost._bind` keeps its subscriptions
+when the id did not change. A provider process accepts at most 200 live
 runs, shared by every agent it hosts. `invoke` and `stream_invoke` send a 300
 second deadline unless the caller passes `timeout`; `deadline_seconds` 0 on
 submit still means no deadline. The 300 second idle watchdog cancels a streamed

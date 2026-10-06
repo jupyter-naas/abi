@@ -175,3 +175,117 @@ def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa:
             await nc.close()
 
     asyncio.run(scenario())
+
+
+def test_a_run_stays_reachable_after_its_owner_loses_the_lease(document_host):  # noqa: F811
+    from naas_abi_sdk import (
+        AgentDescriptor,
+        BaseModule,
+        DiscoveryConfiguration,
+        ModuleDependencies,
+        run_module,
+    )
+    from naas_abi_sdk.discovery import DiscoveryClient
+    from naas_abi_sdk.transport import RPCError, Transport
+
+    async def scenario():
+        nc = await nats.connect(document_host)
+        # A 2 s lease: the provider renews every half second.
+        registry = await start_discovery(nc, SECRET, lease_seconds=2)
+        stop = asyncio.Event()
+        token = issue_service_token("agent-test", SECRET)
+        admin_transport = Transport(
+            document_host, issue_service_token("api", SECRET), timeout=2
+        )
+        admin = DiscoveryClient(admin_transport)
+
+        class Provider(BaseModule):
+            module_id = "test.lease"
+            dependencies = ModuleDependencies(services=("document",))
+            agents = (AgentDescriptor("Long", capabilities=("agent.invoke.v1",)),)
+
+            async def on_initialized(self):
+                class Long:
+                    async def invoke(self, prompt, context):
+                        raise AssertionError("streamed only")
+
+                    async def stream_invoke(self, prompt, context):
+                        yield {"event": "message", "data": "started"}
+                        await asyncio.Event().wait()  # until cancelled
+
+                self.expose_agent("Long", Long())
+
+            async def run(self):
+                await stop.wait()
+
+        class Consumer(BaseModule):
+            module_id = "test.lease-caller"
+            dependencies = ModuleDependencies(modules=("test.lease",))
+
+            async def run(self):
+                module = self.engine.modules["test.lease"]
+                proxy = await module.get_agent("Long")
+                handle = await proxy.submit("go", stream=True, deadline_seconds=60)
+                events = handle.events(timeout=30)
+                assert (await events.__anext__())["data"] == "started"
+                owner = handle.owner_instance_id
+
+                # Discovery drops the owner's registration mid-run.
+                assert (await admin.evict(owner)).instance_id == owner
+
+                async def registered_again():
+                    while True:
+                        try:
+                            return await module.ready_instances()
+                        except RPCError as exc:
+                            if exc.code not in (
+                                "MODULE_NOT_FOUND",
+                                "MODULE_UNAVAILABLE",
+                            ):
+                                raise
+                        await asyncio.sleep(0.05)
+
+                ready = await asyncio.wait_for(registered_again(), 10)
+
+                status = await handle.status()
+                assert (status.status, status.owner_instance_id) == ("RUNNING", owner)
+                assert status.owner_available
+                # The same process, under the same instance id.
+                assert [i.instance_id for i in ready] == [owner]
+                # The live run still holds its conversation.
+                busy = await (await proxy.submit("again", stream=True)).status()
+                assert (busy.status, busy.error_code) == ("FAILED", "CONVERSATION_BUSY")
+                assert (await handle.status()).status == "RUNNING"
+
+                # Any handle can stop it, and the watching one sees the end.
+                await proxy.invocation(handle.invocation_id).cancel()
+                with pytest.raises(RPCError, match="CANCELLED"):
+                    async for _ in events:
+                        pass
+
+        task = asyncio.create_task(
+            run_module(
+                Provider,
+                url=document_host,
+                token=token,
+                discovery=DiscoveryConfiguration(),
+            )
+        )
+        try:
+            await asyncio.wait_for(
+                run_module(
+                    Consumer,
+                    url=document_host,
+                    token=token,
+                    discovery=DiscoveryConfiguration(refresh_seconds=0.05),
+                ),
+                30,
+            )
+        finally:
+            stop.set()
+            await task
+            await admin_transport.close()
+            await registry.stop()
+            await nc.close()
+
+    asyncio.run(scenario())
