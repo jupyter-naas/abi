@@ -98,7 +98,8 @@ Test run at `a582a19f6`: 101 job tests passed (SDK and engine, real broker inclu
       - Close it: while `POSTGRES_URL` is set, have the checkpointer copy a thread from Postgres the first time it reads it.
     - [ ] Amend `docs/adr/20261002_engine-agent-memory-in-documents.md`. Its rollout paragraph still says to stop the engines and run the CLI; replace that with the admin job at release. Add a changelog note. `abi agent migrate-memory` stays as an ops tool, and every deployment being on NATS means the job is always available.
 
-- [ ] **7. A rolling deploy that adds or changes a job or agent cannot start.** *Read in code. Fixed locally in `d8dbc6de8`, not pushed.*
+- [x] **7. A rolling deploy that adds or changes a job or agent cannot start.** *Read in code. Fixed locally in `d8dbc6de8`, not pushed.*
+  - **Fixed:** `d8dbc6de8` alone still compared every live replica of the contract. Now only one generation (same rollout id, or none) must match; a rollout's new or changed jobs, agents and models wait STAGED for its cohort. `run_module` with a rollout id starts the job host only once READY/DEGRADED (schedules and consumers are module-wide), and the System job list skips staged instances (discovery ADR, "Descriptors across generations").
   - **Problem:** `register` (`libs/naas-abi-core/naas_abi_core/services/discovery/discovery_service.py:183`) returns `DESCRIPTOR_CONFLICT` when a new replica's agents, jobs or dependencies differ from a live replica with the same `contract_major`. With `maxUnavailable=0`, the v2 pod crash-loops until v1 is stopped by hand.
   - **Fix:** push `d8dbc6de8` (rollout generations, drain by module id). Confirm it has a test where v2 adds a job while v1 is live and registration succeeds.
 

@@ -332,17 +332,20 @@ class DiscoveryService:
                     "DESCRIPTOR_CONFLICT",
                     "Rollout members do not match",
                 )
+            # Replicas of one generation (a rollout id, or none) must match. A
+            # rollout may change what the generation it replaces declares: it
+            # stays STAGED, out of READY lookups, until its cohort cuts over.
             if (other.module_id, other.contract_major) == (
                 d.module_id,
                 d.contract_major,
-            ):
+            ) and record.rollout_id == req.rollout_id:
                 _require(
                     other.dependencies == d.dependencies
                     and other.agents == d.agents
                     and other.jobs == d.jobs
                     and other.models == d.models,
                     "DESCRIPTOR_CONFLICT",
-                    "Replicas of a contract must declare identical dependencies, agents, jobs and models",
+                    "Replicas of a contract in one rollout must declare identical dependencies, agents, jobs and models",
                 )
             graph[(other.module_id, other.contract_major)] = [
                 (x.module_id, x.contract_major) for x in other.dependencies

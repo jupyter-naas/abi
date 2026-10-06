@@ -236,6 +236,173 @@ def test_run_module_requires_discovery_and_documents_to_host_jobs(monkeypatch):
         asyncio.run(run_module(NoDiscovery, url="nats://unused", token="t"))
 
 
+def _staging(monkeypatch, events):
+    """Discovery that stages a rollout's generation, and a recording job host."""
+
+    class Session:
+        def __init__(self, client, descriptor, rollout_id="", rollout_modules=()):
+            self.rollout_id, self.instance_id = rollout_id, "instance"
+            self.initialized = self.draining = False
+            self.status, self.task = "STARTING", None
+            self.drain_requested = asyncio.Event()
+
+        async def start(self):
+            events.append("register")
+
+        async def renew(self):
+            events.append("renew")
+            if self.initialized and self.status == "STARTING":
+                self.status = "STAGED" if self.rollout_id else "READY"
+
+        async def close(self):
+            pass
+
+    class Host:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def start(self):
+            events.append("jobs")
+
+        async def drain(self, timeout):
+            pass
+
+        async def close(self):
+            events.append("jobs closed")
+
+    monkeypatch.setattr("naas_abi_sdk.module.DiscoverySession", Session)
+    monkeypatch.setattr("naas_abi_sdk.job_host.JobHost", Host)
+
+
+class _Ticking(BaseModule):
+    module_id = "acme.ticking"
+    dependencies = ModuleDependencies(services=("document",))
+
+    @job()
+    async def tick(self, ctx):
+        return None
+
+
+def test_a_staged_generation_hosts_its_jobs_only_after_the_cutover(monkeypatch):
+    from naas_abi_sdk.discovery import DiscoveryConfiguration
+    from naas_abi_sdk.module import run_module
+
+    events: list[str] = []
+    _fake_client(monkeypatch)
+    _staging(monkeypatch, events)
+
+    class Staged(_Ticking):
+        async def run(self):
+            session = self._discovery_session
+            assert session.status == "STAGED"
+            await asyncio.sleep(0.05)
+            # Schedules and consumers are module-wide: the live generation keeps them.
+            assert "jobs" not in events
+            session.status = "READY"  # its cohort is up; a renewal says so
+            for _ in range(200):
+                if "jobs" in events:
+                    break
+                await asyncio.sleep(0.01)
+            return list(events)
+
+    seen = asyncio.run(
+        run_module(
+            Staged,
+            url="nats://unused",
+            token="t",
+            discovery=DiscoveryConfiguration(
+                rollout_id="release-2", refresh_seconds=0.01
+            ),
+        )
+    )
+    assert seen == ["register", "renew", "jobs"]
+    assert events[-1] == "jobs closed"
+
+
+def test_jobs_start_before_readiness_outside_a_rollout(monkeypatch):
+    from naas_abi_sdk.discovery import DiscoveryConfiguration
+    from naas_abi_sdk.module import run_module
+
+    events: list[str] = []
+    _fake_client(monkeypatch)
+    _staging(monkeypatch, events)
+
+    class Plain(_Ticking):
+        async def run(self):
+            return list(events)
+
+    seen = asyncio.run(
+        run_module(
+            Plain, url="nats://unused", token="t", discovery=DiscoveryConfiguration()
+        )
+    )
+    assert seen == ["register", "jobs", "renew"]
+
+
+def test_a_staged_generation_that_drains_never_hosts_its_jobs(monkeypatch):
+    from naas_abi_sdk.discovery import DiscoveryConfiguration
+    from naas_abi_sdk.module import run_module
+
+    events: list[str] = []
+    _fake_client(monkeypatch)
+    _staging(monkeypatch, events)
+
+    class Abandoned(_Ticking):
+        async def run(self):
+            await asyncio.sleep(0.05)
+            self._discovery_session.drain_requested.set()  # SIGTERM while staged
+            await asyncio.Event().wait()
+
+    assert (
+        asyncio.run(
+            run_module(
+                Abandoned,
+                url="nats://unused",
+                token="t",
+                discovery=DiscoveryConfiguration(
+                    rollout_id="release-2", refresh_seconds=0.01
+                ),
+            )
+        )
+        is None
+    )
+    assert "jobs" not in events
+
+
+def test_failing_to_host_jobs_after_the_cutover_stops_the_module(monkeypatch):
+    from naas_abi_sdk import job_host
+    from naas_abi_sdk.discovery import DiscoveryConfiguration
+    from naas_abi_sdk.module import run_module
+
+    events: list[str] = []
+    _fake_client(monkeypatch)
+    _staging(monkeypatch, events)
+
+    class Refused(job_host.JobHost):
+        async def start(self):
+            raise RuntimeError("consumer refused")
+
+    monkeypatch.setattr("naas_abi_sdk.job_host.JobHost", Refused)
+
+    class Staged(_Ticking):
+        async def run(self):
+            self._discovery_session.status = "READY"
+            await asyncio.Event().wait()
+
+    with pytest.raises(RuntimeError, match="consumer refused"):
+        asyncio.run(
+            run_module(
+                Staged,
+                url="nats://unused",
+                token="t",
+                discovery=DiscoveryConfiguration(
+                    rollout_id="release-2", refresh_seconds=0.01
+                ),
+            )
+        )
+    assert events[-1] == "jobs closed"
+
+
 def test_client_reaches_any_modules_job_by_name_without_discovery():
     from naas_abi_sdk.client import ABIClient
     from naas_abi_sdk.jobs import JobProxy

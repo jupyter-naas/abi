@@ -77,6 +77,28 @@ conversation claim. The process then unregisters. A draining instance stays in
 discovery until it exits, so a claim held by a live run is not treated as
 abandoned. A hard kill still falls through to lease expiry.
 
+## Descriptors across generations (2026-10-06)
+
+Replicas of one generation must declare the same dependencies, agents, jobs and
+models for a contract major: the same rollout id, or no rollout id on both. A
+new rollout may change them without a contract bump, for example to add a job.
+Before, any live replica of the contract had to match, so a v2 that added a job
+got `DESCRIPTOR_CONFLICT` while v1 was up and a `maxUnavailable=0` deploy
+stalled.
+
+During the overlap the new generation is `STAGED`. Agent, model and job lookups
+take `READY` instances, and submits and model chats require `READY`, so callers
+keep using the current generation's agents and models. Jobs need more: a job's
+schedule and durable consumer belong to the module, not to an instance, so a
+staged process starting its job host would republish schedules, change
+consumer limits and run its jobs before its cohort is up. The SDK runner of a
+process with a rollout id therefore starts its job host only once discovery
+reports it `READY` or `DEGRADED`, and never if it is asked to drain first. The
+System app's job list skips staged instances and prefers the serving
+generation's definition over a draining one's. A trigger for a brand-new job
+sent between the cutover and the new host's start (at most one heartbeat) has
+no consumer yet and is not delivered.
+
 ## Lease loss keeps the instance id (2026-10-06)
 
 This supersedes "expired leases get a fresh instance identity on recovery"

@@ -46,7 +46,11 @@ processes that cut over together. `rollout_modules` (or `ABI_ROLLOUT_MODULES`,
 comma-separated) names every module id that must be initialized first. Empty
 means this module alone. Discovery keeps the previous generation `READY` until
 that set is up, then marks it `DRAINING` and serves the new one. `STAGED` is a
-new generation waiting behind a live one. `SIGTERM` and `SIGINT` drain the
+new generation waiting behind a live one. A rollout may add or change agents,
+jobs and models without a contract bump; replicas of one rollout must match.
+Job schedules and consumers are module-wide, so with a rollout id `run_module`
+starts the job host only once discovery reports the instance `READY` or
+`DEGRADED`, never while `STAGED`. `SIGTERM` and `SIGINT` drain the
 process: new agent submits, job fetches and model chats stop, accepted runs and
 jobs finish, then the process unregisters. A live run keeps its claim until it
 finishes. See the discovery ADR, section "Rollouts and draining (2026-10-05)".
