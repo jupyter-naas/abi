@@ -79,6 +79,32 @@ class TestDiscoveryJobCatalog(JobCatalogContract):
         return DiscoveryJobCatalog(lambda: _Discovery(tuple(_sdk(d) for d in expected)))
 
 
+def test_during_a_rollout_the_serving_generation_defines_the_jobs():
+    old = (JobDescriptor("report", triggers=(Every("1h"),)), JobDescriptor("retired"))
+    new = (JobDescriptor("report", triggers=(Every("2h"),)), JobDescriptor("added"))
+
+    class Rollout:
+        async def list_modules(self, *, limit, after_instance_id):
+            def instance(iid, status, jobs):
+                return SimpleNamespace(
+                    module_id="acme.other", instance_id=iid, status=status, jobs=jobs
+                )
+
+            return [
+                instance("a-draining", "DRAINING", old),
+                instance("b-staged", "STAGED", new),
+                instance("c-ready", "READY", new),
+            ], ""
+
+    # Staged: listed nowhere (it hosts no jobs before the cutover).
+    jobs = {j.name: j for j in asyncio.run(DiscoveryJobCatalog(Rollout).list_jobs())}
+
+    assert sorted(jobs) == ["added", "report", "retired"]
+    assert jobs["report"].triggers[0].spec == "2h"
+    assert (jobs["report"].instances, jobs["added"].instances) == (2, 1)
+    assert jobs["retired"].instances == 1  # until the old generation exits
+
+
 def test_discovery_errors_are_an_unavailable_source():
     class Broken:
         async def list_modules(self, **_):
