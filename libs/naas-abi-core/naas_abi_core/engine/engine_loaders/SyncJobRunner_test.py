@@ -117,6 +117,41 @@ def test_cancel_request_escalates_to_an_interrupt_after_the_grace_period():
         asyncio.run(scenario())
 
 
+def test_a_second_cancel_during_the_grace_period_still_interrupts_and_waits():
+    seen = _Recorder()
+    interrupted = []
+
+    def handler(ctx):
+        seen.started()
+        try:
+            while True:  # ignores ctx.cancelled
+                time.sleep(0.01)
+        except JobInterrupted:
+            interrupted.append(True)
+            time.sleep(0.2)  # cleanup still holds the slot
+            seen.reached_end = True
+            raise
+
+    async def scenario():
+        task = asyncio.create_task(
+            SyncJobRunner(handler, interrupt_grace_seconds=5)(_ctx())
+        )
+        await asyncio.sleep(0.05)
+        task.cancel()  # the timeout
+        await asyncio.sleep(0.05)
+        task.cancel()  # then JobHost.close(), during the grace period
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        return seen.reached_end
+
+    cleaned_up_when_returned = asyncio.run(scenario())
+
+    assert interrupted == [True]
+    assert cleaned_up_when_returned  # the runner waited for the thread's cleanup
+    seen.thread.join(1)
+    assert not seen.thread.is_alive()
+
+
 def test_without_a_grace_period_the_runner_never_interrupts_but_still_waits():
     seen = _Recorder()
 

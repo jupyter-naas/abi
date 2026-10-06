@@ -123,7 +123,9 @@ class SyncJobRunner:
     async def _stop(self, state: _Thread, done: asyncio.Future[Any]) -> None:
         """Wait out the grace period, interrupt, then wait for the thread to exit."""
         if self.interrupt_grace_seconds is not None:
-            await asyncio.wait({done}, timeout=self.interrupt_grace_seconds)
+            # A second cancel (a timeout, then the host's close) ends the grace early.
+            with contextlib.suppress(asyncio.CancelledError):
+                await asyncio.wait({done}, timeout=self.interrupt_grace_seconds)
             if not done.done():
                 state.interrupt()
         while not done.done():
