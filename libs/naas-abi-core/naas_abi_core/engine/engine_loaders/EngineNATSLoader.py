@@ -21,9 +21,10 @@ holding a valid service token can read every secret this process's
 ("if it's adding security problems we will have to fix that anyway"), not
 an oversight -- revisit once Stage 2 per-caller authorization exists. It
 also has its own re-exposure guard shape (see ``expose_services`` below):
-``Secret`` fans out over a *list* of adapters, not one, so it is skipped when
-any configured adapter is itself a NATS client, preventing
-recursive self-routing on the globally shared secret subjects.
+``Secret`` fans out over a *list* of adapters, not one, so only its local
+adapters are served: a NATS client in the fanout is left out, preventing
+recursive self-routing on the globally shared secret subjects, and the
+secret is skipped when every adapter is one.
 
 Model registry endpoints resolve metadata and execute inference at the owner;
 clients receive LangChain proxies instead of serialized live model objects.
@@ -97,6 +98,7 @@ from naas_abi_core.services.secret.adaptors.primary.secret__primary_adapter__NAT
 from naas_abi_core.services.secret.adaptors.secondary.SecretSecondaryAdapterNATSClient import (
     SecretSecondaryAdapterNATSClient,
 )
+from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.source_control.adapters.primary.source_control__primary_adapter__NATS import (
     SourceControlPrimaryAdapterNATS,
@@ -203,21 +205,33 @@ class EngineNATSLoader:
                 '(adapter: "nats_rpc") -- not re-exposing a remote proxy'
             )
 
-        if services.secret_available() and not any(
-            isinstance(adapter, SecretSecondaryAdapterNATSClient)
-            for adapter in services.secret.adapters
-        ):
-            # A fanout containing a proxy must not serve its own global subject.
-            # Dependency wiring rejects mixed local/remote ownership explicitly.
+        local_secrets = (
+            [
+                adapter
+                for adapter in services.secret.adapters
+                if not isinstance(adapter, SecretSecondaryAdapterNATSClient)
+            ]
+            if services.secret_available()
+            else []
+        )
+        if local_secrets:
+            # Only the local adapters: a proxy served on this global subject
+            # could route into itself. Remote ones stay for upstream reads
+            # (EngineNATSDependencies), so a mixed fanout serves a local view.
+            exposed_secret = services.secret
+            if len(local_secrets) != len(services.secret.adapters):
+                exposed_secret = Secret(local_secrets)
+                if services.secret.services_wired:
+                    exposed_secret.set_services(services.secret.services)
             primary_secret = SecretPrimaryAdapterNATS(
-                services.secret, nats_config.jwt_secret
+                exposed_secret, nats_config.jwt_secret
             )
             nats_runtime.run_coro(primary_secret.start(nc))
             started.append(primary_secret)
             logger.debug("EngineNATSLoader: exposed secret over NATS")
         elif services.secret_available():
             logger.debug(
-                "EngineNATSLoader: secret contains NATS clients "
+                "EngineNATSLoader: secret is entirely backed by NATS clients "
                 "-- not re-exposing a remote proxy"
             )
 

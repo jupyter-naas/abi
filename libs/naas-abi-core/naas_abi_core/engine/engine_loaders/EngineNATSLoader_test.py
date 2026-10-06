@@ -281,8 +281,8 @@ def test_expose_services_starts_one_primary_per_available_service(monkeypatch):
 # ---------------------------------------------------------------------------
 # secret: exposed too (at Max's explicit direction, despite Stage 1's auth
 # gap), but with a different re-exposure guard shape -- Secret fans out over
-# a *list* of adapters, so it's only skipped when EVERY one of them is
-# itself a NATS client, not when any single one is.
+# a *list* of adapters: only its local ones are served, and it's skipped only
+# when EVERY one of them is itself a NATS client.
 # ---------------------------------------------------------------------------
 
 
@@ -322,10 +322,13 @@ def test_expose_services_does_not_re_expose_secret_when_every_adapter_is_remote(
     run_coro.assert_not_called()
 
 
-def test_expose_services_does_not_expose_secret_when_only_some_adapters_are_remote(
+def test_expose_services_exposes_only_the_local_part_of_a_mixed_secret_fanout(
     monkeypatch,
 ):
-    """Never expose a fanout containing a proxy on the same global subject."""
+    """A proxy is never served on the global subject (it could route into
+    itself); the local adapters are, with the owner's event wiring."""
+    from naas_abi_core.services.secret.Secret import Secret
+
     config = SimpleNamespace(
         nats=NATSConfiguration(nats_url="nats://example:4222", jwt_secret="x" * 32)
     )
@@ -334,13 +337,18 @@ def test_expose_services_does_not_expose_secret_when_only_some_adapters_are_remo
     run_coro = MagicMock(side_effect=lambda coro, *a, **k: coro.close())
     monkeypatch.setattr("naas_abi_core.engine.nats_runtime.run_coro", run_coro)
 
-    mixed = [MagicMock(), MagicMock(spec=SecretSecondaryAdapterNATSClient)]
-    services = _services({"secret": mixed})
+    dotenv, naas = MagicMock(), MagicMock()
+    upstream = MagicMock(spec=SecretSecondaryAdapterNATSClient)
+    services = _services({"secret": [dotenv, upstream, naas]})
 
     started = loader.expose_services(services)
 
-    assert started == []
-    run_coro.assert_not_called()
+    assert len(started) == 1
+    exposed = started[0]._adapter
+    assert isinstance(exposed, Secret)
+    assert exposed.adapters == [dotenv, naas]
+    assert exposed.services is services.secret.services
+    run_coro.assert_called_once()
 
 
 @pytest.mark.parametrize("remote", [False, True])

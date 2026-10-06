@@ -26,6 +26,12 @@ Facades wait `nats.client_timeout_seconds` (default 10) for a reply; a route
 configured to another engine (`adapter: nats_rpc`) keeps its own `timeout_seconds`.
 Long dataset operations pass a deadline per call instead.
 
+A secret fanout may mix local and remote adapters (`[dotenv, nats_rpc]`). The
+endpoint serves only the local ones, so the global subject never routes into
+itself. The facade reads them through one client to this engine's endpoint,
+placed where the first local adapter stood, and keeps the remote ones for
+upstream reads.
+
 Kernel jobs (`Engine.job_owners`): dataset maintenance gets the engine's own
 dataset service, like its endpoints. Jobs that service adapters offer
 (`job_owners(services)`, such as the PostgreSQL event archive) work across

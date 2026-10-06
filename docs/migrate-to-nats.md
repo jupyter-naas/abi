@@ -192,7 +192,9 @@ Before you split, keep in mind:
 
 - Nothing enforces which engine owns a service. Keep one owner per service, or
   several owners on the same backend.
-- A secret service cannot mix local adapters and `nats_rpc` adapters.
+- A secret service can mix local adapters and `nats_rpc` adapters, such as
+  `[dotenv, nats_rpc]`. The engine serves only its local secrets; reads that
+  miss them go to the `nats_rpc` upstream, in the configured order.
 
 ### Run a module outside the engine
 

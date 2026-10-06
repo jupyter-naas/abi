@@ -104,7 +104,7 @@ Test run at `a582a19f6`: 101 job tests passed (SDK and engine, real broker inclu
 
 ## Should fix
 
-- [ ] **8. A mixed local and remote secret fanout now fails at startup in NATS mode.** *Read in code.*
+- [x] **8. A mixed local and remote secret fanout now fails at startup in NATS mode.** *Read in code.* **Fixed:** the endpoint serves a view of the local adapters only; the facade reads them through this engine's endpoint and keeps `nats_rpc` adapters for upstream reads, in the configured order.
   - **Problem:** `EngineNATSDependencies.build` (`EngineNATSDependencies.py:178`) raises "NATS mode cannot expose a mixed local/remote secret fanout". Stage 1 supported `[dotenv, nats_rpc]`: it exposed the local part and used `nats_rpc` upstream.
   - **Fix:** restore the stage-1 behavior: expose only the local adapters and keep the remote ones for upstream reads. If the rejection is intended, record it as a breaking change in the ADR and put the migration steps in the error message.
 

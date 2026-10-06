@@ -176,20 +176,19 @@ class EngineNATSDependencies:
                 bus=values.get("bus"),
             )
         if owners.secret_available():
-            remote: list[ISecretAdapter] = [
-                a
-                for a in owners.secret.adapters
-                if isinstance(a, SecretSecondaryAdapterNATSClient)
-            ]
-            if remote and len(remote) != len(owners.secret.adapters):
-                raise ValueError(
-                    "NATS mode cannot expose a mixed local/remote secret fanout; configure one owner"
-                )
-            if remote:
-                self.clients.extend(remote)
-            values["secret"] = Secret(
-                remote or [self._client(SecretSecondaryAdapterNATSClient)]
-            )
+            # In the configured order: remote adapters keep reading upstream;
+            # the local ones, which this engine exposes, are read through one
+            # client to its own endpoint, where the first of them stood.
+            routes: list[ISecretAdapter] = []
+            local_route = False
+            for adapter in owners.secret.adapters:
+                if isinstance(adapter, SecretSecondaryAdapterNATSClient):
+                    self.clients.append(adapter)
+                    routes.append(adapter)
+                elif not local_route:
+                    local_route = True
+                    routes.append(self._client(SecretSecondaryAdapterNATSClient))
+            values["secret"] = Secret(routes)
         if owners.triple_store_available():
             values["triple_store"] = RemoteTripleStoreService(
                 self._adapter(
