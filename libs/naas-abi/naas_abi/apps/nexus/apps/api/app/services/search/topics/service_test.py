@@ -177,6 +177,16 @@ class TestExecution:
         page = await service.search(WS, "person", "", store, limit=3)
         assert len(page.items) == 3 and page.has_more
 
+    async def test_total_counts_every_match_not_only_the_page(
+        self, service: SearchTopicService, store
+    ) -> None:
+        page = await service.search(WS, "person", "", store, limit=3)
+        assert page.total == 8
+        alice = await service.search(WS, "person", "alice", store, limit=3)
+        assert alice.total == len(alice.items)
+        organizations = await service.search(WS, "organization", "", store, limit=2)
+        assert organizations.total is not None and organizations.total >= len(organizations.items)
+
     async def test_person_detail_has_sections(self, service: SearchTopicService, store) -> None:
         detail = await service.detail(WS, "person", ALICE, store)
         assert detail.title

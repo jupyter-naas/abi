@@ -211,6 +211,7 @@ async function topicProvider(scope: SearchScope, q: string, ctx: ProviderContext
   const page = await topicsApi.results(ctx.workspaceId, scope.id, q, 0, ctx.limit);
   return {
     hasMore: page.has_more,
+    total: page.total ?? undefined,
     hits: page.items.map(item => ({
       id: item.uri,
       title: item.title,

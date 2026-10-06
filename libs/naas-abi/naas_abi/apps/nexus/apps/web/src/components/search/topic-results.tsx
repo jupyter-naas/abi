@@ -13,7 +13,7 @@ import { TopicAvatar } from './topic-avatar';
  * Opening a row shows it in the topic's detail tab.
  */
 export function TopicResults({
-  topic, query, items, loading, error, hasMore, sparql, selected, hrefFor, onMore,
+  topic, query, items, loading, error, hasMore, total = null, sparql, selected, hrefFor, onMore,
 }: {
   topic: SearchTopic;
   query: string;
@@ -21,6 +21,8 @@ export function TopicResults({
   loading: boolean;
   error: string | null;
   hasMore: boolean;
+  /** Every match, not only the pages loaded so far. */
+  total?: number | null;
   sparql: string;
   selected: string | null;
   hrefFor: (uri: string) => string;
@@ -31,7 +33,7 @@ export function TopicResults({
       <div className="flex items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
         <span aria-live="polite">
           {loading && !items.length ? 'Searching…'
-            : `${items.length}${hasMore ? '+' : ''} ${(items.length === 1 ? topic.label : topic.plural_label).toLowerCase()}${query ? ` matching “${query}”` : ''}`}
+            : `${total ?? `${items.length}${hasMore ? '+' : ''}`} ${((total ?? items.length) === 1 ? topic.label : topic.plural_label).toLowerCase()}${query ? ` matching “${query}”` : ''}`}
         </span>
         <SparqlDisclosure sparql={sparql} className="text-right" />
       </div>

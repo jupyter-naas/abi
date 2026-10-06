@@ -5,6 +5,7 @@ import { BookOpen, Contact, List } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { searchHref, type SearchRoute, type SearchTopic, type TopicDetail, type TopicResultItem } from '@/lib/search-topics';
 import { topicsApi } from '@/lib/search-topics-api';
+import { useSearchScopesStore } from '@/stores/search-scopes';
 import { TopicDetailView } from './topic-detail';
 import { TopicIcon } from './topic-icon';
 import { TopicOntology } from './topic-ontology';
@@ -25,9 +26,11 @@ export function TopicScopeView({ workspaceId, topic, route, canEdit, onTab }: {
   canEdit: boolean;
   onTab: (tab: SearchRoute['tab']) => void;
 }) {
-  const [results, setResults] = useState<{ items: TopicResultItem[]; hasMore: boolean; sparql: string; error: string | null; loading: boolean }>(
-    { items: [], hasMore: false, sparql: '', error: null, loading: false },
+  const [results, setResults] = useState<{ items: TopicResultItem[]; hasMore: boolean; total: number | null; sparql: string; error: string | null; loading: boolean }>(
+    { items: [], hasMore: false, total: null, sparql: '', error: null, loading: false },
   );
+  // The top bar's refresh clears the server cache and bumps this: search again.
+  const nonce = useSearchScopesStore(s => s.nonce);
   const resultsSeq = useRef(0);
   const fetchResults = useCallback(async (offset: number) => {
     const seq = ++resultsSeq.current;
@@ -38,6 +41,7 @@ export function TopicScopeView({ workspaceId, topic, route, canEdit, onTab }: {
       setResults(r => ({
         items: offset === 0 ? page.items : [...r.items, ...page.items],
         hasMore: page.has_more,
+        total: page.total ?? null,
         sparql: page.sparql,
         error: null,
         loading: false,
@@ -47,7 +51,7 @@ export function TopicScopeView({ workspaceId, topic, route, canEdit, onTab }: {
       setResults(r => ({ ...r, loading: false, error: error instanceof Error ? error.message : 'Search failed' }));
     }
   }, [workspaceId, topic, route.q]);
-  useEffect(() => { void fetchResults(0); }, [fetchResults]);
+  useEffect(() => { void fetchResults(0); }, [fetchResults, nonce]);
 
   const [detail, setDetail] = useState<{ data: TopicDetail | null; loading: boolean; error: string | null }>({ data: null, loading: false, error: null });
   useEffect(() => {
@@ -58,7 +62,7 @@ export function TopicScopeView({ workspaceId, topic, route, canEdit, onTab }: {
       .then(data => { if (!cancelled) setDetail({ data, loading: false, error: null }); })
       .catch(error => { if (!cancelled) setDetail({ data: null, loading: false, error: error instanceof Error ? error.message : 'Could not load details' }); });
     return () => { cancelled = true; };
-  }, [workspaceId, topic, route.item]);
+  }, [workspaceId, topic, route.item, nonce]);
 
   const hrefFor = (uri: string) => searchHref(workspaceId, { ...route, scope: topic.id, item: uri, tab: 'details' });
   const linkFor = (topicId: string, uri: string) => searchHref(workspaceId, { scope: topicId, item: uri, tab: 'details' });
@@ -93,6 +97,7 @@ export function TopicScopeView({ workspaceId, topic, route, canEdit, onTab }: {
           loading={results.loading}
           error={results.error}
           hasMore={results.hasMore}
+          total={results.total}
           sparql={results.sparql}
           selected={route.item}
           hrefFor={hrefFor}

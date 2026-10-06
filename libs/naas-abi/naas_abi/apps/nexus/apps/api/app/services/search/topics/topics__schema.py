@@ -267,6 +267,8 @@ class TopicResults:
     items: list[TopicResultItem]
     has_more: bool
     sparql: str
+    # Every individual the query matches, not only this page; None when the count failed.
+    total: int | None = None
 
 
 @dataclass(frozen=True)

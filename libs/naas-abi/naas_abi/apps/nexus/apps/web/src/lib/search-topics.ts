@@ -65,6 +65,8 @@ export interface TopicResults {
   items: TopicResultItem[];
   has_more: boolean;
   sparql: string;
+  /** Every individual the query matches, not only this page (null when the count failed). */
+  total?: number | null;
 }
 
 export interface TopicFact { key: string; label: string; value: string; is_uri: boolean }

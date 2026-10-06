@@ -37,6 +37,24 @@ from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema impo
 )
 
 MAX_RESULTS = 100
+# The count wraps the results query unpaged; this bounds it.
+COUNT_LIMIT = 100_000
+_PREFIX_LINE = re.compile(r"^\s*(PREFIX|BASE)\b", re.IGNORECASE)
+
+
+def count_query(results_sparql: str) -> str:
+    """``COUNT(DISTINCT ?uri)`` over a rendered results query, as a subquery.
+
+    The prologue (PREFIX/BASE lines) has to stay in front of the outer query;
+    everything after it, ORDER BY and LIMIT included, is a valid subquery.
+    """
+    lines = results_sparql.splitlines()
+    split = 0
+    while split < len(lines) and (not lines[split].strip() or _PREFIX_LINE.match(lines[split])):
+        split += 1
+    prologue = "\n".join(lines[:split])
+    body = "\n".join(lines[split:])
+    return f"{prologue}\nSELECT (COUNT(DISTINCT ?uri) AS ?total)\nWHERE {{\n{{\n{body}\n}}\n}}"
 SECTION_LIMIT = 100
 PREVIEW_LIMIT = 20
 # A result row lists at most this many values ("A, B, C +2").
@@ -157,7 +175,15 @@ class SearchTopicService:
             "results",
             {"q": query.strip(), "limit": limit + 1, "offset": max(0, offset)},
         )
-        rows = await asyncio.to_thread(store.select, sparql)
+        counted = render(
+            topic.results_query,
+            "results",
+            {"q": query.strip(), "limit": COUNT_LIMIT, "offset": 0},
+        )
+        rows, total = await asyncio.gather(
+            asyncio.to_thread(store.select, sparql),
+            asyncio.to_thread(self._count, store, count_query(counted), topic.id),
+        )
         items: list[TopicResultItem] = []
         seen: set[str] = set()
         for row in rows:
@@ -182,7 +208,18 @@ class SearchTopicService:
             items=page,
             has_more=len(items) > limit,
             sparql=sparql,
+            total=total,
         )
+
+    @staticmethod
+    def _count(store: IGraphQueryStore, sparql: str, topic_id: str) -> int | None:
+        """Every match, not only the page. A failed count leaves the page usable."""
+        try:
+            rows = store.select(sparql)
+            return int(_value(rows[0], "total") or 0) if rows else 0
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("search topic %s count failed: %s", topic_id, exc)
+            return None
 
     async def _decorate(
         self, topic: SearchTopic, items: list[TopicResultItem], store: IGraphQueryStore
