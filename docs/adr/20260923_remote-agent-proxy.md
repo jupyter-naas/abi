@@ -81,3 +81,7 @@ deadline.
   instance stays listed, so another replica does not treat the claim as
   abandoned while the run is still going. The next submit resolves a `READY`
   instance.
+- A provider that loses its discovery lease registers again under the same
+  instance id (see the discovery ADR, "Lease loss keeps the instance id"), so
+  its in-flight runs keep their owner: status, events and cancel still reach
+  them, and their conversation claims stay held.

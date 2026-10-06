@@ -101,6 +101,6 @@ describe('discovery view', () => {
   it('names modules and instances, and explains eviction', () => {
     expect(discoveryView.nounFor!(moduleEntry, 0).one).toBe('module');
     expect(discoveryView.nounFor!(detail.entry, 1).one).toBe('instance');
-    expect(discoveryView.deleteWarning!(detail.entry)).toContain('registers again under a new instance id');
+    expect(discoveryView.deleteWarning!(detail.entry)).toContain('registers again under the same instance id');
   });
 });
