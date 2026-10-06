@@ -79,6 +79,16 @@ def _hash(*values: str) -> str:
     return hashlib.sha256(json.dumps(values, ensure_ascii=True).encode()).hexdigest()
 
 
+def go_duration_seconds(duration: str) -> float:
+    """Seconds in a Go duration (``"1h30m"``, ``"1.5s"``), as NATS headers write them."""
+    if not isinstance(duration, str) or not _DURATION.fullmatch(duration):
+        raise ValueError(f"Not a Go duration: {duration!r}")
+    return sum(
+        float(n) * _UNIT_SECONDS[u]
+        for n, u in re.findall(r"(\d+(?:\.\d+)?)(ns|us|µs|ms|s|m|h)", duration)
+    )
+
+
 # --- triggers -------------------------------------------------------------------------
 
 
@@ -124,13 +134,7 @@ class Every:
             if seconds < 1 or seconds != int(seconds):
                 raise ValueError("Every needs a whole number of seconds, at least 1")
             interval = f"{int(seconds)}s"
-        if not isinstance(interval, str) or not _DURATION.fullmatch(interval):
-            raise ValueError(f"Not a Go duration: {interval!r}")
-        total = sum(
-            float(n) * _UNIT_SECONDS[u]
-            for n, u in re.findall(r"(\d+(?:\.\d+)?)(ns|us|µs|ms|s|m|h)", interval)
-        )
-        if total < 1:
+        if go_duration_seconds(interval) < 1:
             raise ValueError("NATS schedules fire at most once per second")
         object.__setattr__(self, "interval", interval)
 

@@ -17,12 +17,13 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from nats.js.errors import NotFoundError
 
-from naas_abi_sdk.job_host import JobHost
+from naas_abi_sdk.job_host import JobHost, ensure_stream
 from naas_abi_sdk.jobs import (
     Cron,
     Every,
     JobDescriptor,
     JobProxy,
+    JobRun,
     OnEvent,
     job_subjects,
     runs_collection,
@@ -68,6 +69,20 @@ class Documents:
         )
         self.data[(collection, id)] = doc
         return doc
+
+    async def find(
+        self, collection, *, where=(), order_by=None, limit=100, cursor=None
+    ):
+        from naas_abi_sdk.services.models import Page
+
+        def matches(data):
+            return all(
+                data.get(field) == value if op == "eq" else data.get(field) in value
+                for field, op, value in where
+            )
+
+        items = [d for (c, _), d in self.data.items() if c == collection]
+        return Page([d for d in items if matches(d.data)][:limit], None)
 
     def runs(self, job=None):
         return [
@@ -635,3 +650,246 @@ def test_lost_ack_redelivery_retires_saved_completion_without_running_again(brok
 
     asyncio.run(scenario())
     assert len(executions) == 1
+
+
+# --- schedules across restarts, expired triggers, recreated streams, store outages -----
+
+
+def test_restarts_more_frequent_than_the_interval_do_not_stop_an_every_schedule(
+    broker,
+):
+    descriptor = JobDescriptor("tick", triggers=(Every("2s"),))
+
+    async def handler(ctx):
+        return None
+
+    async def scenario():
+        started = time.monotonic()
+        while time.monotonic() - started < 4.5:  # a restart every ~0.7 s
+            host = _host(broker, Documents(), [(descriptor, handler)])
+            await host.start()
+            await asyncio.sleep(0.7)
+            await host.close()
+            await host.transport.close()
+        nc = await Transport(broker, "t").connect()
+        try:
+            trigger = job_subjects(PROJECT, MODULE, "tick").trigger
+            fired = await nc.jetstream().get_last_msg(stream_name(PROJECT), trigger)
+            return fired.headers
+        finally:
+            await nc.close()
+
+    # Republishing the schedule on each start restarted its interval: it never fired.
+    assert asyncio.run(scenario())["Abi-Job-Trigger"] == "schedule"
+
+
+def test_replicas_and_restarts_keep_the_schedule_until_it_changes(broker):
+    async def handler(ctx):
+        return None
+
+    async def scenario():
+        hourly = JobDescriptor("digest", triggers=(Every("1h"),))
+        subject = job_subjects(PROJECT, MODULE, "digest").schedule(0)
+        nc = await Transport(broker, "t").connect()
+        js = nc.jetstream()
+
+        async def schedule():
+            return await js.get_last_msg(stream_name(PROJECT), subject)
+
+        try:
+            replicas = [
+                _host(broker, Documents(), [(hourly, handler)], instance_id=i)
+                for i in ("a", "b")
+            ]
+            await asyncio.gather(*(host.start() for host in replicas))
+            first = await schedule()
+            for host in replicas:
+                await host.close()
+            restarted = _host(broker, Documents(), [(hourly, handler)])
+            await restarted.start()
+            await restarted.close()
+            unchanged = await schedule()
+            every_two = JobDescriptor("digest", triggers=(Every("2h"),))
+            changed_host = _host(broker, Documents(), [(every_two, handler)])
+            await changed_host.start()
+            await changed_host.close()
+            return first, unchanged, await schedule()
+        finally:
+            await nc.close()
+
+    first, unchanged, changed = asyncio.run(scenario())
+
+    assert unchanged.seq == first.seq
+    assert changed.seq > first.seq
+    assert changed.headers["Nats-Schedule"] == "@every 2h"
+
+
+def _publish_trigger(broker, job, ttl):
+    async def publish():
+        nc = await Transport(broker, "t").connect()
+        try:
+            ack = await nc.jetstream().publish(
+                job_subjects(PROJECT, MODULE, job).trigger,
+                b"{}",
+                headers={"Abi-Job-Trigger": "manual", "Nats-TTL": ttl},
+                stream=stream_name(PROJECT),
+            )
+            return ack.seq
+        finally:
+            await nc.close()
+
+    return publish()
+
+
+def test_a_trigger_expiring_before_its_retry_ends_the_run_failed(broker):
+    docs = Documents()
+    descriptor = JobDescriptor("slow", max_attempts=2)
+    attempts = []
+
+    async def handler(ctx):
+        attempts.append(ctx.attempt)
+        await asyncio.sleep(3)
+        raise RuntimeError("upstream 503")
+
+    async def scenario():
+        host = _host(broker, docs, [(descriptor, handler)], backoff_base_seconds=0.2)
+        await host.start()
+        try:
+            sequence = await _publish_trigger(broker, "slow", "2s")
+            run = JobRun(
+                Transport(broker, "t"),
+                PROJECT,
+                MODULE,
+                "slow",
+                f"slow:{sequence}",
+                docs,
+            )
+            return await run.wait(timeout=10, poll_seconds=0.05)
+        finally:
+            await host.close()
+            await host.transport.close()
+
+    record = asyncio.run(scenario())
+
+    assert attempts == [1]
+    assert record["status"] == "FAILED"
+    assert record["error"].startswith("Trigger expired before it could be retried")
+
+
+def test_the_reaper_fails_retries_whose_trigger_left_the_stream(broker):
+    docs = Documents()
+    descriptor = JobDescriptor("sync", max_attempts=3)
+
+    async def handler(ctx):
+        return None
+
+    async def scenario():
+        host = _host(broker, docs, [(descriptor, handler)])
+        # The stream, without consumers taking the triggers.
+        await ensure_stream((await host.transport.connect()).jetstream(), PROJECT)
+        expiring = await _publish_trigger(broker, "sync", "1s")
+        kept = await _publish_trigger(broker, "sync", "1h")
+        due = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+        for sequence in (expiring, kept):
+            await docs.put(
+                runs_collection(PROJECT),
+                f"sync:{sequence}",
+                {
+                    "job": "sync",
+                    "run_id": f"sync:{sequence}",
+                    "status": "RETRYING",
+                    "attempt": 1,
+                    "max_attempts": 3,
+                    "sequence": sequence,
+                    "heartbeat_at": due,
+                    "retry_at": due,
+                },
+            )
+        await asyncio.sleep(2.5)  # the 1 s trigger expires
+        try:
+            return expiring, kept, await host.reap_lost_runs()
+        finally:
+            await host.transport.close()
+
+    expiring, kept, reaped = asyncio.run(scenario())
+
+    assert reaped == 1
+    assert {r["run_id"]: r["status"] for r in docs.runs("sync")} == {
+        f"sync:{expiring}": "FAILED",
+        f"sync:{kept}": "RETRYING",
+    }
+
+
+def test_a_recreated_jobs_stream_runs_triggers_that_reuse_old_sequences(broker):
+    docs = Documents()
+    descriptor = JobDescriptor("echo")
+    executions = []
+
+    async def handler(ctx):
+        executions.append(ctx.payload["n"])
+        return ctx.payload
+
+    def finished(n):
+        return any(
+            r["status"] == "SUCCEEDED" and r["result"] == {"n": n}
+            for r in docs.runs("echo")
+        )
+
+    async def run_once(n):
+        host = _host(broker, docs, [(descriptor, handler)])
+        await host.start()
+        try:
+            run = await host.trigger("echo", {"n": n})
+            await _until(lambda: finished(n))
+            return run.run_id
+        finally:
+            await host.close()
+            await host.transport.close()
+
+    async def scenario():
+        first_id = await run_once(1)
+        nc = await Transport(broker, "t").connect()
+        await nc.jetstream().delete_stream(stream_name(PROJECT))  # lost or recreated
+        await nc.close()
+        return first_id, await run_once(2)
+
+    first_id, second_id = asyncio.run(scenario())
+
+    assert first_id == second_id  # sequences restarted
+    assert executions == [1, 2]
+
+
+def test_a_store_outage_when_a_trigger_arrives_uses_no_attempt(broker):
+    class Outage(Documents):
+        failures = 2
+
+        async def get(self, collection, id):
+            if self.failures:
+                self.failures -= 1
+                raise RuntimeError("store unavailable")
+            return await super().get(collection, id)
+
+    docs = Outage()
+    descriptor = JobDescriptor("fragile")  # a single attempt
+    attempts = []
+
+    async def handler(ctx):
+        attempts.append(ctx.attempt)
+        return "done"
+
+    async def scenario():
+        host = _host(broker, docs, [(descriptor, handler)], backoff_base_seconds=0.1)
+        await host.start()
+        try:
+            await host.trigger("fragile")
+            await _until(
+                lambda: any(r["status"] == "SUCCEEDED" for r in docs.runs("fragile"))
+            )
+        finally:
+            await host.close()
+            await host.transport.close()
+
+    asyncio.run(scenario())
+
+    assert docs.failures == 0 and attempts == [1]
+    assert docs.runs("fragile")[0]["attempt"] == 1

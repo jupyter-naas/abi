@@ -148,11 +148,14 @@ def test_last_attempt_failure_terminates():
     async def handler(ctx):
         raise RuntimeError("still down")
 
-    msg = Msg(attempt=3)
-    _run(_host(docs), JobDescriptor("ingest", max_attempts=3), handler, msg)
+    host, descriptor = _host(docs), JobDescriptor("ingest", max_attempts=3)
+    deliveries = [Msg(attempt=n) for n in (1, 2, 3)]
+    for msg in deliveries:
+        _run(host, descriptor, handler, msg)
 
     assert docs.run("ingest:7")["status"] == "FAILED"
-    assert msg.calls == [("term",)]
+    assert docs.run("ingest:7")["attempt"] == 3
+    assert [m.calls for m in deliveries] == [[("nak", 5)], [("nak", 10)], [("term",)]]
 
 
 def test_timeout_is_reported_and_terminated_without_attempts_left():
@@ -229,16 +232,36 @@ def test_redelivery_updates_the_same_run():
 
 
 class JetStream:
+    """Publishes like JetStream: the last message per subject, and
+    ``Nats-Expected-Last-Subject-Sequence`` checked against it."""
+
     def __init__(self):
         self.published: list[tuple[str, bytes, dict]] = []
         self.purged: list[str] = []
+        self.last: dict[str, SimpleNamespace] = {}
 
     async def publish(self, subject, payload=b"", headers=None, stream=None):
-        self.published.append((subject, payload, dict(headers or {})))
+        from nats.js.errors import BadRequestError
+
+        headers = dict(headers or {})
+        expected = headers.get("Nats-Expected-Last-Subject-Sequence")
+        current = self.last.get(subject)
+        if expected is not None and int(expected) != (current.seq if current else 0):
+            raise BadRequestError(code=400, err_code=10071, description="wrong last")
+        self.published.append((subject, payload, headers))
+        self.last[subject] = SimpleNamespace(seq=len(self.published), headers=headers)
         return SimpleNamespace(seq=len(self.published))
+
+    async def get_last_msg(self, stream, subject):
+        from nats.js.errors import NotFoundError
+
+        if subject not in self.last:
+            raise NotFoundError(code=404, err_code=10037)
+        return self.last[subject]
 
     async def purge_stream(self, name, subject=None):
         self.purged.append(subject)
+        self.last.pop(subject, None)
 
 
 def test_schedules_follow_the_declared_triggers():
@@ -264,6 +287,75 @@ def test_schedules_follow_the_declared_triggers():
     assert first["Nats-Schedule-TTL"] == "3600s"  # unprocessed ticks expire
     assert js.published[1][2]["Nats-Schedule"] == "@every 1h"
     assert js.purged == [subjects.schedule(i) for i in range(2, 16)]
+
+
+def test_a_restart_leaves_unchanged_schedules_alone():
+    # Replacing an @every schedule restarts its interval: restarts more frequent
+    # than the interval would keep it from ever firing.
+    js = JetStream()
+    descriptor = JobDescriptor(
+        "ingest", triggers=(Every("1h"), Cron("0 0 6 * * *", time_zone="UTC"))
+    )
+    subjects = job_subjects(PROJECT, MODULE, "ingest")
+
+    async def scenario():
+        await _host().reconcile_schedules(js, descriptor)
+        first = [js.last[subjects.schedule(i)].seq for i in range(2)]
+        await _host().reconcile_schedules(js, descriptor)  # restart, or a replica
+        return first
+
+    first = asyncio.run(scenario())
+
+    assert len(js.published) == 2
+    assert [js.last[subjects.schedule(i)].seq for i in range(2)] == first
+    assert js.published[0][2]["Nats-Expected-Last-Subject-Sequence"] == "0"
+
+
+def test_a_changed_schedule_replaces_the_one_it_read():
+    js = JetStream()
+    subjects = job_subjects(PROJECT, MODULE, "ingest")
+
+    async def scenario():
+        for trigger in (Every("1h"), Every("2h"), Cron("0 0 6 * * *")):
+            await _host().reconcile_schedules(
+                js, JobDescriptor("ingest", triggers=(trigger,))
+            )
+
+    asyncio.run(scenario())
+
+    assert [p[2]["Nats-Schedule"] for p in js.published] == [
+        "@every 1h",
+        "@every 2h",
+        "0 0 6 * * *",
+    ]
+    assert [p[2]["Nats-Expected-Last-Subject-Sequence"] for p in js.published] == [
+        "0",
+        "1",
+        "2",
+    ]
+    assert js.last[subjects.schedule(0)].headers["Nats-Schedule-TTL"] == "3600s"
+
+
+def test_hosts_starting_together_publish_a_schedule_once():
+    descriptor = JobDescriptor("ingest", triggers=(Every("1h"),))
+    subject = job_subjects(PROJECT, MODULE, "ingest").schedule(0)
+
+    class RacingJetStream(JetStream):
+        """Another host writes the same schedule just before this host's publish."""
+
+        raced = False
+
+        async def publish(self, subject, payload=b"", headers=None, stream=None):
+            if not self.raced:
+                self.raced = True
+                await super().publish(subject, payload, headers=headers)
+            return await super().publish(subject, payload, headers, stream)
+
+    js = RacingJetStream()
+    asyncio.run(_host().reconcile_schedules(js, descriptor))
+
+    assert len(js.published) == 1  # only the other host's
+    assert js.last[subject].seq == 1
 
 
 def test_event_bridge_turns_an_event_into_a_trigger():
@@ -752,7 +844,7 @@ def test_a_run_lost_with_its_host_on_its_last_attempt_is_failed():
     _seed_running(docs, 4, now - timedelta(minutes=30), field="started_at")
     _seed_running(docs, 5, now - timedelta(minutes=30))  # running on this host
     host = JobHost(
-        _Transport(),
+        _stream_transport(3)[0],  # sync:3's trigger is still in the stream
         docs,
         MODULE,
         PROJECT,
@@ -1060,9 +1152,8 @@ def test_cas_exhaustion_does_not_silently_allow_execution():
         pytest.fail("A run must be saved before it starts")
 
     msg = Msg()
-    with pytest.raises(VersionConflict):
-        _run(_host(ConflictingDocuments()), JobDescriptor("ingest"), handler, msg)
-    assert msg.calls == []
+    _run(_host(ConflictingDocuments()), JobDescriptor("ingest"), handler, msg)
+    assert msg.calls == [("nak", 5)]  # redelivered later, no attempt used
 
 
 @pytest.mark.parametrize("failed", [False, True])
@@ -1157,3 +1248,351 @@ def test_drain_stops_new_fetches_and_lets_the_running_job_finish():
         assert consumer.done()
 
     asyncio.run(scenario())
+
+
+# --- expired triggers, recreated streams, store outages ---------------------------------
+
+
+def _expiring(attempt=1, *, age, ttl):
+    msg = Msg(attempt=attempt)
+    msg.metadata.timestamp = datetime.now(timezone.utc) - timedelta(seconds=age)
+    msg.headers["Nats-TTL"] = ttl
+    return msg
+
+
+@pytest.mark.parametrize(
+    "age,ttl",
+    [
+        (10, "5s"),  # already gone
+        (0, "3s"),  # gone before its 5 s backoff ends
+        (0, "2"),  # TTLs in plain seconds too
+    ],
+)
+def test_a_trigger_expiring_before_its_retry_fails_the_run(age, ttl):
+    docs = Documents()
+
+    async def handler(ctx):
+        raise RuntimeError("upstream 503")
+
+    msg = _expiring(age=age, ttl=ttl)
+    _run(
+        _host(docs, backoff_base_seconds=5),
+        JobDescriptor("ingest", max_attempts=3),
+        handler,
+        msg,
+    )
+
+    run = docs.run("ingest:7")
+    assert run["status"] == "FAILED" and run["finished_at"]
+    assert run["error"].startswith("Trigger expired before it could be retried")
+    assert "upstream 503" in run["error"]
+    assert msg.calls == [("term",)]
+
+
+def test_a_trigger_alive_after_its_backoff_is_retried_with_a_retry_time():
+    docs = Documents()
+
+    async def handler(ctx):
+        raise RuntimeError("upstream 503")
+
+    before = datetime.now(timezone.utc)
+    msg = _expiring(age=0, ttl="1h")
+    _run(
+        _host(docs, backoff_base_seconds=5),
+        JobDescriptor("ingest", max_attempts=3),
+        handler,
+        msg,
+    )
+
+    run = docs.run("ingest:7")
+    assert run["status"] == "RETRYING" and msg.calls == [("nak", 5)]
+    retry_at = datetime.fromisoformat(run["retry_at"])
+    assert before + timedelta(seconds=5) <= retry_at
+    assert run["sequence"] == 7
+
+
+class _Stream:
+    """The jobs stream as the reaper sees it: trigger messages by sequence."""
+
+    def __init__(self, messages):
+        self.messages = messages
+
+    async def get_msg(self, stream_name, seq=None, **kwargs):
+        from nats.js.errors import NotFoundError
+
+        if seq not in self.messages:
+            raise NotFoundError(code=404, err_code=10037)
+        return self.messages[seq]
+
+
+def _stream_transport(*sequences, job="sync"):
+    trigger = job_subjects(PROJECT, MODULE, job).trigger
+    stream = _Stream({n: SimpleNamespace(subject=trigger) for n in sequences})
+
+    class _NC:
+        max_payload = 1024 * 1024
+
+        def jetstream(self):
+            return stream
+
+    class _T:
+        async def connect(self):
+            return _NC()
+
+    return _T(), stream
+
+
+def _seed_retrying(docs, n, retry_at, *, with_retry_at=True):
+    run_id = f"sync:{n}"
+    docs.data[(runs_collection(PROJECT), run_id)] = Document(
+        id=run_id,
+        data={
+            "job": "sync",
+            "run_id": run_id,
+            "status": "RETRYING",
+            "attempt": 1,
+            "max_attempts": 3,
+            "started_at": (retry_at - timedelta(seconds=30)).isoformat(),
+            "heartbeat_at": (retry_at - timedelta(seconds=5)).isoformat(),
+            **({"retry_at": retry_at.isoformat()} if with_retry_at else {}),
+        },
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+        version=1,
+    )
+
+
+def test_runs_whose_trigger_expired_before_redelivery_are_failed():
+    docs = QueryDocuments()
+    now = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+    stale, fresh = now - timedelta(minutes=30), now - timedelta(minutes=1)
+    # RETRYING past its retry time: redelivered while its trigger exists.
+    _seed_retrying(docs, 1, now - timedelta(minutes=2))  # trigger gone: failed
+    _seed_retrying(docs, 2, now - timedelta(minutes=2))  # trigger still there
+    _seed_retrying(docs, 3, now + timedelta(minutes=2))  # not due yet
+    # Recorded before retry_at: its last heartbeat stands in.
+    _seed_retrying(docs, 5, now - timedelta(minutes=2), with_retry_at=False)
+    # RUNNING with attempts left: its host stopped, nothing redelivers it.
+    _seed_running(docs, 4, stale, max_attempts=3)  # trigger gone: failed
+    _seed_running(docs, 6, fresh, max_attempts=3)  # alive
+    _seed_running(docs, 7, stale, max_attempts=3)  # trigger there: redelivered
+    _seed_running(docs, 8, stale, max_attempts=3)  # running on this host
+    transport, stream = _stream_transport(2, 7)
+    # A recreated stream reused sequence 9 for another job: not this trigger.
+    stream.messages[9] = SimpleNamespace(
+        subject=job_subjects(PROJECT, MODULE, "other").trigger
+    )
+    _seed_retrying(docs, 9, now - timedelta(minutes=2))
+    host = JobHost(
+        transport,
+        docs,
+        MODULE,
+        PROJECT,
+        {"sync": (JobDescriptor("sync", max_attempts=3), None)},
+        lost_after_seconds=300,
+    )
+    host._running["sync:8"] = object()
+
+    assert asyncio.run(host.reap_lost_runs(now=now)) == 4
+
+    for gone in ("sync:1", "sync:5", "sync:9"):
+        run = docs.run(gone)
+        assert run["status"] == "FAILED" and run["finished_at"] == now.isoformat()
+        assert run["error"] == "Trigger expired before it could be retried"
+    run = docs.run("sync:4")
+    assert run["status"] == "FAILED"
+    assert "no heartbeat since" in run["error"] and "expired" in run["error"]
+    assert docs.run("sync:2")["status"] == "RETRYING"
+    assert docs.run("sync:3")["status"] == "RETRYING"
+    for alive in ("sync:6", "sync:7", "sync:8"):
+        assert docs.run(alive)["status"] == "RUNNING"
+
+
+@pytest.mark.parametrize("status", ["SUCCEEDED", "FAILED", "RUNNING"])
+def test_a_recreated_stream_reusing_a_sequence_starts_a_new_run(status):
+    docs = Documents()
+    old = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    _seed(docs, "ingest", 7, status, old)
+    docs.data[(runs_collection(PROJECT), "ingest:7")].data.update(
+        fired_at=old.isoformat(), result={"old": True}, attempt=1, skip_reason="x"
+    )
+    executions = []
+
+    async def handler(ctx):
+        executions.append(ctx.attempt)
+        return {"new": True}
+
+    msg = Msg(payload={"n": 2})
+    msg.metadata.timestamp = datetime.now(timezone.utc)
+    _run(_host(docs), JobDescriptor("ingest"), handler, msg)
+
+    run = docs.run("ingest:7")
+    assert executions == [1]
+    assert run["status"] == "SUCCEEDED" and run["result"] == {"new": True}
+    assert run["fired_at"] == msg.metadata.timestamp.isoformat()
+    assert run["payload"] == {"n": 2} and "skip_reason" not in run
+    assert msg.calls == [("ack",)]
+
+
+def test_a_redelivered_trigger_matching_its_finished_run_is_retired():
+    docs = Documents()
+    fired = datetime(2026, 10, 2, 6, 0, tzinfo=timezone.utc)
+    _seed(docs, "ingest", 7, "SUCCEEDED", fired)
+    docs.data[(runs_collection(PROJECT), "ingest:7")].data["fired_at"] = (
+        fired.isoformat()
+    )
+
+    async def handler(ctx):
+        pytest.fail("A finished run must not execute again")
+
+    msg = Msg(attempt=2)
+    msg.metadata.timestamp = fired
+    _run(_host(docs), JobDescriptor("ingest"), handler, msg)
+
+    assert msg.calls == [("ack",)]
+
+
+@pytest.mark.parametrize("failing", ["get", "put"])
+def test_a_store_outage_before_the_run_defers_the_delivery_without_an_attempt(
+    failing, caplog
+):
+    class Outage(Documents):
+        down = True
+
+        async def get(self, collection, id):
+            if self.down and failing == "get":
+                raise RuntimeError("store unavailable")
+            return await super().get(collection, id)
+
+        async def put(self, collection, id, data, **kwargs):
+            if self.down and failing == "put":
+                raise RuntimeError("store unavailable")
+            return await super().put(collection, id, data, **kwargs)
+
+    docs = Outage()
+    attempts = []
+
+    async def handler(ctx):
+        attempts.append(ctx.attempt)
+        return "done"
+
+    host = _host(docs, backoff_base_seconds=5)
+    descriptor = JobDescriptor("ingest")  # one attempt
+    first, second = Msg(attempt=1), Msg(attempt=2)
+    _run(host, descriptor, handler, first)
+    _run(host, descriptor, handler, second)  # still down
+    docs.down = False
+    third = Msg(attempt=3)
+    _run(host, descriptor, handler, third)
+
+    assert first.calls == [("nak", 5)] and second.calls == [("nak", 10)]
+    assert attempts == [1]
+    run = docs.run("ingest:7")
+    assert run["status"] == "SUCCEEDED" and run["attempt"] == 1
+    assert third.calls == [("ack",)]
+    errors = [r for r in caplog.records if r.levelname == "ERROR"]
+    assert len(errors) == 2 and "ingest:7" in errors[0].getMessage()
+
+
+def test_a_delivery_after_the_last_attempt_is_terminated_not_run():
+    docs = Documents()
+    docs.data[(runs_collection(PROJECT), "ingest:7")] = Document(
+        id="ingest:7",
+        data={"job": "ingest", "status": "RUNNING", "attempt": 2, "max_attempts": 2},
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+        version=1,
+    )
+
+    async def handler(ctx):
+        pytest.fail("Its attempts are used up")
+
+    msg = Msg(attempt=5)
+    _run(_host(docs), JobDescriptor("ingest", max_attempts=2), handler, msg)
+
+    assert msg.calls == [("term",)]
+    assert docs.run("ingest:7")["status"] == "RUNNING"  # the reaper's to fail
+
+
+def test_consumers_leave_attempts_to_the_host():
+    added = []
+
+    class _JS:
+        async def stream_info(self, name):
+            return SimpleNamespace(
+                config=SimpleNamespace(allow_msg_schedules=True, allow_msg_ttl=True)
+            )
+
+        async def add_consumer(self, stream, config):
+            added.append(config)
+
+        async def get_last_msg(self, stream, subject):
+            from nats.js.errors import NotFoundError
+
+            raise NotFoundError(code=404, err_code=10037)
+
+        async def publish(self, *args, **kwargs):
+            return SimpleNamespace(seq=1)
+
+        async def purge_stream(self, name, subject=None):
+            return None
+
+        async def pull_subscribe_bind(self, durable, stream):
+            return SimpleNamespace()
+
+    class _NC:
+        def jetstream(self):
+            return _JS()
+
+        async def subscribe(self, subject, cb=None, queue=""):
+            return SimpleNamespace(unsubscribe=lambda: asyncio.sleep(0))
+
+    class _T:
+        async def connect(self):
+            return _NC()
+
+    async def handler(ctx):
+        return None
+
+    async def scenario():
+        host = JobHost(
+            _T(),
+            Documents(),
+            MODULE,
+            PROJECT,
+            {"ingest": (JobDescriptor("ingest", max_attempts=3), handler)},
+            retention=None,
+        )
+        host._consume = lambda *args: asyncio.sleep(0)
+        host._upkeep = lambda: asyncio.sleep(0)
+        await host.start()
+        await host.close()
+
+    asyncio.run(scenario())
+
+    # Deliveries deferred during a store outage must not use up the attempts.
+    assert added[0].max_deliver == -1
+
+
+def test_a_long_completion_outage_is_logged_as_an_error(caplog):
+    class CompletionOutage(Documents):
+        failures = 8
+
+        async def put(self, collection, id, data, **kwargs):
+            if data["status"] == "SUCCEEDED" and self.failures:
+                self.failures -= 1
+                raise RuntimeError("store unavailable")
+            return await super().put(collection, id, data, **kwargs)
+
+    async def handler(ctx):
+        return 42
+
+    msg = Msg()
+    host = _host(
+        CompletionOutage(), heartbeat_seconds=0.01, completion_error_after_seconds=0.03
+    )
+    _run(host, JobDescriptor("ingest"), handler, msg)
+
+    levels = [r.levelname for r in caplog.records if "ingest:7" in r.getMessage()]
+    assert levels[0] == "WARNING" and levels[-1] == "ERROR"
+    assert msg.calls[-1] == ("ack",)
