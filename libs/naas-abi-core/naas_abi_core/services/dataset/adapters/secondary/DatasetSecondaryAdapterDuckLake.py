@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import IO, Any, TypeVar
 
 from naas_abi_core.services.dataset.DatasetValues import (
     is_finite,
@@ -131,7 +131,8 @@ class _CatalogLock:
     write, DuckDB's SQLite layer could keep a lock for good, and every later
     read in the process failed with "database is locked". Reentrant: a thread
     may nest reads, nest writes, and read inside its own write; asking to
-    write while reading (an open query_stream) raises instead of deadlocking.
+    write while reading raises instead of deadlocking. query_stream holds the
+    lock only while it spools, never while its caller reads.
     PostgreSQL catalogs handle concurrency themselves (``_NoCatalogLock``).
     """
 
@@ -177,7 +178,7 @@ class _CatalogLock:
                 if getattr(self._local, "depth", 0):
                     raise RuntimeError(
                         "Cannot write to a SQLite DuckLake catalog while this "
-                        "thread is reading it (finish the query_stream first)"
+                        "thread is reading it"
                     )
                 self._waiting_writers += 1
                 try:
@@ -624,38 +625,60 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         namespace: str = "default",
         snapshot_id: int | None = None,
     ) -> Iterator[RowStream]:
-        """Fetch rows ``FETCH_ROWS`` at a time on the stream's own cursor
-        (docs/adr/20261003_nats-streamed-results.md). Like ``query``, this
-        never replays the SQL. On a SQLite catalog the stream reads under the
-        catalog's shared lock until the block exits."""
-        with self._catalog_lock.shared():
-            if snapshot_id is None:
-                connection = self._get_read_connection()
-            else:
-                if not self._snapshot_exists(snapshot_id):
-                    raise DatasetSnapshotNotFoundError(snapshot_id)
-                connection = self._get_snapshot_connection(snapshot_id)
-            cursor = connection.cursor()
-            try:
-                try:
-                    cursor.execute(f"USE {self._qualified_schema(namespace)}")
-                    result = cursor.execute(sql)
-                except Exception as exc:
-                    self._retire_if_stale(exc, connection)
-                    raise
-                columns, json_columns = self._describe(result)
-                yield RowStream(
-                    columns=columns, rows=self._fetched(result, columns, json_columns)
-                )
-            finally:
-                cursor.close()
+        """Run the query, spool its rows to an anonymous temporary file, then
+        read them back as the caller iterates
+        (docs/adr/20261003_nats-streamed-results.md). Only the spool holds the
+        cursor and, on a SQLite catalog, the shared lock, so a slow or
+        abandoned reader never holds up writes, nor the reads queued behind
+        them. Like ``query``, this never replays the SQL. The file goes when
+        the block exits."""
+        with tempfile.TemporaryFile(prefix="abi-dataset-query-") as spool:
+            with self._catalog_lock.shared():
+                columns = self._spool_query(spool, sql, namespace, snapshot_id)
+            spool.seek(0)
+            yield RowStream(columns=columns, rows=self._spooled(spool, columns))
 
-    def _fetched(
-        self, result: Any, columns: builtins.list[str], json_columns: set[int]
+    def _spool_query(
+        self, spool: IO[bytes], sql: str, namespace: str, snapshot_id: int | None
+    ) -> builtins.list[str]:
+        """Write the rows to ``spool`` ``FETCH_ROWS`` at a time, one line per
+        batch: a JSON array holding each row's values as ``query`` returns
+        them. Return the columns."""
+        if snapshot_id is None:
+            connection = self._get_read_connection()
+        else:
+            if not self._snapshot_exists(snapshot_id):
+                raise DatasetSnapshotNotFoundError(snapshot_id)
+            connection = self._get_snapshot_connection(snapshot_id)
+        cursor = connection.cursor()
+        try:
+            cursor.execute(f"USE {self._qualified_schema(namespace)}")
+            result = cursor.execute(sql)
+            columns, json_columns = self._describe(result)
+            while batch := result.fetchmany(FETCH_ROWS):
+                values = [
+                    [
+                        self._cell(value, index in json_columns)
+                        for index, value in enumerate(raw)
+                    ]
+                    for raw in batch
+                ]
+                spool.write(json.dumps(values, separators=(",", ":")).encode() + b"\n")
+            return columns
+        except Exception as exc:
+            self._retire_if_stale(exc, connection)
+            raise
+        finally:
+            cursor.close()
+
+    @staticmethod
+    def _spooled(
+        spool: IO[bytes], columns: builtins.list[str]
     ) -> Iterator[dict[str, Any]]:
-        while batch := result.fetchmany(FETCH_ROWS):
-            for raw in batch:
-                yield self._row(raw, columns, json_columns)
+        # dict(zip(...)) pairs columns as _row does, duplicate names included.
+        for line in spool:
+            for values in json.loads(line):
+                yield dict(zip(columns, values))
 
     def list_snapshots(self) -> builtins.list[DatasetSnapshotInfo]:
         def read(con: Any) -> builtins.list[DatasetSnapshotInfo]:

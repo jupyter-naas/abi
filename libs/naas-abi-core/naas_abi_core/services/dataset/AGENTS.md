@@ -208,13 +208,28 @@ uv run pytest naas_abi_core/services/dataset naas_abi_core/engine/engine_configu
 
 `query_stream` yields a `RowStream` (`columns`, lazy `rows`) read once inside
 the `with` (docs/adr/20261003_nats-streamed-results.md). The port's default
-reads `query`; DuckLake fetches `FETCH_ROWS` at a time on the stream's own
-cursor; over NATS the primary hosts `transfer/v1` sessions on
-`abi.svc.dataset.v1.transfer` (operation `query`, frames in
+reads `query`; DuckLake spools the result first (below); over NATS the
+primary hosts `transfer/v1` sessions on `abi.svc.dataset.v1.transfer`
+(operation `query`, frames in
 `adapters/dataset_stream_codec.py`: a `QueryResult` with the columns, then
 `QueryResult`s with rows only), each produced on its own thread, and the core
 client and SDK facade fetch frames as they iterate (unary `query` against an
 older engine). Frames carry JSON rows, like the unary reply (below).
+
+DuckLake never holds the catalog while the caller reads. Under the SQLite
+catalog's shared lock it runs the query, fetches `FETCH_ROWS` at a time and
+writes each batch (the values `query` returns) as one JSON line to an anonymous
+temporary file in the system temp directory. It then releases the cursor and
+the lock and reads the file back lazily. Leaving the block, early or on an
+error, closes and deletes the file. Holding the lock for the whole stream let
+one slow or abandoned reader (an export whose browser went away, whose transfer
+only idles out after 60 s) block every write, then every read queued behind
+that writer. Memory holds one batch: 2M rows (about 420 MB) streamed with RSS
+up 10 MiB, where `query` took 630 MiB. Disk holds the whole result, the lock is
+held while it is written (as for `query`), and the first row arrives only once
+the query has finished. PostgreSQL catalogs have no process lock and were not
+blocked (writes, flush and compaction went through an open stream), but take
+the same path, which also ends the stream's cursor and catalog transaction early.
 
 ## Streamed writes
 
