@@ -52,7 +52,7 @@ Views of a running deployment for platform super admins: kernel services (config
   - `next_every`: the last scheduled fire plus the interval, rolled forward past now.
   - `describe`: triggers in plain English.
 - Adapters:
-  - `job_catalogs.py`: engine owners from `factory.job_owners` and discovery descriptors. `factory.job_owners` is `Engine.job_owners` through the platform proxy (`EngineProxy.job_owners`, unlocked only) plus `naas_abi`: engine modules and kernel owners (dataset maintenance, agent memory, and the jobs service adapters offer, such as the event archive).
+  - `job_catalogs.py`: engine owners from `factory.job_owners` and discovery descriptors. `factory.job_owners` is `Engine.job_owners` through the platform proxy (`EngineProxy.job_owners`, unlocked only) plus `naas_abi`: engine modules and kernel owners (dataset maintenance, agent memory, and the jobs service adapters offer, such as the activity log copy and the event archive).
   - `document_job_runs.py`: run records in each module's document namespace, collection `runs_collection(project)`, through `document_admin`.
   - `nats_job_control.py`: SDK `JobProxy` / `JobRun`.
   - `nats_job_queue.py`: JetStream consumer info.
