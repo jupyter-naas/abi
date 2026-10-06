@@ -8,12 +8,21 @@ const UPSTREAM =
 
 const APP_HTML_TOKEN_COOKIE = 'abi_app_html_token';
 
+/** Request headers the upstream needs to read the body and choose a response format. */
+const FORWARDED_REQUEST_HEADERS = ['content-type', 'accept'];
+
 /**
  * Forward caller credentials only — never forge ``ABI_API_KEY``.
  * Accepts Authorization, ``?token=``, or the scoped app-html cookie.
+ * The content type is forwarded too: without it a multipart body loses its
+ * boundary and the upstream cannot read any form field.
  */
 function upstreamHeaders(request: NextRequest): HeadersInit {
   const headers: Record<string, string> = {};
+  for (const name of FORWARDED_REQUEST_HEADERS) {
+    const value = request.headers.get(name);
+    if (value) headers[name] = value;
+  }
   const incoming = request.headers.get('authorization');
   if (incoming) {
     headers.Authorization = incoming;
