@@ -84,6 +84,8 @@ jobs:
           uv run --project libs/naas-abi-core --no-sync pytest --import-mode=importlib -q \
             libs/naas-abi-core/naas_abi_core/engine/ownership \
             libs/naas-abi-core/naas_abi_core/engine/Engine_ownership_test.py \
+            libs/naas-abi-core/naas_abi_core/engine/Engine_handover_integration_test.py \
+            libs/naas-abi-core/naas_abi_core/engine/nats_sessions_test.py \
             libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_NATSEngine_test.py \
             libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_LocalStorage_test.py \
             libs/naas-abi-core/naas_abi_core/engine/engine_loaders/EngineOwnershipLoader_test.py \

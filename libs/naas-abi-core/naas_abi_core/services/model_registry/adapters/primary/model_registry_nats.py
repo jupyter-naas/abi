@@ -16,7 +16,12 @@ from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
-from naas_abi_core.engine.nats_transfer import TransferHost, stream_thread
+from naas_abi_core.engine.nats_sessions import SessionHost, session_owner, until
+from naas_abi_core.engine.nats_transfer import (
+    TransferHost,
+    drain_shared,
+    stream_thread,
+)
 from naas_abi_core.models.Model import ChatModel, EmbeddingModel
 from naas_abi_core.services.model_registry.ModelRegistryPort import (
     DefaultModelNotResolvedError,
@@ -92,7 +97,7 @@ class _Stream:
     touched: float = 0
 
 
-class ModelRegistryNATS:
+class ModelRegistryNATS(SessionHost):
     def __init__(
         self,
         registry: IModelRegistry,
@@ -101,7 +106,10 @@ class ModelRegistryNATS:
         stream_ttl: float = 30,
         deadline: float | None = None,
         transfer_options: dict | None = None,
+        owner: str | None = None,
     ):
+        """``owner``: the id in stream and transfer subjects; by default the
+        engine's (``nats_sessions.owned_by``), else a new one."""
         if any(
             not math.isfinite(v) or v <= 0
             for v in (stream_ttl, deadline)
@@ -109,9 +117,11 @@ class ModelRegistryNATS:
         ):
             raise ValueError("Model deadlines must be finite and positive")
         self.registry, self.secret = registry, secret
-        self.owner = uuid4().hex
+        self.owner = session_owner(owner)
         self.stream_ttl, self.deadline = stream_ttl, deadline
         self.subscriptions: list[Any] = []
+        # On the queue group: independent calls and opening a stream.
+        self.shared_subscriptions: list[Any] = []
         self.tasks: set[asyncio.Task] = set()
         self.streams: dict[str, _Stream] = {}
         self.max_payload = 512 * 1024
@@ -133,6 +143,7 @@ class ModelRegistryNATS:
             operations=("chat", "stream", "embed"),
             total_seconds=deadline,
             error_mapper=self._transfer_error,
+            owner=self.owner,
             **options,
         )
         self._reaper: asyncio.Task | None = None
@@ -141,15 +152,16 @@ class ModelRegistryNATS:
         self.max_payload = min(nc.max_payload, self.max_payload)
         try:
             for operation in OPERATIONS:
+                shared = operation not in {"stream_next", "stream_close"}
                 self.subscriptions.append(
                     await nc.subscribe(
                         f"abi.svc.model_registry.v1.{operation}",
-                        queue="abi.model_registry.owners"
-                        if operation not in {"stream_next", "stream_close"}
-                        else "",
+                        queue="abi.model_registry.owners" if shared else "",
                         cb=partial(self._dispatch, operation),
                     )
                 )
+                if shared:
+                    self.shared_subscriptions.append(self.subscriptions[-1])
             for operation in ("stream_next", "stream_close"):
                 self.subscriptions.append(
                     await nc.subscribe(
@@ -164,11 +176,22 @@ class ModelRegistryNATS:
             await self.stop()
             raise
 
+    async def stop_accepting(self) -> None:
+        """Drain the queue group; this owner's streams and transfers go on."""
+        await drain_shared(self.subscriptions, self.shared_subscriptions)
+        await self.transfer.stop_accepting()
+
+    async def sessions_finished(self) -> None:
+        """Calls already received and open streams end, then transfers."""
+        await until(lambda: not self.tasks and not self.streams)
+        await self.transfer.sessions_finished()
+
     async def stop(self) -> None:
         await self.transfer.stop()
         for sub in self.subscriptions:
             await sub.unsubscribe()
         self.subscriptions.clear()
+        self.shared_subscriptions.clear()
         if self._reaper:
             self._reaper.cancel()
             await asyncio.gather(self._reaper, return_exceptions=True)

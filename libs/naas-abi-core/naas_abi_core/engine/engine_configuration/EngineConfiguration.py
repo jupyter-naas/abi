@@ -391,6 +391,11 @@ class NATSEngineConfiguration(BaseModel):
 
     ``ABI_ENGINE_ROLE`` and ``ABI_ROLLOUT_ID`` override ``role`` and
     ``rollout_id`` (``resolved``).
+
+    At shutdown the serving engine stops taking requests, then lets the
+    transfers, model streams and overflow replies it already serves finish for
+    up to ``drain_seconds`` (default: a transfer's idle expiry) before closing
+    them. Keep the orchestrator's grace period above it.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -401,6 +406,7 @@ class NATSEngineConfiguration(BaseModel):
     )
     lease_seconds: float = Field(default=20, ge=1, le=300, allow_inf_nan=False)
     standby_timeout_seconds: float = Field(default=900, gt=0, allow_inf_nan=False)
+    drain_seconds: float = Field(default=60, ge=0, allow_inf_nan=False)
 
     def resolved(self, environ: Mapping[str, str]) -> "NATSEngineConfiguration":
         """These settings with ``ABI_ENGINE_ROLE`` / ``ABI_ROLLOUT_ID`` applied."""

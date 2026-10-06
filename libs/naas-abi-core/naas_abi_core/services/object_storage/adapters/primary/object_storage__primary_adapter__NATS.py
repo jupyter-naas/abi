@@ -38,7 +38,11 @@ from naas_abi_core.engine.nats_rpc import (
     respond_protobuf,
 )
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
-from naas_abi_core.engine.nats_transfer import TransferHost, stream_thread
+from naas_abi_core.engine.nats_transfer import (
+    ServiceWithTransfers,
+    TransferHost,
+    stream_thread,
+)
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.object_storage.v1 import object_storage_pb2
 from naas_abi_core.services.object_storage.adapters.object_storage_nats_contract import (
@@ -95,7 +99,7 @@ def _metadata_to_pb(metadata: ObjectMetaData) -> object_storage_pb2.ObjectMetaDa
     return pb
 
 
-class ObjectStoragePrimaryAdapterNATS:
+class ObjectStoragePrimaryAdapterNATS(ServiceWithTransfers):
     """Serves object storage over NATS RPC (request/reply).
 
     Wraps a real adapter *or* the domain service and registers one NATS
@@ -185,17 +189,6 @@ class ObjectStoragePrimaryAdapterNATS:
         )
         self._service = service
         await self._transfer.start(nc)
-
-    async def stop(self) -> None:
-        """Deregister the service, draining its subscriptions."""
-        await self._transfer.stop()
-        service = self._service
-        self._service = None
-        try:
-            if service is not None:
-                await service.stop()
-        finally:
-            self._dispatch.close()
 
     @staticmethod
     def _transfer_error(exc):
