@@ -104,6 +104,8 @@ Test run at `a582a19f6`: 101 job tests passed (SDK and engine, real broker inclu
   - **Problem:** `register` (`libs/naas-abi-core/naas_abi_core/services/discovery/discovery_service.py:183`) returns `DESCRIPTOR_CONFLICT` when a new replica's agents, jobs or dependencies differ from a live replica with the same `contract_major`. With `maxUnavailable=0`, the v2 pod crash-loops until v1 is stopped by hand.
   - **Fix:** push `d8dbc6de8` (rollout generations, drain by module id). Confirm it has a test where v2 adds a job while v1 is live and registration succeeds.
   - [x] **Lost trigger for a new job after cutover.** A rollout process now creates its missing job consumers before it can serve (`JobHost.prepare`: no fetch, no schedule, existing consumers untouched), so a trigger sent before its host starts runs once (broker test).
+  - [x] **Both generations STAGED.** A module keeps the generation that served at the last write until a newer rollout completes (else the oldest initialized one serves), and a completing rollout drains older ones even when incomplete.
+  - [x] **False dependency cycle across generations.** Cycles are checked per generation (own cohort's edges, then the serving or one other live generation for the rest) and only through the registering module; a cycle within a generation is still refused.
 
 ## Should fix
 
