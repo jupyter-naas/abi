@@ -34,6 +34,14 @@ registration fails with DESCRIPTOR_CONFLICT. A rollout may change them for the
 generation it replaces: it stays STAGED, outside READY lookups and READY-gated
 authorizations, until its cohort cuts over.
 
+A module always keeps a serving generation while it has an initialized
+instance: its latest complete rollout; else the generation that served at the
+last write (stored statuses), even if its rollout became incomplete; else the
+oldest. A completing rollout drains older rollouts of its modules, complete or
+not. The cycle check reads edges per generation (own cohort, then the serving
+or one other live generation for the rest) and refuses only cycles through the
+registering module. See the ADR, "Serving generation and dependency cycles".
+
 ## Agent authorization
 `authorize_agent` with `new_invocation` false (status, event and cancel polls)
 is answered from the registry as this replica last read or wrote it, when that

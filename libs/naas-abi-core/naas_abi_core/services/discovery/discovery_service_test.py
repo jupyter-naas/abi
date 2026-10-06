@@ -519,6 +519,143 @@ def test_first_rollout_becomes_ready_and_a_missing_dependency_blocks_cutover():
     asyncio.run(scenario())
 
 
+async def _renew(service, req):
+    return await service.renew(
+        pb.RenewRequest(
+            instance_id=req.instance_id, lease_token=req.lease_token, initialized=True
+        ),
+        "owner",
+    )
+
+
+def test_the_serving_generation_keeps_serving_when_its_rollout_breaks():
+    async def scenario():
+        now = [0.0]
+        service = DiscoveryService(
+            MemoryRegistry(), lease_seconds=20, clock=lambda: now[0]
+        )
+        cohort = ("a", "b")
+        old_a = registration("a", "a-old", rollout="release-1", cohort=cohort)
+        await _up(service, old_a)
+        await _up(
+            service, registration("b", "b-old", rollout="release-1", cohort=cohort)
+        )
+        now[0] = 10
+        new_a = registration("a", "a-new", rollout="release-2", cohort=cohort)
+        await _up(service, new_a)
+        assert await _statuses(service, "a") == {"a-old": "READY", "a-new": "STAGED"}
+        now[0] = 15
+        await _renew(service, old_a)
+        now[0] = 25  # b-old's lease ran out: release-1 is no longer complete
+        await _renew(service, new_a)
+        assert await _statuses(service, "a") == {"a-old": "READY", "a-new": "STAGED"}
+        # A replacement replica of the serving generation is not staged either.
+        await _up(
+            service, registration("a", "a-old-2", rollout="release-1", cohort=cohort)
+        )
+        assert (await _statuses(service, "a"))["a-old-2"] == "READY"
+        # release-2 completes, takes over and drains the incomplete release-1.
+        await _up(
+            service, registration("b", "b-new", rollout="release-2", cohort=cohort)
+        )
+        assert await _statuses(service, "a") == {
+            "a-old": "DRAINING",
+            "a-old-2": "DRAINING",
+            "a-new": "READY",
+        }
+
+    asyncio.run(scenario())
+
+
+def test_an_incomplete_generation_serves_until_none_of_its_instances_is_left():
+    async def scenario():
+        now = [0.0]
+        service = DiscoveryService(
+            MemoryRegistry(), lease_seconds=20, clock=lambda: now[0]
+        )
+        cohort = ("a", "b", "c")  # b never comes up: no rollout completes
+        other = registration("c", "c-1", rollout="release-1", cohort=cohort)
+        await _up(service, other)
+        await _up(service, registration("a", "a-1", rollout="release-1", cohort=cohort))
+        now[0] = 5
+        second = registration("a", "a-2", rollout="release-2", cohort=cohort)
+        await _up(service, second)
+        # The oldest generation serves first, and keeps serving.
+        assert await _statuses(service, "a") == {"a-1": "READY", "a-2": "STAGED"}
+        now[0] = 15
+        await _renew(service, other)
+        await _renew(service, second)
+        now[0] = 22  # a-1's lease ran out: release-2 is the only one left for a
+        await _renew(service, second)
+        assert await _statuses(service, "a") == {"a-2": "READY"}
+        # A late replica of the older release-1 does not take a-2's place back.
+        await _up(
+            service, registration("a", "a-1b", rollout="release-1", cohort=cohort)
+        )
+        assert await _statuses(service, "a") == {"a-2": "READY", "a-1b": "STAGED"}
+
+    asyncio.run(scenario())
+
+
+async def _flip_a_dependency(order):
+    now = [0.0]
+    service = DiscoveryService(MemoryRegistry(), clock=lambda: now[0])
+    await _up(service, registration("a", "a-old", ("b",)))
+    await _up(service, registration("b", "b-old"))
+    now[0] = 10
+    cohort = ("a", "b")
+    # release-2 reverses the edge: b depends on a, and a no longer on b.
+    new = {
+        "a": registration("a", "a-new", rollout="release-2", cohort=cohort),
+        "b": registration("b", "b-new", ("a",), rollout="release-2", cohort=cohort),
+    }
+    for name in order:
+        await _up(service, new[name])
+    return await _statuses(service, "a"), await _statuses(service, "b")
+
+
+def test_a_rollout_may_reverse_a_dependency_between_the_modules_it_replaces():
+    for order in (("b", "a"), ("a", "b")):
+        assert asyncio.run(_flip_a_dependency(order)) == (
+            {"a-old": "DRAINING", "a-new": "READY"},
+            {"b-old": "DRAINING", "b-new": "READY"},
+        )
+
+
+def test_cycles_within_a_generation_or_with_one_that_can_serve_beside_it_are_refused():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry(), clock=lambda: 0.0)
+        await _up(service, registration("a", "a-old"))
+        await _up(service, registration("c", "c-old", ("a",)))
+        cohort = ("a", "b")
+        await service.register(
+            registration("a", "a-2", ("b",), rollout="release-2", cohort=cohort),
+            "owner",
+        )
+        # Within one generation.
+        with pytest.raises(DiscoveryError, match="DEPENDENCY_CYCLE"):
+            await service.register(
+                registration("b", "b-2", ("a",), rollout="release-2", cohort=cohort),
+                "owner",
+            )
+        # With the generation serving c, which release-3 does not replace.
+        with pytest.raises(DiscoveryError, match="DEPENDENCY_CYCLE"):
+            await service.register(
+                registration("a", "a-3", ("c",), rollout="release-3"), "owner"
+            )
+        # With release-2's staged a: both rollouts could serve side by side.
+        with pytest.raises(DiscoveryError, match="DEPENDENCY_CYCLE"):
+            await service.register(
+                registration("b", "b-4", ("a",), rollout="release-4"), "owner"
+            )
+        # Unrelated modules and acyclic edges still register.
+        await service.register(
+            registration("d", "d-1", ("a", "c"), rollout="release-5"), "owner"
+        )
+
+    asyncio.run(scenario())
+
+
 class CountingRegistry(MemoryRegistry):
     """Counts full snapshot reads (each one up to 512 KiB from JetStream)."""
 

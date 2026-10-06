@@ -104,6 +104,38 @@ the cutover and the host's start (up to one heartbeat) used to be skipped. It
 now waits for the host. Existing consumers, schedules and event bridges stay
 with the serving generation until the host starts.
 
+## Serving generation and dependency cycles (2026-10-06)
+
+A module id keeps a serving generation while any of its instances could
+serve. The latest complete rollout serves, as before. Without one, the
+generation that served at the last registry write keeps serving: statuses are
+stored in the snapshot. So when the serving rollout becomes incomplete (every
+instance of another cohort module expired, say) while a newer one is staged,
+its remaining instances and new replicas stay out of `STAGED`. Before, both
+generations were `STAGED` and the module had no `READY` instance. When none of
+its instances is left, the oldest generation with an initialized instance
+serves. Instances without a rollout id always serve. Keeping the generation
+that served, rather than the oldest, stops a restarted replica of an older
+incomplete rollout from taking the module back. A process staged again after
+serving keeps its job host.
+
+A rollout that completes now drains the older rollouts of its module ids,
+complete or not. Only a newer incomplete rollout, a deploy in progress, is left
+in place.
+
+The dependency-cycle check reads edges per generation. It used to merge every
+live record into one graph keyed by module and contract major, the last record
+winning, so a rollout that reversed a dependency between modules it replaces
+(v1 `a -> b`, v2 `b -> a`) could get `DEPENDENCY_CYCLE` against v1 and stall.
+The registering generation is now checked with its own edges for its cohort's
+module ids and the serving generation's for the others. It is then checked once
+per other live generation, with that generation's edges in place of the
+serving ones for its module ids, since the two could serve side by side. Only a
+cycle through the registering module refuses it, and draining instances are
+ignored. A cycle within one generation, or with one that could serve beside
+it, is still refused. A cycle that needs two other generations that do not
+serve yet is not detected: its modules stay `DEGRADED`.
+
 ## Lease loss keeps the instance id (2026-10-06)
 
 This supersedes "expired leases get a fresh instance identity on recovery"
