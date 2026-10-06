@@ -509,8 +509,14 @@ class AgentHost:
             self.runs[key] = run
             run.task = asyncio.create_task(self._execute(name, req, run))
             run.task.add_done_callback(self._observe_task)
-            run.watchdog = asyncio.create_task(self._watch_progress(run))
-            run.watchdog.add_done_callback(self._observe_task)
+            streamed = req.mode == "stream" and hasattr(
+                self.handlers[name], "stream_invoke"
+            )
+            # An unstreamed run reports no progress until it returns: the
+            # caller's deadline bounds it. Without one, inactivity does.
+            if streamed or not req.deadline_seconds:
+                run.watchdog = asyncio.create_task(self._watch_progress(run))
+                run.watchdog.add_done_callback(self._observe_task)
             if req.deadline_seconds:
                 run.deadline = asyncio.create_task(
                     self._deadline(run, req.deadline_seconds)

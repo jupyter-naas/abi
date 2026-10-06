@@ -368,6 +368,28 @@ def test_no_deadline_agent_times_out_after_inactivity_and_releases_slot():
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("mode", ["invoke", "stream"])
+def test_a_deadline_governs_a_run_that_reports_no_progress(mode):
+    # Only invoke: a stream request runs it unstreamed too, with no events.
+    class Slow:
+        async def invoke(self, prompt, context):
+            await asyncio.sleep(0.1)
+            return "slow answer"
+
+    async def scenario():
+        docs = Documents()
+        owner = host(docs, Slow())
+        owner.idle_timeout_seconds = 0.02
+        req = request()  # a 10 s deadline, far above the run's 0.1 s
+        req.mode = mode
+        await owner._submit("agent", "key", "caller", req)
+        await asyncio.wait_for(owner.runs["key"].task, 1)
+        done = (await docs.get(owner.runs_collection, "key")).data
+        assert (done["status"], done["error_code"]) == ("SUCCEEDED", "")
+
+    asyncio.run(scenario())
+
+
 def test_active_stream_outlives_inactivity_budget():
     class StreamingHandler:
         async def stream_invoke(self, prompt, context):
