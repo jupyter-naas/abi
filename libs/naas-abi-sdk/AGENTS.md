@@ -102,10 +102,17 @@ allowed there): keep `jobs.py` importable without `nats` (stdlib and proto only)
 and keep the package `__init__` lazy for the same reason. Triggers are JetStream message schedules (`Cron`, `Every`,
 NATS >= 2.14) and core-NATS events (`OnEvent`, at-most-once bridge). Delivery is
 at-least-once: handlers must be idempotent. One durable pull consumer per job;
-`max_concurrency` is `max_ack_pending`, retries are `nak(delay)`.
+`max_concurrency` is `max_ack_pending`, retries are `nak(delay)`. Attempts are
+handler starts counted on the run record (`max_deliver` is unlimited): a delivery
+that can't read or record its run is nak'ed with backoff and uses none. Publish a
+schedule only when missing or changed, with `Nats-Expected-Last-Subject-Sequence`:
+replacing one restarts an `@every` interval. A run ID belongs to a delivery only
+when `fired_at` matches (a recreated stream reuses sequences). A retry its
+trigger's `Nats-TTL` would not outlive fails the run instead.
 Renew acknowledgement independently of log persistence; supervise renewal failure.
 Save completion before ack/term/nak and retire redelivered terminal records without
-executing handlers again. Event deduplication requires a source Nats-Msg-Id and
+executing handlers again. An unsaved completion keeps its delivery and its slot
+until the store recovers (on purpose; logged as an error after 60 s). Event deduplication requires a source Nats-Msg-Id and
 includes the target module/job; manual idempotency keys are target-scoped too.
 Run records live in the provider's document namespace (`job_runs_<hash(project)>`), written with CAS.
 Cancellation is cooperative (`ctx.cancelled`). tests/test_jobs_integration.py needs
@@ -115,7 +122,8 @@ code, `atrigger_job` for async; `JobsNotHosted` outside a running host), with an
 optional `idempotency_key` (`Nats-Msg-Id` dedup). `ctx.skip(reason)` records a
 run as SKIPPED; hosts prune finished runs (`JobRetention`: skipped after 1 h,
 others after 7 days, 1,000 per job) and fail runs lost with a crashed host
-(`reap_lost_runs`: RUNNING on the last attempt, no heartbeat for 5 min).
+(`reap_lost_runs`: RUNNING on the last attempt, no heartbeat for 5 min; or
+RUNNING/RETRYING with attempts left whose trigger left the stream).
 `OnEvent(filter=...)` drops events before a
 trigger is published; `event_filter.py` mirrors core's `EventFilter.matches`,
 change them together.

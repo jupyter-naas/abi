@@ -17,12 +17,14 @@ Test run at `a582a19f6`: 101 job tests passed (SDK and engine, real broker inclu
 
 ## Must fix before merge
 
-- [ ] **1. Restarting a host resets every `@every` timer.** *Reproduced.*
+- [x] **1. Restarting a host resets every `@every` timer.** *Reproduced.*
+  - **Done:** `_ensure_schedule` reads the schedule and publishes only when it is missing or its headers differ, expecting the sequence it read (conflicts re-read). Broker tests: restarts every 0.7 s keep an `Every("2s")` firing; replicas and restarts keep the sequence, a new interval replaces it.
   - **Problem:** `JobHost.reconcile_schedules` (`libs/naas-abi-sdk/naas_abi_sdk/job_host.py:295`) republishes each schedule message on every `start()`. NATS replaces the schedule and restarts its interval from the new message. An `Every("1h")` job whose module restarts, redeploys or scales more often than hourly never fires. On the broker, an `@every 3s` schedule fired 3 times in 10 s when left alone and 0 times when republished every 2 s.
   - **Fix:** read the current schedule with `js.get_last_msg(stream, subjects.schedule(index))` and publish only when it is missing or its headers differ (`Nats-Schedule`, `Nats-Schedule-Time-Zone`, `Nats-Schedule-Target`, `Nats-Schedule-TTL`, trigger kind). Publish with `Nats-Expected-Last-Subject-Sequence` set to the sequence just read (0 when missing), so two hosts starting together don't both reset it. Keep the purge of stale indexes as is.
   - **Test:** broker test that starts two hosts with the same descriptor and asserts the schedule's stream sequence is unchanged; then changes the interval and asserts it is republished.
 
-- [ ] **2. A trigger that expires before its retry leaves the run RETRYING or RUNNING forever.** *Reproduced.*
+- [x] **2. A trigger that expires before its retry leaves the run RETRYING or RUNNING forever.** *Reproduced.*
+  - **Done:** a retry the trigger's `Nats-TTL` would not outlive (`fired_at` + TTL before the backoff ends) records FAILED and terms; RETRYING runs store `retry_at` and runs store `sequence`; `reap_lost_runs` fails RETRYING runs past `retry_at` and stale RUNNING runs with attempts left once `get_msg` no longer finds their trigger. Broker tests cover the review's scenario and the reaper.
   - **Problem:** trigger messages carry a `Nats-TTL` (60 s to 1 h for schedule ticks via `scheduled_tick_ttl`, 24 h for events). A run with attempts left relies on JetStream to redeliver after `nak`, but once the TTL has passed the message is gone and never comes back. On the broker, a 2 s TTL trigger nak'ed after 3.5 s was not redelivered. `reap_lost_runs` skips runs with attempts left, and retention never prunes non-terminal runs. Example: `Every("5m")` with `max_attempts=3` and a run that takes 6 minutes and fails stays RETRYING in the System Jobs tab.
   - **Fix:**
     - Before a `nak`, check whether the trigger's TTL has passed (`fired_at` + the `Nats-TTL` header). If it has, record FAILED with "Trigger expired before it could be retried" instead of RETRYING.
@@ -111,7 +113,8 @@ Test run at `a582a19f6`: 101 job tests passed (SDK and engine, real broker inclu
   - **Fix:** in invoke mode with a caller deadline, let the deadline govern and skip the idle watchdog. Without a deadline, keep the watchdog as the default cap; it is what bounds runs since the "no deadline by default" fix.
   - **Test:** an invoke-mode run longer than `idle_timeout_seconds` with a longer deadline must succeed.
 
-- [ ] **10. Recreating the jobs stream makes new triggers look finished, so they are skipped.** *Read in code.*
+- [x] **10. Recreating the jobs stream makes new triggers look finished, so they are skipped.** *Read in code.*
+  - **Done:** a record whose `fired_at` differs from the delivery's stream timestamp is replaced as a new run (missing `fired_at` still matches). Broker test deletes the stream and checks the reused sequence runs.
   - **Problem:** the run id is `<job>:<stream sequence>` (`job_host.py:614`), and a terminal record makes `_handle_delivery` retire the delivery without running it. If `ABI_JOBS_<project>` is lost or recreated while `job_runs` survives, sequences restart at 1 and new triggers match old SUCCEEDED records until retention prunes them (up to 7 days or 1000 runs).
   - **Fix:** `fired_at` (the trigger's stream timestamp) is already stored. Treat a terminal record as this delivery's only when `existing.data.get("fired_at") == _fired_at(msg)`; otherwise overwrite it as a new run. Treat a missing `fired_at` (records from before the field) as a match, to avoid re-running completed work after the upgrade.
 
@@ -120,7 +123,8 @@ Test run at `a582a19f6`: 101 job tests passed (SDK and engine, real broker inclu
   - **Fix:** on re-registration, rewrite `owner` on in-flight run records to the new instance id (a conditional write on each record's version), and keep the old subjects subscribed until those runs end. Alternatively, re-register under the same instance id when discovery allows it.
   - **Test:** force a lease expiry during a long run; then cancel and events must still work.
 
-- [ ] **12. A second cancel during the sync job grace period frees the slot while the thread still runs.** *Read in code.*
+- [x] **12. A second cancel during the sync job grace period frees the slot while the thread still runs.** *Read in code.*
+  - **Done:** the grace wait is wrapped in `contextlib.suppress(asyncio.CancelledError)`; test cancels twice and checks the interrupt and the wait for the thread's cleanup.
   - **Problem:** in `SyncJobRunner._stop` (`libs/naas-abi-core/naas_abi_core/engine/engine_loaders/SyncJobRunner.py:126`), the grace wait `await asyncio.wait({done}, timeout=self.interrupt_grace_seconds)` is not protected. Example: the job times out and `_handle_delivery` cancels it, then `JobHost.close()` cancels it again during a 30 s grace. `CancelledError` escapes, `state.interrupt()` is never called, and the runner returns while the thread is still running. The next delivery can overlap it even with `max_concurrency=1`.
   - **Fix:**
     ```python
@@ -164,13 +168,16 @@ Test run at `a582a19f6`: 101 job tests passed (SDK and engine, real broker inclu
 - [ ] **16. The broker message-size rule exists in four copies, and Go-duration parsing in two.**
   - **Problem:** message sizing appears in `naas_abi_core/engine/nats_rpc.py:165` (`message_size`), `naas_abi_sdk/messages.py` (`message_size`), `naas_abi_sdk/transport.py` (`_message_size`) and inline in `NatsRPCClient._do_request_async`. If the header framing changes and one copy is missed, a request passes the client check and the broker closes the connection. Separately, `job_host._seconds` repeats the duration parsing in `jobs.Every`.
   - **Fix:** keep one `message_size` in `naas_abi_sdk.messages` and import it everywhere. Expose one duration parser from `jobs.py` and use it in `scheduled_tick_ttl`.
+  - **Duration part done:** `jobs.go_duration_seconds` serves `Every`, `scheduled_tick_ttl` and the trigger TTL check; `job_host._seconds` is gone. (Nexus `jobs_schedule.go_duration_seconds` is a third copy, left as is.)
 
 ## Notes (smaller, or decisions to record)
 
-- [ ] **17. A document-store outage when a trigger arrives can use up its attempts and leave no run record.** *Read in code.*
+- [x] **17. A document-store outage when a trigger arrives can use up its attempts and leave no run record.** *Read in code.*
+  - **Done (full fix):** a failed pre-run read, claim-check resolve or RUNNING write logs an error and nak's with backoff; the consumer's `max_deliver` is unlimited and attempts are handler starts on the run, so an outage uses none (a delivery after the last attempt is termed). Unit and broker tests with `max_attempts=1`.
   - **Problem:** in `_handle_delivery`, the first `documents.get` and the RUNNING `_save` happen before the `try`. If either raises, the error escapes `handle`, nothing is acked or nak'ed, and the broker redelivers after `ack_wait` with no backoff. Each redelivery counts toward `max_deliver = max_attempts`, so an outage of roughly `max_attempts × ack_wait` drops the trigger with only a log line.
   - **Fix:** catch failures in that section and `nak(delay=self._backoff(attempt))`. To stop store outages consuming handler attempts, set the consumer's `max_deliver` higher than `max_attempts` (or unlimited) and enforce `max_attempts` in the host from handler starts recorded on the run.
 
-- [ ] **18. A run that can't save its completion holds its concurrency slot until the store recovers.**
+- [x] **18. A run that can't save its completion holds its concurrency slot until the store recovers.**
+  - **Done:** recorded in the jobs ADR ("Review hardening (2026-10-06)"); retries name the run and log at ERROR once the outage lasts `completion_error_after_seconds` (60 s).
   - **Problem:** `_save_completion` keeps the broker heartbeat alive and retries indefinitely (until shutdown). With `max_concurrency=1`, that job is blocked for the whole outage. This looks deliberate, since it avoids re-running finished work.
   - **Fix:** record the trade-off in `docs/adr/20261001_nats-jobs.md`. Make it visible too: escalate the retry log to ERROR after a threshold, or expose a metric.
