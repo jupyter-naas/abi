@@ -21,6 +21,7 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
     find_matches,
     network,
     network_view_config,
+    search_graph_payload,
     search_root_id,
 )
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.text import (
@@ -103,8 +104,9 @@ def test_the_act_of_searching_is_the_centre(setup) -> None:
 def test_the_view_opens_in_rings_without_filters_or_time() -> None:
     graph = network_view_config(load_config())["graph"]
     assert graph["layout"] == "rings"
+    assert graph["ring_cluster_class"] == "Organization"
     assert graph["temporal_filter"] is False
-    assert graph["default_distance"] == 3
+    assert graph["default_distance"] == graph["max_distance"] == 4
     assert all(not graph["view_defaults"][view]["filters"] for view in ("2d", "3d"))
 
 
@@ -176,3 +178,33 @@ def test_one_client_in_three_acts_is_one_match() -> None:
     )
     assert [(m["field"], m["text"]) for m in matches] == [("Client", "EDF R&D")]
     assert matches[0]["evidence"] == [f"people:ActOfWorking/{n}" for n in range(3)]
+
+
+def test_people_lead_to_their_current_organization(setup) -> None:
+    view = network(*setup, query="Demo")
+    [demo] = _entities(view, "Organization")
+    assert demo["label"] == "Demo"
+    for name in ("Alice Dupont", "Bob Martin", "Ghost Person"):
+        assert (name, "works for", demo["id"]) in _edges(view)
+    # search -> match -> act -> person -> organization
+    assert _reaches(view, view["root"], demo["id"], 4)
+
+
+def test_an_organization_shows_its_logo() -> None:
+    from rdflib import Graph
+
+    payload = search_graph_payload(
+        Graph(),
+        [
+            {
+                "slug": "ada",
+                "full_name": "Ada",
+                "organization": "Firm",
+                "organization_logo": "/logos/firm.png",
+            }
+        ],
+        query="",
+        total=1,
+    )
+    [firm] = [e for e in payload["entities"] if e["classLabel"] == "Organization"]
+    assert firm["image"] == "/logos/firm.png"

@@ -72,6 +72,12 @@ let DATE_SLICER_CONFIG = configureDateSlicer();
 let GRAPH_LAYOUT = "semantic";
 // Whether the Temporal Region filter applies: off, every act is shown.
 let TEMPORAL_FILTER = true;
+// With rings, the class whose nodes each get a sector of their own (a search:
+// "Organization"); empty, the rings are not cut.
+let RING_CLUSTER_CLASS = "";
+// The farthest the Distance setting goes. A person's graph is read in three
+// hops; a search reaches the people's organizations in four.
+let MAX_DISTANCE = 3;
 
 function defaultGraphParams(view) {
   const base = Object.fromEntries(
@@ -151,6 +157,8 @@ export function configureGraph(config) {
   DATE_SLICER_CONFIG = configureDateSlicer(graph.date_slicer);
   GRAPH_LAYOUT = graph.layout === "rings" ? "rings" : "semantic";
   TEMPORAL_FILTER = graph.temporal_filter !== false;
+  RING_CLUSTER_CLASS = graph.ring_cluster_class || "";
+  MAX_DISTANCE = Math.max(1, Math.floor(Number(graph.max_distance) || 3));
   DISTANCE_HINT = graph.distance_hint;
   GRAPH_VIEW_LABELS = graph.view_labels || {};
   configureBfoBuckets(config.theme?.bfo_buckets);
@@ -812,8 +820,16 @@ function resolveNode(id, lookup) {
   return null;
 }
 
-function graphNodeRadius(_n) {
-  return GRAPH_NODE_RADIUS;
+// A node drawn with a picture (an organization's logo) is drawn larger, so
+// the picture can be told apart at the zoom a whole network opens on.
+const IMAGE_NODE_SCALE = 2;
+
+function hasNodeImage(n) {
+  return Boolean(n?.entity?.image || n?.person?.image);
+}
+
+function graphNodeRadius(n) {
+  return hasNodeImage(n) ? GRAPH_NODE_RADIUS * IMAGE_NODE_SCALE : GRAPH_NODE_RADIUS;
 }
 
 function truncateLine(line, maxChars, forceEllipsis = false) {
@@ -914,9 +930,10 @@ function nodeLabelLayout(n) {
   };
 }
 
-function graphNodeExtent(_n) {
+function graphNodeExtent(n) {
   const pad = 6;
-  return { rx: GRAPH_NODE_RADIUS + pad, ry: GRAPH_NODE_RADIUS + pad };
+  const radius = graphNodeRadius(n);
+  return { rx: radius + pad, ry: radius + pad };
 }
 
 function resolveOverlaps(
@@ -1614,9 +1631,14 @@ function buildGraph(focusRootId, visible, lookup) {
 
 /**
  * Each hop from the focus on its own circle: the focus at the centre, what it
- * links to around it, and so on outwards. A node sits as near as its ring
- * allows to the nodes that lead to it, and the first ring is ordered by what
- * each node leads to, so one person's branches stay side by side.
+ * links to around it, and so on outwards.
+ *
+ * With ``graph.ring_cluster_class`` set (a search: "Organization"), the rings
+ * are cut into one sector per node of that class: every node sits in the
+ * sector of the one it leads to outwards (match -> act -> person ->
+ * organization), the sector's width follows how much it holds, and the
+ * organization itself sits on the outer edge. Without it, a node sits as near
+ * as its ring allows to the nodes that lead to it.
  */
 function seedRingLayout(focusNode, nodes, edges) {
   const adjacency = new Map(nodes.map((node) => [node.id, []]));
@@ -1642,29 +1664,51 @@ function seedRingLayout(focusNode, nodes, edges) {
   }
   const deepest = Math.max(0, ...level.values());
   for (const node of nodes) if (!level.has(node.id)) level.set(node.id, deepest + 1);
-
-  // What a node leads to, outermost first: the key that groups the first ring.
-  const leafKey = new Map();
-  const byDepth = [...nodes].sort((a, b) => level.get(b.id) - level.get(a.id));
-  for (const node of byDepth) {
-    const children = (adjacency.get(node.id) || []).filter(
+  const isClusterHead = (node) =>
+    Boolean(RING_CLUSTER_CLASS) && node.entity?.classLabel === RING_CLUSTER_CLASS;
+  if (nodes.some(isClusterHead)) {
+    // The cluster nodes (organizations) on a ring of their own, outermost,
+    // whichever hop first reached them.
+    const outermost = Math.max(
+      0,
+      ...nodes.filter((n) => !isClusterHead(n)).map((n) => level.get(n.id))
+    );
+    for (const node of nodes) if (isClusterHead(node)) level.set(node.id, outermost + 1);
+  }
+  const childrenOf = (node) =>
+    (adjacency.get(node.id) || []).filter(
       (next) => level.get(next.id) === level.get(node.id) + 1
     );
+
+  // What a node leads to, outermost first: groups one person's branches, and
+  // names the cluster (the node of the cluster class) each node belongs to.
+  const leafKey = new Map();
+  const clusterOf = new Map();
+  const byDepth = [...nodes].sort((a, b) => level.get(b.id) - level.get(a.id));
+  for (const node of byDepth) {
+    const children = childrenOf(node);
     const keys = children.map((child) => leafKey.get(child.id)).filter(Boolean).sort();
     leafKey.set(node.id, keys[0] || node.label || node.id);
+    if (isClusterHead(node)) {
+      clusterOf.set(node.id, node.id);
+    } else {
+      // A node tied to a cluster node belongs to it (a person and their
+      // organization); otherwise to the cluster of what it leads to.
+      const direct = (adjacency.get(node.id) || []).filter(isClusterHead).map((n) => n.id);
+      const clusters = direct.length
+        ? direct
+        : children.map((child) => clusterOf.get(child.id)).filter(Boolean);
+      clusterOf.set(node.id, clusters.sort()[0] || "");
+    }
   }
 
   focusNode.x = 0;
   focusNode.y = 0;
   focusNode.z = 0;
-  const angles = new Map([[focusNode.id, 0]]);
-  const rings = new Map();
-  for (const node of nodes) {
-    if (node.id === focusNode.id) continue;
-    const ring = level.get(node.id);
-    if (!rings.has(ring)) rings.set(ring, []);
-    rings.get(ring).push(node);
-  }
+  focusNode.clusterSector = null;
+  const ringLevels = [
+    ...new Set(nodes.filter((n) => n.id !== focusNode.id).map((n) => level.get(n.id))),
+  ].sort((a, b) => a - b);
   const spacing = GRAPH_NODE_RADIUS * 2 + (graphParams.nodeMinGap ?? 60);
   const ringGap = Math.max(220, spacing * 1.6);
   const circularMean = (values) =>
@@ -1672,42 +1716,128 @@ function seedRingLayout(focusNode, nodes, edges) {
       values.reduce((sum, value) => sum + Math.sin(value), 0),
       values.reduce((sum, value) => sum + Math.cos(value), 0)
     );
-  let radius = 0;
-  for (const ringLevel of [...rings.keys()].sort((a, b) => a - b)) {
-    const ring = rings.get(ringLevel);
-    const step = (Math.PI * 2) / ring.length;
-    radius = Math.max(radius + ringGap, (ring.length * spacing) / (Math.PI * 2));
-    const wanted = (node) => {
-      const from = (parents.get(node.id) || []).filter((parent) => angles.has(parent.id));
-      return from.length ? circularMean(from.map((parent) => angles.get(parent.id))) : 0;
-    };
-    let offset = 0;
-    if (ringLevel === 1) {
-      ring.sort(
-        (a, b) =>
-          leafKey.get(a.id).localeCompare(leafKey.get(b.id)) ||
-          a.label.localeCompare(b.label) ||
-          a.id.localeCompare(b.id)
-      );
-    } else {
-      const normalise = (angle) => (angle + Math.PI * 4) % (Math.PI * 2);
-      ring.sort(
-        (a, b) =>
-          normalise(wanted(a)) - normalise(wanted(b)) || a.label.localeCompare(b.label)
-      );
-      // Turn the evenly spaced ring so it lines up with where its nodes want to be.
-      offset = circularMean(ring.map((node, index) => wanted(node) - index * step));
-    }
-    ring.forEach((node, index) => {
-      const angle = offset + index * step;
-      angles.set(node.id, angle);
-      node.x = Math.cos(angle) * radius;
-      node.y = Math.sin(angle) * radius;
-      node.z = 0;
-      node.rayId = null;
-      node.radialLevel = ringLevel;
-    });
+  const angles = new Map([[focusNode.id, 0]]);
+  const place = (node, angle, radius, ringLevel) => {
+    angles.set(node.id, angle);
+    node.x = Math.cos(angle) * radius;
+    node.y = Math.sin(angle) * radius;
+    node.z = 0;
+    node.rayId = null;
+    node.radialLevel = ringLevel;
+    node.clusterSector = null;
+  };
+
+  // One sector per cluster: its nodes, ring by ring, in the order of what
+  // leads to them.
+  const clusterIds = [...new Set(nodes.filter((n) => n.id !== focusNode.id).map((n) => clusterOf.get(n.id) || ""))];
+  const clustered = RING_CLUSTER_CLASS && clusterIds.some(Boolean);
+  const sectors = clustered
+    ? clusterIds
+        .map((id) => {
+          const members = nodes.filter(
+            (n) => n.id !== focusNode.id && (clusterOf.get(n.id) || "") === id
+          );
+          const rings = new Map(ringLevels.map((ringLevel) => [ringLevel, []]));
+          for (const member of members) rings.get(level.get(member.id)).push(member);
+          const head = nodes.find((n) => n.id === id) || null;
+          return { id, head, members, rings, width: Math.max(...[...rings.values()].map((r) => r.length)) };
+        })
+        // Biggest clusters first round the circle; the unclustered last.
+        .sort(
+          (a, b) =>
+            Boolean(b.id) - Boolean(a.id) ||
+            b.members.length - a.members.length ||
+            (a.head?.label || "").localeCompare(b.head?.label || "")
+        )
+    : [
+        {
+          id: "",
+          head: null,
+          members: nodes.filter((n) => n.id !== focusNode.id),
+          rings: new Map(
+            ringLevels.map((ringLevel) => [
+              ringLevel,
+              nodes.filter((n) => n.id !== focusNode.id && level.get(n.id) === ringLevel),
+            ])
+          ),
+          width: 1,
+        },
+      ];
+
+  const gapAngle = clustered && sectors.length > 1 ? 0.06 : 0;
+  const totalWidth = sectors.reduce((sum, sector) => sum + sector.width, 0) || 1;
+  const usable = Math.PI * 2 - gapAngle * (clustered ? sectors.length : 0);
+  let cursor = -Math.PI / 2;
+  for (const sector of sectors) {
+    sector.span = clustered ? (usable * sector.width) / totalWidth : Math.PI * 2;
+    sector.start = cursor + gapAngle / 2;
+    cursor += sector.span + gapAngle;
   }
+
+  // A ring is as wide as its most crowded sector needs.
+  const radii = new Map();
+  let radius = 0;
+  for (const ringLevel of ringLevels) {
+    const needed = Math.max(
+      0,
+      ...sectors.map((sector) => {
+        const count = sector.rings.get(ringLevel)?.length || 0;
+        return count ? (count * spacing) / sector.span : 0;
+      })
+    );
+    radius = Math.max(radius + ringGap, needed);
+    radii.set(ringLevel, radius);
+  }
+
+  for (const sector of sectors) {
+    for (const ringLevel of ringLevels) {
+      const ring = sector.rings.get(ringLevel) || [];
+      if (!ring.length) continue;
+      const wanted = (node) => {
+        const from = (parents.get(node.id) || []).filter((parent) => angles.has(parent.id));
+        return from.length ? circularMean(from.map((parent) => angles.get(parent.id))) : 0;
+      };
+      if (ringLevel === ringLevels[0]) {
+        ring.sort(
+          (a, b) =>
+            leafKey.get(a.id).localeCompare(leafKey.get(b.id)) ||
+            a.label.localeCompare(b.label) ||
+            a.id.localeCompare(b.id)
+        );
+      } else {
+        // Unwrapped relative to the sector's start, so the order runs along it.
+        const along = (node) =>
+          (((wanted(node) - sector.start) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+        ring.sort((a, b) => along(a) - along(b) || a.label.localeCompare(b.label));
+      }
+      if (!clustered && ringLevel !== ringLevels[0]) {
+        // A whole circle: turn it so it lines up with where its nodes want to be.
+        const step = (Math.PI * 2) / ring.length;
+        const offset = circularMean(ring.map((node, index) => wanted(node) - index * step));
+        ring.forEach((node, index) => place(node, offset + index * step, radii.get(ringLevel), ringLevel));
+        continue;
+      }
+      ring.forEach((node, index) =>
+        place(
+          node,
+          sector.start + (sector.span * (index + 0.5)) / ring.length,
+          radii.get(ringLevel),
+          ringLevel
+        )
+      );
+    }
+    if (clustered && sector.id) {
+      // Drawn behind the cluster (draw()): the band of rings its nodes occupy.
+      const held = sector.members.map((member) => radii.get(level.get(member.id)));
+      sector.head.clusterSector = {
+        start: sector.start,
+        span: sector.span,
+        inner: Math.max(0, Math.min(...held) - spacing * 0.6),
+        outer: Math.max(...held) + spacing * 0.8,
+      };
+    }
+  }
+
   for (const node of nodes) {
     node.homeX = node.x;
     node.homeY = node.y;
@@ -1784,13 +1914,15 @@ function resetGraphView(canvas, focusNode, setPanScale, nodes = null) {
   // Rings are read as a whole - centre, matches, acts, people - so they open
   // fitted to the canvas, never above the default zoom.
   if (GRAPH_LAYOUT === "rings" && graphParams.view === "2d" && nodes?.length) {
-    const reach =
-      Math.max(
-        ...nodes.map((node) =>
-          Math.hypot((node.x ?? 0) - (focusNode?.x ?? 0), (node.y ?? 0) - (focusNode?.y ?? 0))
-        )
-      ) +
-      GRAPH_NODE_RADIUS * 2;
+    const reach = Math.max(
+      ...nodes.map(
+        (node) =>
+          Math.hypot((node.x ?? 0) - (focusNode?.x ?? 0), (node.y ?? 0) - (focusNode?.y ?? 0)) +
+          GRAPH_NODE_RADIUS * 2
+      ),
+      // A cluster's sector reaches past its outermost node.
+      ...nodes.map((node) => node.clusterSector?.outer ?? 0)
+    );
     const fit = (Math.min(canvas.clientWidth, canvas.clientHeight) / (2 * reach)) * 0.95;
     if (Number.isFinite(fit) && fit > 0) scale = Math.max(MIN_SCALE, Math.min(scale, fit));
   }
@@ -2004,12 +2136,47 @@ function mountGraphCanvas(root, options) {
     ctx.globalAlpha = 1;
   }
 
+  // Pictures a node may carry (an organization's logo): loaded once, drawn
+  // once they arrive. One that fails leaves the node in its colour.
+  const images = new Map();
+  function nodeImage(n) {
+    const url = n.entity?.image || n.person?.image;
+    if (!url) return null;
+    let entry = images.get(url);
+    if (!entry) {
+      const image = new Image();
+      entry = { image, ready: false };
+      image.onload = () => {
+        entry.ready = image.naturalWidth > 0;
+        draw();
+      };
+      image.onerror = () => images.set(url, { image, ready: false, failed: true });
+      image.src = url;
+      images.set(url, entry);
+    }
+    return entry.ready ? entry.image : null;
+  }
+
   function drawNodeBody(n) {
     const r = nodeRadius(n);
+    const image = nodeImage(n);
     ctx.beginPath();
     ctx.arc(viewX(n), viewY(n), r, 0, Math.PI * 2);
-    ctx.fillStyle = n.palette.color;
+    ctx.fillStyle = image ? "#ffffff" : n.palette.color;
     ctx.fill();
+    if (image) {
+      // The logo whole, inside the disc: fitted to its inscribed square.
+      const side = r * 1.3;
+      const fit = Math.min(side / image.naturalWidth, side / image.naturalHeight);
+      const w = image.naturalWidth * fit;
+      const h = image.naturalHeight * fit;
+      ctx.save();
+      ctx.clip();
+      ctx.drawImage(image, viewX(n) - w / 2, viewY(n) - h / 2, w, h);
+      ctx.restore();
+      ctx.beginPath();
+      ctx.arc(viewX(n), viewY(n), r, 0, Math.PI * 2);
+    }
     ctx.strokeStyle = n.palette.border;
     ctx.lineWidth = n.dashed ? 1.2 : 2;
     if (n.dashed) ctx.setLineDash([4, 3]);
@@ -2028,6 +2195,15 @@ function mountGraphCanvas(root, options) {
     // Labels behind this point are unreadable anyway, and drawing them only
     // adds clutter over the nodes in front.
     if (graphParams.view === "3d" && depth < 0.88) return;
+    if (nodeImage(n)) {
+      // The picture fills the node: its name goes underneath.
+      ctx.font = `600 ${fontSize * depth}px var(--font-body), sans-serif`;
+      ctx.fillStyle = colors.ink;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(n.label, viewX(n), viewY(n) + nodeRadius(n) + 4 * depth);
+      return;
+    }
     ctx.font = `600 ${fontSize * depth}px var(--font-body), sans-serif`;
     ctx.fillStyle = n.dashed ? colors.nodeFillMuted : colors.nodeFill;
     ctx.textAlign = "center";
@@ -2039,6 +2215,23 @@ function mountGraphCanvas(root, options) {
       ctx.fillText(line, viewX(n), y);
       y += scaledLineHeight;
     }
+  }
+
+  /** The sector behind each cluster of a ring layout, alternately tinted. */
+  function drawClusterSectors() {
+    const heads = nodes.filter((n) => n.clusterSector);
+    heads.forEach((head, index) => {
+      const { start, span, inner, outer } = head.clusterSector;
+      ctx.beginPath();
+      ctx.arc(0, 0, outer, start, start + span);
+      ctx.arc(0, 0, inner, start + span, start, true);
+      ctx.closePath();
+      ctx.fillStyle = index % 2 ? "rgba(23, 28, 142, 0.035)" : "rgba(0, 114, 206, 0.06)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0, 114, 206, 0.18)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
   }
 
   function draw() {
@@ -2055,6 +2248,7 @@ function mountGraphCanvas(root, options) {
       );
       for (const e of orderedEdges) drawEdge(e);
     } else {
+      drawClusterSectors();
       for (const e of edges) drawEdge(e);
     }
     if (graphParams.view === "3d") {
@@ -2467,7 +2661,7 @@ function renderParamsPanel(params, distance, open) {
       <div class="graph-params-grid">
         <label class="graph-param">
           <span class="graph-param-head">Distance <strong data-param-value="distance">${distance}</strong></span>
-          <input type="range" data-param="distance" min="1" max="3" step="1" value="${distance}" />
+          <input type="range" data-param="distance" min="1" max="${MAX_DISTANCE}" step="1" value="${distance}" />
           <em>${esc(DISTANCE_HINT)}</em>
         </label>
         ${rows}
@@ -2557,7 +2751,10 @@ function graphFiltersFromUrl(people, lookup, fallbackDistance) {
     selectedRootId = defaultPerson(people)?.id || null;
   }
   const distanceParam = Number(params.get("distance"));
-  const distance = [1, 2, 3].includes(distanceParam) ? distanceParam : fallbackDistance;
+  const distance =
+    Number.isInteger(distanceParam) && distanceParam >= 1 && distanceParam <= MAX_DISTANCE
+      ? distanceParam
+      : fallbackDistance;
   return {
     selectedRootId,
     distance,
@@ -2626,7 +2823,7 @@ export function mountGraphPage(
   };
   const people = [...(data.people || [])].sort((a, b) => a.label.localeCompare(b.label));
   const storedDistance = Math.min(
-    3,
+    MAX_DISTANCE,
     Math.max(1, Number(sessionStorage.getItem(DISTANCE_KEY)) || DEFAULT_DISTANCE)
   );
   const initialFilters = graphFiltersFromUrl(people, lookup, storedDistance);
@@ -2661,7 +2858,9 @@ export function mountGraphPage(
   }
   // A page that knows how far its graph reaches (a search: query, match, act,
   // person) opens at that distance whatever was last chosen elsewhere.
-  if ([1, 2, 3].includes(openDistance)) distance = openDistance;
+  if (Number.isInteger(openDistance) && openDistance >= 1 && openDistance <= MAX_DISTANCE) {
+    distance = openDistance;
+  }
   if (selectedRootId) {
     const initialRange = temporalRangeForRoot(adj, selectedRootId, distance);
     dateRangeStart = initialRange.min;

@@ -1,6 +1,7 @@
 import { fetchSearch, fetchSearchNetwork } from "../../../lib/api.js";
 import { avatarHtml, escapeHtml, flagHtml, highlight, orgLogoHtml } from "../../../lib/dom.js";
 import { profileHref, searchHref } from "../../../lib/routes.js";
+import { apiUrl } from "../../../lib/config.js";
 import { mountGraphView } from "../../../lib/graph-view.js";
 import { overflowTabs } from "../../../lib/tab-overflow.js";
 
@@ -14,6 +15,11 @@ function resultHtml(config, hit, tokens, query) {
           ${flagHtml(hit.country_code)}
           ${orgLogoHtml(hit.organization, hit.organization_logo)}
           <span>${escapeHtml(place.join(" › "))}</span>
+          ${
+            query && hit.hits
+              ? `<span class="result-hits">${hit.hits} ${hit.hits === 1 ? "hit" : "hits"}</span>`
+              : ""
+          }
         </p>
         <h2 class="result-title">
           <a href="${profileHref(config, hit.slug, { query })}">${highlight(hit.full_name, tokens, "b")}</a>
@@ -178,9 +184,9 @@ function networkStatsText(network, query) {
 }
 
 /**
- * The Network view: the person graph page focused on the search query. It
- * opens three hops out, far enough to reach the people (query, match, what
- * matched, person). A person's node links to their profile.
+ * The Network view: the person graph page focused on the search. It opens
+ * four hops out, far enough to reach the people's organizations (search,
+ * match, act, person, organization). A person's node links to their profile.
  */
 async function mountNetwork(host, { config, query, facet }) {
   host.innerHTML = `
@@ -203,9 +209,13 @@ async function mountNetwork(host, { config, query, facet }) {
         for (const person of network.data.people || []) {
           if (person.slug) person.href = profileHref(config, person.slug, { query });
         }
+        for (const entity of network.data.entities || []) {
+          // Served under this app's API: the same path the People list uses.
+          if (entity.image) entity.image = apiUrl(entity.image);
+        }
         return network;
       },
-      { distance: 3 },
+      { distance: 4 },
     );
     return dispose;
   } catch (error) {

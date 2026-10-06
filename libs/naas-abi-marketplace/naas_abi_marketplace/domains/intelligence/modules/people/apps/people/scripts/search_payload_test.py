@@ -136,3 +136,53 @@ def test_a_directory_bigger_than_the_old_candidate_cap_is_fully_searchable(
     beyond = search_payload.search(warehouse, config, page=99)
     assert beyond["page"] == 7 and len(beyond["results"]) == 100
     assert search_payload.search(warehouse, config, page=0)["page"] == 1
+
+
+def test_results_are_sorted_by_hits_descending(tmp_path: Path) -> None:
+    """Three mentions in a summary outrank one in a headline, a weightier field."""
+    config = load_config()
+    warehouse = DatasetFactory.DatasetServiceDuckLake(
+        f"sqlite:{tmp_path / 'datasets.sqlite'}", str(tmp_path / "data")
+    )
+
+    def row(slug: str, headline: str | None, about: str | None) -> dict:
+        return {
+            "slug": slug,
+            "full_name": slug.title(),
+            "headline": headline,
+            "about": about,
+            "quote": None,
+            "photo_url": None,
+            "organization": "Demo",
+            "office": None,
+            "city": None,
+            "country": None,
+            "country_code": None,
+            "years_of_experience": None,
+            "public_profile_url": None,
+            "email": None,
+            "phone": None,
+            "linkedin_url": None,
+            "search_text": search_text(
+                {"headline": [headline or ""], "about": [about or ""]}
+            ),
+        }
+
+    rows = [
+        row("once", "Director, EDF", None),
+        row("thrice", None, "EDF audits. EDF networks. Worked with EDF R&D."),
+        row("twice", None, "EDF and EDF R&D."),
+    ]
+    for logical in ds.TABLES:
+        spec = ds.dataset_spec(
+            logical, table=config["data"]["tables"][logical], namespace="people"
+        )
+        ds.replace_rows(warehouse, spec, rows if logical == "people" else [])
+    config["data"]["namespace"] = "people"
+
+    found = search_payload.search(warehouse, config, query="EDF")
+    assert [(hit["slug"], hit["hits"]) for hit in found["results"]] == [
+        ("thrice", 3),
+        ("twice", 2),
+        ("once", 1),
+    ]

@@ -185,6 +185,11 @@ a skill, the profile summary, or the person by name - leading on to the person.
 top 30 results with the same bound queries as the profile graph, opens three
 hops out (query, match, act, person), and links each person to their profile.
 
+Each person leads on to their current organization (with its logo), and the
+rings are cut into one sector per organization (`graph.ring_cluster_class`), so
+who the search found at each organization is drawn together. People are ranked
+by search hits, highest first, on both tabs.
+
 `data.graph.file` may list several TTL files; they are read as one graph.
 
 ## Files

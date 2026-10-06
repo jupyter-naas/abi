@@ -4,7 +4,7 @@ The search is drawn with the person graph page (``graph_page/GraphPage.js``),
 focused on an act of searching instead of a person, one hop per ring
 (ontologies/modules/SearchOntology.ttl):
 
-    act of searching  --has search match-->  search match  --matches in-->  act  <--  person
+    act of searching  --has search match-->  search match  --matches in-->  act  <--  person  --works for-->  organization
     (process)                                (GDC)                          (process)
 
 A match records where the query's words were found. Found in an act of working
@@ -14,7 +14,9 @@ the person performing it; found in the person themselves (name, headline,
 summary, a skill no act records), it leads straight to the person. So "EDF"
 reaches Alexis Tourneux through the acts whose client is EDF R&D, Bernard
 Fontana through the act he performs for EDF, and Claire Dusser through her
-summary.
+summary. Each person then leads to their current organization (the one the
+People list shows), one node per organization, so who the search found at
+each organization is drawn together.
 
 The people are the search's own top results (same ranking, same facet), read
 from this instance's graph with the people competency queries bound to each.
@@ -50,8 +52,8 @@ NETWORK_SIZE = 30
 # its field alone; the value is always in its properties.
 SHORT_VALUE = 28
 MATCHED_TEXT_LENGTH = 220
-# Search, match, act, person: the hops the view opens on.
-NETWORK_DISTANCE = 3
+# Search, match, act, person, organization: the hops the view opens on.
+NETWORK_DISTANCE = 4
 
 
 def _hit(text: object, tokens: list[str]) -> bool:
@@ -65,6 +67,10 @@ def _matched_text(text: str, tokens: list[str]) -> str:
         (sentence for sentence in _sentences(text) if _hit(sentence, tokens)), text
     )
     return truncate(sentence, MATCHED_TEXT_LENGTH)
+
+
+def organization_id(name: str) -> str:
+    return f"organization:{name.strip().casefold()}"
 
 
 def search_root_id(query: str) -> str:
@@ -207,7 +213,8 @@ def search_graph_payload(
     total: int,
 ) -> dict[str, Any]:
     """The graph page payload for a search: the act of searching, its matches,
-    the acts they were found in, and the people performing them.
+    the acts they were found in, the people performing them, and each person's
+    current organization.
 
     ``people`` are search results (``slug``, ``full_name``, ``organization``).
     Someone with no match the canvas can draw (not in the graph, or a search
@@ -229,6 +236,37 @@ def search_graph_payload(
 
     entities: dict[str, dict[str, Any]] = {}
     relations: list[dict[str, Any]] = []
+
+    # Each person's current organization, as the People list shows it: one node
+    # per organization, so the people a search found there are drawn together.
+    for found in people:
+        organization = (found.get("organization") or "").strip()
+        if not organization:
+            continue
+        org_id = organization_id(organization)
+        node = entities.setdefault(
+            org_id,
+            _entity_node(
+                org_id,
+                label=organization,
+                class_uri="abi:Organization",
+                class_label="Organization",
+                bfo_bucket="Material Entity",
+                properties=_props(("rdfs:label", "name", organization)),
+            ),
+        )
+        # Drawn in place of the node's colour (the People list shows the same).
+        if found.get("organization_logo") and not node.get("image"):
+            node["image"] = found["organization_logo"]
+        relations.append(
+            _relation(
+                found.get("full_name") or found["slug"],
+                org_id,
+                "abi:worksFor",
+                "works for",
+            )
+        )
+
     index = 0
     for found in people:
         label = found.get("full_name") or found["slug"]
@@ -338,9 +376,12 @@ def network_view_config(config: dict[str, Any]) -> dict[str, Any]:
     graph = view_config["graph"]
     graph.update(
         layout="rings",
+        # One sector per organization: who the search found there, together.
+        ring_cluster_class="Organization",
         temporal_filter=False,
         default_view="2d",
         default_distance=NETWORK_DISTANCE,
+        max_distance=NETWORK_DISTANCE,
         params_session_key="people-search-graph-params-v1",
         # Thirty people's rings need to zoom further out than one person.
         scale={**graph.get("scale", {}), "min": 0.08},
@@ -359,7 +400,7 @@ def network_view_config(config: dict[str, Any]) -> dict[str, Any]:
 @lru_cache(maxsize=32)
 def _cached_payload(
     graph: Graph,
-    people: tuple[tuple[str, str, str], ...],
+    people: tuple[tuple[str, str, str, str], ...],
     query: str,
     total: int,
 ) -> dict[str, Any]:
@@ -368,8 +409,13 @@ def _cached_payload(
     return search_graph_payload(
         graph,
         [
-            {"slug": slug, "full_name": name, "organization": organization}
-            for slug, name, organization in people
+            {
+                "slug": slug,
+                "full_name": name,
+                "organization": organization,
+                "organization_logo": logo,
+            }
+            for slug, name, organization, logo in people
         ],
         query=query,
         total=total,
@@ -394,6 +440,7 @@ def network(
             hit["slug"],
             hit.get("full_name") or hit["slug"],
             hit.get("organization") or "",
+            hit.get("organization_logo") or "",
         )
         for hit in found["results"]
     )
