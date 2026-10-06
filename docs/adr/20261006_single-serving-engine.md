@@ -101,12 +101,29 @@ effects.
 2. It releases the lease. The standby, watching the key, takes it and subscribes.
 3. It ends its shared (queue-grouped) subscriptions, so new requests and new
    sessions go to the standby.
-4. It keeps the sessions it owns until they finish, or until `drain_seconds`
-   passes (default 60, a transfer's idle expiry). Then it closes what is left
-   and its connections.
+4. It answers the calls it has already received and keeps the sessions it owns
+   until they finish, or until `drain_seconds` passes (default 60, a transfer's
+   idle expiry). Then it closes what is left and its connections.
 
 The standby subscribes while the old engine drains, so for a moment both serve:
-an overlap rather than a gap. Shared backends make the overlap safe.
+an overlap rather than a gap. Shared backends make the overlap safe, including a
+call the old engine finishes after the release.
+
+### Calls already received
+The kernel services' one-shot endpoints are NATS micro services. `nats.micro`'s
+`Service.stop` unsubscribes: it cancels a handler still running and drops the
+requests already delivered, whose callers then time out. So each kernel primary
+(`nats_sessions.ServicePrimary`) counts the calls it has received as sessions. At
+step 3 its endpoints stop taking calls; at step 4 it answers the ones it has.
+Fencing and the drain deadline still cancel them.
+
+A shared subscription is ended at the broker first: the UNSUB is written, then a
+round trip confirms it (`nats_sessions.stop_delivery`). Only then is it drained.
+nats-py's `Subscription.drain` alone writes its PING before its UNSUB, so a
+request the broker routes in between arrives after the drain and is dropped
+(reproduced with concurrent requests on nats-server 2.14, though not on every
+run). Both pieces reach into nats-py and `nats.micro` internals; the real-broker
+tests catch a change there.
 
 ### Sessions belong to one engine instance
 Transfers, model streams and parked overflow replies live in one process. Their
@@ -184,10 +201,15 @@ delays a renewal. `Engine.load` claims first; `Engine.shutdown` releases.
 
 `engine/nats_sessions.py` holds the session side: `owned_by` (hosts built inside
 take the engine's instance id), `SessionHost` (`stop_accepting`,
-`sessions_finished`, `stop`) and `wait_for_sessions`. `TransferHost` (and so the
-overflow host), the model registry endpoint and the primaries that stream through
-a transfer host (`ServiceWithTransfers`) are session hosts. A client engine's
-services come from `EngineNATSDependencies.build_clients`.
+`sessions_finished`, `stop`), `ServicePrimary`, `stop_delivery` and
+`wait_for_sessions`. `TransferHost` (and so the overflow host), the model
+registry endpoint and every kernel primary are session hosts: `ServicePrimary`,
+or `ServiceWithTransfers` for those that stream through a transfer host. A
+primary's micro service (`nats_tracing.TracedService`) does the endpoint side:
+`stop_accepting`, `requests_finished`, `stop`. `wait_for_sessions` waits twice,
+because a call answered during the first wait can park its overflowing reply on
+a host already done. A client engine's services come from
+`EngineNATSDependencies.build_clients`.
 
 ## Consequences
 - A second serving engine fails at start with a message naming the first. This
@@ -246,10 +268,25 @@ Done:
   closed at the deadline.
 - A `client` engine opens no backend. Tested over a real broker: it creates no
   file, never touches the lease, and every service is a NATS client.
+- The calls already received are answered. Every kernel primary is a session
+  host whose endpoints stop taking calls at the handover and answer the ones they
+  have, within `drain_seconds`. Shared subscriptions end at the broker before
+  they drain (`stop_delivery`), for the transfer hosts and the model registry too.
+  Tested over a real broker:
+  - A call being handled and one queued behind it are answered while new calls
+    reach the next engine. A call sent while nobody serves is answered by the
+    next engine. A call still running at the deadline, or at fencing, is
+    cancelled.
+  - A queue member drained under load loses no request.
+  - Key-value calls through the real primary run without pause across a deploy
+    with no failed call.
+  - A real engine answers a slow call in flight at shutdown, while new calls go
+    to the next engine.
+
+  With `nats.micro`'s own stop, the tests of calls received, of the deadline, of
+  the deploy and of the engine fail.
 
 Pending:
-- A kernel service's one-shot endpoints (NATS micro services) are unsubscribed,
-  not drained, when the engine stops serving: `nats.micro`'s `Service.stop`
-  cancels a handler still running and drops requests already delivered, whose
-  callers then time out. Draining them needs `nats.micro` internals. Until then a
-  handover can fail the one-shot calls in flight at that moment.
+- The discovery primary (`DiscoveryNATS.stop`) still drains its queue-grouped
+  subscriptions with nats-py's `Subscription.drain` alone. It should call
+  `stop_delivery` first, as the transfer hosts and the model registry do.

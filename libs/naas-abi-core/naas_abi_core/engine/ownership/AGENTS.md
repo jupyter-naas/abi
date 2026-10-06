@@ -33,6 +33,13 @@ Around the lease, in the engine:
   ends the shared (queue-grouped) subscriptions, then waits for each
   `SessionHost`'s sessions up to `nats.engine.drain_seconds` (60) before closing
   them. Fencing closes them at once.
+- **Calls already received are answered.** Every kernel primary is a
+  `ServicePrimary` (`engine/nats_sessions.py`): its one-shot calls are its
+  sessions. Its micro service (`nats_tracing.TracedService`) ends the endpoints'
+  subscriptions at the broker and answers what they received, instead of
+  `nats.micro`'s `Service.stop`, which cancels them. Every shared subscription
+  ends through `stop_delivery` before it drains: nats-py's `Subscription.drain`
+  alone can drop a request routed between its PING and its UNSUB.
 - **A client engine opens nothing.** With role `client` (or `auto` next to a
   serving engine) every service comes from
   `EngineNATSDependencies.build_clients`: NATS clients only, no owner, no
@@ -103,7 +110,11 @@ The JetStream and integration tests need `nats-server` on `PATH` (with JetStream
 and skip without it. CI runs them in `.github/workflows/standalone_sdk.yml`.
 `Engine_handover_integration_test.py` loads real engines: one instance id across
 the lease and every session, a transfer completing during shutdown, a stuck one
-closed at the drain deadline, and a client engine that creates no file.
+closed at the drain deadline, a one-shot call in flight at shutdown answered, and
+a client engine that creates no file. `nats_sessions_test.py` covers one-shot
+calls at the handover over a real broker, and the deploy test in
+`EngineOwnershipLoader_integration_test.py` runs key-value calls through the real
+primary across the handover.
 
 ## Adding a new adapter
 1. Implement every method of `EngineLeasePort` in
