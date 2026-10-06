@@ -24,6 +24,21 @@ The engine side is `engine_loaders/EngineOwnershipLoader.py`. It runs the domain
 on its own loop thread and NATS connection. `Engine.load` claims;
 `Engine.shutdown` releases.
 
+Around the lease, in the engine:
+- **One instance id.** `Engine.instance_id` is generated once. The lease is held
+  under it, and every session host the engine starts takes it as the owner in its
+  subjects (`engine/nats_sessions.py`, `owned_by`): transfers, overflow replies,
+  model streams.
+- **Sessions outlive the release.** `Engine.shutdown` stops the jobs, releases,
+  ends the shared (queue-grouped) subscriptions, then waits for each
+  `SessionHost`'s sessions up to `nats.engine.drain_seconds` (60) before closing
+  them. Fencing closes them at once.
+- **A client engine opens nothing.** With role `client` (or `auto` next to a
+  serving engine) every service comes from
+  `EngineNATSDependencies.build_clients`: NATS clients only, no owner, no
+  subscription, no ontology loading. Only the model registry stays local, in
+  memory.
+
 ## Port
 `EngineLeasePort` holds one record, written only by compare-and-swap. Revisions
 are positive and only move forward; an absent record has revision 0.
@@ -68,8 +83,9 @@ timestamps, so hosts' clocks are never compared.
 - `InMemoryLease`: an `asyncio.Condition` bound to the loop that first uses it.
 
 ## Factory
-- `this_process(rollout_id)` describes this process as a `Holder`: a new instance
-  id, host, pid, `naas-abi-core` version and UTC start time.
+- `this_process(rollout_id, instance_id=None)` describes this process as a
+  `Holder`: the engine's instance id (a new one without), host, pid,
+  `naas-abi-core` version and UTC start time.
 - `create_engine_ownership(nc, me, timing, bucket=)` builds `EngineOwnership`
   over `JetStreamLease`.
 
@@ -79,10 +95,15 @@ cd libs/naas-abi-core
 uv run pytest --import-mode=importlib naas_abi_core/engine/ownership \
   naas_abi_core/engine/engine_loaders/EngineOwnershipLoader_test.py \
   naas_abi_core/engine/engine_loaders/EngineOwnershipLoader_integration_test.py \
-  naas_abi_core/engine/Engine_ownership_test.py
+  naas_abi_core/engine/Engine_ownership_test.py \
+  naas_abi_core/engine/nats_sessions_test.py \
+  naas_abi_core/engine/Engine_handover_integration_test.py
 ```
 The JetStream and integration tests need `nats-server` on `PATH` (with JetStream)
 and skip without it. CI runs them in `.github/workflows/standalone_sdk.yml`.
+`Engine_handover_integration_test.py` loads real engines: one instance id across
+the lease and every session, a transfer completing during shutdown, a stuck one
+closed at the drain deadline, and a client engine that creates no file.
 
 ## Adding a new adapter
 1. Implement every method of `EngineLeasePort` in

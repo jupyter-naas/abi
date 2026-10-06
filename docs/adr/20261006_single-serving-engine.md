@@ -58,9 +58,13 @@ version, rollout id and start time.
 ### Three roles
 - **`serve`** (default): takes the lease, serves the kernel subjects and hosts
   the jobs.
-- **`client`**: never takes the lease, serves nothing and hosts no jobs. Its
-  modules reach every service through the NATS clients. It is for scripts and
-  notebooks that load the engine next to the serving one.
+- **`client`**: never takes the lease, serves nothing and hosts no jobs. It
+  opens no backend: every service is a NATS client of the serving engine, the
+  same facades a serving engine gives its modules. Only the model registry
+  stays in the process, in memory, for modules to register their models. Its
+  agents keep their memory in the serving engine's document service, and it
+  leaves the ontologies to the serving engine, which owns the triple store. It
+  is for scripts and notebooks that load the engine next to the serving one.
 - **`auto`**: serves when no engine does and is a client otherwise. It never
   stands by. CLI commands that load an engine (`abi chat`, `abi agent list`,
   `abi run script`) use it unless `ABI_ENGINE_ROLE` is set, so they keep working
@@ -95,10 +99,24 @@ effects.
 
 1. It stops its jobs. They finish against the engine still serving: itself.
 2. It releases the lease. The standby, watching the key, takes it and subscribes.
-3. It drains its service subscriptions, then closes its connections.
+3. It ends its shared (queue-grouped) subscriptions, so new requests and new
+   sessions go to the standby.
+4. It keeps the sessions it owns until they finish, or until `drain_seconds`
+   passes (default 60, a transfer's idle expiry). Then it closes what is left
+   and its connections.
 
 The standby subscribes while the old engine drains, so for a moment both serve:
 an overlap rather than a gap. Shared backends make the overlap safe.
+
+### Sessions belong to one engine instance
+Transfers, model streams and parked overflow replies live in one process. Their
+later messages use subjects that carry an owner id
+(`<prefix>.<owner>.<operation>`), so they reach that process only. Each engine
+generates one instance id. The lease is held under it, and every session host the
+engine starts takes it as the owner (`nats_sessions.owned_by`), so the lease
+record names the process a session belongs to. A session in progress at the
+handover goes on with the old engine on those subjects (step 4), while new ones
+open on the standby.
 
 ### Standby needs shared backends
 Zero-downtime deploys run on shared backends (PostgreSQL, S3, an Oxigraph or
@@ -140,11 +158,13 @@ A holder that has not renewed for half a lease period stops serving at once. It
 keeps renewing. If a renewal succeeds while the lease is still its own, it
 serves again. If another engine holds the lease, the process stops (`SIGTERM`).
 Since a contender waits a full lease period before taking over, the old holder
-has stopped serving well before the new one starts.
+has stopped serving well before the new one starts. Fencing does not wait for
+sessions: they close at once.
 
 ### Defaults
 Under `nats.engine`: `role` `serve`, `rollout_id` empty, `lease_seconds` 20 (1 to
-300), `standby_timeout_seconds` 900.
+300), `standby_timeout_seconds` 900, `drain_seconds` 60 (0 closes the sessions at
+once).
 
 ### Shape
 A self-contained `naas_abi_core/engine/ownership/` domain:
@@ -162,6 +182,13 @@ A self-contained `naas_abi_core/engine/ownership/` domain:
 its own event loop thread and NATS connection, so a busy service endpoint never
 delays a renewal. `Engine.load` claims first; `Engine.shutdown` releases.
 
+`engine/nats_sessions.py` holds the session side: `owned_by` (hosts built inside
+take the engine's instance id), `SessionHost` (`stop_accepting`,
+`sessions_finished`, `stop`) and `wait_for_sessions`. `TransferHost` (and so the
+overflow host), the model registry endpoint and the primaries that stream through
+a transfer host (`ServiceWithTransfers`) are session hosts. A client engine's
+services come from `EngineNATSDependencies.build_clients`.
+
 ## Consequences
 - A second serving engine fails at start with a message naming the first. This
   includes a Dagster engine, which needs no special case. Dagster leaves the dev
@@ -175,8 +202,8 @@ delays a renewal. `Engine.load` claims first; `Engine.shutdown` releases.
   - Set `ABI_ROLLOUT_ID` per deploy, for example the image tag.
   - Use `maxSurge: 1` and `maxUnavailable: 0`.
   - Count a standby as ready.
-  - Set `terminationGracePeriodSeconds` above the time jobs and services need to
-    drain.
+  - Set `terminationGracePeriodSeconds` above the time jobs need to finish plus
+    `drain_seconds`.
 - A standby engine serves HTTP during the handover. Its modules and API routes
   use the NATS clients, so they reach the old engine until the switch.
 - Migrations that run at boot must work with the previous release still serving
@@ -209,12 +236,20 @@ Done:
   - Two real-broker runs under continuous traffic. A handover has zero failed
     calls. After a crash, every request sent after it is answered. Both tests
     fail when the retry is turned off.
+- One engine instance id: the lease holder and the owner of every transfer,
+  overflow reply and model stream the engine serves. A real-broker test opens a
+  session on each host and finds the lease holder's id in every one.
+- Sessions survive the release. Shutdown ends the shared subscriptions, waits
+  for the engine's sessions up to `drain_seconds`, then closes them. Tested over
+  a real broker, for a transfer host and for a whole engine: a transfer in
+  progress at shutdown completes while new ones go elsewhere, and a stuck one is
+  closed at the deadline.
+- A `client` engine opens no backend. Tested over a real broker: it creates no
+  file, never touches the lease, and every service is a NATS client.
 
 Pending:
-- One engine instance id for the lease and the transfer, overflow and stream
-  owners, which today each generate their own.
-- Keeping owner-scoped sessions (transfers, streams, overflow) alive after the
-  release until they finish or a drain deadline passes. Today they end when their
-  service's subscription is drained.
-- A `client` engine that loads no local backend at all. Today it builds the
-  configured services, as before, but serves none of them.
+- A kernel service's one-shot endpoints (NATS micro services) are unsubscribed,
+  not drained, when the engine stops serving: `nats.micro`'s `Service.stop`
+  cancels a handler still running and drops requests already delivered, whose
+  callers then time out. Draining them needs `nats.micro` internals. Until then a
+  handover can fail the one-shot calls in flight at that moment.

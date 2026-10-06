@@ -68,9 +68,10 @@ Test run at `a582a19f6`: 101 job tests passed (SDK and engine, real broker inclu
       - type, time, search and JSON filters translate to DuckDB SQL (`json_extract`, `ILIKE`);
       - type counts add the archive's to PostgreSQL's.
       - Until then, the Data tab already shows `abi_event/events_archive` (schema, partitions, a 100-row preview, copyable SQL).
-    - [ ] One engine instance id, used for the lease and as the owner id in transfer, overflow and stream subjects (today each generates its own).
-    - [ ] Keep owner-scoped transfer and stream sessions after the release until they finish or a drain deadline passes. Today they end when their service's subscription is drained.
-    - [ ] A `client` engine that loads no local backend at all. Today it builds the configured services as before, but serves none of them.
+    - [x] One engine instance id, used for the lease and as the owner id in transfer, overflow and stream subjects (today each generates its own). `Engine.instance_id` holds the lease and owns every session host it starts (`nats_sessions.owned_by`); a real-broker test finds it in every session.
+    - [x] Keep owner-scoped transfer and stream sessions after the release until they finish or a drain deadline passes. Today they end when their service's subscription is drained. Shutdown ends the queue-grouped subscriptions, then waits up to `nats.engine.drain_seconds` (60) for each `SessionHost`'s sessions; tested: a transfer completes during shutdown, a stuck one closes at the deadline.
+    - [x] A `client` engine that loads no local backend at all. Today it builds the configured services as before, but serves none of them. It now gets NATS clients only (`EngineNATSDependencies.build_clients`); tested: no file created, lease untouched, every service a NATS client.
+    - [ ] Drain the kernel services' one-shot endpoints at the handover. They are `nats.micro` services, and `Service.stop` unsubscribes: it cancels a handler still running and drops requests already delivered, whose callers time out (reproduced with nats-py's micro service). The handover test only covers a plain drained subscription. Draining needs `nats.micro` internals (each endpoint's subscription).
     - [ ] Remove Dagster from the dev CLI and compose files when it is retired.
   - **Test:** done for the start matrix, standby and takeover, fencing (including fencing before a standby can take over), lost and restored leases, the client and auto roles, the shared-backend check per adapter, and two real-broker runs under continuous traffic: a handover with zero failed calls, and a crash after which every request sent is answered. Requests in flight at the crash are lost. Both real-broker runs fail when the retry is turned off.
 
