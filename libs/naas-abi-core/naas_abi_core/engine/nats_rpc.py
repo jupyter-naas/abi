@@ -30,6 +30,7 @@ from naas_abi_core.engine.nats_transfer import TransferError
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_proto.transfer.v1 import transfer_pb2 as transfer_pb
 from naas_abi_sdk import no_responders, overflow
+from naas_abi_sdk.messages import message_size
 from naas_abi_sdk.telemetry import (
     TransferTrace,
     client_span,
@@ -160,14 +161,6 @@ async def respond_protobuf(
             error_response.SerializeToString(),
             headers={ERROR_CODE_REPLY_HEADER: "PAYLOAD_TOO_LARGE"},
         )
-
-
-def message_size(payload: bytes, headers: dict[str, str] | None) -> int:
-    """Bytes NATS counts against max_payload: the body and the header block."""
-    if not headers:
-        return len(payload)
-    block = "".join(f"{key}: {value}\r\n" for key, value in headers.items())
-    return len(payload) + len(f"NATS/1.0\r\n{block}\r\n".encode())
 
 
 def broker_limit(request: Request) -> int | None:
@@ -690,13 +683,10 @@ class NatsRPCClient:
         timeout_seconds: float | None = None,
     ):
         nc = await self._ensure_connection_async()
-        # NATS counts the HPUB header block as part of the message size. nats-py's
-        # publish check only counts the body, so check both before sending.
-        header_size = len(b"NATS/1.0\r\n\r\n") + sum(
-            len(f"{key}: {value}\r\n".encode()) for key, value in headers.items()
-        )
+        # nats-py's publish check only counts the body; the broker counts the
+        # header block too, so check both before sending.
         limit = nc.max_payload
-        if len(payload) + header_size > limit:
+        if message_size(payload, headers) > limit:
             raise NatsRPCPayloadTooLargeError(
                 f"Request exceeds {limit} bytes including headers; "
                 "use streaming or a storage reference.",

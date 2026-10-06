@@ -13,6 +13,7 @@ from nats.aio.client import Client
 from nats.errors import MaxPayloadError, NoRespondersError
 
 from naas_abi_sdk import no_responders, overflow
+from naas_abi_sdk.messages import message_size
 from naas_abi_sdk.telemetry import (
     TransferTrace,
     client_span,
@@ -126,7 +127,7 @@ class Transport:
         nc = await self.connect()
         limit = nc.max_payload
         upload = None
-        if _message_size(payload, headers) > limit and overflow.possible(limit):
+        if message_size(payload, headers) > limit and overflow.possible(limit):
             try:
                 upload = await overflow.upload(
                     chunk, payload, chunk_bytes=overflow.chunk_size(limit)
@@ -160,7 +161,7 @@ class Transport:
     ) -> Response:
         async def send():
             nc = await self.connect()
-            if _message_size(payload, headers) > nc.max_payload:
+            if message_size(payload, headers) > nc.max_payload:
                 raise RPCError("PAYLOAD_TOO_LARGE", "Request exceeds broker limit")
             try:
                 # An engine handing over may leave nobody subscribed for a moment;
@@ -199,12 +200,6 @@ class Transport:
             record_error(error.code, error.message)
             raise RPCError(error.code, error.message, response=response)
         return response
-
-
-def _message_size(payload: bytes, headers: dict[str, str]) -> int:
-    # NATS counts the HPUB header block as part of the message size.
-    header_block = "".join(f"{k}: {v}\r\n" for k, v in headers.items())
-    return len(payload) + len(f"NATS/1.0\r\n{header_block}\r\n".encode())
 
 
 async def _download(call: overflow.Call, headers: Any) -> bytes:
