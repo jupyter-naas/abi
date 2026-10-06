@@ -92,3 +92,58 @@ def test_bus_telemetry_setting_survives_owner_and_dependency_wiring(monkeypatch)
         assert dependencies.bus.services_wired
     finally:
         wiring.close()
+
+
+def _config(nats, services=None):
+    return EngineConfiguration(
+        api={},
+        global_config={"ai_mode": "local"},
+        modules=[],
+        nats=nats,
+        services=services or {},
+    )
+
+
+def test_local_backends_cover_every_service_a_nats_engine_owns():
+    loader = EngineServiceLoader(_config({"jwt_secret": "test"}))
+
+    found = loader.local_backends({})
+
+    # Defaults keep data on this host; the bus is the broker's JetStream.
+    assert {
+        "activity_log",
+        "cache",
+        "coding_environment",
+        "dataset",
+        "document",
+        "event",
+        "kv",
+        "object_storage",
+        "source_control",
+        "triple_store",
+        "vector_store",
+    } == set(found)
+
+
+def test_local_backends_skip_services_this_engine_does_not_load():
+    loader = EngineServiceLoader(_config(None))
+
+    found = loader.local_backends(
+        {"m": ModuleDependencies(modules=[], services=[DocumentService])}
+    )
+
+    # Coding environment and source control always load.
+    assert set(found) == {"document", "coding_environment", "source_control"}
+
+
+def test_an_activity_log_in_documents_loads_the_document_service(monkeypatch):
+    from naas_abi_core.services.activity_log.ActivityLogService import (
+        ActivityLogService,
+    )
+
+    services = _loader(monkeypatch, None).load_services(
+        {"m": ModuleDependencies(modules=[], services=[ActivityLogService])}
+    )
+
+    assert services.document_available()
+    assert services.activity_log_available()

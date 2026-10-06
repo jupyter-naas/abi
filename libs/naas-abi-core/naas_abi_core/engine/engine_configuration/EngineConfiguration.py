@@ -1,5 +1,6 @@
 import os
 import sys
+from collections.abc import Iterable, Mapping
 from io import StringIO
 from typing import Any, Literal, Self
 
@@ -8,7 +9,6 @@ from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 from naas_abi_core import logger
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_ActivityLogService import (
     ActivityLogAdapterConfiguration,
-    ActivityLogAdapterSqliteConfiguration,
     ActivityLogServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService import (
@@ -86,7 +86,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_VectorStoreSe
 )
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from rich.prompt import Prompt
 
 
@@ -187,10 +187,7 @@ class ServicesConfiguration(BaseModel):
         )
     )
     activity_log: ActivityLogServiceConfiguration = ActivityLogServiceConfiguration(
-        activity_log_adapter=ActivityLogAdapterConfiguration(
-            adapter="sqlite",
-            config=ActivityLogAdapterSqliteConfiguration(),
-        )
+        activity_log_adapter=ActivityLogAdapterConfiguration(adapter="document")
     )
     event: EventServiceConfiguration = EventServiceConfiguration(
         event_adapter=EventAdapterConfiguration(
@@ -220,6 +217,58 @@ class ServicesConfiguration(BaseModel):
             ),
         ]
     )
+
+    def local_backends(self, owned: Iterable[str]) -> dict[str, str]:
+        """For each owned service whose data stays on this host, where it is.
+
+        A deploy that hands over without downtime needs every service the engine
+        owns on a shared backend (docs/adr/20261006_single-serving-engine.md).
+        ``owned`` names services as in this configuration (``document``, ``kv``,
+        ...). The bus is never listed: in NATS mode it is the broker's JetStream.
+        """
+        found: dict[str, str] = {}
+        for name in owned:
+            reason = self._local_storage(name)
+            if reason:
+                found[name] = reason
+        return found
+
+    def _local_storage(self, name: str) -> str | None:
+        if name == "secret":
+            reasons = [a.local_storage() for a in self.secret.secret_adapters]
+            return "; ".join(r for r in reasons if r) or None
+        if name == "activity_log":
+            return self.activity_log.activity_log_adapter.local_storage(
+                document=self.document.document_adapter.local_storage()
+            )
+        if name == "cache":
+            object_storage = self.object_storage.object_storage_adapter.local_storage()
+            keyvalue = self.kv.kv_adapter.local_storage()
+            tiers = [
+                (
+                    entry.tier,
+                    entry.local_storage(
+                        object_storage=object_storage, keyvalue=keyvalue
+                    ),
+                )
+                for entry in self.cache.adapters
+            ]
+            return "; ".join(f"{tier} tier on {r}" for tier, r in tiers if r) or None
+        adapters = {
+            "coding_environment": self.coding_environment.coding_environment_adapter,
+            "dataset": self.dataset.dataset_adapter,
+            "document": self.document.document_adapter,
+            "email": self.email.email_adapter,
+            "event": self.event.event_adapter,
+            "kv": self.kv.kv_adapter,
+            "object_storage": self.object_storage.object_storage_adapter,
+            "source_control": self.source_control.source_control_adapter,
+            "triple_store": self.triple_store.triple_store_adapter,
+            "vector_store": self.vector_store.vector_store_adapter,
+        }
+        if name not in adapters:
+            return None  # no storage of its own (bus in NATS mode, model registry)
+        return adapters[name].local_storage()
 
 
 class ApiConfiguration(BaseModel):
@@ -328,6 +377,57 @@ class NATSJobsConfiguration(BaseModel):
     )
 
 
+class NATSEngineConfiguration(BaseModel):
+    """Which engine serves the kernel services (docs/adr/20261006_single-serving-engine.md).
+
+    One engine per NATS account serves them, holding a lease it renews every
+    quarter of ``lease_seconds``. Another serving engine fails to start, unless
+    its ``rollout_id`` differs from the serving engine's: it then stands by and
+    takes over when that engine stops (deploys without downtime), or fails after
+    ``standby_timeout_seconds``. ``role: client`` never serves nor hosts jobs:
+    scripts that load the engine next to the serving one. ``role: auto`` serves
+    when no engine does and is a client otherwise, never a standby: one-off
+    engines such as CLI commands, which use it by default.
+
+    ``ABI_ENGINE_ROLE`` and ``ABI_ROLLOUT_ID`` override ``role`` and
+    ``rollout_id`` (``resolved``).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["serve", "client", "auto"] = "serve"
+    rollout_id: str = Field(
+        default="", pattern=r"^([A-Za-z0-9_][A-Za-z0-9_.:-]{0,127})?$"
+    )
+    lease_seconds: float = Field(default=20, ge=1, le=300, allow_inf_nan=False)
+    standby_timeout_seconds: float = Field(default=900, gt=0, allow_inf_nan=False)
+
+    def resolved(self, environ: Mapping[str, str]) -> "NATSEngineConfiguration":
+        """These settings with ``ABI_ENGINE_ROLE`` / ``ABI_ROLLOUT_ID`` applied."""
+        overrides = {
+            field: value
+            for field, value in (
+                ("role", environ.get("ABI_ENGINE_ROLE", "")),
+                ("rollout_id", environ.get("ABI_ROLLOUT_ID", "")),
+            )
+            if value
+        }
+        if not overrides:
+            return self
+        return NATSEngineConfiguration.model_validate(
+            {**self.model_dump(), **overrides}
+        )
+
+    def timing(self) -> Any:
+        """The ownership ``OwnershipTiming`` for these settings."""
+        from naas_abi_core.engine.ownership.ownership_service import OwnershipTiming
+
+        return OwnershipTiming(
+            lease_seconds=self.lease_seconds,
+            standby_timeout_seconds=self.standby_timeout_seconds,
+        )
+
+
 class NATSConfiguration(BaseModel):
     """Cross-cutting NATS exposure config -- not a domain service, so it lives
     at the top level next to ``api``/``deploy``/``global_config``, not nested
@@ -359,6 +459,7 @@ class NATSConfiguration(BaseModel):
         default_factory=NATSRPCOverflowConfiguration
     )
     jobs: NATSJobsConfiguration = Field(default_factory=NATSJobsConfiguration)
+    engine: NATSEngineConfiguration = Field(default_factory=NATSEngineConfiguration)
     # The broker's HTTP monitoring endpoint (``nats-server -m 8222``), read by the
     # Nexus SysAdmin app (/varz, /connz, /jsz). It has no auth: keep it private.
     monitoring_url: str | None = Field(default=None, pattern=r"^https?://")

@@ -15,6 +15,7 @@ activity_log/
 ├── ActivityLogService.py          # public service
 ├── adapters/activity_log_stream_codec.py   # event <-> protobuf, stream frames
 ├── adapters/secondary/
+│   ├── ActivityLogDocumentAdapter.py   # default: the engine's Document Service
 │   └── ActivityLogSqliteAdapter.py
 └── tests/
     └── activity_log__secondary_adapter__generic_test.py   # generic contract tests
@@ -68,7 +69,15 @@ pin the snapshot before opening and have no unary fallback.
 
 | Adapter | Backend / Notes |
 |---|---|
-| `ActivityLogSqliteAdapter` | One SQLite DB file **per actor**, WAL mode, per-actor locking, LRU connection cache |
+| `ActivityLogDocumentAdapter` (`adapter: document`, the default) | The engine's Document Service, namespace `naas_abi_core.services.activity_log`. Collections `events` (id `<actor_id>#<seq, 20 digits>`) and `actors`. Shared by every engine when the Document Service is on PostgreSQL. |
+| `ActivityLogSqliteAdapter` (`adapter: sqlite`) | One SQLite DB file **per actor**, WAL mode, per-actor locking, LRU connection cache |
+
+`ActivityLogDocumentAdapter` gets the Document Service through
+`ActivityLogService.set_services` (`wire_services`), as cache tiers do. In NATS
+mode that is the NATS facade. Each actor's `seq` is the next number after its
+newest event, written create-only, and retried on conflict, so two engines
+recording for one actor lose nothing. Decision and trade-offs:
+`docs/adr/20261006_shared-event-and-activity-log-storage.md`.
 
 ## Factory (`ActivityLogFactory.py`)
 
@@ -88,6 +97,8 @@ ActivityLogFactory.ActivityLogServiceSqlite(
 uv run pytest libs/naas-abi-core/naas_abi_core/services/activity_log/ActivityLogPort_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/activity_log/ActivityLogService_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/activity_log/adapters/secondary/ActivityLogSqliteAdapter_test.py
+# On SQLite documents, and on PostgreSQL documents with DOCUMENT_TEST_POSTGRES_DSN set:
+uv run pytest libs/naas-abi-core/naas_abi_core/services/activity_log/adapters/secondary/ActivityLogDocumentAdapter_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/activity_log/tests/activity_log__secondary_adapter__generic_test.py
 ```
 

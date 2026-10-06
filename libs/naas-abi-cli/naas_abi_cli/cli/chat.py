@@ -17,6 +17,9 @@ def chat(module_name: str = "", agent_name: str = ""):
 def _chat(module_name: str, agent_name: str) -> None:
     from naas_abi_core.engine.Engine import Engine
 
+    from naas_abi_cli.cli.engine_role import use_auto_engine_role
+
+    use_auto_engine_role()
     engine = Engine()
 
     if module_name == "" and agent_name == "":

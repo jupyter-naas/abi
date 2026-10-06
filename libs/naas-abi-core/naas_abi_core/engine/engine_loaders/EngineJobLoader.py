@@ -41,11 +41,14 @@ def as_async_handler(
     return SyncJobRunner(handler, interrupt_grace_seconds=interrupt_grace_seconds)
 
 
-class _LoopThread:
-    def __init__(self) -> None:
+class LoopThread:
+    """An event loop on its own daemon thread, for engine work that must not
+    wait behind ``nats_runtime``'s loop."""
+
+    def __init__(self, name: str = LOOP_THREAD_NAME) -> None:
         self.loop = asyncio.new_event_loop()
         self.thread = threading.Thread(
-            target=self.loop.run_forever, daemon=True, name=LOOP_THREAD_NAME
+            target=self.loop.run_forever, daemon=True, name=name
         )
         self.thread.start()
 
@@ -88,7 +91,7 @@ class EngineJobLoader:
         self.hosts: list[Any] = []
         # Modules bound to their host, for their own triggers (trigger_job).
         self._bound: list[Any] = []
-        self._loop: _LoopThread | None = None
+        self._loop: LoopThread | None = None
         self._transport: Any = None
 
     @property
@@ -122,7 +125,7 @@ class EngineJobLoader:
                 "Engine jobs need the document service for their run records"
             )
 
-        self._loop = _LoopThread()
+        self._loop = LoopThread()
         try:
             for module_id, module in with_jobs.items():
                 self._start_host(module_id, module)

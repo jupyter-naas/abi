@@ -8,6 +8,8 @@ from naas_abi_core.engine.Engine import Engine
 from rich.console import Console
 from rich.table import Table
 
+from naas_abi_cli.cli.engine_role import use_auto_engine_role
+
 
 @click.group("agent")
 def agent():
@@ -16,6 +18,7 @@ def agent():
 
 @agent.command("list")
 def list():
+    use_auto_engine_role()
     engine = Engine()
     engine.load()
 

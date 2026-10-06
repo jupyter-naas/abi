@@ -2,6 +2,7 @@ from typing import Literal, Self
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
+    config_model,
 )
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
@@ -225,6 +226,17 @@ class ObjectStorageAdapterConfiguration(GenericLoader):
             # ).load()
         else:
             return super().load()
+
+    def local_storage(self) -> str | None:
+        """Where the objects live (single-serving-engine ADR)."""
+        if self.adapter == "fs":
+            base_path = config_model(
+                ObjectStorageAdapterFSConfiguration, self.config
+            ).base_path
+            return f"files under {base_path}"
+        if self.adapter == "custom":
+            return self.custom_local_storage()
+        return None  # s3, naas, r2; nats_rpc is another engine's
 
 
 class ObjectStorageServiceConfiguration(BaseModel):

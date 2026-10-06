@@ -46,6 +46,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
+    config_model,
 )
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
@@ -272,6 +273,22 @@ class CacheAdapterEntry(GenericLoader):
 # ---------------------------------------------------------------------------
 # Top-level service configuration
 # ---------------------------------------------------------------------------
+
+    def local_storage(  # type: ignore[override]
+        self, *, object_storage: str | None = None, keyvalue: str | None = None
+    ) -> str | None:
+        """Where this tier's entries live; ``object_storage`` and ``keyvalue`` are
+        those services' own answers (single-serving-engine ADR)."""
+        if self.adapter == "fs":
+            base_path = config_model(CacheAdapterFSConfiguration, self.config).base_path
+            return f"files under {base_path}"
+        if self.adapter == "object_storage" and object_storage:
+            return f"the object_storage service: {object_storage}"
+        if self.adapter == "keyvalue" and keyvalue:
+            return f"the keyvalue service: {keyvalue}"
+        if self.adapter == "custom":
+            return self.custom_local_storage()
+        return None  # redis; nats_rpc is another engine's
 
 
 class CacheServiceConfiguration(BaseModel):

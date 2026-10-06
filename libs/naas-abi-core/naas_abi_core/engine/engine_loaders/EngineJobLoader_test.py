@@ -163,7 +163,7 @@ def test_engine_adds_dataset_maintenance_as_a_kernel_job_owner_in_nats_mode():
         e._Engine__nats_dependencies = None  # type: ignore[attr-defined]
         e._Engine__modules = {"acme.jobs": _Jobs()}  # type: ignore[attr-defined]
         e._Engine__services = SimpleNamespace(  # type: ignore[attr-defined]
-            dataset_available=lambda: True, dataset=object()
+            dataset_available=lambda: True, dataset=object(), all=[]
         )
         return e
 

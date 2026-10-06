@@ -2,6 +2,7 @@ from typing import Literal
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
+    config_model,
 )
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
@@ -176,6 +177,17 @@ class EmailAdapterConfiguration(GenericLoader):
             return super().load()
         else:
             raise ValueError(f"Unknown adapter: {self.adapter}")
+
+    def local_storage(self) -> str | None:
+        """Where sent emails go (single-serving-engine ADR)."""
+        if self.adapter == "filesystem":
+            directory = config_model(
+                EmailAdapterFilesystemConfiguration, self.config
+            ).directory
+            return f"files under {directory}"
+        if self.adapter == "custom":
+            return self.custom_local_storage()
+        return None  # smtp, ses, sendgrid, microsoft_outlook; nats_rpc is another engine's
 
 
 class EmailServiceConfiguration(BaseModel):

@@ -12,6 +12,7 @@ since it's a private field) need to exist.
 
 from __future__ import annotations
 
+import threading
 from unittest.mock import AsyncMock, MagicMock
 
 from naas_abi_core.engine.Engine import Engine
@@ -23,6 +24,8 @@ def _bare_engine(primaries: list) -> Engine:
     engine._Engine__nats_primary_adapters = primaries  # type: ignore[attr-defined]
     engine._Engine__nats_runtime_started = bool(primaries)  # type: ignore[attr-defined]
     engine._Engine__job_loader = None  # type: ignore[attr-defined]
+    engine._Engine__ownership = None  # type: ignore[attr-defined]
+    engine._Engine__serving_lock = threading.RLock()  # type: ignore[attr-defined]
     return engine
 
 

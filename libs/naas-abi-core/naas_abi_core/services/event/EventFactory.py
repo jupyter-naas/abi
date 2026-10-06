@@ -26,3 +26,14 @@ class EventFactory:
 
         db_path = os.path.join(root, subpath)
         return EventService(adapter=EventSQLiteAdapter(db_path), bus=bus)
+
+    @staticmethod
+    def EventServicePostgreSQL(
+        dsn: str, schema: str = "abi_event", bus: BusService | None = None
+    ) -> EventService:
+        """An event log every engine shares (deploys without downtime)."""
+        from naas_abi_core.services.event.adapters.secondary.EventPostgreSQLAdapter import (
+            EventPostgreSQLAdapter,
+        )
+
+        return EventService(adapter=EventPostgreSQLAdapter(dsn, schema=schema), bus=bus)
