@@ -236,6 +236,8 @@ def test_a_mixed_secret_fanout_falls_through_to_upstream(monkeypatch):
 def test_a_client_engine_gets_the_facades_a_serving_engine_gives_its_modules():
     owners = MagicMock()  # every service, none of them a NATS client yet
     owners.cache.adapters = [("hot", object()), ("cold", object())]
+    # A local secret fanout: its modules read it through this engine's endpoint.
+    owners.secret = Secret([MagicMock(spec=ISecretAdapter)])
     serving = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
     client = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
 
@@ -265,3 +267,32 @@ def test_a_client_engine_gets_the_facades_a_serving_engine_gives_its_modules():
         serving.close()
         client.close()
     assert not client.clients
+
+
+def test_a_client_engine_keeps_the_upstream_routes_of_its_secret_fanout():
+    def secret_routes(routes):
+        client = EngineNATSDependencies(
+            NATSConfiguration(nats_url="nats://engine:4222", jwt_secret="x" * 32)
+        )
+        facades = client.build_clients(
+            MagicMock(), cache_tiers=[], emit_message_events=False, secret_routes=routes
+        )
+        return client, facades.secret.adapters
+
+    upstream = _upstream_secret()
+    # [dotenv, nats_rpc]: the serving engine's endpoint, then upstream, as its modules see it.
+    client, view = secret_routes([None, upstream])
+    try:
+        assert len(view) == 2 and _is_own_endpoint(view[0]) and view[1] is upstream
+    finally:
+        client.close()
+    client, view = secret_routes([upstream])
+    try:
+        assert view == [upstream]
+    finally:
+        client.close()
+    client, view = secret_routes([None, None])
+    try:
+        assert len(view) == 1 and _is_own_endpoint(view[0])
+    finally:
+        client.close()

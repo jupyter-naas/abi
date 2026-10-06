@@ -272,6 +272,10 @@ class Engine(IEngine):
             services.model_registry.load(),
             cache_tiers=[entry.tier for entry in services.cache.adapters],
             emit_message_events=services.bus.emit_message_events,
+            secret_routes=[
+                entry.load() if entry.adapter == "nats_rpc" else None
+                for entry in services.secret.secret_adapters
+            ],
         )
 
     def __serve(self) -> None:

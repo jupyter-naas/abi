@@ -4,6 +4,7 @@ Owners keep local persistence adapters. Only their injected dependency container
 contains remote clients. Proxies are never passed to the endpoint exposer.
 """
 
+from collections.abc import Sequence
 from typing import Any
 
 from naas_abi_core import logger
@@ -238,12 +239,30 @@ class EngineNATSDependencies:
         self.module_services = dependencies
         return dependencies
 
+    def _secret_routes(
+        self, routes: Sequence[ISecretAdapter | None]
+    ) -> list[ISecretAdapter]:
+        """A client engine's secret view, as ``build`` gives the serving engine's
+        modules: upstream adapters keep their place; the exposed ones are read
+        through one client to the serving engine, where the first of them stood."""
+        view: list[ISecretAdapter] = []
+        endpoint = False
+        for route in routes:
+            if route is not None:
+                self.clients.append(route)
+                view.append(route)
+            elif not endpoint:
+                endpoint = True
+                view.append(self._client(SecretSecondaryAdapterNATSClient))
+        return view
+
     def build_clients(
         self,
         model_registry: Any,
         *,
         cache_tiers: list[str],
         emit_message_events: bool,
+        secret_routes: Sequence[ISecretAdapter | None] = (None,),
     ) -> IEngine.Services:
         """A client engine's services: the serving engine's, through NATS.
 
@@ -251,6 +270,8 @@ class EngineNATSDependencies:
         subscribes. They are the facades ``build`` gives a serving engine's
         modules. ``model_registry`` is this process's in-memory registry: modules
         register their models with it; lookups and inference go over NATS.
+        ``secret_routes`` is the configured secret fanout in order: an upstream
+        ``nats_rpc`` adapter, or None for one the serving engine exposes.
         """
         from naas_abi_core.services.model_registry.adapters.secondary.model_registry_client import (
             ModelRegistryNATSClient,
@@ -289,7 +310,7 @@ class EngineNATSDependencies:
             "events": EventService(
                 self._client(EventSecondaryAdapterNATSClient), bus=bus
             ),
-            "secret": Secret([self._client(SecretSecondaryAdapterNATSClient)]),
+            "secret": Secret(self._secret_routes(secret_routes)),
             "triple_store": RemoteTripleStoreService(
                 self._client(TripleStoreSecondaryAdapterNATSClient)
             ),
