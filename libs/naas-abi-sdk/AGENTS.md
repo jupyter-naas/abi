@@ -149,3 +149,10 @@ or stop; current only around the handler). Keep it stdlib plus optional
 OpenTelemetry API, and a no-op without a provider. Modules
 export spans when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (`[otel]` extra). See
 docs/adr/20261002_observability.md.
+
+Test layout is a deliberate exception to the monorepo rule of a `_test.py` beside
+each file: SDK tests live in `tests/test_<module>.py`, outside the published
+package, and the CI `packages` job runs them alone on Python 3.10 to 3.12. Add a
+module's tests to its `tests/test_<module>.py`. `tests/conftest.py` fails a test
+skipped for want of `nats-server` when `ABI_REQUIRE_NATS_SERVER=1` (set in CI);
+it mirrors core's `engine/nats_test_server.py` hook, so change them together.
