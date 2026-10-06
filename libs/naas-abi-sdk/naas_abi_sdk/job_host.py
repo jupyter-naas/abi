@@ -196,11 +196,47 @@ class JobHost:
     def _subjects(self, descriptor: JobDescriptor):
         return job_subjects(self.project, self.module_id, descriptor.name)
 
-    # --- lifecycle -----------------------------------------------------------------------
-
-    async def start(self) -> None:
+    def _consumer_config(self, descriptor: JobDescriptor) -> Any:
         from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
 
+        subjects = self._subjects(descriptor)
+        return ConsumerConfig(
+            durable_name=subjects.consumer,
+            filter_subject=subjects.trigger,
+            ack_policy=AckPolicy.EXPLICIT,
+            deliver_policy=DeliverPolicy.NEW,
+            ack_wait=self.ack_wait_seconds,
+            # Unlimited: the host counts attempts on the run, so deliveries
+            # deferred while the store is down use none. Triggers expire.
+            max_deliver=-1,
+            max_ack_pending=descriptor.max_concurrency,
+        )
+
+    # --- lifecycle -----------------------------------------------------------------------
+
+    async def prepare(self) -> None:
+        """Create each job's consumer if it is missing, and nothing else.
+
+        A consumer delivers only triggers stored after it was created
+        (``DeliverPolicy.NEW``). A rollout's process calls this before its
+        instance can serve, so a trigger for a job only it declares, sent after
+        the cutover but before ``start``, waits for it instead of being skipped.
+        It never changes an existing consumer, publishes schedules, bridges
+        events or fetches: those stay with the serving generation until
+        ``start``.
+        """
+        from nats.js.errors import NotFoundError
+
+        js = (await self.transport.connect()).jetstream()
+        await ensure_stream(js, self.project)
+        stream = stream_name(self.project)
+        for descriptor, _ in self.handlers.values():
+            try:
+                await js.consumer_info(stream, self._subjects(descriptor).consumer)
+            except NotFoundError:
+                await js.add_consumer(stream, self._consumer_config(descriptor))
+
+    async def start(self) -> None:
         await self.documents.ensure_collection(
             CollectionSpec(
                 name=self.collection,
@@ -218,19 +254,9 @@ class JobHost:
         for descriptor, handler in self.handlers.values():
             subjects = self._subjects(descriptor)
             cancel_subject = subjects.cancel
+            # Created, or updated in place to this code's limits.
             await js.add_consumer(
-                stream_name(self.project),
-                ConsumerConfig(
-                    durable_name=subjects.consumer,
-                    filter_subject=subjects.trigger,
-                    ack_policy=AckPolicy.EXPLICIT,
-                    deliver_policy=DeliverPolicy.NEW,
-                    ack_wait=self.ack_wait_seconds,
-                    # Unlimited: the host counts attempts on the run, so deliveries
-                    # deferred while the store is down use none. Triggers expire.
-                    max_deliver=-1,
-                    max_ack_pending=descriptor.max_concurrency,
-                ),
+                stream_name(self.project), self._consumer_config(descriptor)
             )
             await self.reconcile_schedules(js, descriptor)
             for event in descriptor.events:
