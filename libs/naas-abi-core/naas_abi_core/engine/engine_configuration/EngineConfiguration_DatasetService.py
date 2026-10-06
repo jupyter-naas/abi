@@ -2,6 +2,7 @@ from typing import Literal
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
+    config_model,
 )
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
@@ -143,6 +144,20 @@ class DatasetAdapterConfiguration(GenericLoader):
                 return DatasetSecondaryAdapterNATSClient(**self.config)
             raise ValueError(f"Unknown adapter: {self.adapter}")
         return super().load()
+
+    def local_storage(self) -> str | None:
+        """Where the catalog and table data live (single-serving-engine ADR)."""
+        if self.adapter == "custom":
+            return self.custom_local_storage()
+        if self.adapter != "ducklake":
+            return None  # nats_rpc is another engine's
+        ducklake = config_model(DatasetAdapterDuckLakeConfiguration, self.config)
+        reasons = []
+        if not ducklake.catalog.startswith(("postgres:", "mysql:")):
+            reasons.append(f"DuckLake catalog {ducklake.catalog}")
+        if not ducklake.data_path.lower().startswith(("s3://", "s3a://")):
+            reasons.append(f"DuckLake data under {ducklake.data_path}")
+        return "; ".join(reasons) or None
 
 
 class DatasetServiceConfiguration(BaseModel):

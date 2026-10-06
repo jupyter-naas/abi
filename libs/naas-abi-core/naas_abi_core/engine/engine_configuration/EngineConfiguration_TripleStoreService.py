@@ -2,6 +2,7 @@ from typing import Any, Literal, Self
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
+    config_model,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueService import (
     KeyValueServiceConfiguration,
@@ -383,6 +384,25 @@ class TripleStoreAdapterConfiguration(GenericLoader):
                 raise ValueError(f"Adapter {self.adapter} not supported")
         else:
             return super().load()
+
+    def local_storage(self) -> str | None:
+        """Where the triples live (single-serving-engine ADR)."""
+        if self.adapter == "fs":
+            store = config_model(TripleStoreAdapterFilesystemConfiguration, self.config)
+            return f"files under {store.store_path}"
+        if self.adapter == "oxigraph_embedded":
+            store = config_model(
+                TripleStoreAdapterOxigraphEmbeddedConfiguration, self.config
+            )
+            return f"embedded Oxigraph at {store.store_path}"
+        if self.adapter == "object_storage":
+            storage = config_model(
+                TripleStoreAdapterObjectStorageConfiguration, self.config
+            ).object_storage_service.object_storage_adapter.local_storage()
+            return f"object storage: {storage}" if storage else None
+        if self.adapter == "custom":
+            return self.custom_local_storage()
+        return None  # oxigraph, apache_jena_tdb2, aws_neptune*; nats_rpc is another engine's
 
 
 class TripleStoreServiceConfiguration(BaseModel):

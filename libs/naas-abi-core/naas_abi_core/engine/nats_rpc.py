@@ -29,7 +29,7 @@ from naas_abi_core.engine.nats_naming import connection_name, rpc_client_role
 from naas_abi_core.engine.nats_transfer import TransferError
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_proto.transfer.v1 import transfer_pb2 as transfer_pb
-from naas_abi_sdk import overflow
+from naas_abi_sdk import no_responders, overflow
 from naas_abi_sdk.telemetry import (
     TransferTrace,
     client_span,
@@ -436,7 +436,11 @@ class NatsRPCClient:
         ) as span:
             if transfer is not None:  # a transfer's own chunk: always small
                 return self._rpc_parse(
-                    self._rpc_request(subject, payload, headers), response_cls, transfer
+                    self._rpc_request(
+                        subject, payload, headers, retry_no_responders=False
+                    ),
+                    response_cls,
+                    transfer,
                 )
             headers[overflow.ACCEPT_HEADER] = "1"
             trace = TransferTrace(span)
@@ -472,11 +476,21 @@ class NatsRPCClient:
                 record_overflow(trace)
 
     def _rpc_request(
-        self, subject: str, payload: bytes, headers: dict[str, str]
+        self,
+        subject: str,
+        payload: bytes,
+        headers: dict[str, str],
+        *,
+        retry_no_responders: bool = True,
     ) -> Any:
         return self._run_coro(
             asyncio.wait_for(
-                self._do_request_async(subject, payload, headers),
+                self._do_request_async(
+                    subject,
+                    payload,
+                    headers,
+                    retry_no_responders=retry_no_responders,
+                ),
                 timeout=self._timeout_seconds,
             )
         )
@@ -517,7 +531,9 @@ class NatsRPCClient:
             headers = {self._auth_header: token}
             with client_span(subject, headers, size=len(payload), transfer=trace):
                 msg = await asyncio.wait_for(
-                    self._do_request_async(subject, payload, headers),
+                    self._do_request_async(
+                        subject, payload, headers, retry_no_responders=False
+                    ),
                     timeout=self._timeout_seconds,
                 )
             record_reply(len(msg.data or b""), transfer=trace)
@@ -648,7 +664,12 @@ class NatsRPCClient:
             logger.opt(exception=True).warning("Could not close an overflow upload")
 
     async def _do_request_async(
-        self, subject: str, payload: bytes, headers: dict[str, str]
+        self,
+        subject: str,
+        payload: bytes,
+        headers: dict[str, str],
+        *,
+        retry_no_responders: bool = True,
     ):
         nc = await self._ensure_connection_async()
         # NATS counts the HPUB header block as part of the message size. nats-py's
@@ -664,8 +685,15 @@ class NatsRPCClient:
                 unsent=True,
             )
         try:
-            return await nc.request(
-                subject, payload, timeout=self._timeout_seconds, headers=headers
+            # During an engine handover nobody may be subscribed for a moment;
+            # an undelivered request is safe to send again (no_responders).
+            return await no_responders.request(
+                nc,
+                subject,
+                payload,
+                headers=headers,
+                timeout=self._timeout_seconds,
+                retry_seconds=no_responders.RETRY_SECONDS if retry_no_responders else 0,
             )
         except MaxPayloadError as exc:
             raise NatsRPCPayloadTooLargeError(

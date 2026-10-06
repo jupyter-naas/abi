@@ -35,11 +35,16 @@ REVIEWED = {
         "overflow fetch: transfer read/start/close requests, a few bytes each",
     ),
     "naas-abi-core/naas_abi_core/engine/nats_rpc.py": (
-        4,
+        3,
         (
             "RPC replies sized with their headers against the connection's limit "
-            "(parked or refused above it); requests checked the same way and uploaded"
+            "(parked or refused above it); requests are checked the same way, then "
+            "sent through no_responders"
         ),
+    ),
+    "naas-abi-core/naas_abi_core/engine/ownership/adapters/secondary/lease_jetstream.py": (
+        2,
+        "engine lease record: one holder description, a few hundred bytes",
     ),
     "naas-abi-core/naas_abi_core/services/bus/adapters/secondary/NATSJetStreamAdapter.py": (
         2,
@@ -79,9 +84,12 @@ REVIEWED = {
         1,
         "reply(): refuses a message over the limit, headers counted",
     ),
-    "naas-abi-sdk/naas_abi_sdk/transport.py": (
-        1,
-        "Transport: size checked with headers, overflow upload and download",
+    "naas-abi-sdk/naas_abi_sdk/no_responders.py": (
+        2,
+        (
+            "resends a request nobody received; its callers (nats_rpc, Transport) "
+            "check the size with headers first, and overflow above the limit"
+        ),
     ),
     "naas-abi/naas_abi/apps/nexus/apps/api/app/services/sysadmin/adapters/secondary/nats_micro.py": (
         1,

@@ -24,8 +24,10 @@ event/
 ├── README.md               # user guide (publishing, subscribing, filter DSL)
 ├── adapters/event_stream_codec.py   # StoredEvent <-> protobuf, stream frames
 ├── adapters/secondary/
-│   └── EventSQLiteAdapter.py
-├── tests/event__secondary_adapter__generic_test.py   # contract for every adapter
+│   ├── EventSQLiteAdapter.py
+│   ├── EventPostgreSQLAdapter.py    # shared by every engine
+│   └── EventPostgreSQLArchive.py    # hourly job: events older than 7 days -> Dataset Service
+├── tests/event__secondary_adapter__generic_test.py   # contracts: every adapter, every store
 └── ontologies/
     ├── modules/EventOntology.{ttl,py}    # RDFEntity, Process, LogProcess (canonical bases)
     └── classes/                          # auto-generated event classes
@@ -103,7 +105,30 @@ EventBridge-style: `eq`, `prefix`, `suffix`, `contains`, `in`, `gt`, `gte`, `lt`
 
 | Adapter | Backend / Notes |
 |---|---|
-| `EventSQLiteAdapter` | SQLite (WAL). Tables: `events(seq, id, event_type, timestamp, payload)`, `consumer_cursors(consumer_id, event_type, last_seq, updated_at)` |
+| `EventSQLiteAdapter` (`adapter: sqlite`, the default) | SQLite (WAL). Tables: `events(seq, id, event_type, timestamp, payload)`, `consumer_cursors(consumer_id, event_type, last_seq, updated_at)` |
+| `EventPostgreSQLAdapter` (`adapter: postgresql`) | PostgreSQL, one schema (default `abi_event`). The same two tables, a `JSONB` copy of JSON payloads for `json_filter`, and a one-row `event_sequence` counter: appends are gapless, visible in `seq` order across engines, and numbers are never reused. Shared by every engine, so deploys can hand over without downtime. Keeps 7 days (`archive_after_days`); its `event_archive` job moves older events to the dataset `events_archive`. |
+
+`EventPostgreSQLAdapter` filter semantics follow SQLite's, with two deliberate
+differences: numeric ranges ignore values that are not numbers, and LIKE
+wildcards in prefix, suffix and contains match literally. Decision:
+`docs/adr/20261006_shared-event-and-activity-log-storage.md`.
+
+### Archive (`EventPostgreSQLArchive.py`)
+
+`EventArchiveJobs` runs hourly on the serving engine, in NATS mode. The adapter
+offers it through `job_owners(services)`, which `Engine.job_owners()` collects
+from service adapters. Each run:
+
+1. deletes what an interrupted run archived but did not delete, using the
+   archive's highest `seq`;
+2. finds how far it may go: before the first event newer than the window, and
+   below the cursor of every consumer that read within it;
+3. moves batches into the dataset `events_archive` (namespace = the event
+   schema, partitioned by month), each written as one snapshot before its rows
+   are deleted.
+
+Idle consumers are logged and left behind. Archived events are read with SQL on
+the dataset. Decision: `docs/adr/20261006_event-log-archive.md`.
 
 ## Factory (`EventFactory.py`)
 
@@ -113,6 +138,8 @@ EventFactory.EventSQLite_find_storage(
     subpath: str = "events.sqlite",
     needle: str = "storage",
 ) -> EventService
+
+EventFactory.EventServicePostgreSQL(dsn, schema="abi_event", bus=None) -> EventService
 ```
 
 ## Tests
@@ -120,11 +147,15 @@ EventFactory.EventSQLite_find_storage(
 ```bash
 uv run pytest libs/naas-abi-core/naas_abi_core/services/event/EventService_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/event/adapters/secondary/EventSQLiteAdapter_test.py
+# PostgreSQL (EVENT_TEST_POSTGRES_DSN), with the activity log on PostgreSQL documents:
+EVENT_TEST_POSTGRES_DSN=... DOCUMENT_TEST_POSTGRES_DSN=... make test-event-core
 ```
 
-`tests/event__secondary_adapter__generic_test.py` holds the contract every
-adapter must pass (streamed queries, filter errors); the SQLite and NATS
-client tests subclass it, so the NATS run covers the transfer path.
+`tests/event__secondary_adapter__generic_test.py` holds two contracts.
+`EventSecondaryAdapterContract` is what every adapter must pass (streamed
+queries, filter errors); the NATS client runs it, so its run covers the transfer
+path. `EventStorageContract` adds what every store must do: sequencing, filters,
+search, cursors and type summaries. The SQLite and PostgreSQL adapters run it.
 
 ## Adding a new adapter
 

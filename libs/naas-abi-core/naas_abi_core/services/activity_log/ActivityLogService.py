@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 
 from naas_abi_core.services.activity_log.ActivityLogPort import (
     ActivityEvent,
@@ -8,6 +11,9 @@ from naas_abi_core.services.activity_log.ActivityLogPort import (
     IActivityLogDomain,
 )
 from naas_abi_core.services.ServiceBase import ServiceBase
+
+if TYPE_CHECKING:
+    from naas_abi_core.engine.IEngine import IEngine
 
 
 class ActivityLogService(ServiceBase, IActivityLogDomain):
@@ -22,6 +28,13 @@ class ActivityLogService(ServiceBase, IActivityLogDomain):
     def __init__(self, adapter: IActivityLogAdapter) -> None:
         super().__init__()
         self.__adapter = adapter
+
+    def set_services(self, services: IEngine.Services) -> None:
+        """Also hand the engine's services to an adapter built on one of them
+        (the ``document`` adapter), as ``CacheService`` does."""
+        super().set_services(services)
+        if hasattr(self.__adapter, "wire_services"):
+            self.__adapter.wire_services(services)
 
     @property
     def adapter(self) -> IActivityLogAdapter:

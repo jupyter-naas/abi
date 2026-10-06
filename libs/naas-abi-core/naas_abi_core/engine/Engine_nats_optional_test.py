@@ -72,9 +72,19 @@ def test_explicit_nats_config_still_exposes_services(monkeypatch):
     from naas_abi_core.engine.Engine import Engine
     from naas_abi_core.engine.engine_loaders.EngineJobLoader import EngineJobLoader
     from naas_abi_core.engine.engine_loaders.EngineNATSLoader import EngineNATSLoader
+    from naas_abi_core.engine.engine_loaders.EngineOwnershipLoader import (
+        EngineOwnershipLoader,
+    )
+    from naas_abi_core.engine.ownership.ownership_service import Claim
 
     # This test stubs the endpoints, so do not initialize built-in modules that query them.
     monkeypatch.setattr(Engine, "on_initialized", lambda self: None)
+    # Nor claim the engine lease on a broker (Engine_ownership_test covers it).
+    monkeypatch.setattr(
+        EngineOwnershipLoader, "claim", MagicMock(return_value=Claim.SERVING)
+    )
+    for method in ("keep", "release", "close"):
+        monkeypatch.setattr(EngineOwnershipLoader, method, MagicMock())
     # Nor host jobs on them; only check which owners would be hosted.
     start_jobs = MagicMock()
     monkeypatch.setattr(EngineJobLoader, "start", start_jobs)

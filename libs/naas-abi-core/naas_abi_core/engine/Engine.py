@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import threading
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.base import BaseCheckpointSaver
     from naas_abi_core.engine.engine_loaders.EngineNATSDependencies import (
         EngineNATSDependencies,
+    )
+    from naas_abi_core.engine.engine_loaders.EngineOwnershipLoader import (
+        EngineOwnershipLoader,
     )
 
 from naas_abi_core import logger
@@ -26,7 +30,8 @@ from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import (
 )
 from naas_abi_core.engine.engine_loaders.EngineServiceLoader import EngineServiceLoader
 from naas_abi_core.engine.IEngine import IEngine
-from naas_abi_core.module.Module import BaseModule
+from naas_abi_core.engine.ownership.ownership_service import Claim
+from naas_abi_core.module.Module import BaseModule, ModuleDependencies
 
 
 class Engine(IEngine):
@@ -47,6 +52,10 @@ class Engine(IEngine):
     __nats_runtime_started: bool
     # Hosts the modules' jobs (NATS mode only); stopped first in shutdown().
     __job_loader: EngineJobLoader | None
+    # NATS mode: the lease that lets this engine serve (single-serving-engine ADR).
+    __ownership: EngineOwnershipLoader | None
+    # Serving starts and stops from the lease's callbacks as well as load/shutdown.
+    __serving_lock: threading.RLock
     # Memory of agents built with memory=None, bound by load() (see context.py).
     __agent_checkpointer: BaseCheckpointSaver | None = None
 
@@ -80,6 +89,8 @@ class Engine(IEngine):
         self.__nats_primary_adapters = []
         self.__nats_runtime_started = False
         self.__job_loader = None
+        self.__ownership = None
+        self.__serving_lock = threading.RLock()
 
     def load(self, module_names: list[str] | None = None):
         # Per-module CLI invocations (e.g. ``abi chat <module> <agent>``)
@@ -113,6 +124,10 @@ class Engine(IEngine):
             module_names
         )
 
+        # Before any backend opens: a second serving engine fails here, and so
+        # does a deploy that would hand over with data on this host.
+        claim = self.__claim_ownership(module_dependencies)
+
         logger.debug("Loading engine services")
         self.__services = self.__engine_service_loader.load_services(
             module_dependencies
@@ -129,19 +144,13 @@ class Engine(IEngine):
             from naas_abi_core.engine.engine_loaders.EngineNATSDependencies import (
                 EngineNATSDependencies,
             )
-            from naas_abi_core.engine.engine_loaders.EngineNATSLoader import (
-                EngineNATSLoader,
-            )
 
             self.__nats_dependencies = EngineNATSDependencies(self.__configuration.nats)
             dependencies = self.__nats_dependencies.build(self.__services)
             self.__services.wire_services(dependencies)
             self.__nats_runtime_started = True
-            nats_loader = EngineNATSLoader(self.__configuration)
-            self.__nats_primary_adapters = nats_loader.expose_services(self.__services)
-            self.__nats_primary_adapters += nats_loader.expose_overflow(
-                self.__nats_primary_adapters
-            )
+            if claim is Claim.SERVING:
+                self.__serve()
 
         logger.debug("Loading engine modules")
         self.__modules = self.__engine_module_loader.load_modules(self, module_names)
@@ -185,10 +194,94 @@ class Engine(IEngine):
         logger.debug("Engine initialized")
 
         # Module jobs start last: their handlers may use anything initialized above.
+        # A standby or client engine hosts none: the serving engine does.
+        if self.__configuration.nats is None or claim is Claim.SERVING:
+            self.__start_jobs()
+        if self.__ownership is not None and claim is Claim.SERVING:
+            self.__ownership.keep(
+                on_fenced=self.__stop_serving, on_restored=self.__serve
+            )
+        elif self.__ownership is not None and claim is Claim.STANDBY:
+            self.__ownership.take_over_in_background(
+                self.__serve_after_handover,
+                on_fenced=self.__stop_serving,
+                on_restored=self.__serve,
+            )
+
+    def __claim_ownership(
+        self, module_dependencies: dict[str, ModuleDependencies]
+    ) -> Claim | None:
+        """NATS mode: whether this engine serves now, stands by, or (None) is a client.
+
+        Raises ``EngineAlreadyServing`` when another engine serves and this one
+        may not take over (docs/adr/20261006_single-serving-engine.md).
+        """
+        if self.__configuration.nats is None:
+            return None
+        from naas_abi_core.engine.engine_loaders.EngineOwnershipLoader import (
+            EngineOwnershipLoader,
+        )
+
+        ownership = EngineOwnershipLoader(
+            self.__configuration.nats,
+            local_backends=self.__engine_service_loader.local_backends(
+                module_dependencies
+            ),
+        )
+        try:
+            claim = ownership.claim()
+        except BaseException:
+            ownership.close()
+            raise
+        self.__ownership = ownership
+        return claim
+
+    def __serve(self) -> None:
+        """Expose the kernel services over NATS: this engine holds the lease."""
+        from naas_abi_core.engine.engine_loaders.EngineNATSLoader import (
+            EngineNATSLoader,
+        )
+
+        with self.__serving_lock:
+            if self.__nats_primary_adapters or not self.__nats_runtime_started:
+                return
+            nats_loader = EngineNATSLoader(self.__configuration)
+            primaries = nats_loader.expose_services(self.__services)
+            primaries += nats_loader.expose_overflow(primaries)
+            self.__nats_primary_adapters = primaries
+
+    def __stop_serving(self) -> None:
+        """Stop every started primary adapter, draining its subscriptions."""
+        from naas_abi_core.engine import nats_runtime
+
+        with self.__serving_lock:
+            primaries, self.__nats_primary_adapters = self.__nats_primary_adapters, []
+        for primary in primaries:
+            try:
+                # __nats_primary_adapters is list[object] (it holds whichever
+                # of the 11 *PrimaryAdapterNATS classes EngineNATSLoader
+                # started, deliberately untyped there -- see its own return
+                # type) -- every one of them has an async stop(), just not
+                # one mypy can see through `object`.
+                nats_runtime.run_coro(primary.stop())  # type: ignore[attr-defined]
+            except Exception as exc:  # noqa: BLE001
+                # Best-effort: a slow/unresponsive primary must never block
+                # the rest of shutdown or crash the process on the way out.
+                logger.warning(
+                    f"Engine.shutdown: error stopping a NATS primary adapter "
+                    f"({type(primary).__name__}): {exc}"
+                )
+
+    def __start_jobs(self) -> None:
         self.__job_loader = EngineJobLoader(self.__configuration.nats)
         self.__job_loader.start(
             self.job_owners(), document_available=self.__services.document_available()
         )
+
+    def __serve_after_handover(self) -> None:
+        """A standby took the lease: serve, then host the jobs."""
+        self.__serve()
+        self.__start_jobs()
 
     def __bind_agent_memory(self) -> None:
         """Agents built with memory=None checkpoint into the document service.
@@ -226,16 +319,22 @@ class Engine(IEngine):
     def job_owners(self) -> dict[str, object]:
         """Modules plus kernel job owners (NATS mode only), keyed by owner id."""
         owners: dict[str, object] = dict(self.__modules)
-        if (
-            self.__configuration.nats is not None
-            and self.__services.dataset_available()
-        ):
+        if self.__configuration.nats is None:
+            return owners
+        if self.__services.dataset_available():
             from naas_abi_core.services.dataset.DatasetMaintenanceJobs import (
                 DATASET_JOBS_OWNER,
                 DatasetMaintenanceJobs,
             )
 
             owners[DATASET_JOBS_OWNER] = DatasetMaintenanceJobs(self.services.dataset)
+        # A service's adapter may host its own maintenance jobs (the PostgreSQL
+        # event log archives itself into the Dataset Service).
+        for service in self.__services.all:
+            adapter = getattr(service, "adapter", None)
+            offer = getattr(type(adapter), "job_owners", None)
+            if offer is not None:
+                owners.update(offer(adapter, self.services))
         return owners
 
     def on_initialized(self):
@@ -267,28 +366,22 @@ class Engine(IEngine):
         memory, self.__agent_checkpointer = self.__agent_checkpointer, None
         if memory is not None and get_default_agent_checkpointer() is memory:
             set_default_agent_checkpointer(None)
+        # Free the lease before draining: a standby takes over while this engine
+        # finishes what it already received (shared backends make the overlap safe).
+        ownership, self.__ownership = self.__ownership, None
+        if ownership is not None:
+            ownership.release()
         if not self.__nats_runtime_started:
+            if ownership is not None:
+                ownership.close()
             return
         self.__nats_runtime_started = False
         set_default_event_service(None)
         from naas_abi_core.engine import nats_runtime
 
-        primaries, self.__nats_primary_adapters = self.__nats_primary_adapters, []
-        for primary in primaries:
-            try:
-                # __nats_primary_adapters is list[object] (it holds whichever
-                # of the 11 *PrimaryAdapterNATS classes EngineNATSLoader
-                # started, deliberately untyped there -- see its own return
-                # type) -- every one of them has an async stop(), just not
-                # one mypy can see through `object`.
-                nats_runtime.run_coro(primary.stop())  # type: ignore[attr-defined]
-            except Exception as exc:  # noqa: BLE001
-                # Best-effort: a slow/unresponsive primary must never block
-                # the rest of shutdown or crash the process on the way out.
-                logger.warning(
-                    f"Engine.shutdown: error stopping a NATS primary adapter "
-                    f"({type(primary).__name__}): {exc}"
-                )
+        self.__stop_serving()
+        if ownership is not None:
+            ownership.close()
         if self.__nats_dependencies is not None:
             self.__nats_dependencies.close()
             self.__nats_dependencies = None

@@ -12,7 +12,7 @@ from google.protobuf.message import Message
 from nats.aio.client import Client
 from nats.errors import MaxPayloadError, NoRespondersError
 
-from naas_abi_sdk import overflow
+from naas_abi_sdk import no_responders, overflow
 from naas_abi_sdk.telemetry import (
     TransferTrace,
     client_span,
@@ -163,8 +163,17 @@ class Transport:
             if _message_size(payload, headers) > nc.max_payload:
                 raise RPCError("PAYLOAD_TOO_LARGE", "Request exceeds broker limit")
             try:
-                return await nc.request(
-                    subject, payload, headers=headers, timeout=self.timeout
+                # An engine handing over may leave nobody subscribed for a moment;
+                # a transfer chunk belongs to one engine, so it is never resent.
+                return await no_responders.request(
+                    nc,
+                    subject,
+                    payload,
+                    headers=headers,
+                    timeout=self.timeout,
+                    retry_seconds=no_responders.RETRY_SECONDS
+                    if transfer is None
+                    else 0,
                 )
             except MaxPayloadError as exc:
                 raise RPCError(

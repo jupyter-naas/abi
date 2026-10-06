@@ -2,6 +2,7 @@ from typing import Any, Literal
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
+    config_model,
 )
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
@@ -105,6 +106,15 @@ class DocumentAdapterConfiguration(GenericLoader):
         if not isinstance(adapter, IDocumentAdapter):
             raise TypeError("Custom document adapter must implement IDocumentAdapter")
         return adapter
+
+    def local_storage(self) -> str | None:
+        """Where the documents live (single-serving-engine ADR)."""
+        if self.adapter == "sqlite":
+            path = config_model(DocumentAdapterSQLiteConfiguration, self.config).path
+            return f"SQLite at {path}"
+        if self.adapter == "custom":
+            return self.custom_local_storage()
+        return None  # postgresql; nats_rpc is another engine's
 
 
 class DocumentServiceConfiguration(BaseModel):

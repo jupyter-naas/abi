@@ -75,11 +75,21 @@ jobs:
             examples/standalone_module/model_integration_test.py \
             examples/standalone_module/agent_integration_test.py \
             examples/standalone_module/checkpoint_integration_test.py
-      - name: Jobs and claim checks on nats-server 2.14
+      - name: Engine lease and handover over a real broker
+        run: |
+          uv run --project libs/naas-abi-core --no-sync pytest --import-mode=importlib -q \
+            libs/naas-abi-core/naas_abi_core/engine/ownership \
+            libs/naas-abi-core/naas_abi_core/engine/Engine_ownership_test.py \
+            libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_NATSEngine_test.py \
+            libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_LocalStorage_test.py \
+            libs/naas-abi-core/naas_abi_core/engine/engine_loaders/EngineOwnershipLoader_test.py \
+            libs/naas-abi-core/naas_abi_core/engine/engine_loaders/EngineOwnershipLoader_integration_test.py
+      - name: Jobs, claim checks and handover retries on nats-server 2.14
         run: |
           uv run --project libs/naas-abi-core --no-sync pytest -q \
             libs/naas-abi-sdk/tests/test_jobs_integration.py \
-            libs/naas-abi-sdk/tests/test_claim_check.py
+            libs/naas-abi-sdk/tests/test_claim_check.py \
+            libs/naas-abi-sdk/tests/test_no_responders.py
       - name: Kernel services and their NATS clients over a real broker
         run: |
           uv run --project libs/naas-abi-core --no-sync pytest --import-mode=importlib -q \

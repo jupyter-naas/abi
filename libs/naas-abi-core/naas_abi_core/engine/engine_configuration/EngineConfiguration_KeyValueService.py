@@ -2,6 +2,7 @@ from typing import Literal
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
+    config_model,
 )
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
@@ -128,6 +129,17 @@ class KeyValueAdapterConfiguration(GenericLoader):
                 raise ValueError(f"Unknown adapter: {self.adapter}")
         else:
             return super().load()
+
+    def local_storage(self) -> str | None:
+        """Where the keys live (single-serving-engine ADR)."""
+        if self.adapter == "python":
+            path = config_model(
+                KeyValueAdapterPythonConfiguration, self.config
+            ).persistence_path
+            return f"this process, persisted to {path}" if path else "this process"
+        if self.adapter == "custom":
+            return self.custom_local_storage()
+        return None  # redis; nats_rpc is another engine's
 
 
 class KeyValueServiceConfiguration(BaseModel):

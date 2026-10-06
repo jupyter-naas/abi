@@ -124,6 +124,7 @@ help:
 	@echo "  test-local-embedded-core Run no-docker local embedded core e2e test"
 	@echo "  test-integration-core    Run core integration tests (testcontainers)"
 	@echo "  test-document-core       Run document tests (set DOCUMENT_TEST_POSTGRES_DSN for PostgreSQL)"
+	@echo "  test-event-core          Run event and activity log tests (set EVENT_TEST_POSTGRES_DSN, DOCUMENT_TEST_POSTGRES_DSN)"
 	@echo "  test-api-init            Test API initialization with production secrets"
 	@echo "  test-api-init-container  Test API initialization in containerized environment"
 	@echo "  ftest                    Interactive test selector using fzf (fuzzy finder)"
@@ -567,6 +568,12 @@ test-document-core:
 	@ uv run --project libs/naas-abi-core --all-extras python -m pytest -c libs/naas-abi-core/pyproject.toml libs/naas-abi-core/naas_abi_core/services/document libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_DocumentService_test.py libs/naas-abi-core/naas_abi_core/engine/EngineProxy_test.py -q
 
 .PHONY: test-document-core
+
+# Event log and activity log adapters, on PostgreSQL when the DSNs are set
+test-event-core:
+	@ uv run --project libs/naas-abi-core --all-extras python -m pytest -c libs/naas-abi-core/pyproject.toml --import-mode=importlib libs/naas-abi-core/naas_abi_core/services/event libs/naas-abi-core/naas_abi_core/services/activity_log libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_EventService_test.py libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_ActivityLogService_test.py -q
+
+.PHONY: test-event-core
 
 # Test API initialization with production secrets
 test-api-init: deps
