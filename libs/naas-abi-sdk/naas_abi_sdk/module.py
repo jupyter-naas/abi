@@ -461,6 +461,10 @@ async def run_module(
                 )
                 if not registration.rollout_id:
                     await _host_jobs(job_host, module)
+                else:
+                    # Before this instance can serve: a trigger for a job only
+                    # this generation declares waits in its consumer.
+                    await job_host.prepare()
             if registration:
                 registration.initialized = True
                 await registration.renew()
