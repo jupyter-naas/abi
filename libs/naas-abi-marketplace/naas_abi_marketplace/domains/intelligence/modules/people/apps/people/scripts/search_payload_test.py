@@ -162,7 +162,7 @@ def test_results_are_sorted_by_hits_descending(tmp_path: Path) -> None:
             "public_profile_url": None,
             "email": None,
             "phone": None,
-            "linkedin_url": None,
+            "linkedin_url": f"https://www.linkedin.com/in/{slug}",
             "search_text": search_text(
                 {"headline": [headline or ""], "about": [about or ""]}
             ),
@@ -186,3 +186,11 @@ def test_results_are_sorted_by_hits_descending(tmp_path: Path) -> None:
         ("twice", 2),
         ("once", 1),
     ]
+
+    # A contact detail: shown only where the instance publishes them.
+    config["privacy"]["publish_contact_details"] = True
+    shown = search_payload.search(warehouse, config, query="EDF")["results"][0]
+    assert shown["linkedin_url"] == "https://www.linkedin.com/in/thrice"
+    config["privacy"]["publish_contact_details"] = False
+    hidden = search_payload.search(warehouse, config, query="EDF")["results"][0]
+    assert hidden["linkedin_url"] is None

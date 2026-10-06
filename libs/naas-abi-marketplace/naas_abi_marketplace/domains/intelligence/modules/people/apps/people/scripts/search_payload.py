@@ -254,11 +254,18 @@ def snippet(
 
 
 def _result(
-    person: dict[str, Any], snippet_value: dict[str, str], hits: int = 0
+    person: dict[str, Any],
+    snippet_value: dict[str, str],
+    hits: int = 0,
+    *,
+    contact: bool = False,
 ) -> dict[str, Any]:
     place = [person.get("country"), person.get("office") or person.get("city")]
     return {
         "hits": hits,
+        # A contact detail: only where the instance publishes them
+        # (privacy.publish_contact_details), as on the profile header.
+        "linkedin_url": person.get("linkedin_url") if contact else None,
         "slug": person.get("slug"),
         "full_name": person.get("full_name"),
         "headline": person.get("headline"),
@@ -433,6 +440,7 @@ def search(
                     length=search_config["snippet_length"],
                 ),
                 hit["hits"],
+                contact=bool(config["privacy"].get("publish_contact_details")),
             )
             for hit in window
         ],

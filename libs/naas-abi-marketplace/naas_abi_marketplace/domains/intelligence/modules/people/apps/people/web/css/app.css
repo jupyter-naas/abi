@@ -847,6 +847,12 @@ a.page:hover {
   overflow: hidden;
 }
 
+/* A result's LinkedIn, when the directory publishes contact details. */
+.result-contact {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
 /* How many times the query occurs in a result's profile: what the list is sorted by. */
 .result-hits {
   margin-left: auto;

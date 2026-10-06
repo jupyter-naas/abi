@@ -1,5 +1,5 @@
 import { fetchSearch, fetchSearchNetwork } from "../../../lib/api.js";
-import { avatarHtml, escapeHtml, flagHtml, highlight, orgLogoHtml } from "../../../lib/dom.js";
+import { avatarHtml, escapeHtml, flagHtml, highlight, ICONS, orgLogoHtml } from "../../../lib/dom.js";
 import { profileHref, searchHref } from "../../../lib/routes.js";
 import { apiUrl } from "../../../lib/config.js";
 import { mountGraphView } from "../../../lib/graph-view.js";
@@ -32,6 +32,13 @@ function resultHtml(config, hit, tokens, query) {
                   ? `<span class="result-snippet-label">${escapeHtml(snippet.label)}: </span>`
                   : ""
               }${highlight(snippet.text, tokens, "b")}</p>`
+            : ""
+        }
+        ${
+          hit.linkedin_url
+            ? `<p class="result-contact"><a class="contact-link" href="${escapeHtml(hit.linkedin_url)}"
+                target="_blank" rel="noopener noreferrer"
+                aria-label="${escapeHtml(`LinkedIn: ${hit.full_name || ""}`)}">${ICONS.linkedin_url}<span>LinkedIn</span></a></p>`
             : ""
         }
       </div>
