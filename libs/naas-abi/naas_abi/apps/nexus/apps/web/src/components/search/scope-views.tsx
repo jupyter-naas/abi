@@ -13,11 +13,13 @@ export const ALL_VIEW_LIMIT = 5;
 export const SCOPE_VIEW_LIMIT = 50;
 
 /** "All": the query in every scope switched on, a short group per scope. Without a query the page shows its landing instead. */
-export function AllScopesView({ workspaceId, scopes, q, onScopes }: {
+export function AllScopesView({ workspaceId, scopes, q, onScopes, highlight = q }: {
   workspaceId: string;
   scopes: SearchScope[];
   q: string;
   onScopes: number;
+  /** The words to mark in the results; empty when the search box was cleared. */
+  highlight?: string;
 }) {
   const run = useSearchScopesStore(s => s.run);
   const runs = useSearchScopesStore(s => s.runs);
@@ -56,7 +58,7 @@ export function AllScopesView({ workspaceId, scopes, q, onScopes }: {
           {state?.status === 'error' ? (
             <ScopeError message={state.error} onRetry={() => void run(workspaceId, scope, q, ALL_VIEW_LIMIT, true)} />
           ) : state?.result ? (
-            <ScopeHits workspaceId={workspaceId} hits={state.result.hits} compact />
+            <ScopeHits workspaceId={workspaceId} hits={state.result.hits} compact query={highlight} />
           ) : null}
         </section>
       ))}
@@ -67,7 +69,7 @@ export function AllScopesView({ workspaceId, scopes, q, onScopes }: {
 }
 
 /** One feature or web scope on its own: its full list. */
-export function FeatureScopeView({ workspaceId, scope, q }: { workspaceId: string; scope: SearchScope; q: string }) {
+export function FeatureScopeView({ workspaceId, scope, q, highlight = q }: { workspaceId: string; scope: SearchScope; q: string; highlight?: string }) {
   const run = useSearchScopesStore(s => s.run);
   const nonce = useSearchScopesStore(s => s.nonce);
   const state = useSearchScopesStore(s => s.runs[scopeRunKey(workspaceId, scope.id, q, SCOPE_VIEW_LIMIT)]);
@@ -87,7 +89,7 @@ export function FeatureScopeView({ workspaceId, scope, q }: { workspaceId: strin
         </button>
       </div>
       {result.note && <p className="text-xs text-muted-foreground">{result.note}</p>}
-      {result.hits.length ? <ScopeHits workspaceId={workspaceId} hits={result.hits} /> : <Empty>No {scope.label.toLowerCase()} {q ? <>match &ldquo;{q}&rdquo;</> : 'found'}.</Empty>}
+      {result.hits.length ? <ScopeHits workspaceId={workspaceId} hits={result.hits} query={highlight} /> : <Empty>No {scope.label.toLowerCase()} {q ? <>match &ldquo;{q}&rdquo;</> : 'found'}.</Empty>}
       {result.hasMore && <p className="text-xs text-muted-foreground">Showing the first {result.hits.length}. Refine the search to narrow it down.</p>}
     </div>
   );

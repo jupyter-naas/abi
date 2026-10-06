@@ -19,11 +19,13 @@ const PAGE_SIZE = 30;
  * label ("Profile" for a person, "Card" for an organization). Opening a result
  * switches to that tab; until one is opened it is empty.
  */
-export function TopicScopeView({ workspaceId, topic, route, canEdit, onTab }: {
+export function TopicScopeView({ workspaceId, topic, route, canEdit, highlight = route.q, onTab }: {
   workspaceId: string;
   topic: SearchTopic;
   route: SearchRoute;
   canEdit: boolean;
+  /** The words to mark in the results; empty when the search box was cleared. */
+  highlight?: string;
   onTab: (tab: SearchRoute['tab']) => void;
 }) {
   const [results, setResults] = useState<{ items: TopicResultItem[]; hasMore: boolean; total: number | null; sparql: string; error: string | null; loading: boolean }>(
@@ -93,6 +95,7 @@ export function TopicScopeView({ workspaceId, topic, route, canEdit, onTab }: {
         <TopicResults
           topic={topic}
           query={route.q}
+          highlight={highlight}
           items={results.items}
           loading={results.loading}
           error={results.error}

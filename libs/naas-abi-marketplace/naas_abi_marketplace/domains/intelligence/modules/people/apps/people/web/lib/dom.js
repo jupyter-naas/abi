@@ -69,7 +69,7 @@ export function highlight(text, tokens, tag = "mark") {
   let cursor = 0;
   for (const [start, end] of ranges) {
     out += escapeHtml(raw.slice(cursor, start));
-    out += `<${tag}>${escapeHtml(raw.slice(start, end))}</${tag}>`;
+    out += `<${tag} class="hit">${escapeHtml(raw.slice(start, end))}</${tag}>`;
     cursor = end;
   }
   return out + escapeHtml(raw.slice(cursor));

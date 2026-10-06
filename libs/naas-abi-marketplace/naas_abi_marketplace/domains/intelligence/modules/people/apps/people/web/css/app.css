@@ -87,6 +87,14 @@ mark,
   padding: 0 1px;
 }
 
+/* The search box is empty: the words of the last search are no longer marked. */
+.highlight-off .hit,
+.highlight-off mark {
+  background: none;
+  font-weight: inherit;
+  padding: 0;
+}
+
 /* ── Brand ───────────────────────────────────────────────── */
 .brand-logo {
   display: inline-flex;

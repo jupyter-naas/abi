@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { displayUrl, isWebUrl, type SearchTopic, type TopicResultItem } from '@/lib/search-topics';
 import { SparqlDisclosure } from './sparql-disclosure';
+import { Highlight } from './highlight';
 import { TopicAvatar } from './topic-avatar';
 
 /**
@@ -13,10 +14,12 @@ import { TopicAvatar } from './topic-avatar';
  * Opening a row shows it in the topic's detail tab.
  */
 export function TopicResults({
-  topic, query, items, loading, error, hasMore, total = null, sparql, selected, hrefFor, onMore,
+  topic, query, highlight = query, items, loading, error, hasMore, total = null, sparql, selected, hrefFor, onMore,
 }: {
   topic: SearchTopic;
   query: string;
+  /** The words to mark; empty when the search box was cleared (the query may lag behind it). */
+  highlight?: string;
   items: TopicResultItem[];
   loading: boolean;
   error: string | null;
@@ -60,10 +63,10 @@ export function TopicResults({
             >
               <TopicAvatar label={item.title} image={item.image} size={40} />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">{item.title}</div>
-                {item.subtitle && <div className="truncate text-xs text-muted-foreground">{item.subtitle}</div>}
-                <TopicRows rows={item.rows} />
-                {item.snippet && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{item.snippet}</p>}
+                <div className="truncate text-sm font-medium"><Highlight text={item.title} query={highlight} /></div>
+                {item.subtitle && <div className="truncate text-xs text-muted-foreground"><Highlight text={item.subtitle} query={highlight} /></div>}
+                <TopicRows rows={item.rows} query={highlight} />
+                {item.snippet && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground"><Highlight text={item.snippet} query={highlight} /></p>}
               </div>
             </Link>
           </li>
@@ -85,7 +88,7 @@ export function TopicResults({
 }
 
 /** A result's metadata rows (Organization, Role, LinkedIn…); web addresses open in a new tab. */
-export function TopicRows({ rows }: { rows?: { id: string; label: string; value: string }[] | null }) {
+export function TopicRows({ rows, query }: { rows?: { id: string; label: string; value: string }[] | null; query?: string | null }) {
   if (!rows?.length) return null;
   return (
     <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
@@ -93,7 +96,7 @@ export function TopicRows({ rows }: { rows?: { id: string; label: string; value:
         <div key={row.id} className="flex min-w-0 max-w-full gap-1">
           <dt className="flex-shrink-0 text-muted-foreground">{row.label}</dt>
           <dd className="truncate">
-            {isWebUrl(row.value) ? <ExternalValue url={row.value} /> : row.value}
+            {isWebUrl(row.value) ? <ExternalValue url={row.value} /> : <Highlight text={row.value} query={query} />}
           </dd>
         </div>
       ))}

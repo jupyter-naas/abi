@@ -8,19 +8,20 @@ import type { ScopeHit } from '@/lib/search-scopes';
 import { searchHref } from '@/lib/search-topics';
 import { useFilesStore } from '@/stores/files';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { Highlight } from './highlight';
 import { TopicAvatar } from './topic-avatar';
 import { TopicRows } from './topic-results';
 
 /** Hits of any scope: one row shape, opened the way their feature opens them. */
-export function ScopeHits({ workspaceId, hits, compact = false }: { workspaceId: string; hits: ScopeHit[]; compact?: boolean }) {
+export function ScopeHits({ workspaceId, hits, compact = false, query }: { workspaceId: string; hits: ScopeHit[]; compact?: boolean; query?: string }) {
   return (
     <ul className="space-y-1.5">
-      {hits.map(hit => <li key={hit.id}><HitRow workspaceId={workspaceId} hit={hit} compact={compact} /></li>)}
+      {hits.map(hit => <li key={hit.id}><HitRow workspaceId={workspaceId} hit={hit} compact={compact} query={query} /></li>)}
     </ul>
   );
 }
 
-function HitRow({ workspaceId, hit, compact }: { workspaceId: string; hit: ScopeHit; compact: boolean }) {
+function HitRow({ workspaceId, hit, compact, query }: { workspaceId: string; hit: ScopeHit; compact: boolean; query?: string }) {
   const router = useRouter();
   const setStarredNavigation = useFilesStore(s => s.setStarredNavigation);
   const setActiveSource = useFilesStore(s => s.setActiveSource);
@@ -31,13 +32,13 @@ function HitRow({ workspaceId, hit, compact }: { workspaceId: string; hit: Scope
       <TopicAvatar label={hit.title} image={hit.image} size={compact ? 32 : 40} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1 truncate text-sm font-medium">
-          <span className="truncate">{hit.title}</span>
+          <span className="truncate"><Highlight text={hit.title} query={query} /></span>
           {hit.action?.kind === 'external' && <ExternalLink size={11} className="flex-shrink-0 text-muted-foreground" />}
         </div>
-        {hit.subtitle && <div className="truncate text-xs text-muted-foreground">{hit.subtitle}</div>}
+        {hit.subtitle && <div className="truncate text-xs text-muted-foreground"><Highlight text={hit.subtitle} query={query} /></div>}
         {/* The same information as the scope's own results, compact or not. */}
-        <TopicRows rows={hit.rows} />
-        {hit.snippet && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{hit.snippet}</p>}
+        <TopicRows rows={hit.rows} query={query} />
+        {hit.snippet && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground"><Highlight text={hit.snippet} query={query} /></p>}
       </div>
     </>
   );
