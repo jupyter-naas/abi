@@ -312,14 +312,18 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
         *,
         namespace: str = "default",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> QueryResult:
         request = dataset_pb2.QueryRequest(
-            context=self._context(), sql=sql, namespace=namespace
+            context=self._context(timeout_seconds), sql=sql, namespace=namespace
         )
         if snapshot_id is not None:
             request.snapshot_id = snapshot_id
         response = self._call(
-            f"{SUBJECT_PREFIX}.query", request, dataset_pb2.QueryResponse
+            f"{SUBJECT_PREFIX}.query",
+            request,
+            dataset_pb2.QueryResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error)
@@ -360,12 +364,21 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
                 rows=(row for frame in frames for row in decode_rows(frame)),
             )
 
-    def flush(self, name: str, *, namespace: str = "default") -> QueryResult:
+    def flush(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
         request = dataset_pb2.FlushRequest(
-            context=self._context(), name=name, namespace=namespace
+            context=self._context(timeout_seconds), name=name, namespace=namespace
         )
         response = self._call(
-            f"{SUBJECT_PREFIX}.flush", request, dataset_pb2.FlushResponse
+            f"{SUBJECT_PREFIX}.flush",
+            request,
+            dataset_pb2.FlushResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error)
@@ -384,12 +397,21 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
             _raise_for_error(response.error)
         return response.count
 
-    def compact(self, name: str, *, namespace: str = "default") -> QueryResult:
+    def compact(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
         request = dataset_pb2.CompactRequest(
-            context=self._context(), name=name, namespace=namespace
+            context=self._context(timeout_seconds), name=name, namespace=namespace
         )
         response = self._call(
-            f"{SUBJECT_PREFIX}.compact", request, dataset_pb2.CompactResponse
+            f"{SUBJECT_PREFIX}.compact",
+            request,
+            dataset_pb2.CompactResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error)

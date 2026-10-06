@@ -97,7 +97,13 @@ class EngineNATSDependencies:
         self.clients: list[Any] = []
 
     def _client(self, cls, **kwargs):
-        client = cls(self.config.nats_url, self.config.jwt_secret, "engine", **kwargs)
+        client = cls(
+            self.config.nats_url,
+            self.config.jwt_secret,
+            "engine",
+            timeout_seconds=self.config.client_timeout_seconds,
+            **kwargs,
+        )
         self.clients.append(client)
         return client
 

@@ -1,3 +1,4 @@
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock, call
 
@@ -5,6 +6,7 @@ import pytest
 from naas_abi_core.module.jobs import Cron, JobContext
 from naas_abi_core.services.dataset.DatasetMaintenanceJobs import (
     DATASET_JOBS_OWNER,
+    MAINTENANCE_CALL_TIMEOUT,
     DatasetMaintenanceJobs,
 )
 from naas_abi_core.services.dataset.DatasetPort import QueryResult
@@ -61,15 +63,28 @@ def test_compaction_flushes_then_compacts_the_targeted_datasets(payload, expecte
 
     assert result == {"datasets_processed": len(expected)}
     operations = [c for c in service.mock_calls if c[0] in ("flush", "compact")]
+    deadline = MAINTENANCE_CALL_TIMEOUT.total_seconds()
     assert operations == [
         op
         for name, namespace in expected
         for op in (
-            call.flush(name, namespace=namespace),
-            call.compact(name, namespace=namespace),
+            call.flush(name, namespace=namespace, timeout_seconds=deadline),
+            call.compact(name, namespace=namespace, timeout_seconds=deadline),
         )
     ]
     assert len(ctx.logs) == 2 * len(expected)
+
+
+def test_maintenance_waits_hours_not_the_default_rpc_seconds():
+    service = _service()
+
+    DatasetMaintenanceJobs(service, call_timeout=timedelta(minutes=90)).compact(
+        _ctx({"name": "a"})
+    )
+
+    assert MAINTENANCE_CALL_TIMEOUT >= timedelta(hours=1)
+    assert service.flush.call_args.kwargs["timeout_seconds"] == 5400.0
+    assert service.compact.call_args.kwargs["timeout_seconds"] == 5400.0
 
 
 def test_failed_flush_prevents_compaction():
