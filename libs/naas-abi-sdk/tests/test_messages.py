@@ -9,7 +9,8 @@ from naas_abi_sdk import messages
 
 def test_message_size_counts_the_header_block_as_nats_does():
     assert messages.message_size(b"abc", None) == 3
-    assert messages.message_size(b"abc", {}) == 3
+    # nats-py sends a header block for any headers that are not None, even {}.
+    assert messages.message_size(b"abc", {}) == 3 + len("NATS/1.0\r\n\r\n")
     block = "NATS/1.0\r\nA: b\r\n\r\n"
     assert messages.message_size(b"abc", {"A": "b"}) == 3 + len(block)
 

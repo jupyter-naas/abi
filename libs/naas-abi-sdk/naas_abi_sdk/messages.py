@@ -14,8 +14,12 @@ from nats.errors import MaxPayloadError
 
 
 def message_size(payload: bytes, headers: dict[str, str] | None) -> int:
-    """Bytes NATS counts against max_payload: the body and the header block."""
-    if not headers:
+    """Bytes NATS counts against max_payload: the body and the header block.
+
+    The one copy of this rule: core and the SDK import it. nats-py sends a
+    header block whenever ``headers`` is not None, even an empty one.
+    """
+    if headers is None:
         return len(payload)
     block = "".join(f"{key}: {value}\r\n" for key, value in headers.items())
     return len(payload) + len(f"NATS/1.0\r\n{block}\r\n".encode())
