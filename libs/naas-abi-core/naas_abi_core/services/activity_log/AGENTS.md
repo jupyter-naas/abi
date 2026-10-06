@@ -16,7 +16,8 @@ activity_log/
 ├── adapters/activity_log_stream_codec.py   # event <-> protobuf, stream frames
 ├── adapters/secondary/
 │   ├── ActivityLogDocumentAdapter.py   # default: the engine's Document Service
-│   └── ActivityLogSqliteAdapter.py
+│   ├── ActivityLogSqliteAdapter.py
+│   └── ActivityLogSqliteCopy.py        # job: copy SQLite logs into documents
 └── tests/
     └── activity_log__secondary_adapter__generic_test.py   # generic contract tests
 ```
@@ -79,6 +80,29 @@ newest event, written create-only, and retried on conflict, so two engines
 recording for one actor lose nothing. Decision and trade-offs:
 `docs/adr/20261006_shared-event-and-activity-log-storage.md`.
 
+## Copying the SQLite logs into documents
+
+`ActivityLogDocumentAdapter.job_owners(services)` offers `activity_log_migrate`
+(owner `naas_abi_core.activity_log`, `ActivityLogSqliteCopy.py`). The engine
+hosts it in NATS mode, and a super admin runs it from the System app's Jobs
+tab (Run now only).
+
+- Payload: `{"data_dir": "storage/activity_log", "apply": false}`. The default
+  is a dry run reporting, per actor, the events present in documents and the
+  events missing. `data_dir` is relative to the engine's working directory and
+  must resolve inside its `storage` directory (symlinks included).
+- Events are recorded through `record` in SQLite order: new per-actor `seq`,
+  after events recorded since the switch.
+- Idempotent. A mark per (source directory, actor) in `sqlite_copies` keeps
+  the last SQLite row handled; it is saved after each batch and after each
+  refused event. Events written after the last mark are matched by content
+  (type, timestamp, correlation id, attributes, counting identical events), so
+  nothing is copied twice.
+- Events whose values the Document Service refuses (checked with
+  `validate_data` before `record`: non-finite numbers, integers above 64 bits,
+  NUL characters) are skipped and listed in the result, by a dry run too. Any
+  other error stops the run; running it again resumes.
+
 ## Factory (`ActivityLogFactory.py`)
 
 ```python
@@ -99,6 +123,7 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/activity_log/ActivityLog
 uv run pytest libs/naas-abi-core/naas_abi_core/services/activity_log/adapters/secondary/ActivityLogSqliteAdapter_test.py
 # On SQLite documents, and on PostgreSQL documents with DOCUMENT_TEST_POSTGRES_DSN set:
 uv run pytest libs/naas-abi-core/naas_abi_core/services/activity_log/adapters/secondary/ActivityLogDocumentAdapter_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/activity_log/adapters/secondary/ActivityLogSqliteCopy_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/activity_log/tests/activity_log__secondary_adapter__generic_test.py
 ```
 

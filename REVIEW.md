@@ -59,7 +59,7 @@ Test run at `a582a19f6`: 101 job tests passed (SDK and engine, real broker inclu
       - The activity log lives in the Document Service (`adapter: document`, now the default).
       - Events have a PostgreSQL adapter: gapless `seq` visible in order across engines, JSONB filters, and raw-payload search. It passes the same storage contract as SQLite.
       - CI runs both on PostgreSQL (`make test-event-core`).
-    - [ ] Copy existing per-actor SQLite activity logs into documents, for installations that need their history. Until then such an installation keeps `adapter: sqlite`.
+    - [x] Copy existing per-actor SQLite activity logs into documents, for installations that need their history. *Done:* `activity_log_migrate` (owner `naas_abi_core.activity_log`, offered by `ActivityLogDocumentAdapter.job_owners`, Run now only): a dry run by default, idempotent through per-actor marks, `data_dir` confined to `storage/`.
     - [x] The PostgreSQL event log keeps 7 days. An hourly `event_archive` job, beside the adapter, moves older events into the dataset `events_archive` (`docs/adr/20261006_event-log-archive.md`):
       - Exactly once: the archive's highest `seq` is the resume point.
       - It never archives events an active consumer still needs.
