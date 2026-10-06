@@ -341,6 +341,16 @@ LIMIT {{ limit }}
 OFFSET {{ offset }}
 """,
     detail_label="Profile",
+    # The organizations module's abi:Logo (OrganizationLogoPipeline).
+    image_query=_PREFIXES
+    + """
+SELECT ?uri ?image
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?uri abi:hasLogo ?l .
+  ?l abi:logo_url ?image .
+}
+""",
     result_rows=(
         TopicResultRowDef(
             id="people",
@@ -389,8 +399,10 @@ GROUP BY ?uri
     + """
 SELECT ?title (COUNT(DISTINCT ?employee) AS ?people) (SAMPLE(?industryLabel) AS ?industry)
        (SAMPLE(?parentLabel) AS ?parentOrganization) (SAMPLE(?website) AS ?url)
+       (SAMPLE(?logo) AS ?image)
 WHERE {
   {{ uri }} rdfs:label ?title .
+  OPTIONAL { {{ uri }} abi:hasLogo ?l . ?l abi:logo_url ?logo . }
   OPTIONAL { ?a abi:forOrganization {{ uri }} . ?employee abi:hasActOfWorking ?a . }
   OPTIONAL { {{ uri }} abi:hasIndustry ?i . ?i rdfs:label ?industryLabel . }
   OPTIONAL { {{ uri }} abi:hasParentOrganization ?parent . ?parent rdfs:label ?parentLabel . }
