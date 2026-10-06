@@ -138,6 +138,12 @@ def test_api_security_scheme_is_plain_bearer():
     assert "flows" not in model
 
 
+def test_oauth2_scheme_is_an_alias_of_api_key_scheme():
+    from naas_abi_core.apps.api.api import api_key_scheme, oauth2_scheme
+
+    assert oauth2_scheme is api_key_scheme
+
+
 def test_api_agent_routes():
     """Test that each agent has both /completion and /stream-completion endpoints."""
     try:

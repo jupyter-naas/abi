@@ -183,6 +183,9 @@ class QueryOrHeaderBearer(HTTPBearer):
 
 api_key_scheme = QueryOrHeaderBearer(scheme_name="ABI API key")
 
+# Former name, kept so modules that import ``oauth2_scheme`` keep loading.
+oauth2_scheme = api_key_scheme
+
 
 # Update the token validation dependency
 async def is_token_valid(token: str = Depends(api_key_scheme)):
