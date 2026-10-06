@@ -66,6 +66,12 @@ let CONFIGURED_PAGE_URLS = new Set();
  */
 let GRAPH_VIEW_DEFAULT_OVERRIDES = {};
 let DATE_SLICER_CONFIG = configureDateSlicer();
+// "semantic" rays every node out from the act of working it belongs to (a
+// person's graph); "rings" puts each hop from the focus on its own circle (a
+// search: search, matches, acts, people).
+let GRAPH_LAYOUT = "semantic";
+// Whether the Temporal Region filter applies: off, every act is shown.
+let TEMPORAL_FILTER = true;
 
 function defaultGraphParams(view) {
   const base = Object.fromEntries(
@@ -143,6 +149,8 @@ export function configureGraph(config) {
   if (graph.view_defaults) GRAPH_VIEW_DEFAULT_OVERRIDES = graph.view_defaults;
   if (graph.params_session_key) PARAMS_KEY = graph.params_session_key;
   DATE_SLICER_CONFIG = configureDateSlicer(graph.date_slicer);
+  GRAPH_LAYOUT = graph.layout === "rings" ? "rings" : "semantic";
+  TEMPORAL_FILTER = graph.temporal_filter !== false;
   DISTANCE_HINT = graph.distance_hint;
   GRAPH_VIEW_LABELS = graph.view_labels || {};
   configureBfoBuckets(config.theme?.bfo_buckets);
@@ -744,6 +752,7 @@ function renderNodeDetail(node, { focusPersonId } = {}) {
   if (node.kind === "person") {
     const person = node.person;
     return `<h2>${esc(person.label)}${node.isFocus ? " · focus" : ""}</h2>
+      ${person.href ? `<p class="graph-detail-link"><a href="${esc(person.href)}">Open profile ›</a></p>` : ""}
       <dl>${renderNodeUri(person.id)}<dt>Class</dt><dd>Individual</dd><dt>BFO bucket</dt><dd>${renderBfoBadge("Material Entity")}</dd></dl>
       <h3>Data properties</h3>${renderPropertiesFeed(person.properties)}`;
   }
@@ -1603,8 +1612,115 @@ function buildGraph(focusRootId, visible, lookup) {
   return { nodes, edges, focusNode, workingNode };
 }
 
+/**
+ * Each hop from the focus on its own circle: the focus at the centre, what it
+ * links to around it, and so on outwards. A node sits as near as its ring
+ * allows to the nodes that lead to it, and the first ring is ordered by what
+ * each node leads to, so one person's branches stay side by side.
+ */
+function seedRingLayout(focusNode, nodes, edges) {
+  const adjacency = new Map(nodes.map((node) => [node.id, []]));
+  for (const edge of edges) {
+    if (edge.hidden) continue;
+    adjacency.get(edge.a.id)?.push(edge.b);
+    adjacency.get(edge.b.id)?.push(edge.a);
+  }
+  const level = new Map([[focusNode.id, 0]]);
+  const parents = new Map();
+  const queue = [focusNode];
+  for (let cursor = 0; cursor < queue.length; cursor++) {
+    const node = queue[cursor];
+    for (const next of adjacency.get(node.id) || []) {
+      if (!level.has(next.id)) {
+        level.set(next.id, level.get(node.id) + 1);
+        parents.set(next.id, [node]);
+        queue.push(next);
+      } else if (level.get(next.id) === level.get(node.id) + 1) {
+        parents.get(next.id).push(node);
+      }
+    }
+  }
+  const deepest = Math.max(0, ...level.values());
+  for (const node of nodes) if (!level.has(node.id)) level.set(node.id, deepest + 1);
+
+  // What a node leads to, outermost first: the key that groups the first ring.
+  const leafKey = new Map();
+  const byDepth = [...nodes].sort((a, b) => level.get(b.id) - level.get(a.id));
+  for (const node of byDepth) {
+    const children = (adjacency.get(node.id) || []).filter(
+      (next) => level.get(next.id) === level.get(node.id) + 1
+    );
+    const keys = children.map((child) => leafKey.get(child.id)).filter(Boolean).sort();
+    leafKey.set(node.id, keys[0] || node.label || node.id);
+  }
+
+  focusNode.x = 0;
+  focusNode.y = 0;
+  focusNode.z = 0;
+  const angles = new Map([[focusNode.id, 0]]);
+  const rings = new Map();
+  for (const node of nodes) {
+    if (node.id === focusNode.id) continue;
+    const ring = level.get(node.id);
+    if (!rings.has(ring)) rings.set(ring, []);
+    rings.get(ring).push(node);
+  }
+  const spacing = GRAPH_NODE_RADIUS * 2 + (graphParams.nodeMinGap ?? 60);
+  const ringGap = Math.max(220, spacing * 1.6);
+  const circularMean = (values) =>
+    Math.atan2(
+      values.reduce((sum, value) => sum + Math.sin(value), 0),
+      values.reduce((sum, value) => sum + Math.cos(value), 0)
+    );
+  let radius = 0;
+  for (const ringLevel of [...rings.keys()].sort((a, b) => a - b)) {
+    const ring = rings.get(ringLevel);
+    const step = (Math.PI * 2) / ring.length;
+    radius = Math.max(radius + ringGap, (ring.length * spacing) / (Math.PI * 2));
+    const wanted = (node) => {
+      const from = (parents.get(node.id) || []).filter((parent) => angles.has(parent.id));
+      return from.length ? circularMean(from.map((parent) => angles.get(parent.id))) : 0;
+    };
+    let offset = 0;
+    if (ringLevel === 1) {
+      ring.sort(
+        (a, b) =>
+          leafKey.get(a.id).localeCompare(leafKey.get(b.id)) ||
+          a.label.localeCompare(b.label) ||
+          a.id.localeCompare(b.id)
+      );
+    } else {
+      const normalise = (angle) => (angle + Math.PI * 4) % (Math.PI * 2);
+      ring.sort(
+        (a, b) =>
+          normalise(wanted(a)) - normalise(wanted(b)) || a.label.localeCompare(b.label)
+      );
+      // Turn the evenly spaced ring so it lines up with where its nodes want to be.
+      offset = circularMean(ring.map((node, index) => wanted(node) - index * step));
+    }
+    ring.forEach((node, index) => {
+      const angle = offset + index * step;
+      angles.set(node.id, angle);
+      node.x = Math.cos(angle) * radius;
+      node.y = Math.sin(angle) * radius;
+      node.z = 0;
+      node.rayId = null;
+      node.radialLevel = ringLevel;
+    });
+  }
+  for (const node of nodes) {
+    node.homeX = node.x;
+    node.homeY = node.y;
+    node.physicsEnabled = node.id !== focusNode.id;
+  }
+}
+
 export function layoutGraphNodes(focusRootId, visible, lookup) {
   const graph = buildGraph(focusRootId, visible, lookup);
+  if (GRAPH_LAYOUT === "rings") {
+    seedRingLayout(graph.focusNode, graph.nodes, graph.edges);
+    return graph;
+  }
   seedSemanticLayout(
     graph.focusNode,
     graph.workingNode,
@@ -1663,8 +1779,21 @@ export {
  * relations between nodes were unreadable; at a standard zoom the labels are
  * legible and the canvas is pannable to reach the rest.
  */
-function resetGraphView(canvas, focusNode, setPanScale) {
-  const scale = graphParams.zoom;
+function resetGraphView(canvas, focusNode, setPanScale, nodes = null) {
+  let scale = graphParams.zoom;
+  // Rings are read as a whole - centre, matches, acts, people - so they open
+  // fitted to the canvas, never above the default zoom.
+  if (GRAPH_LAYOUT === "rings" && graphParams.view === "2d" && nodes?.length) {
+    const reach =
+      Math.max(
+        ...nodes.map((node) =>
+          Math.hypot((node.x ?? 0) - (focusNode?.x ?? 0), (node.y ?? 0) - (focusNode?.y ?? 0))
+        )
+      ) +
+      GRAPH_NODE_RADIUS * 2;
+    const fit = (Math.min(canvas.clientWidth, canvas.clientHeight) / (2 * reach)) * 0.95;
+    if (Number.isFinite(fit) && fit > 0) scale = Math.max(MIN_SCALE, Math.min(scale, fit));
+  }
   setPanScale({
     scale,
     panX: -(focusNode?.x ?? 0) * scale,
@@ -1756,7 +1885,7 @@ function mountGraphCanvas(root, options) {
     canvas.style.width = `${stage.clientWidth}px`;
     canvas.style.height = `${stage.clientHeight}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (layoutDone) resetGraphView(canvas, focusNode, setPanScale);
+    if (layoutDone) resetGraphView(canvas, focusNode, setPanScale, nodes);
     draw();
   }
 
@@ -2059,7 +2188,7 @@ function mountGraphCanvas(root, options) {
   root.querySelector("#graph-zoom-in")?.addEventListener("click", () => zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 1.15));
   root.querySelector("#graph-zoom-out")?.addEventListener("click", () => zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 0.87));
   root.querySelector("#graph-zoom-reset")?.addEventListener("click", () => {
-    resetGraphView(canvas, focusNode, setPanScale);
+    resetGraphView(canvas, focusNode, setPanScale, nodes);
     selected = focusNode;
     showDetail(focusNode);
     draw();
@@ -2073,13 +2202,13 @@ function mountGraphCanvas(root, options) {
     stopPhysics = runClassPhysics(nodes, edges, focusNode, {
       onTick: draw,
       onEnd: () => {
-        resetGraphView(canvas, focusNode, setPanScale);
+        resetGraphView(canvas, focusNode, setPanScale, nodes);
         draw();
       },
     });
   } else {
     // Physics off: the seeded layout is the layout.
-    resetGraphView(canvas, focusNode, setPanScale);
+    resetGraphView(canvas, focusNode, setPanScale, nodes);
     draw();
   }
 
@@ -2482,7 +2611,11 @@ function syncGraphFiltersToUrl(rootId, distance, lookup) {
  *   the URL. ``syncUrl: false`` leaves the address bar alone, for pages that
  *   embed this view under a route of their own.
  */
-export function mountGraphPage(el, data, { rootId = null, syncUrl = true } = {}) {
+export function mountGraphPage(
+  el,
+  data,
+  { rootId = null, syncUrl = true, distance: openDistance = null } = {}
+) {
   const adj = buildGraphIndex(data);
   const processClassCatalog = data.processClassCatalog || {};
   const lookup = {
@@ -2526,6 +2659,9 @@ export function mountGraphPage(el, data, { rootId = null, syncUrl = true } = {})
     hiddenProcessTypes = new Set(readStoredHiddenProcessTypes());
     hiddenProcessInstances = new Set(readStoredHiddenProcesses());
   }
+  // A page that knows how far its graph reaches (a search: query, match, act,
+  // person) opens at that distance whatever was last chosen elsewhere.
+  if ([1, 2, 3].includes(openDistance)) distance = openDistance;
   if (selectedRootId) {
     const initialRange = temporalRangeForRoot(adj, selectedRootId, distance);
     dateRangeStart = initialRange.min;
@@ -2668,7 +2804,9 @@ export function mountGraphPage(el, data, { rootId = null, syncUrl = true } = {})
     if (dateRangeStart && dateRangeEnd && dateRangeStart > dateRangeEnd) {
       dateRangeEnd = dateRange.max || dateRangeEnd;
     }
-    const dateFiltered = reachable
+    const dateFiltered = !TEMPORAL_FILTER
+      ? reachable
+      : reachable
       ? applyDateFilter(
           reachable,
           dateRangeStart,
@@ -2734,7 +2872,7 @@ export function mountGraphPage(el, data, { rootId = null, syncUrl = true } = {})
           ? `<div class="graph-page"><div class="graph-body">
               <div class="graph-stage" id="graph-stage">
                 <canvas id="graph-canvas"></canvas>
-                <div class="graph-toolbar graph-toolbar--${toolbarLayout}">
+                ${graphParams.filters === false ? "" : `<div class="graph-toolbar graph-toolbar--${toolbarLayout}">
                   <label class="graph-search"><span>Individual</span>
                     <input type="search" id="graph-person-search" placeholder="Search individuals (3+ chars)…" value="${esc(rootLabel)}" autocomplete="off" />
                     <ul class="graph-suggestions" id="graph-suggestions" hidden></ul>
@@ -2746,12 +2884,12 @@ export function mountGraphPage(el, data, { rootId = null, syncUrl = true } = {})
                     hiddenProcessInstances,
                     expandedProcessTypes
                   )}
-                  ${renderDateSlicer({
+                  ${TEMPORAL_FILTER ? renderDateSlicer({
                     esc,
                     globalRange: dateRange,
                     selectedStart: dateRangeStart,
                     selectedEnd: dateRangeEnd,
-                  })}
+                  }) : ""}
                   ${renderClassFilter(
                     classTypeOptions,
                     allClassInstances,
@@ -2759,7 +2897,7 @@ export function mountGraphPage(el, data, { rootId = null, syncUrl = true } = {})
                     hiddenClassInstances,
                     expandedClassTypes
                   )}
-                </div>
+                </div>`}
                 ${graphParams.legend ? `<div class="graph-legend">${renderLegend()}</div>` : ""}
                 <div class="graph-controls">
                   <div class="graph-zoom"><button type="button" id="graph-zoom-in" title="Zoom in">+</button><button type="button" id="graph-zoom-out" title="Zoom out">−</button><button type="button" id="graph-zoom-reset" title="Reset view">⟲</button></div>
@@ -2794,9 +2932,9 @@ export function mountGraphPage(el, data, { rootId = null, syncUrl = true } = {})
       }
       suggestions.hidden = false;
     };
-    input.addEventListener("focus", () => openSuggestions(input.value));
-    input.addEventListener("input", () => openSuggestions(input.value));
-    suggestions.addEventListener("click", (e) => {
+    input?.addEventListener("focus", () => openSuggestions(input.value));
+    input?.addEventListener("input", () => openSuggestions(input.value));
+    suggestions?.addEventListener("click", (e) => {
       const li = e.target.closest("[data-person]");
       if (!li) return;
       selectedRootId = li.dataset.person;

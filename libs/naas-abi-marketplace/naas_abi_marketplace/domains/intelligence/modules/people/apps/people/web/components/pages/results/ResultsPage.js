@@ -1,7 +1,7 @@
 import { fetchSearch, fetchSearchNetwork } from "../../../lib/api.js";
 import { avatarHtml, escapeHtml, flagHtml, highlight, orgLogoHtml } from "../../../lib/dom.js";
 import { profileHref, searchHref } from "../../../lib/routes.js";
-import { mountPeopleNetwork } from "../../../lib/people-network.js";
+import { mountGraphView } from "../../../lib/graph-view.js";
 import { overflowTabs } from "../../../lib/tab-overflow.js";
 
 function resultHtml(config, hit, tokens, query) {
@@ -33,12 +33,39 @@ function resultHtml(config, hit, tokens, query) {
     </article>`;
 }
 
-/** The ways to look at one page of results: a list, a network, a gallery of profiles. */
+/**
+ * The ways to look at a search: the list of people, then its network (the
+ * search at the centre, what it matched, and the people it leads to).
+ */
 export const VIEWS = [
-  { id: "", label: "All" },
-  { id: "graph", label: "Graph" },
-  { id: "profile", label: "Profile" },
+  { id: "", label: "People" },
+  { id: "network", label: "Network" },
 ];
+
+// The network of each search asked for in this page's lifetime. The People view
+// starts it in the background, so the Network tab is ready, or on its way,
+// when it is opened; the first build of a search can take seconds.
+const networkRequests = new Map();
+
+function loadNetwork(query, facet) {
+  const key = JSON.stringify([query, facet]);
+  if (!networkRequests.has(key)) {
+    const request = fetchSearchNetwork({ query, facet });
+    // A failed request is not kept: the next visit asks again.
+    request.catch(() => networkRequests.delete(key));
+    networkRequests.set(key, request);
+  }
+  return networkRequests.get(key);
+}
+
+/** Mark the Network tab as loading until its network has arrived. */
+function prefetchNetwork(host, query, facet) {
+  const tab = host.querySelector('.tabs .tab[data-view="network"]');
+  tab?.classList.add("is-loading");
+  loadNetwork(query, facet)
+    .catch(() => {})
+    .finally(() => tab?.classList.remove("is-loading"));
+}
 
 export function viewOf(value) {
   return VIEWS.some((item) => item.id === value) ? value : "";
@@ -46,32 +73,14 @@ export function viewOf(value) {
 
 function tabsHtml(config, { query, facet, view }) {
   const tabs = VIEWS.map(
-    (item) => `<a class="tab" href="${searchHref(config, { query, facet, view: item.id })}"
+    (item) => `<a class="tab" data-view="${item.id || "people"}" href="${searchHref(config, { query, facet, view: item.id })}"
       aria-current="${item.id === view}">${escapeHtml(item.label)}</a>`,
   ).join("");
   return `<nav class="tabs" aria-label="View">${tabs}</nav>`;
 }
 
-/** One person as a CV card: portrait, name, headline, where they are. */
-function cardHtml(config, hit, tokens, query) {
-  const place = [hit.organization, ...(hit.place || [])].filter(Boolean);
-  return `
-    <a class="profile-card" href="${profileHref(config, hit.slug, { query })}">
-      ${avatarHtml(hit, "md")}
-      <span class="profile-card-name">${highlight(hit.full_name, tokens, "b")}</span>
-      <span class="profile-card-headline">${highlight(hit.headline || "", tokens, "b")}</span>
-      <span class="profile-card-place">${flagHtml(hit.country_code)}${orgLogoHtml(hit.organization, hit.organization_logo)}${escapeHtml(place.join(" › "))}</span>
-    </a>`;
-}
-
-function bodyHtml(config, view, results, tokens, query) {
+function bodyHtml(config, results, tokens, query) {
   if (!results.length) return emptyHtml(config, query);
-  if (view === "graph") return `<div class="network-host"><p class="stats">Drawing the network…</p></div>`;
-  if (view === "profile") {
-    return `<div class="profile-gallery">${results
-      .map((hit) => cardHtml(config, hit, tokens, query))
-      .join("")}</div>`;
-  }
   return results.map((hit) => resultHtml(config, hit, tokens, query)).join("");
 }
 
@@ -151,18 +160,58 @@ export function missingDatasetHtml(detail) {
     </div>`;
 }
 
-async function drawNetwork(target, config, { query, facet, page }) {
+function errorHtml(error) {
+  return error.detail?.error === "missing_dataset"
+    ? missingDatasetHtml(error.detail)
+    : `<div class="empty-state error-block"><h2>Search failed</h2><p>${escapeHtml(error.message)}</p></div>`;
+}
+
+function networkStatsText(network, query) {
+  const noun = network.total === 1 ? "person" : "people";
+  const counted =
+    network.shown < network.total
+      ? `Top ${network.shown} of ${network.total} ${noun}`
+      : `${network.total} ${noun}`;
+  return `${counted}${query ? ` for “${escapeHtml(query)}”` : ""}${
+    network.facet ? ` in ${escapeHtml(network.facet)}` : ""
+  }`;
+}
+
+/**
+ * The Network view: the person graph page focused on the search query. It
+ * opens three hops out, far enough to reach the people (query, match, what
+ * matched, person). A person's node links to their profile.
+ */
+async function mountNetwork(host, { config, query, facet }) {
+  host.innerHTML = `
+    <div class="results results-network">
+      ${tabsHtml(config, { query, facet, view: "network" })}
+      <p class="stats">Drawing the network…</p>
+      <div class="profile-graph search-graph"></div>
+    </div>`;
+  const tabs = host.querySelector(".tabs");
+  if (tabs) overflowTabs(tabs);
+  const stats = host.querySelector(".stats");
+  const graphEl = host.querySelector(".search-graph");
   try {
-    const network = await fetchSearchNetwork({ query, facet, page });
-    if (!target.isConnected) return;
-    target.innerHTML = "";
-    mountPeopleNetwork(target, network, {
-      personHref: (slug) => profileHref(config, slug, { query }),
-    });
+    const dispose = await mountGraphView(
+      graphEl,
+      async () => {
+        const network = structuredClone(await loadNetwork(query, facet));
+        stats.innerHTML = networkStatsText(network, query);
+        if (!network.total) throw Object.assign(new Error("empty"), { empty: true });
+        for (const person of network.data.people || []) {
+          if (person.slug) person.href = profileHref(config, person.slug, { query });
+        }
+        return network;
+      },
+      { distance: 3 },
+    );
+    return dispose;
   } catch (error) {
-    if (target.isConnected) {
-      target.innerHTML = `<p class="empty-state error-block">The network could not be drawn: ${escapeHtml(error.message)}</p>`;
-    }
+    if (!graphEl.isConnected) return null;
+    graphEl.outerHTML = error.empty ? emptyHtml(config, query) : errorHtml(error);
+    return null;
   }
 }
 
@@ -171,17 +220,18 @@ export async function mountResults(host, { config, params }) {
   const facet = params.get("facet") || "";
   const view = viewOf(params.get("view") || "");
   const requestedPage = Math.max(1, parseInt(params.get("page") || "1", 10) || 1);
-  host.innerHTML = `<div class="results"><p class="stats">Searching…</p></div>`;
 
+  if (view === "network") {
+    const dispose = await mountNetwork(host, { config, query, facet });
+    return { showTopbarSearch: true, query, teardown: dispose || undefined };
+  }
+
+  host.innerHTML = `<div class="results"><p class="stats">Searching…</p></div>`;
   let payload;
   try {
     payload = await fetchSearch({ query, facet, page: requestedPage });
   } catch (error) {
-    host.innerHTML = `<div class="results">${
-      error.detail?.error === "missing_dataset"
-        ? missingDatasetHtml(error.detail)
-        : `<div class="empty-state error-block"><h2>Search failed</h2><p>${escapeHtml(error.message)}</p></div>`
-    }</div>`;
+    host.innerHTML = `<div class="results">${errorHtml(error)}</div>`;
     return { showTopbarSearch: true, query };
   }
 
@@ -199,18 +249,13 @@ export async function mountResults(host, { config, params }) {
         query ? ` for “${escapeHtml(query)}”` : ""
       }${payload.facet ? ` in ${escapeHtml(payload.facet)}` : ""}</p>
       ${noticeHtml}
-      ${bodyHtml(config, view, results, tokens, query)}
+      ${bodyHtml(config, results, tokens, query)}
       ${pagerHtml(config, payload, query, view)}
     </div>`;
   const tabs = host.querySelector(".tabs");
   if (tabs) overflowTabs(tabs);
-  if (view === "graph" && results.length) {
-    drawNetwork(host.querySelector(".network-host"), config, {
-      query,
-      facet: payload.facet,
-      page: payload.page,
-    });
-  }
+  // Not awaited: the list is already on screen.
+  if (results.length) prefetchNetwork(host, query, payload.facet);
 
   return { showTopbarSearch: true, query };
 }
