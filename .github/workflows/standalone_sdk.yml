@@ -38,6 +38,9 @@ jobs:
     name: Core and real NATS integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      # A broker test skipped for want of nats-server fails instead (conftest hooks).
+      ABI_REQUIRE_NATS_SERVER: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -57,6 +60,7 @@ jobs:
           uv run --project libs/naas-abi-core --no-sync pytest --import-mode=importlib -q \
             libs/naas-abi-core/naas_abi_core/engine/nats_rpc_test.py \
             libs/naas-abi-core/naas_abi_core/engine/nats_transfer_test.py \
+            libs/naas-abi-core/naas_abi_core/engine/nats_test_server_test.py \
             libs/naas-abi-core/naas_abi_core/services/object_storage/adapters/primary/object_storage__primary_adapter__NATS_test.py \
             libs/naas-abi-core/naas_abi_core/engine/engine_loaders/EngineNATSLoader_test.py \
             libs/naas-abi-core/naas_abi_core/engine/engine_loaders/EngineNATSDependencies_test.py \
@@ -98,4 +102,12 @@ jobs:
             libs/naas-abi-core/naas_abi_core/services/event \
             libs/naas-abi-core/naas_abi_core/services/activity_log \
             libs/naas-abi-core/naas_abi_core/services/vector_store \
-            libs/naas-abi-core/naas_abi_core/services/triple_store/adapters
+            libs/naas-abi-core/naas_abi_core/services/triple_store/adapters \
+            libs/naas-abi-core/naas_abi_core/engine/engine_loaders/EngineJobLoader_integration_test.py \
+            libs/naas-abi-core/naas_abi_core/engine/nats_tracing_integration_test.py \
+            libs/naas-abi-core/naas_abi_core/services/bus/adapters/secondary/NATSJetStreamAdapter_claim_check_test.py \
+            libs/naas-abi-core/naas_abi_core/services/cache/adapters/secondary/CacheSecondaryAdapterNATSClient_test.py \
+            libs/naas-abi-core/naas_abi_core/services/keyvalue/adapters/secondary/KeyValueSecondaryAdapterNATSClient_test.py \
+            libs/naas-abi-core/naas_abi_core/services/email/adapters/secondary/EmailSecondaryAdapterNATSClient_test.py \
+            libs/naas-abi-core/naas_abi_core/services/source_control/adapters/secondary/SourceControlSecondaryAdapterNATSClient_broker_test.py \
+            libs/naas-abi-core/naas_abi_core/services/coding_environment/adapters/secondary/CodingEnvironmentSecondaryAdapterNATSClient_broker_test.py
