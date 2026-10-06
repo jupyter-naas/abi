@@ -425,6 +425,74 @@ def test_same_rollout_replica_joins_and_a_later_rollout_replaces_it():
     asyncio.run(scenario())
 
 
+def _with_agent(request, name="Researcher"):
+    request.descriptor.agents.add(
+        name=name, contract_major=1, capabilities=["agent.invoke.v1"]
+    )
+    return request
+
+
+def test_a_new_rollout_may_add_jobs_and_agents_and_waits_for_its_cohort():
+    async def scenario():
+        now = [0.0]
+        service = DiscoveryService(MemoryRegistry(), clock=lambda: now[0])
+        await _up(service, _with_jobs(registration("a", "a-old"), _job()))
+        await _up(service, registration("b", "b-old"))
+        now[0] = 10
+        cohort = ("a", "b")
+        # Same contract major: a new job and a changed schedule on a, an agent on b.
+        new_a = registration("a", "a-new", rollout="release-2", cohort=cohort)
+        _with_jobs(new_a, _job(spec="0 0 7 * * *"), _job("summary", "every", "1h"))
+        new_b = _with_agent(
+            registration("b", "b-new", rollout="release-2", cohort=cohort)
+        )
+        await _up(service, new_a)
+        assert await _statuses(service, "a") == {"a-old": "READY", "a-new": "STAGED"}
+        await _up(service, new_b)
+        assert await _statuses(service, "a") == {"a-old": "DRAINING", "a-new": "READY"}
+        assert await _statuses(service, "b") == {"b-old": "DRAINING", "b-new": "READY"}
+
+    asyncio.run(scenario())
+
+
+def test_a_single_module_rollout_with_a_new_job_replaces_the_live_one():
+    async def scenario():
+        now = [0.0]
+        service = DiscoveryService(MemoryRegistry(), clock=lambda: now[0])
+        await _up(service, registration("a", "v1", rollout="release-1"))
+        now[0] = 10
+        v2 = _with_jobs(registration("a", "v2", rollout="release-2"), _job())
+        await _up(service, v2)
+        assert await _statuses(service, "a") == {"v1": "DRAINING", "v2": "READY"}
+
+    asyncio.run(scenario())
+
+
+def test_replicas_of_one_generation_still_declare_identical_descriptors():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry(), clock=lambda: 0.0)
+        await _up(service, registration("a", "old"))
+        first = _with_jobs(registration("a", "r2-1", rollout="release-2"), _job())
+        await service.register(first, "owner")
+        # Another replica of that rollout must match it, even with a live old one.
+        for differs in (
+            registration("a", "r2-2", rollout="release-2"),
+            _with_jobs(registration("a", "r2-2", rollout="release-2"), _job("other")),
+            _with_agent(
+                _with_jobs(registration("a", "r2-2", rollout="release-2"), _job())
+            ),
+        ):
+            with pytest.raises(DiscoveryError, match="DESCRIPTOR_CONFLICT"):
+                await service.register(differs, "owner")
+        same = _with_jobs(registration("a", "r2-2", rollout="release-2"), _job())
+        await service.register(same, "owner")
+        # Without rollout ids, every live replica is one generation.
+        with pytest.raises(DiscoveryError, match="DESCRIPTOR_CONFLICT"):
+            await service.register(_with_agent(registration("a", "plain")), "owner")
+
+    asyncio.run(scenario())
+
+
 def test_first_rollout_becomes_ready_and_a_missing_dependency_blocks_cutover():
     async def scenario():
         service = DiscoveryService(MemoryRegistry(), clock=lambda: 0.0)

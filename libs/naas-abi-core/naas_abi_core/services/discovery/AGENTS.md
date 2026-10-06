@@ -27,6 +27,13 @@ stopping a module means stopping its process. Registering an instance id whose
 record expired or was evicted is a new registration (STARTING until its next
 initialized renewal).
 
+## Generations
+Replicas of one generation (the same rollout id, or none on both) must declare
+identical dependencies, agents, jobs and models for a contract major, or the
+registration fails with DESCRIPTOR_CONFLICT. A rollout may change them for the
+generation it replaces: it stays STAGED, outside READY lookups and READY-gated
+authorizations, until its cohort cuts over.
+
 ## Agent authorization
 `authorize_agent` with `new_invocation` false (status, event and cancel polls)
 is answered from the registry as this replica last read or wrote it, when that

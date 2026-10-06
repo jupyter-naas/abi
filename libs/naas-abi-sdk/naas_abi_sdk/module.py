@@ -292,6 +292,32 @@ async def _drain_hosts(agent_host, job_host, model_host, timeout: float) -> None
         await asyncio.gather(*waits)
 
 
+async def _host_jobs(job_host, module) -> None:
+    await job_host.start()
+    # The module's own triggers (atrigger_job) go through this host.
+    module._bind_job_host(job_host, asyncio.get_running_loop())
+
+
+async def _host_jobs_after_cutover(registration, job_host, module, refresh) -> None:
+    """Host the jobs once this generation serves (READY or DEGRADED).
+
+    Runs until the runner cancels it, so only a failure to host ends it. A
+    process asked to drain first never hosts them.
+    """
+    draining = registration.drain_requested
+    while registration.status not in ("READY", "DEGRADED") and not draining.is_set():
+        await asyncio.sleep(refresh)
+    if not draining.is_set():
+        await _host_jobs(job_host, module)
+    await asyncio.Event().wait()
+
+
+async def _cancel(task: asyncio.Task | None) -> None:
+    if task is not None and not task.done():
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
 def _rollout(discovery: DiscoveryConfiguration) -> tuple[str, tuple[str, ...]]:
     rollout_id = validate_rollout_id(
         discovery.rollout_id or os.environ.get("ABI_ROLLOUT_ID", "")
@@ -371,6 +397,7 @@ async def run_module(
         agent_host = None
         model_host = None
         job_host = None
+        jobs_after_cutover: asyncio.Task | None = None
         health_server = None
         try:
             await _invoke(module.on_load)
@@ -432,12 +459,25 @@ async def run_module(
                     {j.name: (j, module._job_handlers[j.name]) for j in module.jobs},
                     instance_id=registration.instance_id,
                 )
-                await job_host.start()
-                # The module's own triggers (atrigger_job) go through this host.
-                module._bind_job_host(job_host, asyncio.get_running_loop())
+                if not registration.rollout_id:
+                    await _host_jobs(job_host, module)
             if registration:
                 registration.initialized = True
                 await registration.renew()
+            if job_host is not None and registration and registration.rollout_id:
+                # Schedules and consumers are module-wide. A STAGED generation
+                # leaves them to the serving one until its rollout cuts over.
+                if registration.status == "STAGED":
+                    jobs_after_cutover = asyncio.create_task(
+                        _host_jobs_after_cutover(
+                            registration,
+                            job_host,
+                            module,
+                            discovery.refresh_seconds if discovery else 2.0,
+                        )
+                    )
+                else:
+                    await _host_jobs(job_host, module)
             if probe is not None:
                 health_server = HealthServer(
                     lambda: module.discovery_status, probe[0], probe[1]
@@ -468,10 +508,14 @@ async def run_module(
             watched = {work, stop_task}
             if registration is not None and registration.task is not None:
                 watched.add(registration.task)
+            if jobs_after_cutover is not None:
+                watched.add(jobs_after_cutover)
             try:
                 done, _ = await asyncio.wait(
                     watched, return_when=asyncio.FIRST_COMPLETED
                 )
+                if jobs_after_cutover in done:
+                    await jobs_after_cutover  # it ends only when hosting failed
                 if registration is not None and registration.task in done:
                     await registration.task
                     return await work
@@ -484,6 +528,7 @@ async def run_module(
                             logging.getLogger(__name__).warning(
                                 "Could not mark module draining", exc_info=True
                             )
+                    await _cancel(jobs_after_cutover)
                     await _drain_hosts(
                         agent_host,
                         job_host,
@@ -503,6 +548,7 @@ async def run_module(
                     loop.remove_signal_handler(sig)
         finally:
             try:
+                await _cancel(jobs_after_cutover)
                 if health_server is not None:
                     await health_server.close()
                 if work:

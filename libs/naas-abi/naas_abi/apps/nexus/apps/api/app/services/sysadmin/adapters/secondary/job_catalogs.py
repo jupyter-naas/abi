@@ -85,7 +85,8 @@ class DiscoveryJobCatalog:
         return self._clients[loop]
 
     async def list_jobs(self) -> list[JobDefinition]:
-        descriptors: dict[tuple[str, str], Any] = {}
+        serving: dict[tuple[str, str], Any] = {}
+        draining: dict[tuple[str, str], Any] = {}
         instances: dict[tuple[str, str], int] = {}
         after = ""
         try:
@@ -93,15 +94,21 @@ class DiscoveryJobCatalog:
             for _ in range(MAX_PAGES):
                 page, after = await client.list_modules(limit=PAGE_SIZE, after_instance_id=after)
                 for instance in page:
+                    status = getattr(instance, "status", "")
+                    if status == "STAGED":
+                        continue  # a rollout's jobs are hosted from its cutover on
                     for descriptor in instance.jobs:
                         key = (instance.module_id, descriptor.name)
-                        descriptors.setdefault(key, descriptor)
+                        found = draining if status == "DRAINING" else serving
+                        found.setdefault(key, descriptor)
                         instances[key] = instances.get(key, 0) + 1
                 if not after:
                     break
         except Exception as exc:  # noqa: BLE001 - RPC errors, timeouts, no broker
             code = getattr(exc, "code", "") or type(exc).__name__
             raise SourceUnavailable("discovery", f"{code}: {exc}" if str(exc) else code) from exc
+        # The serving generation's definition, over the one a rollout replaces.
+        descriptors = {**draining, **serving}
         return [
             definition(module_id, descriptor, "remote", instances[(module_id, name)])
             for (module_id, name), descriptor in sorted(descriptors.items())
