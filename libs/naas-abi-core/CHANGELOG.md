@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.41.2 (2026-10-06)
+
+### Bug Fixes
+
+- **api**: Keep oauth2_scheme as an alias of api_key_scheme
+  ([`d7b36c2`](https://github.com/jupyter-naas/abi/commit/d7b36c2b11b5541804a448a6f6931a5de7a24180))
+
+
 ## v2.41.1 (2026-10-05)
 
 ### Bug Fixes
