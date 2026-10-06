@@ -27,10 +27,11 @@ def _core_version() -> str:
         return ""
 
 
-def this_process(rollout_id: str = "") -> Holder:
-    """This engine process as a lease holder, with a new instance id."""
+def this_process(rollout_id: str = "", instance_id: str | None = None) -> Holder:
+    """This engine process as a lease holder: under the engine's instance id,
+    the owner of its sessions (``nats_sessions``), else a new one."""
     return Holder(
-        instance_id=uuid4().hex,
+        instance_id=instance_id or uuid4().hex,
         host=socket.gethostname(),
         pid=os.getpid(),
         version=_core_version(),

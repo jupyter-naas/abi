@@ -93,6 +93,19 @@ def test_a_serving_engine_holds_the_lease_until_it_releases():
     loader.close()
 
 
+def test_the_lease_is_held_under_the_engines_instance_id():
+    store = Store()
+    engine_id = "0123456789abcdef0123456789abcdef"
+    loader = EngineOwnershipLoader(
+        nats_config(), environ={}, ownership_factory=store, instance_id=engine_id
+    )
+
+    assert loader.claim() is Claim.SERVING
+    assert loader.run(store.lease.read()).holder.instance_id == engine_id
+    assert loader.instance_id == engine_id
+    loader.close()
+
+
 def test_a_live_engine_makes_the_claim_fail():
     store = Store(holder("other"))
     done = threading.Event()

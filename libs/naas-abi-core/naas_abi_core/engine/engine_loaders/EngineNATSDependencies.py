@@ -238,6 +238,84 @@ class EngineNATSDependencies:
         self.module_services = dependencies
         return dependencies
 
+    def build_clients(
+        self,
+        model_registry: Any,
+        *,
+        cache_tiers: list[str],
+        emit_message_events: bool,
+    ) -> IEngine.Services:
+        """A client engine's services: the serving engine's, through NATS.
+
+        Every service is a NATS client: nothing opens a backend on this host or
+        subscribes. They are the facades ``build`` gives a serving engine's
+        modules. ``model_registry`` is this process's in-memory registry: modules
+        register their models with it; lookups and inference go over NATS.
+        """
+        from naas_abi_core.services.model_registry.adapters.secondary.model_registry_client import (
+            ModelRegistryNATSClient,
+        )
+
+        bus_adapter = NATSJetStreamAdapter(self.config.nats_url)
+        self.clients.append(bus_adapter)
+        bus = BusService(bus_adapter, emit_message_events=emit_message_events)
+        models = ModelRegistryNATSClient(
+            model_registry, self.config.nats_url, self.config.jwt_secret
+        )
+        self.clients.append(models)
+        values: dict[str, Any] = {
+            "bus": bus,
+            "object_storage": ObjectStorageService(
+                self._client(ObjectStorageSecondaryAdapterNATSClient)
+            ),
+            "document": DocumentService._for_engine(
+                self._client(DocumentSecondaryAdapterNATSClient)
+            ),
+            "dataset": DatasetService(self._client(DatasetSecondaryAdapterNATSClient)),
+            "kv": KeyValueService(self._client(KeyValueSecondaryAdapterNATSClient)),
+            "email": EmailService(self._client(EmailSecondaryAdapterNATSClient)),
+            "activity_log": ActivityLogService(
+                self._client(ActivityLogSecondaryAdapterNATSClient)
+            ),
+            "coding_environment": CodingEnvironmentService(
+                self._client(CodingEnvironmentSecondaryAdapterNATSClient)
+            ),
+            "source_control": SourceControlService(
+                self._client(SourceControlSecondaryAdapterNATSClient)
+            ),
+            "vector_store": VectorStoreService(
+                self._client(VectorStoreSecondaryAdapterNATSClient)
+            ),
+            "events": EventService(
+                self._client(EventSecondaryAdapterNATSClient), bus=bus
+            ),
+            "secret": Secret([self._client(SecretSecondaryAdapterNATSClient)]),
+            "triple_store": RemoteTripleStoreService(
+                self._client(TripleStoreSecondaryAdapterNATSClient)
+            ),
+            "model_registry": models,
+        }
+        if cache_tiers:
+            values["cache"] = CacheService(
+                adapters=[
+                    (
+                        tier,
+                        self._client(
+                            CacheSecondaryAdapterNATSClient,
+                            subject_prefix=f"abi.svc.cache.v1.tier.{index}",
+                        ),
+                    )
+                    for index, tier in enumerate(cache_tiers)
+                ]
+            )
+        services = IEngine.Services(**values)
+        # Wired as ``build`` wires its facades: domain owners publish the events.
+        services.triple_store.set_services(IEngine.Services(bus=bus))
+        bus.set_services(IEngine.Services(events=services.events))
+        self.services = services
+        self.module_services = services
+        return services
+
     def close(self) -> None:
         clients, self.clients = self.clients, []
         for client in reversed(clients):

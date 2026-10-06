@@ -47,7 +47,11 @@ from naas_abi_core.engine.nats_rpc import (
     respond_protobuf,
 )
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
-from naas_abi_core.engine.nats_transfer import TransferHost, thread_frames
+from naas_abi_core.engine.nats_transfer import (
+    ServiceWithTransfers,
+    TransferHost,
+    thread_frames,
+)
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.event.v1 import event_pb2
 from naas_abi_core.services.event.adapters.event_nats_contract import (
@@ -136,7 +140,7 @@ def _query_arguments(req: event_pb2.QueryRequest) -> dict[str, Any]:
     }
 
 
-class EventPrimaryAdapterNATS:
+class EventPrimaryAdapterNATS(ServiceWithTransfers):
     """Serves the event durable-log port over NATS RPC (request/reply).
 
     Wraps a real ``IEventAdapter`` and registers one NATS micro-service
@@ -223,17 +227,6 @@ class EventPrimaryAdapterNATS:
         )
         self._service = service
         await self._transfer.start(nc)
-
-    async def stop(self) -> None:
-        """Deregister the service, draining its subscriptions."""
-        await self._transfer.stop()
-        service = self._service
-        self._service = None
-        try:
-            if service is not None:
-                await service.stop()
-        finally:
-            self._dispatch.close()
 
     # ------------------------------------------------------------------
     # Shared request handling: auth, decode, dispatch, encode.

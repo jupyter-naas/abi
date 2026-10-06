@@ -4,6 +4,10 @@ Inputs spool to temporary disk. Only an explicit start calls the domain handler;
 closing an incomplete upload cannot modify its destination. No durable replay.
 Each session is one SERVER span continuing the caller's trace from ``open``; the
 handler runs inside it, and its real failure is recorded there, never replied.
+
+Sessions belong to their host's owner: the engine's instance id when the engine
+builds the host (``nats_sessions.owned_by``). At a handover ``stop_accepting``
+ends ``open`` (a queue group) and the owner's sessions go on until they finish.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_sessions import SessionHost, session_owner, until
 from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.telemetry import ServedTransfer, serve_transfer
@@ -134,7 +139,18 @@ async def thread_frames(
         stopped.set()
 
 
-class TransferHost:
+async def drain_shared(subscriptions: list[Any], shared: list[Any]) -> None:
+    """Drain the ``shared`` subscriptions and drop them from ``subscriptions``.
+
+    Draining lets the messages already delivered run; the others stay.
+    """
+    draining, shared[:] = list(shared), []
+    for sub in draining:
+        subscriptions.remove(sub)
+        await sub.drain()
+
+
+class TransferHost(SessionHost):
     def __init__(
         self,
         prefix,
@@ -150,7 +166,10 @@ class TransferHost:
         max_buffered_upload_bytes=None,
         close_timeout_seconds=1.0,
         error_mapper=None,
+        owner=None,
     ):
+        """``owner``: the id in this host's session subjects; by default the
+        engine's (``nats_sessions.owned_by``), else a new one."""
         if not math.isfinite(idle_seconds) or idle_seconds <= 0:
             raise ValueError("Transfer idle timeout must be positive and finite")
         if total_seconds is not None and (
@@ -171,13 +190,15 @@ class TransferHost:
         self.buffered_upload_bytes = 0
         self.retiring: set[asyncio.Task] = set()
         self.prefix, self.secret, self.handler = prefix, secret, handler
-        self.owner = uuid4().hex
+        self.owner = session_owner(owner)
         self.operations, self.chunk_bytes = set(operations), chunk_bytes
         self.idle_seconds, self.max_sessions = idle_seconds, max_sessions
         self.max_upload_bytes, self.total_seconds = max_upload_bytes, total_seconds
         self.error_mapper = error_mapper
         self.sessions: dict[str, TransferSession] = {}
         self.subscriptions: list[Any] = []
+        # ``open``, on a queue group: any owner may answer it.
+        self.shared_subscriptions: list[Any] = []
         self.tasks: set[asyncio.Task] = set()
         self.reaper = None
         self.packet_bytes = 0
@@ -196,6 +217,8 @@ class TransferHost:
                         cb=partial(self._dispatch, operation),
                     )
                 )
+                if operation == "open":
+                    self.shared_subscriptions.append(self.subscriptions[-1])
             for operation in OPERATIONS.keys() - {"open"}:
                 self.subscriptions.append(
                     await nc.subscribe(
@@ -209,10 +232,18 @@ class TransferHost:
             await self.stop()
             raise
 
+    async def stop_accepting(self):
+        """Drain ``open``: new transfers go to another owner, this one's go on."""
+        await drain_shared(self.subscriptions, self.shared_subscriptions)
+
+    async def sessions_finished(self):
+        await until(lambda: not self.sessions)
+
     async def stop(self):
         for sub in self.subscriptions:
             await sub.unsubscribe()
         self.subscriptions.clear()
+        self.shared_subscriptions.clear()
         if self.reaper:
             self.reaper.cancel()
             await asyncio.gather(self.reaper, return_exceptions=True)
@@ -508,3 +539,35 @@ class TransferHost:
             session.read_sequence += 1
             session.trace.bytes_sent += len(data)
             return response
+
+
+class ServiceWithTransfers(SessionHost):
+    """A primary adapter: a NATS micro service whose streams use a TransferHost.
+
+    Subclasses set ``_service`` (the started micro service, or None),
+    ``_transfer`` and ``_dispatch`` (the domain's worker pool).
+    """
+
+    _service: Any
+    _transfer: TransferHost
+    _dispatch: Any
+
+    async def stop_accepting(self) -> None:
+        """End the endpoints (queue groups) and ``open``; transfers go on."""
+        await self._transfer.stop_accepting()
+        service, self._service = self._service, None
+        if service is not None:
+            await service.stop()
+
+    async def sessions_finished(self) -> None:
+        await self._transfer.sessions_finished()
+
+    async def stop(self) -> None:
+        """Deregister the service, draining its subscriptions."""
+        await self._transfer.stop()
+        service, self._service = self._service, None
+        try:
+            if service is not None:
+                await service.stop()
+        finally:
+            self._dispatch.close()

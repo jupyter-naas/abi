@@ -27,6 +27,12 @@ def test_this_process_describes_the_running_engine():
     assert this_process().instance_id != me.instance_id
 
 
+def test_this_process_holds_the_lease_under_the_engines_instance_id():
+    engine_id = uuid4().hex
+
+    assert this_process("v2", instance_id=engine_id).instance_id == engine_id
+
+
 def test_this_process_reports_the_installed_core_version():
     from importlib.metadata import version
 
