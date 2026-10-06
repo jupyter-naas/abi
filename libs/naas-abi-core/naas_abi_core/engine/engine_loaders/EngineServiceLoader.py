@@ -9,6 +9,7 @@ from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogSe
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.dataset.DatasetService import DatasetService
+from naas_abi_core.services.document.DocumentService import DocumentService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
@@ -68,6 +69,9 @@ class EngineServiceLoader:
         logger.debug(f"Services to load: {services_to_load}")
 
         services = IEngine.Services(
+            document=self.__configuration.services.document.load()
+            if self._should_load_service(DocumentService, services_to_load)
+            else None,
             object_storage=self.__configuration.services.object_storage.load()
             if self._should_load_service(ObjectStorageService, services_to_load)
             else None,

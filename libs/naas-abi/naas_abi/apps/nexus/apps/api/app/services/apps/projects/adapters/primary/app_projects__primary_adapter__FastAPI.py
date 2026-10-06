@@ -24,7 +24,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
-from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key, settings
 from naas_abi.apps.nexus.apps.api.app.services.apps.projects.factory import (
     AppProjectsUnavailableError,
     build_app_projects_service,
@@ -535,7 +535,7 @@ async def preview_token(
     await _run(service.get_project, key)  # 404 before minting
     minutes = settings.app_preview_token_expire_minutes
     token = mint_preview_token(
-        secret=settings.secret_key,
+        secret=current_secret_key(),
         user_id=str(current_user.id),
         workspace_id=key.workspace_id,
         slug=key.slug,
@@ -570,7 +570,7 @@ async def serve_app_preview(
     path: str = "",
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> Response:
-    grant = read_preview_token(token, secret=settings.secret_key)
+    grant = read_preview_token(token, secret=current_secret_key())
     if grant is None:
         raise HTTPException(status_code=401, detail="Preview link expired. Reload the editor.")
     try:

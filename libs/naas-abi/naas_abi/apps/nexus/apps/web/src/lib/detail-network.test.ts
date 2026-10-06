@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { instanceDomainGraph, instanceDomainRelationsKey, instanceEgoGraph, termEgoGraph } from './detail-network';
+import { bfoBucketResolver, instanceDomainGraph, instanceDomainRelationsKey, instanceEgoGraph, termBfoBucketIri, termEgoGraph } from './detail-network';
 import type { DictionaryTerm } from './ontology-dictionary-tree';
 
 describe('instanceEgoGraph', () => {
@@ -64,5 +64,35 @@ describe('termEgoGraph', () => {
     expect(graph.edges.map(edge => [edge.source, edge.label, edge.target])).toEqual([
       ['entity:urn:child', 'subclass of', 'entity:urn:parent'],
     ]);
+  });
+});
+
+describe('termBfoBucketIri', () => {
+  const bfo = (n: string) => `http://purl.obolibrary.org/obo/BFO_${n}`;
+  const entity: DictionaryTerm = { id: bfo('0000001'), name: 'entity', type: 'entity' };
+  const process: DictionaryTerm = { id: bfo('0000015'), name: 'process', type: 'entity', parents: [{ id: entity.id, name: 'entity' }] };
+  const act: DictionaryTerm = { id: 'urn:act', name: 'Act', type: 'entity', parents: [{ id: process.id, name: 'process' }] };
+  const work: DictionaryTerm = { id: 'urn:work', name: 'Work', type: 'entity', parents: [{ id: act.id, name: 'Act' }] };
+  const loose: DictionaryTerm = { id: 'urn:loose', name: 'Loose', type: 'entity', parents: [{ id: entity.id, name: 'entity' }] };
+
+  it('is the nearest bucket class up the parents', () => {
+    expect(termBfoBucketIri(work.id, [entity, process, act, work])).toBe(process.id);
+  });
+
+  it('is nothing for a term under entity only', () => {
+    expect(termBfoBucketIri(loose.id, [entity, loose])).toBeUndefined();
+  });
+
+  it('is carried on the ego graph nodes', () => {
+    const graph = termEgoGraph(work, [entity, process, act, work]);
+    expect(graph.nodes.map(node => node.properties.bfo_parent_iri)).toEqual([process.id, process.id]);
+  });
+});
+
+describe('bfoBucketResolver', () => {
+  it('files a fiat point (abi:GeospatialPosition) under Site even when the server only reached entity', () => {
+    const position: DictionaryTerm = { id: 'abi:GeospatialPosition', name: 'geospatial position', type: 'entity',
+      parents: [{ id: 'http://purl.obolibrary.org/obo/BFO_0000147', name: 'fiat point' }], bfoBucket: 'http://purl.obolibrary.org/obo/BFO_0000001' };
+    expect(bfoBucketResolver([position], { entityFallback: true })(position.id)).toBe('http://purl.obolibrary.org/obo/BFO_0000029');
   });
 });

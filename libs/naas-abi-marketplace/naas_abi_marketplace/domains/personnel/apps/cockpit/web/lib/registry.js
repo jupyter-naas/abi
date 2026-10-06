@@ -1,7 +1,16 @@
 import { mountPage as mountDashboardPage } from "../components/pages/dashboard/DashboardPage.js";
-import { mountPage as mountGraphPage } from "../components/pages/graph/GraphPage.js";
 import { mountPage as mountProcessesPage } from "../components/pages/processes/ProcessesPage.js";
 import { mountPage as mountLogsPage } from "../components/pages/logs/LogsPage.js?v=11";
+
+// The graph page belongs to the people module (a person's 7-bucket graph is
+// people intelligence, not HR); the personnel module serves it under this
+// app's API prefix, so it loads from there.
+const GRAPH_PAGE_URL = "/api/personnel-cockpit/graph-page/GraphPage.js";
+
+async function mountGraphPage(el, ctx) {
+  const { mountPage } = await import(GRAPH_PAGE_URL);
+  return mountPage(el, ctx);
+}
 
 const PAGE_MOUNTS = {
   dashboard: mountDashboardPage,

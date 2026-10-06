@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Files, Database, Code, Presentation, FileText, LayoutGrid, Store, Settings, Activity, Home, Blocks, MoreHorizontal,
+  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Files, Database, Code, Presentation, FileText, Table2, LayoutGrid, Store, Settings, Activity, Home, Blocks, MoreHorizontal,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -23,7 +23,6 @@ import {
   moveNavItem,
   shiftForReorder,
 } from '@/lib/sidebar-nav';
-import { requestQuickOpen } from '@/lib/quick-open';
 import { isDocumentsNestedPath } from './documents-tree';
 import { isSlidesNestedPath } from './slides-tree';
 import { getWorkspacePath } from './utils';
@@ -39,22 +38,23 @@ type SectionDef = {
   label: string;
   description: string;
   href: string;
-  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'documents' | 'settings.workspace';
+  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'documents' | 'sheets' | 'settings.workspace';
   extraHref?: string;
 };
 
 const SECTIONS: SectionDef[] = [
   { id: 'home',        icon: <Home size={18} />,          label: 'Home',        description: 'Workspace overview and shortcuts',     href: '/home' },
+  { id: 'search',      icon: <Search size={18} />,        label: 'Search',      description: 'Search people, organizations and more',     href: '/search',      feature: 'search' },
   { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        description: 'Installed and available apps',          href: '/apps',        feature: 'apps' },
   { id: 'files',       icon: <Files size={18} />,         label: 'Files',       description: 'Browse and manage workspace files',     href: '/files',       feature: 'files' },
   { id: 'chat',        icon: <MessageSquare size={18} />, label: 'Chat',        description: 'Conversations with Abi and your team',  href: '/chat',        feature: 'chat' },
-  { id: 'search',      icon: <Search size={18} />,        label: 'Search',      description: 'Jump to anything in the workspace',     href: '/search',      feature: 'search' },
   { id: 'maps',        icon: <MapIcon size={18} />,       label: 'Maps',        description: 'Geographic and network presence maps',  href: '/maps',        feature: 'maps' },
   { id: 'ontology',    icon: <BrainCircuit size={18} />,  label: 'Ontology',    description: 'Explore ontology classes and relations', href: '/ontology',    feature: 'ontology' },
   { id: 'graph',       icon: <Waypoints size={18} />,     label: 'Knowledge Graph', description: 'Browse the knowledge graph',        href: '/graph', feature: 'graph' },
   { id: 'datasets',    icon: <Database size={18} />,      label: 'Datasets',    description: 'Manage structured datasets',            href: '/datasets',    feature: 'datasets' },
   { id: 'slides',      icon: <Presentation size={18} />,  label: 'Slides',      description: 'Create and edit presentation decks',    href: '/slides',      feature: 'slides' },
   { id: 'documents',   icon: <FileText size={18} />,      label: 'Documents',   description: 'Create and edit rich documents',        href: '/documents',   feature: 'documents' },
+  { id: 'sheets',      icon: <Table2 size={18} />,        label: 'Sheets',      description: 'Spreadsheets with HTML source and XLSX export', href: '/sheets', feature: 'sheets' },
   { id: 'code',        icon: <Code size={18} />,          label: 'Code',        description: 'Code editor and repositories',          href: '/code',        feature: 'code' },
   { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', description: 'Discover and install new apps',          href: '/marketplace', feature: 'marketplace' },
 ];
@@ -79,6 +79,9 @@ export function Sidebar() {
   } | null>(null);
   const [navMeasure, setNavMeasure] = useState<{ available: number; item: number; padding: number } | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  // Section the user just clicked, highlighted before the route commits so the
+  // dock answers the click immediately instead of after the page renders.
+  const [pendingSection, setPendingSection] = useState<{ id: SidebarSection; from: string } | null>(null);
   const [morePos, setMorePos] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
   const navRef = useRef<HTMLElement>(null);
   const moreBtnRef = useRef<HTMLButtonElement>(null);
@@ -107,18 +110,20 @@ export function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const {
-    currentWorkspaceId,
-    activePanelSection,
-    setActivePanelSection,
-    sidebarNavOrder,
-    setSidebarNavOrder,
-    dockWidth,
-    setDockWidth,
-  } = useWorkspaceStore();
+  // Field selectors, not the whole store: the dock used to re-render on every
+  // workspace/files/ontology store update (streamed chat tokens, file lists,
+  // ontology loads), which made section switches pay for a full dock render.
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const activePanelSection = useWorkspaceStore((s) => s.activePanelSection);
+  const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
+  const sidebarNavOrder = useWorkspaceStore((s) => s.sidebarNavOrder);
+  const setSidebarNavOrder = useWorkspaceStore((s) => s.setSidebarNavOrder);
+  const dockWidth = useWorkspaceStore((s) => s.dockWidth);
+  const setDockWidth = useWorkspaceStore((s) => s.setDockWidth);
 
-  const { fetchFiles, setActiveSource } = useFilesStore();
-  const { fetchItems: fetchOntology } = useOntologyStore();
+  const fetchFiles = useFilesStore((s) => s.fetchFiles);
+  const setActiveSource = useFilesStore((s) => s.setActiveSource);
+  const fetchOntology = useOntologyStore((s) => s.fetchItems);
 
   const canMaps = useFeature('maps');
   const canChat = useFeature('chat');
@@ -132,6 +137,7 @@ export function Sidebar() {
   const canCode = useFeature('code');
   const canSlides = useFeature('slides');
   const canDocuments = useFeature('documents');
+  const canSheets = useFeature('sheets');
   const canSettingsWorkspace = useFeature('settings.workspace');
   const isSuperadmin = useAuthStore((s) => !!s.user?.is_superadmin);
 
@@ -161,6 +167,10 @@ export function Sidebar() {
     if (urlSection?.id === 'files' && canFiles) { fetchFiles(); }
     if (urlSection?.id === 'ontology' && canOntology) { fetchOntology(); }
   }, [urlSection?.id, currentWorkspaceId, canFiles, canOntology, fetchFiles, fetchOntology]);
+
+  useEffect(() => {
+    setPendingSection(null);
+  }, [pathname]);
 
   const lastReconciledPathRef = useRef<string | null>(null);
   useEffect(() => {
@@ -202,11 +212,16 @@ export function Sidebar() {
     if (feature === 'code') return !!canCode;
     if (feature === 'slides') return !!canSlides;
     if (feature === 'documents') return !!canDocuments;
+    if (feature === 'sheets') return !!canSheets;
     if (feature === 'settings.workspace') return !!canSettingsWorkspace;
     return true;
   };
 
+  // Pending until the pathname moves off the one the click started from.
+  const pendingId = pendingSection && pendingSection.from === pathname ? pendingSection.id : null;
+
   const isSectionActive = (section: SectionDef) => {
+    if (pendingId) return pendingId === section.id;
     const base = getWorkspacePath(currentWorkspaceId, section.href);
     if (pathname.startsWith(base)) return true;
     if (section.extraHref) {
@@ -223,7 +238,7 @@ export function Sidebar() {
       .filter((s) => isFeatureEnabled(s.feature))
       .sort((a, b) => (index.get(a.id) ?? 999) - (index.get(b.id) ?? 999));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sidebarNavOrder, canMaps, canChat, canFiles, canDatasets, canApps, canMarketplace, canSearch, canOntology, canGraph, canCode, canSlides, canDocuments]);
+  }, [sidebarNavOrder, canMaps, canChat, canFiles, canDatasets, canApps, canMarketplace, canSearch, canOntology, canGraph, canCode, canSlides, canDocuments, canSheets]);
 
   const dockLayout = layoutDockNav(
     navMeasure?.available ?? Number.POSITIVE_INFINITY,
@@ -238,7 +253,7 @@ export function Sidebar() {
     ? []
     : orderedSections.slice(dockLayout.visibleCount);
 
-  const getDefaultPath = useCallback((sectionId: SidebarSection): string => {
+  const getDefaultPath = useCallback((sectionId: SidebarSection): string | undefined => {
     switch (sectionId) {
       case 'home':     return getWorkspacePath(currentWorkspaceId, '/home');
       case 'maps':     return getWorkspacePath(currentWorkspaceId, '/maps/presence');
@@ -254,6 +269,7 @@ export function Sidebar() {
       case 'code':     return getWorkspacePath(currentWorkspaceId, '/code');
       case 'slides':   return getWorkspacePath(currentWorkspaceId, '/slides');
       case 'documents': return getWorkspacePath(currentWorkspaceId, '/documents');
+      case 'sheets':    return getWorkspacePath(currentWorkspaceId, '/sheets');
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
       case 'infrastructure': return getWorkspacePath(currentWorkspaceId, '/settings/infrastructure');
@@ -266,34 +282,49 @@ export function Sidebar() {
   useEffect(() => {
     if (!currentWorkspaceId) return;
     for (const section of orderedSections) {
-      if (section.id === 'search') continue;
-      router.prefetch(getDefaultPath(section.id));
+      const path = getDefaultPath(section.id);
+      if (path) router.prefetch(path);
     }
   }, [currentWorkspaceId, getDefaultPath, orderedSections, router]);
 
   const handleSectionClick = (section: SectionDef) => {
     setHoverTip(null);
     clearAppsSkipRestore();
-    if (section.id === 'search') {
-      requestQuickOpen();
-      return;
-    }
+    const path = getDefaultPath(section.id);
+    // Navigating: only flip the dock highlight now. The pathname reconciler
+    // above opens the matching column when the route commits, so the column
+    // and the page swap together. Setting the store here rendered the whole
+    // new column synchronously inside pointerup (zustand updates are always
+    // sync), blocking the click for 100s of ms on heavy sections (Ontology).
+    const navigates = !!path && path.split('?')[0] !== pathname;
+    const navigate = () => {
+      if (!path) return;
+      setPendingSection({ id: section.id, from: pathname });
+      router.push(path);
+    };
+    // Query-only change (e.g. Ontology's restored route): the pathname stays
+    // put, so the reconciler will not run; switch the column here.
+    const pushQueryOnly = () => {
+      if (path && path !== pathname + window.location.search) router.push(path);
+    };
     if (section.id === 'home') {
+      // Closing is cheap, and the reconciler keeps a Workspaces panel open on
+      // Home, so an explicit Home click still closes whatever column is open.
       setActivePanelSection(null);
-      router.push(getDefaultPath(section.id));
+      if (navigates) navigate();
       return;
     }
     if (activePanelSection === section.id) {
       if (section.id === 'slides') {
         const gallery = getDefaultPath('slides');
-        if (isSlidesNestedPath(pathname, gallery)) {
+        if (gallery && isSlidesNestedPath(pathname, gallery)) {
           router.push(gallery);
           return;
         }
       }
       if (section.id === 'documents') {
         const gallery = getDefaultPath('documents');
-        if (isDocumentsNestedPath(pathname, gallery)) {
+        if (gallery && isDocumentsNestedPath(pathname, gallery)) {
           router.push(gallery);
           return;
         }
@@ -301,9 +332,14 @@ export function Sidebar() {
       setActivePanelSection(null);
       return;
     }
-    setActivePanelSection(section.id);
     if (section.id === 'files') setActiveSource('my-drive');
-    router.push(getDefaultPath(section.id));
+    if (navigates) {
+      navigate();
+      return;
+    }
+    // Same route (column was closed): no pathname change, so open it now.
+    setActivePanelSection(section.id);
+    pushQueryOnly();
   };
 
   const measureDropIndex = useCallback((clientY: number) => {
@@ -591,7 +627,8 @@ export function Sidebar() {
               onPointerUp={(e) => onItemPointerUp(section, e)}
               onPointerCancel={onItemPointerCancel}
               onPointerEnter={(e) => {
-                if (section.id !== 'search') router.prefetch(getDefaultPath(section.id));
+                const path = getDefaultPath(section.id);
+                if (path) router.prefetch(path);
                 showHoverTip(section, e.currentTarget);
               }}
               onPointerLeave={hideHoverTip}

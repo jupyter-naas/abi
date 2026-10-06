@@ -32,14 +32,14 @@ export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean;
             </p>
             {group.items.map((item) => {
               const fullHref = getWorkspacePath(currentWorkspaceId, item.href);
-              const isActive = pathname === fullHref || pathname.endsWith(item.href);
+              const isActive = pathname === fullHref || pathname.startsWith(`${fullHref}/`) || pathname.endsWith(item.href);
               const Icon = item.icon;
               return (
                 <Link
                   key={item.href}
                   href={fullHref}
                   className={cn(
-                    'flex w-full items-center gap-1 rounded-md px-2 py-1.5 settings-sidebar-list-row transition-colors',
+                    'flex w-full items-center gap-1 px-2 py-1.5 settings-sidebar-list-row transition-colors',
                     isActive
                       ? 'bg-workspace-accent-15 text-workspace-accent'
                       : 'text-muted-foreground hover:bg-workspace-accent-10 hover:text-foreground'

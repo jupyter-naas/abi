@@ -26,6 +26,7 @@ import {
   AlertCircle,
   ArrowRight,
   Focus,
+  Palette,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOntologyStore } from '@/stores/ontology';
@@ -35,6 +36,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { usePublishFeatureResource } from '@/stores/feature-pane';
 import { termTabs, termViews, kindForView, termRoute, viewRoute, ontologyBrowser, normalizeOntologyRoute, lastOntologyRoute, rememberOntologyRoute } from '@/lib/ontology-navigation';
 import type { DictionaryTerm } from '@/lib/ontology-dictionary-tree';
+import { referencedClasses } from '@/lib/ontology-bfo-groups';
 import { buildHoverTitle } from '@/components/graph/vis-network';
 
 type OntologyOverviewGraphNode = {
@@ -117,7 +119,10 @@ export default function OntologyPage() {
   const terms = useMemo(() => dictionary.workspaceId === workspaceId
     ? dictionary.terms.filter(term => !selectedOntologyPath || term.sources?.some(source => source.path === selectedOntologyPath))
     : [], [dictionary.workspaceId, dictionary.terms, workspaceId, selectedOntologyPath]);
-  const matches = terms.filter(term => term.type === kind && `${term.name} ${term.description || ''}`.toLowerCase().includes(queryText.trim().toLowerCase()));
+  // A file's class list also shows the classes its restrictions point at (abi:GeospatialRegion in PeopleOntology).
+  const listed = useMemo(() => kind === 'entity' && selectedOntologyPath
+    ? [...terms, ...referencedClasses(terms, dictionary.terms, [selectedOntologyPath])] : terms, [kind, selectedOntologyPath, terms, dictionary.terms]);
+  const matches = listed.filter(term => term.type === kind && `${term.name} ${term.description || ''}`.toLowerCase().includes(queryText.trim().toLowerCase()));
   const navigate = (next: string) => router.push(`?${viewRoute(query, next)}`, { scroll: false });
   const select = (term: DictionaryTerm) => router.push(`?${termRoute(query, term)}`, { scroll: false });
   const [graph, setGraph] = useState<{nodes: OntologyOverviewGraphNode[]; edges: OntologyOverviewGraphEdge[]; prefixes: Record<string, string>}>({nodes: [], edges: [], prefixes: {}});
@@ -165,7 +170,8 @@ export default function OntologyPage() {
             <input aria-label="Search terms and definitions" placeholder="Search terms…" value={queryText} onChange={event => setQueryText(event.target.value)} className="mb-3 w-full rounded border bg-background px-2 py-2 text-xs" />
             {matches.map(term => <button key={`${term.type}:${term.id}`} type="button" onClick={() => select(term)} title={term.id}
               aria-current={searchParams?.get('term') === term.id && searchParams?.get('termType') === term.type ? 'page' : undefined}
-              className={cn('block w-full truncate rounded px-2 py-1 text-left text-[13px] leading-5 hover:bg-muted', searchParams?.get('term') === term.id && searchParams?.get('termType') === term.type && 'bg-workspace-accent-10 text-workspace-accent')}>{term.name}</button>)}
+              className={cn('block w-full truncate rounded px-2 py-1 text-left text-[13px] leading-5 hover:bg-muted', term.referenced && 'text-muted-foreground', searchParams?.get('term') === term.id && searchParams?.get('termType') === term.type && 'bg-workspace-accent-10 text-workspace-accent')}>
+              {term.name}{term.referenced && <span className="ml-1 text-xs" title="Declared elsewhere; a restriction in this file points at it">(referenced)</span>}</button>)}
             {!dictionary.loading && !dictionary.error && !matches.length && <p className="text-xs text-muted-foreground">No matching terms in this scope.</p>}
           </aside>}
           <OntologyDictionaryEntry />
@@ -208,6 +214,15 @@ const BFO_URI_TO_BUCKET_LOCAL: Record<string, string> = {
   'BFO_0000031': 'GDC',
   'BFO_0000019': 'Quality',
   'BFO_0000017': 'Realizable',
+  // Continuant fiat boundaries (abi:GeospatialPosition is a fiat point) answer WHERE.
+  'http://purl.obolibrary.org/obo/BFO_0000140': 'Site',
+  'BFO_0000140': 'Site',
+  'http://purl.obolibrary.org/obo/BFO_0000142': 'Site',
+  'BFO_0000142': 'Site',
+  'http://purl.obolibrary.org/obo/BFO_0000146': 'Site',
+  'BFO_0000146': 'Site',
+  'http://purl.obolibrary.org/obo/BFO_0000147': 'Site',
+  'BFO_0000147': 'Site',
 };
 
 const LABEL_TO_BUCKET_LOCAL: Record<string, string> = {
@@ -294,6 +309,13 @@ function OntologyNetworkView({
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
   /** Per-node visibility overrides — nodes in this set are hidden from the graph. */
   const [hiddenNodeIds, setHiddenNodeIds] = useState<Set<string>>(new Set());
+  // The BFO legend (bucket filters) is opt-in. Hiding it also drops its filters,
+  // so nothing stays filtered without a visible control to undo it.
+  const [showBfoLegend, setShowBfoLegend] = useState(false);
+  const toggleBfoLegend = () => {
+    if (showBfoLegend) { setActiveBuckets(new Set()); setHiddenNodeIds(new Set()); }
+    setShowBfoLegend(!showBfoLegend);
+  };
   const isAllOntologiesOverview = !ontologyPath;
 
   /** Persist vis-network zoom/pan per relation / SubclassOf mode. */
@@ -861,6 +883,20 @@ function OntologyNetworkView({
                   <ArrowRight size={12} />
                   Object Properties
                 </button>
+                <button
+                  onClick={toggleBfoLegend}
+                  aria-pressed={showBfoLegend}
+                  title="Show or hide the BFO 7 buckets legend and its filters"
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs shadow-sm',
+                    showBfoLegend
+                      ? 'border-foreground bg-foreground text-background'
+                      : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Palette size={12} />
+                  BFO legend
+                </button>
               </>
             )}
             {(graphSearchQuery.trim() || activeBuckets.size > 0 || focusedNodeId || hiddenNodeIds.size > 0) && (
@@ -874,7 +910,7 @@ function OntologyNetworkView({
             )}
           </div>
 
-          {!isAllOntologiesOverview && (
+          {!isAllOntologiesOverview && showBfoLegend && (
             <BFOBucketFilters
               activeBuckets={activeBuckets}
               effectiveActiveBuckets={effectiveActiveBuckets}

@@ -1,0 +1,508 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+
+#################################################################
+#  People (S2 intelligence) Queries
+#  Data: GRAPH <http://ontology.naas.ai/graph/people>
+#  Schema: <http://ontology.naas.ai/people/>
+#
+#  What can be known about any person from what is published about
+#  them: their acts of working and studying, the occupation roles and
+#  missions those acts realize, their skills, certifications, languages,
+#  interests and recommendations, and how they are presented.
+#
+#  Nothing here reads an organization's internal records (employee
+#  roles, job positions, employment records, contracts, grades, service
+#  lines). Those queries belong to the module that keeps the records.
+#################################################################
+
+#-----------------------------------------------------------------
+# Process queries
+#-----------------------------------------------------------------
+
+intentMapping:findWorkingProcessesQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_working_experiences"@en ;
+    intentMapping:intentDescription "Return every act of working with the seven buckets it ties together: the person performing the work, the organization they work for and, for a consulting engagement, the client they performed it for (WHO), the site (WHERE), the temporal region and its bounding instants (WHEN), the occupation role, its job title and the mission that role concretizes (WHY), the skills developed (HOW IT IS), and the employment type stated and the profile document it was sourced from (HOW WE KNOW). Backed by the ActOfWorkingProcess ontology." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?person ?personLabel ?working ?workingLabel ?org ?orgLabel ?client ?clientLabel ?site ?siteLabel
+                        ?temporal ?temporalLabel ?temporalStart ?temporalEnd ?durationLabel
+                        ?firstInstant ?firstInstantLabel ?lastInstant ?lastInstantLabel
+                        ?employmentType
+                        ?role ?roleLabel ?jobTitle
+                        ?mission ?missionLabel ?missionContext ?missionContent
+                        ?profile ?profileLabel ?sourceUrl
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/people> {
+            ?person rdf:type abi:Person ;
+                    rdfs:label ?personLabel ;
+                    abi:hasActOfWorking ?working .
+            ?working rdf:type abi:ActOfWorking .
+            OPTIONAL { ?working rdfs:label ?workingLabel . }
+            OPTIONAL { ?working abi:forOrganization ?org . ?org rdfs:label ?orgLabel . }
+            OPTIONAL { ?working abi:forClient ?client . ?client rdfs:label ?clientLabel . }
+            OPTIONAL { ?working abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
+            OPTIONAL {
+              ?working abi:occupiesTemporalRegion ?temporal .
+              ?temporal rdfs:label ?temporalLabel .
+              OPTIONAL { ?temporal abi:duration_label ?durationLabel . }
+              OPTIONAL {
+                ?temporal abi:hasFirstInstant ?firstInstant .
+                ?firstInstant abi:instant_date ?temporalStart .
+                OPTIONAL { ?firstInstant rdfs:label ?firstInstantLabel . }
+              }
+              # An ongoing experience has no last instant: the region stays open.
+              OPTIONAL {
+                ?temporal abi:hasLastInstant ?lastInstant .
+                ?lastInstant abi:instant_date ?temporalEnd .
+                OPTIONAL { ?lastInstant rdfs:label ?lastInstantLabel . }
+              }
+            }
+            OPTIONAL { ?working abi:employment_type ?employmentType . }
+            # Reached through the act, not through the person: a person bears one
+            # occupation role per job, so joining on the person would cross-join
+            # every role against every act of working they ever performed.
+            OPTIONAL {
+              ?working abi:realizes ?role .
+              OPTIONAL { ?role rdfs:label ?roleLabel . }
+              OPTIONAL { ?role abi:job_title ?jobTitle . }
+              OPTIONAL {
+                ?role abi:hasMission ?mission .
+                ?mission rdfs:label ?missionLabel .
+                OPTIONAL { ?mission abi:mission_context ?missionContext . }
+                OPTIONAL { ?mission abi:mission_content ?missionContent . }
+                OPTIONAL {
+                  ?mission abi:isSourcedFrom ?profile .
+                  ?profile rdfs:label ?profileLabel .
+                  OPTIONAL { ?profile abi:source_url ?sourceUrl . }
+                }
+              }
+            }
+          }
+        }
+        ORDER BY ?personLabel DESC(?temporalStart)
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:peopleLimitArg .
+
+intentMapping:findSkillsDevelopedQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_skills_developed"@en ;
+    intentMapping:intentDescription "Return every skill a person bears together with each act of working in which it was developed. A skill exercised across several jobs yields one row per job, which is what links those jobs to one another in the graph. Backed by the ActOfWorkingProcess ontology." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?personLabel ?skill ?skillLabel ?working ?orgLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/people> {
+            ?person rdf:type abi:Person ;
+                    rdfs:label ?personLabel ;
+                    abi:hasSkill ?skill .
+            ?skill rdf:type abi:Skill ; rdfs:label ?skillLabel .
+            OPTIONAL {
+              ?skill abi:isSkillDevelopedIn ?working .
+              OPTIONAL { ?working abi:forOrganization ?org . ?org rdfs:label ?orgLabel . }
+            }
+          }
+        }
+        ORDER BY ?personLabel ?skillLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:peopleLimitArg .
+
+intentMapping:findActsOfStudyingQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_educations"@en ;
+    intentMapping:intentDescription "Return every act of studying: the person enrolled, the educational organization, site, temporal region, enrollment record, programme name, and student role. Backed by the ActOfStudyingProcess ontology." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?person ?personLabel ?studying ?studyingLabel ?org ?orgLabel ?site ?siteLabel
+                        ?temporal ?temporalLabel ?temporalStart ?temporalEnd ?durationLabel
+                        ?firstInstant ?firstInstantLabel ?lastInstant ?lastInstantLabel
+                        ?enrollment ?enrollmentLabel ?programName ?activitiesContent
+                        ?role ?roleLabel
+                        ?degree ?degreeLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/people> {
+            ?person rdf:type abi:Person ;
+                    rdfs:label ?personLabel ;
+                    abi:hasActOfStudying ?studying .
+            ?studying rdf:type abi:ActOfStudying .
+            OPTIONAL { ?studying rdfs:label ?studyingLabel . }
+            OPTIONAL { ?studying abi:forEducationalOrganization ?org . ?org rdfs:label ?orgLabel . }
+            OPTIONAL { ?studying abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
+            OPTIONAL {
+              ?studying abi:occupiesTemporalRegion ?temporal .
+              ?temporal rdfs:label ?temporalLabel .
+              OPTIONAL { ?temporal abi:duration_label ?durationLabel . }
+              OPTIONAL {
+                ?temporal abi:hasFirstInstant ?firstInstant .
+                ?firstInstant abi:instant_date ?temporalStart .
+                OPTIONAL { ?firstInstant rdfs:label ?firstInstantLabel . }
+              }
+              OPTIONAL {
+                ?temporal abi:hasLastInstant ?lastInstant .
+                ?lastInstant abi:instant_date ?temporalEnd .
+                OPTIONAL { ?lastInstant rdfs:label ?lastInstantLabel . }
+              }
+            }
+            OPTIONAL {
+              ?studying abi:hasEnrollment ?enrollment .
+              ?enrollment rdfs:label ?enrollmentLabel .
+              OPTIONAL { ?enrollment abi:program_name ?programName . }
+              OPTIONAL { ?enrollment abi:activities_content ?activitiesContent . }
+            }
+            OPTIONAL {
+              ?studying abi:realizes ?role .
+              OPTIONAL { ?role rdfs:label ?roleLabel . }
+            }
+            OPTIONAL {
+              ?studying abi:hasDegree ?degree .
+              ?degree rdfs:label ?degreeLabel .
+            }
+          }
+        }
+        ORDER BY ?personLabel DESC(?temporalStart)
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:peopleLimitArg .
+
+#-----------------------------------------------------------------
+# Profile queries
+#
+# One query per section of a published profile. Each returns rows for
+# every person unless a person_slug is given, so the same query serves
+# both the directory export and a single profile page.
+#
+# Sections a person has nothing for return no rows. That is the answer,
+# not an error: a profile with no recommendations is not a profile with
+# unknown recommendations, and the app says so rather than leaving a gap.
+#-----------------------------------------------------------------
+
+intentMapping:findPeopleDirectoryQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_people_directory"@en ;
+    intentMapping:intentDescription "Return one row per person for a people directory: slug, name, contact details (email, telephone, LinkedIn URL), headline, summary, quote, portrait, the organization they work for, office and country, and years of experience. Useful to answer 'who is in the directory?' or to build a searchable index of people. Every field beyond the person and their label is optional, so someone with only a name is still returned." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?person ?personLabel ?slug ?headline ?about ?quote ?yearsOfExperience
+                        ?portraitUrl ?portraitPath
+                        ?organizationLabel
+                        ?officeLabel ?cityName ?countryName ?countryCode
+                        ?profileUrl ?emailAddress ?telephoneNumber ?linkedinUrl
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/people> {
+            ?person rdf:type abi:Person ;
+                    rdfs:label ?personLabel .
+            OPTIONAL { ?person abi:profile_slug ?slug . }
+            OPTIONAL {
+              ?person abi:hasProfileSummary ?summary .
+              OPTIONAL { ?summary abi:headline_text ?headline . }
+              OPTIONAL { ?summary abi:summary_content ?about . }
+              OPTIONAL { ?summary abi:quote_content ?quote . }
+              OPTIONAL { ?summary abi:years_of_experience ?yearsOfExperience . }
+              OPTIONAL { ?summary abi:isSourcedFrom ?profileDoc . ?profileDoc abi:source_url ?profileUrl . }
+            }
+            OPTIONAL {
+              ?person abi:hasPortrait ?portrait .
+              OPTIONAL { ?portrait abi:portrait_url ?portraitUrl . }
+              OPTIONAL { ?portrait abi:portrait_path ?portraitPath . }
+            }
+            OPTIONAL { ?person abi:email_address ?emailAddress . }
+            OPTIONAL { ?person abi:telephone_number ?telephoneNumber . }
+            OPTIONAL { ?person abi:linkedin_url ?linkedinUrl . }
+            OPTIONAL { ?person abi:worksFor ?org . ?org rdfs:label ?organizationLabel . }
+            # abi:hasWorkLocation reaches every site the person has worked
+            # at. The one that says where they are based is the one whose place
+            # has been stated, so bind that and leave the rest to the acts of
+            # working they belong to.
+            OPTIONAL {
+              ?person abi:hasWorkLocation ?site .
+              FILTER EXISTS {
+                ?site ?placeProperty ?placeValue .
+                FILTER(?placeProperty IN (abi:office_label, abi:city_name,
+                                          abi:country_name, abi:site_country_code))
+              }
+              OPTIONAL { ?site abi:office_label ?officeLabel . }
+              OPTIONAL { ?site abi:city_name ?cityName . }
+              OPTIONAL { ?site abi:country_name ?countryName . }
+              OPTIONAL { ?site abi:site_country_code ?countryCode . }
+            }
+          }
+        }
+        ORDER BY ?personLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:peopleLimitArg .
+
+intentMapping:findProfileHeaderQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_profile_header"@en ;
+    intentMapping:intentDescription "Return the header of one person's profile, identified by their profile slug: name, contact details (email, telephone, LinkedIn URL), headline, summary, quote, portrait, the organization they work for, office and country, and years of experience. Useful to answer 'who is alice_dupont?' before asking for their experience or skills." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?person ?personLabel ?slug ?headline ?about ?quote ?yearsOfExperience
+                        ?portraitUrl ?portraitPath
+                        ?organizationLabel
+                        ?officeLabel ?cityName ?countryName ?countryCode
+                        ?profileUrl ?emailAddress ?telephoneNumber ?linkedinUrl
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/people> {
+            ?person rdf:type abi:Person ;
+                    rdfs:label ?personLabel ;
+                    abi:profile_slug ?slug .
+            FILTER(LCASE(STR(?slug)) = LCASE("{{ person_slug }}"))
+            OPTIONAL {
+              ?person abi:hasProfileSummary ?summary .
+              OPTIONAL { ?summary abi:headline_text ?headline . }
+              OPTIONAL { ?summary abi:summary_content ?about . }
+              OPTIONAL { ?summary abi:quote_content ?quote . }
+              OPTIONAL { ?summary abi:years_of_experience ?yearsOfExperience . }
+              OPTIONAL { ?summary abi:isSourcedFrom ?profileDoc . ?profileDoc abi:source_url ?profileUrl . }
+            }
+            OPTIONAL {
+              ?person abi:hasPortrait ?portrait .
+              OPTIONAL { ?portrait abi:portrait_url ?portraitUrl . }
+              OPTIONAL { ?portrait abi:portrait_path ?portraitPath . }
+            }
+            OPTIONAL { ?person abi:email_address ?emailAddress . }
+            OPTIONAL { ?person abi:telephone_number ?telephoneNumber . }
+            OPTIONAL { ?person abi:linkedin_url ?linkedinUrl . }
+            OPTIONAL { ?person abi:worksFor ?org . ?org rdfs:label ?organizationLabel . }
+            # abi:hasWorkLocation reaches every site the person has worked
+            # at. The one that says where they are based is the one whose place
+            # has been stated, so bind that and leave the rest to the acts of
+            # working they belong to.
+            OPTIONAL {
+              ?person abi:hasWorkLocation ?site .
+              FILTER EXISTS {
+                ?site ?placeProperty ?placeValue .
+                FILTER(?placeProperty IN (abi:office_label, abi:city_name,
+                                          abi:country_name, abi:site_country_code))
+              }
+              OPTIONAL { ?site abi:office_label ?officeLabel . }
+              OPTIONAL { ?site abi:city_name ?cityName . }
+              OPTIONAL { ?site abi:country_name ?countryName . }
+              OPTIONAL { ?site abi:site_country_code ?countryCode . }
+            }
+          }
+        }
+        LIMIT 1
+    """ ;
+    intentMapping:hasArgument intentMapping:peoplePersonSlugArg .
+
+intentMapping:findPersonSkillsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_person_skills"@en ;
+    intentMapping:intentDescription "Return the skills each person bears, one row per person and skill, without joining through the acts of working in which they were developed. Useful to answer 'who knows Python?' or to list someone's skills. Use find_skills_developed instead when the question is where a skill was acquired." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?person ?personLabel ?slug ?skillLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/people> {
+            ?person rdf:type abi:Person ;
+                    rdfs:label ?personLabel ;
+                    abi:hasSkill ?skill .
+            ?skill rdf:type abi:Skill ; rdfs:label ?skillLabel .
+            OPTIONAL { ?person abi:profile_slug ?slug . }
+          }
+        }
+        ORDER BY ?personLabel ?skillLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:peopleLimitArg .
+
+intentMapping:findCertificationsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_certifications"@en ;
+    intentMapping:intentDescription "Return the certifications and licences people hold: the certification name, the organization that issued it, the date it was issued, the date it expires, its status and where it can be verified. Useful to answer 'who is a certified auditor?' or 'what licences does this person hold?'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?person ?personLabel ?slug ?certification ?certificationName
+                        ?issuerLabel ?issueDate ?expiryDate ?certificationStatus ?credentialId ?credentialUrl
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/people> {
+            ?person rdf:type abi:Person ;
+                    rdfs:label ?personLabel ;
+                    abi:hasCertification ?certification .
+            OPTIONAL { ?person abi:profile_slug ?slug . }
+            OPTIONAL { ?certification abi:certification_name ?certificationName . }
+            OPTIONAL { ?certification abi:issuedByOrganization ?issuer . ?issuer rdfs:label ?issuerLabel . }
+            OPTIONAL { ?certification abi:issue_date ?issueDate . }
+            OPTIONAL { ?certification abi:expiry_date ?expiryDate . }
+            OPTIONAL { ?certification abi:certification_status ?certificationStatus . }
+            OPTIONAL { ?certification abi:credential_id ?credentialId . }
+            OPTIONAL { ?certification abi:credential_url ?credentialUrl . }
+          }
+        }
+        ORDER BY ?personLabel DESC(?issueDate) ?certificationName
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:peopleLimitArg .
+
+intentMapping:findActsOfCertificationQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_acts_of_certification"@en ;
+    intentMapping:intentDescription "Return every act of certification: the person certified, the certifying organization, the site, the date the certification was awarded, the certification awarded, the candidate role the person bore and the skills demonstrated. Backed by the ActOfCertificationProcess ontology. Useful to answer 'who was certified by ISACA?' or 'how did this person come to hold this certification?'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?person ?personLabel ?slug ?certifying ?certifyingLabel ?org ?orgLabel
+                        ?site ?siteLabel ?temporal ?temporalLabel ?awardedOn
+                        ?certification ?certificationName ?role ?roleLabel ?skill ?skillLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/people> {
+            ?person rdf:type abi:Person ;
+                    rdfs:label ?personLabel ;
+                    abi:hasActOfCertification ?certifying .
+            ?certifying rdf:type abi:ActOfCertification .
+            OPTIONAL { ?person abi:profile_slug ?slug . }
+            OPTIONAL { ?certifying rdfs:label ?certifyingLabel . }
+            OPTIONAL { ?certifying abi:forCertifyingOrganization ?org . ?org rdfs:label ?orgLabel . }
+            OPTIONAL { ?certifying abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
+            OPTIONAL {
+              ?certifying abi:occupiesTemporalRegion ?temporal .
+              OPTIONAL { ?temporal rdfs:label ?temporalLabel . }
+              OPTIONAL {
+                ?temporal abi:hasLastInstant ?lastInstant .
+                ?lastInstant abi:instant_date ?awardedOn .
+              }
+            }
+            OPTIONAL {
+              ?certifying abi:hasAwardedCertification ?certification .
+              OPTIONAL { ?certification abi:certification_name ?certificationName . }
+            }
+            OPTIONAL { ?certifying abi:realizes ?role . ?role rdfs:label ?roleLabel . }
+            OPTIONAL { ?certifying abi:demonstratesSkill ?skill . ?skill rdfs:label ?skillLabel . }
+          }
+        }
+        ORDER BY ?personLabel DESC(?awardedOn) ?certificationName
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:peopleLimitArg .
+
+intentMapping:findLanguagesQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_languages"@en ;
+    intentMapping:intentDescription "Return the languages people can work in, with the proficiency each source states. Useful to answer 'who speaks Spanish?' or 'what languages does this person work in?'. Proficiency is free text because sources report it in incompatible scales." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?person ?personLabel ?slug ?capability ?languageName ?proficiencyLevel ?languageLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/people> {
+            ?person rdf:type abi:Person ;
+                    rdfs:label ?personLabel ;
+                    abi:hasLanguageCapability ?capability .
+            OPTIONAL { ?person abi:profile_slug ?slug . }
+            OPTIONAL { ?capability abi:language_name ?languageName . }
+            OPTIONAL { ?capability abi:proficiency_level ?proficiencyLevel . }
+            OPTIONAL { ?capability abi:ofLanguage ?language . ?language rdfs:label ?languageLabel . }
+          }
+        }
+        ORDER BY ?personLabel ?languageName
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:peopleLimitArg .
+
+intentMapping:findRecommendationsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_recommendations"@en ;
+    intentMapping:intentDescription "Return the recommendations written about people: who wrote each one, how the author describes the working relationship, when it was written and its full text. Useful to answer 'what do colleagues say about this person?'. A person with no recommendations returns no rows." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?person ?personLabel ?slug ?recommendation ?authorLabel ?authorHeadline
+                        ?relationshipLabel ?recommendationDate ?recommendationContent
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/people> {
+            ?person rdf:type abi:Person ;
+                    rdfs:label ?personLabel ;
+                    abi:hasRecommendation ?recommendation .
+            OPTIONAL { ?person abi:profile_slug ?slug . }
+            OPTIONAL {
+              ?recommendation abi:hasRecommendationAuthor ?author .
+              ?author rdfs:label ?authorLabel .
+              OPTIONAL {
+                ?author abi:hasProfileSummary ?authorSummary .
+                ?authorSummary abi:headline_text ?authorHeadline .
+              }
+            }
+            OPTIONAL { ?recommendation abi:relationship_label ?relationshipLabel . }
+            OPTIONAL { ?recommendation abi:recommendation_date ?recommendationDate . }
+            OPTIONAL { ?recommendation abi:recommendation_content ?recommendationContent . }
+          }
+        }
+        ORDER BY ?personLabel DESC(?recommendationDate)
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:peopleLimitArg .
+
+intentMapping:findInterestsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_interests"@en ;
+    intentMapping:intentDescription "Return what people follow or care about outside the duties of any one job, with the kind of thing each interest is in and, where the graph holds one, the entity it points at. Useful to answer 'what is this person interested in?'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?person ?personLabel ?slug ?interest ?interestName ?interestDescription ?interestKind ?targetLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/people> {
+            ?person rdf:type abi:Person ;
+                    rdfs:label ?personLabel ;
+                    abi:hasInterest ?interest .
+            OPTIONAL { ?person abi:profile_slug ?slug . }
+            OPTIONAL { ?interest abi:interest_name ?interestName . }
+            OPTIONAL { ?interest abi:interest_description ?interestDescription . }
+            OPTIONAL { ?interest abi:interest_kind ?interestKind . }
+            OPTIONAL { ?interest abi:hasInterestTarget ?target . ?target rdfs:label ?targetLabel . }
+          }
+        }
+        ORDER BY ?personLabel ?interestName
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:peopleLimitArg .
+
+#-----------------------------------------------------------------
+# Query arguments
+#
+# TemplatableSparqlQueryLoader requires all four predicates below on
+# every argument; an argument missing one is not loaded, and the query
+# that references it then renders with its placeholder unfilled.
+# validationPattern is matched against the raw value before substitution
+# - keep it tight enough to block injection.
+#-----------------------------------------------------------------
+
+intentMapping:peopleLimitArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "limit" ;
+    intentMapping:argumentDescription "Maximum number of rows to return (positive integer)." ;
+    intentMapping:validationPattern "^[1-9][0-9]{0,3}$" ;
+    intentMapping:validationFormat "integer" .
+
+intentMapping:peoplePersonSlugArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "person_slug" ;
+    intentMapping:argumentDescription "Profile slug of one person, e.g. 'alice_dupont'. Lowercase ASCII letters, digits and underscores." ;
+    intentMapping:validationPattern "^[a-z][a-z0-9_]{0,63}$" ;
+    intentMapping:validationFormat "person_slug" .

@@ -50,7 +50,9 @@ def load_default_entity() -> dict[str, Any]:
         if isinstance(entity, dict)
         and entity.get("entity_type", "organization") == "organization"
     ]
-    candidates = organizations or [entity for entity in entities if isinstance(entity, dict)]
+    candidates = organizations or [
+        entity for entity in entities if isinstance(entity, dict)
+    ]
     default = next(
         (entity for entity in candidates if entity.get("is_default") is True),
         candidates[0] if candidates else None,
@@ -95,7 +97,9 @@ def load_config() -> dict[str, Any]:
         if not PAGE_TOKEN.fullmatch(url):
             raise ConfigError(f"Invalid page URL segment: {url}")
         if not isinstance(order, int) or order < 0:
-            raise ConfigError(f"app.pages[{index}].order must be a non-negative integer")
+            raise ConfigError(
+                f"app.pages[{index}].order must be a non-negative integer"
+            )
         if not isinstance(permissions, list) or not all(
             isinstance(permission, str) and permission for permission in permissions
         ):

@@ -21,7 +21,7 @@ from datetime import date, datetime
 from typing import Any, TypeVar
 from uuid import uuid4
 
-from naas_abi.agents.tools.nexus_admin_tools import (
+from naas_abi.tools.nexus_admin_tools import (
     _require_user_id,
     _run_async,
     _with_db,

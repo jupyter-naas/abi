@@ -4,12 +4,14 @@ import secrets
 import shutil
 from datetime import UTC, datetime
 from ipaddress import ip_address
+from pathlib import Path
 from uuid import uuid4
 
 from rich.prompt import Prompt
 
 import naas_abi_cli
 
+from ..admin_credentials import ensure_admin_credentials, generate_admin_password
 from ..utils.Copier import Copier
 
 LOCAL_ENV_MARKER = "# Added by abi deploy local command execution"
@@ -39,7 +41,6 @@ DEFAULT_ENV_VALUES: dict[str, str] = {
     "NEXUS_WEB_TAG": "latest",
     "NEXUS_WEB_PORT": "3042",
     "NEXUS_USER_ADMIN_EMAIL": "admin@example.com",
-    "NEXUS_USER_ADMIN_PASSWORD": "Admin1234!",
     "HEADSCALE_SERVER_URL": "headscale.localhost",
     "HEADSCALE_SERVER_PORT": "8083",
     "HEADSCALE_METRICS_PORT": "9090",
@@ -465,6 +466,7 @@ def setup_local_deploy(
         "RABBITMQ_PASSWORD": str(uuid4()),
         "FUSEKI_ADMIN_PASSWORD": str(uuid4()),
         "ABI_API_KEY": str(uuid4()),
+        "NEXUS_USER_ADMIN_PASSWORD": generate_admin_password(),
     }
 
     existing_env_vars = _read_env_vars(local_env_target_path)
@@ -538,6 +540,9 @@ def setup_local_deploy(
 
     for key in RANDOM_ENV_KEYS:
         _ensure_env_var(local_env_target_path, key, str(uuid4()))
+
+    # Generated per project; a password an older CLI wrote is replaced.
+    ensure_admin_credentials(Path(local_env_target_path))
 
     persisted_public_api_host = (
         _get_env_var(local_env_target_path, "PUBLIC_API_HOST")

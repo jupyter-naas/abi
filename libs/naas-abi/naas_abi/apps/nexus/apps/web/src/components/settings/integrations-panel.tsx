@@ -19,6 +19,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { discardDeferredStorage } from '@/lib/deferred-storage';
 import {
   useIntegrationsStore,
   type ProviderConfig,
@@ -72,6 +73,7 @@ export function IntegrationsPanel() {
 
   const resetConfig = () => {
     if (confirm('Reset all model and agent configurations to defaults?')) {
+      discardDeferredStorage(['nexus-integrations', 'nexus-agents']);
       localStorage.removeItem('nexus-integrations');
       localStorage.removeItem('nexus-agents');
       window.location.reload();
@@ -117,11 +119,11 @@ export function IntegrationsPanel() {
         </div>
         <div className="flex items-center gap-2">
           {/* View toggle */}
-          <div className="flex rounded-lg border bg-card p-1">
+          <div className="flex border bg-card p-1">
             <button
               onClick={() => setViewMode('table')}
               className={cn(
-                'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                'flex items-center gap-2 px-3 py-1.5 text-sm font-medium transition-colors',
                 viewMode === 'table' ? 'bg-secondary' : 'hover:bg-secondary/50'
               )}
             >
@@ -130,7 +132,7 @@ export function IntegrationsPanel() {
             <button
               onClick={() => setViewMode('yaml')}
               className={cn(
-                'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                'flex items-center gap-2 px-3 py-1.5 text-sm font-medium transition-colors',
                 viewMode === 'yaml' ? 'bg-secondary' : 'hover:bg-secondary/50'
               )}
             >
@@ -142,7 +144,7 @@ export function IntegrationsPanel() {
             <>
               <button
                 onClick={resetConfig}
-                className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary"
+                className="flex items-center gap-2 border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary"
               >
                 Reset
               </button>
@@ -151,7 +153,7 @@ export function IntegrationsPanel() {
                   setShowAddForm(true);
                   setEditingId(null);
                 }}
-                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                className="flex items-center gap-2 bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
               >
                 <Plus size={16} />
                 Add Model
@@ -167,7 +169,7 @@ export function IntegrationsPanel() {
         <>
           {/* Add form */}
           {showAddForm && (
-            <div className="rounded-xl border bg-card p-4">
+            <div className=" border bg-card p-4">
               <h3 className="mb-4 font-medium">Add New Model</h3>
               <ProviderForm
                 onSave={() => setShowAddForm(false)}
@@ -177,7 +179,7 @@ export function IntegrationsPanel() {
           )}
 
           {/* Models table */}
-          <div className="overflow-x-auto rounded-xl border bg-card">
+          <div className="overflow-x-auto border bg-card">
             <table className="w-full min-w-[800px]">
               <thead>
                 <tr className="border-b text-left text-sm text-muted-foreground">
@@ -204,7 +206,7 @@ export function IntegrationsPanel() {
                       <>
                         <td className="p-4">
                           <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
+                            <div className="flex h-9 w-9 items-center justify-center bg-secondary text-muted-foreground">
                               {providerIcons[provider.type]}
                             </div>
                             <span className="font-medium">{provider.name}</span>
@@ -214,7 +216,7 @@ export function IntegrationsPanel() {
                           {providerLabels[provider.type]}
                         </td>
                         <td className="p-4">
-                          <code className="rounded bg-secondary px-2 py-1 text-xs">
+                          <code className=" bg-secondary px-2 py-1 text-xs">
                             {provider.model}
                           </code>
                         </td>
@@ -239,7 +241,7 @@ export function IntegrationsPanel() {
                           <button
                             onClick={() => toggleProvider(provider.id)}
                             className={cn(
-                              'flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                              'flex items-center gap-2 px-3 py-1 text-xs font-medium transition-colors',
                               provider.enabled
                                 ? 'bg-primary/10 text-primary'
                                 : 'bg-secondary text-muted-foreground'
@@ -262,14 +264,14 @@ export function IntegrationsPanel() {
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => handleEdit(provider.id)}
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground"
+                              className="flex h-8 w-8 items-center justify-center text-muted-foreground hover:bg-secondary hover:text-foreground"
                               title="Edit"
                             >
                               <Pencil size={14} />
                             </button>
                             <button
                               onClick={() => handleDelete(provider.id)}
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                              className="flex h-8 w-8 items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                               title="Delete"
                             >
                               <Trash2 size={14} />
@@ -285,7 +287,7 @@ export function IntegrationsPanel() {
           </div>
 
           {/* Hint to configure agent mappings */}
-          <div className="rounded-xl border bg-card/50 p-4 text-center">
+          <div className=" border bg-card/50 p-4 text-center">
             <p className="text-sm text-muted-foreground">
               To assign models to agents, go to{' '}
               <a href="settings/agents" className="text-primary hover:underline font-medium">

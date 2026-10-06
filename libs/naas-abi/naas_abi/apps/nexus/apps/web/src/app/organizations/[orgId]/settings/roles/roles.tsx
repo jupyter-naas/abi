@@ -7,6 +7,8 @@ import { useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { OrgSettingsSectionCard } from '../components/org-settings-section-card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { SettingsFilterSelect, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
 import '../components/org-settings-components.css';
 import './roles.css';
 
@@ -70,6 +72,8 @@ export default function OrgRolesPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [accessFilter, setAccessFilter] = useState('all');
   const [persistence, setPersistence] = useState('deployment');
   const [features, setFeatures] = useState<string[]>([]);
   const [roles, setRoles] = useState<RoleName[]>([
@@ -228,10 +232,24 @@ export default function OrgRolesPage() {
       ? 'Role feature access for this organization is saved in the database and applies across API workers and restarts.'
       : 'Role feature access currently uses the deployment baseline from nexus_config.feature_flags. Save writes a durable organization overlay.');
 
+  const featureQuery = searchQuery.trim().toLowerCase();
+  const rolesWith = (feature: string) => roles.filter((role) => (baseline[role] || []).includes(feature)).length;
+  const filteredFeatures = features.filter((feature) => {
+    const granted = rolesWith(feature);
+    if (accessFilter === 'everyone' && granted !== roles.length) return false;
+    if (accessFilter === 'restricted' && (granted === roles.length || granted === 0)) return false;
+    if (accessFilter === 'nobody' && granted !== 0) return false;
+    if (accessFilter.startsWith('role:') && !(baseline[accessFilter.slice(5) as RoleName] || []).includes(feature)) return false;
+    const label = (FEATURE_LABELS[feature] || feature).toLowerCase();
+    return !featureQuery || label.includes(featureQuery) || feature.toLowerCase().includes(featureQuery);
+  });
+  const grantCount = roles.reduce((total, role) => total + (baseline[role] || []).length, 0);
+
   return (
     <div className="org-settings-roles-page">
       <OrgSettingsPageHeader
         title="Roles"
+        badge={`${grantCount} enabled`}
         subtitle="Define which workspace features each role can access"
         actions={
           canManage ? (
@@ -259,6 +277,27 @@ export default function OrgRolesPage() {
         </div>
       )}
 
+      <SettingsTableToolbar
+        search={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search features..."
+        filters={
+          <SettingsFilterSelect
+            label="Access"
+            value={accessFilter}
+            onChange={setAccessFilter}
+            options={[
+              { value: 'all', label: 'All features' },
+              { value: 'everyone', label: 'Granted to every role' },
+              { value: 'restricted', label: 'Granted to some roles' },
+              { value: 'nobody', label: 'Granted to no role' },
+              ...roles.map((role) => ({ value: `role:${role}`, label: `Granted to ${ROLE_LABELS[role] || role}` })),
+            ]}
+          />
+        }
+        meta={`${countLabel(filteredFeatures.length, features.length, 'feature')} · ${roles.length} roles · ${grantCount} access grants${dirty ? ' · unsaved changes' : ''}`}
+      />
+
       <OrgSettingsSectionCard flush overflowHidden>
         <div className="org-settings-roles-card-heading">
           <Shield size={18} />
@@ -284,7 +323,14 @@ export default function OrgRolesPage() {
               </tr>
             </thead>
             <tbody>
-              {features.map((feature) => (
+              {filteredFeatures.length === 0 && (
+                <tr>
+                  <td colSpan={roles.length + 1} className="org-settings-roles-no-match">
+                    No features match the current search and filters
+                  </td>
+                </tr>
+              )}
+              {filteredFeatures.map((feature) => (
                 <tr key={feature}>
                   <th scope="row">{FEATURE_LABELS[feature] || feature}</th>
                   {roles.map((role) => {
@@ -292,11 +338,10 @@ export default function OrgRolesPage() {
                     return (
                       <td key={`${role}-${feature}`}>
                         <label className="org-settings-roles-check">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={checked}
                             disabled={!canManage}
-                            onChange={() => toggleFeature(role, feature)}
+                            onCheckedChange={() => toggleFeature(role, feature)}
                             aria-label={`${ROLE_LABELS[role]} can access ${FEATURE_LABELS[feature] || feature}`}
                           />
                         </label>

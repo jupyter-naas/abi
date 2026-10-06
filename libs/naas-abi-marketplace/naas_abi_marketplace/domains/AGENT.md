@@ -66,6 +66,13 @@ If the counterparty is a paying customer in a commercial relationship, it is ope
 (sales, success, support). If the counterparty is a broader audience, community, partner body or
 public, it is external.
 
+**`personnel` vs `intelligence` — our records or anyone's facts.**
+Personnel is what the organization records about *its own staff*: the employee role, job
+position, contract, grade, service line. What can be known about *any* person - their career,
+studies, skills, published profile - is intelligence (`intelligence/modules/people`), even when
+the person is on staff. Personnel specializes the people vocabulary (an act of employment is an
+act of working); people never refers back to personnel.
+
 **`intelligence` vs `plans` — analysis or decision.**
 Intelligence tells you what is true. Plans decides what to do about it. A module that measures
 content performance is intelligence; a module that decides the next content calendar is plans.
@@ -108,8 +115,9 @@ this is*; the inner folders are the module's own shape, unchanged.
 `financial_cockpit` is an app-only module (P&L and treasury dashboard under `web/`).
 → `finance/apps/financial_cockpit/`
 
-`organizations` contains only `ontologies/`. Nothing else.
-→ `intelligence/ontologies/organizations/`
+`organizations` contains only `ontologies/` - but it is a vocabulary other modules build on, so
+it is a loadable module of its own.
+→ `intelligence/modules/organizations/`
 
 **Multi-component modules — pick the dominant one.**
 
@@ -118,8 +126,13 @@ exist to support the agent; the agent is the deliverable. This shape is shared b
 → `finance/agents/accountant/`
 
 `wsr` contains 125 files under `apps/` (a dashboard with its own API and web frontend) plus 1
-agent and 2 ontologies. The dashboard is overwhelmingly the point.
-→ `intelligence/apps/wsr/`
+agent, 2 ontologies and its own credentials. The dashboard is the point, but the agent and the
+configuration make it a module rather than a bucket app.
+→ `intelligence/modules/wsr/`
+
+`people` holds a vocabulary (career, studies, skills, profiles), the pipelines that write it, an
+agent and People Search. A loadable module that another bucket (personnel) builds on.
+→ `intelligence/modules/people/`
 
 `document` contains 13 pipelines, 3 agents, 6 ontologies, 1 orchestration. It is a processing
 chain — file → markdown → chunk → embed → vector store — with an agent bolted on top.
@@ -202,7 +215,7 @@ Two validator rules catch most first drafts:
   an `owl:Restriction` on `bfo:BFO_0000197` (inheres in) or `bfo:BFO_0000196` (bearer of),
   directly or via a sub-property such as `abi:inheresIn`.
 
-The second rule is a modelling check, not a formality. When `personnel:JobPosition` failed it, the
+The second rule is a modelling check, not a formality. When `abi:JobPosition` failed it, the
 fix was not to bolt on a bearer but to recognise that a vacant requisition *has* no bearer and is
 therefore not a role at all — it is a generically dependent continuant. See
 [`personnel/README.md`](personnel/README.md).

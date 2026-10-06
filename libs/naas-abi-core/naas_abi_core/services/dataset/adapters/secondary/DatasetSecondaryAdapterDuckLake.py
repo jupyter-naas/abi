@@ -526,23 +526,33 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         """
         import duckdb
 
-        connection = self._get_read_connection()
-        cursor = connection.cursor()
-        try:
-            return operation(cursor)
-        except duckdb.CatalogException as exc:
-            # Another process may flush and drop a cached inline table. Retire
-            # this connection for subsequent calls without interrupting cursors
-            # already using it. Do not replay arbitrary SQL: query() allows writes.
-            if "Failed to read inlined data from DuckLake" in str(
-                exc
-            ) and "does not exist" in str(exc):
-                with self._read_connection_lock:
-                    if self._read_connection is connection:
-                        self._read_connection = None
-            raise
-        finally:
-            cursor.close()
+        for attempt in range(2):
+            connection = self._get_read_connection()
+            cursor = connection.cursor()
+            try:
+                return operation(cursor)
+            except duckdb.Error as exc:
+                # Another process may flush and drop a cached inline table. Retire
+                # this connection for subsequent calls without interrupting cursors
+                # already using it. Do not replay arbitrary SQL: query() allows writes.
+                retire = False
+                if isinstance(exc, duckdb.CatalogException) and (
+                    "Failed to read inlined data from DuckLake" in str(exc)
+                    and "does not exist" in str(exc)
+                ) or "database has been invalidated" in str(exc):
+                    retire = True
+                if retire:
+                    with self._read_connection_lock:
+                        if self._read_connection is connection:
+                            self._read_connection = None
+                    with self._snapshot_connection_lock:
+                        self._snapshot_connections.clear()
+                    if attempt == 0 and "database has been invalidated" in str(exc):
+                        continue
+                raise
+            finally:
+                cursor.close()
+        raise RuntimeError("unreachable")  # pragma: no cover
 
     def _write_transaction(self, operation: Callable[[Any], _T]) -> tuple[_T, int]:
         if self._sqlite_write_lock is not None:

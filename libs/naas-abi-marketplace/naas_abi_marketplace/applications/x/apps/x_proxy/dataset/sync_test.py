@@ -11,6 +11,7 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelope_paths imp
 )
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
     AUTHOR_STATS_V1,
+    COUNT_BUCKETS_V1,
     ENVELOPES_V1,
     POSTS_V1,
     X_DATASET_NAMESPACE,
@@ -133,6 +134,39 @@ def test_sync_envelope_paths_idempotent(dataset):
     assert len(stats.rows) == 1
     assert int(stats.rows[0]["matched_count"]) == 1
     assert stats.rows[0]["first_post_at"] is not None
+
+
+def test_sync_count_envelope_populates_count_buckets(dataset):
+    ensure_x_datasets(dataset)
+    prefix = "x/count_recent_tweets/drones_lang_en"
+    key = "2026-09-01T12_00_00Z_drones.json"
+    body = json.dumps(
+        {
+            "query": "drones lang:en",
+            "results": {
+                "data": [
+                    {
+                        "start": "2026-09-01T11:00:00.000Z",
+                        "end": "2026-09-01T12:00:00.000Z",
+                        "tweet_count": 42,
+                    }
+                ]
+            },
+        }
+    ).encode()
+    storage = _FakeStorage({(prefix, key): body})
+    module = _FakeModule(dataset, storage)
+    path = f"{prefix}/{key}"
+
+    summary = sync_envelope_paths(module, [path])
+    assert summary["ingested_envelopes"] == 1
+    assert summary["posts_upserted"] == 0
+
+    rows = dataset.query(
+        f"SELECT tweet_count FROM {COUNT_BUCKETS_V1} WHERE query_slug = 'drones_lang_en'",
+        namespace=X_DATASET_NAMESPACE,
+    )
+    assert int(rows.rows[0]["tweet_count"]) == 42
 
 
 def test_sync_dedupes_duplicate_posts_in_one_batch(dataset):

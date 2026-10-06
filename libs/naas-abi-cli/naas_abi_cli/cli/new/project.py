@@ -3,10 +3,15 @@ import shlex
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import click
 
 import naas_abi_cli
+from naas_abi_cli.cli.admin_credentials import (
+    ADMIN_PASSWORD_KEY,
+    ensure_admin_credentials,
+)
 from naas_abi_cli.cli.deploy.local import _build_hosts_from_domain, setup_local_deploy
 from naas_abi_cli.cli.utils.Copier import Copier
 
@@ -91,10 +96,15 @@ def _cd_argument(project_path: str) -> str:
     return shlex.quote(relative)
 
 
-def _print_next_steps(project_path: str) -> None:
+def _print_next_steps(project_path: str, admin_email: str) -> None:
     """Report where the project landed and how to start it."""
     click.echo()
     click.secho(f"✓ Project created at {project_path}", fg="green", bold=True)
+    click.echo()
+    click.echo(
+        f"Admin login: {admin_email} — its generated password is in .env "
+        f"as {ADMIN_PASSWORD_KEY}."
+    )
     click.echo()
     click.secho("Next steps:", bold=True)
     click.echo(f"  cd {_cd_argument(project_path)}")
@@ -209,6 +219,9 @@ def new_project(
             base_domain=base_domain,
         )
 
+    # The one seeded account gets a password generated for this project only.
+    admin_email, _password = ensure_admin_credentials(Path(project_path) / ".env")
+
     # Run dependency install without shell to avoid quoting issues on paths with spaces.
     # ai-openrouter is the marketplace extra the generated config.yaml enables:
     # one gateway key serves both defaults — Gemma 4 for chat and
@@ -232,4 +245,4 @@ def new_project(
         check=True,
     )
 
-    _print_next_steps(project_path)
+    _print_next_steps(project_path, admin_email)

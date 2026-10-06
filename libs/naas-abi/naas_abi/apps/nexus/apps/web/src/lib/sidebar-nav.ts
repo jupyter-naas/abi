@@ -1,15 +1,16 @@
 export const DEFAULT_NAV_ORDER = [
   'home',
+  'search',
   'apps',
   'files',
   'chat',
-  'search',
   'maps',
   'ontology',
   'graph',
   'datasets',
   'slides',
   'documents',
+  'sheets',
   'code',
   'marketplace',
 ] as const;
@@ -35,13 +36,21 @@ export function shiftForReorder(index: number, from: number, to: number): number
   return 0;
 }
 
+/** Earlier defaults: a saved order still equal to one of them was never customised. */
+const PREVIOUS_DEFAULT_NAV_ORDERS: readonly (readonly string[])[] = [
+  ['home', 'apps', 'files', 'chat', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'],
+];
+
 /**
  * Keep a persisted order, drop unknown ids, append anything new from the catalog.
+ * An order that is still an earlier default follows the current default instead.
  */
 export function mergeNavOrder(
   persisted: readonly string[] | undefined,
   catalog: readonly NavSectionId[] = DEFAULT_NAV_ORDER,
 ): NavSectionId[] {
+  const saved = persisted?.join();
+  if (saved && PREVIOUS_DEFAULT_NAV_ORDERS.some(old => old.join() === saved)) persisted = catalog;
   const allowed = new Set<string>(catalog);
   const seen = new Set<string>();
   const next: NavSectionId[] = [];

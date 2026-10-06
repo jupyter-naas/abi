@@ -26,6 +26,8 @@ KNOWN_FEATURE_KEYS: tuple[str, ...] = (
     "slides",
     # Business documents (Forgejo HTML + Monaco). Same default grant as slides.
     "documents",
+    # Business sheets (Forgejo HTML workbook + XLSX export). Same default as slides.
+    "sheets",
 )
 
 

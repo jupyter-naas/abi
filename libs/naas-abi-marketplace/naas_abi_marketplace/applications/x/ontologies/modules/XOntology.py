@@ -16,13 +16,13 @@ from naas_abi.ontologies.modules.ABIOntology import (
     Disposition,
     GenericallyDependentContinuant,
     MaterialEntity,
-    Person,
     Process,
     Quality,
     Role,
     Site,
     TemporalInstant,
 )
+from naas_abi.ontologies.modules.PersonOntology import Person
 from pydantic import BaseModel, Field, ValidationError
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, XSD

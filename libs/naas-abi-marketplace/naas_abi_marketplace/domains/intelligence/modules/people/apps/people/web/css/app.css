@@ -1,0 +1,2428 @@
+/* People Search.
+ *
+ * Every colour, font and width here is a custom property set from
+ * config.yaml (theme.css_variables) by web/lib/config.js. The values below are
+ * fallbacks so the page still renders if the config request fails.
+ */
+
+:root {
+  --ink: #10121b;
+  --muted: #5a6478;
+  --paper: #ffffff;
+  --panel: #ffffff;
+  --line: #dfe3ec;
+  --accent: #171c8e;
+  --accent-strong: #0072ce;
+  --accent-soft: #e8f2fb;
+  --highlight: #00b0c8;
+  --cover: linear-gradient(120deg, #171c8e 0%, #0072ce 100%);
+  --mark-text: #ffffff;
+  --result-link: #0b46b8;
+  --result-visited: #6b3fa0;
+  --empty-surface: #f6f7fb;
+  --chip-surface: #eef1f8;
+  --focus-ring: #0072ce;
+  --danger: #b3261e;
+  --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-body);
+  --content-width: 760px;
+  --profile-width: 1080px;
+  /* Read by the cockpit graph canvas (profile graph view) from :root. */
+  --graph-node-fill: #ffffff;
+  --graph-node-fill-muted: rgba(255, 255, 255, 0.82);
+  --muted-surface: var(--chip-surface);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.55;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+}
+
+main {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+main > * {
+  flex: 1 0 auto;
+}
+
+a {
+  color: var(--accent-strong);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+mark,
+.hit {
+  background: none;
+  color: inherit;
+  font-weight: 700;
+}
+
+.profile mark {
+  background: #fff3a3;
+  padding: 0 1px;
+}
+
+/* ── Brand ───────────────────────────────────────────────── */
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+
+.brand-logo svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* A client logo is usually a wordmark, not a square. The box gives it a height
+   and lets it take the width it needs, so nothing is stretched. */
+.brand-logo img {
+  width: auto;
+  height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.brand-logo.is-mark {
+  background: var(--accent);
+  color: var(--mark-text);
+  font-weight: 700;
+}
+
+/* ── Topbar ──────────────────────────────────────────────── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 24px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar[hidden] {
+  display: none;
+}
+
+.topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--ink);
+  flex: none;
+}
+
+.topbar-brand .brand-logo {
+  width: auto;
+  min-width: 30px;
+  height: 30px;
+  font-size: 15px;
+}
+
+/* The letter fallback has no proportions of its own, so it stays square. */
+.topbar-brand .brand-logo.is-mark {
+  width: 30px;
+}
+
+.brand-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.topbar-search {
+  flex: 1 1 auto;
+  max-width: 620px;
+}
+
+/* ── Search box ──────────────────────────────────────────── */
+.search {
+  position: relative;
+  width: 100%;
+}
+
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.search-field:focus-within {
+  border-color: var(--accent-strong);
+  box-shadow: 0 1px 10px rgba(16, 18, 27, 0.12);
+}
+
+.search-field svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  color: var(--muted);
+}
+
+.search-input {
+  flex: 1 1 auto;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  min-width: 0;
+}
+
+.search-input:focus {
+  outline: none;
+}
+
+/* The field draws its own ring; a second one inside it looks like a bug. */
+.search-input:focus-visible {
+  box-shadow: none;
+  outline: none;
+}
+
+.search-clear {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 28px rgba(16, 18, 27, 0.14);
+}
+
+.suggestions[hidden] {
+  display: none;
+}
+
+.suggestion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.suggestion[aria-selected="true"],
+.suggestion:hover {
+  background: var(--accent-soft);
+}
+
+.suggestion-name {
+  font-weight: 600;
+}
+
+.suggestion-headline {
+  color: var(--muted);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Avatars ─────────────────────────────────────────────── */
+.avatar {
+  flex: none;
+  /* The initials are a fallback *under* the portrait, not next to it: a photo
+     that never loads leaves them visible, a photo that loads covers them. */
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--mark-text);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-top: 5px;
+}
+
+.avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.avatar-sm {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+}
+
+.avatar-md {
+  width: 56px;
+  height: 56px;
+  font-size: 18px;
+}
+
+/* ── Home ────────────────────────────────────────────────── */
+.home {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  padding: 10vh 16px 40px;
+  text-align: center;
+}
+
+.home .brand-logo {
+  width: auto;
+  min-width: 84px;
+  height: 84px;
+  font-size: 40px;
+}
+
+.home .brand-logo.is-mark {
+  width: 84px;
+}
+
+.home-title {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.home-subtitle {
+  color: var(--muted);
+  margin: -18px 0 0;
+}
+
+.home-search {
+  width: min(100%, 580px);
+}
+
+.home-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.chip {
+  display: inline-block;
+  padding: 5px 12px;
+  background: var(--chip-surface);
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.chip:hover {
+  background: var(--accent-soft);
+}
+
+/* ── Results ─────────────────────────────────────────────── */
+.results {
+  width: 100%;
+  max-width: min(var(--content-width), calc(100vw - var(--content-inset-left, 24px) - 24px));
+  padding: 20px 24px 56px 0;
+  margin: 0;
+  margin-left: var(--content-inset-left, 24px);
+}
+
+/* One row: the facets that do not fit go behind an "N more" tab (tab-overflow.js). */
+.tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+
+.tab {
+  flex: none;
+  white-space: nowrap;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--muted);
+  padding: 8px 12px;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.tab[aria-current="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.tab-count {
+  color: var(--muted);
+  font-size: 13px;
+  margin-left: 4px;
+}
+
+.tab[hidden],
+.tab-more[hidden] {
+  display: none;
+}
+
+.tab-more {
+  position: relative;
+  flex: none;
+}
+
+.tab-more-button::after {
+  content: "";
+  display: inline-block;
+  margin-left: 6px;
+  vertical-align: 2px;
+  border: 4px solid transparent;
+  border-top-color: currentColor;
+  border-bottom-width: 0;
+}
+
+.tab-more-button[aria-expanded="true"] {
+  color: var(--ink);
+}
+
+.tab-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 28px rgba(16, 18, 27, 0.14);
+}
+
+.tab-menu[hidden] {
+  display: none;
+}
+
+.tab-menu-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 10px;
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tab-menu-item:hover,
+.tab-menu-item:focus-visible {
+  background: var(--accent-soft);
+}
+
+/* "Profile" view: one CV card per person. */
+.profile-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.profile-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 18px 14px 16px;
+  text-align: center;
+  color: var(--ink);
+  text-decoration: none;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.profile-card:hover,
+.profile-card:focus-visible {
+  border-color: var(--accent-strong);
+  box-shadow: 0 6px 18px rgba(16, 18, 27, 0.1);
+}
+
+.profile-card .avatar {
+  margin-bottom: 4px;
+}
+
+.profile-card-name {
+  font-weight: 600;
+  color: var(--result-link);
+}
+
+.profile-card-headline {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.profile-card-place {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* "Graph" view: the people found and what ties them (people-network.js). */
+.network-host {
+  margin-bottom: 20px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.network-host > .stats {
+  padding: 16px;
+}
+
+.network-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.network-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-line {
+  width: 22px;
+  border-top: 2px solid #94a3b8;
+}
+
+.legend-client_of {
+  border-top: 2px dashed var(--accent-strong);
+}
+
+.legend-studied_at {
+  border-top: 2px dotted var(--highlight);
+}
+
+.legend-box {
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+}
+
+.legend-school {
+  background: var(--highlight);
+}
+
+.people-network {
+  display: block;
+  width: 100%;
+  height: min(70vh, 640px);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.people-network.is-panning {
+  cursor: grabbing;
+}
+
+.network-edge {
+  stroke: #94a3b8;
+  stroke-width: 1.2;
+}
+
+.network-edge-client_of {
+  stroke: var(--accent-strong);
+  stroke-dasharray: 5 4;
+}
+
+.network-edge-studied_at {
+  stroke: var(--highlight);
+  stroke-dasharray: 2 3;
+}
+
+.network-org rect {
+  fill: var(--accent);
+}
+
+.network-school rect {
+  fill: var(--highlight);
+}
+
+.network-person-disc {
+  fill: var(--chip-surface);
+}
+
+.network-person-initials {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.network-person-ring {
+  fill: none;
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+.network-person:hover .network-person-ring,
+.network-person:focus-visible .network-person-ring {
+  stroke: var(--accent-strong);
+  stroke-width: 3;
+}
+
+.network-label {
+  fill: var(--ink);
+  font-size: 10px;
+  paint-order: stroke;
+  stroke: var(--panel);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.network-org-label {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.network-caption {
+  margin: 0;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 24px 0 8px;
+}
+
+.page {
+  min-width: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  text-align: center;
+  text-decoration: none;
+  color: var(--result-link, var(--accent));
+  background: var(--paper);
+}
+
+a.page:hover {
+  background: var(--accent-soft);
+}
+
+.page-current {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--mark-text, #fff);
+  font-weight: 600;
+}
+
+.page-disabled {
+  color: var(--muted);
+  background: none;
+}
+
+.page-gap {
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.stats {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0 0 0px;
+}
+
+.notice {
+  background: var(--accent-soft);
+  padding: 10px 14px;
+  margin: 0 0 18px;
+  font-size: 14px;
+}
+
+.result {
+  display: flex;
+  gap: 14px;
+  padding: 14px 0;
+}
+
+.result + .result {
+  border-top: 1px solid var(--line);
+}
+
+.result-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.result-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  /* It is the first line of a result: the browser's default paragraph margin
+     would push it away from the top of the row. */
+  margin: 0 0 2px;
+}
+
+.result-flag {
+  width: 16px;
+  height: 12px;
+  object-fit: cover;
+}
+
+.result-title {
+  font-size: 19px;
+  line-height: 1.3;
+  margin: 0 0 2px;
+  font-weight: 500;
+}
+
+.result-title a {
+  color: var(--result-link);
+  text-decoration: none;
+}
+
+.result-title a:visited {
+  color: var(--result-visited);
+}
+
+.result-title a:hover {
+  text-decoration: underline;
+}
+
+.result-headline {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0 0 4px;
+}
+
+.result-snippet {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.result-snippet-label {
+  color: var(--muted);
+}
+
+.empty-state {
+  padding: 40px 0;
+  max-width: 560px;
+}
+
+.empty-state h2 {
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+
+.empty-state p {
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+
+.error-block {
+  border-left: 3px solid var(--danger);
+  padding-left: 14px;
+}
+
+.error-block code {
+  display: block;
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: var(--empty-surface);
+  font-size: 13px;
+  overflow-x: auto;
+}
+
+/* ── Profile ─────────────────────────────────────────────── */
+.profile {
+  box-sizing: border-box;
+  /* Left edge stays aligned with the topbar search (--content-inset-left). */
+  margin-left: var(--content-inset-left, 24px);
+  margin-right: var(--content-inset-left, 24px);
+  width: auto;
+  max-width: none;
+  padding: 0 0 56px;
+}
+
+.intro {
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.intro-cover {
+  height: var(--intro-cover-height, 128px);
+  background: var(--cover);
+}
+
+.intro-body {
+  padding: 0 28px 24px;
+  background: var(--panel);
+  /* Contain the photo's negative margin: without this the margin collapses and
+     the headline rides up onto the cover. */
+  display: flow-root;
+}
+
+.intro-photo {
+  width: 132px;
+  height: 132px;
+  margin-top: -66px;
+  border: 4px solid var(--panel);
+  box-shadow: 0 2px 10px rgba(16, 18, 27, 0.15);
+  font-size: 40px;
+}
+
+.intro-name {
+  font-family: var(--font-display);
+  font-size: 28px;
+  letter-spacing: -0.02em;
+  margin: 14px 0 2px;
+}
+
+.intro-headline {
+  font-size: 17px;
+  margin: 0 0 6px;
+}
+
+.intro-place {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+.intro-contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  font-size: 14px;
+}
+
+.contact-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--result-link);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.contact-link svg {
+  flex: none;
+}
+
+.contact-link:hover,
+.contact-link:focus-visible {
+  text-decoration: underline;
+}
+
+.intro-quote {
+  margin: 14px 0 0;
+  padding-left: 14px;
+  border-left: 3px solid var(--highlight);
+  color: var(--muted);
+  font-style: italic;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  margin: 18px 0 0;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.fact {
+  min-width: 120px;
+}
+
+.fact-label,
+.fact-value {
+  margin: 0;
+  text-align: left;
+}
+
+.fact-label {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.fact-value {
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--mark-text);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button.secondary {
+  background: none;
+  color: var(--accent);
+}
+
+.topbar-end {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  flex: none;
+}
+
+.topbar-end:empty {
+  display: none;
+}
+
+.profile-view-switch {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.profile-view-option {
+  min-width: 84px;
+  padding: 6px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.profile-view-option:hover {
+  color: var(--ink);
+}
+
+.profile-view-option[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--mark-text);
+}
+
+.profile-view-option:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* The cockpit graph page fills this box; its own stylesheet (graph-view.css)
+   is scoped under .profile-graph. */
+.profile-graph {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 130px);
+  min-height: 480px;
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.profile-graph[hidden],
+.profile-columns[hidden] {
+  display: none;
+}
+
+.profile.is-graph-view {
+  padding-bottom: 24px;
+}
+
+.profile-graph-status {
+  margin: auto;
+}
+
+.profile-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+  gap: 24px;
+  align-items: start;
+  margin-top: 20px;
+}
+
+.profile-main {
+  min-width: 0;
+}
+
+.profile-main .card {
+  margin-top: 20px;
+}
+
+.profile-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.profile-sidebar-card {
+  margin-bottom: 0;
+}
+
+.source-graph-list {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.source-info-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.source-graph-name {
+  /* The graph is one source among the ones listed under it, not a heading for
+     them, so it is set like they are. */
+  font-weight: inherit;
+}
+
+.source-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--muted) 55%, var(--line));
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  font-style: italic;
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1;
+  cursor: help;
+}
+
+.source-info-popover {
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  width: min(280px, 70vw);
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 24px rgb(16 18 27 / 0.12);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease, visibility 0.12s ease;
+}
+
+.source-info-wrap:hover .source-info-popover,
+.source-info-wrap:focus-within .source-info-popover {
+  opacity: 1;
+  visibility: visible;
+}
+
+.source-info-line {
+  display: block;
+}
+
+.source-info-line + .source-info-line {
+  margin-top: 8px;
+}
+
+.source-info-line strong {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.sparql-query-list {
+  list-style: disc;
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.sparql-query-btn {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.sparql-query-btn:hover,
+.sparql-query-btn:focus-visible {
+  color: var(--accent);
+  outline: none;
+}
+
+body.sparql-modal-open {
+  overflow: hidden;
+}
+
+.sparql-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.sparql-modal[hidden] {
+  display: none;
+}
+
+.sparql-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(16 18 27 / 0.52);
+}
+
+.sparql-modal-panel {
+  position: relative;
+  z-index: 1;
+  width: min(920px, 100%);
+  max-height: min(88vh, 900px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 64px rgb(16 18 27 / 0.22);
+  padding: 22px 24px 20px;
+}
+
+.sparql-modal-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sparql-modal-close:hover {
+  color: var(--ink);
+}
+
+.sparql-modal-kicker {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sparql-modal-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  margin: 0 0 14px;
+  padding-right: 2rem;
+}
+
+.sparql-modal-query {
+  flex: 0 1 auto;
+  max-height: min(42vh, 420px);
+  min-height: 0;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  background: var(--empty-surface);
+  border: 1px solid var(--line);
+  font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.42;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.sparql-modal-results {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sparql-results-title {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 15px;
+}
+
+.sparql-results-meta,
+.sparql-results-status,
+.sparql-results-empty {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.sparql-results-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.sparql-results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.sparql-results-table th,
+.sparql-results-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.sparql-results-table th {
+  position: sticky;
+  top: 0;
+  background: var(--empty-surface);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sparql-results-table td {
+  font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  word-break: break-word;
+}
+
+@media (max-width: 900px) {
+  .profile-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 22px 28px;
+  margin-bottom: 20px;
+}
+
+.card h2 {
+  font-family: var(--font-display);
+  font-size: 19px;
+  margin: 0 0 14px;
+}
+
+.card p:last-child {
+  margin-bottom: 0;
+}
+
+.empty {
+  color: var(--muted);
+  background: var(--empty-surface);
+  padding: 12px 14px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.entry + .entry {
+  border-top: 1px solid var(--line);
+  margin-top: 18px;
+  padding-top: 18px;
+}
+
+.entry-head {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.entry-title {
+  font-weight: 600;
+  margin: 0;
+}
+
+.entry-meta,
+.role-meta {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+.entry-text {
+  margin: 8px 0 0;
+}
+
+.roles {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0 0 0 18px;
+  border-left: 2px solid var(--line);
+}
+
+.role + .role {
+  margin-top: 14px;
+}
+
+.role-title {
+  font-weight: 600;
+}
+
+/* An avatar next to a title needs its own row; entry() only wraps title+meta
+   like this when one is given, so every other entry (education, certs, ...)
+   is unaffected. */
+.entry-head:has(> .avatar) {
+  align-items: flex-start;
+  flex-wrap: nowrap;
+}
+
+.entry-head-text {
+  min-width: 0;
+}
+
+.avatar-org {
+  background: var(--empty-surface);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+
+/* The client a mission was performed for, when staffed there by the employer
+   heading the group -- a consulting engagement, distinct from a direct role. */
+.role-client {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+
+.role-context {
+  color: var(--muted);
+}
+
+.tasks {
+  margin: 8px 0 0;
+  padding: 0 0 0 18px;
+}
+
+.tasks li + li {
+  margin-top: 4px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chips li {
+  background: var(--chip-surface);
+  padding: 6px 14px;
+  font-size: 14px;
+}
+
+.quote-card {
+  background: var(--empty-surface);
+  padding: 14px 16px;
+}
+
+.quote-card + .quote-card {
+  margin-top: 14px;
+}
+
+.quote-author {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.quote-author-name {
+  font-weight: 600;
+}
+
+.quote-author-meta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.sources li,
+.related li {
+  margin-bottom: 10px;
+}
+
+/* A source that is not a web page: named, but not dressed up as a link. */
+.source-name {
+  display: block;
+  color: var(--ink);
+}
+
+.source-ref {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.profile-sidebar .profile-sidebar-card {
+  padding: 18px 20px;
+}
+
+.profile-sidebar .profile-sidebar-card h2 {
+  font-size: 16px;
+}
+
+.related {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.related a {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+}
+
+.related-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.related-headline {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ── Footer ──────────────────────────────────────────────── */
+.footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.footer[hidden] {
+  display: none;
+}
+
+.footer-badge {
+  background: var(--chip-surface);
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 980px) {
+  .profile-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .topbar {
+    padding: 10px 16px;
+    gap: 12px;
+  }
+
+  .results,
+  .profile {
+    margin-left: var(--content-inset-left, 16px);
+    padding-right: 16px;
+  }
+
+  .card,
+  .intro-body {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .intro-photo {
+    width: 96px;
+    height: 96px;
+    margin-top: -48px;
+    font-size: 30px;
+  }
+
+  .intro-name {
+    font-size: 23px;
+  }
+
+  .home {
+    padding-top: 8vh;
+  }
+
+  .home-title {
+    font-size: 26px;
+  }
+
+  .brand-name {
+    display: none;
+  }
+
+  .topbar-search {
+    min-width: 0;
+  }
+
+  .profile-view-option {
+    min-width: 0;
+    padding: 6px 10px;
+  }
+}
+
+/* ── Ontology viewer ─────────────────────────────────────── */
+.home-ontology {
+  margin: 8px 0 0;
+}
+
+.home-ontology-link {
+  color: var(--muted);
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.home-ontology-link:hover {
+  color: var(--accent-strong);
+}
+
+/* The page fills the viewport: toolbar, network, inspector, status bar. */
+html:has(body.is-ontology-view) {
+  height: 100%;
+  overflow: hidden;
+}
+
+body.is-ontology-view {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+body.is-ontology-view main {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.is-ontology-view main > .ontology-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ontology-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: var(--paper);
+  font-size: 12px;
+}
+
+.ontology-network {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Toolbar: title, relations to show, layout, file, search. */
+.ontology-toolbar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  min-height: 48px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ontology-title {
+  flex: 1 1 160px;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.ontology-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.ontology-controls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.ontology-controls label[hidden] {
+  display: none;
+}
+
+/* Not a relationship: set apart from the three that are. */
+.ontology-controls .ontology-zones-first {
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+
+.ontology-controls input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.ontology-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.ontology-select select {
+  max-width: 170px;
+  min-height: 28px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ontology-turtle-btn {
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ontology-turtle-btn:hover {
+  background: var(--empty-surface);
+  color: var(--ink);
+}
+
+.ontology-turtle-btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ontology-toolbar .home-ontology-link {
+  font-size: 12px;
+}
+
+.ontology-network :is(button, input, select, a):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Body: [Turtle] network [inspector]. */
+.ontology-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ontology-source {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 min(440px, 38%);
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.ontology-source[hidden] {
+  display: none;
+}
+
+/* The handle on the panel's right edge: 10px to grab, a 2px line when in use. */
+.ontology-resizer {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  bottom: 0;
+  z-index: 3;
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.ontology-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 2px;
+  background: transparent;
+  transition: background 0.12s;
+}
+
+.ontology-resizer:hover::after,
+.ontology-resizer:focus-visible::after,
+.ontology-resizer.is-dragging::after {
+  background: var(--accent, #2563eb);
+}
+
+.ontology-resizer:focus-visible {
+  outline: none;
+}
+
+.ontology-code {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.42;
+  tab-size: 2;
+}
+
+.ontology-code .ttl-prefix {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ontology-code .ttl-qname {
+  color: var(--accent-strong);
+}
+
+.ontology-code .ttl-pred {
+  color: #6b3fa0;
+}
+
+.ontology-code .ttl-kw {
+  color: #0a7a55;
+  font-weight: 600;
+}
+
+.ontology-code .ttl-string {
+  color: #9a3412;
+}
+
+.ontology-code .ttl-type {
+  color: var(--muted);
+}
+
+.ontology-code .ttl-iri {
+  color: var(--result-link);
+}
+
+.ontology-code .ttl-comment {
+  color: var(--muted);
+}
+
+/* Class search, in the toolbar. */
+.ontology-class-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 0 1 260px;
+  height: 28px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--muted);
+}
+
+.ontology-class-search:focus-within {
+  border-color: var(--focus-ring);
+}
+
+.ontology-class-search > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-left: 8px;
+}
+
+.ontology-class-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+
+.ontology-network .ontology-class-input:focus-visible {
+  outline: none;
+}
+
+.ontology-class-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: -1px;
+  width: max(100%, 300px);
+  max-width: calc(100vw - 32px);
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 30;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 28px rgba(16, 18, 27, 0.14);
+  white-space: normal;
+}
+
+.ontology-class-results[hidden] {
+  display: none;
+}
+
+.ontology-class-result {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.ontology-class-result[aria-selected="true"],
+.ontology-class-result:hover {
+  background: var(--accent-soft);
+}
+
+.ontology-class-result-label {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ontology-class-result-id {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ontology-class-noresult {
+  padding: 8px;
+  color: var(--muted);
+}
+
+/* The network. */
+.ontology-canvas {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  background: var(--paper);
+}
+
+.ontology-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.network-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  user-select: none;
+}
+
+.network-zoom {
+  position: absolute;
+  right: 16px;
+  bottom: 44px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.network-zoom button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.network-zoom button + button {
+  border-top: 1px solid var(--line);
+}
+
+.network-zoom button:hover {
+  background: var(--empty-surface);
+}
+
+.network-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  margin: 0;
+  transform: translateX(-50%);
+  color: var(--muted);
+  font-size: 11px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* BFO bucket panel: filter by bucket, hide single classes. */
+.ontology-buckets {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+  width: 176px;
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 12px rgba(16, 18, 27, 0.1);
+}
+
+.ontology-buckets h2 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.bucket {
+  transition: opacity 0.12s;
+}
+
+.bucket.is-dimmed {
+  opacity: 0.3;
+}
+
+.bucket-row {
+  display: flex;
+  align-items: center;
+}
+
+.bucket-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bucket-toggle:hover,
+.bucket-expand:hover {
+  background: var(--empty-surface);
+}
+
+.bucket-toggle i {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.bucket-toggle strong {
+  flex: 1;
+  font-weight: 600;
+}
+
+.bucket-toggle span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.bucket-expand {
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.bucket-expand.is-open {
+  transform: rotate(90deg);
+}
+
+.bucket-nodes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 4px 12px;
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+}
+
+.bucket-nodes label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.bucket-nodes label:hover {
+  background: var(--empty-surface);
+}
+
+.bucket-nodes input {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.bucket-nodes span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+/* Inspector: the selected class. */
+.ontology-inspector {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 320px;
+  width: 320px;
+  max-width: 40%;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  line-height: 1.6;
+}
+
+.ontology-inspector[hidden] {
+  display: none;
+}
+
+.inspector-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.inspector-head > div {
+  min-width: 0;
+}
+
+.inspector-head h2 {
+  margin: 6px 0 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.inspector-head h2:focus {
+  outline: none;
+}
+
+.inspector-kind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.inspector-kind span {
+  flex: none;
+  width: 7px;
+  height: 7px;
+}
+
+.inspector-uri {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.inspector-close {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.inspector-close:hover {
+  background: var(--empty-surface);
+  color: var(--ink);
+}
+
+.inspector-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.inspector-content > * + * {
+  margin-top: 20px;
+}
+
+.ontology-inspector h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.ontology-inspector h3 span {
+  font-size: 10px;
+}
+
+.ontology-inspector p {
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.inspector-content section > p {
+  margin: 0;
+}
+
+.inspector-connections,
+.inspector-list,
+.inspector-sources {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inspector-connections li + li {
+  border-top: 1px solid var(--line);
+}
+
+.inspector-connections button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inspector-connections button span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.inspector-connections button:hover {
+  color: var(--accent-strong);
+}
+
+.inspector-list li {
+  padding: 2px 0;
+  overflow-wrap: anywhere;
+}
+
+.inspector-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.inspector-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.inspector-actions button {
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font: inherit;
+  cursor: pointer;
+}
+
+.inspector-actions button:hover {
+  text-decoration: underline;
+}
+
+/* Status bar. */
+.ontology-status {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+  padding: 7px 16px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.ontology-status > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ontology-status button {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ontology-status button:hover {
+  text-decoration: underline;
+}
+
+.ontology-status-hint {
+  margin-left: auto;
+  font-size: 11px;
+}
+
+.ontology-empty {
+  color: var(--muted);
+}
+
+@media (max-width: 900px) {
+  .ontology-body {
+    flex-direction: column;
+  }
+
+  .ontology-source {
+    flex: 0 0 34% !important; /* stacked: the width the handle sets does not apply */
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .ontology-resizer {
+    display: none;
+  }
+
+  .ontology-title {
+    flex-basis: 100%;
+  }
+
+  .ontology-inspector {
+    flex: 0 0 240px;
+    width: 100%;
+    max-width: none;
+    max-height: 50%;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .ontology-buckets {
+    width: 152px;
+  }
+}

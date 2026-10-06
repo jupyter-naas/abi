@@ -3,7 +3,11 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { highlightSearchNeedle } from "@/lib/highlightSearchNeedle";
 import { searchFor } from "@/lib/routes";
-import { USER_RESULTS_PAGE_SIZE } from "@/lib/userSearch";
+import {
+  USER_RESULTS_PAGE_SIZE,
+  prefetchOn,
+  prefetchUser,
+} from "@/lib/userSearch";
 import type { UserRow } from "@/lib/types";
 
 type Props = {
@@ -165,6 +169,7 @@ export function UserResults({
                     q: submitted,
                     user: user.username,
                   })}
+                  {...prefetchOn(() => prefetchUser(user.username))}
                   onClick={(e) => {
                     if (
                       e.defaultPrevented ||

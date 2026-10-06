@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
+import { buttonVariants } from '@/components/ui/button';
 import '../components/org-settings-components.css';
 import './workspaces.css';
 
@@ -62,6 +63,7 @@ export default function OrganizationWorkspacesPage() {
     <div className="org-settings-workspaces-page">
       <OrgSettingsPageHeader
         title="Workspaces"
+        badge={`${workspaces.length} ${workspaces.length === 1 ? 'workspace' : 'workspaces'}`}
         subtitle="Manage workspaces belonging to this organization"
         actions={
           <button type="button" className="org-settings-primary-button">
@@ -72,16 +74,12 @@ export default function OrganizationWorkspacesPage() {
       />
 
       {workspaces.length === 0 ? (
-        <div className="rounded-xl border border-dashed bg-card p-12 text-center">
+        <div className=" border border-dashed bg-card p-12 text-center">
           <FolderKanban size={48} className="mx-auto mb-4 text-muted-foreground" />
           <h3 className="mb-2 text-lg font-semibold">No workspaces yet</h3>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Create your first workspace to get started
+          <p className="text-sm text-muted-foreground">
+            Use Create Workspace at the top right to get started
           </p>
-          <button className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 transition-colors">
-            <Plus size={16} />
-            Create Workspace
-          </button>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -94,7 +92,7 @@ export default function OrganizationWorkspacesPage() {
             return (
             <div
               key={workspace.id}
-              className="group rounded-xl border bg-card p-6 transition-all hover:border-blue-500/50 hover:shadow-md"
+              className="group border bg-card p-6 transition-all hover:border-primary/50"
             >
               <div className="mb-4 flex items-start justify-between">
                 {logo ? (
@@ -103,11 +101,11 @@ export default function OrganizationWorkspacesPage() {
                     <img src={logo} alt={workspace.name} className="absolute inset-0 h-full w-full object-cover" />
                   </div>
                 ) : (
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl text-2xl" style={{ backgroundColor: '#22c55e20' }}>
+                  <div className="flex h-12 w-12 items-center justify-center text-2xl" style={{ backgroundColor: '#22c55e20' }}>
                     📁
                   </div>
                 )}
-                <button className="opacity-0 transition-opacity group-hover:opacity-100 rounded-lg p-1 hover:bg-muted">
+                <button type="button" className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'opacity-0 group-hover:opacity-100')}>
                   <Settings size={16} className="text-muted-foreground" />
                 </button>
               </div>
@@ -131,13 +129,13 @@ export default function OrganizationWorkspacesPage() {
               <div className="mt-4 flex gap-2">
                 <Link
                   href={`/workspace/${workspace.id}/maps/presence`}
-                  className="flex-1 rounded-lg border px-3 py-2 text-center text-xs font-medium transition-colors hover:bg-muted"
+                  className="flex-1 border px-3 py-2 text-center text-xs font-medium transition-colors hover:bg-muted"
                 >
                   Open
                 </Link>
                 <Link
                   href={`/workspace/${workspace.id}/settings`}
-                  className="flex-1 rounded-lg border px-3 py-2 text-center text-xs font-medium transition-colors hover:bg-muted"
+                  className="flex-1 border px-3 py-2 text-center text-xs font-medium transition-colors hover:bg-muted"
                 >
                   Settings
                 </Link>
@@ -148,7 +146,7 @@ export default function OrganizationWorkspacesPage() {
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-muted/30 p-4">
+      <div className=" border border-border bg-muted/30 p-4">
         <p className="text-sm text-muted-foreground">
           Workspaces inherit branding from the organization but can customize their own themes.
         </p>

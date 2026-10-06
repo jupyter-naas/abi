@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
-import type { DictionaryTerm } from '@/lib/ontology-dictionary-tree';
+import type { DictionaryLink, DictionaryTerm } from '@/lib/ontology-dictionary-tree';
 import type { OntologyDeclaration } from '@/lib/ontology-dashboard';
 
 type DictionaryState = {
@@ -17,12 +17,37 @@ type DictionaryState = {
   errors: Array<{ path: string; name: string; message: string }>;
   revision: number;
   load: (workspaceId: string, revision?: number, force?: boolean) => Promise<void>;
+  /** Clear the server's cached BFO bucket of ``iri``, resolve it again, and apply the result. */
+  refreshBfoBucket: (workspaceId: string, iri: string) => Promise<string | null>;
 };
+
+/** Apply a re-resolved bucket to the term and to every link that points at it. */
+export function withBfoBucket(terms: DictionaryTerm[], iri: string, bucket: string | null): DictionaryTerm[] {
+  const link = <T extends DictionaryLink>(item: T): T => item.id === iri ? { ...item, bfoBucket: bucket } : item;
+  const links = (items?: DictionaryLink[]) => items?.map(link);
+  return terms.map(term => ({
+    ...term,
+    ...(term.id === iri && term.type === 'entity' ? { bfoBucket: bucket } : {}),
+    parents: links(term.parents), equivalents: links(term.equivalents),
+    domain: links(term.domain), range: links(term.range),
+    relations: term.relations?.map(relation => ({ ...relation, target: link(relation.target as DictionaryLink) })),
+  }));
+}
 
 let generation = 0;
 export const useOntologyDictionaryStore = create<DictionaryState>((set, get) => ({
   workspaceId: null, terms: [], ontologies: [], loading: false, error: null,
   fileCount: 0, loadedFileCount: 0, errors: [], revision: -1,
+  refreshBfoBucket: async (workspaceId, iri) => {
+    const query = new URLSearchParams({ workspace_id: workspaceId });
+    const response = await authFetch(`${getApiUrl()}/api/ontology/bfo-bucket/refresh?${query}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ iri }),
+    });
+    if (!response.ok) throw new Error(`Could not refresh the BFO bucket (${response.status}).`);
+    const bucket: string | null = (await response.json()).bfoBucket ?? null;
+    if (get().workspaceId === workspaceId) set({ terms: withBfoBucket(get().terms, iri, bucket) });
+    return bucket;
+  },
   load: async (workspaceId, revision = 0, force = false) => {
     const previous = get();
     // A hot update can retain a dictionary loaded before ledger metadata existed.

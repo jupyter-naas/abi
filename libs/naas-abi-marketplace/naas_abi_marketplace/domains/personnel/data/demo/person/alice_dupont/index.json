@@ -1,63 +1,31 @@
 {
   "schema_version": "1.0",
-  "data_version": "2026-08-19 17:25",
+  "data_version": "2026-10-02 17:30",
   "person": {
     "first_name": "Alice",
     "last_name": "Dupont",
-    "full_name": "Alice Dupont",
-    "linkedin_profile_url": "https://demo.example/profiles/alice_dupont"
+    "full_name": "Alice Dupont"
   },
-  "records": [
+  "employer": "Demo",
+  "service_line": "Operations",
+  "grade": "Partner",
+  "roster": {
+    "employee_id": "E-10429",
+    "job_title": "COO",
+    "job_family": "Executive",
+    "hire_date": "2023-04-01",
+    "termination_date": null,
+    "status": "active"
+  },
+  "employments": [
     {
-      "process_type": "ActOfWorking",
       "organization": "Demo",
+      "client": null,
       "title": "COO",
-      "contract_type": "Self-employed",
-      "site": "World",
-      "start": "2023-04-01",
-      "end": null,
-      "duration": "3 yrs",
-      "mission_label": "Lead platform operations and agent orchestration for the Demo organization.",
-      "mission": "Lead platform operations and agent orchestration for the Demo organization.",
-      "skills": [
-        "Python",
-        "FastAPI"
-      ],
-      "source": "https://demo.example/profiles/alice_dupont"
-    },
-    {
-      "process_type": "ActOfWorking",
-      "organization": "Acme Consulting",
-      "title": "Data & AI Engineer",
-      "contract_type": "Freelance",
-      "site": "France · Remote",
-      "start": "2019-10-01",
-      "end": null,
-      "duration": "6 yrs",
-      "mission_label": "Deliver data pipelines and automation projects for enterprise clients.",
-      "mission": "Deliver data pipelines and automation projects for enterprise clients.",
-      "skills": [
-        "Python",
-        "Business Analysis"
-      ],
-      "source": "https://demo.example/profiles/alice_dupont"
-    },
-    {
-      "process_type": "ActOfWorking",
-      "organization": "Nexus Labs",
-      "title": "Co-Founder",
-      "contract_type": "Self-employed",
-      "site": "Remote",
-      "start": "2018-10-01",
-      "end": "2022-12-31",
-      "duration": "4 yrs",
-      "mission_label": "Built a boutique data consulting practice for finance teams.",
-      "mission": "Built a boutique data consulting practice for finance teams.",
-      "skills": [
-        "Python",
-        "Business Analysis"
-      ],
-      "source": "https://demo.example/profiles/alice_dupont"
+      "contract_type": "Corporate officer mandate",
+      "job_family": "Executive",
+      "remuneration_amount": null,
+      "remuneration_currency": "EUR"
     }
   ]
 }

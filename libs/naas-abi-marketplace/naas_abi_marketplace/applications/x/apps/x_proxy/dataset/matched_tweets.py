@@ -66,7 +66,7 @@ def rebuild_matched_tweet_ids(dataset, *, buckets: int = 64) -> int:
     expected = int(count.rows[0]["n"]) if count.rows else 0
     if expected == 0:
         return 0
-    dataset.write([], MATCHED_TWEET_IDS_V1, namespace=X_DATASET_NAMESPACE, mode="replace")
+    dataset.write(MATCHED_TWEET_IDS_V1, [], namespace=X_DATASET_NAMESPACE, mode="replace")
     written = 0
     for bucket in range(buckets):
         result = dataset.query(

@@ -293,3 +293,42 @@ def test_setup_local_deploy_ships_a_nats_config_raising_max_payload_to_8mb(
     nats_block = compose_content.split("\n  nats:", 1)[1].split("\n  redis:", 1)[0]
     assert '"-c", "/etc/nats/nats.conf"' in nats_block
     assert "./.deploy/docker/nats/nats.conf:/etc/nats/nats.conf:ro" in nats_block
+
+
+def _env_values(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line and not line.startswith("#") and "=" in line:
+            key, _, value = line.partition("=")
+            values[key] = value
+    return values
+
+
+def test_setup_local_deploy_generates_a_per_project_admin_password(tmp_path: Path) -> None:
+    first, second = tmp_path / "a", tmp_path / "b"
+    setup_local_deploy(str(first), base_domain="localhost")
+    setup_local_deploy(str(second), base_domain="localhost")
+
+    a = _env_values(first / ".env")["NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD"]
+    b = _env_values(second / ".env")["NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD"]
+
+    assert a != b
+    assert len(a) >= 24
+    for content in ((first / ".env").read_text(), (first / "docker-compose.yml").read_text()):
+        assert "Admin1234!" not in content
+        assert "ABI_API_KEY=abi\n" not in content
+    assert "NEXUS_USER_ADMIN_PASSWORD" not in _env_values(first / ".env")
+
+
+def test_setup_local_deploy_replaces_a_shipped_default_admin_password(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text(
+        "NEXUS_USER_ADMIN_PASSWORD=Admin1234!\n"
+        "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=Admin1234!\n",
+        encoding="utf-8",
+    )
+
+    setup_local_deploy(str(tmp_path), base_domain="localhost", regenerate=True, backup=False)
+
+    content = (tmp_path / ".env").read_text(encoding="utf-8")
+    assert "Admin1234!" not in content
+    assert len(_env_values(tmp_path / ".env")["NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD"]) >= 24

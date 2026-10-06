@@ -28,7 +28,7 @@ API (FastAPI, hexagonal):
 - {_API}/services/skills/adapters/primary/skills__primary_adapter__FastAPI.py: GET|POST /api/skills/, GET|PATCH|DELETE /api/skills/{{skill_id}}, POST /api/skills/{{skill_id}}/use.
 - {_API}/services/skills/adapters/secondary/postgres.py and naas_abi/apps/nexus/apps/api/migrations/0037_add_skills.sql: the skills table and the visibility query (own user skills, the workspace's, the organization's).
 - {_API}/services/chat/service.py: _build_skills_block injects the enabled skills with their full prompts into every chat turn (system prompt for cloud providers, user-message preamble for in-process ABI agents).
-Agent: naas_abi/agents/SkillsAgent.py and naas_abi/agents/tools/skills_tools.py (this agent)."""
+Agent: naas_abi/agents/SkillsAgent.py and naas_abi/tools/skills_tools.py (this agent)."""
 
 SKILLS_CAPABILITIES = """- A skill is a reusable prompt for a recurring task. It has a name, a chat command slug (/weekly-report), a one-line description, the prompt itself, a scope and an on/off switch.
 - Create one: tell me the task and I write the prompt and save it. It is live at once — no draft to copy, no form to fill.
@@ -169,8 +169,8 @@ Abi hands a skill request to you, so the user often arrives mid-conversation: th
     @staticmethod
     def get_tools() -> list:
         """Skills tools, plus read-only Nexus source tools."""
-        from naas_abi.agents.tools.nexus_source_tools import nexus_source_tools
-        from naas_abi.agents.tools.skills_tools import skills_tools
+        from naas_abi.tools.nexus_source_tools import nexus_source_tools
+        from naas_abi.tools.skills_tools import skills_tools
 
         return skills_tools() + nexus_source_tools()
 

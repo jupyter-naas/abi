@@ -71,6 +71,16 @@ BUCKET_ROOTS: dict[str, URIRef] = {
 
 ALL_BUCKET_ROOTS: set[URIRef] = set(BUCKET_ROOTS.values())
 
+# Continuant fiat boundaries (points, lines, surfaces) have no volume: they are
+# neither sites nor any other bucket, yet a class such as a geospatial position
+# (a fiat point) is legitimate. They are exempt from the bucket check.
+FIAT_BOUNDARY_ROOTS: set[URIRef] = {
+    BFO["BFO_0000140"],  # continuant fiat boundary
+    BFO["BFO_0000142"],  # fiat line
+    BFO["BFO_0000146"],  # fiat surface
+    BFO["BFO_0000147"],  # fiat point
+}
+
 BFO_INHERES_IN = BFO["BFO_0000197"]
 BFO_BEARER_OF = BFO["BFO_0000196"]
 BFO_HAS_MATERIAL_BASIS = BFO["BFO_0000218"]
@@ -541,7 +551,7 @@ def check_bucket_mapping(
         ancestors = _all_superclasses(cls, g)
         bucket_ancestors = ancestors & ALL_BUCKET_ROOTS
 
-        if not bucket_ancestors:
+        if not bucket_ancestors and not ancestors & FIAT_BOUNDARY_ROOTS:
             issues.append(
                 {
                     "severity": "ERROR",

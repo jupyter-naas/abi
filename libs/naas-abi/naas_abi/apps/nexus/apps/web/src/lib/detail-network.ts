@@ -1,6 +1,7 @@
 import type { GraphEdge, GraphNode } from '@/stores/knowledge-graph';
+import { BFO_BUCKET_BY_URI } from './bfo-buckets';
 import { ontologyConnections, termConnections, termKey, type TermRef } from './ontology-context';
-import type { DictionaryTerm } from './ontology-dictionary-tree';
+import type { DictionaryLink, DictionaryTerm } from './ontology-dictionary-tree';
 
 export type InstanceRelation = {
   role: 'domain' | 'range';
@@ -74,6 +75,84 @@ export function instanceEgoGraph(
   return { rootId, nodes: [...nodes.values()], edges };
 }
 
+/**
+ * The BFO bucket class a term falls under: the nearest of the seven bucket
+ * classes up its parents, so the network can place it in its BFO zone.
+ */
+export function termBfoBucketIri(id: string, terms: DictionaryTerm[]): string | undefined {
+  return bfoBucketResolver(terms)(id);
+}
+
+/**
+ * Server-resolved buckets by IRI: each declared term's own, plus those the
+ * server attached to links pointing at classes outside the workspace files
+ * (a CCO parent, a restriction target). A declared term's own value wins.
+ */
+export function serverBfoBuckets(terms: DictionaryTerm[]): Map<string, string> {
+  const buckets = new Map<string, string>();
+  const links = (term: DictionaryTerm) => [
+    ...(term.parents || []), ...(term.equivalents || []), ...(term.domain || []), ...(term.range || []),
+    ...(term.relations || []).map(relation => relation.target as DictionaryLink),
+  ];
+  for (const term of terms) for (const link of links(term)) if (link.bfoBucket) buckets.set(link.id, link.bfoBucket);
+  for (const term of terms) if (term.bfoBucket) buckets.set(term.id, term.bfoBucket);
+  return buckets;
+}
+
+/** Build the parent/bucket indexes once, then classify any number of terms. */
+export function bfoBucketResolver(
+  terms: DictionaryTerm[],
+  { entityFallback = false }: { entityFallback?: boolean } = {},
+): (id: string) => string | undefined {
+  const parentsOf = new Map<string, string[]>();
+  const resolvedOf = serverBfoBuckets(terms);
+  for (const term of terms) {
+    if (term.type !== 'entity' && term.type !== 'individual') continue;
+    parentsOf.set(term.id, [...(parentsOf.get(term.id) || []), ...(term.parents || []).map(parent => parent.id)]);
+  }
+  return (id: string) => {
+    const queue = [id];
+    const seen = new Set(queue);
+    let entity: string | undefined;
+    for (let i = 0; i < queue.length; i++) {
+      const current = queue[i];
+      // Resolved server-side through imports the dictionary does not carry.
+      for (const bucket of [BFO_BUCKET_BY_URI[current], BFO_BUCKET_BY_URI[resolvedOf.get(current) || '']]) {
+        if (!bucket) continue;
+        if (bucket.type !== 'Entity') return bucket.uri;
+        entity = bucket.uri;
+      }
+      for (const parent of parentsOf.get(current) || []) {
+        if (!seen.has(parent)) { seen.add(parent); queue.push(parent); }
+      }
+    }
+    return entityFallback ? entity : undefined;
+  };
+}
+
+/**
+ * Where a class sits in the hierarchy, for the BFO zones: its superclasses
+ * nearest first (dictionary parents, then those the server resolved through
+ * imports) and its equivalent classes. Built once, then asked per class.
+ */
+export function classHierarchyIndex(terms: DictionaryTerm[]) {
+  const classes = new Map<string, DictionaryTerm>();
+  for (const term of terms) if (term.type === 'entity' && !classes.has(term.id)) classes.set(term.id, term);
+  return (id: string, link?: { bfoAncestors?: string[] }) => {
+    const ancestors: string[] = [];
+    const seen = new Set([id]);
+    const queue = [id];
+    for (let i = 0; i < queue.length; i++) {
+      for (const parent of classes.get(queue[i])?.parents || []) {
+        if (seen.has(parent.id)) continue;
+        seen.add(parent.id); ancestors.push(parent.id); queue.push(parent.id);
+      }
+    }
+    for (const iri of classes.get(id)?.bfoAncestors || link?.bfoAncestors || []) if (!seen.has(iri)) { seen.add(iri); ancestors.push(iri); }
+    return { ancestor_iris: ancestors, equivalent_iris: (classes.get(id)?.equivalents || []).map(link => link.id) };
+  };
+}
+
 /** Focused term plus immediate incoming and outgoing ontology connections. */
 export function termEgoGraph(term: DictionaryTerm, terms: DictionaryTerm[]) {
   const related = termConnections(term, ontologyConnections(terms));
@@ -81,10 +160,13 @@ export function termEgoGraph(term: DictionaryTerm, terms: DictionaryTerm[]) {
   const nodes = new Map<string, GraphNode>();
   const add = (ref: TermRef, primary = false) => {
     const loaded = terms.find(item => item.id === ref.id && (!ref.type || item.type === ref.type));
-    return addNode(nodes, termKey(loaded || ref), loaded?.name || ref.name, loaded?.type || ref.type || 'Resource', {
+    const type = loaded?.type || ref.type;
+    const bucket = type === 'entity' || type === 'individual' ? termBfoBucketIri(ref.id, terms) : undefined;
+    return addNode(nodes, termKey(loaded || ref), loaded?.name || ref.name, type || 'Resource', {
       iri: ref.id,
-      term_type: loaded?.type || ref.type,
+      term_type: type,
       is_primary: primary,
+      ...(bucket ? { bfo_parent_iri: bucket } : {}),
     });
   };
   const rootId = add(term, true);
