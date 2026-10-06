@@ -80,6 +80,14 @@ export interface TopicSectionItem {
   url: string | null;
   /** Labels shown as chips on the row (the skills and languages an experience developed). */
   tags?: string[];
+  /** Rows sharing a group are shown under it (roles under their employer). */
+  group?: string | null;
+  group_item?: string | null;
+  group_image?: string | null;
+  /** The organization the row's work was performed for (a consulting client). */
+  client?: string | null;
+  client_item?: string | null;
+  client_image?: string | null;
 }
 
 export interface TopicSectionResult {

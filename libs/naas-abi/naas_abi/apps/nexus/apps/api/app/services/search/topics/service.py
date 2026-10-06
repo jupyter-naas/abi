@@ -266,6 +266,12 @@ class SearchTopicService:
                     end=_value(row, "end"),
                     url=_value(row, "url"),
                     tags=_tags(_value(row, "tags")),
+                    group=_value(row, "group"),
+                    group_item=_value(row, "group_item"),
+                    group_image=_value(row, "group_image"),
+                    client=_value(row, "client"),
+                    client_item=_value(row, "client_item"),
+                    client_image=_value(row, "client_image"),
                 )
                 for row in rows
                 if (title := _value(row, "title"))

@@ -153,6 +153,7 @@ LIMIT 1
             query=_PREFIXES
             + """
 SELECT ?title ?item ?subtitle ?snippet ?start ?end ?tags
+       ?group ?group_item ?group_image ?client ?client_item ?client_image
 WHERE {
   {{ uri }} abi:hasActOfWorking ?act .
   OPTIONAL {
@@ -177,8 +178,16 @@ WHERE {
     }
     GROUP BY ?act
   }
-  OPTIONAL { ?act abi:forOrganization ?item . ?item rdfs:label ?orgLabel . }
-  OPTIONAL { ?act abi:forClient ?client . ?client rdfs:label ?clientLabel . }
+  # Roles are grouped under their employer; the client, when the employer staffed
+  # the person there, is its own line. Each with its logo (organizations module).
+  OPTIONAL {
+    ?act abi:forOrganization ?item . ?item rdfs:label ?orgLabel .
+    OPTIONAL { ?item abi:hasLogo ?groupLogo . ?groupLogo abi:logo_url ?group_image . }
+  }
+  OPTIONAL {
+    ?act abi:forClient ?client_item . ?client_item rdfs:label ?client .
+    OPTIONAL { ?client_item abi:hasLogo ?clientLogo . ?clientLogo abi:logo_url ?client_image . }
+  }
   OPTIONAL { ?act abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
   OPTIONAL {
     ?act abi:realizes ?role .
@@ -201,12 +210,9 @@ WHERE {
     IF(STRSTARTS(STR(?missionContent), STR(?missionLabel)), "", CONCAT(" · ", ?missionLabel)),
     ""
   ) AS ?missionName)
-  BIND(CONCAT(
-    COALESCE(?orgLabel, ""),
-    COALESCE(CONCAT(" · client: ", ?clientLabel), ""),
-    ?missionName,
-    COALESCE(CONCAT(" · ", ?siteLabel), "")
-  ) AS ?line)
+  BIND(?orgLabel AS ?group)
+  BIND(?item AS ?group_item)
+  BIND(CONCAT(?missionName, COALESCE(CONCAT(" · ", ?siteLabel), "")) AS ?line)
   BIND(IF(STRSTARTS(?line, " · "), SUBSTR(?line, 4), ?line) AS ?subtitle)
   # The situation the mission answered, then what was done, one line each.
   BIND(COALESCE(?missionContent, ?missionLabel) AS ?body)

@@ -209,7 +209,8 @@ class TestExecution:
             <http://x/act> abi:forOrganization <http://x/firm> ; abi:forClient <http://x/client> ;
                 abi:occursIn <http://x/site> ; abi:realizes <http://x/role> .
             <http://x/firm> rdfs:label "Firm" .
-            <http://x/client> rdfs:label "Client" .
+            <http://x/client> rdfs:label "Client" ; abi:hasLogo <http://x/logo> .
+            <http://x/logo> abi:logo_url "/api/organizations/logos/Client/Client.png" .
             <http://x/site> rdfs:label "France" .
             <http://x/role> abi:job_title "Tech Lead" ; abi:hasMission <http://x/mission> .
             <http://x/mission> rdfs:label "DataPool redesign" ;
@@ -220,7 +221,14 @@ class TestExecution:
         )
         detail = await service.detail(WS, "person", ALICE, GraphQueryTripleStoreAdapter(graph))
         [item] = next(s for s in detail.sections if s.id == "experience").items
-        assert item.subtitle == "Firm · client: Client · DataPool redesign · France"
+        # The employer groups the roles and the client is its own line, with its logo.
+        assert item.subtitle == "DataPool redesign · France"
+        assert (item.group, item.group_item) == ("Firm", "http://x/firm")
+        assert (item.client, item.client_item, item.client_image) == (
+            "Client",
+            "http://x/client",
+            "/api/organizations/logos/Client/Client.png",
+        )
         assert item.snippet == (
             "The client needed one finance warehouse.\n"
             "Defined the architecture\nAutomated 250 pipelines"
