@@ -130,7 +130,6 @@ class PeopleGraphContext:
             creator=self.creator,
         )
         self.graph += person.rdf()
-        self.graph.add((URIRef(uri), RDF.type, CCO.ont00000562))
         self.graph.add(
             (URIRef(uri), ABI.given_name, Literal(first, datatype=XSD.string))
         )

@@ -4833,8 +4833,7 @@ abi:ActOfEmployment a owl:Class ;
     skos:example "Alice Dupont working as Head of Product for Demo under a permanent contract, as Demo's HR system records it."@en .
 
 <http://ontology.naas.ai/abi/Person/david-leroy> a abi:Person,
-        owl:NamedIndividual,
-        cco:ont00000562 ;
+        owl:NamedIndividual ;
     rdfs:label "David Leroy" ;
     abi:first_name "David" ;
     abi:full_name "David Leroy" ;
@@ -4944,8 +4943,7 @@ abi:Mission a owl:Class ;
     skos:example "'Leading the development of an open Universal Data & AI Platform to help organizations create powerful ecosystems of AI Agents.'"@en .
 
 <http://ontology.naas.ai/abi/Person/frank-moreau> a abi:Person,
-        owl:NamedIndividual,
-        cco:ont00000562 ;
+        owl:NamedIndividual ;
     rdfs:label "Frank Moreau" ;
     abi:first_name "Frank" ;
     abi:full_name "Frank Moreau" ;
@@ -4990,8 +4988,7 @@ abi:Mission a owl:Class ;
     dcterms:creator "DemoPersonnelGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Person/hugo-girard> a abi:Person,
-        owl:NamedIndividual,
-        cco:ont00000562 ;
+        owl:NamedIndividual ;
     rdfs:label "Hugo Girard" ;
     abi:first_name "Hugo" ;
     abi:full_name "Hugo Girard" ;
@@ -5032,8 +5029,7 @@ abi:Mission a owl:Class ;
     dcterms:creator "DemoPersonnelGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Person/emma-petit> a abi:Person,
-        owl:NamedIndividual,
-        cco:ont00000562 ;
+        owl:NamedIndividual ;
     rdfs:label "Emma Petit" ;
     abi:first_name "Emma" ;
     abi:full_name "Emma Petit" ;
@@ -5131,8 +5127,7 @@ abi:ActOfWorking a owl:Class ;
     skos:example "Alice Dupont working as Head of Product for Demo, worldwide, since April 2023."@en .
 
 <http://ontology.naas.ai/abi/Person/bob-martin> a abi:Person,
-        owl:NamedIndividual,
-        cco:ont00000562 ;
+        owl:NamedIndividual ;
     rdfs:label "Bob Martin" ;
     abi:first_name "Bob" ;
     abi:full_name "Bob Martin" ;
@@ -5179,8 +5174,7 @@ abi:ActOfWorking a owl:Class ;
     dcterms:creator "DemoPersonnelGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Person/grace-lambert> a abi:Person,
-        owl:NamedIndividual,
-        cco:ont00000562 ;
+        owl:NamedIndividual ;
     rdfs:label "Grace Lambert" ;
     abi:first_name "Grace" ;
     abi:full_name "Grace Lambert" ;
@@ -5243,8 +5237,7 @@ abi:OccupationRole a owl:Class ;
     skos:example "The role Jane bears as a data engineer at ACME, as her published profile states it."@en .
 
 <http://ontology.naas.ai/abi/Person/claire-bernard> a abi:Person,
-        owl:NamedIndividual,
-        cco:ont00000562 ;
+        owl:NamedIndividual ;
     rdfs:label "Claire Bernard" ;
     abi:first_name "Claire" ;
     abi:full_name "Claire Bernard" ;
@@ -5317,8 +5310,7 @@ abi:Skill a owl:Class ;
     skos:example "Python (Programming Language); Business Analysis; SAP BFC."@en .
 
 <http://ontology.naas.ai/abi/Person/alice-dupont> a abi:Person,
-        owl:NamedIndividual,
-        cco:ont00000562 ;
+        owl:NamedIndividual ;
     rdfs:label "Alice Dupont" ;
     abi:first_name "Alice" ;
     abi:full_name "Alice Dupont" ;
