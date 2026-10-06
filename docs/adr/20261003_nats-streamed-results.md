@@ -70,8 +70,9 @@ queries, and document `find` pages.
 
 - Triple store: `query_stream` and `export`, every layer (above).
 - Dataset: `query_stream(sql, namespace, snapshot_id)` yields a `RowStream`
-  (`columns`, lazy `rows`). DuckLake fetches 1,000 rows at a time on the
-  stream's own cursor; the wire is `abi.svc.dataset.v1.transfer` operation
+  (`columns`, lazy `rows`). DuckLake fetches 1,000 rows at a time into a
+  temporary file before the first row, so a slow or abandoned reader holds
+  the file, not the catalog; the wire is `abi.svc.dataset.v1.transfer` operation
   `query`, a `QueryResult` with the columns, then `QueryResult`s with rows only
   (one JSON object per row, as the unary reply: see the dataset AGENTS.md).
   Core client and SDK facade, with the unary fallback.
