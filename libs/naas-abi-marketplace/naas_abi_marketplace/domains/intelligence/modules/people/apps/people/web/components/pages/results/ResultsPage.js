@@ -1,5 +1,5 @@
 import { fetchSearch, fetchSearchNetwork } from "../../../lib/api.js";
-import { avatarHtml, escapeHtml, flagHtml, highlight } from "../../../lib/dom.js";
+import { avatarHtml, escapeHtml, flagHtml, highlight, orgLogoHtml } from "../../../lib/dom.js";
 import { profileHref, searchHref } from "../../../lib/routes.js";
 import { mountPeopleNetwork } from "../../../lib/people-network.js";
 import { overflowTabs } from "../../../lib/tab-overflow.js";
@@ -12,6 +12,7 @@ function resultHtml(config, hit, tokens, query) {
       <div class="result-body">
         <p class="result-line">
           ${flagHtml(hit.country_code)}
+          ${orgLogoHtml(hit.organization, hit.organization_logo)}
           <span>${escapeHtml(place.join(" › "))}</span>
         </p>
         <h2 class="result-title">
@@ -59,7 +60,7 @@ function cardHtml(config, hit, tokens, query) {
       ${avatarHtml(hit, "md")}
       <span class="profile-card-name">${highlight(hit.full_name, tokens, "b")}</span>
       <span class="profile-card-headline">${highlight(hit.headline || "", tokens, "b")}</span>
-      <span class="profile-card-place">${flagHtml(hit.country_code)}${escapeHtml(place.join(" › "))}</span>
+      <span class="profile-card-place">${flagHtml(hit.country_code)}${orgLogoHtml(hit.organization, hit.organization_logo)}${escapeHtml(place.join(" › "))}</span>
     </a>`;
 }
 

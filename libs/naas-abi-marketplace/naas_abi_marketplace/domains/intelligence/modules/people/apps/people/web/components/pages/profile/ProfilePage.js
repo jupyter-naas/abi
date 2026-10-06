@@ -7,6 +7,7 @@ import {
   formatQueryLabel,
   highlight,
   ICONS,
+  orgLogoHtml,
 } from "../../../lib/dom.js";
 import { profileHref, searchHref } from "../../../lib/routes.js";
 import { sectionHtml } from "../../profile/sections.js";
@@ -349,6 +350,7 @@ export async function mountProfile(view, { config, params, slug }) {
             <h1 class="intro-name">${highlight(person.full_name, tokens)}</h1>
             <p class="intro-headline">${highlight(person.headline || "", tokens)}</p>
             <p class="intro-place">${flagHtml(person.country_code)}${ICONS.place}
+              ${orgLogoHtml(person.organization, person.organization_logo)}
               <span>${escapeHtml(place.join(" · "))}</span></p>
             ${contactHtml(person.contact)}
             ${person.quote ? `<p class="intro-quote">${highlight(person.quote, tokens)}</p>` : ""}

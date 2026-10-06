@@ -419,12 +419,22 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
                 value, f"data.organization_logos.{key}"
             )
 
+    # Logos registered in the graph (abi:hasLogo, the organizations module's
+    # OrganizationLogoPipeline) are served at /api/organizations/logos/...; an
+    # instance that serves them under its own API mount names that prefix here.
+    logo_url_prefix = data.get("organization_logo_url_prefix")
+    if logo_url_prefix not in (None, ""):
+        logo_url_prefix = _text(logo_url_prefix, "data.organization_logo_url_prefix")
+    else:
+        logo_url_prefix = None
+
     return {
         "namespace": namespace,
         "tables": dict(tables),
         "graph": graph_out,
         "portrait_prefix": portrait_prefix,
         "organization_logos": organization_logos,
+        "organization_logo_url_prefix": logo_url_prefix,
     }
 
 

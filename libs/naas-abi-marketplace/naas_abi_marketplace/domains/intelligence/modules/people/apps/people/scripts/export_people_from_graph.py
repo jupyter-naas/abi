@@ -174,10 +174,40 @@ def _date(value: Any) -> str | None:
     return str(value)[:10]
 
 
+GRAPH_LOGO_URL_PREFIX = "/api/organizations/logos"
+LOGOS_QUERY = """
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX abi:  <http://ontology.naas.ai/abi/>
+SELECT ?label ?url WHERE {
+  ?organization abi:hasLogo ?logo ; rdfs:label ?label .
+  ?logo abi:logo_url ?url .
+}
+ORDER BY ?label ?url
+"""
+
+
+def organization_logos(graph: Graph, config: dict[str, Any]) -> dict[str, str]:
+    """Organization label -> logo URL, from the logos registered in the graph.
+
+    The graph holds the address the organizations module serves a logo at; an
+    instance that serves them under its own API mount
+    (``data.organization_logo_url_prefix``) gets them re-pointed there.
+    """
+    prefix = (config.get("data") or {}).get("organization_logo_url_prefix")
+    logos: dict[str, str] = {}
+    for label, url in graph.query(LOGOS_QUERY):
+        address = str(url)
+        if prefix and address.startswith(f"{GRAPH_LOGO_URL_PREFIX}/"):
+            address = f"{prefix.rstrip('/')}{address[len(GRAPH_LOGO_URL_PREFIX):]}"
+        logos.setdefault(str(label), address)
+    return logos
+
+
 def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     """Every table's rows, keyed by logical table name."""
     queries = load_queries()
     portrait_prefix = config["data"].get("portrait_prefix") or APP_PREFIX
+    logos = organization_logos(graph, config)
 
     directory = run_query(graph, queries["find_people_directory"], limit=ROW_LIMIT)
     # Everyone the directory returns is keyed by their slug; a person with none
@@ -254,6 +284,8 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
                     "group_seq": group_index[organization],
                     "organization": organization or None,
                     "client": client,
+                    "organization_logo": logos.get(organization),
+                    "client_logo": logos.get(client) if client else None,
                     "location": item.get("siteLabel"),
                     "title": title,
                     "context": item.get("missionContext"),
@@ -409,6 +441,7 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
                 "quote": row.get("quote"),
                 "photo_url": _photo_url(row, portrait_prefix),
                 "organization": row.get("organizationLabel"),
+                "organization_logo": logos.get(row.get("organizationLabel") or ""),
                 "office": row.get("officeLabel"),
                 "city": row.get("cityName"),
                 "country": row.get("countryName"),

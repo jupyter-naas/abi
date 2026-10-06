@@ -307,6 +307,14 @@ mark,
   font-size: 18px;
 }
 
+/* An organization's logo inline, before its name on a result or profile line. */
+.avatar-xs {
+  width: 18px;
+  height: 18px;
+  font-size: 8px;
+  flex: none;
+}
+
 /* ── Home ────────────────────────────────────────────────── */
 .home {
   display: flex;
@@ -1398,6 +1406,12 @@ body.sparql-modal-open {
   background: var(--empty-surface);
   color: var(--muted);
   border: 1px solid var(--line);
+}
+
+/* A logo is drawn whole: cropping it to the square would cut a wordmark. */
+.avatar-org img {
+  object-fit: contain;
+  background: #fff;
 }
 
 /* The client a mission was performed for, when staffed there by the employer
