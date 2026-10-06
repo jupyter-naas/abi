@@ -195,6 +195,26 @@ def test_unlocked_proxy_reaches_the_document_root_for_administration():
     assert admin.for_namespace("acme.module").namespace == "acme.module"
 
 
+def test_the_platform_proxy_lists_every_job_owner_of_the_engine():
+    engine = _DummyEngine(services=IEngine.Services())
+    engine.job_owners = lambda: {"naas_abi_core.agent_memory": "owner"}  # type: ignore[attr-defined]
+    platform = EngineProxy(
+        engine=engine,
+        module_name="naas_abi",
+        module_dependencies=ModuleDependencies(modules=[], services=[]),
+        unlocked=True,
+    )
+    module = EngineProxy(
+        engine=engine,
+        module_name="acme.module",
+        module_dependencies=ModuleDependencies(modules=[], services=[]),
+    )
+
+    assert platform.job_owners() == {"naas_abi_core.agent_memory": "owner"}
+    with pytest.raises(PermissionError, match="platform"):
+        module.job_owners()
+
+
 def test_locked_proxies_cannot_reach_the_document_root():
     from unittest.mock import MagicMock
 
