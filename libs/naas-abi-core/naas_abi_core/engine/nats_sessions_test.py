@@ -7,16 +7,21 @@ import nats
 import pytest
 from naas_abi_core.engine.nats_auth import issue_service_token
 from naas_abi_core.engine.nats_sessions import (
+    ServicePrimary,
     SessionHost,
     owned_by,
     session_owner,
+    stop_delivery,
     wait_for_sessions,
 )
 from naas_abi_core.engine.nats_test_server import native_nats_server, nats_server_binary
+from naas_abi_core.engine.nats_tracing import add_traced_service
 from naas_abi_core.engine.nats_transfer import TransferError, TransferHost
 from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
+from naas_abi_sdk import no_responders
 from naas_abi_sdk.transfer import Transfer, transfer_subject
 from nats.errors import NoRespondersError
+from nats.errors import TimeoutError as NATSTimeoutError
 
 ENGINE = "0123456789abcdef0123456789abcdef"
 SECRET = "sessions-test-secret-at-least-32-bytes"
@@ -87,41 +92,112 @@ def test_every_endpoint_with_sessions_hands_them_over(path):
     assert issubclass(getattr(importlib.import_module(module), name), SessionHost)
 
 
-def test_a_service_with_transfers_ends_its_endpoints_first_and_its_transfers_last():
+def kernel_primaries() -> list[str]:
+    """Every kernel service's NATS primary adapter module, found on disk."""
+    from pathlib import Path
+
+    import naas_abi_core
+
+    root = Path(naas_abi_core.__file__).parent
+    return sorted(
+        ".".join(path.relative_to(root.parent).with_suffix("").parts)
+        for path in root.glob("services/*/*/primary/*__primary_adapter__NATS.py")
+    )
+
+
+def test_the_kernel_primaries_are_all_found():
+    assert len(kernel_primaries()) >= 13
+
+
+@pytest.mark.parametrize("module", kernel_primaries())
+def test_every_kernel_primary_answers_the_calls_it_received_at_the_handover(module):
+    import importlib
+
+    primaries = [
+        cls
+        for name, cls in vars(importlib.import_module(module)).items()
+        if name.endswith("PrimaryAdapterNATS") and cls.__module__ == module
+    ]
+    assert primaries
+    for cls in primaries:
+        assert issubclass(cls, ServicePrimary), cls.__name__
+
+
+def test_a_service_primary_lets_the_calls_it_received_finish_before_it_stops():
     from unittest.mock import AsyncMock
 
-    from naas_abi_core.engine.nats_transfer import ServiceWithTransfers
-
-    class Primary(ServiceWithTransfers):
+    class Primary(ServicePrimary):
         def __init__(self) -> None:
-            self._service = MagicMock(stop=AsyncMock())
-            self._transfer = MagicMock(
+            self._service = MagicMock(
                 stop_accepting=AsyncMock(),
-                sessions_finished=AsyncMock(),
+                requests_finished=AsyncMock(),
                 stop=AsyncMock(),
             )
             self._dispatch = MagicMock()
 
     async def scenario():
         primary = Primary()
-        service, transfer = primary._service, primary._transfer
+        service = primary._service
 
         await primary.stop_accepting()
-        service.stop.assert_awaited_once()
-        transfer.stop_accepting.assert_awaited_once()
-        transfer.stop.assert_not_awaited()
-        # Requests already received still run on the domain's workers.
+        service.stop_accepting.assert_awaited_once()
+        service.stop.assert_not_awaited()
+        # Calls already received still run on the domain's workers.
         primary._dispatch.close.assert_not_called()
 
         await primary.sessions_finished()
-        transfer.sessions_finished.assert_awaited_once()
+        service.requests_finished.assert_awaited_once()
 
         await primary.stop()
-        transfer.stop.assert_awaited_once()
-        primary._dispatch.close.assert_called_once()
         service.stop.assert_awaited_once()
+        primary._dispatch.close.assert_called_once()
 
     asyncio.run(scenario())
+
+
+def test_a_service_with_transfers_ends_its_endpoints_first_and_its_transfers_last():
+    from unittest.mock import AsyncMock
+
+    from naas_abi_core.engine.nats_transfer import ServiceWithTransfers
+
+    order: list[str] = []
+
+    def step(name):
+        return AsyncMock(side_effect=lambda: order.append(name))
+
+    class Primary(ServiceWithTransfers):
+        def __init__(self) -> None:
+            self._service = MagicMock(
+                stop_accepting=step("endpoints stop accepting"),
+                requests_finished=step("calls answered"),
+                stop=step("endpoints stopped"),
+            )
+            self._transfer = MagicMock(
+                stop_accepting=step("open stops accepting"),
+                sessions_finished=step("transfers finished"),
+                stop=step("transfers stopped"),
+            )
+            self._dispatch = MagicMock()
+
+    async def scenario():
+        primary = Primary()
+
+        await primary.stop_accepting()
+        # Calls and transfers already received still run on the domain's workers.
+        primary._dispatch.close.assert_not_called()
+        await primary.sessions_finished()
+        await primary.stop()
+        primary._dispatch.close.assert_called_once()
+
+    asyncio.run(scenario())
+    assert order == [
+        "open stops accepting",
+        "endpoints stop accepting",
+        "calls answered",
+        "transfers finished",
+        "transfers stopped",
+        "endpoints stopped",
+    ]
 
 
 # --- waiting for sessions ------------------------------------------------------------------
@@ -168,6 +244,25 @@ def test_without_hosts_or_time_there_is_nothing_to_wait_for():
     async def scenario():
         assert await wait_for_sessions([], 5) is True
         assert await wait_for_sessions([Host()], 0) is False
+
+    asyncio.run(scenario())
+
+
+def test_waiting_covers_a_session_opened_on_a_host_already_done():
+    """A call answered during the wait may park its reply on another host (an
+    overflowing reply): the caller still reads it."""
+
+    async def scenario():
+        overflow, calls = Host(), Host()
+        overflow.finished.set()
+        waiting = asyncio.create_task(wait_for_sessions([overflow, calls], 5))
+        await asyncio.sleep(0.05)
+        overflow.finished.clear()  # the call parks its reply...
+        calls.finished.set()  # ...and is answered
+        await asyncio.sleep(0.1)
+        assert not waiting.done()
+        overflow.finished.set()  # the caller has read it
+        assert await asyncio.wait_for(waiting, 1) is True
 
     asyncio.run(scenario())
 
@@ -283,6 +378,203 @@ def test_a_stuck_transfer_is_closed_at_the_drain_deadline(broker):
                 )
         finally:
             await host.stop()
+            for nc in (host_nc, client_nc):
+                await nc.close()
+
+    asyncio.run(scenario())
+
+
+# --- one-shot calls at the handover, over a real broker ------------------------------------
+
+CALLS = "abi.svc.handover.v1.echo"
+
+
+class SlowEcho(ServicePrimary):
+    """A kernel primary with one one-shot endpoint, whose calls wait for ``gate``."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.gate = asyncio.Event()
+        self.received: list[bytes] = []
+        self.cancelled: list[bytes] = []
+        self._service = None
+        self._dispatch = MagicMock()
+
+    async def start(self, nc) -> None:
+        self._service = await add_traced_service(nc, name="handover", version="1.0.0")
+        await self._service.add_endpoint(name="echo", subject=CALLS, handler=self._echo)
+        await nc.flush()  # subscribed at the broker
+
+    async def _echo(self, request) -> None:
+        self.received.append(request.data)
+        try:
+            await self.gate.wait()
+        except asyncio.CancelledError:
+            self.cancelled.append(request.data)
+            raise
+        await request.respond(self.name.encode() + b":" + request.data)
+
+
+async def soon(done) -> None:
+    from naas_abi_core.engine.nats_sessions import until
+
+    await asyncio.wait_for(until(done), 5)
+
+
+def test_a_queue_member_drained_under_load_loses_no_request(broker):
+    """``Subscription.drain`` alone loses one now and then: its PING goes first."""
+
+    async def drain_once() -> int:
+        old_nc, new_nc, client_nc = [await nats.connect(broker) for _ in range(3)]
+
+        async def answer(msg):
+            await msg.respond(b"ok")
+
+        old = await old_nc.subscribe(CALLS, queue="q", cb=answer)
+        await new_nc.subscribe(CALLS, queue="q", cb=answer)
+        for nc in (old_nc, new_nc):
+            await nc.flush()
+        lost, sending = [], asyncio.Event()
+        sending.set()
+
+        async def send():
+            while sending.is_set():
+                try:
+                    await client_nc.request(CALLS, b"x", timeout=5)
+                except NATSTimeoutError:
+                    lost.append(1)
+
+        senders = [asyncio.create_task(send()) for _ in range(64)]
+        await asyncio.sleep(0.2)
+        await stop_delivery([old])
+        await old.drain()
+        await asyncio.sleep(0.2)
+        sending.clear()
+        await asyncio.gather(*senders)
+        for nc in (old_nc, new_nc, client_nc):
+            await nc.close()
+        return len(lost)
+
+    async def scenario():
+        return [await drain_once() for _ in range(5)]
+
+    assert asyncio.run(scenario()) == [0] * 5
+
+
+def test_calls_received_before_the_handover_are_answered_and_new_ones_go_to_the_next_engine(
+    broker,
+):
+    async def scenario():
+        old_nc, new_nc, client_nc = [await nats.connect(broker) for _ in range(3)]
+        old, new = SlowEcho("old"), SlowEcho("new")
+        new.gate.set()
+        try:
+            await old.start(old_nc)
+            # One call is being handled, the next one is delivered behind it.
+            running = asyncio.create_task(client_nc.request(CALLS, b"1", timeout=10))
+            await soon(lambda: old.received == [b"1"])
+            delivered = asyncio.create_task(client_nc.request(CALLS, b"2", timeout=10))
+            await soon(lambda: old_nc.stats["in_msgs"] >= 2)
+
+            await new.start(new_nc)  # the standby serves alongside
+            await old.stop_accepting()
+            # New calls reach the next engine...
+            for n in range(3, 8):
+                reply = await client_nc.request(CALLS, b"%d" % n, timeout=5)
+                assert reply.data == b"new:%d" % n
+            # ...while the old one answers the calls it received.
+            finishing = asyncio.create_task(old.sessions_finished())
+            await asyncio.sleep(0.2)
+            assert not finishing.done()
+            old.gate.set()
+            assert (await running).data == b"old:1"
+            assert (await delivered).data == b"old:2"
+            await asyncio.wait_for(finishing, 5)
+            assert old.received == [b"1", b"2"]
+            assert old.cancelled == []
+        finally:
+            await old.stop()
+            await new.stop()
+            for nc in (old_nc, new_nc, client_nc):
+                await nc.close()
+
+    asyncio.run(scenario())
+
+
+def test_a_call_sent_while_no_engine_serves_is_answered_by_the_next_one(broker):
+    async def scenario():
+        old_nc, new_nc, client_nc = [await nats.connect(broker) for _ in range(3)]
+        old, new = SlowEcho("old"), SlowEcho("new")
+        old.gate.set()
+        new.gate.set()
+        try:
+            await old.start(old_nc)
+            assert (await client_nc.request(CALLS, b"1", timeout=5)).data == b"old:1"
+
+            await old.stop_accepting()
+            asking = asyncio.create_task(
+                no_responders.request(client_nc, CALLS, b"2", headers={}, timeout=5)
+            )
+            await asyncio.sleep(0.3)  # nobody answers: the caller sends it again
+            assert not asking.done()
+            await new.start(new_nc)
+
+            assert (await asking).data == b"new:2"
+            await asyncio.wait_for(old.sessions_finished(), 5)
+        finally:
+            await old.stop()
+            await new.stop()
+            for nc in (old_nc, new_nc, client_nc):
+                await nc.close()
+
+    asyncio.run(scenario())
+
+
+def test_a_call_still_running_at_the_drain_deadline_is_cancelled(broker):
+    async def scenario():
+        host_nc, client_nc = [await nats.connect(broker) for _ in range(2)]
+        old = SlowEcho("old")  # never answers
+        try:
+            await old.start(host_nc)
+            running = asyncio.create_task(client_nc.request(CALLS, b"1", timeout=3))
+            await soon(lambda: old.received == [b"1"])
+
+            await old.stop_accepting()
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            assert await wait_for_sessions([old], 0.3) is False
+            assert 0.3 <= loop.time() - started < 1.5
+            await old.stop()
+
+            assert old.cancelled == [b"1"]
+            with pytest.raises(NATSTimeoutError):
+                await running
+        finally:
+            await old.stop()
+            for nc in (host_nc, client_nc):
+                await nc.close()
+
+    asyncio.run(scenario())
+
+
+def test_fencing_stops_the_calls_at_once(broker):
+    async def scenario():
+        host_nc, client_nc = [await nats.connect(broker) for _ in range(2)]
+        old = SlowEcho("old")
+        try:
+            await old.start(host_nc)
+            running = asyncio.create_task(client_nc.request(CALLS, b"1", timeout=3))
+            await soon(lambda: old.received == [b"1"])
+
+            await asyncio.wait_for(old.stop(), 1)  # no time to drain
+
+            assert old.cancelled == [b"1"]
+            with pytest.raises(NATSTimeoutError):
+                await running
+            with pytest.raises(NoRespondersError):
+                await client_nc.request(CALLS, b"2", timeout=1)
+        finally:
+            await old.stop()
             for nc in (host_nc, client_nc):
                 await nc.close()
 

@@ -32,6 +32,7 @@ from naas_abi_core.engine.nats_rpc import (
     request_payload,
     respond_protobuf,
 )
+from naas_abi_core.engine.nats_sessions import ServicePrimary
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.secret.v1 import secret_pb2
@@ -60,7 +61,7 @@ _RequestT = TypeVar("_RequestT", bound=Message)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
 
 
-class SecretPrimaryAdapterNATS:
+class SecretPrimaryAdapterNATS(ServicePrimary):
     """Serves secrets over NATS RPC (request/reply).
 
     Wraps a real ``ISecretAdapter`` *or* the domain ``Secret`` facade and

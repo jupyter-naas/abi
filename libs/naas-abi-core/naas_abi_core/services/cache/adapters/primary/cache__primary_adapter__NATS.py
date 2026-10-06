@@ -48,6 +48,7 @@ from naas_abi_core.engine.nats_rpc import (
     request_payload,
     respond_protobuf,
 )
+from naas_abi_core.engine.nats_sessions import ServicePrimary
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.cache.v1 import cache_pb2
 from naas_abi_core.proto.common.v1 import common_pb2
@@ -111,7 +112,7 @@ def _pb_to_cached_data(pb: cache_pb2.CachedData) -> CachedData:
     )
 
 
-class CachePrimaryAdapterNATS:
+class CachePrimaryAdapterNATS(ServicePrimary):
     """Serves one cache tier's ``ICacheAdapter`` over NATS RPC (request/reply).
 
     Registers one NATS micro-service endpoint per ``ICacheAdapter`` method.

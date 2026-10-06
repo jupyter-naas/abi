@@ -38,6 +38,7 @@ from naas_abi_core.engine.nats_rpc import (
     request_payload,
     respond_protobuf,
 )
+from naas_abi_core.engine.nats_sessions import ServicePrimary
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.coding_environment.v1 import coding_environment_pb2
 from naas_abi_core.proto.common.v1 import common_pb2
@@ -133,7 +134,7 @@ def _params_from_pb(params: dict[str, str]) -> dict[str, str] | None:
     return dict(params) if params else None
 
 
-class CodingEnvironmentPrimaryAdapterNATS:
+class CodingEnvironmentPrimaryAdapterNATS(ServicePrimary):
     """Serves coding_environment over NATS RPC (request/reply).
 
     Wraps a real adapter *or* the domain service and registers one NATS

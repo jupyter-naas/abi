@@ -22,6 +22,7 @@ from naas_abi_core.engine.nats_rpc import (
     request_payload,
     respond_protobuf,
 )
+from naas_abi_core.engine.nats_sessions import ServicePrimary
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.services.document.adapters.document_nats_codec import (
     ERRORS,
@@ -59,7 +60,7 @@ ADMIN_OPERATIONS = frozenset({"namespaces"})
 ADMIN_IDENTITIES = frozenset({"api", "engine"})
 
 
-class DocumentPrimaryAdapterNATS:
+class DocumentPrimaryAdapterNATS(ServicePrimary):
     def __init__(
         self,
         service: DocumentService,

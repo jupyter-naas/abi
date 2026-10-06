@@ -345,6 +345,7 @@ def test_shutdown_ends_the_shared_subjects_before_the_sessions(parts):
         "stop_accepting",
         "stop_primary",
         "sessions_finished",
+        "sessions_finished",  # again: a call answered meanwhile may park its reply
         "stop_sessions",
         "close_lease",
     ]

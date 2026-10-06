@@ -1,16 +1,23 @@
-"""Server spans for kernel services exposed as NATS micro services.
+"""Kernel services exposed as NATS micro services: server spans and handover.
 
 ``add_traced_service`` is ``nats.micro.add_service`` whose endpoints run inside a
 SERVER span continuing the caller's trace (``traceparent`` header). No-op without
 OpenTelemetry. See ``naas_abi_sdk.telemetry``.
+
+At a handover the service stops taking calls but answers those it already
+received (``stop_accepting``, ``requests_finished``); see
+docs/adr/20261006_single-serving-engine.md.
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from typing import Any
 
+import nats.errors
 import nats.micro
+from naas_abi_core.engine.nats_sessions import stop_delivery, until
 from naas_abi_sdk.telemetry import server_span
 
 
@@ -30,11 +37,52 @@ class TracedService:
 
     def __init__(self, service: Any) -> None:
         self._service = service
+        self._handling = 0  # calls being handled
+        self._draining: list[Any] = []  # endpoint subscriptions the broker has ended
 
     async def add_endpoint(self, *args: Any, handler: Any, **kwargs: Any) -> Any:
-        return await self._service.add_endpoint(
-            *args, handler=traced_handler(handler), **kwargs
+        traced = traced_handler(handler)
+
+        async def handle(request: Any) -> None:
+            self._handling += 1
+            try:
+                await traced(request)
+            finally:
+                self._handling -= 1
+
+        return await self._service.add_endpoint(*args, handler=handle, **kwargs)
+
+    async def stop_accepting(self) -> None:
+        """End the endpoints' queue-group subscriptions at the broker, so new calls
+        go to the group's other members. Calls already received run and are answered.
+
+        ``nats.micro``'s own stop unsubscribes, which cancels a handler still
+        running and drops the calls already delivered: their callers time out.
+        This reaches into ``nats.micro`` (``Service._endpoints``,
+        ``Endpoint._subscription``) to end each endpoint's subscription gracefully.
+        """
+        endpoints, self._service._endpoints = self._service._endpoints, []
+        subscriptions = [e._subscription for e in endpoints if e._subscription]
+        self._draining += subscriptions
+        await stop_delivery(subscriptions)
+
+    async def requests_finished(self) -> None:
+        """Return once every call received before ``stop_accepting`` is answered."""
+        await until(
+            lambda: (
+                not self._handling
+                and not any(sub.pending_msgs for sub in self._draining)
+            )
         )
+
+    async def stop(self) -> None:
+        """Stop now. A call still running (fencing, or past the drain deadline) is
+        cancelled, and the calls waiting behind it are dropped."""
+        draining, self._draining = self._draining, []
+        for subscription in draining:
+            with suppress(nats.errors.Error):  # already gone with the connection
+                await subscription.unsubscribe()
+        await self._service.stop()
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._service, name)

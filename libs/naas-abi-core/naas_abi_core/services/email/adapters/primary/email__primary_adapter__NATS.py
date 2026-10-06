@@ -33,6 +33,7 @@ from naas_abi_core.engine.nats_rpc import (
     request_payload,
     respond_protobuf,
 )
+from naas_abi_core.engine.nats_sessions import ServicePrimary
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.email.v1 import email_pb2
@@ -102,7 +103,7 @@ def _pb_to_attachments(
     ]
 
 
-class EmailPrimaryAdapterNATS:
+class EmailPrimaryAdapterNATS(ServicePrimary):
     """Serves email over NATS RPC (request/reply).
 
     Wraps a real adapter *or* the domain service and registers one NATS

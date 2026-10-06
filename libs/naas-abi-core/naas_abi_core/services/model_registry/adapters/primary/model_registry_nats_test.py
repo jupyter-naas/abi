@@ -46,6 +46,9 @@ def test_a_stream_open_at_the_handover_goes_on_until_it_ends():
         primary = ModelRegistryNATS(Mock(), "test")
         shared, owned = MagicMock(), MagicMock()
         shared.drain, owned.drain = AsyncMock(), AsyncMock()
+        shared._conn = MagicMock(
+            _send_unsubscribe=AsyncMock(), _flush_pending=AsyncMock(), flush=AsyncMock()
+        )
         owned.unsubscribe = AsyncMock()
         primary.subscriptions = [shared, owned]
         primary.shared_subscriptions = [shared]
@@ -54,6 +57,7 @@ def test_a_stream_open_at_the_handover_goes_on_until_it_ends():
         primary.streams["id"] = stream
 
         await primary.stop_accepting()
+        shared._conn._send_unsubscribe.assert_awaited_once_with(shared._id)
         shared.drain.assert_awaited_once()
         owned.drain.assert_not_awaited()
         assert primary.subscriptions == [owned]
