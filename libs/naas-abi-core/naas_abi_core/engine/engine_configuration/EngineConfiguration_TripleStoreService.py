@@ -388,13 +388,13 @@ class TripleStoreAdapterConfiguration(GenericLoader):
     def local_storage(self) -> str | None:
         """Where the triples live (single-serving-engine ADR)."""
         if self.adapter == "fs":
-            store = config_model(TripleStoreAdapterFilesystemConfiguration, self.config)
-            return f"files under {store.store_path}"
+            files = config_model(TripleStoreAdapterFilesystemConfiguration, self.config)
+            return f"files under {files.store_path}"
         if self.adapter == "oxigraph_embedded":
-            store = config_model(
+            embedded = config_model(
                 TripleStoreAdapterOxigraphEmbeddedConfiguration, self.config
             )
-            return f"embedded Oxigraph at {store.store_path}"
+            return f"embedded Oxigraph at {embedded.store_path}"
         if self.adapter == "object_storage":
             storage = config_model(
                 TripleStoreAdapterObjectStorageConfiguration, self.config

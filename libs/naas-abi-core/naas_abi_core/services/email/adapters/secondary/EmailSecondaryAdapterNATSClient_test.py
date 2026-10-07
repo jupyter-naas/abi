@@ -344,6 +344,7 @@ class TestEmailSecondaryAdapterNATSClient(GenericEmailSecondaryAdapterTest):
             text_body="1",
             from_email="n@example.com",
         )
+        assert first is not None
         second = adapter.send(
             to_email="bob@example.com",
             subject="two",
