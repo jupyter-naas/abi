@@ -1,7 +1,7 @@
 # One serving engine per NATS account, handed over by lease
 
 ## Status
-Accepted (2026-10-06), partly implemented: see "Implementation status" below.
+Accepted (2026-10-06), implemented: see "Implementation status" below.
 Follows the PR #1299 review (`REVIEW.md`, item 4). Extends the rollout model of
 `20260923_module-discovery-registry.md` (rollouts and draining) to the engine.
 
@@ -271,7 +271,8 @@ Done:
 - The calls already received are answered. Every kernel primary is a session
   host whose endpoints stop taking calls at the handover and answer the ones they
   have, within `drain_seconds`. Shared subscriptions end at the broker before
-  they drain (`stop_delivery`), for the transfer hosts and the model registry too.
+  they drain (`stop_delivery`), for the transfer hosts, the model registry and
+  the discovery primary (`DiscoveryNATS.stop`) too.
   Tested over a real broker:
   - A call being handled and one queued behind it are answered while new calls
     reach the next engine. A call sent while nobody serves is answered by the
@@ -285,8 +286,4 @@ Done:
 
   With `nats.micro`'s own stop, the tests of calls received, of the deadline, of
   the deploy and of the engine fail.
-
-Pending:
-- The discovery primary (`DiscoveryNATS.stop`) still drains its queue-grouped
-  subscriptions with nats-py's `Subscription.drain` alone. It should call
-  `stop_delivery` first, as the transfer hosts and the model registry do.
+  A unit test pins discovery's order (`stop_delivery`, then each drain).
