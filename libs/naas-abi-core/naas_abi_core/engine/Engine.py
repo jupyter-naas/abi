@@ -101,6 +101,19 @@ class Engine(IEngine):
         self.__serving_lock = threading.RLock()
 
     def load(self, module_names: list[str] | None = None):
+        try:
+            self.__load(module_names)
+        except BaseException:
+            # A failed load may already hold the lease and serve the kernel
+            # subjects. Give them up, or the process keeps answering calls
+            # with a half-loaded engine and the next engine waits a lease period.
+            try:
+                self.shutdown()
+            except Exception as exc:  # noqa: BLE001 - re-raise the load failure
+                logger.warning(f"Engine.load failed, then shutdown failed: {exc!r}")
+            raise
+
+    def __load(self, module_names: list[str] | None) -> None:
         # Per-module CLI invocations (e.g. ``abi chat <module> <agent>``)
         # pass a narrow ``module_names`` to skip the cost of loading every
         # enabled module. The in-memory ModelRegistry only sees models from

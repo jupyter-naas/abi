@@ -240,6 +240,31 @@ def test_an_engine_that_finds_another_serving_fails_before_loading_services(
     parts.close.assert_called_once()
 
 
+def test_a_load_that_fails_after_the_claim_releases_the_lease_and_stops_serving(
+    parts, monkeypatch
+):
+    from naas_abi_core.engine.engine_loaders.EngineModuleLoader import (
+        EngineModuleLoader,
+    )
+
+    def broken_module(*args, **kwargs):
+        parts.order.append("load_modules")
+        raise ImportError("a module failed to import")
+
+    monkeypatch.setattr(EngineModuleLoader, "load_modules", broken_module)
+    engine = new_engine()
+
+    with pytest.raises(ImportError):
+        engine.load()
+
+    # Served, then failed: nothing may keep the kernel subjects or the lease.
+    assert parts.order == ["load_modules", "release", "stop_primary", "close_lease"]
+    parts.start_jobs.assert_not_called()
+    parts.keep.assert_not_called()
+    engine.shutdown()
+    assert parts.order[-1] == "close_lease"
+
+
 def test_fencing_stops_serving_and_restoring_serves_again(parts):
     engine = new_engine()
     engine.load()

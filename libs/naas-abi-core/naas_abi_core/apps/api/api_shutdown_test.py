@@ -8,6 +8,7 @@ actually drives FastAPI's lifespan startup/shutdown events; a bare
 
 from unittest.mock import MagicMock
 
+import pytest
 from fastapi.testclient import TestClient
 from naas_abi_core.apps.api import api as api_module
 
@@ -86,3 +87,45 @@ def test_module_shutdown_handlers_run_before_the_engine_is_torn_down(monkeypatch
         api_module.app.router.on_shutdown.remove(on_shutdown)
 
     assert order == ["module", "engine"]
+
+
+class _BrokenAgent:
+    @classmethod
+    def New(cls):
+        raise ImportError("an agent's tools failed to import")
+
+
+def test_a_failed_route_build_shuts_the_loaded_engine_down(monkeypatch):
+    """get_app() loads the engine (lease, kernel subjects, jobs) before it builds
+    the agents' routes. If that fails, the process is going down: the engine must
+    give up the lease and its subjects instead of answering with a dead app."""
+    fake_engine = MagicMock()
+    fake_engine.modules = {"broken": MagicMock(agents=[_BrokenAgent])}
+    monkeypatch.setattr(api_module.engine, "_engine", fake_engine)
+    monkeypatch.setattr(
+        api_module.app.state, "runtime_routes_loaded", False, raising=False
+    )
+
+    with pytest.raises(ImportError):
+        api_module.get_app()
+
+    fake_engine.shutdown.assert_called_once()
+    assert api_module.engine._engine is None
+    assert api_module.app.state.runtime_routes_loaded is False
+
+
+def test_a_failed_startup_handler_shuts_the_engine_down(monkeypatch):
+    fake_engine = MagicMock()
+    monkeypatch.setattr(api_module.engine, "_engine", fake_engine)
+
+    def on_startup() -> None:
+        raise RuntimeError("migrations failed")
+
+    api_module.app.add_event_handler("startup", on_startup)
+    try:
+        with pytest.raises(RuntimeError), TestClient(api_module.app):
+            pass
+    finally:
+        api_module.app.router.on_startup.remove(on_startup)
+
+    fake_engine.shutdown.assert_called_once()
