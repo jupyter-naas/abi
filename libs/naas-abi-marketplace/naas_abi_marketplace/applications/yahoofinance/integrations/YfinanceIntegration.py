@@ -129,9 +129,7 @@ class YfinanceIntegration(Integration):
                         record[key] = self._convert_list(value)
                     elif isinstance(value, dict):
                         record[key] = self._convert_to_json(value)
-                    elif isinstance(value, pd.Timestamp):
-                        record[key] = value.isoformat()
-                    elif hasattr(value, "isoformat"):
+                    elif isinstance(value, pd.Timestamp) or hasattr(value, "isoformat"):
                         record[key] = value.isoformat()
                     elif hasattr(value, "strftime"):
                         record[key] = value.strftime("%Y-%m-%d")
