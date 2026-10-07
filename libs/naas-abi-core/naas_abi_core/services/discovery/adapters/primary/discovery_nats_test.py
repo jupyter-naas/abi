@@ -126,3 +126,90 @@ def test_authorize_agent_names_the_caller_and_whether_it_is_an_admin():
         assert (api.caller_identity, api.caller_admin) == ("api", True)
 
     asyncio.run(scenario())
+
+
+def test_stopping_under_load_answers_every_request_it_was_sent(tmp_path):
+    """As at an engine handover: the stopped primary's queue member leaves, and
+    no request the broker routed to it is dropped. The race this guards against
+    is timing-dependent, so this catches a regression only some of the time;
+    ``test_stop_ends_delivery_at_the_broker_before_draining`` pins the order."""
+    import nats
+    import pytest
+    from naas_abi_core.engine.nats_test_server import (
+        native_nats_server,
+        nats_server_binary,
+    )
+    from naas_abi_core.services.discovery.discovery_service import DiscoveryService
+    from naas_abi_core.services.discovery.discovery_service_test import MemoryRegistry
+    from nats.errors import TimeoutError as NATSTimeoutError
+
+    if nats_server_binary() is None:
+        pytest.skip("nats-server is not installed")
+    subject = "abi.discovery.test.v1.list_modules"
+    request = pb.ListModulesRequest().SerializeToString()
+
+    async def stop_once(url: str) -> int:
+        service = DiscoveryService(MemoryRegistry())
+        old_nc, new_nc, client_nc = [await nats.connect(url) for _ in range(3)]
+        old = DiscoveryNATS(service, SECRET, "test")
+        new = DiscoveryNATS(service, SECRET, "test")
+        await old.start(old_nc)
+        await new.start(new_nc)
+        lost, sending = [], asyncio.Event()
+        sending.set()
+
+        async def send():
+            while sending.is_set():
+                try:
+                    await client_nc.request(subject, request, timeout=5)
+                except NATSTimeoutError:
+                    lost.append(1)
+
+        senders = [asyncio.create_task(send()) for _ in range(64)]
+        await asyncio.sleep(0.2)
+        await old.stop()
+        await asyncio.sleep(0.2)
+        sending.clear()
+        await asyncio.gather(*senders)
+        await new.stop()
+        for nc in (old_nc, new_nc, client_nc):
+            await nc.close()
+        return len(lost)
+
+    async def scenario(url: str) -> list[int]:
+        return [await stop_once(url) for _ in range(5)]
+
+    with native_nats_server(tmp_path) as url:
+        assert asyncio.run(scenario(url)) == [0] * 5
+
+
+def test_stop_ends_delivery_at_the_broker_before_draining(monkeypatch):
+    """``Subscription.drain`` alone can drop a request routed between its PING
+    and its UNSUB, so the broker must confirm the UNSUBs first
+    (``nats_sessions.stop_delivery``)."""
+    from naas_abi_core.services.discovery.adapters.primary import discovery_nats
+
+    calls: list[tuple[str, object]] = []
+
+    async def stop_delivery(subscriptions):
+        calls.append(("stop_delivery", list(subscriptions)))
+
+    def subscription(name):
+        async def drain():
+            calls.append(("drain", name))
+
+        return SimpleNamespace(name=name, drain=drain)
+
+    monkeypatch.setattr(discovery_nats, "stop_delivery", stop_delivery, raising=False)
+    primary = DiscoveryNATS(AsyncMock(), SECRET, "test")
+    subscriptions = [subscription("a"), subscription("b")]
+    primary.subscriptions = list(subscriptions)
+
+    asyncio.run(primary.stop())
+
+    assert calls == [
+        ("stop_delivery", subscriptions),
+        ("drain", "a"),
+        ("drain", "b"),
+    ]
+    assert primary.subscriptions == []
