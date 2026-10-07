@@ -110,7 +110,14 @@ ROLE_CONTRACTS: dict[str, RoleContract] = {
     "section": RoleContract(
         placeholders=frozenset({"uri", "limit"}),
         required=frozenset({"title"}),
-        optional=frozenset({"item", "subtitle", "snippet", "image", "start", "end", "url", "tags"}),
+        optional=frozenset(
+            {
+                "item", "subtitle", "snippet", "image", "start", "end", "url", "tags",
+                # Rows that share a group are shown under it (roles under their
+                # employer); a client is the organization a row's work was done for.
+                "group", "group_item", "group_image", "client", "client_item", "client_image",
+            }
+        ),
     ),
     "image": RoleContract(
         placeholders=frozenset({"uris"}),
@@ -260,6 +267,8 @@ class TopicResults:
     items: list[TopicResultItem]
     has_more: bool
     sparql: str
+    # Every individual the query matches, not only this page; None when the count failed.
+    total: int | None = None
 
 
 @dataclass(frozen=True)
@@ -281,6 +290,14 @@ class TopicSectionItem:
     end: str | None = None
     url: str | None = None
     tags: list[str] = field(default_factory=list)
+    # Optional grouping (e.g. roles under their employer) and the client a row's
+    # work was performed for; each with the URI to link and an image (a logo).
+    group: str | None = None
+    group_item: str | None = None
+    group_image: str | None = None
+    client: str | None = None
+    client_item: str | None = None
+    client_image: str | None = None
 
 
 @dataclass(frozen=True)

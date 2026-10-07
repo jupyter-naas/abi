@@ -34,6 +34,12 @@ export function wireSearch(root, config) {
   let active = -1;
   let requestId = 0;
 
+  // The page's highlights belong to the search in the box: an empty box (typed
+  // away or cleared with its ✕) shows the page without them, before any new search.
+  const syncHighlight = () =>
+    document.documentElement.classList.toggle("highlight-off", input.value.trim() === "");
+  syncHighlight();
+
   function close() {
     list.hidden = true;
     list.innerHTML = "";
@@ -59,6 +65,7 @@ export function wireSearch(root, config) {
   }
 
   input.addEventListener("input", async () => {
+    syncHighlight();
     const value = input.value.trim();
     if (value.length < minChars) return close();
     const id = ++requestId;

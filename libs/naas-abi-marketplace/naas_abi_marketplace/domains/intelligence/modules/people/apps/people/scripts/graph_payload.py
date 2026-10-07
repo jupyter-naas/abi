@@ -244,6 +244,7 @@ def build_graph_page_payload(
                     for p in (
                         _prop("abi:isActOfWorkingOf", "worker", subject),
                         _prop("abi:forOrganization", "organization", org_label),
+                        _prop("abi:forClient", "client", work.get("clientLabel")),
                         _prop("abi:job_title", "job title", work.get("jobTitle")),
                         _prop(
                             "abi:employment_type",
@@ -279,6 +280,20 @@ def build_graph_page_payload(
                 )
             )
             add_rel(working_id, org_id, "abi:forOrganization", "for organization")
+
+        # --- WHO: the client a consulting engagement was performed for -----
+        client_id = compact_graph_id(work.get("client"))
+        if client_id and work.get("clientLabel"):
+            add_entity(
+                _entity_node(
+                    client_id,
+                    label=work["clientLabel"],
+                    class_uri="abi:Organization",
+                    class_label="Organization",
+                    bfo_bucket="Material Entity",
+                )
+            )
+            add_rel(working_id, client_id, "abi:forClient", "for client")
 
         # --- WHERE: the site of execution ---------------------------------
         site_id = compact_graph_id(work.get("site"))

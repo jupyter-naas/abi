@@ -376,8 +376,10 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
         "iri": "http://ontology.naas.ai/graph/people",
         "label": "People",
         # The TTL the profile page re-runs a competency query against. None
-        # means the domain's own demo graph.
+        # means the domain's own demo graph. ``files`` holds every TTL the
+        # instance reads as one graph; ``file`` is the first of them.
         "file": None,
+        "files": [],
     }
     graph = data.get("graph")
     if graph not in (None, {}):
@@ -386,14 +388,19 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
             graph_out["iri"] = _text(graph_map.get("iri"), "data.graph.iri")
         if graph_map.get("label") not in (None, ""):
             graph_out["label"] = _text(graph_map.get("label"), "data.graph.label")
-        if graph_map.get("file") not in (None, ""):
-            relative = _text(graph_map.get("file"), "data.graph.file")
-            resolved = (app_root / relative).resolve()
-            if not resolved.is_file():
-                raise ConfigError(
-                    f"data.graph.file points at a file that does not exist: {relative}"
-                )
-            graph_out["file"] = str(resolved)
+        if graph_map.get("file") not in (None, "", []):
+            # One file, or a list read together as one graph.
+            configured = graph_map.get("file")
+            relatives = configured if isinstance(configured, list) else [configured]
+            for relative in relatives:
+                relative = _text(relative, "data.graph.file")
+                resolved = (app_root / relative).resolve()
+                if not resolved.is_file():
+                    raise ConfigError(
+                        f"data.graph.file points at a file that does not exist: {relative}"
+                    )
+                graph_out["files"].append(str(resolved))
+            graph_out["file"] = graph_out["files"][0]
 
     # Portraits are stated in the source relative to the module that owns them.
     # This prefix is what comes off the front so the browser is left with a path
@@ -419,12 +426,22 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
                 value, f"data.organization_logos.{key}"
             )
 
+    # Logos registered in the graph (abi:hasLogo, the organizations module's
+    # OrganizationLogoPipeline) are served at /api/organizations/logos/...; an
+    # instance that serves them under its own API mount names that prefix here.
+    logo_url_prefix = data.get("organization_logo_url_prefix")
+    if logo_url_prefix not in (None, ""):
+        logo_url_prefix = _text(logo_url_prefix, "data.organization_logo_url_prefix")
+    else:
+        logo_url_prefix = None
+
     return {
         "namespace": namespace,
         "tables": dict(tables),
         "graph": graph_out,
         "portrait_prefix": portrait_prefix,
         "organization_logos": organization_logos,
+        "organization_logo_url_prefix": logo_url_prefix,
     }
 
 

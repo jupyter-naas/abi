@@ -14,7 +14,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { LayoutGrid, Search as SearchIcon, Settings2, X } from 'lucide-react';
+import { LayoutGrid, RefreshCw, Search as SearchIcon, Settings2, X } from 'lucide-react';
 import { Header } from '@/components/shell/header';
 import { WorkspaceMark, WorkspaceMarkFrame } from '@/components/shell/workspace-mark';
 import { AllScopesView, FeatureScopeView } from '@/components/search/scope-views';
@@ -24,6 +24,8 @@ import { useSearchScopes } from '@/components/search/use-search-scopes';
 import { WebSearchPanel } from '@/components/search/web-search-panel';
 import { cn } from '@/lib/utils';
 import { readSearchRoute, resolveScope, searchHref, type SearchRoute } from '@/lib/search-topics';
+import { topicsApi } from '@/lib/search-topics-api';
+import { useSearchScopesStore } from '@/stores/search-scopes';
 import { useWorkspaceStore } from '@/stores/workspace';
 
 const TYPE_DEBOUNCE_MS = 300;
@@ -68,10 +70,43 @@ function Search() {
   // Nothing asked yet: the landing, search box in the middle. The same form
   // moves to the top once there is a query, so typing never loses focus.
   const landing = !active && !route.q;
+  // Highlights follow the box: emptied (typed away or cleared), the results show
+  // without them at once, before the URL catches up with the box.
+  const highlight = input.trim() ? route.q : '';
+
+  // Search responses are cached for a day on the server; refresh reads the graphs again.
+  const refreshAll = useSearchScopesStore(s => s.refreshAll);
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await topicsApi.refreshCache(workspaceId);
+    } catch {
+      // The cache is best-effort: searching again still shows what the graphs hold.
+    } finally {
+      refreshAll();
+      setRefreshing(false);
+    }
+  }, [workspaceId, refreshAll]);
 
   return (
     <div className="flex h-full flex-col">
-      <Header title="Search" subtitle={active?.description || 'People, organizations, apps, files, chats, ontology and more'} />
+      <Header
+        title="Search"
+        subtitle={active?.description || 'People, organizations, apps, files, chats, ontology and more'}
+        actions={
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={refreshing}
+            title="Refresh: search the graphs again instead of the results kept for a day"
+            aria-label="Refresh search results"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-all hover:bg-muted hover:text-foreground disabled:opacity-60"
+          >
+            <RefreshCw size={16} className={cn(refreshing && 'animate-spin')} />
+          </button>
+        }
+      />
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
         <div className={cn(landing
@@ -102,7 +137,8 @@ function Search() {
               onChange={(e) => { typing.current = true; setInput(e.target.value); }}
               placeholder={placeholder}
               aria-label={placeholder}
-              className={cn('min-w-0 flex-1 bg-transparent caret-[color:var(--workspace-accent,#22c55e)] outline-none focus-visible:ring-0 placeholder:text-muted-foreground', landing ? 'text-base' : 'text-sm')}
+              // The browser's own clear button is hidden: the ✕ below also clears the query in the URL.
+              className={cn('min-w-0 flex-1 bg-transparent caret-[color:var(--workspace-accent,#22c55e)] outline-none focus-visible:ring-0 placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:appearance-none', landing ? 'text-base' : 'text-sm')}
             />
             {input && (
               <button type="button" aria-label="Clear search" onClick={() => { typing.current = false; setInput(''); go({ q: '' }, 'replace'); }}
@@ -156,19 +192,20 @@ function Search() {
           {topicsError && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-500">{topicsError}</div>}
 
           {landing ? null : !active ? (
-            <AllScopesView workspaceId={workspaceId} scopes={onScopes} q={route.q} onScopes={onScopes.length} />
+            <AllScopesView workspaceId={workspaceId} scopes={onScopes} q={route.q} onScopes={onScopes.length} highlight={highlight} />
           ) : topic ? (
             <TopicScopeView
               workspaceId={workspaceId}
               topic={topic}
               route={route}
               canEdit={canEdit}
+              highlight={highlight}
               onTab={(tab) => go({ tab })}
             />
           ) : active.kind === 'web' ? (
             <WebSearchPanel query={route.q} />
           ) : (
-            <FeatureScopeView workspaceId={workspaceId} scope={active} q={route.q} />
+            <FeatureScopeView workspaceId={workspaceId} scope={active} q={route.q} highlight={highlight} />
           )}
         </div>
       </div>

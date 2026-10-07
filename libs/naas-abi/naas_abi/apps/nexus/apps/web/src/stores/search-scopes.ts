@@ -26,6 +26,10 @@ interface SearchScopesState {
   run: (workspaceId: string, scope: SearchScope, q: string, limit: number, force?: boolean) => Promise<void>;
   /** Drop every cached run of a scope (its settings changed). */
   invalidate: (scopeId: string) => void;
+  /** Bumped by `refreshAll`: views that fetch on their own refetch when it changes. */
+  nonce: number;
+  /** Drop every run, so each view searches again (after the server cache was cleared). */
+  refreshAll: () => void;
 }
 
 export const useSearchScopesStore = create<SearchScopesState>()(
@@ -34,6 +38,8 @@ export const useSearchScopesStore = create<SearchScopesState>()(
       overrides: {},
       setScopeOn: (scopeId, on) => set(state => ({ overrides: { ...state.overrides, [scopeId]: on } })),
       runs: {},
+      nonce: 0,
+      refreshAll: () => set(state => ({ runs: {}, nonce: state.nonce + 1 })),
       invalidate: (scopeId) => set(state => ({
         runs: Object.fromEntries(Object.entries(state.runs).filter(([key]) => key.split('|')[1] !== scopeId)),
       })),
