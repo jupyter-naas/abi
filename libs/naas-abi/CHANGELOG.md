@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.80.2 (2026-10-07)
+
+### Bug Fixes
+
+- **nexus**: Keep the agent list tied to its workspace
+  ([`2a5b68d`](https://github.com/jupyter-naas/abi/commit/2a5b68de1d6aa1b4b0124187ac971c473181a541))
+
+
 ## v2.80.1 (2026-10-07)
 
 ### Bug Fixes
