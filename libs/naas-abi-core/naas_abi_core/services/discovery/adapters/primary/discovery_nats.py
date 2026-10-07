@@ -9,6 +9,7 @@ from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_sessions import stop_delivery
 from naas_abi_core.services.discovery.discovery_service import (
     DiscoveryError,
     DiscoveryService,
@@ -56,6 +57,9 @@ class DiscoveryNATS:
             raise
 
     async def stop(self) -> None:
+        # The broker confirms the UNSUBs first: drain alone can drop a request
+        # routed between its PING and its UNSUB (nats_sessions.stop_delivery).
+        await stop_delivery(self.subscriptions)
         for subscription in self.subscriptions:
             await subscription.drain()
         self.subscriptions.clear()
