@@ -7,7 +7,8 @@ delivering it, so sending it again is always safe. See ABI's
 docs/adr/20261006_single-serving-engine.md.
 
 Subjects of one instance (presence, agents, transfer sessions) are not retried:
-nobody answering there means the instance is gone.
+nobody answering there means the instance is gone. A transfer's open is the
+exception among its calls: it goes to the engine's queue group.
 """
 
 from __future__ import annotations
@@ -27,6 +28,13 @@ def engine_served(subject: str) -> bool:
     if subject.startswith("abi.svc."):
         return True
     return subject.startswith("abi.discovery.") and ".presence." not in subject
+
+
+def transfer_open(subject: str) -> bool:
+    """Whether ``subject`` opens a transfer (``<prefix>.open``). The open goes to
+    the serving engine's queue group; the session's later calls go to the one
+    engine that opened it (``<prefix>.<owner>.<operation>``)."""
+    return subject.endswith(".transfer.open")
 
 
 async def request(
