@@ -13,12 +13,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
 from naas_abi.ontologies.modules.ABIOntology import (
-    Organization,
-    Person,
     Site,
     TemporalInstant,
 )
 from naas_abi.ontologies.modules.ABIOntology import TemporalRegion as AbiTemporalRegion
+from naas_abi.ontologies.modules.OrganizationOntology import Organization
+from naas_abi.ontologies.modules.PersonOntology import Person
 from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.modules.PeopleOntology import (
     AcademicDegree,
     Certification,
@@ -130,12 +130,11 @@ class PeopleGraphContext:
             creator=self.creator,
         )
         self.graph += person.rdf()
-        self.graph.add((URIRef(uri), RDF.type, CCO.ont00000562))
         self.graph.add(
-            (URIRef(uri), PEOPLE.given_name, Literal(first, datatype=XSD.string))
+            (URIRef(uri), ABI.given_name, Literal(first, datatype=XSD.string))
         )
         self.graph.add(
-            (URIRef(uri), PEOPLE.family_name, Literal(last, datatype=XSD.string))
+            (URIRef(uri), ABI.family_name, Literal(last, datatype=XSD.string))
         )
         self.people[key] = person
         return person
@@ -181,7 +180,7 @@ class PeopleGraphContext:
             creator=self.creator,
         )
         self.graph += skill.rdf()
-        self.graph.add((URIRef(person._uri), PEOPLE.hasSkill, URIRef(skill._uri)))
+        self.graph.add((URIRef(person._uri), ABI.hasSkill, URIRef(skill._uri)))
         self.skills[key] = skill
         return skill
 
@@ -190,7 +189,7 @@ class PeopleGraphContext:
         self.graph.add(
             (
                 URIRef(person._uri),
-                PEOPLE.profile_slug,
+                ABI.profile_slug,
                 Literal(slug_value, datatype=XSD.string),
             )
         )
@@ -206,9 +205,9 @@ class PeopleGraphContext:
     ) -> None:
         """State how the person can be reached. Absent values are left unstated."""
         for predicate, value, datatype in (
-            (PEOPLE.email_address, email, XSD.string),
-            (PEOPLE.telephone_number, phone, XSD.string),
-            (PEOPLE.linkedin_url, linkedin_url, XSD.anyURI),
+            (ABI.email_address, email, XSD.string),
+            (ABI.telephone_number, phone, XSD.string),
+            (ABI.linkedin_url, linkedin_url, XSD.anyURI),
         ):
             if value:
                 self.graph.add(
@@ -230,10 +229,10 @@ class PeopleGraphContext:
         properties are what a directory reads instead of parsing that label.
         """
         for prop, value in (
-            (PEOPLE.office_label, office),
-            (PEOPLE.city_name, city),
-            (PEOPLE.country_name, country),
-            (PEOPLE.country_code, country_code.upper() if country_code else None),
+            (ABI.office_label, office),
+            (ABI.city_name, city),
+            (ABI.country_name, country),
+            (ABI.site_country_code, country_code.upper() if country_code else None),
         ):
             if value:
                 self.graph.add(
@@ -260,7 +259,7 @@ class PeopleGraphContext:
             creator=self.creator,
         )
         self.graph += portrait.rdf()
-        self.graph.add((URIRef(person._uri), PEOPLE.hasPortrait, URIRef(portrait._uri)))
+        self.graph.add((URIRef(person._uri), ABI.hasPortrait, URIRef(portrait._uri)))
         self.portraits[key] = portrait
         return portrait
 
@@ -301,7 +300,7 @@ class PeopleGraphContext:
         )
         self.graph += summary.rdf()
         self.graph.add(
-            (URIRef(person._uri), PEOPLE.hasProfileSummary, URIRef(summary._uri))
+            (URIRef(person._uri), ABI.hasProfileSummary, URIRef(summary._uri))
         )
         self.profile_summaries[key] = summary
         return summary
@@ -347,7 +346,7 @@ class PeopleGraphContext:
         self.graph.add(
             (
                 URIRef(person._uri),
-                PEOPLE.hasCertification,
+                ABI.hasCertification,
                 URIRef(certification._uri),
             )
         )
@@ -355,7 +354,7 @@ class PeopleGraphContext:
             self.graph.add(
                 (
                     URIRef(certification._uri),
-                    PEOPLE.isSourcedFrom,
+                    ABI.isSourcedFrom,
                     URIRef(profile._uri),
                 )
             )
@@ -380,7 +379,7 @@ class PeopleGraphContext:
         self.graph.add(
             (
                 URIRef(person._uri),
-                PEOPLE.hasCertificationCandidateRole,
+                ABI.hasCertificationCandidateRole,
                 URIRef(role._uri),
             )
         )
@@ -390,7 +389,7 @@ class PeopleGraphContext:
             _uri=act_uri,
             label=f"{name} @ {issuer.label}" if issuer else name,
             hasParticipant=[person._uri],
-            occursIn=site._uri if site else None,
+            occursIn=[site._uri] if site else None,
             occupiesTemporalRegion=[temporal_uri] if temporal_uri else None,
             for_certifying_organization=[issuer._uri] if issuer else None,
             has_awarded_certification=certification._uri,
@@ -401,13 +400,13 @@ class PeopleGraphContext:
         )
         self.graph += act.rdf()
         self.graph.add(
-            (URIRef(person._uri), PEOPLE.hasActOfCertification, URIRef(act_uri))
+            (URIRef(person._uri), ABI.hasActOfCertification, URIRef(act_uri))
         )
         # demonstratesSkill is multi-valued but generated single-valued, so the
         # skills are stated directly rather than through the entity.
         for skill in skills or []:
             self.graph.add(
-                (URIRef(act_uri), PEOPLE.demonstratesSkill, URIRef(skill._uri))
+                (URIRef(act_uri), ABI.demonstratesSkill, URIRef(skill._uri))
             )
         return certification
 
@@ -428,7 +427,7 @@ class PeopleGraphContext:
         self.graph.add(
             (
                 URIRef(person._uri),
-                PEOPLE.hasLanguageCapability,
+                ABI.hasLanguageCapability,
                 URIRef(capability._uri),
             )
         )
@@ -460,7 +459,7 @@ class PeopleGraphContext:
         self.graph.add(
             (
                 URIRef(person._uri),
-                PEOPLE.hasRecommendation,
+                ABI.hasRecommendation,
                 URIRef(recommendation._uri),
             )
         )
@@ -493,7 +492,7 @@ class PeopleGraphContext:
             creator=self.creator,
         )
         self.graph += interest.rdf()
-        self.graph.add((URIRef(person._uri), PEOPLE.hasInterest, URIRef(interest._uri)))
+        self.graph.add((URIRef(person._uri), ABI.hasInterest, URIRef(interest._uri)))
         return interest
 
     def ensure_work_profile(self, person: Person, source_url: str) -> ProfileDocument:
@@ -510,7 +509,7 @@ class PeopleGraphContext:
         )
         self.graph += doc.rdf()
         self.graph.add(
-            (URIRef(person._uri), PEOPLE.hasProfileDocument, URIRef(doc._uri))
+            (URIRef(person._uri), ABI.hasProfileDocument, URIRef(doc._uri))
         )
         self.work_profiles[key] = doc
         return doc
@@ -533,7 +532,7 @@ class PeopleGraphContext:
         )
         self.graph += doc.rdf()
         self.graph.add(
-            (URIRef(person._uri), PEOPLE.hasProfileDocument, URIRef(doc._uri))
+            (URIRef(person._uri), ABI.hasProfileDocument, URIRef(doc._uri))
         )
         self.education_profiles[key] = doc
         return doc
@@ -569,7 +568,7 @@ class PeopleGraphContext:
             for triple in node.rdf():
                 self.graph.add(triple)
             self.graph.add(
-                (URIRef(uri), PEOPLE.instant_date, Literal(moment, datatype=XSD.date))
+                (URIRef(uri), ABI.instant_date, Literal(moment, datatype=XSD.date))
             )
             return uri
 
@@ -590,7 +589,7 @@ class PeopleGraphContext:
             self.graph.add(
                 (
                     URIRef(region_uri),
-                    PEOPLE.duration_label,
+                    ABI.duration_label,
                     Literal(duration, datatype=XSD.string),
                 )
             )
@@ -637,11 +636,11 @@ class PeopleGraphContext:
         )
         self.graph += mission.rdf()
         self.graph.add(
-            (URIRef(person._uri), PEOPLE.hasMissionCarried, URIRef(mission._uri))
+            (URIRef(person._uri), ABI.hasMissionCarried, URIRef(mission._uri))
         )
         if profile:
             self.graph.add(
-                (URIRef(mission._uri), PEOPLE.isSourcedFrom, URIRef(profile._uri))
+                (URIRef(mission._uri), ABI.isSourcedFrom, URIRef(profile._uri))
             )
 
         role = OccupationRole(
@@ -654,17 +653,17 @@ class PeopleGraphContext:
         )
         self.graph += role.rdf()
         self.graph.add(
-            (URIRef(person._uri), PEOPLE.hasOccupationRole, URIRef(role._uri))
+            (URIRef(person._uri), ABI.hasOccupationRole, URIRef(role._uri))
         )
-        self.graph.add((URIRef(role._uri), PEOPLE.hasMission, URIRef(mission._uri)))
-        self.graph.add((URIRef(mission._uri), PEOPLE.isMissionOf, URIRef(role._uri)))
+        self.graph.add((URIRef(role._uri), ABI.hasMission, URIRef(mission._uri)))
+        self.graph.add((URIRef(mission._uri), ABI.isMissionOf, URIRef(role._uri)))
 
         working_uri = individual_uri(str(PEOPLE), "ActOfWorking", key)
         working = ActOfWorking(
             _uri=working_uri,
             label=f"{title} @ {org.label}",
             hasParticipant=[person._uri],
-            occursIn=site._uri if site else None,
+            occursIn=[site._uri] if site else None,
             occupiesTemporalRegion=[temporal_uri] if temporal_uri else None,
             for_organization=[org._uri],
             for_client=[client._uri] if client else None,
@@ -677,20 +676,20 @@ class PeopleGraphContext:
         self.graph += working.rdf()
 
         self.graph.add(
-            (URIRef(person._uri), PEOPLE.hasActOfWorking, URIRef(working_uri))
+            (URIRef(person._uri), ABI.hasActOfWorking, URIRef(working_uri))
         )
         if site:
             self.graph.add(
-                (URIRef(person._uri), PEOPLE.hasWorkLocation, URIRef(site._uri))
+                (URIRef(person._uri), ABI.hasWorkLocation, URIRef(site._uri))
             )
         # developsSkill is declared in the shared module, which a process slice does
         # not import, so it is not a field of the entity: the relation is stated here.
         for skill in skills:
             self.graph.add(
-                (URIRef(working_uri), PEOPLE.developsSkill, URIRef(skill._uri))
+                (URIRef(working_uri), ABI.developsSkill, URIRef(skill._uri))
             )
             self.graph.add(
-                (URIRef(skill._uri), PEOPLE.isSkillDevelopedIn, URIRef(working_uri))
+                (URIRef(skill._uri), ABI.isSkillDevelopedIn, URIRef(working_uri))
             )
         self.last_role_uri = role._uri
         return working_uri, role._uri
@@ -729,7 +728,7 @@ class PeopleGraphContext:
             creator=self.creator,
         )
         self.graph += role.rdf()
-        self.graph.add((URIRef(person._uri), PEOPLE.hasStudentRole, URIRef(role._uri)))
+        self.graph.add((URIRef(person._uri), ABI.hasStudentRole, URIRef(role._uri)))
 
         enrollment = EnrollmentRecord(
             _uri=individual_uri(str(PEOPLE), "EnrollmentRecord", key),
@@ -743,17 +742,17 @@ class PeopleGraphContext:
         )
         self.graph += enrollment.rdf()
         self.graph.add(
-            (URIRef(person._uri), PEOPLE.hasEnrollmentRecord, URIRef(enrollment._uri))
+            (URIRef(person._uri), ABI.hasEnrollmentRecord, URIRef(enrollment._uri))
         )
         if profile:
             self.graph.add(
-                (URIRef(enrollment._uri), PEOPLE.isSourcedFrom, URIRef(profile._uri))
+                (URIRef(enrollment._uri), ABI.isSourcedFrom, URIRef(profile._uri))
             )
         if activities:
             self.graph.add(
                 (
                     URIRef(enrollment._uri),
-                    PEOPLE.activities_content,
+                    ABI.activities_content,
                     Literal(activities, datatype=XSD.string),
                 )
             )
@@ -767,7 +766,7 @@ class PeopleGraphContext:
         self.graph += degree.rdf()
         if profile:
             self.graph.add(
-                (URIRef(degree._uri), PEOPLE.isSourcedFrom, URIRef(profile._uri))
+                (URIRef(degree._uri), ABI.isSourcedFrom, URIRef(profile._uri))
             )
 
         studying_uri = individual_uri(str(PEOPLE), "ActOfStudying", key)
@@ -775,7 +774,7 @@ class PeopleGraphContext:
             _uri=studying_uri,
             label=f"{program} @ {org.label}" if org else program,
             hasParticipant=[person._uri],
-            occursIn=site._uri if site else None,
+            occursIn=[site._uri] if site else None,
             occupiesTemporalRegion=[temporal_uri] if temporal_uri else None,
             for_educational_organization=[org._uri] if org else None,
             has_enrollment=enrollment._uri,
@@ -788,20 +787,20 @@ class PeopleGraphContext:
         self.graph += studying.rdf()
 
         self.graph.add(
-            (URIRef(person._uri), PEOPLE.hasActOfStudying, URIRef(studying_uri))
+            (URIRef(person._uri), ABI.hasActOfStudying, URIRef(studying_uri))
         )
         if site:
             self.graph.add(
-                (URIRef(person._uri), PEOPLE.hasStudyLocation, URIRef(site._uri))
+                (URIRef(person._uri), ABI.hasStudyLocation, URIRef(site._uri))
             )
         # developsSkill is declared in the shared module, which a process slice does
         # not import, so it is not a field of the entity: the relation is stated here.
         for skill in skills:
             self.graph.add(
-                (URIRef(studying_uri), PEOPLE.developsSkill, URIRef(skill._uri))
+                (URIRef(studying_uri), ABI.developsSkill, URIRef(skill._uri))
             )
             self.graph.add(
-                (URIRef(skill._uri), PEOPLE.isSkillDevelopedIn, URIRef(studying_uri))
+                (URIRef(skill._uri), ABI.isSkillDevelopedIn, URIRef(studying_uri))
             )
         return studying_uri
 

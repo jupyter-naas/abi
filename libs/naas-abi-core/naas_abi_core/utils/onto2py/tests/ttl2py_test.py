@@ -1,4 +1,6 @@
+import tempfile
 from io import StringIO
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -7,17 +9,20 @@ import requests
 from naas_abi_core.utils.onto2py.onto2py import onto2py
 from pydantic import ValidationError
 
+# Generated modules go to a temp dir, never the directory pytest runs from.
+GENERATED_DIR = Path(tempfile.mkdtemp(prefix="onto2py_test_"))
+
 
 def ttl_to_module(ttl_file, module_name):
     # Generate Python code from TTL
     python_code = onto2py(ttl_file)
 
-    with open(module_name + ".py", "w") as f:
-        f.write(python_code)
+    module_path = GENERATED_DIR / f"{module_name}.py"
+    module_path.write_text(python_code)
 
     import importlib.util
 
-    spec = importlib.util.spec_from_file_location(module_name, module_name + ".py")
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
@@ -52,12 +57,12 @@ def test_bfo_to_py():
     # Generate Python code from TTL
     python_code = onto2py(ttl_file)
 
-    with open("bfo-core.py", "w") as f:
-        f.write(python_code)
+    module_path = GENERATED_DIR / "bfo-core.py"
+    module_path.write_text(python_code)
 
     import importlib.util
 
-    spec = importlib.util.spec_from_file_location("bfo_core", "bfo-core.py")
+    spec = importlib.util.spec_from_file_location("bfo_core", module_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
@@ -231,9 +236,6 @@ ex:PetOwnerShape rdf:type sh:NodeShape ;
     with open(temp_file, "w") as f:
         f.write(python_code)
 
-    with open("shacl_ttl.py", "w") as f:
-        f.write(python_code)
-
     # Load the generated code
     import importlib.util
 
@@ -380,9 +382,7 @@ ex:Widget rdf:type owl:Class ;
     assert "class Widget" in first
 
     # Second call with unchanged content: rdflib.Graph.parse must not run.
-    with patch(
-        "naas_abi_core.utils.onto2py.onto2py.rdflib.Graph.parse"
-    ) as mock_parse:
+    with patch("naas_abi_core.utils.onto2py.onto2py.rdflib.Graph.parse") as mock_parse:
         second = onto2py(str(ttl))
     mock_parse.assert_not_called()
     assert "class Widget" in second
@@ -391,7 +391,7 @@ ex:Widget rdf:type owl:Class ;
     # the freshly added class (proving rdflib actually re-parsed).
     ttl.write_text(
         ttl.read_text(encoding="utf-8")
-        + "\nex:Gadget rdf:type owl:Class ; rdfs:label \"Gadget\" .\n",
+        + '\nex:Gadget rdf:type owl:Class ; rdfs:label "Gadget" .\n',
         encoding="utf-8",
     )
     third = onto2py(str(ttl))

@@ -79,7 +79,7 @@ def test_working_process_is_an_insert_with_rdf_triples() -> None:
     assert {
         "subject": process,
         "predicate": RDF_TYPE,
-        "object": f"{PEOPLE}ActOfWorking",
+        "object": f"{ABI}ActOfWorking",
     } in events[0]["triples_added"]
     assert {
         "subject": process,

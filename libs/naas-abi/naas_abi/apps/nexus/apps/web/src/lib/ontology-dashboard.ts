@@ -1,5 +1,5 @@
-import type { DictionaryTerm } from './ontology-dictionary-tree';
-import type { DictionaryFile } from './ontology-file-filter';
+import type { DictionaryLink, DictionaryTerm } from './ontology-dictionary-tree';
+import { dictionaryFilesRoute, type DictionaryFile } from './ontology-file-filter';
 import { termKey } from './ontology-context';
 import { dictionaryFilter, dictionaryFilterRoute } from './ontology-navigation';
 
@@ -10,7 +10,16 @@ export const DASHBOARD_KINDS = [
   { type: 'attribute', label: 'Data Property', symbol: 'Dp', color: '#9333ea' },
   { type: 'annotation', label: 'Annotation Property', symbol: 'An', color: '#d97706' },
   { type: 'individual', label: 'Individuals', symbol: 'In', color: '#64748b' },
+  { type: 'restriction', label: 'OWL Restriction', symbol: 'Re', color: '#e11d48' },
 ] as const;
+export type DashboardKind = typeof DASHBOARD_KINDS[number]['type'];
+/** Kinds that are not dictionary term types: selected with ``dashboardType`` instead of the term filter. */
+export const DASHBOARD_PSEUDO_KINDS: readonly DashboardKind[] = ['ontology', 'restriction'];
+export const isPseudoKind = (kind: string): kind is 'ontology' | 'restriction' => (DASHBOARD_PSEUDO_KINDS as readonly string[]).includes(kind);
+export type DashboardRestriction = {
+  key: string; subject: DictionaryTerm; property: { id: string; name: string }; target: DictionaryLink;
+  constraint?: string; sources: NonNullable<DictionaryTerm['sources']>;
+};
 export type DashboardFile = DictionaryFile & { description?: string };
 export type DashboardTile = DashboardFile & { symbol: string; index: number; terms: DictionaryTerm[]; failed: boolean };
 export type OntologyDeclaration = Pick<DictionaryTerm, 'id' | 'name' | 'sources' | 'metadata'> & { type: 'ontology' };
@@ -42,14 +51,35 @@ export function dashboardOntologies(ontologies: OntologyDeclaration[], paths: st
     .map(item => [item.id, item])).values()];
 }
 
-/** Ontology tiles open their existing file view; other kinds retain the term filter route. */
-export function dashboardKindRoute(query: string, type: typeof DASHBOARD_KINDS[number]['type']) {
+/**
+ * OWL restrictions stated in the given files, once each. A restriction belongs
+ * to the file that states it, which need not declare its class: People restricts
+ * abi:Person, declared in ABI.
+ */
+export function dashboardRestrictions(terms: DictionaryTerm[], paths: string[]): DashboardRestriction[] {
+  const found = new Map<string, DashboardRestriction>();
+  for (const term of terms) for (const relation of term.relations || []) {
+    if (relation.kind !== 'restriction') continue;
+    const sources = relation.sources.filter(source => paths.includes(source.path));
+    if (!sources.length) continue;
+    const key = JSON.stringify([term.id, relation.property.id, relation.target.id, relation.constraint || '']);
+    const existing = found.get(key);
+    if (existing) { existing.sources = [...new Map([...existing.sources, ...sources].map(source => [source.path, source])).values()]; continue; }
+    found.set(key, { key, subject: term, property: relation.property, target: relation.target, constraint: relation.constraint, sources });
+  }
+  return [...found.values()].sort((a, b) => a.subject.name.localeCompare(b.subject.name)
+    || a.property.name.localeCompare(b.property.name) || a.target.name.localeCompare(b.target.name));
+}
+
+/** Pseudo kinds (ontology, restriction) toggle ``dashboardType``; other kinds retain the term filter route. */
+export function dashboardKindRoute(query: string, type: DashboardKind) {
   const params = new URLSearchParams(query);
-  const active = params.get('dashboardType') === 'ontology' ? 'ontology' : dictionaryFilter(query);
-  const next = dictionaryFilterRoute(query, type === 'ontology' || active === type ? 'all' : type);
+  const current = params.get('dashboardType');
+  const active = current && isPseudoKind(current) ? current : dictionaryFilter(query);
+  const next = dictionaryFilterRoute(query, isPseudoKind(type) || active === type ? 'all' : type);
   next.set('view', 'overview');
   next.delete('dashboardType');
-  if (type === 'ontology' && active !== type) next.set('dashboardType', 'ontology');
+  if (isPseudoKind(type) && active !== type) next.set('dashboardType', type);
   return next;
 }
 
@@ -76,12 +106,40 @@ export function dashboardTerms(tiles: DashboardTile[]) {
   return [...new Map(tiles.flatMap(tile => tile.terms).map(term => [termKey(term), term])).values()];
 }
 
-/** Tile drill-down changes the dashboard selection, preserving accumulated sidebar filters. */
+/**
+ * Tile drill-down changes the dashboard selection and selects that ontology in
+ * the sidebar file picker, so both show the same file. Leaving the drill-down
+ * clears that selection only while it still mirrors the file: a selection the
+ * user changed in the sidebar meanwhile is kept. Other sidebar filters are kept.
+ */
 export function dashboardRoute(query: string, file?: string) {
   const params = new URLSearchParams(query);
   params.set('view', 'overview');
   params.delete('dashboardType');
   ['term', 'termType', 'system', 'subsystem', 'process'].forEach(key => params.delete(key));
-  if (file) params.set('dashboardFile', file); else params.delete('dashboardFile');
+  const previous = params.get('dashboardFile');
+  const selected = params.getAll('dictionaryFile');
+  if (file) {
+    params.set('dashboardFile', file);
+    params.delete('dictionaryFile');
+    params.append('dictionaryFile', file);
+  } else {
+    params.delete('dashboardFile');
+    if (previous && selected.length === 1 && selected[0] === previous) params.delete('dictionaryFile');
+  }
+  return params;
+}
+
+/**
+ * The sidebar file picker, while an ontology is open on the dashboard: one file
+ * picked opens that one, so the open file never falls out of the selection;
+ * none or several return to the overview of what is picked.
+ */
+export function dashboardFilesRoute(query: string, paths: string[]) {
+  const params = dictionaryFilesRoute(query, paths);
+  if (!params.has('dashboardFile')) return params;
+  const selected = params.getAll('dictionaryFile');
+  if (selected.length === 1) params.set('dashboardFile', selected[0]);
+  else params.delete('dashboardFile');
   return params;
 }

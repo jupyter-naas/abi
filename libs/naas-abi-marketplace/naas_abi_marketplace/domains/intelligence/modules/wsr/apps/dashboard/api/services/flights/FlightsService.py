@@ -1,5 +1,5 @@
 """
-FlightsService — wsr:FlightTrackingProcess orchestrator.
+FlightsService — abi:FlightTrackingProcess orchestrator.
 """
 
 import logging

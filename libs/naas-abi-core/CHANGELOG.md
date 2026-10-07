@@ -17,6 +17,36 @@
   with `{"data_dir": "storage/activity_log"}`, then add `"apply": true`.
 - Runbook: `docs/migrate-to-nats.md`.
 
+## v2.41.2 (2026-10-06)
+
+### Bug Fixes
+
+- **api**: Keep oauth2_scheme as an alias of api_key_scheme
+  ([`d7b36c2`](https://github.com/jupyter-naas/abi/commit/d7b36c2b11b5541804a448a6f6931a5de7a24180))
+
+
+## v2.41.1 (2026-10-05)
+
+### Bug Fixes
+
+- Onto2py code generated
+  ([`3d4283a`](https://github.com/jupyter-naas/abi/commit/3d4283a305bf04794270d4704c3975be63f76e35))
+
+### Refactoring
+
+- **ontologies**: Add action classes for geospatial and administrative regions
+  ([`4dbffc8`](https://github.com/jupyter-naas/abi/commit/4dbffc8b5876b5e91593f8794ebef9d08ad196b4))
+
+- **ontologies**: Add new ontology-related modules and tests
+  ([`5e9ec6a`](https://github.com/jupyter-naas/abi/commit/5e9ec6a19162fe5263bf7bdcd203f22bb3eb33e4))
+
+- **ontologies**: Improve module ontology consolidation and path resolution
+  ([`7d3bc9a`](https://github.com/jupyter-naas/abi/commit/7d3bc9a3eb346e7f116e1f0fa5839c4c6011e64e))
+
+- **ontology**: Add process slices endpoint and tests
+  ([`d4ef150`](https://github.com/jupyter-naas/abi/commit/d4ef150dadf9489329134745d007e99c5f0c69b7))
+
+
 ## v2.41.0 (2026-10-01)
 
 

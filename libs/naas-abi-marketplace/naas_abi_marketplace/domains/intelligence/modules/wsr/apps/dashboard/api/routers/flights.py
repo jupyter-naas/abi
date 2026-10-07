@@ -1,5 +1,5 @@
 """
-Flights router — wsr:FlightTrackingProcess HTTP interface.
+Flights router — abi:FlightTrackingProcess HTTP interface.
 
 Endpoints:
   GET /api/flights           — civil aviation (OpenSky)

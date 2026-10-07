@@ -9,12 +9,14 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-<http://ontology.naas.ai/abi/OrganizationOntology> a owl:Ontology ;
+<http://ontology.naas.ai/abi/OrganizationsOntology> a owl:Ontology ;
     # One owl:imports statement per IRI, never a comma-separated object list:
     # onto2py's codegen pre-scan only matches an IRI directly after the
     # `owl:imports` keyword, so a continuation IRI is silently dropped and the
     # classes behind it degrade to bare URIRef ranges.
     owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl> ;
+    owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+    owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
     owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
     owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
     owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
@@ -24,8 +26,8 @@
     abi:pythonPackage "naas_abi_marketplace.domains.intelligence.modules.organizations" ;
     abi:ontologyResource "ontologies/modules/OrganizationOntology.ttl" ;
     abi:pythonResource "ontologies/modules/OrganizationOntology.py" ;
-    dc:title "Organization Ontology"@en ;
-    dc:description "Vocabulary for the organization domain: the CCO organization taxonomy (incorporated, geopolitical, government, commercial, educational, civil), the information content entities that identify an organization (website, ticker, brand, industry), its capabilities and its headquarters facilities. Processes that organizations undergo live in sibling process ontologies — OrganizationAllianceProcess (cooperation that preserves independence) and OrganizationRestructuringProcess (acts that change which organizations exist). Those import this ontology rather than the reverse, since the vocabulary must stand alone."@en ;
+    dc:title "Organizations Ontology"@en ;
+    dc:description "Vocabulary for the organization domain: the CCO organization taxonomy (incorporated, geopolitical, government, commercial, educational, civil), the information content entities that identify an organization (website, ticker, brand, industry), its capabilities and its headquarters facilities. Processes that organizations undergo are process slices in ontologies/processes/, one per act and mapped to the BFO 7 buckets: six alliances (cooperation that preserves independence) and three restructurings (acts that change which organizations exist). They are consolidated into this module; the vocabulary they share (agreement and participant properties, StrategicAlliance, OrganizationalAgreementRole) is declared here."@en ;
     dc:license <https://creativecommons.org/licenses/by/4.0/> ;
     rdfs:comment "Ontology for organizations."@en ;
     dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
@@ -311,3 +313,504 @@ abi:website_url a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     rdfs:label "website url"@en ;
     skos:definition "The URL at which the organization's website is served."@en .
+
+#################################################################
+#    Object Properties - shared by the process slices
+#################################################################
+
+abi:hasAllianceAgreement a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000058 ; # is concretized by
+    owl:inverseOf abi:isAllianceAgreementOf ;
+    rdfs:domain cco:ont00000228 ;
+    rdfs:range abi:StrategicAlliance ;
+    rdfs:label "has alliance agreement"@en ;
+    skos:definition "Relates an act of alliance to the agreement document that records its terms."@en .
+
+abi:isAllianceAgreementOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000059 ; # concretizes
+    owl:inverseOf abi:hasAllianceAgreement ;
+    rdfs:domain abi:StrategicAlliance ;
+    rdfs:range cco:ont00000228 ;
+    rdfs:label "is alliance agreement of"@en ;
+    skos:definition "Relates an alliance agreement document to the act of alliance it records."@en .
+
+abi:hasAllianceParticipant a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ; # has participant
+    owl:inverseOf abi:participatesInAlliance ;
+    rdfs:domain cco:ont00000228 ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "has alliance participant"@en ;
+    skos:definition "Relates an act of alliance to an organization taking part in it. An alliance has two or more participants, none of which loses its separate identity."@en .
+
+abi:participatesInAlliance a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000056 ; # participates in
+    owl:inverseOf abi:hasAllianceParticipant ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range cco:ont00000228 ;
+    rdfs:label "participates in alliance"@en ;
+    skos:definition "Relates an organization to an act of alliance it takes part in."@en .
+
+abi:hasRestructuringRecord a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000058 ; # is concretized by
+    owl:inverseOf abi:isRestructuringRecordOf ;
+    rdfs:domain cco:ont00000228 ;
+    rdfs:range cco:ont00000853 ;
+    rdfs:label "has restructuring record"@en ;
+    skos:definition "Relates an act of organizational restructuring to the document that records its terms."@en .
+
+abi:isRestructuringRecordOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000059 ; # concretizes
+    owl:inverseOf abi:hasRestructuringRecord ;
+    rdfs:domain cco:ont00000853 ;
+    rdfs:range cco:ont00000228 ;
+    rdfs:label "is restructuring record of"@en ;
+    skos:definition "Relates a restructuring document to the act it records."@en .
+
+abi:hasMergingOrganization a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ; # has participant
+    owl:inverseOf abi:mergesIn ;
+    rdfs:domain abi:ActOfOrganizationalMerger ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "has merging organization"@en ;
+    skos:definition "Relates an act of merger to one of the organizations uniting in it. Symmetric in role: no participant is privileged, which is exactly what distinguishes a merger from an acquisition."@en .
+
+abi:mergesIn a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000056 ; # participates in
+    owl:inverseOf abi:hasMergingOrganization ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:ActOfOrganizationalMerger ;
+    rdfs:label "merges in"@en ;
+    skos:definition "Relates an organization to an act of merger it unites in."@en .
+
+abi:hasAcquiringOrganization a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ; # has participant
+    owl:inverseOf abi:acquiresIn ;
+    rdfs:domain abi:ActOfOrganizationalAcquisition ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "has acquiring organization"@en ;
+    skos:definition "Relates an act of acquisition to the organization gaining control. Kept distinct from abi:hasAcquiredOrganization so that 'who bought whom' is answerable."@en .
+
+abi:acquiresIn a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000056 ; # participates in
+    owl:inverseOf abi:hasAcquiringOrganization ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:ActOfOrganizationalAcquisition ;
+    rdfs:label "acquires in"@en ;
+    skos:definition "Relates an organization to an act of acquisition in which it is the acquirer."@en .
+
+abi:hasAcquiredOrganization a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ; # has participant
+    owl:inverseOf abi:isAcquiredIn ;
+    rdfs:domain abi:ActOfOrganizationalAcquisition ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "has acquired organization"@en ;
+    skos:definition "Relates an act of acquisition to the organization whose assets, operations and management pass under the acquirer's control."@en .
+
+abi:isAcquiredIn a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000056 ; # participates in
+    owl:inverseOf abi:hasAcquiredOrganization ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:ActOfOrganizationalAcquisition ;
+    rdfs:label "is acquired in"@en ;
+    skos:definition "Relates an organization to an act of acquisition in which it is the target."@en .
+
+abi:hasSubsidiaryOrganization a owl:ObjectProperty ;
+    owl:inverseOf abi:hasParentOrganization ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "has subsidiary organization"@en ;
+    skos:definition "Relates an organization to another organization it controls and owns a significant share of."@en .
+
+abi:hasParentOrganization a owl:ObjectProperty ;
+    owl:inverseOf abi:hasSubsidiaryOrganization ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "has parent organization"@en ;
+    skos:definition "Relates an organization to the organization that controls it."@en .
+
+#################################################################
+#    Classes - HOW WE KNOW (agreements, shared by the alliance slices)
+#################################################################
+
+abi:StrategicAlliance a owl:Class ;
+    rdfs:subClassOf cco:ont00000853 ; # Descriptive Information Content Entity
+    rdfs:label "Strategic Alliance"@en ;
+    skos:definition "Describes an agreement between two or more organizations to pursue a set of agreed-upon objectives while remaining independent entities."@en ;
+    skos:example "A memorandum of understanding (MOU) between a technology company and a software provider"@en ,
+                 "A strategic collaboration agreement in the automotive sector"@en ;
+    rdfs:comment "Strategic alliances are typically formalized through documents and agreements, making them apt to be represented as Descriptive Information Content Entities." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - WHY (the role each party bears under an agreement)
+#################################################################
+
+abi:OrganizationalAgreementRole a owl:Class ;
+    rdfs:subClassOf abi:Role ,
+      [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom abi:Organization ] ;
+    rdfs:label "Organizational Agreement Role"@en ;
+    skos:definition "A Role borne by an organization in virtue of an agreement it is party to (alliance, licence, distribution, merger, acquisition or subsidiary establishment), and realized by the act that carries the agreement out."@en ;
+    skos:example "The role of licensee borne by a manufacturer under a technology licensing agreement; the role of acquirer borne by Company X in its acquisition of Company Y."@en ;
+    rdfs:comment "One generic role for every organization process: the agreement record (HOW WE KNOW) states which side each party is on."@en .
+
+# >>> onto2py:consolidated-processes >>>
+# Generated by naas_abi_core.utils.onto2py.consolidate from
+# ontologies/processes/*.ttl. Do not edit between these markers: edit the
+# process files and re-run onto2py on the module.
+
+<http://ontology.naas.ai/abi/OrganizationsOntology>
+  owl:imports <http://ontology.naas.ai/abi/GeospatialRegionOntology> .
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfDistributionAgreementProcess
+#    Source: ontologies/processes/ActOfDistributionAgreementProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfDistributionAgreement a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasAllianceParticipant ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:OrganizationalAgreementRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasAllianceAgreement ; owl:someValuesFrom abi:DistributionAgreement ] ;
+  rdfs:label "Act of Distribution Agreement"@en ;
+  skos:definition "Planned act in which one organization agrees to distribute the products or services of another organization, typically in a specific geographic region or market segment."@en ;
+  skos:example "A distribution agreement between a manufacturer and a regional retailer"@en ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:DistributionAgreement a owl:Class ;
+  # StrategicAlliance is declared in the module, which this slice does not import:
+  # its parent is stated too, so the class reaches its bucket from the slice alone.
+  rdfs:subClassOf abi:StrategicAlliance ,
+    cco:ont00000853 ; # Descriptive Information Content Entity
+  rdfs:label "Distribution Agreement"@en ;
+  skos:definition "Details a planned act in which one organization agrees to distribute the products or services of another organization, typically in a specific geographic region or market segment."@en ;
+  skos:example "A distribution agreement between a manufacturer and a regional retailer"@en ;
+  rdfs:comment "A distribution agreement is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW IT IS
+#################################################################
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfJointVentureProcess
+#    Source: ontologies/processes/ActOfJointVentureProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfJointVenture a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasAllianceParticipant ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:OrganizationalAgreementRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasAllianceAgreement ; owl:someValuesFrom abi:JointVenture ] ;
+  rdfs:label "Act of Joint Venture"@en ;
+  skos:definition "Planned act wherein two or more organizations come together to undertake a specific project or business activity, sharing resources, risks, and rewards, while maintaining their distinct legal identities."@en ;
+  skos:example "A joint venture between automotive companies to develop electric vehicles"@en ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:JointVenture a owl:Class ;
+  # StrategicAlliance is declared in the module, which this slice does not import:
+  # its parent is stated too, so the class reaches its bucket from the slice alone.
+  rdfs:subClassOf abi:StrategicAlliance ,
+    cco:ont00000853 ; # Descriptive Information Content Entity
+  rdfs:label "Joint Venture"@en ;
+  skos:definition "Details a planned act in which two or more organizations come together to undertake a specific project or business activity, sharing resources, risks, and rewards, while maintaining their distinct legal identities."@en ;
+  skos:example "A joint venture between automotive companies to develop electric vehicles"@en ;
+  rdfs:comment "A joint venture is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW IT IS
+#################################################################
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfMarketingAllianceProcess
+#    Source: ontologies/processes/ActOfMarketingAllianceProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfMarketingAlliance a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasAllianceParticipant ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:OrganizationalAgreementRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasAllianceAgreement ; owl:someValuesFrom abi:MarketingAlliance ] ;
+  rdfs:label "Act of Marketing Alliance"@en ;
+  skos:definition "Planned act in which two or more organizations enter into a cooperative relationship to promote and distribute products or services to a common audience."@en ;
+  skos:example "A marketing alliance between a sports team and an apparel brand"@en ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:MarketingAlliance a owl:Class ;
+  # StrategicAlliance is declared in the module, which this slice does not import:
+  # its parent is stated too, so the class reaches its bucket from the slice alone.
+  rdfs:subClassOf abi:StrategicAlliance ,
+    cco:ont00000853 ; # Descriptive Information Content Entity
+  rdfs:label "Marketing Alliance"@en ;
+  skos:definition "Details a planned act in which two or more organizations enter into a cooperative relationship to promote and distribute products or services to a common audience."@en ;
+  skos:example "A marketing alliance between a sports team and an apparel brand"@en ;
+  rdfs:comment "A marketing alliance is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW IT IS
+#################################################################
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfOrganizationalAcquisitionProcess
+#    Source: ontologies/processes/ActOfOrganizationalAcquisitionProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfOrganizationalAcquisition a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasAcquiringOrganization ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasAcquiredOrganization ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:OrganizationalAgreementRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasRestructuringRecord ; owl:someValuesFrom abi:OrganizationAcquisition ] ;
+  rdfs:label "Act of Organizational Acquisition"@en ;
+  skos:definition "An Act of Possession in which one organization gains control over another organization, acquiring its assets, operations, and management to expand its operations or market share."@en ;
+  skos:example "Company X acquires Company Y, taking control of its operations and integrating Company Y's products into its own product line."@en ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:OrganizationAcquisition a owl:Class ;
+  rdfs:subClassOf cco:ont00000853 ; # Descriptive Information Content Entity
+  rdfs:label "Organization Acquisition"@en ;
+  skos:definition "Details a planned act in which one organization gains control over another organization, acquiring its assets, operations, and management to expand its operations or market share."@en ;
+  skos:example "Company X acquires Company Y, taking control of its operations and integrating Company Y's products into its own product line."@en ;
+  rdfs:comment "An organization acquisition is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW IT IS
+#################################################################
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfOrganizationalMergerProcess
+#    Source: ontologies/processes/ActOfOrganizationalMergerProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfOrganizationalMerger a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasMergingOrganization ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:OrganizationalAgreementRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasRestructuringRecord ; owl:someValuesFrom abi:OrganizationMerger ] ;
+  rdfs:label "Act of Organizational Merger"@en ;
+  skos:definition "An Act of Association in which two or more independent organizations unite to form a single entity, typically to enhance operational efficiency, market reach, or competitive advantage."@en ;
+  skos:example "The merger of Company A and Company B to form a new entity, AB Corporation, for the purpose of expanding their market presence and combining resources."@en ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:OrganizationMerger a owl:Class ;
+  rdfs:subClassOf cco:ont00000853 ; # Descriptive Information Content Entity
+  rdfs:label "Organization Merger"@en ;
+  skos:definition "Details a planned act in which two or more organizations unite to form a single entity, typically to enhance operational efficiency, market reach, or competitive advantage."@en ;
+  skos:example "The merger of Company A and Company B to form a new entity, AB Corporation, for the purpose of expanding their market presence and combining resources."@en ;
+  rdfs:comment "A merger is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW IT IS
+#################################################################
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfPartnershipProcess
+#    Source: ontologies/processes/ActOfPartnershipProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfPartnership a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasAllianceParticipant ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:OrganizationalAgreementRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasAllianceAgreement ; owl:someValuesFrom abi:Partnership ] ;
+  rdfs:label "Act of Partnership"@en ;
+  skos:definition "Planned act in which two or more organizations or individuals enter into an agreement to cooperate for mutual benefit, typically to achieve shared objectives."@en ;
+  skos:example "A business partnership between two consulting firms"@en ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:Partnership a owl:Class ;
+  # StrategicAlliance is declared in the module, which this slice does not import:
+  # its parent is stated too, so the class reaches its bucket from the slice alone.
+  rdfs:subClassOf abi:StrategicAlliance ,
+    cco:ont00000853 ; # Descriptive Information Content Entity
+  rdfs:label "Partnership"@en ;
+  skos:definition "Details a formal agreement between two or more parties to manage and operate a business and share its profits and losses."@en ;
+  skos:example "The partnership agreement document for a law firm, a business plan outlining the roles of partners in a medical practice."@en ;
+  rdfs:comment "A partnership is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW IT IS
+#################################################################
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfResearchCollaborationProcess
+#    Source: ontologies/processes/ActOfResearchCollaborationProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfResearchCollaboration a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasAllianceParticipant ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:OrganizationalAgreementRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasAllianceAgreement ; owl:someValuesFrom abi:ResearchCollaboration ] ;
+  rdfs:label "Act of Research Collaboration"@en ;
+  skos:definition "Planned act in which two or more organizations enter into a cooperative relationship to conduct research or development projects, sharing resources, expertise, and results."@en ;
+  skos:example "A research collaboration between universities and pharmaceutical companies"@en ;
+  rdfs:comment "Research Collaborations represent formal partnerships focused on research and development activities." ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:ResearchCollaboration a owl:Class ;
+  # StrategicAlliance is declared in the module, which this slice does not import:
+  # its parent is stated too, so the class reaches its bucket from the slice alone.
+  rdfs:subClassOf abi:StrategicAlliance ,
+    cco:ont00000853 ; # Descriptive Information Content Entity
+  rdfs:label "Research Collaboration"@en ;
+  skos:definition "Details a planned act in which two or more organizations enter into a cooperative relationship to conduct research or development projects, sharing resources, expertise, and results."@en ;
+  skos:example "A research collaboration between universities and pharmaceutical companies"@en ;
+  rdfs:comment "A research collaboration is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW IT IS
+#################################################################
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfSubsidiaryEstablishmentProcess
+#    Source: ontologies/processes/ActOfSubsidiaryEstablishmentProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfSubsidiaryEstablishment a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:OrganizationalAgreementRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasRestructuringRecord ; owl:someValuesFrom abi:SubsidiaryEstablishment ] ;
+  rdfs:label "Act of Subsidiary Establishment"@en ;
+  skos:definition "An Act of Association in which an organization creates and establishes a new legal entity, known as a subsidiary, over which it retains significant control and ownership."@en ;
+  skos:example "Global Corp establishes a new subsidiary, Tech Innovations Inc., to focus on research and development in the technology sector."@en ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:SubsidiaryEstablishment a owl:Class ;
+  rdfs:subClassOf cco:ont00000853 ; # Descriptive Information Content Entity
+  rdfs:label "Subsidiary Establishment"@en ;
+  skos:definition "Details a planned act in which an organization creates a new legal entity over which it retains significant control and ownership."@en ;
+  skos:example "The certificate of incorporation and shareholder agreement establishing Tech Innovations Inc. as a subsidiary of Global Corp."@en ;
+  rdfs:comment "A subsidiary establishment is documented through incorporation and ownership records, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW IT IS
+#################################################################
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfTechnologyLicensingProcess
+#    Source: ontologies/processes/ActOfTechnologyLicensingProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfTechnologyLicensing a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasAllianceParticipant ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:OrganizationalAgreementRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasAllianceAgreement ; owl:someValuesFrom abi:TechnologyLicensing ] ;
+  rdfs:label "Act of Technology Licensing"@en ;
+  skos:definition "Planned act in which one organization grants permission to another organization to use its intellectual property, such as patents, trademarks, or proprietary technology, in exchange for a fee or royalty."@en ;
+  skos:example "A technology licensing agreement for patented semiconductor designs"@en ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:TechnologyLicensing a owl:Class ;
+  # StrategicAlliance is declared in the module, which this slice does not import:
+  # its parent is stated too, so the class reaches its bucket from the slice alone.
+  rdfs:subClassOf abi:StrategicAlliance ,
+    cco:ont00000853 ; # Descriptive Information Content Entity
+  rdfs:label "Technology Licensing"@en ;
+  skos:definition "Details a planned act in which one organization grants permission to another organization to use its intellectual property, such as patents, trademarks, or proprietary technology, in exchange for a fee or royalty."@en ;
+  skos:example "A technology licensing agreement for patented semiconductor designs"@en ;
+  rdfs:comment "A technology licensing is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+  abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes - HOW IT IS
+#################################################################
+# <<< onto2py:consolidated-processes <<<

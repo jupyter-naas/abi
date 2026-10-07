@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v2.26.5 (2026-10-05)
+
+### Bug Fixes
+
+- Onto2py code generated
+  ([`3d4283a`](https://github.com/jupyter-naas/abi/commit/3d4283a305bf04794270d4704c3975be63f76e35))
+
+### Chores
+
+- Commit staged changes
+  ([`50d907d`](https://github.com/jupyter-naas/abi/commit/50d907d0cb5df755ed38cc2565adf0150a535c8a))
+
+- Update naas-abi version and improve people app API mount docs
+  ([`2916982`](https://github.com/jupyter-naas/abi/commit/29169822869cdc4a5f48332c5cbfff70a1cd46a7))
+
+### Refactoring
+
+- **search-topics**: Update topic queries and schema
+  ([`1ec21f8`](https://github.com/jupyter-naas/abi/commit/1ec21f802702ac85fdbc4402d915e8a9a390351c))
+
+
 ## v2.26.4 (2026-09-30)
 
 

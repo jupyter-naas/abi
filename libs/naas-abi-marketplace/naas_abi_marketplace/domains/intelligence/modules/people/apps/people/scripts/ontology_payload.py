@@ -33,8 +33,8 @@ ONTOLOGY_SOURCES: tuple[tuple[str, Path], ...] = (
 CCO_NS = "https://www.commoncoreontologies.org/"
 
 # CCO classes the people ontology builds on and the viewer shows as classes of
-# their own: the facilities an act occurs in, and the educational organization
-# that runs one. Everything else of CCO stays out, as before.
+# their own: the facilities located in the sites acts occur in, and the
+# educational organization that runs one. Everything else of CCO stays out, as before.
 _FACILITY_ONTOLOGY = CCO_MID_LEVEL_DIR / "FacilityOntology.ttl"
 _LABEL_SOURCES = tuple(
     CCO_MID_LEVEL_DIR / name
@@ -86,7 +86,7 @@ def _text_value(graph: Graph, uri: URIRef, predicate: URIRef) -> str | None:
 def _add_imported_classes(graph: Graph) -> None:
     """State, as classes, the CCO facility classes the people files build on.
 
-    The files name them by IRI only (``occursIn some cco:ont00000468``); their
+    The files name them by IRI only (``hasWorkFacility some cco:ont00000468``); their
     labels live in the CCO imports. Each one used is stated here with its label,
     definition and its facility parents, so the viewer can name it and show where
     it sits, and so the merged document says what it is.

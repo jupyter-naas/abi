@@ -1,17 +1,15 @@
+# onto2py-source-sha256: 0239ff4e349e9cf6e8c73f51f4a9eaa77e560a7cad652240566d49de9f35cfa5
 from __future__ import annotations
 
 import contextlib
 import datetime
 import os
 import uuid
+from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
-    Callable,
     ClassVar,
-    Iterable,
-    List,
-    Optional,
     Union,
     get_args,
     get_origin,
@@ -19,18 +17,17 @@ from typing import (
 
 from naas_abi.ontologies.modules.ABIOntology import (
     Disposition,
-    DocumentContentEntity,
     GenericallyDependentContinuant,
     MaterialEntity,
-    Organization,
-    Person,
     Process,
     Quality,
     Role,
 )
-from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfEmploymentProcess import (
-    ActOfEmployment,
+from naas_abi.ontologies.modules.DocumentContentEntityOntology import (
+    DocumentContentEntity,
 )
+from naas_abi.ontologies.modules.OrganizationOntology import Organization
+from naas_abi.ontologies.modules.PersonOntology import Person
 from pydantic import BaseModel, Field, ValidationError
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, XSD
@@ -106,7 +103,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, List):
+        if origin in (list, list):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -324,15 +321,15 @@ class EmployeeRole(RDFEntity):
     Externally grounded: it exists only while the employment relationship holds, and ends without the person ceasing to exist. Concretizes a JobPosition (possibly filling a previously vacant requisition).
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/EmployeeRole"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/EmployeeRole"
     _name: ClassVar[str] = "Employee Role"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "hasRealization": "http://ontology.naas.ai/abi/hasRealization",
-        "has_job_position": "http://ontology.naas.ai/personnel/hasJobPosition",
-        "in_service_line": "http://ontology.naas.ai/personnel/inServiceLine",
-        "is_employee_role_of": "http://ontology.naas.ai/personnel/isEmployeeRoleOf",
+        "has_job_position": "http://ontology.naas.ai/abi/hasJobPosition",
+        "in_service_line": "http://ontology.naas.ai/abi/inServiceLine",
+        "is_employee_role_of": "http://ontology.naas.ai/abi/isEmployeeRoleOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {
@@ -343,44 +340,87 @@ class EmployeeRole(RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.timezone.utc)
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    hasRealization: Optional[
-        Annotated[List[Union[ActOfEmployment, URIRef, str]], Field()]
-    ] = None
-    has_job_position: Optional[
+    hasRealization: Annotated[list[ActOfEmployment | URIRef | str], Field()] | None = (
+        None
+    )
+    has_job_position: (
         Annotated[
-            List[Union[JobPosition, URIRef, str]],
+            list[JobPosition | URIRef | str],
             Field(
                 description="Relates an employee role to the job position it concretizes. Named sub-property of abi:concretizes: a role (SDC) concretizes a position (GDC)."
             ),
         ]
-    ] = None
-    in_service_line: Optional[
+        | None
+    ) = None
+    in_service_line: (
         Annotated[
-            List[Union[ServiceLine, URIRef, str]],
+            list[ServiceLine | URIRef | str],
             Field(
                 description="Relates an employee role to the service line of the employing organization within which it is borne."
             ),
         ]
-    ] = None
-    is_employee_role_of: Optional[
+        | None
+    ) = None
+    is_employee_role_of: (
         Annotated[
-            List[Union[Person, URIRef, str]],
+            list[Person | URIRef | str],
             Field(
                 description="Relates an employee role to the person in whom it inheres."
             ),
         ]
-    ] = None
+        | None
+    ) = None
+
+
+class ActOfEmployment(RDFEntity):
+    """
+    Everything the act of working states (organization, client, site, temporal region, occupation role, mission, skills, profile document) is inherited and stays in the people graph. The act of employment adds the employer's records: the employee role and the contract.
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/ActOfEmployment"
+    _name: ClassVar[str] = "Act of Employment"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "has_contract": "http://ontology.naas.ai/abi/hasContract",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "realizes": "http://ontology.naas.ai/abi/realizes",
+    }
+    _object_properties: ClassVar[set[str]] = {"has_contract", "realizes"}
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[
+        datetime.datetime | None,
+        Field(description="Date of creation of the resource."),
+    ] = datetime.datetime.now(datetime.UTC)
+    creator: Annotated[
+        Any | None,
+        Field(description="An entity responsible for making the resource."),
+    ] = os.environ.get("USER")
+
+    # Object properties
+    has_contract: (
+        Annotated[
+            list[EmploymentContract | URIRef | str],
+            Field(
+                description="Relates an act of employment to the employment contract it concretizes."
+            ),
+        ]
+        | None
+    ) = None
+    realizes: Annotated[list[EmployeeRole | URIRef | str], Field()] | None = None
 
 
 class EmploymentRecord(GenericallyDependentContinuant, RDFEntity):
@@ -388,19 +428,19 @@ class EmploymentRecord(GenericallyDependentContinuant, RDFEntity):
     Generically dependent on the person: the same record can be copied between systems without ceasing to be the record of that person. Concretized by the Act of Working that the relationship consists in.
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/EmploymentRecord"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/EmploymentRecord"
     _name: ClassVar[str] = "Employment Record"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "employee_id": "http://ontology.naas.ai/personnel/employee_id",
+        "employee_id": "http://ontology.naas.ai/abi/employee_id",
         "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
-        "hire_date": "http://ontology.naas.ai/personnel/hire_date",
+        "hire_date": "http://ontology.naas.ai/abi/hire_date",
         "isConcretizedBy": "http://ontology.naas.ai/abi/isConcretizedBy",
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
-        "is_employment_record_of": "http://ontology.naas.ai/personnel/isEmploymentRecordOf",
+        "is_employment_record_of": "http://ontology.naas.ai/abi/isEmploymentRecordOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "termination_date": "http://ontology.naas.ai/personnel/termination_date",
+        "termination_date": "http://ontology.naas.ai/abi/termination_date",
     }
     _object_properties: ClassVar[set[str]] = {
         "generically_depends_on",
@@ -410,90 +450,161 @@ class EmploymentRecord(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    employee_id: Optional[
+    employee_id: (
         Annotated[
             str,
             Field(
                 description="Identifier assigned to a person by the employing organization's HR system."
             ),
         ]
-    ] = None
-    hire_date: Optional[
+        | None
+    ) = None
+    hire_date: (
         Annotated[
             datetime.date,
             Field(
                 description="Date on which the employment relationship documented by this record began."
             ),
         ]
-    ] = None
-    termination_date: Optional[
+        | None
+    ) = None
+    termination_date: (
         Annotated[
             datetime.date,
             Field(
                 description="Date on which the employment relationship documented by this record ended. Absent while the relationship is active."
             ),
         ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
+        | None
+    ) = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: (
         Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
+            datetime.datetime, Field(description="Date of creation of the resource.")
         ]
-    ] = None
-    creator: Optional[
+        | None
+    ) = None
+    creator: (
         Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
+            Any, Field(description="An entity responsible for making the resource.")
         ]
-    ] = None
+        | None
+    ) = None
 
     # Object properties
-    generically_depends_on: Optional[
+    generically_depends_on: (
         Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
+            list[MaterialEntity | URIRef | str],
             Field(
                 description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
             ),
         ]
-    ] = None
-    isConcretizedBy: Optional[
-        Annotated[List[Union[ActOfEmployment, URIRef, str]], Field()]
-    ] = None
-    is_concretized_by: Optional[
+        | None
+    ) = None
+    isConcretizedBy: Annotated[list[ActOfEmployment | URIRef | str], Field()] | None = (
+        None
+    )
+    is_concretized_by: (
         Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            list[Disposition | Process | Quality | Role | URIRef | str],
             Field(description="c is concretized by b =Def b concretizes c"),
         ]
-    ] = None
-    is_employment_record_of: Optional[
+        | None
+    ) = None
+    is_employment_record_of: (
         Annotated[
-            List[Union[Person, URIRef, str]],
+            list[Person | URIRef | str],
             Field(
                 description="Relates an employment record to the person on which it generically depends."
             ),
         ]
-    ] = None
+        | None
+    ) = None
+
+
+class JobDescription(DocumentContentEntity, RDFEntity):
+    """
+    Job Description
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/JobDescription"
+    _name: ClassVar[str] = "Job Description"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "genericallyDependsOn": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_job_description_of": "http://ontology.naas.ai/abi/isJobDescriptionOf",
+        "is_job_description_of_contract": "http://ontology.naas.ai/abi/isJobDescriptionOfContract",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "participatesIn": "http://ontology.naas.ai/abi/participatesIn",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "genericallyDependsOn",
+        "is_job_description_of",
+        "is_job_description_of_contract",
+        "participatesIn",
+    }
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: (
+        Annotated[
+            datetime.datetime, Field(description="Date of creation of the resource.")
+        ]
+        | None
+    ) = None
+    creator: (
+        Annotated[
+            Any, Field(description="An entity responsible for making the resource.")
+        ]
+        | None
+    ) = None
+
+    # Object properties
+    genericallyDependsOn: (
+        Annotated[list[Organization | URIRef | str], Field()] | None
+    ) = None
+    is_job_description_of: (
+        Annotated[
+            list[JobPosition | URIRef | str],
+            Field(
+                description="Relates a job description document to the job position it describes."
+            ),
+        ]
+        | None
+    ) = None
+    is_job_description_of_contract: (
+        Annotated[
+            list[EmploymentContract | URIRef | str],
+            Field(
+                description="Relates a job description to an employment contract that is about it."
+            ),
+        ]
+        | None
+    ) = None
+    participatesIn: Annotated[list[ActOfEmployment | URIRef | str], Field()] | None = (
+        None
+    )
 
 
 class JobPosition(GenericallyDependentContinuant, RDFEntity):
     """
-    Deliberately NOT a subclass of abi:Role. A BFO role must inhere in a bearer, but an open requisition has no occupant. Occupied positions are concretized by personnel:EmployeeRole (allValuesFrom, not someValuesFrom, so a vacant position remains satisfiable).
+    Deliberately NOT a subclass of abi:Role. A BFO role must inhere in a bearer, but an open requisition has no occupant. Occupied positions are concretized by abi:EmployeeRole (allValuesFrom, not someValuesFrom, so a vacant position remains satisfiable).
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/JobPosition"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/JobPosition"
     _name: ClassVar[str] = "Job Position"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "genericallyDependsOn": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
-        "has_job_description": "http://ontology.naas.ai/personnel/hasJobDescription",
+        "has_job_description": "http://ontology.naas.ai/abi/hasJobDescription",
         "isConcretizedBy": "http://ontology.naas.ai/abi/isConcretizedBy",
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
-        "is_job_position_of": "http://ontology.naas.ai/personnel/isJobPositionOf",
-        "job_family": "http://ontology.naas.ai/personnel/job_family",
-        "job_title": "http://ontology.naas.ai/personnel/job_title",
+        "is_job_position_of": "http://ontology.naas.ai/abi/isJobPositionOf",
+        "job_family": "http://ontology.naas.ai/abi/job_family",
+        "job_title": "http://ontology.naas.ai/abi/job_position_title",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "participatesIn": "http://ontology.naas.ai/abi/participatesIn",
     }
@@ -508,76 +619,80 @@ class JobPosition(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    job_title: Optional[
+    job_title: (
         Annotated[
             str,
             Field(
                 description="Title of the job position as published by the organization."
             ),
         ]
-    ] = None
-    job_family: Optional[
+        | None
+    ) = None
+    job_family: (
         Annotated[
             str,
             Field(
                 description="Grouping of related job positions sharing a common discipline or career track."
             ),
         ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
+        | None
+    ) = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: (
         Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
+            datetime.datetime, Field(description="Date of creation of the resource.")
         ]
-    ] = None
-    creator: Optional[
+        | None
+    ) = None
+    creator: (
         Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
+            Any, Field(description="An entity responsible for making the resource.")
         ]
-    ] = None
+        | None
+    ) = None
 
     # Object properties
-    genericallyDependsOn: Optional[
-        Annotated[List[Union[Organization, URIRef, str]], Field()]
-    ] = None
-    generically_depends_on: Optional[
+    genericallyDependsOn: (
+        Annotated[list[Organization | URIRef | str], Field()] | None
+    ) = None
+    generically_depends_on: (
         Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
+            list[MaterialEntity | URIRef | str],
             Field(
                 description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
             ),
         ]
-    ] = None
-    has_job_description: Optional[
+        | None
+    ) = None
+    has_job_description: (
         Annotated[
-            List[Union[JobDescription, URIRef, str]],
+            list[JobDescription | URIRef | str],
             Field(
                 description="Relates a job position to the job description document that states its duties and requirements."
             ),
         ]
-    ] = None
-    isConcretizedBy: Optional[
-        Annotated[List[Union[EmployeeRole, URIRef, str]], Field()]
-    ] = None
-    is_concretized_by: Optional[
+        | None
+    ) = None
+    isConcretizedBy: Annotated[list[EmployeeRole | URIRef | str], Field()] | None = None
+    is_concretized_by: (
         Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            list[Disposition | Process | Quality | Role | URIRef | str],
             Field(description="c is concretized by b =Def b concretizes c"),
         ]
-    ] = None
-    is_job_position_of: Optional[
+        | None
+    ) = None
+    is_job_position_of: (
         Annotated[
-            List[Union[EmployeeRole, URIRef, str]],
+            list[EmployeeRole | URIRef | str],
             Field(
                 description="Relates a job position to the employee role that concretizes it, when the position is occupied."
             ),
         ]
-    ] = None
-    participatesIn: Optional[
-        Annotated[List[Union[ActOfEmployment, URIRef, str]], Field()]
-    ] = None
+        | None
+    ) = None
+    participatesIn: Annotated[list[ActOfEmployment | URIRef | str], Field()] | None = (
+        None
+    )
 
 
 class EmploymentContract(GenericallyDependentContinuant, RDFEntity):
@@ -585,16 +700,18 @@ class EmploymentContract(GenericallyDependentContinuant, RDFEntity):
     Employment Contract
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/EmploymentContract"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/EmploymentContract"
     _name: ClassVar[str] = "Employment Contract"
     _property_uris: ClassVar[dict] = {
+        "contract_type": "http://ontology.naas.ai/abi/contract_type",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "genericallyDependsOn": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "isConcretizedBy": "http://ontology.naas.ai/abi/isConcretizedBy",
-        "is_about_job_description": "http://ontology.naas.ai/personnel/isAboutJobDescription",
+        "is_about_job_description": "http://ontology.naas.ai/abi/isAboutJobDescription",
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_contract_of": "http://ontology.naas.ai/abi/isContractOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {
@@ -603,52 +720,72 @@ class EmploymentContract(GenericallyDependentContinuant, RDFEntity):
         "isConcretizedBy",
         "is_about_job_description",
         "is_concretized_by",
+        "is_contract_of",
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
+    contract_type: (
         Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
+            str,
+            Field(
+                description="Engagement type of an employment contract as the employer records it, e.g. 'Permanent', 'Fixed-term', 'Freelance'. The published counterpart is abi:employment_type, stated on the act of working."
+            ),
         ]
-    ] = None
-    creator: Optional[
+        | None
+    ) = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: (
         Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
+            datetime.datetime, Field(description="Date of creation of the resource.")
         ]
-    ] = None
+        | None
+    ) = None
+    creator: (
+        Annotated[
+            Any, Field(description="An entity responsible for making the resource.")
+        ]
+        | None
+    ) = None
 
     # Object properties
-    genericallyDependsOn: Optional[
-        Annotated[List[Union[Person, URIRef, str]], Field()]
-    ] = None
-    generically_depends_on: Optional[
+    genericallyDependsOn: Annotated[list[Person | URIRef | str], Field()] | None = None
+    generically_depends_on: (
         Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
+            list[MaterialEntity | URIRef | str],
             Field(
                 description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
             ),
         ]
-    ] = None
-    isConcretizedBy: Optional[
-        Annotated[List[Union[ActOfEmployment, URIRef, str]], Field()]
-    ] = None
-    is_about_job_description: Optional[
+        | None
+    ) = None
+    isConcretizedBy: Annotated[list[ActOfEmployment | URIRef | str], Field()] | None = (
+        None
+    )
+    is_about_job_description: (
         Annotated[
-            List[Union[JobDescription, URIRef, str]],
+            list[JobDescription | URIRef | str],
             Field(
                 description="Relates an employment contract to the job description it is about."
             ),
         ]
-    ] = None
-    is_concretized_by: Optional[
+        | None
+    ) = None
+    is_concretized_by: (
         Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
+            list[Disposition | Process | Quality | Role | URIRef | str],
             Field(description="c is concretized by b =Def b concretizes c"),
         ]
-    ] = None
+        | None
+    ) = None
+    is_contract_of: (
+        Annotated[
+            list[ActOfEmployment | URIRef | str],
+            Field(
+                description="Relates an employment contract to the act of employment that concretizes it."
+            ),
+        ]
+        | None
+    ) = None
 
 
 class EmploymentStatus(Quality, RDFEntity):
@@ -656,18 +793,18 @@ class EmploymentStatus(Quality, RDFEntity):
     Employment Status
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/EmploymentStatus"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/EmploymentStatus"
     _name: ClassVar[str] = "Employment Status"
     _property_uris: ClassVar[dict] = {
         "concretizes": "http://ontology.naas.ai/abi/concretizes",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_employment_status_of": "http://ontology.naas.ai/personnel/isEmploymentStatusOf",
+        "is_employment_status_of": "http://ontology.naas.ai/abi/isEmploymentStatusOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "participatesIn": "http://ontology.naas.ai/abi/participatesIn",
         "participates_in": "http://ontology.naas.ai/abi/participatesIn",
-        "status_value": "http://ontology.naas.ai/personnel/status_value",
+        "status_value": "http://ontology.naas.ai/abi/status_value",
     }
     _object_properties: ClassVar[set[str]] = {
         "concretizes",
@@ -678,59 +815,61 @@ class EmploymentStatus(Quality, RDFEntity):
     }
 
     # Data properties
-    status_value: Optional[
+    status_value: (
         Annotated[
             str,
             Field(
                 description="Value of an employment status, e.g. 'active', 'on-leave', 'notice-period', 'terminated'."
             ),
         ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
+        | None
+    ) = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: (
         Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
+            datetime.datetime, Field(description="Date of creation of the resource.")
         ]
-    ] = None
-    creator: Optional[
+        | None
+    ) = None
+    creator: (
         Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
+            Any, Field(description="An entity responsible for making the resource.")
         ]
-    ] = None
+        | None
+    ) = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[List[Union[EmploymentRecord, URIRef, str]], Field()]
-    ] = None
-    inheres_in: Optional[
+    concretizes: Annotated[list[EmploymentRecord | URIRef | str], Field()] | None = None
+    inheres_in: (
         Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
+            list[MaterialEntity | URIRef | str],
             Field(
                 description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
             ),
         ]
-    ] = None
-    is_employment_status_of: Optional[
+        | None
+    ) = None
+    is_employment_status_of: (
         Annotated[
-            List[Union[Person, URIRef, str]],
+            list[Person | URIRef | str],
             Field(
                 description="Relates an employment status quality to the person in whom it inheres."
             ),
         ]
-    ] = None
-    participatesIn: Optional[
-        Annotated[List[Union[ActOfEmployment, URIRef, str]], Field()]
-    ] = None
-    participates_in: Optional[
+        | None
+    ) = None
+    participatesIn: Annotated[list[ActOfEmployment | URIRef | str], Field()] | None = (
+        None
+    )
+    participates_in: (
         Annotated[
-            List[Union[Process, URIRef, str]],
+            list[Process | URIRef | str],
             Field(
                 description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"
             ),
         ]
-    ] = None
+        | None
+    ) = None
 
 
 class Remuneration(Quality, RDFEntity):
@@ -738,7 +877,7 @@ class Remuneration(Quality, RDFEntity):
     Remuneration
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/Remuneration"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Remuneration"
     _name: ClassVar[str] = "Remuneration"
     _property_uris: ClassVar[dict] = {
         "concretizes": "http://ontology.naas.ai/abi/concretizes",
@@ -749,8 +888,8 @@ class Remuneration(Quality, RDFEntity):
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "participatesIn": "http://ontology.naas.ai/abi/participatesIn",
         "participates_in": "http://ontology.naas.ai/abi/participatesIn",
-        "remuneration_amount": "http://ontology.naas.ai/personnel/remuneration_amount",
-        "remuneration_currency": "http://ontology.naas.ai/personnel/remuneration_currency",
+        "remuneration_amount": "http://ontology.naas.ai/abi/remuneration_amount",
+        "remuneration_currency": "http://ontology.naas.ai/abi/remuneration_currency",
     }
     _object_properties: ClassVar[set[str]] = {
         "concretizes",
@@ -761,72 +900,76 @@ class Remuneration(Quality, RDFEntity):
     }
 
     # Data properties
-    remuneration_amount: Optional[
+    remuneration_amount: (
         Annotated[
             Any,
             Field(description="Annual remuneration amount in the contract currency."),
         ]
-    ] = None
-    remuneration_currency: Optional[Annotated[str, Field()]] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
+        | None
+    ) = None
+    remuneration_currency: Annotated[str, Field()] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: (
         Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
+            datetime.datetime, Field(description="Date of creation of the resource.")
         ]
-    ] = None
-    creator: Optional[
+        | None
+    ) = None
+    creator: (
         Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
+            Any, Field(description="An entity responsible for making the resource.")
         ]
-    ] = None
+        | None
+    ) = None
 
     # Object properties
-    concretizes: Optional[
+    concretizes: (
         Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
+            list[GenericallyDependentContinuant | URIRef | str],
             Field(
                 description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
             ),
         ]
-    ] = None
-    inheresIn: Optional[Annotated[List[Union[Person, URIRef, str]], Field()]] = None
-    inheres_in: Optional[
+        | None
+    ) = None
+    inheresIn: Annotated[list[Person | URIRef | str], Field()] | None = None
+    inheres_in: (
         Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
+            list[MaterialEntity | URIRef | str],
             Field(
                 description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
             ),
         ]
-    ] = None
-    participatesIn: Optional[
-        Annotated[List[Union[ActOfEmployment, URIRef, str]], Field()]
-    ] = None
-    participates_in: Optional[
+        | None
+    ) = None
+    participatesIn: Annotated[list[ActOfEmployment | URIRef | str], Field()] | None = (
+        None
+    )
+    participates_in: (
         Annotated[
-            List[Union[Process, URIRef, str]],
+            list[Process | URIRef | str],
             Field(
                 description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"
             ),
         ]
-    ] = None
+        | None
+    ) = None
 
 
 class Grade(Quality, RDFEntity):
     """
-    Kept apart from personnel:job_title, which names a position, and from personnel:EmployeeRole, which is what the person bears. Two people with the same grade can hold different positions, and the same position can be held at different grades.
+    Kept apart from abi:job_position_title, which names a position, and from abi:EmployeeRole, which is what the person bears. Two people with the same grade can hold different positions, and the same position can be held at different grades.
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/Grade"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/Grade"
     _name: ClassVar[str] = "Grade"
     _property_uris: ClassVar[dict] = {
         "concretizes": "http://ontology.naas.ai/abi/concretizes",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "grade_value": "http://ontology.naas.ai/personnel/grade_value",
+        "grade_value": "http://ontology.naas.ai/abi/grade_value",
         "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_grade_of": "http://ontology.naas.ai/personnel/isGradeOf",
+        "is_grade_of": "http://ontology.naas.ai/abi/isGradeOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "participatesIn": "http://ontology.naas.ai/abi/participatesIn",
         "participates_in": "http://ontology.naas.ai/abi/participatesIn",
@@ -840,78 +983,83 @@ class Grade(Quality, RDFEntity):
     }
 
     # Data properties
-    grade_value: Optional[
+    grade_value: (
         Annotated[
             str,
             Field(
                 description="Value of a grade, i.e. the seniority level the employing organization recognises for the person."
             ),
         ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
+        | None
+    ) = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: (
         Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
+            datetime.datetime, Field(description="Date of creation of the resource.")
         ]
-    ] = None
-    creator: Optional[
+        | None
+    ) = None
+    creator: (
         Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
+            Any, Field(description="An entity responsible for making the resource.")
         ]
-    ] = None
+        | None
+    ) = None
 
     # Object properties
-    concretizes: Optional[
+    concretizes: (
         Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
+            list[GenericallyDependentContinuant | URIRef | str],
             Field(
                 description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
             ),
         ]
-    ] = None
-    inheres_in: Optional[
+        | None
+    ) = None
+    inheres_in: (
         Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
+            list[MaterialEntity | URIRef | str],
             Field(
                 description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
             ),
         ]
-    ] = None
-    is_grade_of: Optional[
+        | None
+    ) = None
+    is_grade_of: (
         Annotated[
-            List[Union[Person, URIRef, str]],
+            list[Person | URIRef | str],
             Field(
                 description="Relates a grade quality to the person in whom it inheres."
             ),
         ]
-    ] = None
-    participatesIn: Optional[
-        Annotated[List[Union[ActOfEmployment, URIRef, str]], Field()]
-    ] = None
-    participates_in: Optional[
+        | None
+    ) = None
+    participatesIn: Annotated[list[ActOfEmployment | URIRef | str], Field()] | None = (
+        None
+    )
+    participates_in: (
         Annotated[
-            List[Union[Process, URIRef, str]],
+            list[Process | URIRef | str],
             Field(
                 description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"
             ),
         ]
-    ] = None
+        | None
+    ) = None
 
 
 class ServiceLine(Organization, RDFEntity):
     """
-    An organization in its own right, not a label on a person: it has its own members, its own leadership and can be reorganized without any person changing. A person reaches their service line through the employee role they bear (personnel:inServiceLine).
+    An organization in its own right, not a label on a person: it has its own members, its own leadership and can be reorganized without any person changing. A person reaches their service line through the employee role they bear (abi:inServiceLine).
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/ServiceLine"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/abi/ServiceLine"
     _name: ClassVar[str] = "Service Line"
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "is_service_line_of": "http://ontology.naas.ai/personnel/isServiceLineOf",
-        "is_service_line_of_employee_role": "http://ontology.naas.ai/personnel/isServiceLineOfEmployeeRole",
+        "is_service_line_of": "http://ontology.naas.ai/abi/isServiceLineOf",
+        "is_service_line_of_employee_role": "http://ontology.naas.ai/abi/isServiceLineOfEmployeeRole",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {
@@ -920,127 +1068,49 @@ class ServiceLine(Organization, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: (
         Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
+            datetime.datetime, Field(description="Date of creation of the resource.")
         ]
-    ] = None
-    creator: Optional[
+        | None
+    ) = None
+    creator: (
         Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
+            Any, Field(description="An entity responsible for making the resource.")
         ]
-    ] = None
+        | None
+    ) = None
 
     # Object properties
-    is_service_line_of: Optional[
+    is_service_line_of: (
         Annotated[
-            List[Union[Organization, URIRef, str]],
+            list[Organization | URIRef | str],
             Field(
                 description="Relates a service line to the organization it is a member part of."
             ),
         ]
-    ] = None
-    is_service_line_of_employee_role: Optional[
+        | None
+    ) = None
+    is_service_line_of_employee_role: (
         Annotated[
-            List[Union[EmployeeRole, URIRef, str]],
+            list[EmployeeRole | URIRef | str],
             Field(
                 description="Relates a service line to an employee role borne within it."
             ),
         ]
-    ] = None
-
-
-class JobDescription(DocumentContentEntity, RDFEntity):
-    """
-    Job Description
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/JobDescription"
-    _name: ClassVar[str] = "Job Description"
-    _property_uris: ClassVar[dict] = {
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "genericallyDependsOn": "http://ontology.naas.ai/abi/genericallyDependsOn",
-        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
-        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
-        "is_job_description_of": "http://ontology.naas.ai/personnel/isJobDescriptionOf",
-        "is_job_description_of_contract": "http://ontology.naas.ai/personnel/isJobDescriptionOfContract",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-        "participatesIn": "http://ontology.naas.ai/abi/participatesIn",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "genericallyDependsOn",
-        "generically_depends_on",
-        "is_concretized_by",
-        "is_job_description_of",
-        "is_job_description_of_contract",
-        "participatesIn",
-    }
-
-    # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
-
-    # Object properties
-    genericallyDependsOn: Optional[
-        Annotated[List[Union[Organization, URIRef, str]], Field()]
-    ] = None
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-    is_job_description_of: Optional[
-        Annotated[
-            List[Union[JobPosition, URIRef, str]],
-            Field(
-                description="Relates a job description document to the job position it describes."
-            ),
-        ]
-    ] = None
-    is_job_description_of_contract: Optional[
-        Annotated[
-            List[Union[EmploymentContract, URIRef, str]],
-            Field(
-                description="Relates a job description to an employment contract that is about it."
-            ),
-        ]
-    ] = None
-    participatesIn: Optional[
-        Annotated[List[Union[ActOfEmployment, URIRef, str]], Field()]
-    ] = None
+        | None
+    ) = None
 
 
 # Rebuild models to resolve forward references
 EmployeeRole.model_rebuild()
+ActOfEmployment.model_rebuild()
 EmploymentRecord.model_rebuild()
+JobDescription.model_rebuild()
 JobPosition.model_rebuild()
 EmploymentContract.model_rebuild()
 EmploymentStatus.model_rebuild()
 Remuneration.model_rebuild()
 Grade.model_rebuild()
 ServiceLine.model_rebuild()
-JobDescription.model_rebuild()

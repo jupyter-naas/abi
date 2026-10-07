@@ -591,12 +591,12 @@ function TopicEditor({ workspaceId, topic, topics, graphs, contract, canEdit, is
   );
 }
 
-const IMAGE_QUERY_TEMPLATE = `PREFIX people: <http://ontology.naas.ai/people/>
+const IMAGE_QUERY_TEMPLATE = `PREFIX abi: <http://ontology.naas.ai/abi/>
 SELECT ?uri ?image
 WHERE {
   VALUES ?uri { {{ uris }} }
-  ?uri people:hasPortrait ?p .
-  ?p people:portrait_url ?image .
+  ?uri abi:hasPortrait ?p .
+  ?p abi:portrait_url ?image .
 }`;
 
 const ROW_QUERY_TEMPLATE = `PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>

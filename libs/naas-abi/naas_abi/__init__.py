@@ -829,7 +829,9 @@ class ABIModule(BaseModule):
         # Initialize Nexus platform (graphs + agent metadata in the triple
         # store). Deferred from on_initialized so non-API entry points
         # (Dagster run workers, CLI commands, tests) don't pay this cost.
-        from naas_abi.apply_nexus_platform_pipeline import apply_nexus_platform_pipeline
+        from naas_abi.scripts.apply_nexus_platform_pipeline import (
+            apply_nexus_platform_pipeline,
+        )
 
         apply_nexus_platform_pipeline(
             enabled=self.configuration.run_nexus_platform_pipeline,

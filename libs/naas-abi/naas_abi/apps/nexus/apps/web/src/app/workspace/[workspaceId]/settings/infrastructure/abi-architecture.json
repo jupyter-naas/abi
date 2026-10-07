@@ -271,7 +271,7 @@
       "symbols": 65,
       "sourcePaths": [
         "naas_abi/__init__.py",
-        "naas_abi/apply_nexus_platform_pipeline.py",
+        "naas_abi/scripts/apply_nexus_platform_pipeline.py",
         "naas_abi/cli.py"
       ]
     },
@@ -845,16 +845,8 @@
         "naas_abi/ontologies/classes/ontology_naas_ai/nexus/VisitSessionInterval.py",
         "naas_abi/ontologies/classes/ontology_naas_ai/nexus/Workspace.py",
         "naas_abi/ontologies/classes/ontology_naas_ai/nexus/WorkspaceRole.py",
-        "naas_abi/ontologies/classes/purl_obolibrary_org/obo/Disposition.py",
-        "naas_abi/ontologies/classes/purl_obolibrary_org/obo/GenericallyDependentContinuant.py",
-        "naas_abi/ontologies/classes/purl_obolibrary_org/obo/MaterialEntity.py",
         "naas_abi/ontologies/classes/purl_obolibrary_org/obo/Process.py",
-        "naas_abi/ontologies/classes/purl_obolibrary_org/obo/Quality.py",
-        "naas_abi/ontologies/classes/purl_obolibrary_org/obo/Role.py",
-        "naas_abi/ontologies/classes/purl_obolibrary_org/obo/Site.py",
-        "naas_abi/ontologies/classes/purl_obolibrary_org/obo/TemporalRegion.py",
         "naas_abi/ontologies/modules/ABIOntology.py",
-        "naas_abi/ontologies/modules/BFO7BucketsProcessOntology.py",
         "naas_abi/ontologies/modules/NexusPlatformOntology.py"
       ]
     },

@@ -31,13 +31,6 @@ _BFO_BUCKET_ROOT_IRIS: tuple[str, ...] = (
 
 _BFO_BUCKET_ROOTS = " ".join(f"<{iri}>" for iri in _BFO_BUCKET_ROOT_IRIS)
 
-# CCO Facility: a Material Artifact in BFO/CCO terms, but the seven-bucket
-# framework files a building by WHERE a process happens, so it is a WHERE root
-# here and every facility below it (Office Building, Educational Facility...)
-# lands in Site. Nothing else about the class changes.
-_CCO_NS = "https://www.commoncoreontologies.org/"
-_CCO_FACILITY = f"{_CCO_NS}ont00000192"
-
 # ABI equivalents: rdfs:subClassOf often skips the bucket-root IRI (see Nexus comments).
 _ABI_TO_BFO_BUCKET_ROOT: dict[str, str] = {
     **{
@@ -54,7 +47,6 @@ _ABI_TO_BFO_BUCKET_ROOT: dict[str, str] = {
             ("TemporalInstant", "BFO_0000008"),
         )
     },
-    _CCO_FACILITY: f"{_BFO_NS}BFO_0000029",
 }
 _ABI_BUCKET_VALUES = " ".join(f"<{iri}>" for iri in _ABI_TO_BFO_BUCKET_ROOT)
 
@@ -87,6 +79,11 @@ _ABI_ONTOLOGY_PATH = (
 # Bundled imports referenced by PeopleOntology / ABIOntology (same as Nexus _IMPORT_URI_TO_LOCAL).
 _BUCKET_INFERENCE_TTL_PATHS: tuple[Path, ...] = (
     _ABI_ONTOLOGY_PATH,
+    # Geospatial regions (city, country...) the processes occur in.
+    _ABI_ONTOLOGY_PATH.with_name("GeospatialRegionOntology.ttl"),
+    _ABI_ONTOLOGY_PATH.with_name("PersonOntology.ttl"),
+    _ABI_ONTOLOGY_PATH.with_name("OrganizationOntology.ttl"),
+    _ABI_ONTOLOGY_PATH.with_name("DocumentContentEntityOntology.ttl"),
     _ABI_IMPORTS_DIR / "top-level" / "bfo-core.ttl",
     _ABI_IMPORTS_DIR / "mid-level" / "AgentOntology.ttl",
     _ABI_IMPORTS_DIR / "mid-level" / "QualityOntology.ttl",
@@ -94,6 +91,10 @@ _BUCKET_INFERENCE_TTL_PATHS: tuple[Path, ...] = (
     _ABI_IMPORTS_DIR / "mid-level" / "EventOntology.ttl",
     _ABI_IMPORTS_DIR / "mid-level" / "ExtendedRelationOntology.ttl",
     _ABI_IMPORTS_DIR / "mid-level" / "FacilityOntology.ttl",
+    # Facility -> Material Artifact: a facility is a material entity (WHO); the
+    # WHERE of an act is the geospatial site the facility is located in.
+    _ABI_IMPORTS_DIR / "mid-level" / "ArtifactOntology.ttl",
+    _ABI_IMPORTS_DIR / "mid-level" / "GeospatialOntology.ttl",
 )
 
 

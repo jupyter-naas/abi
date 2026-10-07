@@ -1,5 +1,5 @@
 """
-Earthquakes router — wsr:EarthquakeMonitoringProcess HTTP interface.
+Earthquakes router — abi:EarthquakeMonitoringProcess HTTP interface.
 
 Endpoint:
   GET /api/earthquakes — M≥1.0 earthquakes in the past 24 hours (USGS)

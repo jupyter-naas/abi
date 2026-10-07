@@ -23,14 +23,14 @@ from rdflib import URIRef
 from rdflib.namespace import RDF
 
 ABI_PERSON = URIRef("http://ontology.naas.ai/abi/Person")
-PEOPLE_EMAIL = URIRef("http://ontology.naas.ai/people/email_address")
-PEOPLE_PHONE = URIRef("http://ontology.naas.ai/people/telephone_number")
-PEOPLE_LINKEDIN = URIRef("http://ontology.naas.ai/people/linkedin_url")
-PEOPLE_COUNTRY_CODE = URIRef("http://ontology.naas.ai/people/country_code")
-PEOPLE_PROFILE_SLUG = URIRef("http://ontology.naas.ai/people/profile_slug")
+PEOPLE_EMAIL = URIRef("http://ontology.naas.ai/abi/email_address")
+PEOPLE_PHONE = URIRef("http://ontology.naas.ai/abi/telephone_number")
+PEOPLE_LINKEDIN = URIRef("http://ontology.naas.ai/abi/linkedin_url")
+PEOPLE_COUNTRY_CODE = URIRef("http://ontology.naas.ai/abi/site_country_code")
+PEOPLE_PROFILE_SLUG = URIRef("http://ontology.naas.ai/abi/profile_slug")
 PEOPLE_SITE = URIRef(Site._class_uri)
-PEOPLE_YEARS = URIRef("http://ontology.naas.ai/people/years_of_experience")
-PEOPLE_WORKS_FOR = URIRef("http://ontology.naas.ai/people/worksFor")
+PEOPLE_YEARS = URIRef("http://ontology.naas.ai/abi/years_of_experience")
+PEOPLE_WORKS_FOR = URIRef("http://ontology.naas.ai/abi/worksFor")
 
 
 def _profile_params(**overrides: object) -> PersonProfilePipelineParameters:
@@ -144,7 +144,7 @@ def test_optional_sections_are_written_when_given() -> None:
     types = _types(graph)
     assert URIRef(Certification._class_uri) in types
     # a certification is always the outcome of an act of certification
-    assert URIRef("http://ontology.naas.ai/people/ActOfCertification") in types
+    assert URIRef("http://ontology.naas.ai/abi/ActOfCertification") in types
     assert URIRef(LanguageCapability._class_uri) in types
     assert URIRef(Interest._class_uri) in types
     assert URIRef(Recommendation._class_uri) in types
@@ -156,7 +156,7 @@ def test_empty_sections_emit_nothing() -> None:
 
     types = _types(graph)
     assert URIRef(Certification._class_uri) not in types
-    assert URIRef("http://ontology.naas.ai/people/ActOfCertification") not in types
+    assert URIRef("http://ontology.naas.ai/abi/ActOfCertification") not in types
     assert URIRef(LanguageCapability._class_uri) not in types
     assert URIRef(Interest._class_uri) not in types
     assert URIRef(Recommendation._class_uri) not in types
@@ -176,7 +176,7 @@ def test_a_source_with_nothing_to_summarise_is_still_recorded() -> None:
     assert any(
         str(o) == "https://demo.example/profiles/alice_dupont"
         for _, _, o in graph.triples(
-            (None, URIRef("http://ontology.naas.ai/people/source_url"), None)
+            (None, URIRef("http://ontology.naas.ai/abi/source_url"), None)
         )
     )
 
@@ -209,7 +209,7 @@ def test_recommendation_carries_its_author() -> None:
     authors = list(
         graph.objects(
             recommendations[0],
-            URIRef("http://ontology.naas.ai/people/hasRecommendationAuthor"),
+            URIRef("http://ontology.naas.ai/abi/hasRecommendationAuthor"),
         )
     )
     assert len(authors) == 1

@@ -1,5 +1,7 @@
 /** Small rendering helpers shared by the pages. */
 
+import { apiUrl } from "./config.js";
+
 export const ICONS = {
   search:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
@@ -90,7 +92,7 @@ export function avatarHtml(person, size = "sm") {
   const label = escapeHtml(person.full_name || "");
   const fallback = escapeHtml(initials(person.full_name));
   const image = person.photo_url
-    ? `<img src="${escapeHtml(person.photo_url)}" alt="" loading="lazy" />`
+    ? `<img src="${escapeHtml(apiUrl(person.photo_url))}" alt="" loading="lazy" />`
     : "";
   return `<span class="avatar avatar-${size}" role="img" aria-label="${label}">${fallback}${image}</span>`;
 }

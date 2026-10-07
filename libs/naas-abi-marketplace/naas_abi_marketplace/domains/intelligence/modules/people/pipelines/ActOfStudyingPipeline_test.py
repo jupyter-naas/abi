@@ -28,8 +28,8 @@ ABI_ORGANIZATION = URIRef("http://ontology.naas.ai/abi/Organization")
 ABI_PERSON = URIRef("http://ontology.naas.ai/abi/Person")
 ABI_TEMPORAL_REGION = URIRef("http://ontology.naas.ai/abi/TemporalRegion")
 CCO_EDUCATIONAL_ORG = URIRef("https://www.commoncoreontologies.org/ont00000564")
-PEOPLE_ACTIVITIES = URIRef("http://ontology.naas.ai/people/activities_content")
-PEOPLE_HAS_ACT_OF_STUDYING = URIRef("http://ontology.naas.ai/people/hasActOfStudying")
+PEOPLE_ACTIVITIES = URIRef("http://ontology.naas.ai/abi/activities_content")
+PEOPLE_HAS_ACT_OF_STUDYING = URIRef("http://ontology.naas.ai/abi/hasActOfStudying")
 PEOPLE_SITE = URIRef(Site._class_uri)
 
 

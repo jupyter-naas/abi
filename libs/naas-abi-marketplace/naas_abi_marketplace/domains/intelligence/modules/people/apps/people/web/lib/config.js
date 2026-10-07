@@ -8,10 +8,26 @@
 /**
  * Which API to ask. An instance page declares its own in a meta tag, because
  * two instances of this app can be mounted in one process under two prefixes.
+ * An instance page served somewhere else (inside Nexus, under /app-html/) sets
+ * ``data-people-api-base`` on <html> to the mount that serves it there.
  */
-export const API_BASE =
+const DECLARED_API_BASE =
   document.querySelector('meta[name="people-api-base"]')?.content?.replace(/\/$/, "") ||
   "/api/people";
+
+export const API_BASE =
+  document.documentElement.dataset.peopleApiBase?.replace(/\/$/, "") || DECLARED_API_BASE;
+
+/**
+ * A URL the data states under the declared API (a portrait at
+ * ``/api/people-fmz/portraits/…``), moved to the API this page actually talks to.
+ */
+export function apiUrl(url) {
+  if (!url || API_BASE === DECLARED_API_BASE) return url;
+  return url.startsWith(`${DECLARED_API_BASE}/`)
+    ? `${API_BASE}${url.slice(DECLARED_API_BASE.length)}`
+    : url;
+}
 
 let cached = null;
 
