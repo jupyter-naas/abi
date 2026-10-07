@@ -21,6 +21,11 @@ from naas_abi_core.services.dataset.DatasetPort import (
 )
 from naas_abi_core.services.dataset.DatasetService import DatasetService
 
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.memory_people_store import (
+    MemoryPeopleStore,
+    PeopleStore,
+)
+
 # Logical name -> (primary key, columns). The logical name is what config.yaml
 # maps to a physical table, so a client can serve their own tables from the
 # same app without touching this file.
@@ -274,13 +279,17 @@ def slug_list(slugs: list[str]) -> str:
 
 
 def fetch_people(
-    service: DatasetService,
+    service: PeopleStore,
     *,
     namespace: str,
     table: str,
     where: str = "",
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
+    if isinstance(service, MemoryPeopleStore):
+        return service.fetch_people(
+            namespace=namespace, table=table, where=where, limit=limit
+        )
     clause = f" WHERE {where}" if where else ""
     bound = f" LIMIT {int(limit)}" if limit else ""
     sql = f"SELECT * FROM {table}{clause} ORDER BY full_name{bound}"
@@ -288,7 +297,7 @@ def fetch_people(
 
 
 def fetch_children(
-    service: DatasetService,
+    service: PeopleStore,
     *,
     namespace: str,
     table: str,
@@ -300,6 +309,13 @@ def fetch_children(
     A person with no rows is absent from the result rather than present with an
     empty list: the caller decides what "nothing recorded" looks like.
     """
+    if isinstance(service, MemoryPeopleStore):
+        return service.fetch_children(
+            namespace=namespace,
+            table=table,
+            slugs=slugs,
+            order_by=order_by,
+        )
     if not slugs:
         return {}
     sql = (
