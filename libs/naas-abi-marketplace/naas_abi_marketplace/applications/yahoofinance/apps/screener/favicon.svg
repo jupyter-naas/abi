@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Yahoo Finance">
+  <rect width="32" height="32" fill="#6001D2"/>
+  <path fill="#fff" d="M9 8h3.8l2.8 4.6 2.8-4.6H22l-4.9 7.1L22.5 24H18.7l-3-4.9-3 4.9H9.5l5.1-7.4L9 8z"/>
+  <rect x="21" y="20" width="2.5" height="4" fill="#fff"/>
+</svg>

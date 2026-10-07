@@ -1,0 +1,27 @@
+{
+  "name": "Yahoo Finance Screener",
+  "description": "Run the Yahoo Finance equity screener with selectable query and include fields, then sort and filter results in a table.",
+  "category": "alpha",
+  "url": "html:index.html",
+  "icon_emoji": "📈",
+  "version": "0.1.0",
+  "author": "naas.ai",
+  "license": "MIT",
+  "keywords": [
+    "yahoo",
+    "finance",
+    "screener",
+    "equities",
+    "market cap",
+    "ebitda"
+  ],
+  "dependencies": {
+    "yahoofinance": "0.1.0"
+  },
+  "tier": "community",
+  "maintainer": "naas.ai",
+  "pricing": {
+    "type": "free",
+    "price": 0
+  }
+}

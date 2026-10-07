@@ -1,0 +1,1584 @@
+{
+  "finance": {
+    "result": [
+      {
+        "start": 0,
+        "count": 25,
+        "total": 239708,
+        "records": [
+          {
+            "marketCap": {
+              "raw": 1.0625e+16,
+              "fmt": "10,625T",
+              "longFmt": "10,625,000,000,000,000"
+            },
+            "ticker": "ISBTR.IS",
+            "financialCurrency": "TRY",
+            "avgDailyVol3m": {
+              "raw": 4.796875,
+              "fmt": "4",
+              "longFmt": "4"
+            },
+            "peRatioLtm": {
+              "raw": 4.582372,
+              "fmt": "4.58"
+            },
+            "fulldayChangePercent": {
+              "raw": 0.0,
+              "fmt": "0.00%"
+            },
+            "quotesCurrency": "TRY",
+            "regularMarketChange": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "companyName": "Türkiye Is Bankasi A.S.",
+            "regularMarketOpen": {
+              "raw": 425000.0,
+              "fmt": "425,000.00"
+            },
+            "industry": "Banks—Regional",
+            "fulldayChange": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": 0.0,
+              "fmt": "0.00%"
+            },
+            "fulldayPrice": {
+              "raw": 425000.0,
+              "fmt": "425,000.00"
+            },
+            "regularMarketPrice": {
+              "raw": 425000.0,
+              "fmt": "425,000.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 371860.0,
+              "fmt": "371,860.00"
+            },
+            "regularMarketVolume": {
+              "raw": 2,
+              "fmt": "2",
+              "longFmt": "2"
+            },
+            "region": "tr",
+            "fiftyTwoWeekHigh": {
+              "raw": 650000.0,
+              "fmt": "650,000.00"
+            },
+            "sector": "Financial Services"
+          },
+          {
+            "marketCap": {
+              "raw": 5577957000000000.0,
+              "fmt": "5,577.957T",
+              "longFmt": "5,577,957,000,000,000"
+            },
+            "ticker": "NVDACL.SN",
+            "financialCurrency": "USD",
+            "avgDailyVol3m": {
+              "raw": 18.066666666666666,
+              "fmt": "18",
+              "longFmt": "18"
+            },
+            "peRatioLtm": {
+              "raw": 29.582155,
+              "fmt": "29.58"
+            },
+            "fulldayChangePercent": {
+              "raw": 0.0,
+              "fmt": "0.00%"
+            },
+            "quotesCurrency": "CLP",
+            "regularMarketChange": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "companyName": "NVIDIA Corporation",
+            "regularMarketOpen": {
+              "raw": 230880.0,
+              "fmt": "230,880.00"
+            },
+            "industry": "Semiconductors",
+            "fulldayChange": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": 0.0,
+              "fmt": "0.00%"
+            },
+            "fulldayPrice": {
+              "raw": 231000.0,
+              "fmt": "231,000.00"
+            },
+            "regularMarketPrice": {
+              "raw": 231000.0,
+              "fmt": "231,000.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 203000.0,
+              "fmt": "203,000.00"
+            },
+            "regularMarketVolume": {
+              "raw": 1,
+              "fmt": "1",
+              "longFmt": "1"
+            },
+            "region": "cl",
+            "fiftyTwoWeekHigh": {
+              "raw": 231000.0,
+              "fmt": "231,000.00"
+            },
+            "sector": "Technology"
+          },
+          {
+            "marketCap": {
+              "raw": 3473090958258950.0,
+              "fmt": "3,473.091T",
+              "longFmt": "3,473,090,958,258,950"
+            },
+            "ticker": "BABA.BA",
+            "financialCurrency": "CNY",
+            "avgDailyVol3m": {
+              "raw": 36264.76190476191,
+              "fmt": "36,264",
+              "longFmt": "36,264"
+            },
+            "peRatioLtm": {
+              "raw": 23.845375,
+              "fmt": "23.85"
+            },
+            "fulldayChangePercent": {
+              "raw": -1.9716886,
+              "fmt": "-1.97%"
+            },
+            "quotesCurrency": "ARS",
+            "regularMarketChange": {
+              "raw": -390.0,
+              "fmt": "-390.00"
+            },
+            "companyName": "Alibaba Group Holding Limited",
+            "regularMarketOpen": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "industry": "Internet Retail",
+            "fulldayChange": {
+              "raw": -390.0,
+              "fmt": "-390.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": -1.9716886,
+              "fmt": "-1.97%"
+            },
+            "fulldayPrice": {
+              "raw": 19390.0,
+              "fmt": "19,390.00"
+            },
+            "regularMarketPrice": {
+              "raw": 19390.0,
+              "fmt": "19,390.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 15870.0,
+              "fmt": "15,870.00"
+            },
+            "regularMarketVolume": {
+              "raw": 11285,
+              "fmt": "11,285",
+              "longFmt": "11,285"
+            },
+            "region": "ar",
+            "fiftyTwoWeekHigh": {
+              "raw": 31880.0,
+              "fmt": "31,880.00"
+            },
+            "sector": "Consumer Cyclical"
+          },
+          {
+            "marketCap": {
+              "raw": 2349776791844240.0,
+              "fmt": "2,349.777T",
+              "longFmt": "2,349,776,791,844,240"
+            },
+            "ticker": "AAPL.BA",
+            "financialCurrency": "USD",
+            "avgDailyVol3m": {
+              "raw": 108993.74603174604,
+              "fmt": "108,993",
+              "longFmt": "108,993"
+            },
+            "peRatioLtm": {
+              "raw": 38.280046,
+              "fmt": "38.28"
+            },
+            "fulldayChangePercent": {
+              "raw": 0.37397158,
+              "fmt": "0.37%"
+            },
+            "quotesCurrency": "ARS",
+            "regularMarketChange": {
+              "raw": 100.0,
+              "fmt": "100.00"
+            },
+            "companyName": "Apple Inc.",
+            "regularMarketOpen": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "industry": "Consumer Electronics",
+            "fulldayChange": {
+              "raw": 100.0,
+              "fmt": "100.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": 0.37397158,
+              "fmt": "0.37%"
+            },
+            "fulldayPrice": {
+              "raw": 26840.0,
+              "fmt": "26,840.00"
+            },
+            "regularMarketPrice": {
+              "raw": 26840.0,
+              "fmt": "26,840.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 17440.0,
+              "fmt": "17,440.00"
+            },
+            "regularMarketVolume": {
+              "raw": 4867,
+              "fmt": "4,867",
+              "longFmt": "4,867"
+            },
+            "region": "ar",
+            "fiftyTwoWeekHigh": {
+              "raw": 27880.0,
+              "fmt": "27,880.00"
+            },
+            "sector": "Technology"
+          },
+          {
+            "marketCap": {
+              "raw": 2201702308702785.0,
+              "fmt": "2,201.702T",
+              "longFmt": "2,201,702,308,702,785"
+            },
+            "ticker": "AMZN.BA",
+            "financialCurrency": "USD",
+            "avgDailyVol3m": {
+              "raw": 1150379.7777777778,
+              "fmt": "1.15M",
+              "longFmt": "1,150,379"
+            },
+            "peRatioLtm": {
+              "raw": 20.225334,
+              "fmt": "20.23"
+            },
+            "fulldayChangePercent": {
+              "raw": 0.5314438,
+              "fmt": "0.53%"
+            },
+            "quotesCurrency": "ARS",
+            "regularMarketChange": {
+              "raw": 15.0,
+              "fmt": "15.00"
+            },
+            "companyName": "Amazon.com, Inc.",
+            "regularMarketOpen": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "industry": "Internet Retail",
+            "fulldayChange": {
+              "raw": 15.0,
+              "fmt": "15.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": 0.5314438,
+              "fmt": "0.53%"
+            },
+            "fulldayPrice": {
+              "raw": 2835.0,
+              "fmt": "2,835.00"
+            },
+            "regularMarketPrice": {
+              "raw": 2835.0,
+              "fmt": "2,835.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 2000.0,
+              "fmt": "2,000.00"
+            },
+            "regularMarketVolume": {
+              "raw": 235034,
+              "fmt": "235,034",
+              "longFmt": "235,034"
+            },
+            "region": "ar",
+            "fiftyTwoWeekHigh": {
+              "raw": 3142.5,
+              "fmt": "3,142.50"
+            },
+            "sector": "Consumer Cyclical"
+          },
+          {
+            "marketCap": {
+              "raw": 1786105164832000.0,
+              "fmt": "1,786.105T",
+              "longFmt": "1,786,105,164,832,000"
+            },
+            "ticker": "005930.KS",
+            "financialCurrency": "KRW",
+            "avgDailyVol3m": {
+              "raw": 23749820.933333334,
+              "fmt": "23.75M",
+              "longFmt": "23,749,820"
+            },
+            "peRatioLtm": {
+              "raw": 13.54744,
+              "fmt": "13.55"
+            },
+            "fulldayChangePercent": {
+              "raw": -1.4492754,
+              "fmt": "-1.45%"
+            },
+            "quotesCurrency": "KRW",
+            "regularMarketChange": {
+              "raw": -4000.0,
+              "fmt": "-4,000.00"
+            },
+            "companyName": "Samsung Electronics Co., Ltd.",
+            "regularMarketOpen": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "industry": "Consumer Electronics",
+            "fulldayChange": {
+              "raw": -4000.0,
+              "fmt": "-4,000.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": -1.4492754,
+              "fmt": "-1.45%"
+            },
+            "fulldayPrice": {
+              "raw": 272000.0,
+              "fmt": "272,000.00"
+            },
+            "regularMarketPrice": {
+              "raw": 272000.0,
+              "fmt": "272,000.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 89750.0,
+              "fmt": "89,750.00"
+            },
+            "regularMarketVolume": {
+              "raw": 14340821,
+              "fmt": "14.341M",
+              "longFmt": "14,340,821"
+            },
+            "region": "kr",
+            "fiftyTwoWeekHigh": {
+              "raw": 374500.0,
+              "fmt": "374,500.00"
+            },
+            "sector": "Technology"
+          },
+          {
+            "marketCap": {
+              "raw": 1382341587900000.0,
+              "fmt": "1,382.342T",
+              "longFmt": "1,382,341,587,900,000"
+            },
+            "ticker": "TSLACL.SN",
+            "financialCurrency": "USD",
+            "avgDailyVol3m": {
+              "raw": 3.466666666666667,
+              "fmt": "3",
+              "longFmt": "3"
+            },
+            "peRatioLtm": {
+              "raw": 343.284784,
+              "fmt": "343.28"
+            },
+            "fulldayChangePercent": {
+              "raw": 0.0,
+              "fmt": "0.00%"
+            },
+            "quotesCurrency": "CLP",
+            "regularMarketChange": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "companyName": "Tesla, Inc.",
+            "regularMarketOpen": {
+              "raw": 356040.0,
+              "fmt": "356,040.00"
+            },
+            "industry": "Auto Manufacturers",
+            "fulldayChange": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": 0.0,
+              "fmt": "0.00%"
+            },
+            "fulldayPrice": {
+              "raw": 350000.0,
+              "fmt": "350,000.00"
+            },
+            "regularMarketPrice": {
+              "raw": 350000.0,
+              "fmt": "350,000.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 341170.0,
+              "fmt": "341,170.00"
+            },
+            "regularMarketVolume": {
+              "raw": 11,
+              "fmt": "11",
+              "longFmt": "11"
+            },
+            "region": "cl",
+            "fiftyTwoWeekHigh": {
+              "raw": 357290.0,
+              "fmt": "357,290.00"
+            },
+            "sector": "Consumer Cyclical"
+          },
+          {
+            "marketCap": {
+              "raw": 1307789899287400.0,
+              "fmt": "1,307.79T",
+              "longFmt": "1,307,789,899,287,400"
+            },
+            "ticker": "005935.KS",
+            "financialCurrency": "KRW",
+            "avgDailyVol3m": {
+              "raw": 4085722.066666667,
+              "fmt": "4.086M",
+              "longFmt": "4,085,722"
+            },
+            "peRatioLtm": {
+              "raw": 13.54744,
+              "fmt": "13.55"
+            },
+            "fulldayChangePercent": {
+              "raw": -1.3930348,
+              "fmt": "-1.39%"
+            },
+            "quotesCurrency": "KRW",
+            "regularMarketChange": {
+              "raw": -2800.0,
+              "fmt": "-2,800.00"
+            },
+            "companyName": "Samsung Electronics Co., Ltd.",
+            "regularMarketOpen": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "industry": "Consumer Electronics",
+            "fulldayChange": {
+              "raw": -2800.0,
+              "fmt": "-2,800.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": -1.3930348,
+              "fmt": "-1.39%"
+            },
+            "fulldayPrice": {
+              "raw": 198200.0,
+              "fmt": "198,200.00"
+            },
+            "regularMarketPrice": {
+              "raw": 198200.0,
+              "fmt": "198,200.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 70000.0,
+              "fmt": "70,000.00"
+            },
+            "regularMarketVolume": {
+              "raw": 2638791,
+              "fmt": "2.639M",
+              "longFmt": "2,638,791"
+            },
+            "region": "kr",
+            "fiftyTwoWeekHigh": {
+              "raw": 243500.0,
+              "fmt": "243,500.00"
+            },
+            "sector": "Technology"
+          },
+          {
+            "marketCap": {
+              "raw": 1291518371492000.0,
+              "fmt": "1,291.518T",
+              "longFmt": "1,291,518,371,492,000"
+            },
+            "ticker": "SAN.BA",
+            "financialCurrency": "EUR",
+            "avgDailyVol3m": {
+              "raw": 501.0,
+              "fmt": "501",
+              "longFmt": "501"
+            },
+            "peRatioLtm": {
+              "raw": 13.383673,
+              "fmt": "13.38"
+            },
+            "fulldayChangePercent": {
+              "raw": 0.0,
+              "fmt": "0.00%"
+            },
+            "quotesCurrency": "ARS",
+            "regularMarketChange": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "companyName": "Banco Santander, S.A.",
+            "regularMarketOpen": {
+              "raw": 88225.0,
+              "fmt": "88,225.00"
+            },
+            "industry": "Banks—Diversified",
+            "fulldayChange": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": 0.0,
+              "fmt": "0.00%"
+            },
+            "fulldayPrice": {
+              "raw": 89200.0,
+              "fmt": "89,200.00"
+            },
+            "regularMarketPrice": {
+              "raw": 89200.0,
+              "fmt": "89,200.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 56100.0,
+              "fmt": "56,100.00"
+            },
+            "regularMarketVolume": {
+              "raw": 7,
+              "fmt": "7",
+              "longFmt": "7"
+            },
+            "region": "ar",
+            "fiftyTwoWeekHigh": {
+              "raw": 99300.0,
+              "fmt": "99,300.00"
+            },
+            "sector": "Financial Services"
+          },
+          {
+            "marketCap": {
+              "raw": 1260736861500000.0,
+              "fmt": "1,260.737T",
+              "longFmt": "1,260,736,861,500,000"
+            },
+            "ticker": "000660.KS",
+            "financialCurrency": "KRW",
+            "avgDailyVol3m": {
+              "raw": 4657519.9,
+              "fmt": "4.658M",
+              "longFmt": "4,657,519"
+            },
+            "peRatioLtm": {
+              "raw": 8.089167,
+              "fmt": "8.09"
+            },
+            "fulldayChangePercent": {
+              "raw": -3.6936448,
+              "fmt": "-3.69%"
+            },
+            "quotesCurrency": "KRW",
+            "regularMarketChange": {
+              "raw": -68000.0,
+              "fmt": "-68,000.00"
+            },
+            "companyName": "SK hynix Inc.",
+            "regularMarketOpen": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "industry": "Semiconductors",
+            "fulldayChange": {
+              "raw": -68000.0,
+              "fmt": "-68,000.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": -3.6936448,
+              "fmt": "-3.69%"
+            },
+            "fulldayPrice": {
+              "raw": 1773000.0,
+              "fmt": "1,773,000.00"
+            },
+            "regularMarketPrice": {
+              "raw": 1773000.0,
+              "fmt": "1,773,000.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 395500.0,
+              "fmt": "395,500.00"
+            },
+            "regularMarketVolume": {
+              "raw": 3131396,
+              "fmt": "3.131M",
+              "longFmt": "3,131,396"
+            },
+            "region": "kr",
+            "fiftyTwoWeekHigh": {
+              "raw": 2987000.0,
+              "fmt": "2,987,000.00"
+            },
+            "sector": "Technology"
+          },
+          {
+            "marketCap": {
+              "raw": 1175894082438000.0,
+              "fmt": "1,175.894T",
+              "longFmt": "1,175,894,082,438,000"
+            },
+            "ticker": "TM.BA",
+            "financialCurrency": "JPY",
+            "avgDailyVol3m": {
+              "raw": 3518.3015873015875,
+              "fmt": "3,518",
+              "longFmt": "3,518"
+            },
+            "peRatioLtm": {
+              "raw": 8.17666,
+              "fmt": "8.18"
+            },
+            "fulldayChangePercent": {
+              "raw": 0.7099391,
+              "fmt": "0.71%"
+            },
+            "quotesCurrency": "ARS",
+            "regularMarketChange": {
+              "raw": 140.0,
+              "fmt": "140.00"
+            },
+            "companyName": "Toyota Motor Corporation",
+            "regularMarketOpen": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "industry": "Auto Manufacturers",
+            "fulldayChange": {
+              "raw": 140.0,
+              "fmt": "140.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": 0.7099391,
+              "fmt": "0.71%"
+            },
+            "fulldayPrice": {
+              "raw": 19860.0,
+              "fmt": "19,860.00"
+            },
+            "regularMarketPrice": {
+              "raw": 19860.0,
+              "fmt": "19,860.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 16990.0,
+              "fmt": "16,990.00"
+            },
+            "regularMarketVolume": {
+              "raw": 1365,
+              "fmt": "1,365",
+              "longFmt": "1,365"
+            },
+            "region": "ar",
+            "fiftyTwoWeekHigh": {
+              "raw": 24550.0,
+              "fmt": "24,550.00"
+            },
+            "sector": "Consumer Cyclical"
+          },
+          {
+            "marketCap": {
+              "raw": 971322649990000.0,
+              "fmt": "971.323T",
+              "longFmt": "971,322,649,990,000"
+            },
+            "ticker": "AMDCL.SN",
+            "financialCurrency": "USD",
+            "avgDailyVol3m": {
+              "raw": 0.7936507936507936,
+              "fmt": "0",
+              "longFmt": "0"
+            },
+            "peRatioLtm": {
+              "raw": 161.798329,
+              "fmt": "161.80"
+            },
+            "fulldayChangePercent": {
+              "raw": 0.0,
+              "fmt": "0.00%"
+            },
+            "quotesCurrency": "CLP",
+            "regularMarketChange": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "companyName": "Advanced Micro Devices, Inc.",
+            "regularMarketOpen": {
+              "raw": 595000.0,
+              "fmt": "595,000.00"
+            },
+            "industry": "Semiconductors",
+            "fulldayChange": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": 0.0,
+              "fmt": "0.00%"
+            },
+            "fulldayPrice": {
+              "raw": 595000.0,
+              "fmt": "595,000.00"
+            },
+            "regularMarketPrice": {
+              "raw": 595000.0,
+              "fmt": "595,000.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 172040.0,
+              "fmt": "172,040.00"
+            },
+            "regularMarketVolume": {
+              "raw": 3,
+              "fmt": "3",
+              "longFmt": "3"
+            },
+            "region": "cl",
+            "fiftyTwoWeekHigh": {
+              "raw": 515000.0,
+              "fmt": "515,000.00"
+            },
+            "sector": "Technology"
+          },
+          {
+            "marketCap": {
+              "raw": 769846768365880.0,
+              "fmt": "769.847T",
+              "longFmt": "769,846,768,365,880"
+            },
+            "ticker": "BCS.BA",
+            "financialCurrency": "GBP",
+            "avgDailyVol3m": {
+              "raw": 248.22222222222223,
+              "fmt": "248",
+              "longFmt": "248"
+            },
+            "peRatioLtm": {
+              "raw": 9.224163,
+              "fmt": "9.22"
+            },
+            "fulldayChangePercent": {
+              "raw": 1.1578947,
+              "fmt": "1.16%"
+            },
+            "quotesCurrency": "ARS",
+            "regularMarketChange": {
+              "raw": 440.0,
+              "fmt": "440.00"
+            },
+            "companyName": "Barclays PLC",
+            "regularMarketOpen": {
+              "raw": 38440.0,
+              "fmt": "38,440.00"
+            },
+            "industry": "Banks—Diversified",
+            "fulldayChange": {
+              "raw": 440.0,
+              "fmt": "440.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": 1.1578947,
+              "fmt": "1.16%"
+            },
+            "fulldayPrice": {
+              "raw": 38440.0,
+              "fmt": "38,440.00"
+            },
+            "regularMarketPrice": {
+              "raw": 38440.0,
+              "fmt": "38,440.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 28660.0,
+              "fmt": "28,660.00"
+            },
+            "regularMarketVolume": {
+              "raw": 10,
+              "fmt": "10",
+              "longFmt": "10"
+            },
+            "region": "ar",
+            "fiftyTwoWeekHigh": {
+              "raw": 45700.0,
+              "fmt": "45,700.00"
+            },
+            "sector": "Financial Services"
+          },
+          {
+            "marketCap": {
+              "raw": 749334682930000.0,
+              "fmt": "749.335T",
+              "longFmt": "749,334,682,930,000"
+            },
+            "ticker": "BBCA.JK",
+            "financialCurrency": "IDR",
+            "avgDailyVol3m": {
+              "raw": 129369115.87301587,
+              "fmt": "129.369M",
+              "longFmt": "129,369,115"
+            },
+            "peRatioLtm": {
+              "raw": 12.929,
+              "fmt": "12.93"
+            },
+            "fulldayChangePercent": {
+              "raw": -1.2145749,
+              "fmt": "-1.21%"
+            },
+            "quotesCurrency": "IDR",
+            "regularMarketChange": {
+              "raw": -75.0,
+              "fmt": "-75.00"
+            },
+            "companyName": "PT Bank Central Asia Tbk",
+            "regularMarketOpen": {
+              "raw": 6000.0,
+              "fmt": "6,000.00"
+            },
+            "industry": "Banks—Regional",
+            "fulldayChange": {
+              "raw": -75.0,
+              "fmt": "-75.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": -1.2145749,
+              "fmt": "-1.21%"
+            },
+            "fulldayPrice": {
+              "raw": 6100.0,
+              "fmt": "6,100.00"
+            },
+            "regularMarketPrice": {
+              "raw": 6100.0,
+              "fmt": "6,100.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 4820.0,
+              "fmt": "4,820.00"
+            },
+            "regularMarketVolume": {
+              "raw": 152173400,
+              "fmt": "152.173M",
+              "longFmt": "152,173,400"
+            },
+            "region": "id",
+            "fiftyTwoWeekHigh": {
+              "raw": 8750.0,
+              "fmt": "8,750.00"
+            },
+            "sector": "Financial Services"
+          },
+          {
+            "marketCap": {
+              "raw": 747932773377900.0,
+              "fmt": "747.933T",
+              "longFmt": "747,932,773,377,900"
+            },
+            "ticker": "TSM.BA",
+            "financialCurrency": "TWD",
+            "avgDailyVol3m": {
+              "raw": 16224.682539682539,
+              "fmt": "16,224",
+              "longFmt": "16,224"
+            },
+            "peRatioLtm": {
+              "raw": 29.243428,
+              "fmt": "29.24"
+            },
+            "fulldayChangePercent": {
+              "raw": -0.3455226,
+              "fmt": "-0.35%"
+            },
+            "quotesCurrency": "ARS",
+            "regularMarketChange": {
+              "raw": -300.0,
+              "fmt": "-300.00"
+            },
+            "companyName": "Taiwan Semiconductor Manufacturing Company Limited",
+            "regularMarketOpen": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "industry": "Semiconductors",
+            "fulldayChange": {
+              "raw": -300.0,
+              "fmt": "-300.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": -0.3455226,
+              "fmt": "-0.35%"
+            },
+            "fulldayPrice": {
+              "raw": 86525.0,
+              "fmt": "86,525.00"
+            },
+            "regularMarketPrice": {
+              "raw": 86525.0,
+              "fmt": "86,525.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 44000.0,
+              "fmt": "44,000.00"
+            },
+            "regularMarketVolume": {
+              "raw": 2301,
+              "fmt": "2,301",
+              "longFmt": "2,301"
+            },
+            "region": "ar",
+            "fiftyTwoWeekHigh": {
+              "raw": 87125.0,
+              "fmt": "87,125.00"
+            },
+            "sector": "Technology"
+          },
+          {
+            "marketCap": {
+              "raw": 680474505633810.0,
+              "fmt": "680.475T",
+              "longFmt": "680,474,505,633,810"
+            },
+            "ticker": "LRCX.BA",
+            "financialCurrency": "USD",
+            "peRatioLtm": {
+              "raw": 60.328125,
+              "fmt": "60.33"
+            },
+            "fulldayChangePercent": {
+              "raw": -1.670886,
+              "fmt": "-1.67%"
+            },
+            "quotesCurrency": "ARS",
+            "regularMarketChange": {
+              "raw": -165.0,
+              "fmt": "-165.00"
+            },
+            "companyName": "Lam Research Corporation",
+            "regularMarketOpen": {
+              "raw": 9935.0,
+              "fmt": "9,935.00"
+            },
+            "industry": "Semiconductor Equipment & Materials",
+            "fulldayChange": {
+              "raw": -165.0,
+              "fmt": "-165.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": -1.670886,
+              "fmt": "-1.67%"
+            },
+            "fulldayPrice": {
+              "raw": 9710.0,
+              "fmt": "9,710.00"
+            },
+            "regularMarketPrice": {
+              "raw": 9710.0,
+              "fmt": "9,710.00"
+            },
+            "regularMarketVolume": {
+              "raw": 4740,
+              "fmt": "4,740",
+              "longFmt": "4,740"
+            },
+            "region": "ar",
+            "sector": "Technology"
+          },
+          {
+            "marketCap": {
+              "raw": 617175719154000.0,
+              "fmt": "617.176T",
+              "longFmt": "617,175,719,154,000"
+            },
+            "ticker": "VOD.BA",
+            "financialCurrency": "EUR",
+            "avgDailyVol3m": {
+              "raw": 416.07936507936506,
+              "fmt": "416",
+              "longFmt": "416"
+            },
+            "fulldayChangePercent": {
+              "raw": -0.9665428,
+              "fmt": "-0.97%"
+            },
+            "quotesCurrency": "ARS",
+            "regularMarketChange": {
+              "raw": -260.0,
+              "fmt": "-260.00"
+            },
+            "companyName": "Vodafone Group Public Limited Company",
+            "regularMarketOpen": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "industry": "Telecom Services",
+            "fulldayChange": {
+              "raw": -260.0,
+              "fmt": "-260.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": -0.9665428,
+              "fmt": "-0.97%"
+            },
+            "fulldayPrice": {
+              "raw": 26640.0,
+              "fmt": "26,640.00"
+            },
+            "regularMarketPrice": {
+              "raw": 26640.0,
+              "fmt": "26,640.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 15940.0,
+              "fmt": "15,940.00"
+            },
+            "regularMarketVolume": {
+              "raw": 8981,
+              "fmt": "8,981",
+              "longFmt": "8,981"
+            },
+            "region": "ar",
+            "fiftyTwoWeekHigh": {
+              "raw": 28280.0,
+              "fmt": "28,280.00"
+            },
+            "sector": "Communication Services"
+          },
+          {
+            "marketCap": {
+              "raw": 532014885400500.0,
+              "fmt": "532.015T",
+              "longFmt": "532,014,885,400,500"
+            },
+            "ticker": "HSBC.BA",
+            "financialCurrency": "USD",
+            "avgDailyVol3m": {
+              "raw": 206.04761904761904,
+              "fmt": "206",
+              "longFmt": "206"
+            },
+            "peRatioLtm": {
+              "raw": 15.531508,
+              "fmt": "15.53"
+            },
+            "fulldayChangePercent": {
+              "raw": 0.0,
+              "fmt": "0.00%"
+            },
+            "quotesCurrency": "ARS",
+            "regularMarketChange": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "companyName": "HSBC Holdings plc",
+            "regularMarketOpen": {
+              "raw": 77800.0,
+              "fmt": "77,800.00"
+            },
+            "industry": "Banks—Diversified",
+            "fulldayChange": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": 0.0,
+              "fmt": "0.00%"
+            },
+            "fulldayPrice": {
+              "raw": 77750.0,
+              "fmt": "77,750.00"
+            },
+            "regularMarketPrice": {
+              "raw": 77750.0,
+              "fmt": "77,750.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 47360.0,
+              "fmt": "47,360.00"
+            },
+            "regularMarketVolume": {
+              "raw": 5,
+              "fmt": "5",
+              "longFmt": "5"
+            },
+            "region": "ar",
+            "fiftyTwoWeekHigh": {
+              "raw": 85500.0,
+              "fmt": "85,500.00"
+            },
+            "sector": "Financial Services"
+          },
+          {
+            "marketCap": {
+              "raw": 492865140780640.0,
+              "fmt": "492.865T",
+              "longFmt": "492,865,140,780,640"
+            },
+            "ticker": "PBR.BA",
+            "financialCurrency": "BRL",
+            "peRatioLtm": {
+              "raw": 4.944791,
+              "fmt": "4.94"
+            },
+            "fulldayChangePercent": {
+              "raw": -1.3924704,
+              "fmt": "-1.39%"
+            },
+            "quotesCurrency": "ARS",
+            "regularMarketChange": {
+              "raw": -540.0,
+              "fmt": "-540.00"
+            },
+            "companyName": "Petróleo Brasileiro S.A. - Petrobras",
+            "regularMarketOpen": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "industry": "Oil & Gas Integrated",
+            "fulldayChange": {
+              "raw": -540.0,
+              "fmt": "-540.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": -1.3924704,
+              "fmt": "-1.39%"
+            },
+            "fulldayPrice": {
+              "raw": 38240.0,
+              "fmt": "38,240.00"
+            },
+            "regularMarketPrice": {
+              "raw": 38240.0,
+              "fmt": "38,240.00"
+            },
+            "regularMarketVolume": {
+              "raw": 62682,
+              "fmt": "62,682",
+              "longFmt": "62,682"
+            },
+            "region": "ar",
+            "sector": "Energy"
+          },
+          {
+            "marketCap": {
+              "raw": 480369682496000.0,
+              "fmt": "480.37T",
+              "longFmt": "480,369,682,496,000"
+            },
+            "ticker": "IVVCL.SN",
+            "financialCurrency": "USD",
+            "avgDailyVol3m": {
+              "raw": 22.063492063492063,
+              "fmt": "22",
+              "longFmt": "22"
+            },
+            "peRatioLtm": {
+              "raw": 8.581641,
+              "fmt": "8.58"
+            },
+            "fulldayChangePercent": {
+              "raw": 0.0,
+              "fmt": "0.00%"
+            },
+            "quotesCurrency": "CLP",
+            "regularMarketChange": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "companyName": "iShares Trust - iShares Core S&P 500 ETF",
+            "regularMarketOpen": {
+              "raw": 781000.0,
+              "fmt": "781,000.00"
+            },
+            "fulldayChange": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": 0.0,
+              "fmt": "0.00%"
+            },
+            "fulldayPrice": {
+              "raw": 781000.0,
+              "fmt": "781,000.00"
+            },
+            "regularMarketPrice": {
+              "raw": 781000.0,
+              "fmt": "781,000.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 590000.0,
+              "fmt": "590,000.00"
+            },
+            "regularMarketVolume": {
+              "raw": 8,
+              "fmt": "8",
+              "longFmt": "8"
+            },
+            "region": "cl",
+            "fiftyTwoWeekHigh": {
+              "raw": 781000.0,
+              "fmt": "781,000.00"
+            }
+          },
+          {
+            "marketCap": {
+              "raw": 475676494345000.0,
+              "fmt": "475.676T",
+              "longFmt": "475,676,494,345,000"
+            },
+            "ticker": "DCII.JK",
+            "financialCurrency": "IDR",
+            "avgDailyVol3m": {
+              "raw": 684.1269841269841,
+              "fmt": "684",
+              "longFmt": "684"
+            },
+            "peRatioLtm": {
+              "raw": 428.763521,
+              "fmt": "428.76"
+            },
+            "fulldayChangePercent": {
+              "raw": 2.5436792,
+              "fmt": "2.54%"
+            },
+            "quotesCurrency": "IDR",
+            "regularMarketChange": {
+              "raw": 4950.0,
+              "fmt": "4,950.00"
+            },
+            "companyName": "PT DCI Indonesia Tbk",
+            "regularMarketOpen": {
+              "raw": 194600.0,
+              "fmt": "194,600.00"
+            },
+            "industry": "Real Estate Services",
+            "fulldayChange": {
+              "raw": 4950.0,
+              "fmt": "4,950.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": 2.5436792,
+              "fmt": "2.54%"
+            },
+            "fulldayPrice": {
+              "raw": 199550.0,
+              "fmt": "199,550.00"
+            },
+            "regularMarketPrice": {
+              "raw": 199550.0,
+              "fmt": "199,550.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 170000.0,
+              "fmt": "170,000.00"
+            },
+            "regularMarketVolume": {
+              "raw": 500,
+              "fmt": "500",
+              "longFmt": "500"
+            },
+            "region": "id",
+            "fiftyTwoWeekHigh": {
+              "raw": 295100.0,
+              "fmt": "295,100.00"
+            },
+            "sector": "Real Estate"
+          },
+          {
+            "marketCap": {
+              "raw": 468627828735440.0,
+              "fmt": "468.628T",
+              "longFmt": "468,627,828,735,440"
+            },
+            "ticker": "BBRI.JK",
+            "financialCurrency": "IDR",
+            "avgDailyVol3m": {
+              "raw": 199141328.57142857,
+              "fmt": "199.141M",
+              "longFmt": "199,141,328"
+            },
+            "peRatioLtm": {
+              "raw": 7.574064,
+              "fmt": "7.57"
+            },
+            "fulldayChangePercent": {
+              "raw": -0.32051283,
+              "fmt": "-0.32%"
+            },
+            "quotesCurrency": "IDR",
+            "regularMarketChange": {
+              "raw": -10.0,
+              "fmt": "-10.00"
+            },
+            "companyName": "PT Bank Rakyat Indonesia (Persero) Tbk",
+            "regularMarketOpen": {
+              "raw": 3100.0,
+              "fmt": "3,100.00"
+            },
+            "industry": "Banks—Regional",
+            "fulldayChange": {
+              "raw": -10.0,
+              "fmt": "-10.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": -0.32051283,
+              "fmt": "-0.32%"
+            },
+            "fulldayPrice": {
+              "raw": 3110.0,
+              "fmt": "3,110.00"
+            },
+            "regularMarketPrice": {
+              "raw": 3110.0,
+              "fmt": "3,110.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 2540.0,
+              "fmt": "2,540.00"
+            },
+            "regularMarketVolume": {
+              "raw": 139170200,
+              "fmt": "139.17M",
+              "longFmt": "139,170,200"
+            },
+            "region": "id",
+            "fiftyTwoWeekHigh": {
+              "raw": 4050.0,
+              "fmt": "4,050.00"
+            },
+            "sector": "Financial Services"
+          },
+          {
+            "marketCap": {
+              "raw": 448333355750000.0,
+              "fmt": "448.333T",
+              "longFmt": "448,333,355,750,000"
+            },
+            "ticker": "BYAN.JK",
+            "financialCurrency": "USD",
+            "avgDailyVol3m": {
+              "raw": 1423974.603174603,
+              "fmt": "1.424M",
+              "longFmt": "1,423,974"
+            },
+            "peRatioLtm": {
+              "raw": 26.401697,
+              "fmt": "26.40"
+            },
+            "fulldayChangePercent": {
+              "raw": 9.795918,
+              "fmt": "9.80%"
+            },
+            "quotesCurrency": "IDR",
+            "regularMarketChange": {
+              "raw": 1200.0,
+              "fmt": "1,200.00"
+            },
+            "companyName": "PT Bayan Resources Tbk.",
+            "regularMarketOpen": {
+              "raw": 11700.0,
+              "fmt": "11,700.00"
+            },
+            "industry": "Thermal Coal",
+            "fulldayChange": {
+              "raw": 1200.0,
+              "fmt": "1,200.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": 9.795918,
+              "fmt": "9.80%"
+            },
+            "fulldayPrice": {
+              "raw": 13450.0,
+              "fmt": "13,450.00"
+            },
+            "regularMarketPrice": {
+              "raw": 13450.0,
+              "fmt": "13,450.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 8950.0,
+              "fmt": "8,950.00"
+            },
+            "regularMarketVolume": {
+              "raw": 5749600,
+              "fmt": "5.75M",
+              "longFmt": "5,749,600"
+            },
+            "region": "id",
+            "fiftyTwoWeekHigh": {
+              "raw": 18650.0,
+              "fmt": "18,650.00"
+            },
+            "sector": "Energy"
+          },
+          {
+            "marketCap": {
+              "raw": 444173648231300.0,
+              "fmt": "444.174T",
+              "longFmt": "444,173,648,231,300"
+            },
+            "ticker": "SHEL.BA",
+            "financialCurrency": "USD",
+            "avgDailyVol3m": {
+              "raw": 638.8571428571429,
+              "fmt": "638",
+              "longFmt": "638"
+            },
+            "peRatioLtm": {
+              "raw": 10.566081,
+              "fmt": "10.57"
+            },
+            "fulldayChangePercent": {
+              "raw": 0.51563,
+              "fmt": "0.52%"
+            },
+            "quotesCurrency": "ARS",
+            "regularMarketChange": {
+              "raw": 400.0,
+              "fmt": "400.00"
+            },
+            "companyName": "Shell plc",
+            "regularMarketOpen": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "industry": "Oil & Gas Integrated",
+            "fulldayChange": {
+              "raw": 400.0,
+              "fmt": "400.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": 0.51563,
+              "fmt": "0.52%"
+            },
+            "fulldayPrice": {
+              "raw": 77975.0,
+              "fmt": "77,975.00"
+            },
+            "regularMarketPrice": {
+              "raw": 77975.0,
+              "fmt": "77,975.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 47500.0,
+              "fmt": "47,500.00"
+            },
+            "regularMarketVolume": {
+              "raw": 223,
+              "fmt": "223",
+              "longFmt": "223"
+            },
+            "region": "ar",
+            "fiftyTwoWeekHigh": {
+              "raw": 79650.0,
+              "fmt": "79,650.00"
+            },
+            "sector": "Energy"
+          },
+          {
+            "marketCap": {
+              "raw": 392147280000000.0,
+              "fmt": "392.147T",
+              "longFmt": "392,147,280,000,000"
+            },
+            "ticker": "NVDA.BA",
+            "financialCurrency": "USD",
+            "avgDailyVol3m": {
+              "raw": 578033.5555555555,
+              "fmt": "578,033",
+              "longFmt": "578,033"
+            },
+            "peRatioLtm": {
+              "raw": 29.582155,
+              "fmt": "29.58"
+            },
+            "fulldayChangePercent": {
+              "raw": 1.3100437,
+              "fmt": "1.31%"
+            },
+            "quotesCurrency": "ARS",
+            "regularMarketChange": {
+              "raw": 210.0,
+              "fmt": "210.00"
+            },
+            "companyName": "NVIDIA Corporation",
+            "regularMarketOpen": {
+              "raw": 0.0,
+              "fmt": "0.00"
+            },
+            "industry": "Semiconductors",
+            "fulldayChange": {
+              "raw": 210.0,
+              "fmt": "210.00"
+            },
+            "regularMarketChangePercent": {
+              "raw": 1.3100437,
+              "fmt": "1.31%"
+            },
+            "fulldayPrice": {
+              "raw": 16240.0,
+              "fmt": "16,240.00"
+            },
+            "regularMarketPrice": {
+              "raw": 16240.0,
+              "fmt": "16,240.00"
+            },
+            "fiftyTwoWeekLow": {
+              "raw": 10140.0,
+              "fmt": "10,140.00"
+            },
+            "regularMarketVolume": {
+              "raw": 51120,
+              "fmt": "51,120",
+              "longFmt": "51,120"
+            },
+            "region": "ar",
+            "fiftyTwoWeekHigh": {
+              "raw": 16130.0,
+              "fmt": "16,130.00"
+            },
+            "sector": "Technology"
+          }
+        ],
+        "userHasReadRecord": false,
+        "useRecords": true
+      }
+    ],
+    "error": null
+  }
+}

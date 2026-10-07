@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Yahoo Finance Screener</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css?v=4" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <header class="brand">
+          <div class="brand-mark">
+            <img src="favicon.svg" width="32" height="32" alt="" />
+            <div>
+              <h1>Screener</h1>
+              <p class="brand-sub">Yahoo Finance</p>
+            </div>
+          </div>
+          <p>Query Yahoo, then sort and filter the table.</p>
+        </header>
+
+        <form id="query-form">
+          <section>
+            <h2>Source</h2>
+            <label>
+              Snapshot
+              <select id="snapshot"></select>
+            </label>
+            <div class="row">
+              <button type="button" id="load-snapshot">Load snapshot</button>
+              <label class="file">
+                Upload JSON
+                <input id="upload" type="file" accept="application/json,.json" />
+              </label>
+            </div>
+          </section>
+
+          <section>
+            <h2>Query filters</h2>
+            <label>
+              Sector
+              <input id="sector" list="sector-list" />
+            </label>
+            <datalist id="sector-list"></datalist>
+            <label>
+              Industry
+              <input id="industry" list="industry-list" />
+            </label>
+            <datalist id="industry-list"></datalist>
+            <label>
+              Min revenue LTM
+              <input id="min-revenue" type="number" step="any" />
+            </label>
+            <label class="check">
+              <input id="require-positive" type="checkbox" checked />
+              Require financials &gt; 0 (Yahoo column filters)
+            </label>
+            <details>
+              <summary>Regions</summary>
+              <div class="row">
+                <button type="button" id="regions-all">All</button>
+                <button type="button" id="regions-none">None</button>
+              </div>
+              <div id="regions" class="checks compact"></div>
+            </details>
+          </section>
+
+          <section>
+            <h2>Request</h2>
+            <div class="grid-2">
+              <label>
+                Size
+                <input id="size" type="number" min="1" max="250" />
+              </label>
+              <label>
+                Offset
+                <input id="offset" type="number" min="0" />
+              </label>
+            </div>
+            <label>
+              Sort field
+              <select id="sort-field"></select>
+            </label>
+            <label>
+              Sort type
+              <select id="sort-type">
+                <option value="DESC">Descending</option>
+                <option value="ASC">Ascending</option>
+              </select>
+            </label>
+            <label class="check">
+              <input id="fetch-all" type="checkbox" />
+              Fetch every page
+            </label>
+            <label class="check">
+              <input id="save" type="checkbox" />
+              Save JSON under data/
+            </label>
+            <details>
+              <summary>Query parameters</summary>
+              <label class="check">
+                <input id="formatted" type="checkbox" checked />
+                formatted
+              </label>
+              <label class="check">
+                <input id="use-records" type="checkbox" checked />
+                useRecordsResponse
+              </label>
+              <label>
+                lang
+                <input id="lang" />
+              </label>
+              <label>
+                region
+                <input id="query-region" />
+              </label>
+            </details>
+          </section>
+
+          <section>
+            <h2>Include fields</h2>
+            <div class="row">
+              <button type="button" id="fields-all">All</button>
+              <button type="button" id="fields-none">None</button>
+            </div>
+            <div id="include-fields"></div>
+          </section>
+
+          <section>
+            <h2>Session</h2>
+            <p class="hint">
+              Cookie and crumb stay in this browser only. They are not written to disk.
+            </p>
+            <label>
+              Cookie
+              <textarea id="cookie" rows="3" spellcheck="false"></textarea>
+            </label>
+            <label>
+              Crumb
+              <input id="crumb" type="password" autocomplete="off" />
+            </label>
+          </section>
+
+          <div class="actions">
+            <button type="submit" id="run">Run screener</button>
+            <button type="button" id="preview">Preview payload</button>
+          </div>
+        </form>
+      </aside>
+
+      <main class="main">
+        <div class="toolbar">
+          <input id="filter" type="search" placeholder="Filter ticker, company, industry…" />
+          <label>
+            Watchlist
+            <select id="watchlist">
+              <option value="">All companies</option>
+            </select>
+          </label>
+          <label class="watchlist-box">
+            Tickers / names
+            <textarea
+              id="company-list"
+              rows="2"
+              spellcheck="false"
+              placeholder="OVH.PA, DOCN, Microsoft…"
+            ></textarea>
+          </label>
+          <label>
+            View
+            <select id="view">
+              <option value="listings">Listings</option>
+              <option value="organizations">Organizations</option>
+            </select>
+          </label>
+          <label>
+            Quote FX
+            <select id="fx-filter">
+              <option value="">All</option>
+            </select>
+          </label>
+          <label>
+            Min market cap
+            <input id="min-mcap" type="number" step="any" />
+          </label>
+          <label>
+            Min EBITDA
+            <input id="min-ebitda" type="number" step="any" />
+          </label>
+          <label>
+            Rows
+            <select id="page-size">
+              <option value="50">50</option>
+              <option value="100" selected>100</option>
+              <option value="250">250</option>
+              <option value="0">All</option>
+            </select>
+          </label>
+          <button type="button" id="columns-toggle">Columns</button>
+          <button type="button" id="export-csv">Export CSV</button>
+          <p id="status" class="status"></p>
+        </div>
+        <div id="column-panel" class="column-panel hidden"></div>
+        <div id="payload-panel" class="payload hidden"></div>
+        <div class="table-wrap">
+          <table id="results">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <button type="button" id="prev">Previous</button>
+          <span id="page-label"></span>
+          <button type="button" id="next">Next</button>
+        </div>
+      </main>
+    </div>
+    <script src="app.js?v=3"></script>
+  </body>
+</html>
