@@ -171,6 +171,27 @@ cockpit embeds the same page; it lives here because nothing in it is HR.
 
 The graph shows one person. To look at someone else, open their profile.
 
+## Search views
+
+Results open on **People** (the ranked list, paged), then **Network**, which the
+People view starts loading in the background (a spinner on the tab until it is ready).
+
+The Network view is the same graph page focused on the search instead of a
+person (`ontologies/modules/SearchOntology.ttl`): the query at the centre, one
+search match per place its words were found, and what matched - an act of
+working by its organization, client, job title or mission, an act of studying,
+a skill, the profile summary, or the person by name - leading on to the person.
+`GET <prefix>/search/network?q=&facet=` (`scripts/network_payload.py`) draws the
+top 30 results with the same bound queries as the profile graph, opens three
+hops out (query, match, act, person), and links each person to their profile.
+
+Each person leads on to their current organization (with its logo), and the
+rings are cut into one sector per organization (`graph.ring_cluster_class`), so
+who the search found at each organization is drawn together. People are ranked
+by search hits, highest first, on both tabs.
+
+`data.graph.file` may list several TTL files; they are read as one graph.
+
 ## Files
 
 ```

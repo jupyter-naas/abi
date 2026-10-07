@@ -77,13 +77,10 @@ def build_router(config_path: Path | None = None) -> APIRouter:
     def get_search_network(
         q: str = Query("", max_length=200),
         facet: str = Query("", max_length=120),
-        page: int = Query(1, ge=1, le=1000),
     ) -> dict:
-        """The people a search page shows and the organizations that tie them."""
+        """The Network view: the query, what it matched and the people it leads to."""
         try:
-            return search_network(
-                dataset_service(), config(), query=q, facet=facet, page=page
-            )
+            return search_network(dataset_service(), config(), query=q, facet=facet)
         except DatasetsMissingError as exc:
             raise HTTPException(status_code=404, detail=exc.as_detail()) from exc
 
@@ -154,7 +151,7 @@ def build_router(config_path: Path | None = None) -> APIRouter:
                 query_name,
                 slug,
                 max_rows=max_rows,
-                graph_file=settings["data"]["graph"]["file"],
+                graph_file=tuple(settings["data"]["graph"]["files"]) or None,
                 hidden_columns=()
                 if settings["privacy"].get("publish_contact_details")
                 else CONTACT_VARIABLES,

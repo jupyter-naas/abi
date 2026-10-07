@@ -30,6 +30,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import IGraphQue
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.adapters.secondary.postgres import (
     PostgresSearchTopicStore,
 )
+from naas_abi.apps.nexus.apps.api.app.services.search.topics.cache import SearchCache
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.scope import topic_scope
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.service import SearchTopicService
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema import (
@@ -93,6 +94,14 @@ async def _scoped_store(
     user_id: str, workspace_id: str, graphs: tuple[str, ...] | list[str] = ()
 ) -> IGraphQueryStore:
     """The workspace's readable graphs, narrowed to ``graphs`` when a topic names some."""
+    store, _ = await _scoped(user_id, workspace_id, graphs)
+    return store
+
+
+async def _scoped(
+    user_id: str, workspace_id: str, graphs: tuple[str, ...] | list[str] = ()
+) -> tuple[IGraphQueryStore, str]:
+    """The scoped store and the scope's cache key (which graphs the user can read)."""
     from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__dependencies import (  # noqa: E501
         workspace_graph_service,
     )
@@ -104,7 +113,32 @@ async def _scoped_store(
     graph = await workspace_graph_service(ServiceRegistry.instance().graph, user_id, workspace_id)
     assert graph.access_scope is not None
     scope = topic_scope(graph.access_scope, graphs)
-    return GraphQueryTripleStoreAdapter(WorkspaceGraphStore(graph._get_catalog_store(), scope))
+    store = GraphQueryTripleStoreAdapter(WorkspaceGraphStore(graph._get_catalog_store(), scope))
+    return store, scope.cache_key
+
+
+_SEARCH_CACHE: SearchCache | None = None
+
+
+def _search_cache() -> SearchCache:
+    """The engine's multi-tier CacheService when configured, else a local FS cache."""
+    global _SEARCH_CACHE
+    if _SEARCH_CACHE is None:
+        cache = None
+        try:
+            from naas_abi import ABIModule
+
+            services = ABIModule.get_instance().engine.services
+            if services.cache_available():
+                cache = services.cache
+        except Exception:  # noqa: BLE001 - engine not loaded: local FS cache
+            pass
+        if cache is None:
+            from naas_abi_core.services.cache.CacheFactory import CacheFactory
+
+            cache = CacheFactory.CacheFS_find_storage(subpath="nexus/search-topics")
+        _SEARCH_CACHE = SearchCache(cache)
+    return _SEARCH_CACHE
 
 
 def _http_error(exc: Exception) -> HTTPException:
@@ -209,11 +243,23 @@ async def topic_results(
     await require_workspace_access(current_user.id, workspace_id)
     try:
         topic = await service.get_topic(workspace_id, topic_id)
-        store = await _scoped_store(current_user.id, workspace_id, topic.graphs)
-        results = await service.search(workspace_id, topic_id, q, store, limit=limit, offset=offset)
+        store, scope_key = await _scoped(current_user.id, workspace_id, topic.graphs)
+        cache = _search_cache()
+        key = cache.key(
+            workspace_id,
+            scope=scope_key,
+            topic=topic.to_dict(),
+            request={"role": "results", "q": q.strip(), "limit": limit, "offset": offset},
+        )
+        if (cached := cache.fetch(key)) is not None:
+            return cached
+        results = asdict(
+            await service.search(workspace_id, topic_id, q, store, limit=limit, offset=offset)
+        )
     except Exception as exc:
         raise _http_error(exc) from exc
-    return asdict(results)
+    cache.store(key, results)
+    return results
 
 
 @router.get("/{topic_id}/detail")
@@ -227,11 +273,32 @@ async def topic_detail(
     await require_workspace_access(current_user.id, workspace_id)
     try:
         topic = await service.get_topic(workspace_id, topic_id)
-        store = await _scoped_store(current_user.id, workspace_id, topic.graphs)
-        detail = await service.detail(workspace_id, topic_id, uri, store)
+        store, scope_key = await _scoped(current_user.id, workspace_id, topic.graphs)
+        cache = _search_cache()
+        key = cache.key(
+            workspace_id,
+            scope=scope_key,
+            topic=topic.to_dict(),
+            request={"role": "detail", "uri": uri},
+        )
+        if (cached := cache.fetch(key)) is not None:
+            return cached
+        detail = asdict(await service.detail(workspace_id, topic_id, uri, store))
     except Exception as exc:
         raise _http_error(exc) from exc
-    return asdict(detail)
+    cache.store(key, detail)
+    return detail
+
+
+@router.post("/cache/refresh")
+async def refresh_search_cache(
+    workspace_id: str = Query(...),
+    current_user=Depends(get_current_user_required),
+) -> dict[str, Any]:
+    """Retire the workspace's cached search responses: the next search reads the graphs."""
+    await require_workspace_access(current_user.id, workspace_id)
+    _search_cache().refresh(workspace_id)
+    return {"refreshed": True}
 
 
 @router.put("/{topic_id}")

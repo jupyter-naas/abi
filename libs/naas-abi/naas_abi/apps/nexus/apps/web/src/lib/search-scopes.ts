@@ -41,14 +41,24 @@ export interface ScopeHit {
   subtitle?: string | null;
   snippet?: string | null;
   image?: string | null;
+  /** A topic's metadata rows (Organization, Role, LinkedIn…), shown as in the topic's own results. */
+  rows?: { id: string; label: string; value: string }[];
   action: ScopeHitAction | null;
 }
 
 export interface ScopeResult {
   hits: ScopeHit[];
   hasMore: boolean;
+  /** Every match when the scope can count them (topics), not only the hits returned. */
+  total?: number;
   /** Caveat shown under the group, e.g. what the provider does not cover yet. */
   note?: string;
+}
+
+/** The exact count when the scope gives one, else what came back ("5+" when there is more). */
+export function formatHitCount(result: Pick<ScopeResult, 'hits' | 'hasMore' | 'total'>): string {
+  if (typeof result.total === 'number') return String(result.total);
+  return `${result.hits.length}${result.hasMore ? '+' : ''}`;
 }
 
 export const ALL_SCOPE = 'all';

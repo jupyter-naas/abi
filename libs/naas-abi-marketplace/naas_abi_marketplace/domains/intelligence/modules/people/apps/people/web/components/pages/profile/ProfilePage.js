@@ -1,5 +1,4 @@
 import { fetchPerson, fetchPersonGraph, fetchQueryResults } from "../../../lib/api.js";
-import { API_BASE } from "../../../lib/config.js";
 import {
   avatarHtml,
   escapeHtml,
@@ -7,7 +6,9 @@ import {
   formatQueryLabel,
   highlight,
   ICONS,
+  orgLogoHtml,
 } from "../../../lib/dom.js";
+import { mountGraphView } from "../../../lib/graph-view.js";
 import { profileHref, searchHref } from "../../../lib/routes.js";
 import { sectionHtml } from "../../profile/sections.js";
 import { missingDatasetHtml } from "../results/ResultsPage.js";
@@ -266,31 +267,10 @@ function viewSwitchHtml() {
   </div>`;
 }
 
-/** The graph page's stylesheet, scoped by the API, loaded once. */
-function ensureGraphStylesheet() {
-  if (document.querySelector("link[data-graph-view-css]")) return;
-  const link = document.createElement("link");
-  link.rel = "stylesheet";
-  link.href = `${API_BASE}/graph-view.css`;
-  link.dataset.graphViewCss = "";
-  document.head.append(link);
-}
-
-/**
- * Mount the person graph page (graph_page/GraphPage.js) for one person, served
- * under the API prefix.
- * Returns the page's disposer.
- */
-async function mountGraphView(host, slug) {
+/** Mount the person graph page for one person. Returns the page's disposer. */
+function mountPersonGraph(host, slug) {
   host.innerHTML = `<p class="stats profile-graph-status">Loading graph…</p>`;
-  ensureGraphStylesheet();
-  const [view, graphModule] = await Promise.all([
-    fetchPersonGraph(slug),
-    import(`${API_BASE}/graph-page/GraphPage.js`),
-  ]);
-  graphModule.configureGraph(view.config);
-  host.innerHTML = "";
-  return graphModule.mountGraphPage(host, view.data, { rootId: view.root, syncUrl: false });
+  return mountGraphView(host, () => fetchPersonGraph(slug));
 }
 
 function notFoundHtml(config, slug) {
@@ -349,6 +329,7 @@ export async function mountProfile(view, { config, params, slug }) {
             <h1 class="intro-name">${highlight(person.full_name, tokens)}</h1>
             <p class="intro-headline">${highlight(person.headline || "", tokens)}</p>
             <p class="intro-place">${flagHtml(person.country_code)}${ICONS.place}
+              ${orgLogoHtml(person.organization, person.organization_logo)}
               <span>${escapeHtml(place.join(" · "))}</span></p>
             ${contactHtml(person.contact)}
             ${person.quote ? `<p class="intro-quote">${highlight(person.quote, tokens)}</p>` : ""}
@@ -403,7 +384,7 @@ export async function mountProfile(view, { config, params, slug }) {
       return;
     }
     try {
-      const dispose = await mountGraphView(graphEl, slug);
+      const dispose = await mountPersonGraph(graphEl, slug);
       if (token !== switchToken) return dispose?.();
       disposeGraph = dispose;
     } catch (error) {

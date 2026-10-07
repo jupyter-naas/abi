@@ -67,7 +67,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-AVATAR_STORAGE_PREFIX = "nexus/avatars"
+AVATAR_STORAGE_PREFIX = "naas_abi/nexus/avatars"
+# Avatars used to be stored at the datastore root. They are still served from
+# there and moved to AVATAR_STORAGE_PREFIX on first read (see _read_avatar).
+LEGACY_AVATAR_STORAGE_PREFIX = "nexus/avatars"
 ALLOWED_AVATAR_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 AVATAR_MIME_TYPES = {
     ".png": "image/png",
@@ -566,7 +569,7 @@ async def get_avatar(
     ext = os.path.splitext(filename)[1].lower()
     media_type = AVATAR_MIME_TYPES.get(ext, "application/octet-stream")
     try:
-        content = object_storage.get_object(AVATAR_STORAGE_PREFIX, filename)
+        content = _read_avatar(object_storage, filename)
     except StorageExceptions.ObjectNotFound:
         raise HTTPException(status_code=404, detail="Avatar not found") from None
     return Response(content=content, media_type=media_type)
@@ -589,6 +592,24 @@ async def remove_avatar(
     return {"status": "ok"}
 
 
+def _read_avatar(object_storage: ObjectStorageService, filename: str) -> bytes:
+    """The avatar's bytes, moving a legacy one under AVATAR_STORAGE_PREFIX on the way.
+
+    Raises ``ObjectNotFound`` when neither location has it.
+    """
+    try:
+        return object_storage.get_object(AVATAR_STORAGE_PREFIX, filename)
+    except StorageExceptions.ObjectNotFound:
+        pass
+    content = object_storage.get_object(LEGACY_AVATAR_STORAGE_PREFIX, filename)
+    try:
+        object_storage.put_object(AVATAR_STORAGE_PREFIX, filename, content)
+        object_storage.delete_object(LEGACY_AVATAR_STORAGE_PREFIX, filename)
+    except Exception as exc:  # noqa: BLE001 - the read already succeeded
+        logger.warning("Could not move legacy avatar %s: %s", filename, exc)
+    return content
+
+
 def _delete_old_avatar(
     object_storage: ObjectStorageService,
     previous_avatar: str | None,
@@ -599,10 +620,11 @@ def _delete_old_avatar(
     key = previous_avatar.rsplit("/", 1)[-1]
     if key == exclude_filename:
         return
-    try:
-        object_storage.delete_object(AVATAR_STORAGE_PREFIX, key)
-    except Exception:
-        pass
+    for prefix in (AVATAR_STORAGE_PREFIX, LEGACY_AVATAR_STORAGE_PREFIX):
+        try:
+            object_storage.delete_object(prefix, key)
+        except Exception:
+            pass
 
 
 async def _send_magic_link_email(
