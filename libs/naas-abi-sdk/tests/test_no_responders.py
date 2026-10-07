@@ -134,6 +134,26 @@ def test_nobody_serving_still_fails_after_the_retry_window(broker):
 
 
 @needs_broker
+def test_the_retry_ends_before_the_callers_deadline(broker):
+    # A caller whose deadline is inside the retry window still learns that
+    # nobody serves the subject (a transfer open falls back on it), not a timeout.
+    async def scenario():
+        nc = await nats.connect(broker)
+        started = time.monotonic()
+        with pytest.raises(NoRespondersError):
+            await asyncio.wait_for(
+                no_responders.request(
+                    nc, "abi.svc.test.v1.ping", b"ping", headers={}, timeout=1.0
+                ),
+                timeout=1.0,
+            )
+        assert time.monotonic() - started < 1.0
+        await nc.close()
+
+    asyncio.run(scenario())
+
+
+@needs_broker
 def test_an_instance_subject_fails_at_once(broker):
     async def scenario():
         nc = await nats.connect(broker)
