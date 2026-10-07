@@ -54,9 +54,7 @@ def load_subclasses(class_: type, folder: str, base: type) -> list[type]:
                 imported = importlib.import_module(dotted)
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    "ModuleComponentLoader: failed to import %s: %s; skipping.",
-                    dotted,
-                    exc,
+                    f"ModuleComponentLoader: failed to import {dotted}: {exc!r}; skipping."
                 )
                 continue
 
