@@ -436,9 +436,14 @@ class NatsRPCClient:
             subject, headers, size=len(payload), transfer=transfer
         ) as span:
             if transfer is not None:  # a transfer's own chunk: always small
+                # Only the open goes to the serving engine's queue group; the
+                # session's later calls belong to the engine that opened it.
                 return self._rpc_parse(
                     self._rpc_request(
-                        subject, payload, headers, retry_no_responders=False
+                        subject,
+                        payload,
+                        headers,
+                        retry_no_responders=no_responders.transfer_open(subject),
                     ),
                     response_cls,
                     transfer,

@@ -164,17 +164,17 @@ class Transport:
             if message_size(payload, headers) > nc.max_payload:
                 raise RPCError("PAYLOAD_TOO_LARGE", "Request exceeds broker limit")
             try:
-                # An engine handing over may leave nobody subscribed for a moment;
-                # a transfer chunk belongs to one engine, so it is never resent.
+                # An engine handing over may leave nobody subscribed for a moment.
+                # A transfer's session calls belong to one engine, so only its
+                # open (on the queue group) is resent.
+                resend = transfer is None or no_responders.transfer_open(subject)
                 return await no_responders.request(
                     nc,
                     subject,
                     payload,
                     headers=headers,
                     timeout=self.timeout,
-                    retry_seconds=no_responders.RETRY_SECONDS
-                    if transfer is None
-                    else 0,
+                    retry_seconds=no_responders.RETRY_SECONDS if resend else 0,
                 )
             except MaxPayloadError as exc:
                 raise RPCError(
