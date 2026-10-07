@@ -1,8 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  allowedWebEngines, availableScopes, FEATURE_SCOPES, isScopeOn, matchScore, rankItems, RESERVED_SCOPE_IDS, scopeGroups, WEB_SCOPE_DEF,
-} from './search-scopes';
+import { allowedWebEngines, availableScopes, FEATURE_SCOPES, isScopeOn, matchScore, rankItems, RESERVED_SCOPE_IDS, scopeGroups, WEB_SCOPE_DEF, formatHitCount } from './search-scopes';
 import { blankTopic } from './search-topics';
 
 test('scopes follow the workspace features and the enabled topics', () => {
@@ -50,4 +48,11 @@ test('features and engines switched off for the workspace are not offered', () =
   assert.ok(ids(['web.wikipedia']).includes('web'));
   assert.ok(!ids(['web.wikipedia', 'web.duckduckgo']).includes('web'));
   assert.deepEqual(allowedWebEngines(['web.duckduckgo']), ['wikipedia']);
+});
+
+test('a hit count is exact when the scope counts, else what came back', () => {
+  assert.equal(formatHitCount({ hits: new Array(5).fill(null), hasMore: true, total: 42 }), '42');
+  assert.equal(formatHitCount({ hits: [], hasMore: false, total: 0 }), '0');
+  assert.equal(formatHitCount({ hits: new Array(5).fill(null), hasMore: true }), '5+');
+  assert.equal(formatHitCount({ hits: new Array(3).fill(null), hasMore: false }), '3');
 });

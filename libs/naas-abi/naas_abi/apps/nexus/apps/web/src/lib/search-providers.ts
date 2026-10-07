@@ -211,13 +211,15 @@ async function topicProvider(scope: SearchScope, q: string, ctx: ProviderContext
   const page = await topicsApi.results(ctx.workspaceId, scope.id, q, 0, ctx.limit);
   return {
     hasMore: page.has_more,
+    total: page.total ?? undefined,
     hits: page.items.map(item => ({
       id: item.uri,
       title: item.title,
-      // Without a subtitle, the topic's metadata rows say what the result is ("People 746").
-      subtitle: item.subtitle || (item.rows || []).map(row => `${row.label} ${row.value}`).join(' · ') || null,
+      subtitle: item.subtitle,
       snippet: item.snippet,
       image: item.image,
+      // The same card as the topic's own results: its metadata rows, not a summary line.
+      rows: item.rows || [],
       action: { kind: 'topic-item', topic: scope.id, uri: item.uri },
     })),
   };

@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { SearchTopic, TopicResultItem } from '@/lib/search-topics';
+import { displayUrl, isWebUrl, type SearchTopic, type TopicResultItem } from '@/lib/search-topics';
 import { SparqlDisclosure } from './sparql-disclosure';
+import { Highlight } from './highlight';
 import { TopicAvatar } from './topic-avatar';
 
 /**
@@ -13,14 +14,18 @@ import { TopicAvatar } from './topic-avatar';
  * Opening a row shows it in the topic's detail tab.
  */
 export function TopicResults({
-  topic, query, items, loading, error, hasMore, sparql, selected, hrefFor, onMore,
+  topic, query, highlight = query, items, loading, error, hasMore, total = null, sparql, selected, hrefFor, onMore,
 }: {
   topic: SearchTopic;
   query: string;
+  /** The words to mark; empty when the search box was cleared (the query may lag behind it). */
+  highlight?: string;
   items: TopicResultItem[];
   loading: boolean;
   error: string | null;
   hasMore: boolean;
+  /** Every match, not only the pages loaded so far. */
+  total?: number | null;
   sparql: string;
   selected: string | null;
   hrefFor: (uri: string) => string;
@@ -31,7 +36,7 @@ export function TopicResults({
       <div className="flex items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
         <span aria-live="polite">
           {loading && !items.length ? 'Searching…'
-            : `${items.length}${hasMore ? '+' : ''} ${(items.length === 1 ? topic.label : topic.plural_label).toLowerCase()}${query ? ` matching “${query}”` : ''}`}
+            : `${total ?? `${items.length}${hasMore ? '+' : ''}`} ${((total ?? items.length) === 1 ? topic.label : topic.plural_label).toLowerCase()}${query ? ` matching “${query}”` : ''}`}
         </span>
         <SparqlDisclosure sparql={sparql} className="text-right" />
       </div>
@@ -58,19 +63,10 @@ export function TopicResults({
             >
               <TopicAvatar label={item.title} image={item.image} size={40} />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">{item.title}</div>
-                {item.subtitle && <div className="truncate text-xs text-muted-foreground">{item.subtitle}</div>}
-                {item.rows?.length > 0 && (
-                  <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
-                    {item.rows.map(row => (
-                      <div key={row.id} className="flex min-w-0 max-w-full gap-1">
-                        <dt className="flex-shrink-0 text-muted-foreground">{row.label}</dt>
-                        <dd className="truncate">{row.value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
-                {item.snippet && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{item.snippet}</p>}
+                <div className="truncate text-sm font-medium"><Highlight text={item.title} query={highlight} /></div>
+                {item.subtitle && <div className="truncate text-xs text-muted-foreground"><Highlight text={item.subtitle} query={highlight} /></div>}
+                <TopicRows rows={item.rows} query={highlight} />
+                {item.snippet && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground"><Highlight text={item.snippet} query={highlight} /></p>}
               </div>
             </Link>
           </li>
@@ -88,5 +84,46 @@ export function TopicResults({
         </button>
       )}
     </div>
+  );
+}
+
+/** A result's metadata rows (Organization, Role, LinkedIn…); web addresses open in a new tab. */
+export function TopicRows({ rows, query }: { rows?: { id: string; label: string; value: string }[] | null; query?: string | null }) {
+  if (!rows?.length) return null;
+  return (
+    <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
+      {rows.map(row => (
+        <div key={row.id} className="flex min-w-0 max-w-full gap-1">
+          <dt className="flex-shrink-0 text-muted-foreground">{row.label}</dt>
+          <dd className="truncate">
+            {isWebUrl(row.value) ? <ExternalValue url={row.value} /> : <Highlight text={row.value} query={query} />}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/**
+ * A web address inside a result card. The card is itself a link, and a link
+ * cannot hold another, so this opens the address in a new tab on its own click.
+ */
+function ExternalValue({ url }: { url: string }) {
+  const open = (event: React.SyntheticEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+  return (
+    <span
+      role="link"
+      tabIndex={0}
+      title={url}
+      onClick={open}
+      onKeyDown={event => { if (event.key === 'Enter') open(event); }}
+      className="cursor-pointer text-workspace-accent hover:underline"
+    >
+      {displayUrl(url)}
+    </span>
   );
 }

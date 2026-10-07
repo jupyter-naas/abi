@@ -65,6 +65,8 @@ export interface TopicResults {
   items: TopicResultItem[];
   has_more: boolean;
   sparql: string;
+  /** Every individual the query matches, not only this page (null when the count failed). */
+  total?: number | null;
 }
 
 export interface TopicFact { key: string; label: string; value: string; is_uri: boolean }
@@ -80,6 +82,14 @@ export interface TopicSectionItem {
   url: string | null;
   /** Labels shown as chips on the row (the skills and languages an experience developed). */
   tags?: string[];
+  /** Rows sharing a group are shown under it (roles under their employer). */
+  group?: string | null;
+  group_item?: string | null;
+  group_image?: string | null;
+  /** The organization the row's work was performed for (a consulting client). */
+  client?: string | null;
+  client_item?: string | null;
+  client_image?: string | null;
 }
 
 export interface TopicSectionResult {
@@ -164,6 +174,16 @@ export function initials(label: string): string {
 }
 
 /** "2019-10-01" → "Oct 2019"; open-ended periods read "– present". */
+/** A value that is a web address (a LinkedIn profile, a website) and can open in a new tab. */
+export function isWebUrl(value: string | null | undefined): value is string {
+  return !!value && /^https?:\/\/\S+$/i.test(value.trim());
+}
+
+/** A web address as people read it: no scheme, no "www.", no trailing slash. */
+export function displayUrl(value: string): string {
+  return value.trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, '');
+}
+
 export function formatPeriod(start: string | null, end: string | null): string | null {
   const fmt = (value: string) => {
     const date = new Date(value);

@@ -33,7 +33,15 @@ class ABIModule(BaseModule):
     )
 
     class Configuration(ModuleConfiguration):
-        pass
+        """
+        module: naas_abi_marketplace.domains.intelligence.modules.organizations
+        enabled: true
+        """
+
+        # Each organization's files: <datastore_path>/<key>/logos/<key>.<ext>, served
+        # at /api/organizations/logos/<key>/<key>.<ext> (OrganizationLogoPipeline).
+        datastore_path: str = "intelligence/organizations"
+        graph_name: str = "http://ontology.naas.ai/graph/organizations"
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.
@@ -128,7 +136,12 @@ class ABIModule(BaseModule):
         # app.state.bus_service = self.engine.services.bus
         # app.state.key_value_service = self.engine.services.kv
 
-        # Example: mount your FastAPI routes/app factory.
-        # from your_module.apps.api.app.main import create_app
-        # create_app(app)
-        pass
+        from naas_abi_marketplace.domains.intelligence.modules.organizations.utils.logo_routes import (
+            mount_logo_route,
+        )
+
+        mount_logo_route(
+            app,
+            lambda: self.engine.services.object_storage,
+            self.configuration.datastore_path,
+        )

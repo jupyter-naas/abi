@@ -8,7 +8,7 @@ import tarfile
 import tempfile
 import zipfile
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
 from naas_abi.apps.nexus.apps.api.app.services.files.files__schema import (
@@ -33,6 +33,23 @@ from naas_abi.apps.nexus.apps.api.app.services.files.files__schema import (
 )
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
+
+# Folders carry no timestamp and sort as the oldest entries.
+_UNKNOWN_MODIFIED = datetime.min.replace(tzinfo=UTC)
+
+
+def _modified_sort_key(info: FileInfoData) -> datetime:
+    """Comparable ``modified`` for every entry.
+
+    S3/MinIO report a timezone-aware ``LastModified`` while the filesystem adapter
+    and ``datetime.now()`` give naive values; a naive one is taken as UTC so a
+    folder mixing both still sorts instead of raising ``TypeError``.
+    """
+    if info.modified is None:
+        return _UNKNOWN_MODIFIED
+    if info.modified.tzinfo is None:
+        return info.modified.replace(tzinfo=UTC)
+    return info.modified
 
 
 class FilesService:
@@ -164,7 +181,7 @@ class FilesService:
                     reverse=reverse,
                 )
             else:  # modified
-                infos.sort(key=lambda info: info.modified or datetime.min, reverse=reverse)
+                infos.sort(key=_modified_sort_key, reverse=reverse)
             files = infos[start : start + limit] if limit is not None else infos[start:]
 
         return FileListResponseData(files=files, path=normalized_path, total=total)
