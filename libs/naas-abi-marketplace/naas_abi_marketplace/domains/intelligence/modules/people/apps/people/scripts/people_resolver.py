@@ -61,10 +61,14 @@ def graph_from_config_files(config: dict[str, Any]) -> Graph:
 
 def filter_graph_iris(readable: frozenset[str], config: dict[str, Any]) -> list[str]:
     prefixes = config["data"]["graph"].get("include_prefixes") or []
-    if not prefixes:
+    suffixes = config["data"]["graph"].get("include_suffixes") or []
+    if not prefixes and not suffixes:
         return sorted(readable)
     return sorted(
-        iri for iri in readable if any(str(iri).startswith(prefix) for prefix in prefixes)
+        iri
+        for iri in readable
+        if any(str(iri).startswith(prefix) for prefix in prefixes)
+        or any(str(iri).rstrip("/").endswith(suffix) for suffix in suffixes)
     )
 
 

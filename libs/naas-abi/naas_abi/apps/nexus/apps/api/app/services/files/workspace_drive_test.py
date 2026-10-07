@@ -16,6 +16,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.workspace_drive import (
+    GRAPH_BASE,
     LEGACY_MANIFEST_NAME,
     MANIFEST_NAME,
     README_NAME,
@@ -101,7 +102,9 @@ async def test_a_created_workspace_gets_a_manifest(env) -> None:
             "created_at": "2026-05-01T09:30:00",
             "updated_at": "2026-05-01T09:30:00",
         },
+        "graph_base": GRAPH_BASE,
     }
+    assert "graphs" not in _manifest(storage, "ws-1")
 
 
 @pytest.mark.asyncio
@@ -130,11 +133,14 @@ async def test_updating_a_workspace_rewrites_the_manifest(env) -> None:
         workspace.slug = "renamed"
         await session.commit()
 
-    workspace_meta = _manifest(storage, "ws-1")["workspace"]
+    rewritten = _manifest(storage, "ws-1")
+    workspace_meta = rewritten["workspace"]
     assert workspace_meta["name"] == "Renamed"
     assert workspace_meta["slug"] == "renamed"
     assert workspace_meta["created_at"] == "2026-05-01T09:30:00"
     assert workspace_meta["updated_at"] > "2026-05-01T09:30:00"
+    assert rewritten["graph_base"] == GRAPH_BASE
+    assert "graphs" not in rewritten
 
 
 @pytest.mark.asyncio
@@ -151,6 +157,35 @@ async def test_a_rolled_back_update_leaves_the_manifest(env) -> None:
         await session.rollback()
 
     assert _manifest(storage, "ws-1")["workspace"]["name"] == "Forvis Mazars France"
+
+
+@pytest.mark.asyncio
+async def test_updating_a_workspace_keeps_graphs_an_app_wrote(env) -> None:
+    maker, storage = env
+    async with maker() as session:
+        session.add(_user())
+        workspace = _workspace()
+        session.add(workspace)
+        await session.commit()
+
+    root = "naas_abi/workspace-drive/ws-1"
+    data = _manifest(storage, "ws-1")
+    data["graphs"] = {
+        "market": f"{GRAPH_BASE}ws-1/market",
+        "people": f"{GRAPH_BASE}ws-1/people",
+    }
+    storage.put_object(root, MANIFEST_NAME, json.dumps(data).encode())
+
+    async with maker() as session:
+        workspace = await session.get(WorkspaceModel, "ws-1")
+        assert workspace is not None
+        workspace.name = "Renamed"
+        await session.commit()
+
+    rewritten = _manifest(storage, "ws-1")
+    assert rewritten["graph_base"] == GRAPH_BASE
+    assert rewritten["graphs"] == data["graphs"]
+    assert rewritten["workspace"]["name"] == "Renamed"
 
 
 @pytest.mark.asyncio
@@ -268,7 +303,11 @@ async def test_backfill_creates_staff_folders_once_and_keeps_existing_files(env)
     async with maker() as session:
         written = await backfill_workspace_drives(session, storage)
 
-    assert written == {"manifests": 0, "staff_folders": 1, "legacy_manifests_removed": 0}
+    assert written == {
+        "manifests": 0,
+        "staff_folders": 1,
+        "legacy_manifests_removed": 0,
+    }
     assert _readme(storage, "ws-1", "plans") == staff_folder_readme("plans")
     assert _readme(storage, "ws-1", "finance") == "# Ours"
     assert not _has(storage, "naas_abi/workspace-drive/ws-2/training", README_NAME)

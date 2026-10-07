@@ -389,6 +389,9 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
         # When backend is workspace_graphs, only these named graph IRIs are
         # merged (prefix match). Empty means every graph the workspace may read.
         "include_prefixes": [],
+        # Also keep graphs whose IRI ends with one of these (workspace people
+        # graphs are ``http://ontology.naas.ai/graph/<workspace_id>/people``).
+        "include_suffixes": [],
     }
     graph = data.get("graph")
     if graph not in (None, {}):
@@ -417,6 +420,14 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
             graph_out["include_prefixes"] = [
                 _text(item, f"data.graph.include_prefixes[{index}]")
                 for index, item in enumerate(prefixes)
+            ]
+        suffixes = graph_map.get("include_suffixes")
+        if suffixes not in (None, []):
+            if not isinstance(suffixes, list):
+                raise ConfigError("data.graph.include_suffixes must be a list")
+            graph_out["include_suffixes"] = [
+                _text(item, f"data.graph.include_suffixes[{index}]")
+                for index, item in enumerate(suffixes)
             ]
 
     # Portraits are stated in the source relative to the module that owns them.
