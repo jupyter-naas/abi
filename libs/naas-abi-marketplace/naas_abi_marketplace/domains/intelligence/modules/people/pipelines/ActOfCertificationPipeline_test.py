@@ -22,7 +22,6 @@ from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfCer
 from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import RDF
 
-PEOPLE = "http://ontology.naas.ai/people/"
 ABI_ORGANIZATION = URIRef("http://ontology.naas.ai/abi/Organization")
 ABI_PERSON = URIRef("http://ontology.naas.ai/abi/Person")
 ABI_TEMPORAL_REGION = URIRef("http://ontology.naas.ai/abi/TemporalRegion")
@@ -35,7 +34,8 @@ SITE = URIRef(Site._class_uri)
 
 
 def p(name: str) -> URIRef:
-    return URIRef(f"{PEOPLE}{name}")
+    """A People term: classes and properties are in the abi namespace."""
+    return URIRef(f"http://ontology.naas.ai/abi/{name}")
 
 
 def params(**overrides: object) -> ActOfCertificationPipelineParameters:

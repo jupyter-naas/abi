@@ -11,9 +11,9 @@
 @prefix people: <http://ontology.naas.ai/people/> .
 @prefix personnel: <http://ontology.naas.ai/personnel/> .
 
-personnel:ActOfEmploymentProcess a owl:Ontology ;
+abi:ActOfEmploymentProcess a owl:Ontology ;
   # Slice: the act of employment and its process-only properties. It
-  # specializes people:ActOfWorking (ActOfWorkingProcess, people module): what
+  # specializes abi:ActOfWorking (ActOfWorkingProcess, people module): what
   # any source can say about someone's work stays there, and this slice adds
   # only what the employing organization records about its own staff. Shared
   # internal classes (EmployeeRole, EmploymentContract, EmploymentRecord) live
@@ -26,12 +26,13 @@ personnel:ActOfEmploymentProcess a owl:Ontology ;
   #   HOW WE KNOW  EmploymentContract, EmploymentRecord (GDCs)
   #
   # Same individual, two graphs: an act of employment is the act of working the
-  # people graph already holds, typed personnel:ActOfEmployment and given its
+  # people graph already holds, typed abi:ActOfEmployment and given its
   # contract in the personnel graph.
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
   owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
-  owl:imports <http://ontology.naas.ai/people/ActOfWorkingProcess> ;
-  rdfs:seeAlso <http://ontology.naas.ai/personnel/PersonnelOntology> ;
+  # People processes are consolidated into PeopleOntology: import it, never a slice.
+  owl:imports <http://ontology.naas.ai/abi/PeopleOntology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/abi/PersonnelOntology> ;
   rdfs:member "bpl-processes/personnel" ;
   abi:pythonPackage "naas_abi_marketplace.domains.personnel" ;
   abi:ontologyResource "ontologies/processes/ActOfEmploymentProcess.ttl" ;
@@ -39,7 +40,7 @@ personnel:ActOfEmploymentProcess a owl:Ontology ;
   dc:title "Act of Employment Process Ontology"@en ;
   dc:description "Process slice for the act of employment - an act of working, and a CCO Act of Employment, performed for the organization that employs the person, realizing an employee role and concretizing an employment contract."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
-  rdfs:comment "Process slice for Act of Employment. Specializes people:ActOfWorking; reuses shared personnel classes."@en ;
+  rdfs:comment "Process slice for Act of Employment. Specializes abi:ActOfWorking; reuses shared personnel classes."@en ;
   dc11:contributor "Alice Dupont" ;
   dc11:date "2026-10-02"^^xsd:date .
 
@@ -47,11 +48,11 @@ personnel:ActOfEmploymentProcess a owl:Ontology ;
 #    Classes - WHAT
 #################################################################
 
-personnel:ActOfEmployment a owl:Class ;
-  rdfs:subClassOf people:ActOfWorking ,
+abi:ActOfEmployment a owl:Class ;
+  rdfs:subClassOf abi:ActOfWorking ,
     cco:ont00001226 ,
-    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom personnel:EmployeeRole ] ,
-    [ a owl:Restriction ; owl:onProperty personnel:hasContract ; owl:someValuesFrom personnel:EmploymentContract ] ;
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:EmployeeRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasContract ; owl:someValuesFrom abi:EmploymentContract ] ;
   rdfs:label "Act of Employment"@en ;
   skos:definition "An Act of Working, and a CCO Act of Employment, that a person performs for the organization that employs them, realizing an employee role under an employment contract."@en ;
   skos:example "Alice Dupont working as Head of Product for Demo under a permanent contract, as Demo's HR system records it."@en ;
@@ -61,28 +62,28 @@ personnel:ActOfEmployment a owl:Class ;
 #    Object properties - process-only
 #################################################################
 
-personnel:hasContract a owl:ObjectProperty ;
+abi:hasContract a owl:ObjectProperty ;
   rdfs:subPropertyOf abi:concretizes ;
-  owl:inverseOf personnel:isContractOf ;
+  owl:inverseOf abi:isContractOf ;
   rdfs:label "has contract"@en ;
   skos:definition "Relates an act of employment to the employment contract it concretizes."@en ;
-  rdfs:domain personnel:ActOfEmployment ;
-  rdfs:range  personnel:EmploymentContract .
+  rdfs:domain abi:ActOfEmployment ;
+  rdfs:range  abi:EmploymentContract .
 
-personnel:isContractOf a owl:ObjectProperty ;
+abi:isContractOf a owl:ObjectProperty ;
   rdfs:subPropertyOf abi:isConcretizedBy ;
-  owl:inverseOf personnel:hasContract ;
+  owl:inverseOf abi:hasContract ;
   rdfs:label "is contract of"@en ;
   skos:definition "Relates an employment contract to the act of employment that concretizes it."@en ;
-  rdfs:domain personnel:EmploymentContract ;
-  rdfs:range  personnel:ActOfEmployment .
+  rdfs:domain abi:EmploymentContract ;
+  rdfs:range  abi:ActOfEmployment .
 
 #################################################################
 #    Data properties
 #################################################################
 
-personnel:contract_type a owl:DatatypeProperty ;
+abi:contract_type a owl:DatatypeProperty ;
   rdfs:label "contract type"@en ;
-  skos:definition "Engagement type of an employment contract as the employer records it, e.g. 'Permanent', 'Fixed-term', 'Freelance'. The published counterpart is people:employment_type, stated on the act of working."@en ;
-  rdfs:domain personnel:EmploymentContract ;
+  skos:definition "Engagement type of an employment contract as the employer records it, e.g. 'Permanent', 'Fixed-term', 'Freelance'. The published counterpart is abi:employment_type, stated on the act of working."@en ;
+  rdfs:domain abi:EmploymentContract ;
   rdfs:range  xsd:string .

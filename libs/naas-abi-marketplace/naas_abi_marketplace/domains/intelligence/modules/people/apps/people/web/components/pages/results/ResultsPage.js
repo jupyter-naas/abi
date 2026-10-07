@@ -1,6 +1,8 @@
-import { fetchSearch } from "../../../lib/api.js";
+import { fetchSearch, fetchSearchNetwork } from "../../../lib/api.js";
 import { avatarHtml, escapeHtml, flagHtml, highlight } from "../../../lib/dom.js";
 import { profileHref, searchHref } from "../../../lib/routes.js";
+import { mountPeopleNetwork } from "../../../lib/people-network.js";
+import { overflowTabs } from "../../../lib/tab-overflow.js";
 
 function resultHtml(config, hit, tokens, query) {
   const place = [hit.organization, ...(hit.place || [])].filter(Boolean);
@@ -30,22 +32,46 @@ function resultHtml(config, hit, tokens, query) {
     </article>`;
 }
 
-function tabsHtml(config, payload, query) {
-  const facets = payload.facets || [];
-  if (facets.length < 2) return "";
-  const all = `<a class="tab" href="${searchHref(config, { query })}" aria-current="${!payload.facet}">
-      ${escapeHtml(config.search?.all_facet_label || "All")}
-      <span class="tab-count">${payload.facets.reduce((sum, facet) => sum + facet.count, 0)}</span>
+/** The ways to look at one page of results: a list, a network, a gallery of profiles. */
+export const VIEWS = [
+  { id: "", label: "All" },
+  { id: "graph", label: "Graph" },
+  { id: "profile", label: "Profile" },
+];
+
+export function viewOf(value) {
+  return VIEWS.some((item) => item.id === value) ? value : "";
+}
+
+function tabsHtml(config, { query, facet, view }) {
+  const tabs = VIEWS.map(
+    (item) => `<a class="tab" href="${searchHref(config, { query, facet, view: item.id })}"
+      aria-current="${item.id === view}">${escapeHtml(item.label)}</a>`,
+  ).join("");
+  return `<nav class="tabs" aria-label="View">${tabs}</nav>`;
+}
+
+/** One person as a CV card: portrait, name, headline, where they are. */
+function cardHtml(config, hit, tokens, query) {
+  const place = [hit.organization, ...(hit.place || [])].filter(Boolean);
+  return `
+    <a class="profile-card" href="${profileHref(config, hit.slug, { query })}">
+      ${avatarHtml(hit, "md")}
+      <span class="profile-card-name">${highlight(hit.full_name, tokens, "b")}</span>
+      <span class="profile-card-headline">${highlight(hit.headline || "", tokens, "b")}</span>
+      <span class="profile-card-place">${flagHtml(hit.country_code)}${escapeHtml(place.join(" › "))}</span>
     </a>`;
-  const rest = facets
-    .map(
-      (facet) => `<a class="tab" href="${searchHref(config, { query, facet: facet.value })}"
-        aria-current="${payload.facet === facet.value}">
-        ${escapeHtml(facet.value)}<span class="tab-count">${facet.count}</span>
-      </a>`,
-    )
-    .join("");
-  return `<nav class="tabs" aria-label="${escapeHtml(config.search?.facet_label || "Filter")}">${all}${rest}</nav>`;
+}
+
+function bodyHtml(config, view, results, tokens, query) {
+  if (!results.length) return emptyHtml(config, query);
+  if (view === "graph") return `<div class="network-host"><p class="stats">Drawing the network…</p></div>`;
+  if (view === "profile") {
+    return `<div class="profile-gallery">${results
+      .map((hit) => cardHtml(config, hit, tokens, query))
+      .join("")}</div>`;
+  }
+  return results.map((hit) => resultHtml(config, hit, tokens, query)).join("");
 }
 
 /**
@@ -70,11 +96,11 @@ export function pageWindow(current, pages, radius = 2) {
   return out;
 }
 
-function pagerHtml(config, payload, query) {
+function pagerHtml(config, payload, query, view = "") {
   const pages = payload.pages || 1;
   if (pages < 2) return "";
   const current = payload.page || 1;
-  const href = (page) => searchHref(config, { query, facet: payload.facet, page });
+  const href = (page) => searchHref(config, { query, facet: payload.facet, page, view });
   const link = (page, label, { disabled = false, ariaLabel = "" } = {}) =>
     disabled
       ? `<span class="page page-disabled" aria-disabled="true">${label}</span>`
@@ -124,17 +150,33 @@ export function missingDatasetHtml(detail) {
     </div>`;
 }
 
-export async function mountResults(view, { config, params }) {
+async function drawNetwork(target, config, { query, facet, page }) {
+  try {
+    const network = await fetchSearchNetwork({ query, facet, page });
+    if (!target.isConnected) return;
+    target.innerHTML = "";
+    mountPeopleNetwork(target, network, {
+      personHref: (slug) => profileHref(config, slug, { query }),
+    });
+  } catch (error) {
+    if (target.isConnected) {
+      target.innerHTML = `<p class="empty-state error-block">The network could not be drawn: ${escapeHtml(error.message)}</p>`;
+    }
+  }
+}
+
+export async function mountResults(host, { config, params }) {
   const query = params.get("q") || "";
   const facet = params.get("facet") || "";
+  const view = viewOf(params.get("view") || "");
   const requestedPage = Math.max(1, parseInt(params.get("page") || "1", 10) || 1);
-  view.innerHTML = `<div class="results"><p class="stats">Searching…</p></div>`;
+  host.innerHTML = `<div class="results"><p class="stats">Searching…</p></div>`;
 
   let payload;
   try {
     payload = await fetchSearch({ query, facet, page: requestedPage });
   } catch (error) {
-    view.innerHTML = `<div class="results">${
+    host.innerHTML = `<div class="results">${
       error.detail?.error === "missing_dataset"
         ? missingDatasetHtml(error.detail)
         : `<div class="empty-state error-block"><h2>Search failed</h2><p>${escapeHtml(error.message)}</p></div>`
@@ -149,20 +191,25 @@ export async function mountResults(view, { config, params }) {
       ? `<p class="notice">No one matches every word. Showing people who match some of them.</p>`
       : "";
 
-  view.innerHTML = `
+  host.innerHTML = `
     <div class="results">
-      ${tabsHtml(config, payload, query)}
+      ${tabsHtml(config, { query, facet: payload.facet, view })}
       <p class="stats">${statsText(payload)}${
         query ? ` for “${escapeHtml(query)}”` : ""
       }${payload.facet ? ` in ${escapeHtml(payload.facet)}` : ""}</p>
       ${noticeHtml}
-      ${
-        results.length
-          ? results.map((hit) => resultHtml(config, hit, tokens, query)).join("")
-          : emptyHtml(config, query)
-      }
-      ${pagerHtml(config, payload, query)}
+      ${bodyHtml(config, view, results, tokens, query)}
+      ${pagerHtml(config, payload, query, view)}
     </div>`;
+  const tabs = host.querySelector(".tabs");
+  if (tabs) overflowTabs(tabs);
+  if (view === "graph" && results.length) {
+    drawNetwork(host.querySelector(".network-host"), config, {
+      query,
+      facet: payload.facet,
+      page: payload.page,
+    });
+  }
 
   return { showTopbarSearch: true, query };
 }

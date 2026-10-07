@@ -1,9 +1,9 @@
 /**
  * FlightLayerAdapter
  *
- * Realizes: wsr:FlightTrackingProcess
- * ICE consumed: wsr:AircraftPositionReport[] from /api/flights (OpenSky → airplanes.live fallback)
- * Material entity rendered: wsr:CivilAircraft billboards (cyan)
+ * Realizes: abi:FlightTrackingProcess
+ * ICE consumed: abi:AircraftPositionReport[] from /api/flights (OpenSky → airplanes.live fallback)
+ * Material entity rendered: abi:CivilAircraft billboards (cyan)
  *
  * One adapter per BFO process subclass — civil flight, military aircraft,
  * and theater aircraft are separate adapters with separate layer IDs.

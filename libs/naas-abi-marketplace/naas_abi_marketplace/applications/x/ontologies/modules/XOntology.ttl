@@ -15,6 +15,7 @@ x:XOntology a owl:Ontology ;
   # ontologies/processes/XSearchRecentTweetsProcess.ttl: onto2py's codegen
   # pre-scan does not follow a comma-separated continuation.
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/PersonOntology> ;
   owl:imports <http://ontology.naas.ai/x/CountRecentTweetsProcess> ;
   rdfs:seeAlso <https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi-marketplace/naas_abi_marketplace/applications/x/ontologies/modules/XOntology.ttl> ,
                <http://ontology.naas.ai/x/SearchRecentTweetsProcess> ;

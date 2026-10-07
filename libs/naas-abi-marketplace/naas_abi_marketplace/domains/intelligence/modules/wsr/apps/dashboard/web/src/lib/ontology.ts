@@ -6,13 +6,13 @@
  *   ontology/wsr-instances.ttl  (named individuals)
  *
  * Organisation follows the BFO 7-bucket pattern:
- *   1. Site              (WHERE)  — wsr:GeographicSite subclasses
- *   2. Material Entity   (WHO)    — wsr:Satellite, wsr:Aircraft, wsr:CCTVCameraUnit …
- *   3. GDC / ICE         (HOW WE KNOW) — wsr:InformationContentEntity subclasses
- *   4. Quality           (HOW IT IS)   — wsr:GeographicCoordinate …
- *   5. Role              (WHY — external) — wsr:SurveillanceSourceRole …
- *   6. Disposition       (WHY — internal) — wsr:StreamingDisposition …
- *   7. Process           (WHAT)   — wsr:GeospatialIntelligenceProcess subclasses
+ *   1. Site              (WHERE)  — abi:GeographicSite subclasses
+ *   2. Material Entity   (WHO)    — abi:Satellite, abi:Aircraft, abi:CCTVCameraUnit …
+ *   3. GDC / ICE         (HOW WE KNOW) — abi:InformationContentEntity subclasses
+ *   4. Quality           (HOW IT IS)   — abi:GeographicCoordinate …
+ *   5. Role              (WHY — external) — abi:SurveillanceSourceRole …
+ *   6. Disposition       (WHY — internal) — abi:StreamingDisposition …
+ *   7. Process           (WHAT)   — abi:GeospatialIntelligenceProcess subclasses
  *
  * RULE: All domain types in this app MUST be a subtype of one of these
  * seven base interfaces. If you add a new concept, determine its BFO
@@ -21,6 +21,7 @@
 
 // ─── Namespace constants ─────────────────────────────────────────────────────
 
+export const ABI_NS = 'http://ontology.naas.ai/abi/' as const;
 export const WSR_NS = 'http://ontology.naas.ai/wsr/' as const;
 export const WSRI_NS = 'http://ontology.naas.ai/wsr/instances/' as const;
 export const BFO_NS = 'http://purl.obolibrary.org/obo/' as const;
@@ -88,7 +89,7 @@ export type SiteType =
   | 'OrbitalShell';
 
 /**
- * wsr:GeographicSite and all subclasses.
+ * abi:GeographicSite and all subclasses.
  * Maps to ConflictEvent in the legacy API — but is now ontology-typed.
  */
 export interface GeographicSite extends BFOSite {
@@ -102,7 +103,7 @@ export interface GeographicSite extends BFOSite {
   readonly description?: string;
 }
 
-/** Threat severity values — wsr:ThreatSeverityLevel individuals */
+/** Threat severity values — abi:ThreatSeverityLevel individuals */
 export type ThreatSeverityValue = 'critical' | 'high' | 'medium' | 'low';
 
 /** Canonical theater instance — wvi:MiddleEastTheater */
@@ -129,8 +130,8 @@ export type MaterialEntityType =
   | 'ComputeInfrastructure';
 
 /**
- * wsr:Satellite — physical satellite object.
- * Linked to wsr:TLERecord (GDC) via BFO_0000101 is_carrier_of.
+ * abi:Satellite — physical satellite object.
+ * Linked to abi:TLERecord (GDC) via BFO_0000101 is_carrier_of.
  */
 export interface OntologySatellite extends BFOMaterialEntity {
   readonly materialType: 'Satellite';
@@ -140,8 +141,8 @@ export interface OntologySatellite extends BFOMaterialEntity {
 }
 
 /**
- * wsr:Aircraft — tracked airborne material entity.
- * Bears wsr:ADSBTransponderDisposition.
+ * abi:Aircraft — tracked airborne material entity.
+ * Bears abi:ADSBTransponderDisposition.
  */
 export interface OntologyAircraft extends BFOMaterialEntity {
   readonly materialType: 'MilitaryAircraft' | 'CivilAircraft' | 'AerialRefuelingAircraft';
@@ -157,8 +158,8 @@ export interface OntologyAircraft extends BFOMaterialEntity {
 }
 
 /**
- * wsr:CCTVCameraUnit — physical camera bearing wsr:StreamingDisposition.
- * Linked to wsr:VideoStream (GDC) via BFO_0000101 is_carrier_of.
+ * abi:CCTVCameraUnit — physical camera bearing abi:StreamingDisposition.
+ * Linked to abi:VideoStream (GDC) via BFO_0000101 is_carrier_of.
  */
 export interface OntologyCCTVCameraUnit extends BFOMaterialEntity {
   readonly materialType: 'CCTVCameraUnit';
@@ -175,7 +176,7 @@ export interface OntologyCCTVCameraUnit extends BFOMaterialEntity {
 }
 
 /**
- * wsr:DataSourceEndpoint — server that produces ICEs.
+ * abi:DataSourceEndpoint — server that produces ICEs.
  */
 export interface OntologyDataSourceEndpoint extends BFOMaterialEntity {
   readonly materialType: 'DataSourceEndpoint';
@@ -206,7 +207,7 @@ export interface InformationContentEntity extends BFOGDC {
 }
 
 /**
- * wsr:TLERecord — orbital element set.
+ * abi:TLERecord — orbital element set.
  * Generically depends on wvi:CelesTrakEndpoint.
  * Concretized by wvi:OrbitalPropagationProcess.
  */
@@ -218,7 +219,7 @@ export interface TLERecord extends InformationContentEntity {
 }
 
 /**
- * wsr:AircraftPositionReport — ADS-B derived position.
+ * abi:AircraftPositionReport — ADS-B derived position.
  * Generically depends on OpenSky or airplanes.live endpoint.
  */
 export interface AircraftPositionReport extends InformationContentEntity {
@@ -235,7 +236,7 @@ export interface AircraftPositionReport extends InformationContentEntity {
 }
 
 /**
- * wsr:EarthquakeEventRecord — seismic event.
+ * abi:EarthquakeEventRecord — seismic event.
  * Generically depends on wvi:USGSEarthquakeEndpoint.
  */
 export interface EarthquakeEventRecord extends InformationContentEntity {
@@ -252,9 +253,9 @@ export interface EarthquakeEventRecord extends InformationContentEntity {
 export type NewsSeverity = 'breaking' | 'alert' | 'update';
 
 /**
- * wsr:NewsArticle — information content from a news organization.
+ * abi:NewsArticle — information content from a news organization.
  * Generically depends on BBC/AJ/Reuters RSS endpoint.
- * Bears wsr:NewsSeverityClass quality.
+ * Bears abi:NewsSeverityClass quality.
  */
 export interface NewsArticle extends InformationContentEntity {
   readonly gdcType: 'NewsArticle' | 'BreakingNewsArticle' | 'AlertNewsArticle';
@@ -267,7 +268,7 @@ export interface NewsArticle extends InformationContentEntity {
 }
 
 /**
- * wsr:ConflictSiteRecord — structured OSINT record for a conflict-relevant site.
+ * abi:ConflictSiteRecord — structured OSINT record for a conflict-relevant site.
  * Links an ICE to its corresponding GeographicSite instance.
  */
 export interface ConflictSiteRecord extends InformationContentEntity {
@@ -280,13 +281,13 @@ export interface ConflictSiteRecord extends InformationContentEntity {
   readonly country: string;
   readonly description: string;
   readonly severity: ThreatSeverityValue;
-  /** IRI of the corresponding wsr:GeographicSite individual */
+  /** IRI of the corresponding abi:GeographicSite individual */
   readonly siteIri?: string;
 }
 
 /**
- * wsr:VideoStream — continuous video content from a physical camera.
- * Concretized by wsr:CCTVStreamingProcess.
+ * abi:VideoStream — continuous video content from a physical camera.
+ * Concretized by abi:CCTVStreamingProcess.
  */
 export interface VideoStream extends InformationContentEntity {
   readonly gdcType: 'VideoStream';
@@ -297,14 +298,14 @@ export interface VideoStream extends InformationContentEntity {
 
 // ─── 4. QUALITIES (HOW IT IS) ────────────────────────────────────────────────
 
-/** wsr:GeographicCoordinate — lat/lon quality pair */
+/** abi:GeographicCoordinate — lat/lon quality pair */
 export interface GeographicCoordinate extends BFOQuality {
   readonly bfoType: 'Quality';
   readonly lat: number;
   readonly lon: number;
 }
 
-/** wsr:ThreatSeverityLevel — composite theater threat assessment */
+/** abi:ThreatSeverityLevel — composite theater threat assessment */
 export type ThreatLevel = 'MONITORING' | 'ELEVATED' | 'HIGH' | 'IMMINENT';
 
 export function computeThreatLevel(breakingCount: number): ThreatLevel {
@@ -362,12 +363,12 @@ export type ProcessType =
 
 /**
  * Runtime descriptor for a WSR process instance.
- * The refreshIntervalMs and cacheTTLMs mirror the wsr:hasRefreshInterval
- * and wsr:hasCacheTTL datatype properties in the TTL.
+ * The refreshIntervalMs and cacheTTLMs mirror the abi:hasRefreshInterval
+ * and abi:hasCacheTTL datatype properties in the TTL.
  */
 export interface ProcessDescriptor extends BFOProcess {
   readonly processType: ProcessType;
-  /** Polling interval in milliseconds (wsr:hasRefreshInterval × 1000) */
+  /** Polling interval in milliseconds (abi:hasRefreshInterval × 1000) */
   readonly refreshIntervalMs?: number;
   /** Server-side cache TTL in milliseconds */
   readonly cacheTTLMs?: number;
@@ -393,7 +394,7 @@ export const WSR_PROCESSES: Record<ProcessType, ProcessDescriptor> = {
     sourceEndpoints: [`${WSRI_NS}CelesTrakEndpoint`],
   },
   OrbitalPropagationProcess: {
-    iri: `${WSR_NS}OrbitalPropagationProcess`,
+    iri: `${ABI_NS}OrbitalPropagationProcess`,
     label: 'SGP4 Orbital Propagation Subprocess',
     bfoType: 'Process',
     processType: 'OrbitalPropagationProcess',
@@ -453,7 +454,7 @@ export const WSR_PROCESSES: Record<ProcessType, ProcessDescriptor> = {
     sourceEndpoints: [],
   },
   CCTVStreamingProcess: {
-    iri: `${WSR_NS}CCTVStreamingProcess`,
+    iri: `${ABI_NS}CCTVStreamingProcess`,
     label: 'CCTV Video Stream Process',
     bfoType: 'Process',
     processType: 'CCTVStreamingProcess',
@@ -469,7 +470,7 @@ export const WSR_PROCESSES: Record<ProcessType, ProcessDescriptor> = {
     sourceEndpoints: [],
   },
   GeocodingProcess: {
-    iri: `${WSR_NS}GeocodingProcess`,
+    iri: `${ABI_NS}GeocodingProcess`,
     label: 'Nominatim Geocoding Process',
     bfoType: 'Process',
     processType: 'GeocodingProcess',
@@ -484,7 +485,7 @@ export const WSR_PROCESSES: Record<ProcessType, ProcessDescriptor> = {
     sourceEndpoints: [],
   },
   DataCachingProcess: {
-    iri: `${WSR_NS}DataCachingProcess`,
+    iri: `${ABI_NS}DataCachingProcess`,
     label: 'Server-Side API Response Caching',
     bfoType: 'Process',
     processType: 'DataCachingProcess',

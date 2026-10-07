@@ -20,11 +20,11 @@ from naas_abi_marketplace.domains.personnel.workflows.DemoPersonnelGraphWorkflow
 from rdflib import Graph, URIRef
 from rdflib.namespace import RDF, RDFS
 
-PEOPLE_ACT_OF_WORKING = URIRef("http://ontology.naas.ai/people/ActOfWorking")
-ACT_OF_EMPLOYMENT = URIRef("http://ontology.naas.ai/personnel/ActOfEmployment")
-EMPLOYEE_ROLE = URIRef("http://ontology.naas.ai/personnel/EmployeeRole")
-SERVICE_LINE = URIRef("http://ontology.naas.ai/personnel/ServiceLine")
-GRADE = URIRef("http://ontology.naas.ai/personnel/Grade")
+PEOPLE_ACT_OF_WORKING = URIRef("http://ontology.naas.ai/abi/ActOfWorking")
+ACT_OF_EMPLOYMENT = URIRef("http://ontology.naas.ai/abi/ActOfEmployment")
+EMPLOYEE_ROLE = URIRef("http://ontology.naas.ai/abi/EmployeeRole")
+SERVICE_LINE = URIRef("http://ontology.naas.ai/abi/ServiceLine")
+GRADE = URIRef("http://ontology.naas.ai/abi/Grade")
 
 
 def test_demo_mode_writes_people_and_personnel_together(tmp_path: Path) -> None:
@@ -49,7 +49,7 @@ def test_overlay_holds_only_the_employer_records() -> None:
     assert {ACT_OF_EMPLOYMENT, EMPLOYEE_ROLE, SERVICE_LINE, GRADE} <= types
     # The act of working itself, its mission and skills stay in the people graph.
     assert PEOPLE_ACT_OF_WORKING not in types
-    assert URIRef("http://ontology.naas.ai/people/Mission") not in types
+    assert URIRef("http://ontology.naas.ai/abi/Mission") not in types
 
 
 def test_every_employee_role_is_the_role_an_act_of_working_realizes(
@@ -62,7 +62,7 @@ def test_every_employee_role_is_the_role_an_act_of_working_realizes(
         )
     )
     graph = Graph().parse(output)
-    occupation = URIRef("http://ontology.naas.ai/people/OccupationRole")
+    occupation = URIRef("http://ontology.naas.ai/abi/OccupationRole")
     for role in graph.subjects(RDF.type, EMPLOYEE_ROLE):
         assert (role, RDF.type, occupation) in graph
 

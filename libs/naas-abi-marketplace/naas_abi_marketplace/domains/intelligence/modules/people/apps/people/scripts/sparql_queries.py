@@ -160,7 +160,7 @@ def restrict_to_profile_slug(sparql: str, slug: str) -> str:
     escaped = _sparql_string_literal(slug)
     injection = (
         "            FILTER EXISTS {\n"
-        "              ?person people:profile_slug ?__profileSlug .\n"
+        "              ?person abi:profile_slug ?__profileSlug .\n"
         f'              FILTER(LCASE(STR(?__profileSlug)) = LCASE("{escaped}"))\n'
         "            }\n"
     )

@@ -39,6 +39,7 @@ QUERIES_TTLS = (
     ONTOLOGIES_DIR / "queries" / "PersonnelSparqlQueries.ttl",
 )
 PERSONNEL_NS = "http://ontology.naas.ai/personnel/"
+ABI_NS = "http://ontology.naas.ai/abi/"
 # The queries the graph page is built from. The rest feed other cockpit pages.
 GRAPH_PAGE_QUERIES = (
     "find_employee_roster",
@@ -139,7 +140,7 @@ def process_class_catalog() -> dict:
         process_specs=(
             {
                 "process_label": "Act of Employment",
-                "process_class": f"{PERSONNEL_NS}ActOfEmployment",
+                "process_class": f"{ABI_NS}ActOfEmployment",
                 "process_ontology": ONTOLOGIES_DIR
                 / "processes"
                 / "ActOfEmploymentProcess.ttl",
@@ -181,28 +182,28 @@ def graph_page_roster(roster_rows: list[dict]) -> list[dict]:
                     p
                     for p in (
                         prop(
-                            "personnel:job_family", "job family", row.get("job_family")
+                            "abi:job_family", "job family", row.get("job_family")
                         ),
                         prop(
-                            "personnel:employee_id",
+                            "abi:employee_id",
                             "employee id",
                             row.get("employee_id"),
                         ),
                         prop(
-                            "personnel:status_value", "status", row.get("status_value")
+                            "abi:status_value", "status", row.get("status_value")
                         ),
                     )
                     if p
                 ],
-                "roleClass": "personnel:EmployeeRole",
+                "roleClass": "abi:EmployeeRole",
                 "roleClassLabel": "Employee Role",
-                "rolePredicate": "personnel:hasEmployeeRole",
+                "rolePredicate": "abi:hasEmployeeRole",
                 "rolePredicateLabel": "has employee role",
                 "roleProperties": [
                     p
                     for p in (
                         prop(
-                            "personnel:job_family", "job family", row.get("job_family")
+                            "abi:job_family", "job family", row.get("job_family")
                         ),
                     )
                     if p

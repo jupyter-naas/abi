@@ -1,5 +1,5 @@
 """
-CCTV router — wsr:CCTVStreamingProcess HTTP interface.
+CCTV router — abi:CCTVStreamingProcess HTTP interface.
 
 Endpoints:
   GET /api/cctv                   — merged camera list (mideast + NYC + London + OWDB)

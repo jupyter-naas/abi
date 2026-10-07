@@ -1,5 +1,5 @@
 """
-CCTVService — wsr:CCTVStreamingProcess orchestrator.
+CCTVService — abi:CCTVStreamingProcess orchestrator.
 
 Fan-out to all source adapters, merge results, fall back to static theater
 cameras if dynamic sources fail. Also owns the HLS/JPEG snapshot proxy.

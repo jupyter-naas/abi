@@ -12,7 +12,7 @@ from naas_abi_marketplace.domains.personnel.utils.paths import DEMO_GRAPH_FILE
 from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import XSD
 
-PROFILE_SLUG = URIRef("http://ontology.naas.ai/people/profile_slug")
+PROFILE_SLUG = URIRef("http://ontology.naas.ai/abi/profile_slug")
 
 
 @pytest.fixture(scope="module")

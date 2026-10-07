@@ -1,5 +1,5 @@
 """
-Conflict events router — wsr:ConflictZoneLoadingProcess HTTP interface.
+Conflict events router — abi:ConflictZoneLoadingProcess HTTP interface.
 
 Endpoint:
   GET /api/conflict-events — static list of Middle East conflict sites

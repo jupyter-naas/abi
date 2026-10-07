@@ -1,5 +1,5 @@
 """
-Flights port — wsr:FlightTrackingProcess interface contracts.
+Flights port — abi:FlightTrackingProcess interface contracts.
 """
 
 from ports.models import FlightState

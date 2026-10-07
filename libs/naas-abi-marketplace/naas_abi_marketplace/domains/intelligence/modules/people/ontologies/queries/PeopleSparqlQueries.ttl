@@ -3,6 +3,7 @@
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
 
 #################################################################
 #  People (S2 intelligence) Queries
@@ -30,7 +31,6 @@ intentMapping:findWorkingProcessesQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX people: <http://ontology.naas.ai/people/>
 
         SELECT DISTINCT ?person ?personLabel ?working ?workingLabel ?org ?orgLabel ?client ?clientLabel ?site ?siteLabel
                         ?temporal ?temporalLabel ?temporalStart ?temporalEnd ?durationLabel
@@ -43,45 +43,45 @@ intentMapping:findWorkingProcessesQuery a intentMapping:TemplatableSparqlQuery ;
           GRAPH <http://ontology.naas.ai/graph/people> {
             ?person rdf:type abi:Person ;
                     rdfs:label ?personLabel ;
-                    people:hasActOfWorking ?working .
-            ?working rdf:type people:ActOfWorking .
+                    abi:hasActOfWorking ?working .
+            ?working rdf:type abi:ActOfWorking .
             OPTIONAL { ?working rdfs:label ?workingLabel . }
-            OPTIONAL { ?working people:forOrganization ?org . ?org rdfs:label ?orgLabel . }
-            OPTIONAL { ?working people:forClient ?client . ?client rdfs:label ?clientLabel . }
+            OPTIONAL { ?working abi:forOrganization ?org . ?org rdfs:label ?orgLabel . }
+            OPTIONAL { ?working abi:forClient ?client . ?client rdfs:label ?clientLabel . }
             OPTIONAL { ?working abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
             OPTIONAL {
               ?working abi:occupiesTemporalRegion ?temporal .
               ?temporal rdfs:label ?temporalLabel .
-              OPTIONAL { ?temporal people:duration_label ?durationLabel . }
+              OPTIONAL { ?temporal abi:duration_label ?durationLabel . }
               OPTIONAL {
                 ?temporal abi:hasFirstInstant ?firstInstant .
-                ?firstInstant people:instant_date ?temporalStart .
+                ?firstInstant abi:instant_date ?temporalStart .
                 OPTIONAL { ?firstInstant rdfs:label ?firstInstantLabel . }
               }
               # An ongoing experience has no last instant: the region stays open.
               OPTIONAL {
                 ?temporal abi:hasLastInstant ?lastInstant .
-                ?lastInstant people:instant_date ?temporalEnd .
+                ?lastInstant abi:instant_date ?temporalEnd .
                 OPTIONAL { ?lastInstant rdfs:label ?lastInstantLabel . }
               }
             }
-            OPTIONAL { ?working people:employment_type ?employmentType . }
+            OPTIONAL { ?working abi:employment_type ?employmentType . }
             # Reached through the act, not through the person: a person bears one
             # occupation role per job, so joining on the person would cross-join
             # every role against every act of working they ever performed.
             OPTIONAL {
               ?working abi:realizes ?role .
               OPTIONAL { ?role rdfs:label ?roleLabel . }
-              OPTIONAL { ?role people:job_title ?jobTitle . }
+              OPTIONAL { ?role abi:job_title ?jobTitle . }
               OPTIONAL {
-                ?role people:hasMission ?mission .
+                ?role abi:hasMission ?mission .
                 ?mission rdfs:label ?missionLabel .
-                OPTIONAL { ?mission people:mission_context ?missionContext . }
-                OPTIONAL { ?mission people:mission_content ?missionContent . }
+                OPTIONAL { ?mission abi:mission_context ?missionContext . }
+                OPTIONAL { ?mission abi:mission_content ?missionContent . }
                 OPTIONAL {
-                  ?mission people:isSourcedFrom ?profile .
+                  ?mission abi:isSourcedFrom ?profile .
                   ?profile rdfs:label ?profileLabel .
-                  OPTIONAL { ?profile people:source_url ?sourceUrl . }
+                  OPTIONAL { ?profile abi:source_url ?sourceUrl . }
                 }
               }
             }
@@ -99,18 +99,17 @@ intentMapping:findSkillsDevelopedQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX people: <http://ontology.naas.ai/people/>
 
         SELECT DISTINCT ?personLabel ?skill ?skillLabel ?working ?orgLabel
         WHERE {
           GRAPH <http://ontology.naas.ai/graph/people> {
             ?person rdf:type abi:Person ;
                     rdfs:label ?personLabel ;
-                    people:hasSkill ?skill .
-            ?skill rdf:type people:Skill ; rdfs:label ?skillLabel .
+                    abi:hasSkill ?skill .
+            ?skill rdf:type abi:Skill ; rdfs:label ?skillLabel .
             OPTIONAL {
-              ?skill people:isSkillDevelopedIn ?working .
-              OPTIONAL { ?working people:forOrganization ?org . ?org rdfs:label ?orgLabel . }
+              ?skill abi:isSkillDevelopedIn ?working .
+              OPTIONAL { ?working abi:forOrganization ?org . ?org rdfs:label ?orgLabel . }
             }
           }
         }
@@ -126,7 +125,6 @@ intentMapping:findActsOfStudyingQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX people: <http://ontology.naas.ai/people/>
 
         SELECT DISTINCT ?person ?personLabel ?studying ?studyingLabel ?org ?orgLabel ?site ?siteLabel
                         ?temporal ?temporalLabel ?temporalStart ?temporalEnd ?durationLabel
@@ -138,38 +136,38 @@ intentMapping:findActsOfStudyingQuery a intentMapping:TemplatableSparqlQuery ;
           GRAPH <http://ontology.naas.ai/graph/people> {
             ?person rdf:type abi:Person ;
                     rdfs:label ?personLabel ;
-                    people:hasActOfStudying ?studying .
-            ?studying rdf:type people:ActOfStudying .
+                    abi:hasActOfStudying ?studying .
+            ?studying rdf:type abi:ActOfStudying .
             OPTIONAL { ?studying rdfs:label ?studyingLabel . }
-            OPTIONAL { ?studying people:forEducationalOrganization ?org . ?org rdfs:label ?orgLabel . }
+            OPTIONAL { ?studying abi:forEducationalOrganization ?org . ?org rdfs:label ?orgLabel . }
             OPTIONAL { ?studying abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
             OPTIONAL {
               ?studying abi:occupiesTemporalRegion ?temporal .
               ?temporal rdfs:label ?temporalLabel .
-              OPTIONAL { ?temporal people:duration_label ?durationLabel . }
+              OPTIONAL { ?temporal abi:duration_label ?durationLabel . }
               OPTIONAL {
                 ?temporal abi:hasFirstInstant ?firstInstant .
-                ?firstInstant people:instant_date ?temporalStart .
+                ?firstInstant abi:instant_date ?temporalStart .
                 OPTIONAL { ?firstInstant rdfs:label ?firstInstantLabel . }
               }
               OPTIONAL {
                 ?temporal abi:hasLastInstant ?lastInstant .
-                ?lastInstant people:instant_date ?temporalEnd .
+                ?lastInstant abi:instant_date ?temporalEnd .
                 OPTIONAL { ?lastInstant rdfs:label ?lastInstantLabel . }
               }
             }
             OPTIONAL {
-              ?studying people:hasEnrollment ?enrollment .
+              ?studying abi:hasEnrollment ?enrollment .
               ?enrollment rdfs:label ?enrollmentLabel .
-              OPTIONAL { ?enrollment people:program_name ?programName . }
-              OPTIONAL { ?enrollment people:activities_content ?activitiesContent . }
+              OPTIONAL { ?enrollment abi:program_name ?programName . }
+              OPTIONAL { ?enrollment abi:activities_content ?activitiesContent . }
             }
             OPTIONAL {
               ?studying abi:realizes ?role .
               OPTIONAL { ?role rdfs:label ?roleLabel . }
             }
             OPTIONAL {
-              ?studying people:hasDegree ?degree .
+              ?studying abi:hasDegree ?degree .
               ?degree rdfs:label ?degreeLabel .
             }
           }
@@ -198,7 +196,6 @@ intentMapping:findPeopleDirectoryQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX people: <http://ontology.naas.ai/people/>
 
         SELECT DISTINCT ?person ?personLabel ?slug ?headline ?about ?quote ?yearsOfExperience
                         ?portraitUrl ?portraitPath
@@ -209,39 +206,39 @@ intentMapping:findPeopleDirectoryQuery a intentMapping:TemplatableSparqlQuery ;
           GRAPH <http://ontology.naas.ai/graph/people> {
             ?person rdf:type abi:Person ;
                     rdfs:label ?personLabel .
-            OPTIONAL { ?person people:profile_slug ?slug . }
+            OPTIONAL { ?person abi:profile_slug ?slug . }
             OPTIONAL {
-              ?person people:hasProfileSummary ?summary .
-              OPTIONAL { ?summary people:headline_text ?headline . }
-              OPTIONAL { ?summary people:summary_content ?about . }
-              OPTIONAL { ?summary people:quote_content ?quote . }
-              OPTIONAL { ?summary people:years_of_experience ?yearsOfExperience . }
-              OPTIONAL { ?summary people:isSourcedFrom ?profileDoc . ?profileDoc people:source_url ?profileUrl . }
+              ?person abi:hasProfileSummary ?summary .
+              OPTIONAL { ?summary abi:headline_text ?headline . }
+              OPTIONAL { ?summary abi:summary_content ?about . }
+              OPTIONAL { ?summary abi:quote_content ?quote . }
+              OPTIONAL { ?summary abi:years_of_experience ?yearsOfExperience . }
+              OPTIONAL { ?summary abi:isSourcedFrom ?profileDoc . ?profileDoc abi:source_url ?profileUrl . }
             }
             OPTIONAL {
-              ?person people:hasPortrait ?portrait .
-              OPTIONAL { ?portrait people:portrait_url ?portraitUrl . }
-              OPTIONAL { ?portrait people:portrait_path ?portraitPath . }
+              ?person abi:hasPortrait ?portrait .
+              OPTIONAL { ?portrait abi:portrait_url ?portraitUrl . }
+              OPTIONAL { ?portrait abi:portrait_path ?portraitPath . }
             }
-            OPTIONAL { ?person people:email_address ?emailAddress . }
-            OPTIONAL { ?person people:telephone_number ?telephoneNumber . }
-            OPTIONAL { ?person people:linkedin_url ?linkedinUrl . }
-            OPTIONAL { ?person people:worksFor ?org . ?org rdfs:label ?organizationLabel . }
-            # people:hasWorkLocation reaches every site the person has worked
+            OPTIONAL { ?person abi:email_address ?emailAddress . }
+            OPTIONAL { ?person abi:telephone_number ?telephoneNumber . }
+            OPTIONAL { ?person abi:linkedin_url ?linkedinUrl . }
+            OPTIONAL { ?person abi:worksFor ?org . ?org rdfs:label ?organizationLabel . }
+            # abi:hasWorkLocation reaches every site the person has worked
             # at. The one that says where they are based is the one whose place
             # has been stated, so bind that and leave the rest to the acts of
             # working they belong to.
             OPTIONAL {
-              ?person people:hasWorkLocation ?site .
+              ?person abi:hasWorkLocation ?site .
               FILTER EXISTS {
                 ?site ?placeProperty ?placeValue .
-                FILTER(?placeProperty IN (people:office_label, people:city_name,
-                                          people:country_name, people:country_code))
+                FILTER(?placeProperty IN (abi:office_label, abi:city_name,
+                                          abi:country_name, abi:site_country_code))
               }
-              OPTIONAL { ?site people:office_label ?officeLabel . }
-              OPTIONAL { ?site people:city_name ?cityName . }
-              OPTIONAL { ?site people:country_name ?countryName . }
-              OPTIONAL { ?site people:country_code ?countryCode . }
+              OPTIONAL { ?site abi:office_label ?officeLabel . }
+              OPTIONAL { ?site abi:city_name ?cityName . }
+              OPTIONAL { ?site abi:country_name ?countryName . }
+              OPTIONAL { ?site abi:site_country_code ?countryCode . }
             }
           }
         }
@@ -257,7 +254,6 @@ intentMapping:findProfileHeaderQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX people: <http://ontology.naas.ai/people/>
 
         SELECT DISTINCT ?person ?personLabel ?slug ?headline ?about ?quote ?yearsOfExperience
                         ?portraitUrl ?portraitPath
@@ -268,40 +264,40 @@ intentMapping:findProfileHeaderQuery a intentMapping:TemplatableSparqlQuery ;
           GRAPH <http://ontology.naas.ai/graph/people> {
             ?person rdf:type abi:Person ;
                     rdfs:label ?personLabel ;
-                    people:profile_slug ?slug .
+                    abi:profile_slug ?slug .
             FILTER(LCASE(STR(?slug)) = LCASE("{{ person_slug }}"))
             OPTIONAL {
-              ?person people:hasProfileSummary ?summary .
-              OPTIONAL { ?summary people:headline_text ?headline . }
-              OPTIONAL { ?summary people:summary_content ?about . }
-              OPTIONAL { ?summary people:quote_content ?quote . }
-              OPTIONAL { ?summary people:years_of_experience ?yearsOfExperience . }
-              OPTIONAL { ?summary people:isSourcedFrom ?profileDoc . ?profileDoc people:source_url ?profileUrl . }
+              ?person abi:hasProfileSummary ?summary .
+              OPTIONAL { ?summary abi:headline_text ?headline . }
+              OPTIONAL { ?summary abi:summary_content ?about . }
+              OPTIONAL { ?summary abi:quote_content ?quote . }
+              OPTIONAL { ?summary abi:years_of_experience ?yearsOfExperience . }
+              OPTIONAL { ?summary abi:isSourcedFrom ?profileDoc . ?profileDoc abi:source_url ?profileUrl . }
             }
             OPTIONAL {
-              ?person people:hasPortrait ?portrait .
-              OPTIONAL { ?portrait people:portrait_url ?portraitUrl . }
-              OPTIONAL { ?portrait people:portrait_path ?portraitPath . }
+              ?person abi:hasPortrait ?portrait .
+              OPTIONAL { ?portrait abi:portrait_url ?portraitUrl . }
+              OPTIONAL { ?portrait abi:portrait_path ?portraitPath . }
             }
-            OPTIONAL { ?person people:email_address ?emailAddress . }
-            OPTIONAL { ?person people:telephone_number ?telephoneNumber . }
-            OPTIONAL { ?person people:linkedin_url ?linkedinUrl . }
-            OPTIONAL { ?person people:worksFor ?org . ?org rdfs:label ?organizationLabel . }
-            # people:hasWorkLocation reaches every site the person has worked
+            OPTIONAL { ?person abi:email_address ?emailAddress . }
+            OPTIONAL { ?person abi:telephone_number ?telephoneNumber . }
+            OPTIONAL { ?person abi:linkedin_url ?linkedinUrl . }
+            OPTIONAL { ?person abi:worksFor ?org . ?org rdfs:label ?organizationLabel . }
+            # abi:hasWorkLocation reaches every site the person has worked
             # at. The one that says where they are based is the one whose place
             # has been stated, so bind that and leave the rest to the acts of
             # working they belong to.
             OPTIONAL {
-              ?person people:hasWorkLocation ?site .
+              ?person abi:hasWorkLocation ?site .
               FILTER EXISTS {
                 ?site ?placeProperty ?placeValue .
-                FILTER(?placeProperty IN (people:office_label, people:city_name,
-                                          people:country_name, people:country_code))
+                FILTER(?placeProperty IN (abi:office_label, abi:city_name,
+                                          abi:country_name, abi:site_country_code))
               }
-              OPTIONAL { ?site people:office_label ?officeLabel . }
-              OPTIONAL { ?site people:city_name ?cityName . }
-              OPTIONAL { ?site people:country_name ?countryName . }
-              OPTIONAL { ?site people:country_code ?countryCode . }
+              OPTIONAL { ?site abi:office_label ?officeLabel . }
+              OPTIONAL { ?site abi:city_name ?cityName . }
+              OPTIONAL { ?site abi:country_name ?countryName . }
+              OPTIONAL { ?site abi:site_country_code ?countryCode . }
             }
           }
         }
@@ -316,16 +312,15 @@ intentMapping:findPersonSkillsQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX people: <http://ontology.naas.ai/people/>
 
         SELECT DISTINCT ?person ?personLabel ?slug ?skillLabel
         WHERE {
           GRAPH <http://ontology.naas.ai/graph/people> {
             ?person rdf:type abi:Person ;
                     rdfs:label ?personLabel ;
-                    people:hasSkill ?skill .
-            ?skill rdf:type people:Skill ; rdfs:label ?skillLabel .
-            OPTIONAL { ?person people:profile_slug ?slug . }
+                    abi:hasSkill ?skill .
+            ?skill rdf:type abi:Skill ; rdfs:label ?skillLabel .
+            OPTIONAL { ?person abi:profile_slug ?slug . }
           }
         }
         ORDER BY ?personLabel ?skillLabel
@@ -340,7 +335,6 @@ intentMapping:findCertificationsQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX people: <http://ontology.naas.ai/people/>
 
         SELECT DISTINCT ?person ?personLabel ?slug ?certification ?certificationName
                         ?issuerLabel ?issueDate ?expiryDate ?certificationStatus ?credentialId ?credentialUrl
@@ -348,15 +342,15 @@ intentMapping:findCertificationsQuery a intentMapping:TemplatableSparqlQuery ;
           GRAPH <http://ontology.naas.ai/graph/people> {
             ?person rdf:type abi:Person ;
                     rdfs:label ?personLabel ;
-                    people:hasCertification ?certification .
-            OPTIONAL { ?person people:profile_slug ?slug . }
-            OPTIONAL { ?certification people:certification_name ?certificationName . }
-            OPTIONAL { ?certification people:issuedByOrganization ?issuer . ?issuer rdfs:label ?issuerLabel . }
-            OPTIONAL { ?certification people:issue_date ?issueDate . }
-            OPTIONAL { ?certification people:expiry_date ?expiryDate . }
-            OPTIONAL { ?certification people:certification_status ?certificationStatus . }
-            OPTIONAL { ?certification people:credential_id ?credentialId . }
-            OPTIONAL { ?certification people:credential_url ?credentialUrl . }
+                    abi:hasCertification ?certification .
+            OPTIONAL { ?person abi:profile_slug ?slug . }
+            OPTIONAL { ?certification abi:certification_name ?certificationName . }
+            OPTIONAL { ?certification abi:issuedByOrganization ?issuer . ?issuer rdfs:label ?issuerLabel . }
+            OPTIONAL { ?certification abi:issue_date ?issueDate . }
+            OPTIONAL { ?certification abi:expiry_date ?expiryDate . }
+            OPTIONAL { ?certification abi:certification_status ?certificationStatus . }
+            OPTIONAL { ?certification abi:credential_id ?credentialId . }
+            OPTIONAL { ?certification abi:credential_url ?credentialUrl . }
           }
         }
         ORDER BY ?personLabel DESC(?issueDate) ?certificationName
@@ -371,7 +365,6 @@ intentMapping:findActsOfCertificationQuery a intentMapping:TemplatableSparqlQuer
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX people: <http://ontology.naas.ai/people/>
 
         SELECT DISTINCT ?person ?personLabel ?slug ?certifying ?certifyingLabel ?org ?orgLabel
                         ?site ?siteLabel ?temporal ?temporalLabel ?awardedOn
@@ -380,26 +373,26 @@ intentMapping:findActsOfCertificationQuery a intentMapping:TemplatableSparqlQuer
           GRAPH <http://ontology.naas.ai/graph/people> {
             ?person rdf:type abi:Person ;
                     rdfs:label ?personLabel ;
-                    people:hasActOfCertification ?certifying .
-            ?certifying rdf:type people:ActOfCertification .
-            OPTIONAL { ?person people:profile_slug ?slug . }
+                    abi:hasActOfCertification ?certifying .
+            ?certifying rdf:type abi:ActOfCertification .
+            OPTIONAL { ?person abi:profile_slug ?slug . }
             OPTIONAL { ?certifying rdfs:label ?certifyingLabel . }
-            OPTIONAL { ?certifying people:forCertifyingOrganization ?org . ?org rdfs:label ?orgLabel . }
+            OPTIONAL { ?certifying abi:forCertifyingOrganization ?org . ?org rdfs:label ?orgLabel . }
             OPTIONAL { ?certifying abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
             OPTIONAL {
               ?certifying abi:occupiesTemporalRegion ?temporal .
               OPTIONAL { ?temporal rdfs:label ?temporalLabel . }
               OPTIONAL {
                 ?temporal abi:hasLastInstant ?lastInstant .
-                ?lastInstant people:instant_date ?awardedOn .
+                ?lastInstant abi:instant_date ?awardedOn .
               }
             }
             OPTIONAL {
-              ?certifying people:hasAwardedCertification ?certification .
-              OPTIONAL { ?certification people:certification_name ?certificationName . }
+              ?certifying abi:hasAwardedCertification ?certification .
+              OPTIONAL { ?certification abi:certification_name ?certificationName . }
             }
             OPTIONAL { ?certifying abi:realizes ?role . ?role rdfs:label ?roleLabel . }
-            OPTIONAL { ?certifying people:demonstratesSkill ?skill . ?skill rdfs:label ?skillLabel . }
+            OPTIONAL { ?certifying abi:demonstratesSkill ?skill . ?skill rdfs:label ?skillLabel . }
           }
         }
         ORDER BY ?personLabel DESC(?awardedOn) ?certificationName
@@ -414,18 +407,17 @@ intentMapping:findLanguagesQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX people: <http://ontology.naas.ai/people/>
 
         SELECT DISTINCT ?person ?personLabel ?slug ?capability ?languageName ?proficiencyLevel ?languageLabel
         WHERE {
           GRAPH <http://ontology.naas.ai/graph/people> {
             ?person rdf:type abi:Person ;
                     rdfs:label ?personLabel ;
-                    people:hasLanguageCapability ?capability .
-            OPTIONAL { ?person people:profile_slug ?slug . }
-            OPTIONAL { ?capability people:language_name ?languageName . }
-            OPTIONAL { ?capability people:proficiency_level ?proficiencyLevel . }
-            OPTIONAL { ?capability people:ofLanguage ?language . ?language rdfs:label ?languageLabel . }
+                    abi:hasLanguageCapability ?capability .
+            OPTIONAL { ?person abi:profile_slug ?slug . }
+            OPTIONAL { ?capability abi:language_name ?languageName . }
+            OPTIONAL { ?capability abi:proficiency_level ?proficiencyLevel . }
+            OPTIONAL { ?capability abi:ofLanguage ?language . ?language rdfs:label ?languageLabel . }
           }
         }
         ORDER BY ?personLabel ?languageName
@@ -440,7 +432,6 @@ intentMapping:findRecommendationsQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX people: <http://ontology.naas.ai/people/>
 
         SELECT DISTINCT ?person ?personLabel ?slug ?recommendation ?authorLabel ?authorHeadline
                         ?relationshipLabel ?recommendationDate ?recommendationContent
@@ -448,19 +439,19 @@ intentMapping:findRecommendationsQuery a intentMapping:TemplatableSparqlQuery ;
           GRAPH <http://ontology.naas.ai/graph/people> {
             ?person rdf:type abi:Person ;
                     rdfs:label ?personLabel ;
-                    people:hasRecommendation ?recommendation .
-            OPTIONAL { ?person people:profile_slug ?slug . }
+                    abi:hasRecommendation ?recommendation .
+            OPTIONAL { ?person abi:profile_slug ?slug . }
             OPTIONAL {
-              ?recommendation people:hasRecommendationAuthor ?author .
+              ?recommendation abi:hasRecommendationAuthor ?author .
               ?author rdfs:label ?authorLabel .
               OPTIONAL {
-                ?author people:hasProfileSummary ?authorSummary .
-                ?authorSummary people:headline_text ?authorHeadline .
+                ?author abi:hasProfileSummary ?authorSummary .
+                ?authorSummary abi:headline_text ?authorHeadline .
               }
             }
-            OPTIONAL { ?recommendation people:relationship_label ?relationshipLabel . }
-            OPTIONAL { ?recommendation people:recommendation_date ?recommendationDate . }
-            OPTIONAL { ?recommendation people:recommendation_content ?recommendationContent . }
+            OPTIONAL { ?recommendation abi:relationship_label ?relationshipLabel . }
+            OPTIONAL { ?recommendation abi:recommendation_date ?recommendationDate . }
+            OPTIONAL { ?recommendation abi:recommendation_content ?recommendationContent . }
           }
         }
         ORDER BY ?personLabel DESC(?recommendationDate)
@@ -475,19 +466,18 @@ intentMapping:findInterestsQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX people: <http://ontology.naas.ai/people/>
 
         SELECT DISTINCT ?person ?personLabel ?slug ?interest ?interestName ?interestDescription ?interestKind ?targetLabel
         WHERE {
           GRAPH <http://ontology.naas.ai/graph/people> {
             ?person rdf:type abi:Person ;
                     rdfs:label ?personLabel ;
-                    people:hasInterest ?interest .
-            OPTIONAL { ?person people:profile_slug ?slug . }
-            OPTIONAL { ?interest people:interest_name ?interestName . }
-            OPTIONAL { ?interest people:interest_description ?interestDescription . }
-            OPTIONAL { ?interest people:interest_kind ?interestKind . }
-            OPTIONAL { ?interest people:hasInterestTarget ?target . ?target rdfs:label ?targetLabel . }
+                    abi:hasInterest ?interest .
+            OPTIONAL { ?person abi:profile_slug ?slug . }
+            OPTIONAL { ?interest abi:interest_name ?interestName . }
+            OPTIONAL { ?interest abi:interest_description ?interestDescription . }
+            OPTIONAL { ?interest abi:interest_kind ?interestKind . }
+            OPTIONAL { ?interest abi:hasInterestTarget ?target . ?target rdfs:label ?targetLabel . }
           }
         }
         ORDER BY ?personLabel ?interestName

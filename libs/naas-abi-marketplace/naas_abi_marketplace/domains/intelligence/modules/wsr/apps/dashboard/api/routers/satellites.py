@@ -1,5 +1,5 @@
 """
-Satellites router — wsr:SatelliteTrackingProcess HTTP interface.
+Satellites router — abi:SatelliteTrackingProcess HTTP interface.
 
 Endpoint:
   GET /api/satellites — active satellite TLE records (CelesTrak)

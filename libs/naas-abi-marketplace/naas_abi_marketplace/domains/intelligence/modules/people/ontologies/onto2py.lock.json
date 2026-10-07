@@ -1,9 +1,9 @@
 {
   "files": {
-    "modules/PeopleOntology.ttl": "ead63cd206a0adffe200be0f75b5664ccd425ca5c9d183c31812df24f5a8a54e",
-    "processes/ActOfCertificationProcess.ttl": "27a7e390fbfe1aa06adce50c0c7cbb94923b69ab110943aed71ccbc41374a12b",
-    "processes/ActOfProfilingProcess.ttl": "46425af2fa12ec68569db5b268965c5c367e15d7a95f125ab5712cac9d63fd0d",
-    "processes/ActOfStudyingProcess.ttl": "6d741b0785285eb5636910e543ae0fe151349361a6456c824da92ad7ad655d03",
-    "processes/ActOfWorkingProcess.ttl": "cb815ef9d993e1ec9e6f240ea505e646e65050f0d5f569ffb7ffb4f922762799"
+    "modules/PeopleOntology.ttl": "6ab2c421ae9ddcfd42d19ce3b15b0bc6d62941ce81ffec4a49e125d1b718aef3",
+    "processes/ActOfCertificationProcess.ttl": "79bf57f7829426cb5b61c13001be723fdff0f82360d80b4c35f3a68ffa280546",
+    "processes/ActOfProfilingProcess.ttl": "e2a0188381d13ff167cfa5067753b4ca903fd7aebdc709dd9e2b97e83d209564",
+    "processes/ActOfStudyingProcess.ttl": "07220c00f9b12173154c428a7d4fae5e669a6da289c90a2f04376452ec0e9529",
+    "processes/ActOfWorkingProcess.ttl": "40225c06278e86cbdd4763f51b4339379bee9c3d46ab2630655d12ccc44b97eb"
   }
 }

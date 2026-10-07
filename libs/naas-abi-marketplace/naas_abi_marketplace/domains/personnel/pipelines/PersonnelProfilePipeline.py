@@ -18,7 +18,6 @@ from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.gr
     ABI,
 )
 from naas_abi_marketplace.domains.personnel.pipelines.utils.graph_builders import (
-    PERSONNEL,
     PersonnelGraphContext,
 )
 from naas_abi_marketplace.domains.personnel.utils.paths import module_graph_name
@@ -77,10 +76,10 @@ class PersonnelProfilePipeline(Pipeline):
                 (URIRef(line._uri), ABI.hasMemberPart, URIRef(person._uri))
             )
             for role_uri in context.graph.objects(
-                URIRef(person._uri), PERSONNEL.hasEmployeeRole
+                URIRef(person._uri), ABI.hasEmployeeRole
             ):
                 context.graph.add(
-                    (role_uri, PERSONNEL.inServiceLine, URIRef(line._uri))
+                    (role_uri, ABI.inServiceLine, URIRef(line._uri))
                 )
 
         if parameters.grade:

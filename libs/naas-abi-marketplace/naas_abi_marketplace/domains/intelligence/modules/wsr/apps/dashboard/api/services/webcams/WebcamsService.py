@@ -1,5 +1,5 @@
 """
-WebcamsService — wsr:CCTVStreamingProcess (OpenWebcamDB) orchestrator.
+WebcamsService — abi:CCTVStreamingProcess (OpenWebcamDB) orchestrator.
 """
 
 from ports.models import CCTVCamera, StreamResult
