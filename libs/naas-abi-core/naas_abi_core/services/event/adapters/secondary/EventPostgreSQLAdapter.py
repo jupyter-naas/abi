@@ -183,6 +183,8 @@ class EventPostgreSQLAdapter(IEventAdapter):
         if archive_batch_rows < 1:
             raise ValueError("archive_batch_rows must be at least 1")
         self._schema = schema
+        # The only names put into SQL text: `schema` matched _SCHEMA_RE above.
+        # Every value (filters, search, cursors) is a %s parameter (B608 nosec).
         self._events = f'"{schema}".events'
         self._cursors = f'"{schema}".consumer_cursors'
         self._sequence = f'"{schema}".event_sequence'
@@ -242,7 +244,7 @@ class EventPostgreSQLAdapter(IEventAdapter):
                 "id SMALLINT PRIMARY KEY CHECK (id = 1), last_seq BIGINT NOT NULL)"
             )
             conn.execute(
-                f"INSERT INTO {self._sequence} (id, last_seq) "
+                f"INSERT INTO {self._sequence} (id, last_seq) "  # nosec B608
                 f"SELECT 1, COALESCE(MAX(seq), 0) FROM {self._events} "
                 "ON CONFLICT (id) DO NOTHING"
             )
@@ -275,13 +277,13 @@ class EventPostgreSQLAdapter(IEventAdapter):
             # The counter row stays locked until commit: numbering and
             # visibility follow one order, and a failed insert gives its number back.
             row = conn.execute(
-                f"UPDATE {self._sequence} SET last_seq = last_seq + 1 "
+                f"UPDATE {self._sequence} SET last_seq = last_seq + 1 "  # nosec B608
                 "WHERE id = 1 RETURNING last_seq"
             ).fetchone()
             assert row is not None
             seq = int(row[0])
             conn.execute(
-                f"INSERT INTO {self._events} "
+                f"INSERT INTO {self._events} "  # nosec B608
                 "(seq, id, event_type, timestamp, payload, body) "
                 "VALUES (%s, %s, %s, %s, %s, %s)",
                 (
@@ -363,11 +365,11 @@ class EventPostgreSQLAdapter(IEventAdapter):
         with self._transaction() as conn:
             if event_type is None:
                 row = conn.execute(
-                    f"SELECT COALESCE(MAX(seq), 0) FROM {self._events}"
+                    f"SELECT COALESCE(MAX(seq), 0) FROM {self._events}"  # nosec B608
                 ).fetchone()
             else:
                 row = conn.execute(
-                    f"SELECT COALESCE(MAX(seq), 0) FROM {self._events} "
+                    f"SELECT COALESCE(MAX(seq), 0) FROM {self._events} "  # nosec B608
                     "WHERE event_type = %s",
                     (event_type,),
                 ).fetchone()
@@ -376,7 +378,7 @@ class EventPostgreSQLAdapter(IEventAdapter):
     def list_event_types(self) -> list[EventTypeSummary]:
         with self._transaction() as conn:
             rows = conn.execute(
-                "SELECT t.event_type, t.n, t.last_seq, e.timestamp FROM ("
+                "SELECT t.event_type, t.n, t.last_seq, e.timestamp FROM ("  # nosec B608
                 "SELECT event_type, COUNT(*) AS n, MAX(seq) AS last_seq "
                 f"FROM {self._events} GROUP BY event_type) t "
                 f"JOIN {self._events} e ON e.seq = t.last_seq "
@@ -399,7 +401,7 @@ class EventPostgreSQLAdapter(IEventAdapter):
     def get_cursor(self, consumer_id: str, event_type: str) -> int:
         with self._transaction() as conn:
             row = conn.execute(
-                f"SELECT last_seq FROM {self._cursors} "
+                f"SELECT last_seq FROM {self._cursors} "  # nosec B608
                 "WHERE consumer_id = %s AND event_type = %s",
                 (consumer_id, event_type),
             ).fetchone()
@@ -410,7 +412,7 @@ class EventPostgreSQLAdapter(IEventAdapter):
             raise ValueError(f"last_seq must be >= 0, got {last_seq}")
         with self._transaction() as conn:
             conn.execute(
-                f"INSERT INTO {self._cursors} "
+                f"INSERT INTO {self._cursors} "  # nosec B608
                 "(consumer_id, event_type, last_seq, updated_at) "
                 "VALUES (%s, %s, %s, now()) "
                 "ON CONFLICT (consumer_id, event_type) DO UPDATE SET "
@@ -432,13 +434,13 @@ class EventPostgreSQLAdapter(IEventAdapter):
             # Lock the cursor row (created if new) so two readers of one consumer
             # cannot both deliver the same events.
             conn.execute(
-                f"INSERT INTO {self._cursors} "
+                f"INSERT INTO {self._cursors} "  # nosec B608
                 "(consumer_id, event_type, last_seq, updated_at) "
                 "VALUES (%s, %s, 0, now()) ON CONFLICT DO NOTHING",
                 (consumer_id, event_type),
             )
             row = conn.execute(
-                f"SELECT last_seq FROM {self._cursors} "
+                f"SELECT last_seq FROM {self._cursors} "  # nosec B608
                 "WHERE consumer_id = %s AND event_type = %s FOR UPDATE",
                 (consumer_id, event_type),
             ).fetchone()
@@ -458,7 +460,7 @@ class EventPostgreSQLAdapter(IEventAdapter):
             rows = conn.execute(sql, params).fetchall()
             if rows:
                 conn.execute(
-                    f"UPDATE {self._cursors} SET last_seq = %s, updated_at = now() "
+                    f"UPDATE {self._cursors} SET last_seq = %s, updated_at = now() "  # nosec B608
                     "WHERE consumer_id = %s AND event_type = %s",
                     (rows[-1][2], consumer_id, event_type),
                 )
@@ -476,22 +478,22 @@ class EventPostgreSQLAdapter(IEventAdapter):
         ``consumers_active_since`` still needs it."""
         with self._transaction() as conn:
             first_recent = conn.execute(
-                f"SELECT MIN(seq) FROM {self._events} WHERE timestamp >= %s",
+                f"SELECT MIN(seq) FROM {self._events} WHERE timestamp >= %s",  # nosec B608
                 (older_than,),
             ).fetchone()
-            newest = conn.execute(f"SELECT MAX(seq) FROM {self._events}").fetchone()
+            newest = conn.execute(f"SELECT MAX(seq) FROM {self._events}").fetchone()  # nosec B608
             if first_recent and first_recent[0] is not None:
                 through = int(first_recent[0]) - 1
             else:
                 through = int(newest[0]) if newest and newest[0] is not None else 0
             active = conn.execute(
-                f"SELECT MIN(last_seq) FROM {self._cursors} WHERE updated_at >= %s",
+                f"SELECT MIN(last_seq) FROM {self._cursors} WHERE updated_at >= %s",  # nosec B608
                 (consumers_active_since,),
             ).fetchone()
             if active and active[0] is not None:
                 through = min(through, int(active[0]))
             idle = conn.execute(
-                f"SELECT consumer_id, event_type FROM {self._cursors} "
+                f"SELECT consumer_id, event_type FROM {self._cursors} "  # nosec B608
                 "WHERE updated_at < %s AND last_seq < %s "
                 "ORDER BY consumer_id, event_type",
                 (consumers_active_since, through),
@@ -505,7 +507,7 @@ class EventPostgreSQLAdapter(IEventAdapter):
         while True:
             with self._transaction() as conn:
                 deleted = conn.execute(
-                    f"DELETE FROM {self._events} WHERE seq IN ("
+                    f"DELETE FROM {self._events} WHERE seq IN ("  # nosec B608
                     f"SELECT seq FROM {self._events} WHERE seq <= %s "
                     "ORDER BY seq LIMIT %s)",
                     (seq, _REMOVE_CHUNK),
