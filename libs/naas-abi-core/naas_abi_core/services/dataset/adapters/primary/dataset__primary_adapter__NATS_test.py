@@ -7,12 +7,12 @@ against a minimal fake ``Request`` that records whatever gets passed to
 """
 
 import asyncio
-import json
 
 # ``list`` is a port method name, so it shadows the builtin for annotations
 # evaluated in _StubAdapter's class body below (methods after ``list``);
 # use ``builtins.list`` there -- same workaround as DatasetPort.py/DatasetService.py.
 import builtins
+import json
 from datetime import UTC, datetime
 from typing import Any
 

@@ -563,7 +563,7 @@ class DatasetSecondaryAdapterContract(ABC):
             [
                 {
                     "read_on": date(2026, 10, 4),
-                    "read_at": datetime(2026, 10, 4, 12, 30),
+                    "read_at": datetime(2026, 10, 4, 12, 30),  # noqa: DTZ001 - naive on purpose
                     "ok": True,
                     "label": "café",
                 }
@@ -736,7 +736,7 @@ class DatasetSecondaryAdapterContract(ABC):
             {"n": 1, "seen_at": datetime(2026, 10, 4, 12, 30, tzinfo=paris)},
             {"n": 2, "seen_at": "2026-10-04T12:30:00+02:00"},
             {"n": 3, "seen_at": "2026-10-04T10:30:00Z"},
-            {"n": 4, "seen_at": datetime(2026, 10, 4, 10, 30)},  # naive: UTC
+            {"n": 4, "seen_at": datetime(2026, 10, 4, 10, 30)},  # noqa: DTZ001 - naive: UTC
         ]
         if streamed:
             adapter.write_stream("visits", iter(rows), namespace="acme")

@@ -19,7 +19,6 @@ from typing import Any
 
 from langchain_core.tools import BaseTool, tool
 
-
 MAX_ROWS = 200  # rows kg_sparql_query returns to the model
 
 

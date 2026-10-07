@@ -1,9 +1,9 @@
 from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
-from naas_abi_proto.vector_store.values import decode_object, encode_object
 from naas_abi_core.services.vector_store.adapters.vector_store_stream_codec import (
     decode_frame,
     document_frames,
 )
+from naas_abi_proto.vector_store.values import decode_object, encode_object
 
 
 def _document(n: int) -> vector_store_pb2.VectorDocument:

@@ -17,11 +17,6 @@ from itertools import islice
 from pathlib import Path
 from typing import IO, Any, TypeVar
 
-from naas_abi_core.services.dataset.DatasetValues import (
-    is_finite,
-    row_value,
-    timestamp_value,
-)
 from naas_abi_core.services.dataset.DatasetPort import (
     DatasetAlreadyExistsError,
     DatasetInfo,
@@ -35,6 +30,11 @@ from naas_abi_core.services.dataset.DatasetPort import (
     QueryResult,
     RowStream,
     WriteMode,
+)
+from naas_abi_core.services.dataset.DatasetValues import (
+    is_finite,
+    row_value,
+    timestamp_value,
 )
 
 CATALOG_ALIAS = "abi_datasets"
