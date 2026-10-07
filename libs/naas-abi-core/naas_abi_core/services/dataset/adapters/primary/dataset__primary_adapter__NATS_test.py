@@ -121,17 +121,34 @@ class _StubAdapter(IDatasetPort):
         return updated
 
     def query(
-        self, sql: str, *, namespace: str = "default", snapshot_id: int | None = None
+        self,
+        sql: str,
+        *,
+        namespace: str = "default",
+        snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> QueryResult:
         return QueryResult(columns=["answer"], rows=[{"answer": 42}])
 
-    def flush(self, name: str, *, namespace: str = "default") -> QueryResult:
+    def flush(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
         return QueryResult(columns=[], rows=[])
 
     def inlined_row_count(self, name: str, *, namespace: str = "default") -> int:
         return 7
 
-    def compact(self, name: str, *, namespace: str = "default") -> QueryResult:
+    def compact(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
         return QueryResult(columns=[], rows=[])
 
     def list_snapshots(self) -> builtins.list[DatasetSnapshotInfo]:

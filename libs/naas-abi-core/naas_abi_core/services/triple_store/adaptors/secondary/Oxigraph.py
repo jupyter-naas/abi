@@ -35,7 +35,7 @@ License: MIT
 
 import logging
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 
 import rdflib
@@ -447,13 +447,13 @@ class Oxigraph(ITripleStorePort):
                 ask_result.askAnswer = bool(result_data["boolean"])
                 return ask_result
 
-            from rdflib.term import BNode, Literal, URIRef, Variable
+            from rdflib.term import BNode, Identifier, Literal, URIRef, Variable
 
             # Extract variables
             vars = result_data.get("head", {}).get("vars", [])
             bindings = result_data.get("results", {}).get("bindings", [])
 
-            results = []
+            results: list[Mapping[Variable, Identifier]] = []
 
             for binding in bindings:
                 row_values = {}

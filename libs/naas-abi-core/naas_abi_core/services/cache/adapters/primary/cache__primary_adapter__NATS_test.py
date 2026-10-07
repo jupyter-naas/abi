@@ -7,6 +7,7 @@ out for this adapter.
 """
 
 import asyncio
+from typing import Any
 
 import pytest
 from naas_abi_core.engine.nats_auth import issue_service_token
@@ -418,7 +419,7 @@ def test_owner_emits_mutation_events_once_and_only_when_written():
 def _list_keys(
     adapter: CachePrimaryAdapterNATS, **fields
 ) -> cache_pb2.ListKeysResponse:
-    request = _FakeRequest(
+    request: Any = _FakeRequest(
         data=cache_pb2.ListKeysRequest(**fields).SerializeToString(),
         headers={AUTH_HEADER: _valid_token()},
     )

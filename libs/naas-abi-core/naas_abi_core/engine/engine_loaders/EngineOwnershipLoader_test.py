@@ -6,6 +6,7 @@ import time
 import pytest
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     NATSConfiguration,
+    NATSEngineConfiguration,
 )
 from naas_abi_core.engine.engine_loaders.EngineOwnershipLoader import (
     EngineOwnershipLoader,
@@ -26,7 +27,8 @@ from naas_abi_core.engine.ownership.tests.lease__secondary_adapter__generic_test
 
 def nats_config(**engine) -> NATSConfiguration:
     return NATSConfiguration(
-        jwt_secret="test-only", engine={"lease_seconds": 1, **engine}
+        jwt_secret="test-only",
+        engine=NATSEngineConfiguration(**{"lease_seconds": 1, **engine}),
     )
 
 

@@ -19,6 +19,7 @@ import nats
 import pytest
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     NATSConfiguration,
+    NATSEngineConfiguration,
 )
 from naas_abi_core.engine.engine_loaders.EngineOwnershipLoader import (
     EngineOwnershipLoader,
@@ -85,7 +86,9 @@ class FakeEngine:
         self.lost = threading.Event()
         self.loader = EngineOwnershipLoader(
             NATSConfiguration(
-                nats_url=url, jwt_secret="test-only", engine={"lease_seconds": 1}
+                nats_url=url,
+                jwt_secret="test-only",
+                engine=NATSEngineConfiguration(lease_seconds=1),
             ),
             environ={"ABI_ROLLOUT_ID": rollout_id} if rollout_id else {},
             on_lost=self.lost.set,

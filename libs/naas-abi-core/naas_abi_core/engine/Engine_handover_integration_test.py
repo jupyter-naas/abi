@@ -140,7 +140,9 @@ def test_every_session_the_engine_owns_carries_the_id_that_holds_the_lease(
         nc = await nats.connect(broker)
         call = caller(nc)
         try:
-            found = {(await (await JetStreamLease.open(nc)).read()).holder.instance_id}
+            record = await (await JetStreamLease.open(nc)).read()
+            assert record is not None
+            found = {record.holder.instance_id}
             for prefix, operation in TRANSFER_HOSTS:
                 opened = await call(
                     f"{prefix}.open",

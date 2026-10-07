@@ -135,7 +135,7 @@ import random
 import re
 import threading
 import time
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -682,12 +682,12 @@ class ApacheJenaTDB2(ITripleStorePort):
             ask_result.askAnswer = bool(result_data["boolean"])
             return ask_result
 
-        from rdflib.term import BNode, Literal, URIRef, Variable
+        from rdflib.term import BNode, Identifier, Literal, URIRef, Variable
 
         vars = result_data.get("head", {}).get("vars", [])
         bindings = result_data.get("results", {}).get("bindings", [])
 
-        results = []
+        results: list[Mapping[Variable, Identifier]] = []
 
         for binding in bindings:
             row_values = {}
