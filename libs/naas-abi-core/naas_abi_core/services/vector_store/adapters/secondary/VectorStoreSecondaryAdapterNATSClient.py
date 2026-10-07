@@ -49,17 +49,17 @@ import numpy as np
 from naas_abi_core.engine.nats_rpc import NatsRPCClient, NatsRPCError
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
-from naas_abi_core.services.vector_store.adapters.vector_store_nats_contract import (
-    AUTH_HEADER,
-    SUBJECT_PREFIX,
-    TRANSFER_PREFIX,
-)
 from naas_abi_core.services.vector_store.adapters.vector_store_nats_codec import (
     document_to_pb,
     object_to_pb,
     pb_to_document,
     pb_to_search_result,
     vector_to_pb,
+)
+from naas_abi_core.services.vector_store.adapters.vector_store_nats_contract import (
+    AUTH_HEADER,
+    SUBJECT_PREFIX,
+    TRANSFER_PREFIX,
 )
 from naas_abi_core.services.vector_store.adapters.vector_store_stream_codec import (
     decode_frame,

@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -25,14 +25,14 @@ def test_json_values_are_kept_as_they_are(value):
     ("value", "portable"),
     [
         (date(2026, 10, 4), "2026-10-04"),
-        (datetime(2026, 10, 4, 12, 30), "2026-10-04T12:30:00"),
+        (datetime(2026, 10, 4, 12, 30), "2026-10-04T12:30:00"),  # noqa: DTZ001 - naive on purpose
         (
-            datetime(2026, 10, 4, 12, 30, tzinfo=timezone.utc),
+            datetime(2026, 10, 4, 12, 30, tzinfo=UTC),
             "2026-10-04T12:30:00+00:00",
         ),
         (time(12, 30), "12:30:00"),
         (Decimal("1.25"), 1.25),
-        (Decimal("12"), 12.0),
+        (Decimal(12), 12.0),
         (b"\x00\xff", "AP8="),
         (uuid.UUID(int=1), "00000000-0000-0000-0000-000000000001"),
         (float("nan"), None),
@@ -58,11 +58,11 @@ def test_finite_numbers():
     [
         (
             datetime(2026, 10, 4, 12, 30, tzinfo=timezone(timedelta(hours=2))),
-            datetime(2026, 10, 4, 10, 30),
+            datetime(2026, 10, 4, 10, 30),  # noqa: DTZ001 - stored naive, in UTC
         ),
-        ("2026-10-04T12:30:00+02:00", datetime(2026, 10, 4, 10, 30)),
-        ("2026-10-04T10:30:00Z", datetime(2026, 10, 4, 10, 30)),
-        (datetime(2026, 10, 4, 10, 30), datetime(2026, 10, 4, 10, 30)),
+        ("2026-10-04T12:30:00+02:00", datetime(2026, 10, 4, 10, 30)),  # noqa: DTZ001 - stored naive, in UTC
+        ("2026-10-04T10:30:00Z", datetime(2026, 10, 4, 10, 30)),  # noqa: DTZ001 - stored naive, in UTC
+        (datetime(2026, 10, 4, 10, 30), datetime(2026, 10, 4, 10, 30)),  # noqa: DTZ001 - naive on purpose
         ("2026-10-04T10:30:00", "2026-10-04T10:30:00"),
         ("not a time", "not a time"),
         (None, None),

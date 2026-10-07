@@ -16,7 +16,6 @@ from typing import Any
 import numpy as np
 from naas_abi_core.engine.nats_auth import issue_service_token
 from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
-from naas_abi_proto.vector_store.values import decode_object, encode_object
 from naas_abi_core.services.vector_store.adapters.primary.vector_store__primary_adapter__NATS import (
     AUTH_HEADER,
     VectorStorePrimaryAdapterNATS,
@@ -28,6 +27,7 @@ from naas_abi_core.services.vector_store.IVectorStorePort import (
     VectorDocument,
     VectorPage,
 )
+from naas_abi_proto.vector_store.values import decode_object, encode_object
 
 SECRET = "test-shared-secret"
 
