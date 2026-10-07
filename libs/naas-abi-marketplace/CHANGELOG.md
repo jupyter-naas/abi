@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v3.58.0 (2026-10-07)
+
+### Features
+
+- **intel-processes**: Add organization and people logo pipelines and utilities
+  ([`d39062b`](https://github.com/jupyter-naas/abi/commit/d39062ba961596f4661354af9a1a47922b1723b3))
+
+- **people**: Add optional LinkedIn contact link in search results
+  ([`c0d1cc1`](https://github.com/jupyter-naas/abi/commit/c0d1cc12224e98ffc3d1c49af22baf2a3d0b4b86))
+
+- **people**: Add support for organization logos from graph
+  ([`aa4d605`](https://github.com/jupyter-naas/abi/commit/aa4d6052b4c21646b9870ee55de1b665275cff1b))
+
+- **people**: Enhance graph visualization with ring clustering and image scaling
+  ([`e58d31a`](https://github.com/jupyter-naas/abi/commit/e58d31a7366f1c254a6bc48907fce8930e73d141))
+
+- **people**: Update search views and network API
+  ([`b8f3a2a`](https://github.com/jupyter-naas/abi/commit/b8f3a2a805921940ebca0aa0d57fdcba1eb08cdb))
+
+- **search**: Add highlight toggle and improve search UI
+  ([`41f5a62`](https://github.com/jupyter-naas/abi/commit/41f5a62214dedc9d55b26be1441bd8d0a4537c5c))
+
+
 ## v3.57.1 (2026-10-06)
 
 ### Bug Fixes

@@ -31,6 +31,7 @@ graph:
         - { value: "row", label: "Horizontal" }
         - { value: "column", label: "Vertical" }
       hint: "Arrange search and filters in a row or a column."
+    filters: { label: "Filters", type: "toggle", default: true, hint: "Show the individual search and the process, time and class filters." }
     physics: { label: "Physics", type: "toggle", default: true, hint: "Run the force simulation." }
     clusterBy:
       label: "Cluster by"

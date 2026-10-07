@@ -11,8 +11,15 @@ The new layout nests everything under a per-module ``naas_abi/`` directory:
     naas_abi/workspace-drive/<workspace_id>/...
 
 This module moves a user's or workspace's files on first access. Each migration
-is guarded by a marker object stored under ``naas_abi/.migrated/`` so the move
+is guarded by a marker object stored under ``naas_abi/.migrated/v2/`` so the move
 runs at most once per entity. The whole module is intentionally temporary.
+
+The first version (markers directly under ``naas_abi/.migrated/``) told files
+from folders by listing each entry and expecting a leaf to raise
+``NotADirectoryError``, which only the filesystem adapter does. On S3/MinIO
+listing a file raises ``ObjectNotFound``, so every file was skipped and the
+marker written anyway, leaving the files stranded at the legacy root. The
+markers are versioned so those entities are walked once more.
 
 TODO(remove-after: all live deployments have been migrated and the on-disk
 legacy paths are confirmed empty): delete this file and its call sites.
@@ -21,7 +28,6 @@ legacy paths are confirmed empty): delete this file and its call sites.
 from __future__ import annotations
 
 import logging
-from collections import deque
 
 from naas_abi.apps.nexus.apps.api.app.services.files.drive_roots import (
     MODULE_ROOT,
@@ -34,7 +40,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import ObjectSto
 
 logger = logging.getLogger(__name__)
 
-_MARKER_ROOT = f"{MODULE_ROOT}/.migrated"
+_MARKER_ROOT = f"{MODULE_ROOT}/.migrated/v2"
 
 
 class LegacyStorageMigrator:
@@ -76,32 +82,20 @@ class LegacyStorageMigrator:
         self._write_marker(marker_path)
 
     def _move_tree(self, legacy_root: str, new_root: str) -> None:
-        """Recursively move all files under ``legacy_root`` to ``new_root``.
+        """Move every file under ``legacy_root`` to the same relative path under ``new_root``.
 
-        Empty directories under the legacy root are not preserved (the storage
-        layer has no first-class notion of directories — a directory exists by
-        virtue of holding files).
+        Files are enumerated with ``list_objects_recursive``, which returns object
+        keys only on every adapter, so no adapter-specific file/folder test is
+        needed. Empty directories under the legacy root are not preserved (the
+        storage layer has no first-class notion of directories).
         """
         try:
-            top_level = self.storage.list_objects(legacy_root)
+            entries = self.storage.list_objects_recursive(legacy_root)
         except Exceptions.ObjectNotFound:
             return
 
-        queue: deque[str] = deque(top_level)
-        while queue:
-            entry = queue.popleft()
-            relative = entry[len(legacy_root) + 1 :] if entry.startswith(f"{legacy_root}/") else entry
-
-            try:
-                children = self.storage.list_objects(entry)
-                queue.extend(children)
-                continue
-            except Exceptions.ObjectNotFound:
-                continue
-            except (NotADirectoryError, OSError):
-                # ``entry`` is a leaf file
-                pass
-
+        for entry in entries:
+            relative = entry[len(legacy_root) + 1 :]
             prefix, key = self._split(entry)
             new_full = f"{new_root}/{relative}"
             new_prefix, new_key = self._split(new_full)

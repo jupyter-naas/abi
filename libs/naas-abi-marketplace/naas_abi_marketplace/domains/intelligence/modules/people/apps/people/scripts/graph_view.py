@@ -60,16 +60,23 @@ STUDYING_QUERY = "find_educations"
 ROW_LIMIT = 2000
 
 
-def _graph_file(config: dict[str, Any]) -> Path:
-    configured = config["data"]["graph"].get("file")
-    return Path(configured) if configured else DEMO_GRAPH_FILE
+def _graph_files(config: dict[str, Any]) -> list[Path]:
+    graph = config["data"]["graph"]
+    configured = graph.get("files") or ([graph["file"]] if graph.get("file") else [])
+    return [Path(name) for name in configured] or [DEMO_GRAPH_FILE]
+
+
+def _graph_key(config: dict[str, Any]) -> tuple[tuple[str, int], ...]:
+    """Every graph file with its mtime, so a rebuilt file is read again."""
+    return tuple((str(path), path.stat().st_mtime_ns) for path in _graph_files(config))
 
 
 @lru_cache(maxsize=2)
-def _graph(graph_file: str, mtime_ns: int) -> Graph:
-    # mtime is part of the key, so a rebuilt graph file is read again.
-    del mtime_ns
-    return Graph().parse(graph_file, format="turtle")
+def _graph(files: tuple[tuple[str, int], ...]) -> Graph:
+    graph = Graph()
+    for name, _mtime_ns in files:
+        graph.parse(name, format="turtle")
+    return graph
 
 
 @lru_cache(maxsize=1)
@@ -114,19 +121,39 @@ def person_graph_payload(
     )
 
 
-@lru_cache(maxsize=64)
-def _payload(
-    graph_file: str, mtime_ns: int, slug: str, org_label: str
-) -> dict[str, Any] | None:
-    graph = _graph(graph_file, mtime_ns)
-    person = next(
+def person_by_slug(graph: Graph, slug: str) -> URIRef | None:
+    """The person whose ``abi:profile_slug`` is ``slug``, typed or plain."""
+    return next(
         (
             subject
             for literal in (Literal(slug, datatype=XSD.string), Literal(slug))
             for subject in graph.subjects(PROFILE_SLUG, literal)
+            if isinstance(subject, URIRef)
         ),
         None,
     )
+
+
+def graph_for(config: dict[str, Any]) -> Graph:
+    """This instance's graph, read again when its file changes."""
+    return _graph(_graph_key(config))
+
+
+def graph_view_config(config: dict[str, Any]) -> dict[str, Any]:
+    """The settings the graph page is configured with."""
+    return {
+        "graph": graph_settings(),
+        "theme": {"bfo_buckets": config["theme"].get("bfo_buckets")},
+        "app": {"pages": []},
+    }
+
+
+@lru_cache(maxsize=64)
+def _payload(
+    files: tuple[tuple[str, int], ...], slug: str, org_label: str
+) -> dict[str, Any] | None:
+    graph = _graph(files)
+    person = person_by_slug(graph, slug)
     if person is None:
         return None
     return person_graph_payload(graph, person, org_label=org_label)
@@ -149,10 +176,8 @@ def graph_view(
     if not people:
         raise ProfileNotFoundError(slug)
     person = people[0]
-    graph_file = _graph_file(config)
     payload = _payload(
-        str(graph_file),
-        graph_file.stat().st_mtime_ns,
+        _graph_key(config),
         slug,
         person.get("organization") or "",
     )
@@ -164,11 +189,7 @@ def graph_view(
         # the directory shows.
         "root": person.get("full_name"),
         "data": payload,
-        "config": {
-            "graph": graph_settings(),
-            "theme": {"bfo_buckets": config["theme"].get("bfo_buckets")},
-            "app": {"pages": []},
-        },
+        "config": graph_view_config(config),
     }
 
 

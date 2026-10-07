@@ -74,6 +74,9 @@ async function listLocalSyncedFolders(
   return files;
 }
 
+/** Drives shown expanded when the sidebar opens or the workspace changes. */
+const DEFAULT_EXPANDED_DRIVES = ['workspace', 'my-drive'] as const;
+
 export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
   const isMobile = useIsMobile();
@@ -454,15 +457,24 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     }
   }, [activeSource, currentPath, driveRoot, ensureExpanded, isRemoteDrive, loadDir]);
 
-  // Drop explorer cache when the workspace changes.
+  // Drop explorer cache when the workspace changes; the default drives start expanded.
   useEffect(() => {
     loadGeneration.current += 1;
+    folderCacheRef.current = {};
     setFolderCache({});
     setLoadingDirs({});
     setDirErrors({});
-    setExpandedDirs([]);
+    setExpandedDirs(DEFAULT_EXPANDED_DRIVES.map((sourceId) => explorerDirKey(sourceId, '')));
     setExplorerQuery('');
   }, [currentWorkspaceId]);
+
+  // List the default expanded drives, so they open with their content (cached loads are skipped).
+  useEffect(() => {
+    if (!currentWorkspaceId) return;
+    for (const sourceId of DEFAULT_EXPANDED_DRIVES) {
+      void loadDir(sourceId, '');
+    }
+  }, [currentWorkspaceId, loadDir]);
 
   const handleRefresh = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -717,33 +729,6 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
 
         {fileExpandedCategories.includes('local') && (
           <div className="ml-1 space-y-0.5">
-            {renderDriveRow(
-              'my-drive',
-              'My Drive',
-              <HardDrive size={iconSize} className="text-muted-foreground" />,
-              () => {
-                void openRemoteDrive('my-drive');
-              },
-            )}
-            {renderDriveRow(
-              'workspace',
-              'Workspace Drive',
-              <HardDrive size={iconSize} className="text-muted-foreground" />,
-              () => {
-                void openRemoteDrive('workspace');
-              },
-            )}
-            {platformDriveEnabled
-              ? renderDriveRow(
-                  'platform-drive',
-                  'Platform Drive',
-                  <HardDrive size={iconSize} className="text-muted-foreground" />,
-                  () => {
-                    void openRemoteDrive('platform-drive');
-                  },
-                  'Files shared across every workspace where platform drive is enabled',
-                )
-              : null}
             {isWorkspaceAdmin && systemDriveEnabled
               ? renderDriveRow(
                   'system-drive',
@@ -755,6 +740,33 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                   'Full object storage tree, visible to workspace owners and admins',
                 )
               : null}
+            {platformDriveEnabled
+              ? renderDriveRow(
+                  'platform-drive',
+                  'Platform Drive',
+                  <HardDrive size={iconSize} className="text-muted-foreground" />,
+                  () => {
+                    void openRemoteDrive('platform-drive');
+                  },
+                  'Files shared across every workspace where platform drive is enabled',
+                )
+              : null}
+            {renderDriveRow(
+              'workspace',
+              'Workspace Drive',
+              <HardDrive size={iconSize} className="text-muted-foreground" />,
+              () => {
+                void openRemoteDrive('workspace');
+              },
+            )}
+            {renderDriveRow(
+              'my-drive',
+              'My Drive',
+              <HardDrive size={iconSize} className="text-muted-foreground" />,
+              () => {
+                void openRemoteDrive('my-drive');
+              },
+            )}
             {syncedFolders.map((folder) =>
               renderDriveRow(
                 folder.id,

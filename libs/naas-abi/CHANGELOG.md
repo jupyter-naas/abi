@@ -2,6 +2,77 @@
 
 <!-- version list -->
 
+## v2.81.0 (2026-10-07)
+
+### Bug Fixes
+
+- **files**: Handle mixed timezone-aware and naive timestamps in file sorting
+  ([`3390a87`](https://github.com/jupyter-naas/abi/commit/3390a872573c98a9595d9feed8d9589fee23d4ff))
+
+### Features
+
+- **files**: Add My Drive support with manifest and default folders
+  ([`47892ee`](https://github.com/jupyter-naas/abi/commit/47892ee45e13a4c15f2fde4903358889c1ca5d7d))
+
+- **files-section**: Expand default drives on sidebar open and workspace change
+  ([`86615d6`](https://github.com/jupyter-naas/abi/commit/86615d65ba7782366fa8fce35d0ddb7cf83f8832))
+
+- **workspace-drive**: Add workspace drive writer and backfill
+  ([`e556b65`](https://github.com/jupyter-naas/abi/commit/e556b65a6dd74e856514434a08bd0bd4e1e20023))
+
+### Testing
+
+- **auth**: Add tests for avatar storage adapter and legacy avatar migration
+  ([`7905cbb`](https://github.com/jupyter-naas/abi/commit/7905cbb3396b6977b318ffd8f7c4425bd43e1cde))
+
+
+## v2.80.2 (2026-10-07)
+
+### Bug Fixes
+
+- **nexus**: Keep the agent list tied to its workspace
+  ([`2a5b68d`](https://github.com/jupyter-naas/abi/commit/2a5b68de1d6aa1b4b0124187ac971c473181a541))
+
+
+## v2.80.1 (2026-10-07)
+
+### Bug Fixes
+
+- **files**: Update legacy storage migration to handle S3-like listing behavior
+  ([`adc4e9f`](https://github.com/jupyter-naas/abi/commit/adc4e9f086dc035084ddf4f5d71aa5353d0c18b9))
+
+
+## v2.80.0 (2026-10-07)
+
+### Bug Fixes
+
+- **search-topics**: Improve snippet explanation and fix thread safety in search
+  ([`dd0107f`](https://github.com/jupyter-naas/abi/commit/dd0107f9d8eb916ffff1b67cd9ae2000c964f893))
+
+### Features
+
+- **intel-processes**: Add organization and people logo pipelines and utilities
+  ([`d39062b`](https://github.com/jupyter-naas/abi/commit/d39062ba961596f4661354af9a1a47922b1723b3))
+
+- **search**: Add highlight toggle and improve search UI
+  ([`41f5a62`](https://github.com/jupyter-naas/abi/commit/41f5a62214dedc9d55b26be1441bd8d0a4537c5c))
+
+- **search**: Add metadata rows display for topic results
+  ([`3feb48c`](https://github.com/jupyter-naas/abi/commit/3feb48ca6434c1edc1fa81356e4d8463a47c5492))
+
+- **search**: Add multi-tier caching for topic search results and details
+  ([`7436ef7`](https://github.com/jupyter-naas/abi/commit/7436ef7b19892f15965c3baa875f47ff62350078))
+
+- **search**: Enhance person search with weighted text matching and add related test
+  ([`b41fa48`](https://github.com/jupyter-naas/abi/commit/b41fa48f3d3f19b8a99374d927252e962ea1e584))
+
+- **search**: Enhance topic search with LinkedIn and website info
+  ([`889b508`](https://github.com/jupyter-naas/abi/commit/889b508bf3c5f14840b02ed3e19cc5ff5b48d5c6))
+
+- **search-topics**: Add grouping and client info to topic search results
+  ([`c5828e1`](https://github.com/jupyter-naas/abi/commit/c5828e16641d274a00b66e60122edbb944ba05f5))
+
+
 ## v2.79.1 (2026-10-06)
 
 ### Bug Fixes

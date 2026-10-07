@@ -69,7 +69,7 @@ export function highlight(text, tokens, tag = "mark") {
   let cursor = 0;
   for (const [start, end] of ranges) {
     out += escapeHtml(raw.slice(cursor, start));
-    out += `<${tag}>${escapeHtml(raw.slice(start, end))}</${tag}>`;
+    out += `<${tag} class="hit">${escapeHtml(raw.slice(start, end))}</${tag}>`;
     cursor = end;
   }
   return out + escapeHtml(raw.slice(cursor));
@@ -100,16 +100,18 @@ export function avatarHtml(person, size = "sm") {
 /**
  * An organization's logo, or its initials.
  *
- * Same fallback-underneath pattern as avatarHtml: a name with no curated logo
- * (data.organization_logos in config.yaml) still reads as something, and a
- * logo file that 404s degrades to the initials rather than a broken icon.
+ * Same fallback-underneath pattern as avatarHtml: a name with no logo (none in
+ * the graph, none in data.organization_logos) still reads as something, and a
+ * logo file that 404s degrades to the initials rather than a broken icon. The
+ * path goes through apiUrl, as a portrait's does, so a logo served under this
+ * app's API mount still loads inside the Nexus frame.
  */
 export function orgAvatarHtml(name, logoPath, size = "sm") {
   if (!name) return "";
   const label = escapeHtml(name);
   const fallback = escapeHtml(initials(name));
   const image = logoPath
-    ? `<img src="${escapeHtml(logoPath)}" alt="" loading="lazy" />`
+    ? `<img src="${escapeHtml(apiUrl(logoPath))}" alt="" loading="lazy" />`
     : "";
   return `<span class="avatar avatar-${size} avatar-org" role="img" aria-label="${label}">${fallback}${image}</span>`;
 }
@@ -138,4 +140,9 @@ export function periodText(item, { presentLabel = "Present" } = {}) {
   const end = yearOf(item.end);
   const span = start ? `${start} – ${end || presentLabel}` : end || "";
   return [span, item.duration].filter(Boolean).join(" · ");
+}
+
+/** The organization's logo before its name, when it has one: nothing otherwise. */
+export function orgLogoHtml(name, logoPath) {
+  return name && logoPath ? orgAvatarHtml(name, logoPath, "xs") : "";
 }
