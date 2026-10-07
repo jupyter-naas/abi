@@ -7,9 +7,9 @@ from threading import Thread
 import naas_abi_core.services.triple_store.adapters.secondary.TripleStoreSecondaryAdapterNATSClient as _client_module
 import nats
 import pytest
-from naas_abi_core.engine.nats_rpc import NatsRPCError
 import rdflib
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_rpc import NatsRPCError
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
 from naas_abi_core.services.triple_store.adapters.primary.triple_store__primary_adapter__NATS import (
@@ -627,11 +627,15 @@ def test_streams_without_a_transfer_host_fail_clearly(nats_url):
         nats_url=nats_url, jwt_secret=JWT_SECRET, service_identity="api"
     )
     try:
-        with pytest.raises(NatsRPCError, match="UNAVAILABLE"):
-            with client.export() as triples:
-                list(triples)
-        with pytest.raises(NatsRPCError, match="UNAVAILABLE"):
-            with client.query_stream("ASK {}"):
-                pass
+        with (
+            pytest.raises(NatsRPCError, match="UNAVAILABLE"),
+            client.export() as triples,
+        ):
+            list(triples)
+        with (
+            pytest.raises(NatsRPCError, match="UNAVAILABLE"),
+            client.query_stream("ASK {}"),
+        ):
+            pass
     finally:
         client.close()

@@ -40,7 +40,6 @@ from naas_abi_core.services.document.DocumentPort import (
     validate_version,
 )
 
-
 # A document's estimated size is its stored JSON plus this, for its id,
 # timestamps and version on the wire.
 DOCUMENT_OVERHEAD = 64

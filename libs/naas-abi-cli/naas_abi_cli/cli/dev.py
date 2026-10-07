@@ -932,7 +932,7 @@ def _dev_modules(strict: bool = True) -> dict:
     reports an invalid block and carries on without modules."""
     try:
         modules = load_dev_modules()
-    except Exception as exc:  # noqa: BLE001 - config errors of any kind
+    except Exception as exc:
         if not strict:
             click.echo(f"⚠ ignoring dev.modules: {exc}", err=True)
             return {}

@@ -102,9 +102,11 @@ class EventSecondaryAdapterContract(ABC):
 
         with pytest.raises(FilterError):
             adapter.query(json_filter=malformed)
-        with pytest.raises(FilterError):
-            with adapter.query_stream(json_filter=malformed) as events:
-                list(events)
+        with (
+            pytest.raises(FilterError),
+            adapter.query_stream(json_filter=malformed) as events,
+        ):
+            list(events)
 
 
 class EventStorageContract(EventSecondaryAdapterContract):

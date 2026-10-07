@@ -91,7 +91,7 @@ def test_never_does_not_restart():
 
 
 def test_a_stopped_supervisor_does_not_restart():
-    code, runs, _, _ = _run([143, 1], stop_after=1)
+    _, runs, _, _ = _run([143, 1], stop_after=1)
 
     assert runs == 1
 

@@ -430,8 +430,10 @@ def test_list_vectors_stream_without_a_streaming_engine_raises(nats_url):
         timeout_seconds=5.0,
     )
     try:
-        with pytest.raises(RuntimeError, match="UNAVAILABLE"):
-            with client.list_vectors_stream("docs") as documents:
-                list(documents)
+        with (
+            pytest.raises(RuntimeError, match="UNAVAILABLE"),
+            client.list_vectors_stream("docs") as documents,
+        ):
+            list(documents)
     finally:
         client.close()
