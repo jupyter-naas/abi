@@ -48,24 +48,77 @@ PERSON = SearchTopic(
     source="builtin",
     results_query=_PREFIXES
     + """
-SELECT ?uri ?title (SAMPLE(?headline) AS ?subtitle) (SAMPLE(?about) AS ?snippet)
+# The snippet says why a person matched when the card cannot show it (a client, a
+# school, a skill, a summary, a mission); otherwise it is their summary, since a
+# match on the name or headline is visible as it is. An empty query searched
+# nothing, so there is nothing to explain: no snippet.
+SELECT ?uri ?title (SAMPLE(?headline) AS ?subtitle)
+       (COALESCE(SAMPLE(?why), SAMPLE(?about)) AS ?snippet)
 WHERE {
-  ?uri rdf:type abi:Person ;
-       rdfs:label ?title .
+  {
+    # Every text a person is known by, weighted by how much a match on it says:
+    # the name first, then the headline, the organizations, roles and skills, and
+    # last the free text of a summary or a mission.
+    SELECT ?uri (MIN(?weight) AS ?rank) (SAMPLE(?found) AS ?evidence)
+    WHERE {
+      ?uri rdf:type abi:Person .
+      {
+        { ?uri rdfs:label ?text . BIND(0 AS ?weight) }
+        UNION { ?uri abi:hasProfileSummary/abi:headline_text ?text . BIND(1 AS ?weight) }
+        UNION {
+          # No snippet: the card's Organization row already names the employer.
+          ?uri abi:worksFor|abi:isEmployedBy ?organization . ?organization rdfs:label ?text .
+          BIND(2 AS ?weight)
+        }
+        UNION {
+          # No snippet: the card's Organization row names the organization.
+          ?uri abi:hasActOfWorking/abi:forOrganization ?organization . ?organization rdfs:label ?text .
+          BIND(2 AS ?weight)
+        }
+        UNION {
+          ?uri abi:hasActOfWorking/abi:forClient ?client . ?client rdfs:label ?text .
+          BIND(2 AS ?weight) BIND(CONCAT("Client: ", ?text) AS ?found)
+        }
+        UNION {
+          ?uri abi:hasActOfStudying/abi:forEducationalOrganization ?school . ?school rdfs:label ?text .
+          BIND(3 AS ?weight) BIND(CONCAT("Education: ", ?text) AS ?found)
+        }
+        UNION {
+          # No snippet: the card's Role row shows the title.
+          ?uri abi:hasActOfWorking/abi:realizes/abi:job_title ?text .
+          BIND(3 AS ?weight)
+        }
+        UNION {
+          ?uri abi:hasSkill ?skill . ?skill rdfs:label ?text .
+          BIND(3 AS ?weight) BIND(CONCAT("Skill: ", ?text) AS ?found)
+        }
+        UNION {
+          ?uri abi:hasProfileSummary/abi:summary_content ?text .
+          BIND(4 AS ?weight) BIND(?text AS ?found)
+        }
+        UNION {
+          ?uri abi:hasActOfWorking/abi:realizes/abi:hasMission ?mission .
+          { ?mission rdfs:label ?text } UNION { ?mission abi:mission_content ?text } UNION { ?mission abi:mission_context ?text }
+          BIND(5 AS ?weight) BIND(CONCAT("Mission: ", ?text) AS ?found)
+        }
+      }
+      FILTER(CONTAINS(LCASE(STR(?text)), LCASE("{{ q }}")))
+    }
+    GROUP BY ?uri
+  }
+  ?uri rdfs:label ?title .
+  # Why the person matched, when the card cannot show it: only for a query, and
+  # not for a match on the name or headline (visible as it is).
+  BIND(IF(STRLEN("{{ q }}") > 0 && ?rank > 1, ?evidence, ?none) AS ?why)
   OPTIONAL {
     ?uri abi:hasProfileSummary ?summary .
     OPTIONAL { ?summary abi:headline_text ?headline . }
-    OPTIONAL { ?summary abi:summary_content ?about . }
+    # The summary stands in for an explanation, so not for an empty query either.
+    OPTIONAL { ?summary abi:summary_content ?about . FILTER(STRLEN("{{ q }}") > 0) }
   }
-  OPTIONAL { ?uri abi:hasSkill ?skill . ?skill rdfs:label ?skillLabel . }
-  FILTER(
-    CONTAINS(LCASE(STR(?title)), LCASE("{{ q }}"))
-    || (BOUND(?headline) && CONTAINS(LCASE(STR(?headline)), LCASE("{{ q }}")))
-    || (BOUND(?skillLabel) && CONTAINS(LCASE(STR(?skillLabel)), LCASE("{{ q }}")))
-  )
 }
-GROUP BY ?uri ?title
-ORDER BY LCASE(STR(?title))
+GROUP BY ?uri ?title ?rank
+ORDER BY ?rank LCASE(STR(?title))
 LIMIT {{ limit }}
 OFFSET {{ offset }}
 """,
@@ -88,7 +141,16 @@ WHERE {
 SELECT DISTINCT ?uri ?value
 WHERE {
   VALUES ?uri { {{ uris }} }
-  ?uri abi:worksFor|abi:isEmployedBy ?org .
+  # The current organization: the employer, or else the organization of a role
+  # still open (no last instant), for a person the source gives no employer.
+  {
+    ?uri abi:worksFor|abi:isEmployedBy ?org .
+  } UNION {
+    ?uri abi:hasActOfWorking ?act .
+    ?act abi:forOrganization ?org .
+    FILTER NOT EXISTS { ?act abi:occupiesTemporalRegion ?t . ?t abi:hasLastInstant ?li . }
+    FILTER NOT EXISTS { ?uri abi:worksFor|abi:isEmployedBy ?employer . }
+  }
   ?org rdfs:label ?value .
 }
 """,
@@ -126,12 +188,25 @@ WHERE {
 }
 """,
         ),
+        TopicResultRowDef(
+            id="linkedin",
+            label="LinkedIn",
+            query=_PREFIXES
+            + """
+SELECT DISTINCT ?uri ?value
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?uri abi:linkedin_url ?value .
+}
+""",
+        ),
     ),
     header_query=_PREFIXES
     + """
-SELECT ?title ?subtitle ?snippet ?image ?url ?employer ?yearsOfExperience
+SELECT ?title ?subtitle ?snippet ?image ?url ?employer ?yearsOfExperience ?linkedin
 WHERE {
   {{ uri }} rdfs:label ?title .
+  OPTIONAL { {{ uri }} abi:linkedin_url ?linkedin . }
   OPTIONAL {
     {{ uri }} abi:hasProfileSummary ?summary .
     OPTIONAL { ?summary abi:headline_text ?subtitle . }
@@ -153,6 +228,7 @@ LIMIT 1
             query=_PREFIXES
             + """
 SELECT ?title ?item ?subtitle ?snippet ?start ?end ?tags
+       ?group ?group_item ?group_image ?client ?client_item ?client_image
 WHERE {
   {{ uri }} abi:hasActOfWorking ?act .
   OPTIONAL {
@@ -177,8 +253,16 @@ WHERE {
     }
     GROUP BY ?act
   }
-  OPTIONAL { ?act abi:forOrganization ?item . ?item rdfs:label ?orgLabel . }
-  OPTIONAL { ?act abi:forClient ?client . ?client rdfs:label ?clientLabel . }
+  # Roles are grouped under their employer; the client, when the employer staffed
+  # the person there, is its own line. Each with its logo (organizations module).
+  OPTIONAL {
+    ?act abi:forOrganization ?item . ?item rdfs:label ?orgLabel .
+    OPTIONAL { ?item abi:hasLogo ?groupLogo . ?groupLogo abi:logo_url ?group_image . }
+  }
+  OPTIONAL {
+    ?act abi:forClient ?client_item . ?client_item rdfs:label ?client .
+    OPTIONAL { ?client_item abi:hasLogo ?clientLogo . ?clientLogo abi:logo_url ?client_image . }
+  }
   OPTIONAL { ?act abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
   OPTIONAL {
     ?act abi:realizes ?role .
@@ -201,12 +285,9 @@ WHERE {
     IF(STRSTARTS(STR(?missionContent), STR(?missionLabel)), "", CONCAT(" · ", ?missionLabel)),
     ""
   ) AS ?missionName)
-  BIND(CONCAT(
-    COALESCE(?orgLabel, ""),
-    COALESCE(CONCAT(" · client: ", ?clientLabel), ""),
-    ?missionName,
-    COALESCE(CONCAT(" · ", ?siteLabel), "")
-  ) AS ?line)
+  BIND(?orgLabel AS ?group)
+  BIND(?item AS ?group_item)
+  BIND(CONCAT(?missionName, COALESCE(CONCAT(" · ", ?siteLabel), "")) AS ?line)
   BIND(IF(STRSTARTS(?line, " · "), SUBSTR(?line, 4), ?line) AS ?subtitle)
   # The situation the mission answered, then what was done, one line each.
   BIND(COALESCE(?missionContent, ?missionLabel) AS ?body)
@@ -341,7 +422,30 @@ LIMIT {{ limit }}
 OFFSET {{ offset }}
 """,
     detail_label="Profile",
+    # The organizations module's abi:Logo (OrganizationLogoPipeline).
+    image_query=_PREFIXES
+    + """
+SELECT ?uri ?image
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?uri abi:hasLogo ?l .
+  ?l abi:logo_url ?image .
+}
+""",
     result_rows=(
+        TopicResultRowDef(
+            id="website",
+            label="Website",
+            query=_PREFIXES
+            + """
+SELECT DISTINCT ?uri ?value
+WHERE {
+  VALUES ?uri { {{ uris }} }
+  ?uri abi:hasWebsite ?w .
+  ?w abi:website_url ?value .
+}
+""",
+        ),
         TopicResultRowDef(
             id="people",
             label="People",
@@ -389,8 +493,10 @@ GROUP BY ?uri
     + """
 SELECT ?title (COUNT(DISTINCT ?employee) AS ?people) (SAMPLE(?industryLabel) AS ?industry)
        (SAMPLE(?parentLabel) AS ?parentOrganization) (SAMPLE(?website) AS ?url)
+       (SAMPLE(?logo) AS ?image)
 WHERE {
   {{ uri }} rdfs:label ?title .
+  OPTIONAL { {{ uri }} abi:hasLogo ?l . ?l abi:logo_url ?logo . }
   OPTIONAL { ?a abi:forOrganization {{ uri }} . ?employee abi:hasActOfWorking ?a . }
   OPTIONAL { {{ uri }} abi:hasIndustry ?i . ?i rdfs:label ?industryLabel . }
   OPTIONAL { {{ uri }} abi:hasParentOrganization ?parent . ?parent rdfs:label ?parentLabel . }

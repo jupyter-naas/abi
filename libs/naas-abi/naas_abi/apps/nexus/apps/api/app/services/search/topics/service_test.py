@@ -141,9 +141,66 @@ class TestExecution:
         results = await service.search(WS, "person", "ALICE", store)
         assert [i.uri for i in results.items] == [ALICE]
 
+    async def test_matches_what_people_worked_on_not_only_their_name(
+        self, service: SearchTopicService
+    ) -> None:
+        graph = Graph().parse(
+            data="""
+            @prefix abi: <http://ontology.naas.ai/abi/> .
+            @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            <http://x/edf> rdfs:label "EDF R&D" .
+            <http://x/firm> rdfs:label "Firm" .
+            <http://x/consultant> rdf:type abi:Person ; rdfs:label "Consultant" ;
+                abi:hasActOfWorking <http://x/act> .
+            <http://x/act> abi:forOrganization <http://x/firm> ; abi:forClient <http://x/edf> .
+            <http://x/director> rdf:type abi:Person ; rdfs:label "Director" ;
+                abi:worksFor <http://x/edf> ;
+                abi:linkedin_url "https://www.linkedin.com/in/director" .
+            <http://x/partner> rdf:type abi:Person ; rdfs:label "Partner" ;
+                abi:hasProfileSummary <http://x/summary> .
+            <http://x/summary> abi:summary_content "Audits energy groups such as EDF." .
+            <http://x/other> rdf:type abi:Person ; rdfs:label "Other" .
+        """,
+            format="turtle",
+        )
+        results = await service.search(WS, "person", "edf", GraphQueryTripleStoreAdapter(graph))
+        snippets = {item.title: item.snippet for item in results.items}
+        assert snippets == {
+            "Consultant": "Client: EDF R&D",
+            # The employer is the card's Organization row, not repeated as a snippet.
+            "Director": None,
+            "Partner": "Audits energy groups such as EDF.",
+        }
+        rows = {
+            item.title: {row.label: row.value for row in item.rows} for item in results.items
+        }
+        assert rows["Director"] == {
+            "Organization": "EDF R&D",
+            "LinkedIn": "https://www.linkedin.com/in/director",
+        }
+        # No employer stated: the current organization is the one of an open role.
+        assert rows["Consultant"] == {"Organization": "Firm"}
+
+        # An empty query searched nothing: no snippet, not even a summary.
+        everyone = await service.search(WS, "person", "", GraphQueryTripleStoreAdapter(graph))
+        assert [item.snippet for item in everyone.items] == [None, None, None, None]
+        # Organizations and roles rank before the free text of a summary.
+        assert [item.title for item in results.items][-1] == "Partner"
+
     async def test_has_more_pages(self, service: SearchTopicService, store) -> None:
         page = await service.search(WS, "person", "", store, limit=3)
         assert len(page.items) == 3 and page.has_more
+
+    async def test_total_counts_every_match_not_only_the_page(
+        self, service: SearchTopicService, store
+    ) -> None:
+        page = await service.search(WS, "person", "", store, limit=3)
+        assert page.total == 8
+        alice = await service.search(WS, "person", "alice", store, limit=3)
+        assert alice.total == len(alice.items)
+        organizations = await service.search(WS, "organization", "", store, limit=2)
+        assert organizations.total is not None and organizations.total >= len(organizations.items)
 
     async def test_person_detail_has_sections(self, service: SearchTopicService, store) -> None:
         detail = await service.detail(WS, "person", ALICE, store)
@@ -209,7 +266,8 @@ class TestExecution:
             <http://x/act> abi:forOrganization <http://x/firm> ; abi:forClient <http://x/client> ;
                 abi:occursIn <http://x/site> ; abi:realizes <http://x/role> .
             <http://x/firm> rdfs:label "Firm" .
-            <http://x/client> rdfs:label "Client" .
+            <http://x/client> rdfs:label "Client" ; abi:hasLogo <http://x/logo> .
+            <http://x/logo> abi:logo_url "/api/organizations/logos/Client/Client.png" .
             <http://x/site> rdfs:label "France" .
             <http://x/role> abi:job_title "Tech Lead" ; abi:hasMission <http://x/mission> .
             <http://x/mission> rdfs:label "DataPool redesign" ;
@@ -220,7 +278,14 @@ class TestExecution:
         )
         detail = await service.detail(WS, "person", ALICE, GraphQueryTripleStoreAdapter(graph))
         [item] = next(s for s in detail.sections if s.id == "experience").items
-        assert item.subtitle == "Firm · client: Client · DataPool redesign · France"
+        # The employer groups the roles and the client is its own line, with its logo.
+        assert item.subtitle == "DataPool redesign · France"
+        assert (item.group, item.group_item) == ("Firm", "http://x/firm")
+        assert (item.client, item.client_item, item.client_image) == (
+            "Client",
+            "http://x/client",
+            "/api/organizations/logos/Client/Client.png",
+        )
         assert item.snippet == (
             "The client needed one finance warehouse.\n"
             "Defined the architecture\nAutomated 250 pipelines"

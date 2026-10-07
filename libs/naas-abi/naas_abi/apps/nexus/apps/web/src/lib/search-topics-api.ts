@@ -44,6 +44,9 @@ export const topicsApi = {
     ),
   detail: (workspaceId: string, topicId: string, uri: string) =>
     request<TopicDetail>(`/${encodeURIComponent(topicId)}/detail?${ws(workspaceId)}&${new URLSearchParams({ uri })}`),
+  /** Retire the workspace's cached search responses (kept a day): the next search reads the graphs. */
+  refreshCache: (workspaceId: string) =>
+    request<{ refreshed: boolean }>(`/cache/refresh?${ws(workspaceId)}`, { method: 'POST' }),
   save: (workspaceId: string, topic: SearchTopic) => {
     const { id, source: _source, ...body } = topic;
     return request<SearchTopic>(`/${encodeURIComponent(id)}?${ws(workspaceId)}`, { method: 'PUT', body: JSON.stringify(body) });

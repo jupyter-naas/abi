@@ -168,6 +168,15 @@ abi:Brand a owl:Class ;
     rdfs:comment "Brands are informational constructs that encapsulate the reputation and identity of products or services, making them suitable to be represented as Descriptive Information Content Entities." ;
     abi:is_curated_in_foundry "enterprise_management_foundry" .
 
+abi:Logo a owl:Class ;
+    rdfs:subClassOf cco:ont00002004 , # Image
+      abi:GenericallyDependentContinuant ,
+      [ a owl:Restriction ; owl:onProperty abi:isLogoOf ; owl:someValuesFrom abi:Organization ] ;
+    rdfs:label "Logo"@en ;
+    skos:definition "An image that an organization publishes to identify itself. Subclass of CCO Image."@en ;
+    skos:example "The Accor logo shown beside the organization in a search result."@en ;
+    rdfs:comment "The organization counterpart of abi:Portrait. The individual carries where the image is kept (abi:logo_storage_path) and where it is served (abi:logo_url), never the bytes: image data belongs in object storage, at <datastore>/<organization>/logos/<organization>.<ext>."@en .
+
 #################################################################
 #    Classes — WHY (capabilities)
 #################################################################
@@ -215,6 +224,23 @@ abi:RegionalHeadquarters a owl:Class ;
 #################################################################
 #    Object Properties
 #################################################################
+
+# WHO ↔ HOW WE KNOW - the organization carries its logo
+abi:hasLogo a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf abi:isLogoOf ;
+    rdfs:label "has logo"@en ;
+    skos:definition "Relates an organization to a logo image that identifies it."@en ;
+    rdfs:domain abi:Organization ;
+    rdfs:range abi:Logo .
+
+abi:isLogoOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf abi:hasLogo ;
+    rdfs:label "is logo of"@en ;
+    skos:definition "Relates a logo image to the organization it identifies."@en ;
+    rdfs:domain abi:Logo ;
+    rdfs:range abi:Organization .
 
 abi:hasLegalName a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000101 ; # is carrier of
@@ -295,6 +321,18 @@ abi:isHeadquartersOf a owl:ObjectProperty ;
 #################################################################
 #    Data Properties
 #################################################################
+
+abi:logo_url a owl:DatatypeProperty ;
+    rdfs:label "logo url"@en ;
+    skos:definition "Address at which the logo image is served."@en ;
+    rdfs:domain abi:Logo ;
+    rdfs:range xsd:anyURI .
+
+abi:logo_storage_path a owl:DatatypeProperty ;
+    rdfs:label "logo storage path"@en ;
+    skos:definition "Object-storage path of the logo image (under the datastore), from which the logo url is served."@en ;
+    rdfs:domain abi:Logo ;
+    rdfs:range xsd:string .
 
 abi:organization_id a owl:DatatypeProperty ;
     rdfs:domain cco:ont00001180 ;
