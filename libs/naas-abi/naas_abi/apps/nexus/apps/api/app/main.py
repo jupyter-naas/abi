@@ -159,44 +159,45 @@ def _schedule_identity_graph_sync(_published: int = 0, delay_seconds: float = 2.
     _identity_graph_sync_task = loop.create_task(_later())
 
 
-def _install_workspace_drive_writer() -> None:
-    """Keep manifest.json and the staff system folders in every workspace's drive."""
+def _install_drive_writers() -> None:
+    """Keep .manifest.json and the default folders in every workspace drive and My Drive."""
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule
+        from naas_abi.apps.nexus.apps.api.app.services.files.my_drive import MyDriveWriter
         from naas_abi.apps.nexus.apps.api.app.services.files.workspace_drive import (
             WorkspaceDriveWriter,
         )
 
-        WorkspaceDriveWriter(
-            get_storage=lambda: ABIModule.get_instance().engine.services.object_storage
-        ).install()
-        _log.info("✓ Workspace drive writer installed")
+        def get_storage():  # noqa: ANN202 - the engine's ObjectStorageService
+            return ABIModule.get_instance().engine.services.object_storage
+
+        WorkspaceDriveWriter(get_storage=get_storage).install()
+        MyDriveWriter(get_storage=get_storage).install()
+        _log.info("✓ Drive writers installed")
     except Exception:
-        _log.exception("Unable to install the workspace drive writer")
+        _log.exception("Unable to install the drive writers")
 
 
-async def _backfill_workspace_drives() -> None:
-    """Write the manifest and staff folders of every workspace drive that lacks them."""
+async def _backfill_drives() -> None:
+    """Write the manifest and default folders of every workspace drive and My Drive lacking them."""
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule
         from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+        from naas_abi.apps.nexus.apps.api.app.services.files.my_drive import backfill_my_drives
         from naas_abi.apps.nexus.apps.api.app.services.files.workspace_drive import (
             backfill_workspace_drives,
         )
 
         storage = ABIModule.get_instance().engine.services.object_storage
         async with AsyncSessionLocal() as session:
-            written = await backfill_workspace_drives(session, storage)
-        if any(written.values()):
-            _log.info(
-                "✓ Workspace drives backfilled: %d manifests, %d staff folder sets",
-                written["manifests"],
-                written["staff_folders"],
-            )
+            workspaces = await backfill_workspace_drives(session, storage)
+            users = await backfill_my_drives(session, storage)
+        if any(workspaces.values()) or any(users.values()):
+            _log.info("✓ Drives backfilled: workspaces %s, my drives %s", workspaces, users)
     except Exception:
-        _log.exception("Workspace drive backfill failed")
+        _log.exception("Drive backfill failed")
 
 
 def _install_identity_event_capture() -> None:
@@ -309,8 +310,8 @@ async def _startup(app: FastAPI) -> None:
     # Before seeds: users, workspaces and memberships the configuration creates
     # or changes are logged as identity events, triggered via "configuration".
     _install_identity_event_capture()
-    # Also before seeds, so workspaces the configuration creates get their drive set up.
-    _install_workspace_drive_writer()
+    # Also before seeds, so users and workspaces the configuration creates get their drives set up.
+    _install_drive_writers()
     from naas_abi_core.services.event.context import event_triggered_via
 
     via = event_triggered_via.set("configuration")
@@ -325,8 +326,8 @@ async def _startup(app: FastAPI) -> None:
 
     # After seeds, so seeded users/workspaces are in the graph on first boot.
     asyncio.create_task(_sync_identity_graph())
-    # After seeds too: workspaces created before the drive writer get theirs.
-    asyncio.create_task(_backfill_workspace_drives())
+    # After seeds too: users and workspaces created before the drive writers get theirs.
+    asyncio.create_task(_backfill_drives())
 
     try:
         start_chat_ingestion_consumer(app)
