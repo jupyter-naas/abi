@@ -6,9 +6,11 @@ is served from this package, so a second directory costs a config file and a
 brand, not a copy of the app.
 
 The shared files are mounted *under the API prefix* rather than at a path of
-their own. Nexus proxies ``/api/`` and ``/app-html/`` to the backend and
-nothing else, so a new top-level prefix would work in development and 404 in
-the product.
+their own, so one prefix carries everything a page needs. Inside Nexus a page
+is a bundled app under ``/app-html/`` and only ``/app-html/`` reaches the
+backend from its iframe: an instance shown there mounts itself a second time
+beside its page, under ``/app-html/<module>/<app>/api``, and its page sets
+``data-people-api-base`` on ``<html>`` to that mount (see ``web/lib/config.js``).
 """
 
 from __future__ import annotations

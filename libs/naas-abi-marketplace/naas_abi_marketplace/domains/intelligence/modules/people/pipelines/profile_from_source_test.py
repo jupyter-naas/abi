@@ -18,8 +18,8 @@ from naas_abi_marketplace.domains.intelligence.modules.people.utils.person_sourc
 from rdflib import URIRef
 from rdflib.namespace import RDF
 
-PEOPLE_ACT_OF_WORKING = URIRef("http://ontology.naas.ai/people/ActOfWorking")
-PEOPLE_PROFILE_SUMMARY = URIRef("http://ontology.naas.ai/people/ProfileSummary")
+PEOPLE_ACT_OF_WORKING = URIRef("http://ontology.naas.ai/abi/ActOfWorking")
+PEOPLE_PROFILE_SUMMARY = URIRef("http://ontology.naas.ai/abi/ProfileSummary")
 ABI_PERSON = URIRef("http://ontology.naas.ai/abi/Person")
 
 
@@ -76,8 +76,8 @@ def test_each_certification_is_an_act_of_certification_with_one_credential() -> 
         ProfileFromSourcePipelineConfiguration(persist=False)
     ).run(params)
 
-    act = URIRef("http://ontology.naas.ai/people/ActOfCertification")
-    certification = URIRef("http://ontology.naas.ai/people/Certification")
+    act = URIRef("http://ontology.naas.ai/abi/ActOfCertification")
+    certification = URIRef("http://ontology.naas.ai/abi/Certification")
     assert len(list(graph.subjects(RDF.type, act))) == 2
     assert len(list(graph.subjects(RDF.type, certification))) == 2
 
@@ -88,7 +88,7 @@ def test_the_certification_names_the_page_it_was_published_on() -> None:
         ProfileFromSourcePipelineConfiguration(persist=False)
     ).run(params)
 
-    sourced = URIRef("http://ontology.naas.ai/people/isSourcedFrom")
-    certification = URIRef("http://ontology.naas.ai/people/Certification")
+    sourced = URIRef("http://ontology.naas.ai/abi/isSourcedFrom")
+    certification = URIRef("http://ontology.naas.ai/abi/Certification")
     for subject in graph.subjects(RDF.type, certification):
         assert list(graph.objects(subject, sourced)), subject

@@ -7,8 +7,8 @@
 #################################################################
 #  Organization Queries
 #  Data: GRAPH <http://ontology.naas.ai/graph/organizations>
-#  Schema: <http://ontology.naas.ai/abi/> (OrganizationOntology,
-#          OrganizationAllianceProcess, OrganizationRestructuringProcess)
+#  Schema: <http://ontology.naas.ai/abi/> (OrganizationOntology and its
+#          per-act process slices, ontologies/processes/ActOf*Process.ttl)
 #
 #  Acts vs records
 #  ---------------

@@ -169,8 +169,8 @@ function workerLabel(record) {
   const props = record?.properties || [];
   const worker = props.find(
     (p) =>
-      p.uri === "people:isActOfWorkingOf" ||
-      p.uri === "people:isActOfStudyingOf" ||
+      p.uri === "abi:isActOfWorkingOf" ||
+      p.uri === "abi:isActOfStudyingOf" ||
       p.label === "worker" ||
       p.label === "student"
   );

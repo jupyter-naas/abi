@@ -1,5 +1,6 @@
 import type { GraphNode, GraphEdge } from '../stores/knowledge-graph';
 import { BFO_BUCKET_BY_URI } from './bfo-buckets';
+import { classHierarchyIndex, serverBfoBuckets } from './detail-network';
 import { classProperties } from './ontology-class-properties';
 import { ontologyConnections, termKey, type TermRef, type TermConnection } from './ontology-context';
 import { dictionaryKindLabel, type DictionaryTerm } from './ontology-dictionary-tree';
@@ -12,6 +13,8 @@ export const BFO_LAYOUT_RELATIONS: TermGraphRelations = { hierarchy: false, rest
 /** Adapt the permitted dictionary declarations to the existing network canvas. */
 export function buildTermGraph(term: DictionaryTerm, terms: DictionaryTerm[]): TermGraph {
   const byKey = new Map(terms.map(item => [termKey(item), item]));
+  const hierarchyOf = classHierarchyIndex(terms);
+  const serverBuckets = serverBfoBuckets(terms);
   const byId = new Map<string, DictionaryTerm[]>();
   terms.forEach(item => byId.set(item.id, [...(byId.get(item.id) || []), item]));
   const resolve = (ref: TermRef, type?: DictionaryTerm['type']): TermRef => {
@@ -31,6 +34,12 @@ export function buildTermGraph(term: DictionaryTerm, terms: DictionaryTerm[]): T
       const definition = BFO_BUCKET_BY_URI[current.id];
       if (definition && definition.type !== 'Entity') return definition.uri;
       if (definition) entity = definition.uri;
+      // The server resolved this through imports the dictionary never carries
+      // (abi:Person -> CCO -> BFO), for declared terms and referenced ones alike
+      // (cco:ont00000468); the walk below only sees workspace files.
+      const resolved = BFO_BUCKET_BY_URI[serverBuckets.get(current.id) || ''];
+      if (resolved && resolved.type !== 'Entity') return resolved.uri;
+      if (resolved) entity = resolved.uri;
       const loaded = byKey.get(key);
       if (loaded?.type !== 'entity' && loaded?.type !== 'individual') continue;
       for (const equivalent of loaded.equivalents || []) queue.push(resolve(equivalent, 'entity'));
@@ -53,6 +62,7 @@ export function buildTermGraph(term: DictionaryTerm, terms: DictionaryTerm[]): T
           iri: ref.id, term_type: ref.type, kind: ref.type ? dictionaryKindLabel(ref.type) : 'Referenced term',
           definition: loaded?.description || '', bfo_parent_iri: bfo,
           source_files: loaded?.sources || [], is_primary: key === termKey(term),
+          ...(!ref.type || ref.type === 'entity' ? hierarchyOf(ref.id) : {}),
         },
       });
     }

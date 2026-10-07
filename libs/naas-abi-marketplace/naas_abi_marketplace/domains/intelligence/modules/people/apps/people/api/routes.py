@@ -36,6 +36,9 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
     graph_view,
     graph_view_css,
 )
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.network_payload import (
+    network as search_network,
+)
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.ontology_payload import (
     build_ontology_payload,
 )
@@ -65,6 +68,20 @@ def build_router(config_path: Path | None = None) -> APIRouter:
     ) -> dict:
         try:
             return search_module.search(
+                dataset_service(), config(), query=q, facet=facet, page=page
+            )
+        except DatasetsMissingError as exc:
+            raise HTTPException(status_code=404, detail=exc.as_detail()) from exc
+
+    @router.get("/search/network")
+    def get_search_network(
+        q: str = Query("", max_length=200),
+        facet: str = Query("", max_length=120),
+        page: int = Query(1, ge=1, le=1000),
+    ) -> dict:
+        """The people a search page shows and the organizations that tie them."""
+        try:
+            return search_network(
                 dataset_service(), config(), query=q, facet=facet, page=page
             )
         except DatasetsMissingError as exc:

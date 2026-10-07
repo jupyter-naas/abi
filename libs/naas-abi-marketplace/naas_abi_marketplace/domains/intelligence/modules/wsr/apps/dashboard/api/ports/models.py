@@ -10,12 +10,12 @@ Field names and units are intentionally identical on both sides of the API bound
   - time: Unix epoch milliseconds (int)
 
 Ontology mapping (wsr.ttl → make generate → ports/domain.py):
-  FlightState       → wsr:AircraftPositionReport    rdfs:subClassOf wsr:InformationContentEntity
-  SatelliteRecord   → wsr:TLERecord                 rdfs:subClassOf wsr:InformationContentEntity
-  EarthquakeFeature → wsr:EarthquakeEventRecord      rdfs:subClassOf wsr:InformationContentEntity
-  NewsItem          → wsr:NewsArticle                rdfs:subClassOf wsr:InformationContentEntity
-  ConflictEvent     → wsr:ConflictSiteRecord         rdfs:subClassOf wsr:InformationContentEntity
-  CCTVCamera        → wsr:CCTVCameraUnit             rdfs:subClassOf wsr:GroundSensorStation
+  FlightState       → abi:AircraftPositionReport    rdfs:subClassOf abi:InformationContentEntity
+  SatelliteRecord   → abi:TLERecord                 rdfs:subClassOf abi:InformationContentEntity
+  EarthquakeFeature → abi:EarthquakeEventRecord      rdfs:subClassOf abi:InformationContentEntity
+  NewsItem          → abi:NewsArticle                rdfs:subClassOf abi:InformationContentEntity
+  ConflictEvent     → abi:ConflictSiteRecord         rdfs:subClassOf abi:InformationContentEntity
+  CCTVCamera        → abi:CCTVCameraUnit             rdfs:subClassOf abi:GroundSensorStation
 
 Each class here is a lightweight Pydantic DTO optimised for JSON.
 The authoritative domain model (RDFEntity subclasses with rdf() serialisation)
@@ -38,10 +38,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-# ─── wsr:AircraftPositionReport  (GDC — Information Content Entity) ──────────
-# domain.py: AircraftPositionReport  ·  wsr:hasICAO24 · wsr:hasCallsign
-#            wsr:hasLat · wsr:hasLon · wsr:hasAltitude · wsr:hasVelocity
-#            wsr:hasHeading · wsr:isOnGround · wsr:isMilitary
+# ─── abi:AircraftPositionReport  (GDC — Information Content Entity) ──────────
+# domain.py: AircraftPositionReport  ·  abi:hasICAO24 · abi:hasCallsign
+#            abi:hasLat · abi:hasLon · abi:hasAltitude · abi:hasVelocity
+#            abi:hasHeading · abi:isOnGround · abi:isMilitary
 
 class FlightState(BaseModel):
     icao24: str
@@ -57,8 +57,8 @@ class FlightState(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-# ─── wsr:TLERecord  (GDC — Information Content Entity) ───────────────────────
-# domain.py: TLERecord  ·  wsr:hasTLELine1 · wsr:hasTLELine2
+# ─── abi:TLERecord  (GDC — Information Content Entity) ───────────────────────
+# domain.py: TLERecord  ·  abi:hasTLELine1 · abi:hasTLELine2
 
 class SatelliteRecord(BaseModel):
     name: str
@@ -66,9 +66,9 @@ class SatelliteRecord(BaseModel):
     line2: str
 
 
-# ─── wsr:EarthquakeEventRecord  (GDC — Information Content Entity) ────────────
-# domain.py: EarthquakeEventRecord  ·  wsr:hasMagnitude · wsr:hasPlace
-#            wsr:hasLat · wsr:hasLon · wsr:hasDepth · wsr:hasEventTime
+# ─── abi:EarthquakeEventRecord  (GDC — Information Content Entity) ────────────
+# domain.py: EarthquakeEventRecord  ·  abi:hasMagnitude · abi:hasPlace
+#            abi:hasLat · abi:hasLon · abi:hasDepth · abi:hasEventTime
 
 class EarthquakeFeature(BaseModel):
     id: str
@@ -80,9 +80,9 @@ class EarthquakeFeature(BaseModel):
     time: int    = Field(description="Unix epoch ms")
 
 
-# ─── wsr:NewsArticle  (GDC — Information Content Entity) ─────────────────────
-# domain.py: NewsArticle  ·  wsr:hasTitle · wsr:hasNewsSource
-#            wsr:hasSourceURL · wsr:hasPubDate · wsr:hasSeverityClass
+# ─── abi:NewsArticle  (GDC — Information Content Entity) ─────────────────────
+# domain.py: NewsArticle  ·  abi:hasTitle · abi:hasNewsSource
+#            abi:hasSourceURL · abi:hasPubDate · abi:hasSeverityClass
 
 SeverityLevel = Literal["breaking", "alert", "update"]
 
@@ -97,10 +97,10 @@ class NewsItem(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-# ─── wsr:ConflictSiteRecord  (GDC — Information Content Entity) ───────────────
-# domain.py: ConflictSiteRecord  ·  wsr:hasConflictSiteName · wsr:hasSiteType
-#            wsr:hasLat · wsr:hasLon · wsr:hasSiteCountry
-#            wsr:hasSiteDescription · wsr:hasThreatSeverity
+# ─── abi:ConflictSiteRecord  (GDC — Information Content Entity) ───────────────
+# domain.py: ConflictSiteRecord  ·  abi:hasConflictSiteName · abi:hasSiteType
+#            abi:hasLat · abi:hasLon · abi:hasSiteCountry
+#            abi:hasSiteDescription · abi:hasThreatSeverity
 
 ConflictType     = Literal["strike", "base", "nuclear", "naval", "zone", "capital"]
 ThreatSeverity   = Literal["critical", "high", "medium"]
@@ -116,10 +116,10 @@ class ConflictEvent(BaseModel):
     severity: ThreatSeverity
 
 
-# ─── wsr:CCTVCameraUnit  (Material Entity — GroundSensorStation) ──────────────
-# domain.py: CCTVCameraUnit  ·  wsr:hasCameraName · wsr:hasCity · wsr:hasCountry
-#            wsr:hasLat · wsr:hasLon · wsr:hasImageURL · wsr:hasVideoURL
-#            wsr:hasStreamType · wsr:hasCameraSource · wsr:hasSlug
+# ─── abi:CCTVCameraUnit  (Material Entity — GroundSensorStation) ──────────────
+# domain.py: CCTVCameraUnit  ·  abi:hasCameraName · abi:hasCity · abi:hasCountry
+#            abi:hasLat · abi:hasLon · abi:hasImageURL · abi:hasVideoURL
+#            abi:hasStreamType · abi:hasCameraSource · abi:hasSlug
 
 StreamType   = Literal["hls", "mp4", "youtube"]
 CameraSource = Literal["nyc", "london", "openwebcamdb", "mideast"]

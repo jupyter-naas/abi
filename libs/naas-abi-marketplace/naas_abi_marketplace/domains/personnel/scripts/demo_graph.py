@@ -131,18 +131,18 @@ def _add_employment_records(
         )
         context.graph += record.rdf()
         context.graph.add(
-            (URIRef(person._uri), PERSONNEL.hasEmploymentRecord, URIRef(record._uri))
+            (URIRef(person._uri), ABI.hasEmploymentRecord, URIRef(record._uri))
         )
 
         position_uri = current_position.get(person.label or "")
         if position_uri is not None:
             context.graph.add(
-                (URIRef(position_uri), PERSONNEL.hasJobDescription, URIRef(desc._uri))
+                (URIRef(position_uri), ABI.hasJobDescription, URIRef(desc._uri))
             )
             context.graph.add(
                 (
                     URIRef(position_uri),
-                    PERSONNEL.job_family,
+                    ABI.job_family,
                     Literal(emp["job_family"], datatype=XSD.string),
                 )
             )
@@ -157,7 +157,7 @@ def _add_employment_records(
         )
         context.graph += status.rdf()
         context.graph.add(
-            (URIRef(person._uri), PERSONNEL.hasEmploymentStatus, URIRef(status._uri))
+            (URIRef(person._uri), ABI.hasEmploymentStatus, URIRef(status._uri))
         )
 
 
@@ -206,9 +206,9 @@ def build_overlay_graph(
                 (URIRef(line._uri), ABI.hasMemberPart, URIRef(person._uri))
             )
             for role in context.graph.objects(
-                URIRef(person._uri), PERSONNEL.hasEmployeeRole
+                URIRef(person._uri), ABI.hasEmployeeRole
             ):
-                context.graph.add((role, PERSONNEL.inServiceLine, URIRef(line._uri)))
+                context.graph.add((role, ABI.inServiceLine, URIRef(line._uri)))
         if payload.get("grade"):
             context.ensure_grade(payload["grade"], person)
 

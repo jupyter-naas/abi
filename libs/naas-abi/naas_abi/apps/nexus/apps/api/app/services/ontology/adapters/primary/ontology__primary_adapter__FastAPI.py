@@ -153,6 +153,34 @@ async def workspace_dictionary(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+class BfoBucketRefresh(BaseModel):
+    iri: str = Field(min_length=1, max_length=8192)
+
+
+@router.post("/bfo-bucket/refresh")
+async def refresh_bfo_bucket(
+    data: BfoBucketRefresh,
+    ontology_service: OntologyService = Depends(get_ontology_service),
+    catalog_refs: list[str] = Depends(ontology_catalog_scope),
+) -> dict:
+    """Clear the cached BFO bucket of one class and resolve it again."""
+    try:
+        bucket = await ontology_service.refresh_bfo_bucket(data.iri, catalog_refs=catalog_refs)
+    except OntologyServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"iri": data.iri, "bfoBucket": bucket}
+
+
+@router.get("/process-slices")
+async def list_process_slices(
+    path: str = Query(..., min_length=1, max_length=4096),
+    ontology_service: OntologyService = Depends(get_ontology_service),
+    catalog_refs: list[str] = Depends(ontology_catalog_scope),
+) -> dict:
+    """Process slices consolidated into one workspace ontology file."""
+    return {"items": await ontology_service.process_slices(path, catalog_refs=catalog_refs)}
+
+
 @router.get("/classes")
 async def list_classes(
     ontology_path: str | None = Query(None, alias="ontology_path"),

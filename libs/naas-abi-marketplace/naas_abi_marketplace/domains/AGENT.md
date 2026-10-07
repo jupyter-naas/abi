@@ -215,7 +215,7 @@ Two validator rules catch most first drafts:
   an `owl:Restriction` on `bfo:BFO_0000197` (inheres in) or `bfo:BFO_0000196` (bearer of),
   directly or via a sub-property such as `abi:inheresIn`.
 
-The second rule is a modelling check, not a formality. When `personnel:JobPosition` failed it, the
+The second rule is a modelling check, not a formality. When `abi:JobPosition` failed it, the
 fix was not to bolt on a bearer but to recognise that a vacant requisition *has* no bearer and is
 therefore not a role at all — it is a generically dependent continuant. See
 [`personnel/README.md`](personnel/README.md).

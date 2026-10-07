@@ -26,8 +26,8 @@ ABI_ORGANIZATION = URIRef("http://ontology.naas.ai/abi/Organization")
 ABI_PERSON = URIRef("http://ontology.naas.ai/abi/Person")
 ABI_SITE = URIRef(Site._class_uri)
 ABI_TEMPORAL_REGION = URIRef("http://ontology.naas.ai/abi/TemporalRegion")
-PEOPLE_HAS_ACT_OF_WORKING = URIRef("http://ontology.naas.ai/people/hasActOfWorking")
-PEOPLE_IS_SOURCED_FROM = URIRef("http://ontology.naas.ai/people/isSourcedFrom")
+PEOPLE_HAS_ACT_OF_WORKING = URIRef("http://ontology.naas.ai/abi/hasActOfWorking")
+PEOPLE_IS_SOURCED_FROM = URIRef("http://ontology.naas.ai/abi/isSourcedFrom")
 
 
 def _working_params(**overrides: object) -> ActOfWorkingPipelineParameters:

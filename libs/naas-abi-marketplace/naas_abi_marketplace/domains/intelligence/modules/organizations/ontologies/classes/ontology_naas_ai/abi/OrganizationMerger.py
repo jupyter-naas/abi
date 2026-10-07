@@ -1,4 +1,4 @@
-from naas_abi_marketplace.domains.intelligence.modules.organizations.ontologies.processes.OrganizationRestructuringProcess import (
+from naas_abi_marketplace.domains.intelligence.modules.organizations.ontologies.processes.ActOfOrganizationalMergerProcess import (
     OrganizationMerger as _OrganizationMerger,
 )
 

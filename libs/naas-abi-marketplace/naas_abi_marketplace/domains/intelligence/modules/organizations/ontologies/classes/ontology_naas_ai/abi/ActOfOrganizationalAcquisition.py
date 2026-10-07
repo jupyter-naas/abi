@@ -1,4 +1,4 @@
-from naas_abi_marketplace.domains.intelligence.modules.organizations.ontologies.processes.OrganizationRestructuringProcess import (
+from naas_abi_marketplace.domains.intelligence.modules.organizations.ontologies.processes.ActOfOrganizationalAcquisitionProcess import (
     ActOfOrganizationalAcquisition as _ActOfOrganizationalAcquisition,
 )
 

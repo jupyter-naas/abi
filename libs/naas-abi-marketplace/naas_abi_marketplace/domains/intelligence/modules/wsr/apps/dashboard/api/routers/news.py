@@ -1,5 +1,5 @@
 """
-News router — wsr:NewsAggregationProcess HTTP interface.
+News router — abi:NewsAggregationProcess HTTP interface.
 
 Endpoint:
   GET /api/news — region-filtered news items from BBC / Al Jazeera / Reuters RSS

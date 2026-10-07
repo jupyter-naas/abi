@@ -17,7 +17,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.graph_builders import (
-    PEOPLE,
+    ABI,
     PeopleGraphContext,
 )
 from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
@@ -150,7 +150,7 @@ class PersonProfilePipeline(Pipeline):
             context.graph.add(
                 (
                     URIRef(person._uri),
-                    PEOPLE.worksFor,
+                    ABI.worksFor,
                     URIRef(org._uri),
                 )
             )
@@ -171,7 +171,7 @@ class PersonProfilePipeline(Pipeline):
             context.graph.add(
                 (
                     URIRef(person._uri),
-                    PEOPLE.hasWorkLocation,
+                    ABI.hasWorkLocation,
                     URIRef(site._uri),
                 )
             )

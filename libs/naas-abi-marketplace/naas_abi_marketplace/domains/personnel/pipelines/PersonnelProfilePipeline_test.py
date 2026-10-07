@@ -23,10 +23,10 @@ from rdflib import URIRef
 from rdflib.namespace import RDF
 
 ABI_HAS_MEMBER_PART = URIRef("http://ontology.naas.ai/abi/hasMemberPart")
-IS_EMPLOYED_BY = URIRef("http://ontology.naas.ai/personnel/isEmployedBy")
-IN_SERVICE_LINE = URIRef("http://ontology.naas.ai/personnel/inServiceLine")
-ACT_OF_EMPLOYMENT = URIRef("http://ontology.naas.ai/personnel/ActOfEmployment")
-HAS_CONTRACT = URIRef("http://ontology.naas.ai/personnel/hasContract")
+IS_EMPLOYED_BY = URIRef("http://ontology.naas.ai/abi/isEmployedBy")
+IN_SERVICE_LINE = URIRef("http://ontology.naas.ai/abi/inServiceLine")
+ACT_OF_EMPLOYMENT = URIRef("http://ontology.naas.ai/abi/ActOfEmployment")
+HAS_CONTRACT = URIRef("http://ontology.naas.ai/abi/hasContract")
 
 
 def _profile(**overrides: object) -> PersonnelProfilePipelineParameters:

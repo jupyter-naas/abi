@@ -23,6 +23,16 @@ export function fetchSearch({ query = "", facet = "", page = 1 } = {}) {
   return getJson(`/search${suffix ? `?${suffix}` : ""}`);
 }
 
+/** The people a search page shows and the organizations that tie them together. */
+export function fetchSearchNetwork({ query = "", facet = "", page = 1 } = {}) {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (facet) params.set("facet", facet);
+  if (page > 1) params.set("page", String(page));
+  const suffix = params.toString();
+  return getJson(`/search/network${suffix ? `?${suffix}` : ""}`);
+}
+
 export function fetchSuggestions(query) {
   return getJson(`/suggest?q=${encodeURIComponent(query)}`);
 }

@@ -1,0 +1,14 @@
+{
+  "files": {
+    "modules/OrganizationOntology.ttl": "b6ce5e897f909b2f5673df5bd2ebf1a7725834fec9125d809e76489d2dc84522",
+    "processes/ActOfDistributionAgreementProcess.ttl": "cbb5e86121e1a0a4c5d2f7e3a042f8c578c98c8c2025d43a9fa9813ee02107af",
+    "processes/ActOfJointVentureProcess.ttl": "448eb9a843a64d35772f80c4289bb7d5709ec949f77e3354e38ab0ec3c684705",
+    "processes/ActOfMarketingAllianceProcess.ttl": "b528744f477aa997d43a9dd48590e7a0dbb508fbea0c2f00301d02d08f0fa3ca",
+    "processes/ActOfOrganizationalAcquisitionProcess.ttl": "4d55f5ec4b775e9a4fc399eb6562dd4cbbf577924ece677b6053bb05f7cc6fbc",
+    "processes/ActOfOrganizationalMergerProcess.ttl": "3857a14c244a190dc7f6a0691983739ce7e1e052ec172b7a6a6a70c35eee5421",
+    "processes/ActOfPartnershipProcess.ttl": "3a7a98ec498eb6763da28a1ef9abeb1c041b874a22c160ffd1798b3f90053bf2",
+    "processes/ActOfResearchCollaborationProcess.ttl": "5c3ad2e271579c63f0d0cb90aaaf5b710340fca6744fbc862895e906fff74351",
+    "processes/ActOfSubsidiaryEstablishmentProcess.ttl": "158a0d6dab57b0f2f518c9eebca727c1893201896468f64eef417026ed1b255c",
+    "processes/ActOfTechnologyLicensingProcess.ttl": "a56ab1cdf92c1697a3c10d6413dd7dd310b5de6c1aa5e094b988a638bbaa616f"
+  }
+}

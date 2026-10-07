@@ -2,8 +2,8 @@
  * MilitaryLayerAdapter
  *
  * Realizes: (global military fleet — subset of FlightTrackingProcess)
- * ICE consumed: wsr:MilitaryAircraftReport[] from /api/military (ADSB.lol → airplanes.live fallback)
- * Material entity rendered: wsr:MilitaryAircraft billboards (orange)
+ * ICE consumed: abi:MilitaryAircraftReport[] from /api/military (ADSB.lol → airplanes.live fallback)
+ * Material entity rendered: abi:MilitaryAircraft billboards (orange)
  */
 
 import { GlobeLayerBase } from '../GlobeLayerBase';

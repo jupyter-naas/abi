@@ -19,9 +19,18 @@ export const BFO_BUCKET_DEFS: BfoBucketDef[] = [
   { uri: '',                                            type: 'Unknown',         label: 'Unknown',     description: 'Unclassified or unresolved bucket', color: '#9ca3af', border: '#6b7280' },
 ];
 
-export const BFO_BUCKET_BY_URI: Record<string, BfoBucketDef> = Object.fromEntries(
-  BFO_BUCKET_DEFS.filter((d) => d.uri).map((d) => [d.uri, d])
-);
+/**
+ * Continuant fiat boundaries (fiat point, line, surface) are no site in BFO,
+ * yet they answer WHERE: abi:GeospatialPosition is a fiat point. The 7 buckets
+ * file them under Site, as the BFO validator exempts them from the bucket rule.
+ */
+export const FIAT_BOUNDARY_URIS = ['BFO_0000140', 'BFO_0000142', 'BFO_0000146', 'BFO_0000147']
+  .map(id => `http://purl.obolibrary.org/obo/${id}`);
+
+export const BFO_BUCKET_BY_URI: Record<string, BfoBucketDef> = Object.fromEntries([
+  ...BFO_BUCKET_DEFS.filter((d) => d.uri).map((d) => [d.uri, d] as const),
+  ...FIAT_BOUNDARY_URIS.map(uri => [uri, BFO_BUCKET_DEFS.find(d => d.type === 'Site')!] as const),
+]);
 
 export const BFO_BUCKET_BY_TYPE: Record<string, BfoBucketDef> = Object.fromEntries(
   BFO_BUCKET_DEFS.map((d) => [d.type, d])

@@ -16,6 +16,7 @@
   # `owl:imports` keyword, so a continuation IRI is silently dropped and the
   # classes behind it degrade to bare URIRef ranges.
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/PersonOntology> ;
 
   # Locator annotations. Other modules importing this ontology's IRI resolve it
   # to a Python module through these three, so keep them accurate.
