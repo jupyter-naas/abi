@@ -7,7 +7,7 @@ import { ALL_VIEW_LIMIT } from '@/components/search/scope-views';
 import { TopicIcon } from '@/components/search/topic-icon';
 import { useSearchScopes } from '@/components/search/use-search-scopes';
 import { cn } from '@/lib/utils';
-import { scopeGroups, WEB_SCOPE } from '@/lib/search-scopes';
+import { formatHitCount, scopeGroups, WEB_SCOPE } from '@/lib/search-scopes';
 import { readSearchRoute, resolveScope, searchHref } from '@/lib/search-topics';
 import { useSearchStore } from '@/stores/search';
 import { scopeRunKey, useSearchScopesStore } from '@/stores/search-scopes';
@@ -40,7 +40,7 @@ export function SearchSection({ collapsed, detailOnly }: { collapsed: boolean; d
     if (!onSearchPage || !route.q.trim() || !currentWorkspaceId) return null;
     const run = runs[scopeRunKey(currentWorkspaceId, scopeId, route.q, ALL_VIEW_LIMIT)];
     if (run?.status !== 'done' || !run.result) return null;
-    return `${run.result.hits.length}${run.result.hasMore ? '+' : ''}`;
+    return formatHitCount(run.result);
   };
 
   return (

@@ -35,6 +35,8 @@ TABLES: dict[str, tuple[tuple[str, ...], tuple[tuple[str, str], ...]]] = {
             ("quote", "string"),
             ("photo_url", "string"),
             ("organization", "string"),
+            # The organization's logo, from the graph (abi:hasLogo).
+            ("organization_logo", "string"),
             ("office", "string"),
             ("city", "string"),
             ("country", "string"),
@@ -64,6 +66,9 @@ TABLES: dict[str, tuple[tuple[str, ...], tuple[tuple[str, str], ...]]] = {
             # The client the work was performed for, when the employer (organization)
             # staffed the person there. Unset for a direct employment role.
             ("client", "string"),
+            # Logos of the organization and the client, from the graph (abi:hasLogo).
+            ("organization_logo", "string"),
+            ("client_logo", "string"),
             ("location", "string"),
             ("title", "string"),
             # The situation the mission responded to, stated before its own
@@ -179,6 +184,9 @@ class DatasetsMissingError(RuntimeError):
         }
 
 
+OPTIONAL_COLUMNS = frozenset({"organization_logo", "client_logo"})
+
+
 def dataset_spec(logical_name: str, *, table: str, namespace: str) -> DatasetSpec:
     """The typed schema of one table, named as the configuration asks."""
     try:
@@ -223,6 +231,10 @@ def replace_rows(
     produced nothing.
     """
     ensure_dataset(service, spec)
+    # Columns a row may leave out: the logos exist only where the graph has one,
+    # and a writer that predates them still writes a valid table.
+    optional = [c.name for c in spec.columns if c.name in OPTIONAL_COLUMNS]
+    rows = [{**dict.fromkeys(optional), **row} for row in rows]
     service.write(spec.name, rows, namespace=spec.namespace, mode="replace")
     service.flush(spec.name, namespace=spec.namespace)
 

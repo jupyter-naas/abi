@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.27.0 (2026-10-07)
+
+### Features
+
+- **intel-processes**: Add organization and people logo pipelines and utilities
+  ([`d39062b`](https://github.com/jupyter-naas/abi/commit/d39062ba961596f4661354af9a1a47922b1723b3))
+
+
 ## v2.26.5 (2026-10-05)
 
 ### Bug Fixes

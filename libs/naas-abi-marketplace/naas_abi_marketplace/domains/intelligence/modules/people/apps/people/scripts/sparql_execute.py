@@ -32,12 +32,15 @@ class SparqlExecutionError(RuntimeError):
 
 
 @lru_cache(maxsize=4)
-def people_graph(graph_file: str | None = None) -> Graph:
-    path = Path(graph_file) if graph_file else DEMO_GRAPH_FILE
-    if not path.is_file():
-        raise SparqlExecutionError(f"Graph file not found: {path}")
+def people_graph(graph_file: str | tuple[str, ...] | None = None) -> Graph:
+    """One TTL, or several read together as one graph; None is the demo graph."""
+    names = (graph_file,) if isinstance(graph_file, str) else graph_file
+    paths = [Path(name) for name in names] if names else [DEMO_GRAPH_FILE]
     graph = Graph()
-    graph.parse(path, format="turtle")
+    for path in paths:
+        if not path.is_file():
+            raise SparqlExecutionError(f"Graph file not found: {path}")
+        graph.parse(path, format="turtle")
     return graph
 
 
@@ -52,7 +55,7 @@ def execute_profile_query(
     slug: str,
     *,
     max_rows: int = DEFAULT_MAX_ROWS,
-    graph_file: str | None = None,
+    graph_file: str | tuple[str, ...] | None = None,
     hidden_columns: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Run one allowed competency query and return tabular results."""

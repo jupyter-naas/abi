@@ -103,6 +103,8 @@ export const RESERVED_AGENT_TYPES = ['Default', 'Custom'] as const;
 
 interface AgentsState {
   agents: Agent[];
+  /** Workspace id of the agents in `agents`. */
+  agentsWorkspaceId: string | null;
   /** Timestamp (ms) of the last successful fetch per workspaceId */
   lastFetchedAt: Record<string, number>;
   /** User-created agent type labels beyond the reserved ones, frontend-only. */
@@ -144,17 +146,24 @@ export const useAgentsStore = create<AgentsState>()(
   persist(
     (set, get) => ({
       agents: [],
+      agentsWorkspaceId: null,
       lastFetchedAt: {},
       customTypes: [],
       agentTypeOverrides: {},
 
       fetchAgents: async (workspaceId: string, force = false) => {
-        // Skip if we fetched recently for this workspace (unless forced)
-        if (!force) {
+        if (!workspaceId) return;
+        // `agents` is one array. `lastFetchedAt` is per workspace, and both
+        // are saved in the browser. Skip the fetch only when this id matches.
+        const sameWorkspace = get().agentsWorkspaceId === workspaceId;
+        if (!force && sameWorkspace) {
           const lastFetched = get().lastFetchedAt[workspaceId];
           if (lastFetched && Date.now() - lastFetched < AGENTS_CACHE_TTL_MS) {
             return;
           }
+        }
+        if (!sameWorkspace) {
+          set({ agents: [], agentsWorkspaceId: workspaceId });
         }
 
         try {
@@ -236,8 +245,10 @@ export const useAgentsStore = create<AgentsState>()(
               createdAt: new Date(a.created_at),
               updatedAt: new Date(a.updated_at),
             }));
+            if (get().agentsWorkspaceId !== workspaceId) return;
             set({
               agents: formattedAgents,
+              agentsWorkspaceId: workspaceId,
               lastFetchedAt: { ...get().lastFetchedAt, [workspaceId]: Date.now() },
             });
 
@@ -248,6 +259,7 @@ export const useAgentsStore = create<AgentsState>()(
             );
 
             const { useWorkspaceStore } = await import('./workspace');
+            if (get().agentsWorkspaceId !== workspaceId) return;
             const ws = useWorkspaceStore.getState();
             const currentSelected = ws.selectedAgent;
             const preferred = pickWorkspaceDefaultAgent(formattedAgents);

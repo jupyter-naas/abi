@@ -66,6 +66,7 @@ def field_words(
             for value in (
                 row.get("title"),
                 row.get("organization"),
+                row.get("client"),
                 row.get("description"),
             )
             for word in words(value)
@@ -134,6 +135,24 @@ def score(
             if best_field and best_field not in hit_fields:
                 hit_fields.append(best_field)
     return total, matched, hit_fields
+
+
+def hit_count(
+    fields: dict[str, list[str]], tokens: list[str], weights: dict[str, float]
+) -> int:
+    """How many times the query's words occur in a person's searchable fields.
+
+    Every occurrence counts, in every field the search weighs: someone whose
+    summary, jobs and clients all mention EDF has more hits than someone who
+    mentions it once.
+    """
+    return sum(
+        1
+        for field, field_word_list in fields.items()
+        if weights.get(field, 0.0)
+        for word in field_word_list
+        if any(word.startswith(token) for token in tokens)
+    )
 
 
 def _sentences(text: str) -> list[str]:
@@ -234,14 +253,25 @@ def snippet(
     return {"label": best[0], "text": truncate(best[1], length)}
 
 
-def _result(person: dict[str, Any], snippet_value: dict[str, str]) -> dict[str, Any]:
+def _result(
+    person: dict[str, Any],
+    snippet_value: dict[str, str],
+    hits: int = 0,
+    *,
+    contact: bool = False,
+) -> dict[str, Any]:
     place = [person.get("country"), person.get("office") or person.get("city")]
     return {
+        "hits": hits,
+        # A contact detail: only where the instance publishes them
+        # (privacy.publish_contact_details), as on the profile header.
+        "linkedin_url": person.get("linkedin_url") if contact else None,
         "slug": person.get("slug"),
         "full_name": person.get("full_name"),
         "headline": person.get("headline"),
         "photo_url": person.get("photo_url"),
         "organization": person.get("organization"),
+        "organization_logo": person.get("organization_logo"),
         "country_code": person.get("country_code"),
         "place": [value for value in place if value],
         "snippet": snippet_value,
@@ -332,17 +362,20 @@ def search(
     for person in people:
         children = children_of(person["slug"])
         if tokens:
-            total, matched, _ = score(field_words(person, children), tokens, weights)
+            fields = field_words(person, children)
+            total, matched, _ = score(fields, tokens, weights)
             if not matched:
                 continue
+            hits = hit_count(fields, tokens, weights)
         else:
-            total, matched = 0.0, 0
+            total, matched, hits = 0.0, 0, 0
         scored.append(
             {
                 "person": person,
                 "children": children,
                 "score": total,
                 "matched": matched,
+                "hits": hits,
             }
         )
 
@@ -361,7 +394,9 @@ def search(
 
     hits.sort(
         key=lambda hit: (
+            # Everyone matching every word comes first; then the most hits.
             -hit["matched"],
+            -hit["hits"],
             -hit["score"],
             str(hit["person"].get("full_name") or ""),
         )
@@ -404,6 +439,8 @@ def search(
                     tokens,
                     length=search_config["snippet_length"],
                 ),
+                hit["hits"],
+                contact=bool(config["privacy"].get("publish_contact_details")),
             )
             for hit in window
         ],

@@ -18,17 +18,15 @@ export function fetchSearch({ query = "", facet = "", page = 1 } = {}) {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
   if (facet) params.set("facet", facet);
-  if (page > 1) params.set("page", String(page));
   const suffix = params.toString();
   return getJson(`/search${suffix ? `?${suffix}` : ""}`);
 }
 
-/** The people a search page shows and the organizations that tie them together. */
-export function fetchSearchNetwork({ query = "", facet = "", page = 1 } = {}) {
+/** The Network view of a search: the query, what it matched and the people it leads to. */
+export function fetchSearchNetwork({ query = "", facet = "" } = {}) {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
   if (facet) params.set("facet", facet);
-  if (page > 1) params.set("page", String(page));
   const suffix = params.toString();
   return getJson(`/search/network${suffix ? `?${suffix}` : ""}`);
 }

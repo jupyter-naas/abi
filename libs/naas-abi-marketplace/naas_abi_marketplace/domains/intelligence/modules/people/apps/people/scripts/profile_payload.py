@@ -70,17 +70,20 @@ def _period(start: Any, end: Any, duration: Any = None) -> dict[str, Any]:
     }
 
 
-def _organization_logo(label: str | None, logos: dict[str, str]) -> str | None:
-    """A curated local asset path for an organization, or None.
+def _organization_logo(
+    label: str | None, logos: dict[str, str], stored: str | None = None
+) -> str | None:
+    """The organization's logo, or None.
 
-    Logos are not fetched from anywhere at render time: an instance opts a name
-    in by adding it to ``data.organization_logos`` in its config.yaml, pointing
-    at a file it has placed itself, the same curated-asset pattern as portraits.
-    A name with no entry gets no logo; the page falls back to initials.
+    ``stored`` is the logo the graph registers for the organization (abi:hasLogo),
+    carried on the row by the exporter. Otherwise an instance may opt a name in
+    by adding it to ``data.organization_logos`` in its config.yaml, pointing at a
+    file it has placed itself. A name with neither gets no logo; the page falls
+    back to initials.
     """
     if not label:
         return None
-    return logos.get(label)
+    return stored or logos.get(label)
 
 
 def _experience(
@@ -96,7 +99,9 @@ def _experience(
         if group is None:
             group = {
                 "organization": row.get("organization"),
-                "organization_logo": _organization_logo(row.get("organization"), logos),
+                "organization_logo": _organization_logo(
+                    row.get("organization"), logos, row.get("organization_logo")
+                ),
                 "location": row.get("location"),
                 "roles": [],
             }
@@ -109,7 +114,9 @@ def _experience(
                 # organization heading this group (a consulting engagement).
                 # Absent for a direct employment role.
                 "client": row.get("client"),
-                "client_logo": _organization_logo(row.get("client"), logos),
+                "client_logo": _organization_logo(
+                    row.get("client"), logos, row.get("client_logo")
+                ),
                 "context": row.get("context"),
                 "description": row.get("description"),
                 **_period(
@@ -300,6 +307,7 @@ def profile(
         "quote": person.get("quote"),
         "photo_url": person.get("photo_url"),
         "organization": person.get("organization"),
+        "organization_logo": person.get("organization_logo"),
         "country_code": person.get("country_code"),
         "place": [value for value in place if value],
         "public_profile_url": person.get("public_profile_url"),

@@ -286,3 +286,30 @@ class TestBuildRowsFromTheDemoGraph:
                     export.check_privacy(
                         value, where=f"{table_name}[{index}].{column}", config=CONFIG
                     )
+
+
+def test_organization_logos_come_from_the_graph_and_follow_the_instance_prefix() -> None:
+    from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.export_people_from_graph import (
+        organization_logos,
+    )
+    from rdflib import Graph
+
+    graph = Graph()
+    graph.parse(
+        data="""
+        @prefix abi: <http://ontology.naas.ai/abi/> .
+        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+        abi:org rdfs:label "Accor" ; abi:hasLogo abi:logo .
+        abi:logo abi:logo_url "/api/organizations/logos/Accor/Accor.jpg" .
+        abi:other rdfs:label "No logo" .
+        """,
+        format="turtle",
+    )
+
+    assert organization_logos(graph, {"data": {}}) == {
+        "Accor": "/api/organizations/logos/Accor/Accor.jpg"
+    }
+    instance = {"data": {"organization_logo_url_prefix": "/api/people-fmz/organization-logos"}}
+    assert organization_logos(graph, instance) == {
+        "Accor": "/api/people-fmz/organization-logos/Accor/Accor.jpg"
+    }
