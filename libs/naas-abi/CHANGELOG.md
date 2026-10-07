@@ -2,6 +2,37 @@
 
 <!-- version list -->
 
+## v2.80.0 (2026-10-07)
+
+### Bug Fixes
+
+- **search-topics**: Improve snippet explanation and fix thread safety in search
+  ([`dd0107f`](https://github.com/jupyter-naas/abi/commit/dd0107f9d8eb916ffff1b67cd9ae2000c964f893))
+
+### Features
+
+- **intel-processes**: Add organization and people logo pipelines and utilities
+  ([`d39062b`](https://github.com/jupyter-naas/abi/commit/d39062ba961596f4661354af9a1a47922b1723b3))
+
+- **search**: Add highlight toggle and improve search UI
+  ([`41f5a62`](https://github.com/jupyter-naas/abi/commit/41f5a62214dedc9d55b26be1441bd8d0a4537c5c))
+
+- **search**: Add metadata rows display for topic results
+  ([`3feb48c`](https://github.com/jupyter-naas/abi/commit/3feb48ca6434c1edc1fa81356e4d8463a47c5492))
+
+- **search**: Add multi-tier caching for topic search results and details
+  ([`7436ef7`](https://github.com/jupyter-naas/abi/commit/7436ef7b19892f15965c3baa875f47ff62350078))
+
+- **search**: Enhance person search with weighted text matching and add related test
+  ([`b41fa48`](https://github.com/jupyter-naas/abi/commit/b41fa48f3d3f19b8a99374d927252e962ea1e584))
+
+- **search**: Enhance topic search with LinkedIn and website info
+  ([`889b508`](https://github.com/jupyter-naas/abi/commit/889b508bf3c5f14840b02ed3e19cc5ff5b48d5c6))
+
+- **search-topics**: Add grouping and client info to topic search results
+  ([`c5828e1`](https://github.com/jupyter-naas/abi/commit/c5828e16641d274a00b66e60122edbb944ba05f5))
+
+
 ## v2.79.1 (2026-10-06)
 
 ### Bug Fixes
