@@ -21,6 +21,9 @@ from nats.errors import NoRespondersError
 RETRY_SECONDS = 5.0
 _FIRST_DELAY_SECONDS = 0.05
 _MAX_DELAY_SECONDS = 0.5
+# The last try lands this long before the caller's deadline, so it sees "no
+# responders" (nobody serves the subject) and not a timeout.
+_DEADLINE_MARGIN_SECONDS = 0.5
 
 
 def engine_served(subject: str) -> bool:
@@ -47,11 +50,12 @@ async def request(
     retry_seconds: float = RETRY_SECONDS,
 ) -> Any:
     """``nc.request``, sent again on "no responders" for up to ``retry_seconds``
-    when the engine serves ``subject``. The caller's own deadline still applies."""
+    when the engine serves ``subject``. The retries stop just short of
+    ``timeout``, the caller's own deadline."""
     if not engine_served(subject):
         return await nc.request(subject, payload, timeout=timeout, headers=headers)
     loop = asyncio.get_running_loop()
-    give_up = loop.time() + retry_seconds
+    give_up = loop.time() + min(retry_seconds, timeout - _DEADLINE_MARGIN_SECONDS)
     delay = _FIRST_DELAY_SECONDS
     while True:
         try:
