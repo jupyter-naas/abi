@@ -80,6 +80,44 @@ def test_failed_request_is_never_replayed(client, error):
     nc.close.assert_not_awaited()
 
 
+def test_a_transfer_open_rides_out_a_handover_but_its_session_calls_do_not(client):
+    # The open goes to the serving engine's queue group, so "no responders"
+    # (nobody subscribed during a handover) is safe to resend; the session's
+    # own calls go to the engine that opened it.
+    from naas_abi_proto.transfer.v1 import transfer_pb2
+    from naas_abi_sdk.telemetry import TransferTrace
+
+    prefix, owner = "abi.svc.test.v1.transfer", "c" * 32
+    sent = []
+
+    async def request(subject, payload, timeout=None, headers=None):
+        sent.append(subject)
+        if len(sent) == 1 or not subject.endswith(".open"):
+            raise NoRespondersError()
+        opened = transfer_pb2.OpenResponse(id=f"{owner}:1")
+        return SimpleNamespace(data=opened.SerializeToString(), headers=None)
+
+    connection(client, side_effect=request)
+
+    opened = client._call(
+        f"{prefix}.open",
+        transfer_pb2.OpenRequest(),
+        transfer_pb2.OpenResponse,
+        transfer=TransferTrace(),
+    )
+    assert opened.id == f"{owner}:1"
+    assert sent == [f"{prefix}.open", f"{prefix}.open"]
+
+    with pytest.raises(NoRespondersError):
+        client._call(
+            f"{prefix}.{owner}.read",
+            transfer_pb2.ReadRequest(id=opened.id),
+            transfer_pb2.ReadResponse,
+            transfer=TransferTrace(),
+        )
+    assert sent[2:] == [f"{prefix}.{owner}.read"]
+
+
 @pytest.mark.parametrize(
     "headers",
     [

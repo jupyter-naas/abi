@@ -168,7 +168,9 @@ sent again and their callers time out.
 Only subjects the engine serves on queue groups are retried: `abi.svc.*` and
 `abi.discovery.<project>.v1.<operation>`. Presence, agent and transfer-session
 subjects belong to one instance, and nobody answering there means it is gone, so
-they still fail at once.
+they still fail at once. A transfer's open (`<prefix>.open`) is the exception
+among its calls: it goes to the queue group, so it is retried like any other
+engine call (`no_responders.transfer_open`).
 
 ### Fencing
 A holder that has not renewed for half a lease period stops serving at once. It

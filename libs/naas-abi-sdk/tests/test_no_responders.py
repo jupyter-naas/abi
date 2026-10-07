@@ -8,9 +8,12 @@ import time
 
 import nats
 import pytest
+from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
 from nats.errors import NoRespondersError
 
 from naas_abi_sdk import no_responders
+from naas_abi_sdk.telemetry import TransferTrace
+from naas_abi_sdk.transport import Transport
 
 needs_broker = pytest.mark.skipif(
     shutil.which("nats-server") is None, reason="nats-server not installed"
@@ -63,6 +66,23 @@ def test_the_engine_serves_kernel_and_discovery_subjects(subject):
 )
 def test_instance_subjects_are_not_engine_served(subject):
     assert not no_responders.engine_served(subject)
+
+
+@pytest.mark.parametrize(
+    ("subject", "resent"),
+    [
+        ("abi.svc.object_storage.v1.transfer.open", True),
+        ("abi.svc.model_registry.v1.transfer.open", True),
+        (
+            "abi.svc.object_storage.v1.transfer.0123456789abcdef0123456789abcdef.read",
+            False,
+        ),
+        ("abi.svc.dataset.v1.transfer.0123456789abcdef0123456789abcdef.close", False),
+        ("abi.svc.document.v1.get", False),
+    ],
+)
+def test_only_the_open_of_a_transfer_goes_to_the_queue_group(subject, resent):
+    assert no_responders.transfer_open(subject) is resent
 
 
 @needs_broker
@@ -124,5 +144,55 @@ def test_an_instance_subject_fails_at_once(broker):
             )
         assert time.monotonic() - started < 0.2
         await nc.close()
+
+    asyncio.run(scenario())
+
+
+@needs_broker
+def test_a_transfer_open_waits_for_the_next_engine_but_its_session_calls_do_not(
+    broker,
+):
+    prefix = "abi.svc.test.v1.transfer"
+    owner = "0123456789abcdef0123456789abcdef"
+
+    async def scenario():
+        transport, engine = (
+            Transport(broker, "token", timeout=5),
+            await nats.connect(broker),
+        )
+
+        async def answer(msg):
+            await msg.respond(pb.OpenResponse(id=f"{owner}:1").SerializeToString())
+
+        async def subscribe_later():
+            await asyncio.sleep(0.3)
+            await engine.subscribe(
+                f"{prefix}.open", queue=f"{prefix}.owners", cb=answer
+            )
+            await engine.flush()
+
+        try:
+            late = asyncio.create_task(subscribe_later())
+            opened = await transport.call(
+                f"{prefix}.open",
+                pb.OpenRequest(),
+                pb.OpenResponse,
+                transfer=TransferTrace(),
+            )
+            await late
+            assert opened.id == f"{owner}:1"
+
+            started = time.monotonic()
+            with pytest.raises(NoRespondersError):
+                await transport.call(
+                    f"{prefix}.{owner}.read",
+                    pb.ReadRequest(id=opened.id),
+                    pb.ReadResponse,
+                    transfer=TransferTrace(),
+                )
+            assert time.monotonic() - started < 0.2
+        finally:
+            await transport.close()
+            await engine.close()
 
     asyncio.run(scenario())
