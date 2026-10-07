@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.80.1 (2026-10-07)
+
+### Bug Fixes
+
+- **files**: Update legacy storage migration to handle S3-like listing behavior
+  ([`adc4e9f`](https://github.com/jupyter-naas/abi/commit/adc4e9f086dc035084ddf4f5d71aa5353d0c18b9))
+
+
 ## v2.80.0 (2026-10-07)
 
 ### Bug Fixes
