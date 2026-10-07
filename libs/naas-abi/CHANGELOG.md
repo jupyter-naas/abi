@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v2.81.0 (2026-10-07)
+
+### Bug Fixes
+
+- **files**: Handle mixed timezone-aware and naive timestamps in file sorting
+  ([`3390a87`](https://github.com/jupyter-naas/abi/commit/3390a872573c98a9595d9feed8d9589fee23d4ff))
+
+### Features
+
+- **files**: Add My Drive support with manifest and default folders
+  ([`47892ee`](https://github.com/jupyter-naas/abi/commit/47892ee45e13a4c15f2fde4903358889c1ca5d7d))
+
+- **files-section**: Expand default drives on sidebar open and workspace change
+  ([`86615d6`](https://github.com/jupyter-naas/abi/commit/86615d65ba7782366fa8fce35d0ddb7cf83f8832))
+
+- **workspace-drive**: Add workspace drive writer and backfill
+  ([`e556b65`](https://github.com/jupyter-naas/abi/commit/e556b65a6dd74e856514434a08bd0bd4e1e20023))
+
+### Testing
+
+- **auth**: Add tests for avatar storage adapter and legacy avatar migration
+  ([`7905cbb`](https://github.com/jupyter-naas/abi/commit/7905cbb3396b6977b318ffd8f7c4425bd43e1cde))
+
+
 ## v2.80.2 (2026-10-07)
 
 ### Bug Fixes
