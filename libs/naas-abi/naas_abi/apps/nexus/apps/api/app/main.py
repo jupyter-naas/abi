@@ -159,6 +159,46 @@ def _schedule_identity_graph_sync(_published: int = 0, delay_seconds: float = 2.
     _identity_graph_sync_task = loop.create_task(_later())
 
 
+def _install_workspace_drive_writer() -> None:
+    """Keep manifest.json and the staff system folders in every workspace's drive."""
+    _log = logging.getLogger(__name__)
+    try:
+        from naas_abi import ABIModule
+        from naas_abi.apps.nexus.apps.api.app.services.files.workspace_drive import (
+            WorkspaceDriveWriter,
+        )
+
+        WorkspaceDriveWriter(
+            get_storage=lambda: ABIModule.get_instance().engine.services.object_storage
+        ).install()
+        _log.info("✓ Workspace drive writer installed")
+    except Exception:
+        _log.exception("Unable to install the workspace drive writer")
+
+
+async def _backfill_workspace_drives() -> None:
+    """Write the manifest and staff folders of every workspace drive that lacks them."""
+    _log = logging.getLogger(__name__)
+    try:
+        from naas_abi import ABIModule
+        from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+        from naas_abi.apps.nexus.apps.api.app.services.files.workspace_drive import (
+            backfill_workspace_drives,
+        )
+
+        storage = ABIModule.get_instance().engine.services.object_storage
+        async with AsyncSessionLocal() as session:
+            written = await backfill_workspace_drives(session, storage)
+        if any(written.values()):
+            _log.info(
+                "✓ Workspace drives backfilled: %d manifests, %d staff folder sets",
+                written["manifests"],
+                written["staff_folders"],
+            )
+    except Exception:
+        _log.exception("Workspace drive backfill failed")
+
+
 def _install_identity_event_capture() -> None:
     """Publish a nexus identity-and-access event for every committed change to
     users, organizations, workspaces, memberships and workspace configuration."""
@@ -269,6 +309,8 @@ async def _startup(app: FastAPI) -> None:
     # Before seeds: users, workspaces and memberships the configuration creates
     # or changes are logged as identity events, triggered via "configuration".
     _install_identity_event_capture()
+    # Also before seeds, so workspaces the configuration creates get their drive set up.
+    _install_workspace_drive_writer()
     from naas_abi_core.services.event.context import event_triggered_via
 
     via = event_triggered_via.set("configuration")
@@ -283,6 +325,8 @@ async def _startup(app: FastAPI) -> None:
 
     # After seeds, so seeded users/workspaces are in the graph on first boot.
     asyncio.create_task(_sync_identity_graph())
+    # After seeds too: workspaces created before the drive writer get theirs.
+    asyncio.create_task(_backfill_workspace_drives())
 
     try:
         start_chat_ingestion_consumer(app)
