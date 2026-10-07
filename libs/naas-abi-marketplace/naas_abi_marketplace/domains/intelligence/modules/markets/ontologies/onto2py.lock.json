@@ -1,0 +1,9 @@
+{
+  "files": {
+    "modules/MarketsOntology.ttl": "394b7439d99f2134f46cfeb42fb945b6d8dea2f32b81bf738eccd28b9b68daa7",
+    "processes/ActOfCompetingProcess.ttl": "a4903142f09d9965971f6ade7d3326f26f2ccb8df16ba52301567d672ec0264c",
+    "processes/ActOfMarketAnalysisProcess.ttl": "1fbe18ce8c9b61dccfd2da74e22680975d66fb48300d273d7ede75b1b7b7dbe0",
+    "processes/ActOfMarketSegmentationProcess.ttl": "b48c017f9246f8ae4965780219ab01943b0fc085833e66db3c0e1fc482e0e78f",
+    "processes/ActOfMarketSizingProcess.ttl": "27025996cf89bb1b7431918b51aae1956f1e4189c6dfb84c35fda91f84dbbf9d"
+  }
+}

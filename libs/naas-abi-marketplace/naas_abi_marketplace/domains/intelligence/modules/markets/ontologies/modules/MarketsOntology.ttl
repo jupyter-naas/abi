@@ -1,0 +1,552 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+
+abi:MarketsOntology a owl:Ontology ;
+  # One owl:imports statement per IRI - onto2py's codegen pre-scan only matches
+  # an IRI directly after the `owl:imports` keyword.
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/MarketOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/DocumentContentEntityOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+  abi:pythonPackage "naas_abi_marketplace.domains.intelligence.modules.markets" ;
+  abi:ontologyResource "ontologies/modules/MarketsOntology.ttl" ;
+  abi:pythonResource "ontologies/modules/MarketsOntology.py" ;
+  dc:title "Markets Ontology"@en ;
+  dc:description "Market intelligence: how a market is segmented, who competes in it, how big it is and how it is assessed (SWOT). The vocabulary the process slices share; the slices are consolidated below."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Market and MarketSegment are the core MarketOntology classes. Every statement this module records is made by an act that cites the market source it was read from: nothing about a market is asserted without saying where it comes from."@en ;
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-10-06"^^xsd:date .
+
+#################################################################
+#    Classes - WHY (shared)
+#################################################################
+
+abi:MarketAnalystRole a owl:Class ;
+  rdfs:subClassOf abi:Role ,
+    [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom abi:Organization ] ;
+  rdfs:label "Market Analyst Role"@en ;
+  skos:definition "A role borne by an organization when it segments, sizes or assesses a market: an analyst firm, a bank's research desk, a consulting firm, or the organization running this module."@en ;
+  skos:example "Synergy Research Group sizing the public cloud market; Forvis Mazars assessing the European cloud market."@en .
+
+#################################################################
+#    Classes - HOW WE KNOW (shared)
+#################################################################
+
+abi:MarketSource a owl:Class ;
+  rdfs:subClassOf abi:DocumentContentEntity ;
+  rdfs:label "Market Source"@en ;
+  skos:definition "A document a market statement was read from: an analyst report, a press release, a stock quote page, an annual report, or a curated seed file."@en ;
+  skos:example "The Yahoo Finance quote page of OVH Groupe (OVH.PA); Gartner's public cloud end-user spending forecast press release."@en .
+
+#################################################################
+#    Object properties - shared by the process slices
+#################################################################
+
+# WHAT -> HOW WE KNOW - every market act cites its source
+abi:hasMarketSource a owl:ObjectProperty ;
+  owl:inverseOf abi:isMarketSourceOf ;
+  rdfs:label "has market source"@en ;
+  skos:definition "Relates a market act (competing, segmenting, sizing, assessing) to a document it was read from."@en ;
+  rdfs:domain cco:ont00000228 ;
+  rdfs:range  abi:MarketSource .
+
+abi:isMarketSourceOf a owl:ObjectProperty ;
+  owl:inverseOf abi:hasMarketSource ;
+  rdfs:label "is market source of"@en ;
+  skos:definition "Relates a market source to a market act it substantiates."@en ;
+  rdfs:domain abi:MarketSource ;
+  rdfs:range  cco:ont00000228 .
+
+#################################################################
+#    Data properties - shared
+#################################################################
+
+abi:market_definition a owl:DatatypeProperty ;
+  rdfs:label "market definition"@en ;
+  skos:definition "What the market covers, in a sentence: the offerings exchanged and the buyers they are sold to."@en ;
+  rdfs:domain abi:Market ;
+  rdfs:range  xsd:string .
+
+abi:market_source_url a owl:DatatypeProperty ;
+  rdfs:label "market source url"@en ;
+  skos:definition "Address at which a market source can be retrieved."@en ;
+  rdfs:domain abi:MarketSource ;
+  rdfs:range  xsd:anyURI .
+
+abi:market_source_publisher a owl:DatatypeProperty ;
+  rdfs:label "market source publisher"@en ;
+  skos:definition "Name of whoever published the market source."@en ;
+  rdfs:domain abi:MarketSource ;
+  rdfs:range  xsd:string .
+
+abi:market_source_date a owl:DatatypeProperty ;
+  rdfs:label "market source date"@en ;
+  skos:definition "Date the market source was published or retrieved."@en ;
+  rdfs:domain abi:MarketSource ;
+  rdfs:range  xsd:date .
+
+# >>> onto2py:consolidated-processes >>>
+# Generated by naas_abi_core.utils.onto2py.consolidate from
+# ontologies/processes/*.ttl. Do not edit between these markers: edit the
+# process files and re-run onto2py on the module.
+
+<http://ontology.naas.ai/abi/MarketsOntology>
+  owl:imports <http://ontology.naas.ai/abi/GeospatialRegionOntology> .
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfCompetingProcess
+#    Source: ontologies/processes/ActOfCompetingProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfCompeting a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasCompetitor ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:CompetitorRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:isInMarket ; owl:someValuesFrom abi:Market ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasMarketShareMeasurement ; owl:someValuesFrom abi:MarketShareMeasurement ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasMarketSource ; owl:someValuesFrom abi:MarketSource ] ;
+  rdfs:label "Act of Competing"@en ;
+  skos:definition "A Planned Act in which an organization offers goods or services to the buyers of a market, against the other organizations offering them, in a geospatial region over a temporal region."@en ;
+  skos:example "OVHcloud competing in the European public cloud market since 2019."@en .
+
+#################################################################
+#    Classes - WHY
+#################################################################
+
+abi:CompetitorRole a owl:Class ;
+  rdfs:subClassOf abi:Role ,
+    [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom abi:Organization ] ;
+  rdfs:label "Competitor Role"@en ;
+  skos:definition "A role borne by an organization in virtue of offering goods or services in a market where other organizations offer them too, realized in its acts of competing."@en ;
+  skos:example "The role Amazon Web Services bears as a seller of infrastructure-as-a-service."@en .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:MarketShareMeasurement a owl:Class ;
+  rdfs:subClassOf cco:ont00001022 , # Ratio Measurement Information Content Entity
+    [ a owl:Restriction ; owl:onProperty abi:isMarketShareMeasurementOf ; owl:someValuesFrom abi:ActOfCompeting ] ;
+  rdfs:label "Market Share Measurement"@en ;
+  skos:definition "A ratio measurement of the part of a market's sales an organization makes in an act of competing, over the act's period and geography."@en ;
+  skos:example "AWS: 30% of worldwide cloud infrastructure services revenue in Q2 2025 (Synergy Research Group)."@en .
+
+#################################################################
+#    Object properties - process-only
+#################################################################
+
+# WHAT <-> WHO
+abi:hasCompetitor a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf abi:isCompetitorIn ;
+  rdfs:label "has competitor"@en ;
+  skos:definition "Relates an act of competing to the organization that competes."@en ;
+  rdfs:domain abi:ActOfCompeting ;
+  rdfs:range  abi:Organization .
+
+abi:isCompetitorIn a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf abi:hasCompetitor ;
+  rdfs:label "is competitor in"@en ;
+  skos:definition "Relates an organization to an act of competing in which it competes."@en ;
+  rdfs:domain abi:Organization ;
+  rdfs:range  abi:ActOfCompeting .
+
+# WHAT <-> HOW WE KNOW - the market competed in
+abi:isInMarket a owl:ObjectProperty ;
+  owl:inverseOf abi:hasActOfCompeting ;
+  rdfs:label "is in market"@en ;
+  skos:definition "Relates an act of competing to the market (or market segment) it takes place in."@en ;
+  rdfs:domain abi:ActOfCompeting ;
+  rdfs:range  abi:Market .
+
+abi:hasActOfCompeting a owl:ObjectProperty ;
+  owl:inverseOf abi:isInMarket ;
+  rdfs:label "has act of competing"@en ;
+  skos:definition "Relates a market to an act of competing that takes place in it."@en ;
+  rdfs:domain abi:Market ;
+  rdfs:range  abi:ActOfCompeting .
+
+# WHAT <-> HOW WE KNOW - the share measured
+abi:hasMarketShareMeasurement a owl:ObjectProperty ;
+  owl:inverseOf abi:isMarketShareMeasurementOf ;
+  rdfs:label "has market share measurement"@en ;
+  skos:definition "Relates an act of competing to a measurement of the market share it achieves."@en ;
+  rdfs:domain abi:ActOfCompeting ;
+  rdfs:range  abi:MarketShareMeasurement .
+
+abi:isMarketShareMeasurementOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf cco:ont00001808 ; # is about
+  owl:inverseOf abi:hasMarketShareMeasurement ;
+  rdfs:label "is market share measurement of"@en ;
+  skos:definition "Relates a market share measurement to the act of competing it is about."@en ;
+  rdfs:domain abi:MarketShareMeasurement ;
+  rdfs:range  abi:ActOfCompeting .
+
+#################################################################
+#    Data properties - process-only
+#################################################################
+
+abi:market_share_percent a owl:DatatypeProperty ;
+  rdfs:label "market share percent"@en ;
+  skos:definition "The measured share, in percent of the market's sales over the measurement's period and geography."@en ;
+  rdfs:domain abi:MarketShareMeasurement ;
+  rdfs:range  xsd:decimal .
+
+abi:market_rank a owl:DatatypeProperty ;
+  rdfs:label "market rank"@en ;
+  skos:definition "The organization's position by market share among the market's competitors (1 is the leader)."@en ;
+  rdfs:domain abi:MarketShareMeasurement ;
+  rdfs:range  xsd:integer .
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfMarketAnalysisProcess
+#    Source: ontologies/processes/ActOfMarketAnalysisProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfMarketAnalysis a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:MarketAnalystRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:analyzesMarket ; owl:someValuesFrom abi:Market ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasSWOTFinding ; owl:someValuesFrom abi:SWOTFinding ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasMarketSource ; owl:someValuesFrom abi:MarketSource ] ;
+  rdfs:label "Act of Market Analysis"@en ;
+  skos:definition "A Planned Act in which an analyst assesses the opportunities and threats a market presents and the strengths and weaknesses of the organizations competing in it."@en ;
+  skos:example "A SWOT of the European cloud computing market in 2026."@en .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:SWOTFinding a owl:Class ;
+  rdfs:subClassOf cco:ont00000853 , # Descriptive Information Content Entity
+    [ a owl:Restriction ; owl:onProperty abi:isFindingAboutMarket ; owl:someValuesFrom abi:Market ] ,
+    [ a owl:Restriction ; owl:onProperty abi:isSWOTFindingOf ; owl:someValuesFrom abi:ActOfMarketAnalysis ] ;
+  rdfs:label "SWOT Finding"@en ;
+  skos:definition "One statement of a SWOT assessment: an opportunity, a threat, a strength or a weakness, in one sentence."@en ;
+  skos:example "'Data sovereignty rules push European public buyers towards European providers.'"@en .
+
+abi:MarketOpportunity a owl:Class ;
+  rdfs:subClassOf abi:SWOTFinding ;
+  rdfs:label "Market Opportunity"@en ;
+  skos:definition "A SWOT finding stating an external condition of a market that its competitors can exploit to grow."@en ;
+  skos:example "Generative AI training and inference drive demand for GPU capacity."@en .
+
+abi:MarketThreat a owl:Class ;
+  rdfs:subClassOf abi:SWOTFinding ;
+  rdfs:label "Market Threat"@en ;
+  skos:definition "A SWOT finding stating an external condition of a market that can harm its competitors."@en ;
+  skos:example "Energy prices and grid capacity constrain new data center builds."@en .
+
+abi:CompetitiveStrength a owl:Class ;
+  rdfs:subClassOf abi:SWOTFinding ,
+    [ a owl:Restriction ; owl:onProperty abi:isFindingAboutOrganization ; owl:someValuesFrom abi:Organization ] ;
+  rdfs:label "Competitive Strength"@en ;
+  skos:definition "A SWOT finding stating an internal advantage one organization has over its competitors in a market."@en ;
+  skos:example "OVHcloud designs its own servers and water cooling, which keeps its unit costs low."@en .
+
+abi:CompetitiveWeakness a owl:Class ;
+  rdfs:subClassOf abi:SWOTFinding ,
+    [ a owl:Restriction ; owl:onProperty abi:isFindingAboutOrganization ; owl:someValuesFrom abi:Organization ] ;
+  rdfs:label "Competitive Weakness"@en ;
+  skos:definition "A SWOT finding stating an internal disadvantage one organization has against its competitors in a market."@en ;
+  skos:example "A narrower catalogue of managed services than the hyperscalers."@en .
+
+abi:MarketOpportunity owl:disjointWith abi:MarketThreat , abi:CompetitiveStrength , abi:CompetitiveWeakness .
+abi:MarketThreat owl:disjointWith abi:CompetitiveStrength , abi:CompetitiveWeakness .
+abi:CompetitiveStrength owl:disjointWith abi:CompetitiveWeakness .
+
+#################################################################
+#    Object properties - process-only
+#################################################################
+
+abi:analyzesMarket a owl:ObjectProperty ;
+  owl:inverseOf abi:isMarketAnalyzedBy ;
+  rdfs:label "analyzes market"@en ;
+  skos:definition "Relates an act of market analysis to the market it assesses."@en ;
+  rdfs:domain abi:ActOfMarketAnalysis ;
+  rdfs:range  abi:Market .
+
+abi:isMarketAnalyzedBy a owl:ObjectProperty ;
+  owl:inverseOf abi:analyzesMarket ;
+  rdfs:label "is market analyzed by"@en ;
+  skos:definition "Relates a market to an act of analysis that assesses it."@en ;
+  rdfs:domain abi:Market ;
+  rdfs:range  abi:ActOfMarketAnalysis .
+
+abi:hasSWOTFinding a owl:ObjectProperty ;
+  owl:inverseOf abi:isSWOTFindingOf ;
+  rdfs:label "has SWOT finding"@en ;
+  skos:definition "Relates an act of market analysis to a finding it states."@en ;
+  rdfs:domain abi:ActOfMarketAnalysis ;
+  rdfs:range  abi:SWOTFinding .
+
+abi:isSWOTFindingOf a owl:ObjectProperty ;
+  owl:inverseOf abi:hasSWOTFinding ;
+  rdfs:label "is SWOT finding of"@en ;
+  skos:definition "Relates a SWOT finding to the act of analysis that states it."@en ;
+  rdfs:domain abi:SWOTFinding ;
+  rdfs:range  abi:ActOfMarketAnalysis .
+
+abi:isFindingAboutMarket a owl:ObjectProperty ;
+  rdfs:subPropertyOf cco:ont00001808 ; # is about
+  owl:inverseOf abi:hasMarketFinding ;
+  rdfs:label "is finding about market"@en ;
+  skos:definition "Relates a SWOT finding to the market it is about."@en ;
+  rdfs:domain abi:SWOTFinding ;
+  rdfs:range  abi:Market .
+
+abi:hasMarketFinding a owl:ObjectProperty ;
+  owl:inverseOf abi:isFindingAboutMarket ;
+  rdfs:label "has market finding"@en ;
+  skos:definition "Relates a market to a SWOT finding about it."@en ;
+  rdfs:domain abi:Market ;
+  rdfs:range  abi:SWOTFinding .
+
+abi:isFindingAboutOrganization a owl:ObjectProperty ;
+  rdfs:subPropertyOf cco:ont00001808 ; # is about
+  owl:inverseOf abi:hasOrganizationFinding ;
+  rdfs:label "is finding about organization"@en ;
+  skos:definition "Relates a strength or weakness to the competitor it is about."@en ;
+  rdfs:domain abi:SWOTFinding ;
+  rdfs:range  abi:Organization .
+
+abi:hasOrganizationFinding a owl:ObjectProperty ;
+  owl:inverseOf abi:isFindingAboutOrganization ;
+  rdfs:label "has organization finding"@en ;
+  skos:definition "Relates an organization to a strength or weakness stated about it."@en ;
+  rdfs:domain abi:Organization ;
+  rdfs:range  abi:SWOTFinding .
+
+#################################################################
+#    Data properties - process-only
+#################################################################
+
+abi:finding_statement a owl:DatatypeProperty ;
+  rdfs:label "finding statement"@en ;
+  skos:definition "The finding in one sentence, as the analyst states it."@en ;
+  rdfs:domain abi:SWOTFinding ;
+  rdfs:range  xsd:string .
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfMarketSegmentationProcess
+#    Source: ontologies/processes/ActOfMarketSegmentationProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfMarketSegmentation a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:MarketAnalystRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:segmentsMarket ; owl:someValuesFrom abi:Market ] ,
+    [ a owl:Restriction ; owl:onProperty abi:yieldsMarketSegment ; owl:someValuesFrom abi:MarketSegment ] ,
+    [ a owl:Restriction ; owl:onProperty abi:appliesSegmentationCriterion ; owl:someValuesFrom abi:SegmentationCriterion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasMarketSource ; owl:someValuesFrom abi:MarketSource ] ;
+  rdfs:label "Act of Market Segmentation"@en ;
+  skos:definition "A Planned Act in which an analyst divides a market into segments along a segmentation criterion."@en ;
+  skos:example "Dividing the cloud computing market by service model into IaaS, PaaS and SaaS."@en .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:SegmentationCriterion a owl:Class ;
+  rdfs:subClassOf cco:ont00000853 , # Descriptive Information Content Entity
+    [ a owl:Restriction ; owl:onProperty abi:isSegmentationCriterionOf ; owl:someValuesFrom abi:MarketSegment ] ;
+  rdfs:label "Segmentation Criterion"@en ;
+  skos:definition "The basis along which a market is divided into segments: what the buyers buy, how it is delivered, what it is used for, or which layer of the value chain sells it."@en ;
+  skos:example "Service model (IaaS, PaaS, SaaS); deployment model (public, private, hybrid); workload (AI, web hosting); value chain layer (data centers)."@en .
+
+# HOW WE KNOW x HOW WE KNOW - every segment names the criterion it was cut along
+abi:MarketSegment rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:hasSegmentationCriterion ; owl:someValuesFrom abi:SegmentationCriterion ] .
+
+#################################################################
+#    Object properties - process-only
+#################################################################
+
+abi:segmentsMarket a owl:ObjectProperty ;
+  owl:inverseOf abi:isMarketSegmentedBy ;
+  rdfs:label "segments market"@en ;
+  skos:definition "Relates an act of market segmentation to the market it divides."@en ;
+  rdfs:domain abi:ActOfMarketSegmentation ;
+  rdfs:range  abi:Market .
+
+abi:isMarketSegmentedBy a owl:ObjectProperty ;
+  owl:inverseOf abi:segmentsMarket ;
+  rdfs:label "is market segmented by"@en ;
+  skos:definition "Relates a market to an act of segmentation that divides it."@en ;
+  rdfs:domain abi:Market ;
+  rdfs:range  abi:ActOfMarketSegmentation .
+
+abi:yieldsMarketSegment a owl:ObjectProperty ;
+  owl:inverseOf abi:isMarketSegmentYieldedBy ;
+  rdfs:label "yields market segment"@en ;
+  skos:definition "Relates an act of market segmentation to a segment it identifies."@en ;
+  rdfs:domain abi:ActOfMarketSegmentation ;
+  rdfs:range  abi:MarketSegment .
+
+abi:isMarketSegmentYieldedBy a owl:ObjectProperty ;
+  owl:inverseOf abi:yieldsMarketSegment ;
+  rdfs:label "is market segment yielded by"@en ;
+  skos:definition "Relates a market segment to the act of segmentation that identified it."@en ;
+  rdfs:domain abi:MarketSegment ;
+  rdfs:range  abi:ActOfMarketSegmentation .
+
+abi:appliesSegmentationCriterion a owl:ObjectProperty ;
+  owl:inverseOf abi:isSegmentationCriterionAppliedIn ;
+  rdfs:label "applies segmentation criterion"@en ;
+  skos:definition "Relates an act of market segmentation to the criterion it divides the market along."@en ;
+  rdfs:domain abi:ActOfMarketSegmentation ;
+  rdfs:range  abi:SegmentationCriterion .
+
+abi:isSegmentationCriterionAppliedIn a owl:ObjectProperty ;
+  owl:inverseOf abi:appliesSegmentationCriterion ;
+  rdfs:label "is segmentation criterion applied in"@en ;
+  skos:definition "Relates a segmentation criterion to an act of segmentation that divides a market along it."@en ;
+  rdfs:domain abi:SegmentationCriterion ;
+  rdfs:range  abi:ActOfMarketSegmentation .
+
+abi:hasSegmentationCriterion a owl:ObjectProperty ;
+  owl:inverseOf abi:isSegmentationCriterionOf ;
+  rdfs:label "has segmentation criterion"@en ;
+  skos:definition "Relates a market segment to the criterion it was cut along."@en ;
+  rdfs:domain abi:MarketSegment ;
+  rdfs:range  abi:SegmentationCriterion .
+
+abi:isSegmentationCriterionOf a owl:ObjectProperty ;
+  owl:inverseOf abi:hasSegmentationCriterion ;
+  rdfs:label "is segmentation criterion of"@en ;
+  skos:definition "Relates a segmentation criterion to a market segment cut along it."@en ;
+  rdfs:domain abi:SegmentationCriterion ;
+  rdfs:range  abi:MarketSegment .
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfMarketSizingProcess
+#    Source: ontologies/processes/ActOfMarketSizingProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfMarketSizing a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:MarketAnalystRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasMarketSizeMeasurement ; owl:someValuesFrom abi:MarketSizeMeasurement ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasMarketSource ; owl:someValuesFrom abi:MarketSource ] ;
+  rdfs:label "Act of Market Sizing"@en ;
+  skos:definition "A Planned Act in which an analyst measures the value of the sales made in a market, in a geography, over a reference period, and how fast it grows."@en ;
+  skos:example "Gartner forecasting worldwide public cloud end-user spending for 2025."@en .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:MarketSizeMeasurement a owl:Class ;
+  rdfs:subClassOf cco:ont00001022 , # Ratio Measurement Information Content Entity
+    [ a owl:Restriction ; owl:onProperty abi:measuresMarket ; owl:someValuesFrom abi:Market ] ,
+    [ a owl:Restriction ; owl:onProperty abi:isMarketSizeMeasurementOf ; owl:someValuesFrom abi:ActOfMarketSizing ] ;
+  rdfs:label "Market Size Measurement"@en ;
+  skos:definition "A ratio measurement of the value of the sales made in a market over a reference year, with its compound annual growth rate when the source states one."@en ;
+  skos:example "Worldwide public cloud end-user spending: USD 723.4 billion in 2025 (Gartner)."@en .
+
+#################################################################
+#    Object properties - process-only
+#################################################################
+
+abi:hasMarketSizeMeasurement a owl:ObjectProperty ;
+  owl:inverseOf abi:isMarketSizeMeasurementOf ;
+  rdfs:label "has market size measurement"@en ;
+  skos:definition "Relates an act of market sizing to the measurement it produces."@en ;
+  rdfs:domain abi:ActOfMarketSizing ;
+  rdfs:range  abi:MarketSizeMeasurement .
+
+abi:isMarketSizeMeasurementOf a owl:ObjectProperty ;
+  owl:inverseOf abi:hasMarketSizeMeasurement ;
+  rdfs:label "is market size measurement of"@en ;
+  skos:definition "Relates a market size measurement to the act of sizing that produced it."@en ;
+  rdfs:domain abi:MarketSizeMeasurement ;
+  rdfs:range  abi:ActOfMarketSizing .
+
+abi:measuresMarket a owl:ObjectProperty ;
+  rdfs:subPropertyOf cco:ont00001808 ; # is about
+  owl:inverseOf abi:isMarketMeasuredBy ;
+  rdfs:label "measures market"@en ;
+  skos:definition "Relates a market size measurement to the market it measures."@en ;
+  rdfs:domain abi:MarketSizeMeasurement ;
+  rdfs:range  abi:Market .
+
+abi:isMarketMeasuredBy a owl:ObjectProperty ;
+  owl:inverseOf abi:measuresMarket ;
+  rdfs:label "is market measured by"@en ;
+  skos:definition "Relates a market to a measurement of its size."@en ;
+  rdfs:domain abi:Market ;
+  rdfs:range  abi:MarketSizeMeasurement .
+
+#################################################################
+#    Data properties - process-only
+#################################################################
+
+abi:market_size_value a owl:DatatypeProperty ;
+  rdfs:label "market size value"@en ;
+  skos:definition "The value of the market's sales over the reference year, in units of the stated currency (not thousands or billions)."@en ;
+  rdfs:domain abi:MarketSizeMeasurement ;
+  rdfs:range  xsd:decimal .
+
+abi:market_size_currency a owl:DatatypeProperty ;
+  rdfs:label "market size currency"@en ;
+  skos:definition "ISO 4217 code of the currency the size is stated in."@en ;
+  rdfs:domain abi:MarketSizeMeasurement ;
+  rdfs:range  xsd:string .
+
+abi:market_size_year a owl:DatatypeProperty ;
+  rdfs:label "market size year"@en ;
+  skos:definition "The reference year the size is stated for; a year after the source's publication makes the size a forecast."@en ;
+  rdfs:domain abi:MarketSizeMeasurement ;
+  rdfs:range  xsd:integer .
+
+abi:market_growth_rate_percent a owl:DatatypeProperty ;
+  rdfs:label "market growth rate percent"@en ;
+  skos:definition "The compound annual growth rate the source states, in percent."@en ;
+  rdfs:domain abi:MarketSizeMeasurement ;
+  rdfs:range  xsd:decimal .
+
+abi:market_growth_period a owl:DatatypeProperty ;
+  rdfs:label "market growth period"@en ;
+  skos:definition "The years the growth rate is stated over, as the source writes them."@en ;
+  skos:example "2024-2030"@en ;
+  rdfs:domain abi:MarketSizeMeasurement ;
+  rdfs:range  xsd:string .
+# <<< onto2py:consolidated-processes <<<

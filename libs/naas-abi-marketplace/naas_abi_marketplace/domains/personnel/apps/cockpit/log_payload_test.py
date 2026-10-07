@@ -1,6 +1,5 @@
 from naas_abi_marketplace.domains.personnel.apps.cockpit.log_payload import (
     ABI,
-    PEOPLE,
     PERSONNEL,
     RDF_TYPE,
     build_ledger_log_rows,

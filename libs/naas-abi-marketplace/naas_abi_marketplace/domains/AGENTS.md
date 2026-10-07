@@ -40,6 +40,7 @@ signals agents that still carry workflows/ontologies.
 | [`agents/OSINTResearcherAgent.py`](intelligence/agents/OSINTResearcherAgent.py) | A | `OSINTResearcherAgent` | Open-source intelligence research |
 | [`agents/PrivateInvestigatorAgent.py`](intelligence/agents/PrivateInvestigatorAgent.py) | A | `PrivateInvestigatorAgent` | Investigative research workflows |
 | [`modules/organizations/`](intelligence/modules/organizations/) | OQ | — | Organization vocabulary + alliance/restructuring process ontologies + 10 SPARQL query tools (no agent yet) |
+| [`modules/markets/`](intelligence/modules/markets/) | APOQ | `MarketsAgent` | Market intelligence: segments, competitors (Yahoo Finance for listed ones), sizes, SWOT — every statement sourced |
 | [`modules/people/`](intelligence/modules/people/) | AWPOXQ | `PeopleAgent` | People intelligence: career, studies, skills, certifications, profiles; People Search and the 7-bucket person graph |
 | [`modules/wsr/`](intelligence/modules/wsr/) | AXO | `WSRAgent` | World Situation Room — global situational-awareness dashboard |
 

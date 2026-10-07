@@ -172,6 +172,11 @@ modules:
   - module: naas_abi_marketplace.domains.intelligence.modules.people
     enabled: true
 
+  # Market intelligence: segments, competitors (Yahoo Finance for listed ones),
+  # sizes and SWOT. Curated markets live under intelligence/markets/<Market>/.
+  - module: naas_abi_marketplace.domains.intelligence.modules.markets
+    enabled: true
+
   # Q: How do I connect the WSR app to live real-world data feeds?
   # A: WSR is a module of the intelligence bucket -- configure it below. Provide API
   #    keys for each source; leave blank to skip that source gracefully.

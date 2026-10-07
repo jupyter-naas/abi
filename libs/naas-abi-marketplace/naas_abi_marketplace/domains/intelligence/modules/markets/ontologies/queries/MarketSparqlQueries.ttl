@@ -1,0 +1,316 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+
+#################################################################
+#  Markets (S2 intelligence) Queries
+#  Data: GRAPH <http://ontology.naas.ai/graph/markets>
+#  Schema: <http://ontology.naas.ai/abi/> (MarketOntology, MarketsOntology and
+#          its process slices, ontologies/processes/ActOf*Process.ttl)
+#
+#  A market is named by a substring of its label and includes its segments:
+#  every query that takes a market walks abi:isMarketSegmentOf* down the tree,
+#  so "Cloud Computing" returns what is stated about IaaS and GPU cloud too,
+#  with the segment each row is about.
+#
+#  Competitors are never linked to each other. Two organizations compete when
+#  they have acts of competing (abi:ActOfCompeting) in the same market.
+#
+#  Segment sizes are never summed: segments cut along different criteria
+#  overlap (IaaS and Public Cloud), so each size is returned with its market,
+#  year, region and source.
+#################################################################
+
+#-----------------------------------------------------------------
+# Market structure
+#-----------------------------------------------------------------
+
+intentMapping:findMarketsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_markets"@en ;
+    intentMapping:intentDescription "Find markets and market segments whose name contains a substring, with their definition, the broader markets they belong to and the criterion they were cut along. Useful to answer 'which markets do we track?' or to resolve a market name before a follow-up question." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT ?market ?marketLabel ?definition ?parentMarkets ?criterion ?competitorCount
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/markets> {
+            ?market rdf:type abi:Market ;
+                    rdfs:label ?marketLabel .
+            FILTER(CONTAINS(LCASE(STR(?marketLabel)), LCASE("{{ market_name }}")))
+            OPTIONAL { ?market abi:market_definition ?definition . }
+            OPTIONAL { ?market abi:hasSegmentationCriterion ?c . ?c rdfs:label ?criterion . }
+            OPTIONAL {
+              SELECT ?market (GROUP_CONCAT(DISTINCT ?parentLabel; separator=" | ") AS ?parentMarkets)
+              WHERE { ?market abi:isMarketSegmentOf ?parent . ?parent rdfs:label ?parentLabel . }
+              GROUP BY ?market
+            }
+            OPTIONAL {
+              SELECT ?market (COUNT(DISTINCT ?act) AS ?competitorCount)
+              WHERE { ?act abi:isInMarket ?market . }
+              GROUP BY ?market
+            }
+          }
+        }
+        ORDER BY ?marketLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:marketNameArg ,
+                              intentMapping:marketLimitArg .
+
+intentMapping:findMarketSegmentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_market_segments"@en ;
+    intentMapping:intentDescription "List the segments (submarkets) of a market at every depth, each with its direct parent and the criterion it was cut along (service model, deployment model, workload, value chain layer). Segments cut along different criteria overlap. Useful to answer 'how is the cloud computing market segmented?'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?market ?marketLabel ?segment ?segmentLabel ?parentLabel ?criterionLabel ?definition
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/markets> {
+            ?market rdf:type abi:Market ;
+                    rdfs:label ?marketLabel .
+            FILTER(CONTAINS(LCASE(STR(?marketLabel)), LCASE("{{ market_name }}")))
+            ?segment abi:isMarketSegmentOf+ ?market ;
+                     abi:isMarketSegmentOf ?parent ;
+                     rdfs:label ?segmentLabel .
+            ?parent rdfs:label ?parentLabel .
+            FILTER(?parent = ?market || EXISTS { ?parent abi:isMarketSegmentOf+ ?market })
+            OPTIONAL { ?segment abi:hasSegmentationCriterion ?c . ?c rdfs:label ?criterionLabel . }
+            OPTIONAL { ?segment abi:market_definition ?definition . }
+          }
+        }
+        ORDER BY ?marketLabel ?criterionLabel ?segmentLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:marketNameArg ,
+                              intentMapping:marketLimitArg .
+
+#-----------------------------------------------------------------
+# Competitors
+#-----------------------------------------------------------------
+
+intentMapping:findMarketCompetitorsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_market_competitors"@en ;
+    intentMapping:intentDescription "List the organizations competing in a market or any of its segments, with the segment, region and period of each act of competing, the market share and rank when measured, and the source that states it. Useful to answer 'who are the competitors in the cloud computing market?' or 'who leads IaaS?'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?organization ?organizationLabel ?segmentLabel ?regionLabel ?periodLabel
+                        ?sharePercent ?rank ?tickerSymbol ?websiteUrl ?sourceTitle ?sourceUrl
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/markets> {
+            ?market rdf:type abi:Market ;
+                    rdfs:label ?marketLabel .
+            FILTER(CONTAINS(LCASE(STR(?marketLabel)), LCASE("{{ market_name }}")))
+            ?segment abi:isMarketSegmentOf* ?market ;
+                     rdfs:label ?segmentLabel .
+            ?act rdf:type abi:ActOfCompeting ;
+                 abi:isInMarket ?segment ;
+                 abi:hasCompetitor ?organization .
+            ?organization rdfs:label ?organizationLabel .
+            OPTIONAL { ?act abi:occursIn ?region . ?region rdfs:label ?regionLabel . }
+            OPTIONAL { ?act abi:occupiesTemporalRegion ?period . ?period rdfs:label ?periodLabel . }
+            OPTIONAL {
+              ?act abi:hasMarketShareMeasurement ?share .
+              OPTIONAL { ?share abi:market_share_percent ?sharePercent . }
+              OPTIONAL { ?share abi:market_rank ?rank . }
+            }
+            OPTIONAL { ?organization abi:hasTickerSymbol ?ticker . ?ticker abi:ticker_symbol ?tickerSymbol . }
+            OPTIONAL { ?organization abi:hasWebsite ?website . ?website abi:website_url ?websiteUrl . }
+            OPTIONAL {
+              ?act abi:hasMarketSource ?source .
+              ?source rdfs:label ?sourceTitle .
+              OPTIONAL { ?source abi:market_source_url ?sourceUrl . }
+            }
+          }
+        }
+        ORDER BY ?segmentLabel (!BOUND(?rank)) ?rank DESC(?sharePercent) ?organizationLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:marketNameArg ,
+                              intentMapping:marketLimitArg .
+
+intentMapping:findMarketsOfOrganizationQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_markets_of_organization"@en ;
+    intentMapping:intentDescription "List the markets and segments an organization competes in, with region, period, market share and rank when measured, and the source. Useful to answer 'which markets is OVHcloud in?'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?organizationLabel ?market ?marketLabel ?regionLabel ?periodLabel
+                        ?sharePercent ?rank ?sourceTitle ?sourceUrl
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/markets> {
+            ?organization rdfs:label ?organizationLabel ;
+                          abi:isCompetitorIn ?act .
+            FILTER(CONTAINS(LCASE(STR(?organizationLabel)), LCASE("{{ organization_name }}")))
+            ?act abi:isInMarket ?market .
+            ?market rdfs:label ?marketLabel .
+            OPTIONAL { ?act abi:occursIn ?region . ?region rdfs:label ?regionLabel . }
+            OPTIONAL { ?act abi:occupiesTemporalRegion ?period . ?period rdfs:label ?periodLabel . }
+            OPTIONAL {
+              ?act abi:hasMarketShareMeasurement ?share .
+              OPTIONAL { ?share abi:market_share_percent ?sharePercent . }
+              OPTIONAL { ?share abi:market_rank ?rank . }
+            }
+            OPTIONAL {
+              ?act abi:hasMarketSource ?source .
+              ?source rdfs:label ?sourceTitle .
+              OPTIONAL { ?source abi:market_source_url ?sourceUrl . }
+            }
+          }
+        }
+        ORDER BY ?organizationLabel ?marketLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:marketOrganizationNameArg ,
+                              intentMapping:marketLimitArg .
+
+intentMapping:findCompetitorsOfOrganizationQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_competitors_of_organization"@en ;
+    intentMapping:intentDescription "List the organizations that compete with a given organization: those with an act of competing in a market or segment where it also competes, with the shared market. Useful to answer 'who are OVHcloud's competitors?'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT ?competitor ?competitorLabel
+               (GROUP_CONCAT(DISTINCT ?marketLabel; separator=" | ") AS ?sharedMarkets)
+               (COUNT(DISTINCT ?market) AS ?sharedMarketCount)
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/markets> {
+            ?organization rdfs:label ?organizationLabel ;
+                          abi:isCompetitorIn ?act .
+            FILTER(CONTAINS(LCASE(STR(?organizationLabel)), LCASE("{{ organization_name }}")))
+            ?act abi:isInMarket ?market .
+            ?market rdfs:label ?marketLabel .
+            ?other abi:isInMarket ?market ;
+                   abi:hasCompetitor ?competitor .
+            ?competitor rdfs:label ?competitorLabel .
+            FILTER(?competitor != ?organization)
+          }
+        }
+        GROUP BY ?competitor ?competitorLabel
+        ORDER BY DESC(?sharedMarketCount) ?competitorLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:marketOrganizationNameArg ,
+                              intentMapping:marketLimitArg .
+
+#-----------------------------------------------------------------
+# Size and SWOT
+#-----------------------------------------------------------------
+
+intentMapping:findMarketSizesQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_market_sizes"@en ;
+    intentMapping:intentDescription "Return every size stated for a market and its segments: value, currency, reference year, region, growth rate and its period, the analyst and the source. Sources and segments are never summed or averaged. Useful to answer 'how big is the cloud computing market?'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?segmentLabel ?value ?currency ?year ?regionLabel ?growthRatePercent ?growthPeriod
+                        ?analystLabel ?sourceTitle ?sourceUrl ?sourceDate
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/markets> {
+            ?market rdf:type abi:Market ;
+                    rdfs:label ?marketLabel .
+            FILTER(CONTAINS(LCASE(STR(?marketLabel)), LCASE("{{ market_name }}")))
+            ?segment abi:isMarketSegmentOf* ?market ;
+                     rdfs:label ?segmentLabel .
+            ?measurement abi:measuresMarket ?segment ;
+                         abi:market_size_value ?value ;
+                         abi:market_size_currency ?currency ;
+                         abi:market_size_year ?year ;
+                         abi:isMarketSizeMeasurementOf ?act .
+            OPTIONAL { ?measurement abi:market_growth_rate_percent ?growthRatePercent . }
+            OPTIONAL { ?measurement abi:market_growth_period ?growthPeriod . }
+            OPTIONAL { ?act abi:occursIn ?region . ?region rdfs:label ?regionLabel . }
+            OPTIONAL { ?act abi:hasParticipant ?analyst . ?analyst rdfs:label ?analystLabel . }
+            OPTIONAL {
+              ?act abi:hasMarketSource ?source .
+              ?source rdfs:label ?sourceTitle .
+              OPTIONAL { ?source abi:market_source_url ?sourceUrl . }
+              OPTIONAL { ?source abi:market_source_date ?sourceDate . }
+            }
+          }
+        }
+        ORDER BY ?segmentLabel DESC(?year)
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:marketNameArg ,
+                              intentMapping:marketLimitArg .
+
+intentMapping:findMarketSwotQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_market_swot"@en ;
+    intentMapping:intentDescription "Return the SWOT of a market and its segments: opportunities and threats of the market, strengths and weaknesses of named competitors in it, each with the segment, region, period, analyst and source. Useful to answer 'what are the opportunities and threats in cloud computing?' or 'what are OVHcloud's strengths?'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?kind ?statement ?organizationLabel ?segmentLabel ?regionLabel ?periodLabel
+                        ?analystLabel ?sourceTitle ?sourceUrl
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/markets> {
+            ?market rdf:type abi:Market ;
+                    rdfs:label ?marketLabel .
+            FILTER(CONTAINS(LCASE(STR(?marketLabel)), LCASE("{{ market_name }}")))
+            ?segment abi:isMarketSegmentOf* ?market ;
+                     rdfs:label ?segmentLabel .
+            ?finding abi:isFindingAboutMarket ?segment ;
+                     abi:finding_statement ?statement ;
+                     abi:isSWOTFindingOf ?act ;
+                     rdf:type ?type .
+            VALUES (?type ?kind ?order) {
+              (abi:CompetitiveStrength "Strength" 1)
+              (abi:CompetitiveWeakness "Weakness" 2)
+              (abi:MarketOpportunity "Opportunity" 3)
+              (abi:MarketThreat "Threat" 4)
+            }
+            OPTIONAL { ?finding abi:isFindingAboutOrganization ?org . ?org rdfs:label ?organizationLabel . }
+            OPTIONAL { ?act abi:occursIn ?region . ?region rdfs:label ?regionLabel . }
+            OPTIONAL { ?act abi:occupiesTemporalRegion ?period . ?period rdfs:label ?periodLabel . }
+            OPTIONAL { ?act abi:hasParticipant ?analyst . ?analyst rdfs:label ?analystLabel . }
+            OPTIONAL {
+              ?act abi:hasMarketSource ?source .
+              ?source rdfs:label ?sourceTitle .
+              OPTIONAL { ?source abi:market_source_url ?sourceUrl . }
+            }
+          }
+        }
+        ORDER BY ?order ?organizationLabel ?segmentLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:marketNameArg ,
+                              intentMapping:marketLimitArg .
+
+#-----------------------------------------------------------------
+# Query arguments
+#-----------------------------------------------------------------
+
+intentMapping:marketLimitArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "limit" ;
+    intentMapping:argumentDescription "Maximum number of rows to return (positive integer)." ;
+    intentMapping:validationPattern "^[1-9][0-9]{0,3}$" ;
+    intentMapping:validationFormat "integer" .
+
+intentMapping:marketNameArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "market_name" ;
+    intentMapping:argumentDescription "Substring to match against a market or segment name, case-insensitive (e.g. 'cloud computing', 'iaas', 'gpu'). Pass an empty string to match every market." ;
+    intentMapping:validationPattern "^[^\"\\\\]*$" ;
+    intentMapping:validationFormat "string" .
+
+intentMapping:marketOrganizationNameArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "organization_name" ;
+    intentMapping:argumentDescription "Substring to match against an organization's name, case-insensitive (e.g. 'ovhcloud', 'amazon')." ;
+    intentMapping:validationPattern "^[^\"\\\\]*$" ;
+    intentMapping:validationFormat "string" .

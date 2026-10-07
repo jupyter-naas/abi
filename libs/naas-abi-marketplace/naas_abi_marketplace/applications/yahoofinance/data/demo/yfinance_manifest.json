@@ -1,0 +1,23 @@
+{
+  "symbol": "AMZN.BA",
+  "sector_key": "consumer-cyclical",
+  "industry_key": "internet-retail",
+  "methods": {
+    "get_ticker_info": "AMZN.BA_info.json",
+    "get_ticker_history": "AMZN.BA_history_1mo.json",
+    "get_ticker_financials": "AMZN.BA_financials.json",
+    "get_sector_info": "consumer-cyclical_info.json",
+    "get_industry_info": "internet-retail_info.json",
+    "search_ticker": "Amazon_search.json"
+  },
+  "files": [
+    "AMZN.BA_financials.json",
+    "AMZN.BA_history_1mo.json",
+    "AMZN.BA_info.json",
+    "Amazon_search.json",
+    "consumer-cyclical_info.json",
+    "internet-retail_info.json",
+    "screener.json",
+    "yfinance_manifest.json"
+  ]
+}

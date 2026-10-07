@@ -1,0 +1,152 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+
+abi:ActOfCompetingProcess a owl:Ontology ;
+  # Slice: the act and what it alone uses. Shared vocabulary (MarketSource,
+  # hasMarketSource) lives in the module MarketsOntology, which this slice
+  # does NOT import (the module consolidates this file).
+  #
+  # Seven-bucket mapping for one organization competing in one market:
+  #   WHO          Organization (the competitor)
+  #   WHAT         ActOfCompeting (the process itself)
+  #   WHEN         TemporalRegion - the period the organization is known to compete
+  #   WHERE        GeospatialRegion - the geography it competes in (Global, Europe, France...)
+  #   WHY          CompetitorRole (SDC) - the role the organization bears as a seller in the market
+  #   HOW IT IS    not stated: market share is measured, so it is a HOW WE KNOW
+  #   HOW WE KNOW  Market (the market competed in), MarketShareMeasurement, MarketSource
+  #
+  # Competition is never a direct organization-to-organization edge: two
+  # organizations compete when they have acts of competing in the same market
+  # (or one of its segments) over overlapping periods. That keeps every claim
+  # dated, scoped to a geography and sourced.
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/MarketOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/GeospatialRegionOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/abi/MarketsOntology> ;
+  abi:pythonPackage "naas_abi_marketplace.domains.intelligence.modules.markets" ;
+  abi:ontologyResource "ontologies/processes/ActOfCompetingProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/ActOfCompetingProcess.py" ;
+  dc:title "Act of Competing Process Ontology"@en ;
+  dc:description "Process slice for the act of competing: a CCO Planned Act in which an organization offers goods or services in a market, in a geospatial region over a temporal region, realizing a competitor role, measured by its market share and documented by a market source."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Process slice for Act of Competing. Reuses the shared markets vocabulary."@en ;
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-10-06"^^xsd:date .
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfCompeting a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasCompetitor ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:CompetitorRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:isInMarket ; owl:someValuesFrom abi:Market ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasMarketShareMeasurement ; owl:someValuesFrom abi:MarketShareMeasurement ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasMarketSource ; owl:someValuesFrom abi:MarketSource ] ;
+  rdfs:label "Act of Competing"@en ;
+  skos:definition "A Planned Act in which an organization offers goods or services to the buyers of a market, against the other organizations offering them, in a geospatial region over a temporal region."@en ;
+  skos:example "OVHcloud competing in the European public cloud market since 2019."@en .
+
+#################################################################
+#    Classes - WHY
+#################################################################
+
+abi:CompetitorRole a owl:Class ;
+  rdfs:subClassOf abi:Role ,
+    [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom abi:Organization ] ;
+  rdfs:label "Competitor Role"@en ;
+  skos:definition "A role borne by an organization in virtue of offering goods or services in a market where other organizations offer them too, realized in its acts of competing."@en ;
+  skos:example "The role Amazon Web Services bears as a seller of infrastructure-as-a-service."@en .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:MarketShareMeasurement a owl:Class ;
+  rdfs:subClassOf cco:ont00001022 , # Ratio Measurement Information Content Entity
+    [ a owl:Restriction ; owl:onProperty abi:isMarketShareMeasurementOf ; owl:someValuesFrom abi:ActOfCompeting ] ;
+  rdfs:label "Market Share Measurement"@en ;
+  skos:definition "A ratio measurement of the part of a market's sales an organization makes in an act of competing, over the act's period and geography."@en ;
+  skos:example "AWS: 30% of worldwide cloud infrastructure services revenue in Q2 2025 (Synergy Research Group)."@en .
+
+#################################################################
+#    Object properties - process-only
+#################################################################
+
+# WHAT <-> WHO
+abi:hasCompetitor a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf abi:isCompetitorIn ;
+  rdfs:label "has competitor"@en ;
+  skos:definition "Relates an act of competing to the organization that competes."@en ;
+  rdfs:domain abi:ActOfCompeting ;
+  rdfs:range  abi:Organization .
+
+abi:isCompetitorIn a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf abi:hasCompetitor ;
+  rdfs:label "is competitor in"@en ;
+  skos:definition "Relates an organization to an act of competing in which it competes."@en ;
+  rdfs:domain abi:Organization ;
+  rdfs:range  abi:ActOfCompeting .
+
+# WHAT <-> HOW WE KNOW - the market competed in
+abi:isInMarket a owl:ObjectProperty ;
+  owl:inverseOf abi:hasActOfCompeting ;
+  rdfs:label "is in market"@en ;
+  skos:definition "Relates an act of competing to the market (or market segment) it takes place in."@en ;
+  rdfs:domain abi:ActOfCompeting ;
+  rdfs:range  abi:Market .
+
+abi:hasActOfCompeting a owl:ObjectProperty ;
+  owl:inverseOf abi:isInMarket ;
+  rdfs:label "has act of competing"@en ;
+  skos:definition "Relates a market to an act of competing that takes place in it."@en ;
+  rdfs:domain abi:Market ;
+  rdfs:range  abi:ActOfCompeting .
+
+# WHAT <-> HOW WE KNOW - the share measured
+abi:hasMarketShareMeasurement a owl:ObjectProperty ;
+  owl:inverseOf abi:isMarketShareMeasurementOf ;
+  rdfs:label "has market share measurement"@en ;
+  skos:definition "Relates an act of competing to a measurement of the market share it achieves."@en ;
+  rdfs:domain abi:ActOfCompeting ;
+  rdfs:range  abi:MarketShareMeasurement .
+
+abi:isMarketShareMeasurementOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf cco:ont00001808 ; # is about
+  owl:inverseOf abi:hasMarketShareMeasurement ;
+  rdfs:label "is market share measurement of"@en ;
+  skos:definition "Relates a market share measurement to the act of competing it is about."@en ;
+  rdfs:domain abi:MarketShareMeasurement ;
+  rdfs:range  abi:ActOfCompeting .
+
+#################################################################
+#    Data properties - process-only
+#################################################################
+
+abi:market_share_percent a owl:DatatypeProperty ;
+  rdfs:label "market share percent"@en ;
+  skos:definition "The measured share, in percent of the market's sales over the measurement's period and geography."@en ;
+  rdfs:domain abi:MarketShareMeasurement ;
+  rdfs:range  xsd:decimal .
+
+abi:market_rank a owl:DatatypeProperty ;
+  rdfs:label "market rank"@en ;
+  skos:definition "The organization's position by market share among the market's competitors (1 is the leader)."@en ;
+  rdfs:domain abi:MarketShareMeasurement ;
+  rdfs:range  xsd:integer .

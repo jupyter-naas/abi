@@ -1,0 +1,137 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+
+abi:ActOfMarketSegmentationProcess a owl:Ontology ;
+  # Slice: the act and what it alone uses. Shared vocabulary (MarketAnalystRole,
+  # MarketSource, hasMarketSource) lives in the module MarketsOntology, which
+  # this slice does NOT import (the module consolidates this file).
+  #
+  # Seven-bucket mapping for one segmentation of a market:
+  #   WHO          Organization (the analyst dividing the market)
+  #   WHAT         ActOfMarketSegmentation (the process itself)
+  #   WHEN         TemporalRegion - when the segmentation was made
+  #   WHERE        not stated: a segmentation is not bound to a place
+  #   WHY          MarketAnalystRole (SDC)
+  #   HOW IT IS    not stated
+  #   HOW WE KNOW  Market (divided), MarketSegment (yielded), SegmentationCriterion
+  #                (the basis of division), MarketSource
+  #
+  # Segments cut along different criteria overlap (IaaS is a service model,
+  # Public Cloud a deployment model): every segment names the criterion it was
+  # cut along, so overlaps are explicit and segment sizes are never summed
+  # across criteria.
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/MarketOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/abi/MarketsOntology> ;
+  abi:pythonPackage "naas_abi_marketplace.domains.intelligence.modules.markets" ;
+  abi:ontologyResource "ontologies/processes/ActOfMarketSegmentationProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/ActOfMarketSegmentationProcess.py" ;
+  dc:title "Act of Market Segmentation Process Ontology"@en ;
+  dc:description "Process slice for the act of market segmentation: a CCO Planned Act in which an analyst divides a market into segments along a segmentation criterion, documented by a market source."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Process slice for Act of Market Segmentation. Reuses the shared markets vocabulary."@en ;
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-10-06"^^xsd:date .
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfMarketSegmentation a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:MarketAnalystRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:segmentsMarket ; owl:someValuesFrom abi:Market ] ,
+    [ a owl:Restriction ; owl:onProperty abi:yieldsMarketSegment ; owl:someValuesFrom abi:MarketSegment ] ,
+    [ a owl:Restriction ; owl:onProperty abi:appliesSegmentationCriterion ; owl:someValuesFrom abi:SegmentationCriterion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasMarketSource ; owl:someValuesFrom abi:MarketSource ] ;
+  rdfs:label "Act of Market Segmentation"@en ;
+  skos:definition "A Planned Act in which an analyst divides a market into segments along a segmentation criterion."@en ;
+  skos:example "Dividing the cloud computing market by service model into IaaS, PaaS and SaaS."@en .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:SegmentationCriterion a owl:Class ;
+  rdfs:subClassOf cco:ont00000853 , # Descriptive Information Content Entity
+    [ a owl:Restriction ; owl:onProperty abi:isSegmentationCriterionOf ; owl:someValuesFrom abi:MarketSegment ] ;
+  rdfs:label "Segmentation Criterion"@en ;
+  skos:definition "The basis along which a market is divided into segments: what the buyers buy, how it is delivered, what it is used for, or which layer of the value chain sells it."@en ;
+  skos:example "Service model (IaaS, PaaS, SaaS); deployment model (public, private, hybrid); workload (AI, web hosting); value chain layer (data centers)."@en .
+
+# HOW WE KNOW x HOW WE KNOW - every segment names the criterion it was cut along
+abi:MarketSegment rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:hasSegmentationCriterion ; owl:someValuesFrom abi:SegmentationCriterion ] .
+
+#################################################################
+#    Object properties - process-only
+#################################################################
+
+abi:segmentsMarket a owl:ObjectProperty ;
+  owl:inverseOf abi:isMarketSegmentedBy ;
+  rdfs:label "segments market"@en ;
+  skos:definition "Relates an act of market segmentation to the market it divides."@en ;
+  rdfs:domain abi:ActOfMarketSegmentation ;
+  rdfs:range  abi:Market .
+
+abi:isMarketSegmentedBy a owl:ObjectProperty ;
+  owl:inverseOf abi:segmentsMarket ;
+  rdfs:label "is market segmented by"@en ;
+  skos:definition "Relates a market to an act of segmentation that divides it."@en ;
+  rdfs:domain abi:Market ;
+  rdfs:range  abi:ActOfMarketSegmentation .
+
+abi:yieldsMarketSegment a owl:ObjectProperty ;
+  owl:inverseOf abi:isMarketSegmentYieldedBy ;
+  rdfs:label "yields market segment"@en ;
+  skos:definition "Relates an act of market segmentation to a segment it identifies."@en ;
+  rdfs:domain abi:ActOfMarketSegmentation ;
+  rdfs:range  abi:MarketSegment .
+
+abi:isMarketSegmentYieldedBy a owl:ObjectProperty ;
+  owl:inverseOf abi:yieldsMarketSegment ;
+  rdfs:label "is market segment yielded by"@en ;
+  skos:definition "Relates a market segment to the act of segmentation that identified it."@en ;
+  rdfs:domain abi:MarketSegment ;
+  rdfs:range  abi:ActOfMarketSegmentation .
+
+abi:appliesSegmentationCriterion a owl:ObjectProperty ;
+  owl:inverseOf abi:isSegmentationCriterionAppliedIn ;
+  rdfs:label "applies segmentation criterion"@en ;
+  skos:definition "Relates an act of market segmentation to the criterion it divides the market along."@en ;
+  rdfs:domain abi:ActOfMarketSegmentation ;
+  rdfs:range  abi:SegmentationCriterion .
+
+abi:isSegmentationCriterionAppliedIn a owl:ObjectProperty ;
+  owl:inverseOf abi:appliesSegmentationCriterion ;
+  rdfs:label "is segmentation criterion applied in"@en ;
+  skos:definition "Relates a segmentation criterion to an act of segmentation that divides a market along it."@en ;
+  rdfs:domain abi:SegmentationCriterion ;
+  rdfs:range  abi:ActOfMarketSegmentation .
+
+abi:hasSegmentationCriterion a owl:ObjectProperty ;
+  owl:inverseOf abi:isSegmentationCriterionOf ;
+  rdfs:label "has segmentation criterion"@en ;
+  skos:definition "Relates a market segment to the criterion it was cut along."@en ;
+  rdfs:domain abi:MarketSegment ;
+  rdfs:range  abi:SegmentationCriterion .
+
+abi:isSegmentationCriterionOf a owl:ObjectProperty ;
+  owl:inverseOf abi:hasSegmentationCriterion ;
+  rdfs:label "is segmentation criterion of"@en ;
+  skos:definition "Relates a segmentation criterion to a market segment cut along it."@en ;
+  rdfs:domain abi:SegmentationCriterion ;
+  rdfs:range  abi:MarketSegment .

@@ -1,0 +1,177 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+
+abi:ActOfMarketAnalysisProcess a owl:Ontology ;
+  # Slice: the act and what it alone uses. Shared vocabulary (MarketAnalystRole,
+  # MarketSource, hasMarketSource) lives in the module MarketsOntology, which
+  # this slice does NOT import (the module consolidates this file).
+  #
+  # Seven-bucket mapping for one SWOT assessment of a market:
+  #   WHO          Organization (the analyst)
+  #   WHAT         ActOfMarketAnalysis (the process itself)
+  #   WHEN         TemporalRegion - when the assessment was made
+  #   WHERE        GeospatialRegion - the geography assessed
+  #   WHY          MarketAnalystRole (SDC)
+  #   HOW IT IS    not stated
+  #   HOW WE KNOW  SWOTFinding: MarketOpportunity and MarketThreat about the market,
+  #                CompetitiveStrength and CompetitiveWeakness about one competitor
+  #                in that market; MarketSource
+  #
+  # Opportunities and threats are external: they belong to the market and
+  # face every competitor alike. Strengths and weaknesses are internal: they
+  # belong to one organization's position in that market, so they name both.
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/MarketOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/GeospatialRegionOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/abi/MarketsOntology> ;
+  abi:pythonPackage "naas_abi_marketplace.domains.intelligence.modules.markets" ;
+  abi:ontologyResource "ontologies/processes/ActOfMarketAnalysisProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/ActOfMarketAnalysisProcess.py" ;
+  dc:title "Act of Market Analysis Process Ontology"@en ;
+  dc:description "Process slice for the act of market analysis: a CCO Planned Act in which an analyst assesses a market's opportunities and threats and its competitors' strengths and weaknesses (SWOT), documented by a market source."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Process slice for Act of Market Analysis. Reuses the shared markets vocabulary."@en ;
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-10-06"^^xsd:date .
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfMarketAnalysis a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 , # Planned Act
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:MarketAnalystRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:analyzesMarket ; owl:someValuesFrom abi:Market ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasSWOTFinding ; owl:someValuesFrom abi:SWOTFinding ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasMarketSource ; owl:someValuesFrom abi:MarketSource ] ;
+  rdfs:label "Act of Market Analysis"@en ;
+  skos:definition "A Planned Act in which an analyst assesses the opportunities and threats a market presents and the strengths and weaknesses of the organizations competing in it."@en ;
+  skos:example "A SWOT of the European cloud computing market in 2026."@en .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:SWOTFinding a owl:Class ;
+  rdfs:subClassOf cco:ont00000853 , # Descriptive Information Content Entity
+    [ a owl:Restriction ; owl:onProperty abi:isFindingAboutMarket ; owl:someValuesFrom abi:Market ] ,
+    [ a owl:Restriction ; owl:onProperty abi:isSWOTFindingOf ; owl:someValuesFrom abi:ActOfMarketAnalysis ] ;
+  rdfs:label "SWOT Finding"@en ;
+  skos:definition "One statement of a SWOT assessment: an opportunity, a threat, a strength or a weakness, in one sentence."@en ;
+  skos:example "'Data sovereignty rules push European public buyers towards European providers.'"@en .
+
+abi:MarketOpportunity a owl:Class ;
+  rdfs:subClassOf abi:SWOTFinding ;
+  rdfs:label "Market Opportunity"@en ;
+  skos:definition "A SWOT finding stating an external condition of a market that its competitors can exploit to grow."@en ;
+  skos:example "Generative AI training and inference drive demand for GPU capacity."@en .
+
+abi:MarketThreat a owl:Class ;
+  rdfs:subClassOf abi:SWOTFinding ;
+  rdfs:label "Market Threat"@en ;
+  skos:definition "A SWOT finding stating an external condition of a market that can harm its competitors."@en ;
+  skos:example "Energy prices and grid capacity constrain new data center builds."@en .
+
+abi:CompetitiveStrength a owl:Class ;
+  rdfs:subClassOf abi:SWOTFinding ,
+    [ a owl:Restriction ; owl:onProperty abi:isFindingAboutOrganization ; owl:someValuesFrom abi:Organization ] ;
+  rdfs:label "Competitive Strength"@en ;
+  skos:definition "A SWOT finding stating an internal advantage one organization has over its competitors in a market."@en ;
+  skos:example "OVHcloud designs its own servers and water cooling, which keeps its unit costs low."@en .
+
+abi:CompetitiveWeakness a owl:Class ;
+  rdfs:subClassOf abi:SWOTFinding ,
+    [ a owl:Restriction ; owl:onProperty abi:isFindingAboutOrganization ; owl:someValuesFrom abi:Organization ] ;
+  rdfs:label "Competitive Weakness"@en ;
+  skos:definition "A SWOT finding stating an internal disadvantage one organization has against its competitors in a market."@en ;
+  skos:example "A narrower catalogue of managed services than the hyperscalers."@en .
+
+abi:MarketOpportunity owl:disjointWith abi:MarketThreat , abi:CompetitiveStrength , abi:CompetitiveWeakness .
+abi:MarketThreat owl:disjointWith abi:CompetitiveStrength , abi:CompetitiveWeakness .
+abi:CompetitiveStrength owl:disjointWith abi:CompetitiveWeakness .
+
+#################################################################
+#    Object properties - process-only
+#################################################################
+
+abi:analyzesMarket a owl:ObjectProperty ;
+  owl:inverseOf abi:isMarketAnalyzedBy ;
+  rdfs:label "analyzes market"@en ;
+  skos:definition "Relates an act of market analysis to the market it assesses."@en ;
+  rdfs:domain abi:ActOfMarketAnalysis ;
+  rdfs:range  abi:Market .
+
+abi:isMarketAnalyzedBy a owl:ObjectProperty ;
+  owl:inverseOf abi:analyzesMarket ;
+  rdfs:label "is market analyzed by"@en ;
+  skos:definition "Relates a market to an act of analysis that assesses it."@en ;
+  rdfs:domain abi:Market ;
+  rdfs:range  abi:ActOfMarketAnalysis .
+
+abi:hasSWOTFinding a owl:ObjectProperty ;
+  owl:inverseOf abi:isSWOTFindingOf ;
+  rdfs:label "has SWOT finding"@en ;
+  skos:definition "Relates an act of market analysis to a finding it states."@en ;
+  rdfs:domain abi:ActOfMarketAnalysis ;
+  rdfs:range  abi:SWOTFinding .
+
+abi:isSWOTFindingOf a owl:ObjectProperty ;
+  owl:inverseOf abi:hasSWOTFinding ;
+  rdfs:label "is SWOT finding of"@en ;
+  skos:definition "Relates a SWOT finding to the act of analysis that states it."@en ;
+  rdfs:domain abi:SWOTFinding ;
+  rdfs:range  abi:ActOfMarketAnalysis .
+
+abi:isFindingAboutMarket a owl:ObjectProperty ;
+  rdfs:subPropertyOf cco:ont00001808 ; # is about
+  owl:inverseOf abi:hasMarketFinding ;
+  rdfs:label "is finding about market"@en ;
+  skos:definition "Relates a SWOT finding to the market it is about."@en ;
+  rdfs:domain abi:SWOTFinding ;
+  rdfs:range  abi:Market .
+
+abi:hasMarketFinding a owl:ObjectProperty ;
+  owl:inverseOf abi:isFindingAboutMarket ;
+  rdfs:label "has market finding"@en ;
+  skos:definition "Relates a market to a SWOT finding about it."@en ;
+  rdfs:domain abi:Market ;
+  rdfs:range  abi:SWOTFinding .
+
+abi:isFindingAboutOrganization a owl:ObjectProperty ;
+  rdfs:subPropertyOf cco:ont00001808 ; # is about
+  owl:inverseOf abi:hasOrganizationFinding ;
+  rdfs:label "is finding about organization"@en ;
+  skos:definition "Relates a strength or weakness to the competitor it is about."@en ;
+  rdfs:domain abi:SWOTFinding ;
+  rdfs:range  abi:Organization .
+
+abi:hasOrganizationFinding a owl:ObjectProperty ;
+  owl:inverseOf abi:isFindingAboutOrganization ;
+  rdfs:label "has organization finding"@en ;
+  skos:definition "Relates an organization to a strength or weakness stated about it."@en ;
+  rdfs:domain abi:Organization ;
+  rdfs:range  abi:SWOTFinding .
+
+#################################################################
+#    Data properties - process-only
+#################################################################
+
+abi:finding_statement a owl:DatatypeProperty ;
+  rdfs:label "finding statement"@en ;
+  skos:definition "The finding in one sentence, as the analyst states it."@en ;
+  rdfs:domain abi:SWOTFinding ;
+  rdfs:range  xsd:string .

@@ -1,0 +1,185 @@
+# Cloud Computing market - curated seed for the markets module.
+#
+# Loaded by MarketSeedPipeline from intelligence/markets/CloudComputing/CloudComputing.yaml.
+# Every section cites where it comes from. Figures (sizes, shares) come only
+# from the published sources named; statements marked "curated" are this
+# seed's own assessment and say so in their source.
+
+market:
+  label: Cloud Computing
+  key: cloud-computing
+  definition: >-
+    On-demand computing, storage, networking and software delivered over the
+    internet and billed by use: infrastructure, platform and software services,
+    on shared (public) or dedicated (private) infrastructure.
+
+segmentation:
+  period: "2026"
+  source:
+    title: Cloud Computing market map (curated seed)
+    publisher: bob markets module
+    date: 2026-10-06
+  segments:
+    - label: Cloud Infrastructure / IaaS (Infrastructure-as-a-Service)
+      key: iaas
+      criterion: Service model
+      definition: Compute, storage and networking rented by the hour or by use.
+    - label: Public Cloud
+      key: public-cloud
+      criterion: Deployment model
+      definition: Cloud services run on infrastructure shared between customers.
+    - label: Private Cloud
+      key: private-cloud
+      criterion: Deployment model
+      definition: Cloud services run on infrastructure dedicated to one customer, hosted or on premises.
+    - label: Web Hosting / Web Cloud
+      key: web-hosting
+      criterion: Workload
+      definition: Hosting of websites, domains and email for businesses and individuals.
+    - label: Cloud Data Centers
+      key: cloud-data-centers
+      criterion: Value chain layer
+      definition: Colocation and wholesale data center capacity that cloud providers and enterprises run their infrastructure in.
+    - label: AI infrastructure / GPU cloud
+      key: gpu-cloud
+      criterion: Workload
+      parents: [iaas, public-cloud]
+      definition: GPU capacity rented for AI training and inference.
+
+competitors:
+  # Synergy Research Group, Q3 2025: worldwide cloud infrastructure services
+  # (IaaS, PaaS, hosted private cloud).
+  - market: iaas
+    source:
+      title: "Cloud Market Share Trends - Big Three Together Hold 63% while Oracle and the Neoclouds Inch Higher"
+      url: https://srgresearch.com/articles/cloud-market-share-trends-big-three-together-hold-63-while-oracle-and-the-neoclouds-inch-higher
+      publisher: Synergy Research Group
+      date: 2025-11-19
+    items:
+      - {organization: Amazon, period: Q3 2025, share_percent: 29, rank: 1}
+      - {organization: Microsoft, period: Q3 2025, share_percent: 20, rank: 2}
+      - {organization: Google, period: Q3 2025, share_percent: 13, rank: 3}
+      - {organization: Alibaba, period: Q3 2025, rank: 4}
+      - {organization: Oracle, period: Q3 2025}
+  - market: gpu-cloud
+    source:
+      title: "Cloud Market Share Trends - Big Three Together Hold 63% while Oracle and the Neoclouds Inch Higher"
+      url: https://srgresearch.com/articles/cloud-market-share-trends-big-three-together-hold-63-while-oracle-and-the-neoclouds-inch-higher
+      publisher: Synergy Research Group
+      date: 2025-11-19
+    items:
+      - {organization: Lambda, period: Q3 2025, website: https://lambda.ai}
+      - {organization: Crusoe, period: Q3 2025, website: https://www.crusoe.ai}
+  # Unlisted European providers: Yahoo Finance cannot read them.
+  - market: public-cloud
+    source:
+      title: Cloud Computing market map (curated seed)
+      publisher: bob markets module
+      date: 2026-10-06
+    items:
+      - {organization: Scaleway, region: Europe, period: "2026", website: https://www.scaleway.com}
+      - {organization: Hetzner, region: Europe, period: "2026", website: https://www.hetzner.com}
+      - {organization: Outscale, region: Europe, period: "2026", website: https://en.outscale.com}
+
+# Listed companies, read from Yahoo Finance (name, website, ticker) and cited to
+# their quote page. `organization` keeps the label the rest of the graph uses.
+yahoofinance:
+  - market: public-cloud
+    tickers:
+      - {symbol: AMZN, organization: Amazon, period: "2026"}
+      - {symbol: MSFT, organization: Microsoft, period: "2026"}
+      - {symbol: GOOGL, organization: Google, period: "2026"}
+      - {symbol: ORCL, organization: Oracle, period: "2026"}
+      - {symbol: BABA, organization: Alibaba, period: "2026"}
+      - {symbol: IBM, organization: IBM, period: "2026"}
+      - {symbol: OVH.PA, organization: OVHcloud, period: "2026"}
+  - market: private-cloud
+    tickers:
+      - {symbol: OVH.PA, organization: OVHcloud, period: "2026"}
+      - {symbol: IBM, organization: IBM, period: "2026"}
+      - {symbol: HPE, organization: Hewlett Packard Enterprise, period: "2026"}
+      - {symbol: RXT, organization: Rackspace Technology, period: "2026"}
+  - market: web-hosting
+    tickers:
+      - {symbol: GDDY, organization: GoDaddy, period: "2026"}
+      - {symbol: IOS.DE, organization: IONOS, region: Europe, period: "2026"}
+      - {symbol: OVH.PA, organization: OVHcloud, period: "2026"}
+      - {symbol: DOCN, organization: DigitalOcean, period: "2026"}
+      - {symbol: AKAM, organization: Akamai, period: "2026"}
+  - market: cloud-data-centers
+    tickers:
+      - {symbol: EQIX, organization: Equinix, period: "2026"}
+      - {symbol: DLR, organization: Digital Realty, period: "2026"}
+  - market: gpu-cloud
+    tickers:
+      - {symbol: CRWV, organization: CoreWeave, period: "2026"}
+      - {symbol: NBIS, organization: Nebius, period: "2026"}
+      - {symbol: ORCL, organization: Oracle, period: "2026"}
+
+sizes:
+  - market: public-cloud
+    value: 723400000000
+    currency: USD
+    year: 2025
+    region: Global
+    growth_rate_percent: 21.5
+    growth_period: 2024-2025
+    analyst: Gartner
+    source:
+      title: Gartner Forecasts Worldwide Public Cloud End-User Spending to Total $723 Billion in 2025
+      url: https://www.gartner.com/en/newsroom/press-releases/2024-11-19-gartner-forecasts-worldwide-public-cloud-end-user-spending-to-total-723-billion-dollars-in-2025
+      publisher: Gartner
+      date: 2024-11-19
+  # Trailing twelve months to Q3 2025; growth is Q3 2025 year on year.
+  - market: iaas
+    value: 390000000000
+    currency: USD
+    year: 2025
+    region: Global
+    growth_rate_percent: 30
+    growth_period: Q3 2024-Q3 2025
+    analyst: Synergy Research Group
+    source:
+      title: "Cloud Market Share Trends - Big Three Together Hold 63% while Oracle and the Neoclouds Inch Higher"
+      url: https://srgresearch.com/articles/cloud-market-share-trends-big-three-together-hold-63-while-oracle-and-the-neoclouds-inch-higher
+      publisher: Synergy Research Group
+      date: 2025-11-19
+
+swot:
+  # Findings the Synergy Research Group article states.
+  - market: iaas
+    analyst: Synergy Research Group
+    region: Global
+    period: Q3 2025
+    source:
+      title: "Cloud Market Share Trends - Big Three Together Hold 63% while Oracle and the Neoclouds Inch Higher"
+      url: https://srgresearch.com/articles/cloud-market-share-trends-big-three-together-hold-63-while-oracle-and-the-neoclouds-inch-higher
+      publisher: Synergy Research Group
+      date: 2025-11-19
+    opportunities:
+      - Cloud infrastructure services revenue grew about 60% in two years, to USD 106.9 billion in Q3 2025.
+      - AI and GPU services let neoclouds such as CoreWeave, Nebius, Lambda and Crusoe gain share.
+    threats:
+      - Amazon, Microsoft and Google hold 63% of the market between them, leaving smaller providers to compete for the rest.
+    strengths:
+      - {organization: Amazon, statement: "Market leader with 29% of worldwide cloud infrastructure services in Q3 2025."}
+      - {organization: Google, statement: "Nearly four times the size of fourth-placed Alibaba."}
+    weaknesses:
+      - {organization: Amazon, statement: "Its market share has eroded from over 32% in 2021 to 29% in Q3 2025."}
+  # This seed's own assessment, to be reviewed and replaced by sourced findings.
+  - market: cloud-computing
+    region: Europe
+    period: "2026"
+    source:
+      title: Cloud Computing market map (curated seed)
+      publisher: bob markets module
+      date: 2026-10-06
+    opportunities:
+      - Data sovereignty requirements push European public buyers and regulated industries towards European providers.
+    threats:
+      - Power and grid capacity limit how fast new data centers can be built.
+      - GPU cloud capacity depends on a concentrated supply of accelerators.
+    strengths:
+      - {organization: OVHcloud, statement: "Designs and builds its own servers and runs its own data centers, which keeps unit costs low."}
+    weaknesses:
+      - {organization: OVHcloud, statement: "A much smaller scale and catalogue of managed services than the US hyperscalers."}

@@ -1,0 +1,82 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+abi:MarketOntology a owl:Ontology ;
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+  dc:title "Market Ontology"@en ;
+  dc:description "The market and its segments, and the organizations that operate in them."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "HOW WE KNOW: a market is described, not observed. It is a Descriptive Information Content Entity about the economic space where buyers and sellers exchange; a segment is a market that is part of a broader one. Moved here from the domain-level OfferingOntology, which now imports it."@en ;
+  rdfs:seeAlso <https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi/naas_abi/ontologies/modules/MarketOntology.ttl> ;
+  abi:pythonPackage "naas_abi" ;
+  abi:ontologyResource "ontologies/modules/MarketOntology.ttl" ;
+  abi:pythonResource "ontologies/modules/MarketOntology.py" ;
+  dc11:contributor "Florent Ravenel", "Alice Dupont", "Emma Petit", "Grace Lambert" ;
+  dc11:date "2026-10-06"^^xsd:date .
+
+#################################################################
+# Classes
+#################################################################
+
+abi:Market a owl:Class ;
+    rdfs:subClassOf cco:ont00000853 ; # Descriptive Information Content Entity
+    rdfs:label "Market"@en ;
+    skos:definition "Represents the economic space where buyers and sellers interact to exchange goods, services, or information, typically characterized by supply and demand dynamics."@en ;
+    skos:example "The technology market"@en ,
+                 "The global oil market"@en ,
+                 "The cloud computing market"@en ;
+    rdfs:comment "A market is an abstract concept used to describe the environment in which trade occurs. As such, it is best represented as a Descriptive Information Content Entity that encompasses the characteristics and dynamics of economic exchanges." .
+
+abi:MarketSegment a owl:Class ;
+    rdfs:subClassOf abi:Market ;
+    rdfs:label "Market Segment"@en ;
+    skos:altLabel "Submarket"@en ;
+    skos:definition "Represents a subset of a market, defined by specific characteristics or criteria that distinguish it from other segments, often based on consumer needs, preferences, or demographics."@en ;
+    skos:example "The luxury car segment within the automotive market"@en ,
+                 "Infrastructure-as-a-Service within the cloud computing market"@en ;
+    rdfs:comment "A segment is itself a market, so it can have segments of its own, and it may be a segment of several broader markets at once: GPU cloud is a segment of IaaS and of Public Cloud. Segments cut along different criteria overlap; their sizes do not add up to the size of the parent."@en .
+
+#################################################################
+# Object Properties
+#################################################################
+
+abi:hasMarket a owl:ObjectProperty ;
+    owl:inverseOf abi:isMarketOf ;
+    rdfs:domain abi:Organization ;
+    rdfs:range abi:Market ;
+    rdfs:label "has market"@en ;
+    skos:definition "Relates an organization to a market it operates in."@en ;
+    rdfs:comment "A shortcut. The dated, sourced statement that an organization competes in a market is an act of competing; this property is what such an act lets a query read in one hop."@en .
+
+abi:isMarketOf a owl:ObjectProperty ;
+    owl:inverseOf abi:hasMarket ;
+    rdfs:domain abi:Market ;
+    rdfs:range abi:Organization ;
+    rdfs:label "is market of"@en ;
+    skos:definition "Relates a market to an organization that operates in it."@en .
+
+abi:hasMarketSegment a owl:ObjectProperty ;
+    owl:inverseOf abi:isMarketSegmentOf ;
+    rdfs:domain abi:Market ;
+    rdfs:range abi:MarketSegment ;
+    rdfs:label "has market segment"@en ;
+    skos:altLabel "has submarket"@en ;
+    skos:definition "Relates a market to one of its segments."@en .
+
+abi:isMarketSegmentOf a owl:ObjectProperty ;
+    owl:inverseOf abi:hasMarketSegment ;
+    rdfs:domain abi:MarketSegment ;
+    rdfs:range abi:Market ;
+    rdfs:label "is market segment of"@en ;
+    skos:altLabel "is submarket of"@en ;
+    skos:definition "Relates a market segment to a broader market it is part of. Not functional: a segment may belong to several broader markets."@en .

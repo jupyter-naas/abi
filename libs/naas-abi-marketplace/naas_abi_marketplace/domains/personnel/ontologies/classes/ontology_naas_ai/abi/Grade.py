@@ -8,4 +8,3 @@ class Grade(_Grade):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

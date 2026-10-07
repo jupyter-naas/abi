@@ -123,20 +123,24 @@ class YfinanceIntegration(Integration):
         for record in data_json:
             if isinstance(record, dict):
                 for key, value in record.items():
-                    if pd.isna(value):  # Handle NaN values
-                        record[key] = None
-                    elif isinstance(
-                        value, pd.Timestamp
-                    ):  # Convert timestamps to ISO format
-                        record[key] = value.isoformat()
-                    elif isinstance(value, list):  # Handle lists recursively
+                    if hasattr(value, "tolist"):
+                        record[key] = value.tolist()
+                    elif isinstance(value, list):
                         record[key] = self._convert_list(value)
-                    elif hasattr(
-                        value, "isoformat"
-                    ):  # Handle other datetime-like objects
+                    elif isinstance(value, dict):
+                        record[key] = self._convert_to_json(value)
+                    elif isinstance(value, pd.Timestamp):
                         record[key] = value.isoformat()
-                    elif hasattr(value, "strftime"):  # Handle date objects
+                    elif hasattr(value, "isoformat"):
+                        record[key] = value.isoformat()
+                    elif hasattr(value, "strftime"):
                         record[key] = value.strftime("%Y-%m-%d")
+                    else:
+                        try:
+                            if pd.isna(value):
+                                record[key] = None
+                        except (ValueError, TypeError):
+                            pass
         return data_json
 
     def _save_data(self, data: Any, prefix: str, filename: str) -> Any:

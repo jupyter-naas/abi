@@ -1,0 +1,580 @@
+{
+  "key": "consumer-cyclical",
+  "name": "Consumer Cyclical",
+  "symbol": "^YH102",
+  "ticker": {
+    "maxAge": 86400,
+    "priceHint": 2,
+    "previousClose": 6690750.0,
+    "regularMarketPreviousClose": 6690750.0,
+    "fiftyTwoWeekLow": 7310570.5,
+    "fiftyTwoWeekHigh": 8642919.0,
+    "fulldayPrice": 8036120.5,
+    "fulldayChange": 22220.0,
+    "fulldayChangePercent": 0.3321003,
+    "fiftyDayAverage": 8211909.5,
+    "twoHundredDayAverage": 8164428.0,
+    "currency": "USD",
+    "tradeable": false,
+    "52WeekChange": -2.3429513,
+    "quoteType": "INDEX",
+    "symbol": "^YH102",
+    "language": "en-US",
+    "region": "US",
+    "typeDisp": "Index",
+    "quoteSourceName": "Delayed Quote",
+    "triggerable": false,
+    "customPriceAlertConfidence": "LOW",
+    "marketState": "PREPRE",
+    "messageBoardId": "finmb_INDEXYH102",
+    "exchangeTimezoneName": "America/New_York",
+    "exchangeTimezoneShortName": "EDT",
+    "gmtOffSetMilliseconds": -14400000,
+    "market": "us_market",
+    "esgPopulated": false,
+    "hasPrePostMarketData": false,
+    "firstTradeDateMilliseconds": 1483367400000,
+    "regularMarketChange": 22220.0,
+    "regularMarketChangePercent": 0.3321003,
+    "regularMarketPrice": 8036120.5,
+    "fullExchangeName": "YHD",
+    "fiftyTwoWeekLowChange": 725550.0,
+    "fiftyTwoWeekLowChangePercent": 0.0992467,
+    "fiftyTwoWeekRange": "7310570.5 - 8642919.0",
+    "fiftyTwoWeekHighChange": -606798.5,
+    "fiftyTwoWeekHighChangePercent": -0.07020759,
+    "fiftyTwoWeekChangePercent": -2.3429513,
+    "shortName": "^YH102,^YH102,",
+    "longName": "Consumer Cyclical (Sector)",
+    "corporateActions": [],
+    "regularMarketTime": 1791316800,
+    "exchange": "YHD",
+    "fiftyDayAverageChange": -175789.0,
+    "fiftyDayAverageChangePercent": -0.021406593,
+    "twoHundredDayAverageChange": -128307.5,
+    "twoHundredDayAverageChangePercent": -0.01571543,
+    "sourceInterval": 15,
+    "exchangeDataDelayedBy": 0,
+    "cryptoTradeable": false,
+    "displayName": "Consumer Cyclical",
+    "trailingPegRatio": null
+  },
+  "overview": {
+    "companies_count": 574,
+    "market_cap": 8036139663360,
+    "message_board_id": "INDEXYH102",
+    "description": "This sector includes retail stores, auto and auto-parts manufacturers, restaurants, lodging facilities, restaurants, and entertainment companies. Companies in this sector include Ford Motor Co., McDonald’s, and News Corp.",
+    "industries_count": 23,
+    "market_weight": 0.08938161,
+    "employee_count": 11881076
+  },
+  "top_companies": [
+    {
+      "key": "AMZN",
+      "name": "Amazon.com, Inc.",
+      "rating": "Strong Buy",
+      "market_weight": 0.3544416
+    },
+    {
+      "key": "TSLA",
+      "name": "Tesla, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.19277352
+    },
+    {
+      "key": "HD",
+      "name": "The Home Depot, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.036673132
+    },
+    {
+      "key": "MCD",
+      "name": "McDonald's Corporation",
+      "rating": "Buy",
+      "market_weight": 0.021090304
+    },
+    {
+      "key": "TJX",
+      "name": "The TJX Companies, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.019325826
+    },
+    {
+      "key": "BKNG",
+      "name": "Booking Holdings Inc.",
+      "rating": "Buy",
+      "market_weight": 0.015185839
+    },
+    {
+      "key": "SBUX",
+      "name": "Starbucks Corporation",
+      "rating": "Buy",
+      "market_weight": 0.0140479645
+    },
+    {
+      "key": "LOW",
+      "name": "Lowe's Companies, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.013212436
+    },
+    {
+      "key": "ABNB",
+      "name": "Airbnb, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.01212451
+    },
+    {
+      "key": "MAR",
+      "name": "Marriott International, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.012079122
+    },
+    {
+      "key": "MELI",
+      "name": "MercadoLibre, Inc.",
+      "rating": "Strong Buy",
+      "market_weight": 0.012077135
+    },
+    {
+      "key": "DASH",
+      "name": "DoorDash, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.010756644
+    },
+    {
+      "key": "RCL",
+      "name": "Royal Caribbean Cruises Ltd.",
+      "rating": "Buy",
+      "market_weight": 0.009902688
+    },
+    {
+      "key": "HLT",
+      "name": "Hilton Worldwide Holdings Inc.",
+      "rating": "Buy",
+      "market_weight": 0.009309484
+    },
+    {
+      "key": "GM",
+      "name": "General Motors Company",
+      "rating": "Buy",
+      "market_weight": 0.00922635
+    },
+    {
+      "key": "ROST",
+      "name": "Ross Stores, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.009221545
+    },
+    {
+      "key": "ORLY",
+      "name": "O'Reilly Automotive, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.008830821
+    },
+    {
+      "key": "NKE",
+      "name": "NIKE, Inc.",
+      "rating": "Hold",
+      "market_weight": 0.0065911068
+    },
+    {
+      "key": "F",
+      "name": "Ford Motor Company",
+      "rating": "Buy",
+      "market_weight": 0.006278407
+    },
+    {
+      "key": "EBAY",
+      "name": "eBay Inc.",
+      "rating": "Hold",
+      "market_weight": 0.0061083967
+    },
+    {
+      "key": "AZO",
+      "name": "AutoZone, Inc.",
+      "rating": "Strong Buy",
+      "market_weight": 0.006010552
+    },
+    {
+      "key": "CVNA",
+      "name": "Carvana Co.",
+      "rating": "Buy",
+      "market_weight": 0.0058964007
+    },
+    {
+      "key": "CMG",
+      "name": "Chipotle Mexican Grill, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.005013401
+    },
+    {
+      "key": "DHI",
+      "name": "D.R. Horton, Inc.",
+      "rating": "Hold",
+      "market_weight": 0.0049041277
+    },
+    {
+      "key": "YUM",
+      "name": "Yum! Brands, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.004893016
+    },
+    {
+      "key": "VIK",
+      "name": "Viking Holdings Ltd",
+      "rating": "Strong Buy",
+      "market_weight": 0.0046751844
+    },
+    {
+      "key": "CCL",
+      "name": "Carnival Corporation Ltd.",
+      "rating": "Buy",
+      "market_weight": 0.0045823823
+    },
+    {
+      "key": "EXPE",
+      "name": "Expedia Group, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.004002132
+    },
+    {
+      "key": "WSM",
+      "name": "Williams-Sonoma, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.0036582407
+    },
+    {
+      "key": "SN",
+      "name": "SharkNinja, Inc.",
+      "rating": "Strong Buy",
+      "market_weight": 0.0033517599
+    },
+    {
+      "key": "CPNG",
+      "name": "Coupang, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.0033233569
+    },
+    {
+      "key": "LVS",
+      "name": "Las Vegas Sands Corp.",
+      "rating": "Buy",
+      "market_weight": 0.0030153722
+    },
+    {
+      "key": "ULTA",
+      "name": "Ulta Beauty, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.0030003332
+    },
+    {
+      "key": "TPR",
+      "name": "Tapestry, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.0029704066
+    },
+    {
+      "key": "DRI",
+      "name": "Darden Restaurants, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.0029468904
+    },
+    {
+      "key": "CASY",
+      "name": "Casey's General Stores, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.0029418843
+    },
+    {
+      "key": "SW",
+      "name": "Smurfit Westrock Plc",
+      "rating": "Strong Buy",
+      "market_weight": 0.0028508073
+    },
+    {
+      "key": "PHM",
+      "name": "PulteGroup, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.002835542
+    },
+    {
+      "key": "RL",
+      "name": "Ralph Lauren Corporation",
+      "rating": "Buy",
+      "market_weight": 0.002816402
+    },
+    {
+      "key": "RIVN",
+      "name": "Rivian Automotive, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.0026936065
+    },
+    {
+      "key": "PKG",
+      "name": "Packaging Corporation of America",
+      "rating": "Buy",
+      "market_weight": 0.0026244966
+    },
+    {
+      "key": "AMCR",
+      "name": "Amcor plc",
+      "rating": "Buy",
+      "market_weight": 0.0024739755
+    },
+    {
+      "key": "LEN",
+      "name": "Lennar Corporation",
+      "rating": "Hold",
+      "market_weight": 0.0023611954
+    },
+    {
+      "key": "BBY",
+      "name": "Best Buy Co., Inc.",
+      "rating": "Hold",
+      "market_weight": 0.0022816425
+    },
+    {
+      "key": "GPC",
+      "name": "Genuine Parts Company",
+      "rating": "Buy",
+      "market_weight": 0.0022515352
+    },
+    {
+      "key": "BURL",
+      "name": "Burlington Stores, Inc.",
+      "rating": "Buy",
+      "market_weight": 0.0022263317
+    },
+    {
+      "key": "IP",
+      "name": "International Paper Company",
+      "rating": "Buy",
+      "market_weight": 0.0021822732
+    },
+    {
+      "key": "TSCO",
+      "name": "Tractor Supply Company",
+      "rating": "Buy",
+      "market_weight": 0.0021571445
+    },
+    {
+      "key": "NVR",
+      "name": "NVR, Inc.",
+      "rating": "Hold",
+      "market_weight": 0.0020762833
+    },
+    {
+      "key": "AS",
+      "name": "Amer Sports, Inc.",
+      "rating": "Strong Buy",
+      "market_weight": 0.0020708547
+    }
+  ],
+  "research_reports": [
+    {
+      "id": "ARGUS_48437_InsiderActivity_1791281801000",
+      "headHtml": "Daily – Vickers Top Insider Picks for 10/06/2026",
+      "provider": "Argus Research",
+      "reportDate": "2026-10-06T10:16:41Z",
+      "reportTitle": "The Vickers Top Insider Picks is a daily report that utilizes a proprietary algorithm to identify 25 companies with compelling insider purchase histories based on transactions over the past three months.",
+      "reportType": "Insider Activity"
+    },
+    {
+      "id": "MS_0P0000068U_AnalystReport_1791242983000",
+      "headHtml": "Analyst Report: Chipotle Mexican Grill, Inc.",
+      "provider": "Morningstar",
+      "targetPrice": 36.0,
+      "targetPriceStatus": "Maintained",
+      "investmentRating": "Bullish",
+      "reportDate": "2026-10-05T23:29:43Z",
+      "reportTitle": "Chipotle is a leading fast-casual, Mexican-inspired restaurant chain operator, generating $11.9 billion in sales across 3,983 company-operated US locations, 104 international units primarily in Canada and Europe, and 14 licensed stores largely operated in the Middle East at the end of 2025. The firm’s revenue is primarily driven by food and beverage sales at its company-owned restaurants, supplemented by delivery fees generated through its first-party digital channels. Chipotle emphasizes ingredients with no artificial flavors and utilizes an efficient, assembly line service model to serve mainly customizable burritos, bowls, salads, quesadillas, and tacos. ",
+      "reportType": "Analyst Report"
+    },
+    {
+      "id": "MS_0P000005YF_AnalystReport_1791241445000",
+      "headHtml": "Analyst Report: Williams-Sonoma, Inc.",
+      "provider": "Morningstar",
+      "targetPrice": 151.0,
+      "targetPriceStatus": "Maintained",
+      "investmentRating": "Bearish",
+      "reportDate": "2026-10-05T23:04:05Z",
+      "reportTitle": "With a retail and direct-to-consumer presence, Williams-Sonoma is a player in the nearly $300 billion domestic home category and $450 billion international home market, focused on expanding its exposure in the B2B ($80 billion total addressable market), marketplace, and franchise areas. Namesake Williams-Sonoma (153 stores) offers high-end cooking essentials, while Pottery Barn (181) provides casual home accessories. West Elm (117) is an emerging concept for young professionals, and Rejuvenation (13) offers lighting and house parts. Brand extensions include Pottery Barn Kids and Pottery Barn Teen (43) as well as Mark & Graham and GreenRow. Williams-Sonoma also has a business-to-business team that supports projects that range from residential to large-scale commercial. ",
+      "reportType": "Analyst Report"
+    },
+    {
+      "id": "MS_0P0001L8LC_AnalystReport_1791241252000",
+      "headHtml": "Analyst Report: Airbnb, Inc.",
+      "provider": "Morningstar",
+      "targetPrice": 185.0,
+      "targetPriceStatus": "Maintained",
+      "investmentRating": "Neutral",
+      "reportDate": "2026-10-05T23:00:52Z",
+      "reportTitle": "Airbnb is the world’s largest online alternative accommodation travel agency; it also offers booking services for boutique hotels, experiences, and hotel-like services. Airbnb’s platform offers over 9 million active accommodation listings. Listings from the company’s 5 million-plus hosts are spread over almost every country in the world. In 2025, 42% of revenue was from North America, 39% from Europe, the Middle East, and Africa, 10% from Latin America, and 9% from Asia-Pacific. Transaction fees for online bookings account for all its revenue. ",
+      "reportType": "Analyst Report"
+    }
+  ],
+  "top_etfs": {
+    "XLY": "State Street Consumer Discretio",
+    "VCR": "Vanguard Consumer Discretion ET",
+    "ITB": "iShares U.S. Home Construction ",
+    "FDIS": "Fidelity MSCI Consumer Discreti",
+    "XHB": "State Street SPDR S&P Homebuild",
+    "IYC": "iShares U.S. Consumer Discretio",
+    "XRT": "State Street SPDR S&P Retail ET",
+    "RSPD": "Invesco S&P 500 Equal Weight Co",
+    "PEJ": "Invesco Leisure and Entertainme",
+    "RXI": "iShares Global Consumer Discret"
+  },
+  "top_mutual_funds": {
+    "BPTIX": "Baron Partners Fund Inst Shs",
+    "BPTRX": "Baron Partners Fund",
+    "BPTUX": "Baron Partners Fund R6 Shs",
+    "PSH": "Pershing Square Holdings Ord",
+    "VCDAX": "Vanguard Consumer Discretionary",
+    "FSRPX": "Fidelity Select Retailing Pt",
+    "0P00003EHR": "JNL/Mellon Consumer Discretiona",
+    "0P00003CBJ": "JNL/Mellon Consumer Discretiona",
+    "FFNSX": null,
+    "FFNNX": null
+  },
+  "industries": [
+    {
+      "key": "internet-retail",
+      "name": "Internet Retail",
+      "symbol": "^YH10280050",
+      "market_weight": 0.38197896
+    },
+    {
+      "key": "auto-manufacturers",
+      "name": "Auto Manufacturers",
+      "symbol": "^YH10200020",
+      "market_weight": 0.2168011
+    },
+    {
+      "key": "restaurants",
+      "name": "Restaurants",
+      "symbol": "^YH10270010",
+      "market_weight": 0.061139654
+    },
+    {
+      "key": "travel-services",
+      "name": "Travel Services",
+      "symbol": "^YH10290050",
+      "market_weight": 0.052759737
+    },
+    {
+      "key": "home-improvement-retail",
+      "name": "Home Improvement Retail",
+      "symbol": "^YH10280030",
+      "market_weight": 0.048957657
+    },
+    {
+      "key": "apparel-retail",
+      "name": "Apparel Retail",
+      "symbol": "^YH10280010",
+      "market_weight": 0.036403574
+    },
+    {
+      "key": "auto-parts",
+      "name": "Auto Parts",
+      "symbol": "^YH10200030",
+      "market_weight": 0.034665868
+    },
+    {
+      "key": "lodging",
+      "name": "Lodging",
+      "symbol": "^YH10290030",
+      "market_weight": 0.023907216
+    },
+    {
+      "key": "specialty-retail",
+      "name": "Specialty Retail",
+      "symbol": "^YH10280060",
+      "market_weight": 0.022418423
+    },
+    {
+      "key": "auto-truck-dealerships",
+      "name": "Auto & Truck Dealerships",
+      "symbol": "^YH10200010",
+      "market_weight": 0.019374244
+    },
+    {
+      "key": "packaging-containers",
+      "name": "Packaging & Containers",
+      "symbol": "^YH10250010",
+      "market_weight": 0.018227706
+    },
+    {
+      "key": "residential-construction",
+      "name": "Residential Construction",
+      "symbol": "^YH10230010",
+      "market_weight": 0.017388823
+    },
+    {
+      "key": "footwear-accessories",
+      "name": "Footwear & Accessories",
+      "symbol": "^YH10240030",
+      "market_weight": 0.0114327455
+    },
+    {
+      "key": "resorts-casinos",
+      "name": "Resorts & Casinos",
+      "symbol": "^YH10290040",
+      "market_weight": 0.008981928
+    },
+    {
+      "key": "furnishings-fixtures-appliances",
+      "name": "Furnishings, Fixtures & Appliances",
+      "symbol": "^YH10220010",
+      "market_weight": 0.00846143
+    },
+    {
+      "key": "leisure",
+      "name": "Leisure",
+      "symbol": "^YH10290020",
+      "market_weight": 0.008364037
+    },
+    {
+      "key": "apparel-manufacturing",
+      "name": "Apparel Manufacturing",
+      "symbol": "^YH10240020",
+      "market_weight": 0.007994731
+    },
+    {
+      "key": "gambling",
+      "name": "Gambling",
+      "symbol": "^YH10290010",
+      "market_weight": 0.00603452
+    },
+    {
+      "key": "personal-services",
+      "name": "Personal Services",
+      "symbol": "^YH10260010",
+      "market_weight": 0.0050669694
+    },
+    {
+      "key": "luxury-goods",
+      "name": "Luxury Goods",
+      "symbol": "^YH10280040",
+      "market_weight": 0.0038766563
+    },
+    {
+      "key": "recreational-vehicles",
+      "name": "Recreational Vehicles",
+      "symbol": "^YH10200040",
+      "market_weight": 0.0029577203
+    },
+    {
+      "key": "department-stores",
+      "name": "Department Stores",
+      "symbol": "^YH10280020",
+      "market_weight": 0.002565768
+    },
+    {
+      "key": "textile-manufacturing",
+      "name": "Textile Manufacturing",
+      "symbol": "^YH10240010",
+      "market_weight": 0.00024053344
+    }
+  ]
+}

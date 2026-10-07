@@ -11,6 +11,8 @@
 
 <http://ontology.naas.ai/abi/OfferingOntology> a owl:Ontology ;
     owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl>  ;
+    # Market and MarketSegment moved to the MarketOntology module.
+    owl:imports <http://ontology.naas.ai/abi/MarketOntology> ;
     dc:title "Offering Ontology"@en ;
     dc:description "Ontology for offerings."@en ;
     dc:license <https://creativecommons.org/licenses/by/4.0/> ;
@@ -51,24 +53,6 @@ abi:Solution a owl:Class ;
                  "A complete digital transformation package with hardware, software and training services"@en ;
     abi:is_curated_in_foundry "enterprise_management_foundry" .
 
-abi:Market a owl:Class ;
-    rdfs:subClassOf cco:ont00000853 ;
-    rdfs:label "Market"@en ;
-    skos:definition "Represents the economic space where buyers and sellers interact to exchange goods, services, or information, typically characterized by supply and demand dynamics."@en ;
-    skos:example "The technology market"@en ,
-                 "The global oil market"@en ;
-    rdfs:comment "A market is an abstract concept used to describe the environment in which trade occurs. As such, it is best represented as a Descriptive Information Content Entity that encompasses the characteristics and dynamics of economic exchanges." ;
-    abi:is_curated_in_foundry "enterprise_management_foundry" .
-
-abi:MarketSegment a owl:Class ;
-    rdfs:subClassOf abi:Market ;
-    rdfs:label "Market Segment"@en ;
-    skos:definition "Represents a subset of a market, defined by specific characteristics or criteria that distinguish it from other segments, often based on consumer needs, preferences, or demographics."@en ;
-    skos:example "The luxury car segment within the automotive market"@en ,
-                 "The millennial smartphone user segment"@en ;
-    rdfs:comment "A market segment is a more focused abstraction that describes a particular portion of a market with shared attributes. It is best categorized as a Descriptive Information Content Entity that details the specific traits and preferences of a particular group within the larger market." ;
-    abi:is_curated_in_foundry "enterprise_management_foundry" .
-
 #################################################################
 #    Object Properties
 #################################################################
@@ -87,40 +71,6 @@ abi:isOfferingOf a owl:ObjectProperty ;
     owl:inverseOf abi:hasOffering ;
     rdfs:label "is_offering_of"@en ;
     skos:definition "Relates offerings back to their providing organization."@en .
-
-abi:hasMarket a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000218 ;
-    rdfs:domain cco:ont00001180 ;
-    rdfs:range abi:Market ;
-    rdfs:label "has market" ;
-    skos:definition "Relates an Organization to its Market." ;
-    rdfs:comment "This property connects an organization to its market, indicating the market it operates in." .
-
-abi:isMarketOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000127 ;
-    rdfs:domain abi:Market ;
-    rdfs:range cco:ont00001180 ;
-    owl:inverseOf abi:hasMarket ;
-    rdfs:label "is market of" ;
-    skos:definition "Relates a Market to the Organization that it belongs to." ;
-    rdfs:comment "This property connects a market segment to the organization that it belongs to." .
-
-abi:hasMarketSegment a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000218 ;
-    rdfs:domain abi:Market ;
-    rdfs:range abi:MarketSegment ;
-    rdfs:label "has market segment" ;
-    skos:definition "Relates a Market to its Market Segment." ;
-    rdfs:comment "This property connects a market to its market segment, indicating the segment of the market it operates in." .
-
-abi:isMarketSegmentOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000127 ;
-    rdfs:domain abi:MarketSegment ;
-    rdfs:range abi:Market ;
-    owl:inverseOf abi:hasMarketSegment ;
-    rdfs:label "is market segment of" ;
-    skos:definition "Relates a Market Segment to the Market that it belongs to." ;
-    rdfs:comment "This property connects a market segment to the market that it belongs to." .
 
 abi:Targets a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000218 ;

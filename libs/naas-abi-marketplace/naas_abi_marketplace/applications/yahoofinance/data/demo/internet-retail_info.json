@@ -1,0 +1,73 @@
+{
+  "sector_key": "consumer-cyclical",
+  "sector_name": "Consumer Cyclical",
+  "top_performing_companies": [
+    {
+      "key": "LOGC",
+      "name": "ContextLogic Holdings Inc.",
+      "ytd_return": 0.996,
+      "last_price": 15.13,
+      "target_price": 5.9
+    },
+    {
+      "key": "PTRN",
+      "name": "Pattern Group Inc.",
+      "ytd_return": 0.5442,
+      "last_price": 17.82,
+      "target_price": 0.0
+    },
+    {
+      "key": "LQDT",
+      "name": "Liquidity Services, Inc.",
+      "ytd_return": 0.3695,
+      "last_price": 41.51,
+      "target_price": 51.0
+    },
+    {
+      "key": "ETSY",
+      "name": "Etsy, Inc.",
+      "ytd_return": 0.2877,
+      "last_price": 71.39,
+      "target_price": 88.3333
+    },
+    {
+      "key": "EBAY",
+      "name": "eBay Inc.",
+      "ytd_return": 0.2292,
+      "last_price": 107.06,
+      "target_price": 116.111
+    }
+  ],
+  "top_growth_companies": [
+    {
+      "key": "CHWY",
+      "name": "Chewy, Inc.",
+      "ytd_return": -0.4511,
+      "growth_estimate": 9.222222222222223
+    },
+    {
+      "key": "MELI",
+      "name": "MercadoLibre, Inc.",
+      "ytd_return": -0.0776,
+      "growth_estimate": 0.8823227132579651
+    },
+    {
+      "key": "AMZN",
+      "name": "Amazon.com, Inc.",
+      "ytd_return": 0.1103,
+      "growth_estimate": 0.7724137931034483
+    },
+    {
+      "key": "RVLV",
+      "name": "Revolve Group, Inc.",
+      "ytd_return": -0.2974,
+      "growth_estimate": 0.6052631578947368
+    },
+    {
+      "key": "EBAY",
+      "name": "eBay Inc.",
+      "ytd_return": 0.2292,
+      "growth_estimate": 0.13915094339622638
+    }
+  ]
+}
