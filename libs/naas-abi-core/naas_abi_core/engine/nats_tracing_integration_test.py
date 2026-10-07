@@ -95,7 +95,11 @@ def test_a_kernel_call_is_one_trace_from_caller_to_service(broker, monkeypatch):
                 with pytest.raises(KVNotFoundError):
                     await asyncio.to_thread(client.get, "missing")
         finally:
-            await tap.unsubscribe()
+            # The tap gets its copy of a reply after the client does. The round
+            # trip queues every copy, and drain hands the queued ones to the
+            # callback before unsubscribing (unsubscribe would drop them).
+            await nc.flush()
+            await tap.drain()
             await asyncio.to_thread(client.close)
             await primary.stop()
             await nc.close()
