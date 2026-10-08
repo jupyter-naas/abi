@@ -44,8 +44,13 @@ The broker was reachable from:
   that URL.
 - The client and monitoring ports are published on 127.0.0.1 only. Containers
   still reach the broker as `nats:4222`.
-- `abi dev up --with-nats` is unchanged. Its broker listens on 127.0.0.1 and
-  has no users.
+- `abi dev up --with-nats` does the same with its native broker: the
+  `nats.conf` it writes (owner-only) declares both users with the passwords
+  from `.env`, its overlay logs the engine in as `abi`, and the `dev.modules`
+  it starts get `ABI_NATS_URL` logged in as `module`. So every broker a
+  project runs, in Docker or with `abi dev`, refuses a client without a
+  password. Only the throwaway loopback brokers of the test suites and of
+  `examples/standalone_module` have no users.
 
 ## Alternatives
 

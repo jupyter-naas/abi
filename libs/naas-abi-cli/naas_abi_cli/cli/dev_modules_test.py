@@ -15,9 +15,11 @@ from naas_abi_cli.cli.dev_modules import (
 )
 
 SECRET = "s" * 48
+MODULE_PASSWORD = "nats-" + "m" * 40
 OVERLAY = {
     "nats": {
-        "nats_url": "nats://127.0.0.1:13042",
+        # The engine's login; a module logs in as `module` instead.
+        "nats_url": "nats://abi:nats-engine-password@127.0.0.1:13042",
         "jwt_secret": SECRET,
         "discovery": {"project": "zen"},
     }
@@ -31,10 +33,12 @@ MODULE = DevModuleConfiguration(
 
 
 def test_a_module_gets_the_dev_broker_and_a_service_token(tmp_path):
-    env = module_environment(MODULE, OVERLAY, tmp_path, {"HOME": "/home/me"})
+    env = module_environment(
+        MODULE, OVERLAY, tmp_path, {"HOME": "/home/me"}, nats_password=MODULE_PASSWORD
+    )
 
     assert env["HOME"] == "/home/me"
-    assert env["ABI_NATS_URL"] == "nats://127.0.0.1:13042"
+    assert env["ABI_NATS_URL"] == f"nats://module:{MODULE_PASSWORD}@127.0.0.1:13042"
     assert env["NATS_JWT_SECRET"] == SECRET
     assert env["ABI_DISCOVERY_PROJECT"] == "zen"
     assert verify_service_token(env["ABI_SERVICE_TOKEN"], SECRET) == "probe-researcher"
@@ -42,7 +46,7 @@ def test_a_module_gets_the_dev_broker_and_a_service_token(tmp_path):
 
 
 def test_module_env_names_the_dev_settings(tmp_path):
-    env = module_environment(MODULE, OVERLAY, tmp_path, {})
+    env = module_environment(MODULE, OVERLAY, tmp_path, {}, nats_password=MODULE_PASSWORD)
 
     assert env["NATS_PROBE_DISCOVERY_PROJECT"] == "zen"
     assert env["KEEP"] == "$1"
@@ -55,7 +59,9 @@ def test_tracing_and_the_src_layout_reach_the_module(tmp_path):
         "telemetry": {"enabled": True, "otlp_endpoint": "http://127.0.0.1:16000"},
     }
 
-    env = module_environment(MODULE, overlay, tmp_path, {"PYTHONPATH": "/x"})
+    env = module_environment(
+        MODULE, overlay, tmp_path, {"PYTHONPATH": "/x"}, nats_password=MODULE_PASSWORD
+    )
 
     assert env["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://127.0.0.1:16000"
     assert env["PYTHONPATH"].split(":") == [str(tmp_path / "src"), "/x"]

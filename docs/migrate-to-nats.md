@@ -120,8 +120,9 @@ In this phase every engine keeps its services and adds NATS on top.
    engine runs outside Docker on the same machine (the port listens on
    127.0.0.1 only). SDK modules log in as `module`:
    `ABI_NATS_URL=nats://module:<NATS_MODULE_PASSWORD>@nats:4222`.
-   `abi dev up --with-nats` runs its own broker on 127.0.0.1, without
-   passwords.
+   `abi dev up --with-nats` runs its own broker on 127.0.0.1 with the same
+   two users and passwords: its overlay logs the engine in as `abi`, and the
+   `dev.modules` it starts as `module`.
 
 4. **Remove the `bus:` section** from `services:`. Configs created by
    `abi new project` declare one: `rabbitmq` in `config.local.yaml`,

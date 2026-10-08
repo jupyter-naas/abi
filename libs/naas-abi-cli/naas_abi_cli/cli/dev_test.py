@@ -8,6 +8,7 @@ the literal. These two must not drift back together.
 """
 
 import importlib
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -434,7 +435,7 @@ def test_ready_probe_port_is_a_no_op_for_every_other_service() -> None:
         assert dev._ready_probe_port(name, 9999) == 9999
 
 
-def test_nats_binds_the_ipv4_literal_and_both_ports(monkeypatch) -> None:
+def test_nats_binds_the_ipv4_literal_and_both_ports(monkeypatch, tmp_path) -> None:
     """Server-to-server hop: no DNS, no ::1 ambiguity — same discipline as oxigraph."""
     captured: dict = {}
     monkeypatch.setattr(
@@ -443,6 +444,8 @@ def test_nats_binds_the_ipv4_literal_and_both_ports(monkeypatch) -> None:
         lambda spec, cmd, cwd, env: captured.update(cmd=cmd) or 1234,
     )
     monkeypatch.setattr(dev.shutil, "which", lambda name: "/usr/local/bin/nats-server")
+    # The launcher writes storage/nats/nats.conf and the passwords in .env.
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
 
     client_port = 13380
     dev._launch_nats(_spec("nats", client_port))
@@ -497,6 +500,89 @@ def test_nats_config_file_is_rewritten_on_every_launch(monkeypatch, tmp_path) ->
     assert "1MB" not in config_path.read_text()
 
 
+def _env_value(path: Path, key: str) -> str:
+    (value,) = [
+        line.split("=", 1)[1]
+        for line in path.read_text().splitlines()
+        if line.startswith(f"{key}=")
+    ]
+    return value
+
+
+def test_the_dev_broker_has_a_user_for_the_engine_and_one_for_modules(
+    monkeypatch, tmp_path
+) -> None:
+    """Only clients with a password get in, as in the Docker stack."""
+    captured: dict = {}
+    monkeypatch.setattr(
+        dev, "_spawn", lambda spec, cmd, cwd, env: captured.update(cmd=cmd) or 1234
+    )
+    monkeypatch.setattr(dev.shutil, "which", lambda name: "/usr/local/bin/nats-server")
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+
+    dev._launch_nats(_spec("nats", 13380))
+
+    config_path = Path(captured["cmd"][captured["cmd"].index("-c") + 1])
+    config = config_path.read_text()
+    for user, key in (("abi", "NATS_ABI_PASSWORD"), ("module", "NATS_MODULE_PASSWORD")):
+        password = _env_value(tmp_path / ".env", key)
+        assert len(password) >= 32
+        assert f'{{ user: "{user}", password: "{password}" }}' in config
+    assert config_path.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.skipif(
+    shutil.which("nats-server") is None, reason="nats-server not installed"
+)
+def test_the_dev_broker_refuses_a_client_without_a_password(tmp_path) -> None:
+    import asyncio
+    import socket
+    import subprocess
+    import time
+
+    import nats
+    from nats.errors import Error as NATSError
+
+    passwords = {"NATS_ABI_PASSWORD": "nats-abi-pw", "NATS_MODULE_PASSWORD": "nats-module-pw"}
+    config = tmp_path / "nats.conf"
+    config.write_text(dev._nats_server_config(passwords))
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    server = subprocess.Popen(
+        [str(shutil.which("nats-server")), "-c", str(config), "-a", "127.0.0.1", "-p", str(port)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    async def connect(login: str):
+        return await nats.connect(
+            f"nats://{login}127.0.0.1:{port}", allow_reconnect=False, connect_timeout=2
+        )
+
+    async def scenario() -> None:
+        for login in ("", "abi:wrong@", "module:nats-abi-pw@"):
+            with pytest.raises(NATSError, match="Authorization Violation"):
+                await connect(login)
+        for login in ("abi:nats-abi-pw@", "module:nats-module-pw@"):
+            await (await connect(login)).close()
+
+    try:
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                socket.create_connection(("127.0.0.1", port), timeout=0.1).close()
+                break
+            except OSError:
+                assert server.poll() is None, "nats-server refused the dev nats.conf"
+                assert time.monotonic() < deadline
+                time.sleep(0.05)
+        asyncio.run(scenario())
+    finally:
+        server.terminate()
+        server.wait(timeout=5)
+
+
 def test_nats_raises_a_helpful_error_when_the_binary_is_missing(monkeypatch) -> None:
     monkeypatch.setattr(dev.shutil, "which", lambda name: None)
 
@@ -524,15 +610,21 @@ def test_the_nats_overlay_points_the_engine_at_the_dev_broker(monkeypatch, tmp_p
     monkeypatch.setattr(dev, "_project_root", lambda: tmp_path / "my project.v2")
     monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path / "dev")
 
-    path = dev._write_dev_overlay({"nats": 13042}, nats_secret="s" * 48)
+    path = dev._write_dev_overlay(
+        {"nats": 13042}, nats_secret="s" * 48, nats_password="nats-engine-pw"
+    )
 
     nats = yaml.safe_load(path.read_text())["nats"]
-    assert nats["nats_url"] == "nats://127.0.0.1:13042"
+    # The engine logs in as the broker user `abi`.
+    assert nats["nats_url"] == "nats://abi:nats-engine-pw@127.0.0.1:13042"
     assert nats["jwt_secret"] == "s" * 48
     assert nats["monitoring_url"] == f"http://127.0.0.1:{dev._nats_monitor_port(13042)}"
     assert nats["discovery"] == {"project": "my-project-v2"}
     bus = yaml.safe_load(path.read_text())["services"]["bus"]["bus_adapter"]
-    assert bus == {"adapter": "nats_jetstream", "config": {"nats_url": "nats://127.0.0.1:13042"}}
+    assert bus == {
+        "adapter": "nats_jetstream",
+        "config": {"nats_url": "nats://abi:nats-engine-pw@127.0.0.1:13042"},
+    }
     assert path.stat().st_mode & 0o777 == 0o600
 
 
@@ -697,7 +789,9 @@ def test_the_overlay_turns_tracing_on_when_asked(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(dev, "_project_root", lambda: tmp_path / "zen")
     monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path / "dev")
 
-    path = dev._write_dev_overlay({"nats": 13042, "jaeger": 15042}, nats_secret="s" * 48, tracing=True)
+    path = dev._write_dev_overlay(
+        {"nats": 13042, "jaeger": 15042}, nats_secret="s" * 48, nats_password="pw", tracing=True
+    )
 
     overlay = yaml.safe_load(path.read_text())
     assert overlay["telemetry"] == {
@@ -707,7 +801,7 @@ def test_the_overlay_turns_tracing_on_when_asked(monkeypatch, tmp_path) -> None:
         "ui_url": "http://localhost:15042",
         "query_url": "http://127.0.0.1:15042",
     }
-    assert overlay["nats"]["nats_url"] == "nats://127.0.0.1:13042"
+    assert overlay["nats"]["nats_url"] == "nats://abi:pw@127.0.0.1:13042"
     assert path.name == "dev.overlay.yaml"
 
 
@@ -798,7 +892,7 @@ def test_selecting_services_leaves_the_modules_alone(stack) -> None:
 
 
 def test_a_module_can_be_started_on_its_own(stack, tmp_path) -> None:
-    dev._write_dev_overlay({"nats": 13042}, nats_secret="s" * 48)
+    dev._write_dev_overlay({"nats": 13042}, nats_secret="s" * 48, nats_password="pw")
 
     result = _abi("up", "--service", "orchestrator", "-d")
 
@@ -861,12 +955,14 @@ def test_a_module_runs_supervised_with_the_dev_broker(monkeypatch, tmp_path) -> 
     monkeypatch.setattr(
         dev, "_spawn", lambda spec, cmd, cwd, env: spawned.update(spec=spec, cmd=cmd, env=env) or 4242
     )
-    overlay = {"nats": {"nats_url": "nats://127.0.0.1:13042", "jwt_secret": "s" * 48, "discovery": {"project": "zen"}}}
+    overlay = {"nats": {"nats_url": "nats://abi:engine-pw@127.0.0.1:13042", "jwt_secret": "s" * 48, "discovery": {"project": "zen"}}}
 
     spec = dev._start_module(_modules("researcher")["researcher"], overlay)
 
     assert spawned["cmd"][2] == "naas_abi_cli.cli.dev_supervisor"
-    assert spawned["env"]["ABI_NATS_URL"] == "nats://127.0.0.1:13042"
+    # Modules log in as `module`, with the project's generated password.
+    password = _env_value(tmp_path / ".env", "NATS_MODULE_PASSWORD")
+    assert spawned["env"]["ABI_NATS_URL"] == f"nats://module:{password}@127.0.0.1:13042"
     assert spec.log_relpath == "logs/researcher.log"
     assert (tmp_path / "researcher.pid").read_text() == "4242\n"
 
