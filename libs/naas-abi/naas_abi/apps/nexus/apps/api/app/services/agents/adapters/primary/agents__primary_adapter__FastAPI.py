@@ -559,14 +559,16 @@ def _enrich_agent(
     """Return a copy of ``agent`` enriched with class-derived presentation fields.
 
     Pure and read-only: resolves the agent's class from the in-memory registry to
-    attach suggestions, logo, intents, a derived ``module_path`` and the resolved
-    model id.  Performs no database writes : any missing ``module_path`` is only
-    derived in-memory here; persistence of that backfill happens in
+    attach the class display name, suggestions, logo, intents, a derived
+    ``module_path`` and the resolved model id.  Performs no database writes :
+    any missing ``module_path`` is only derived in-memory here; persistence of
+    that backfill, and of a renamed class label, happens in
     :func:`_reconcile_workspace_agents`.
     """
     suggestions = None
     logo_url = None
     intents = None
+    display_name = None
     resolved_cls: type | None = None
     module_path = agent.module_path
     if agent.class_name:
@@ -575,6 +577,7 @@ def _enrich_agent(
             suggestions = _extract_agent_suggestions(resolved_cls)
             logo_url = getattr(resolved_cls, "logo_url", None)
             intents = _extract_agent_intents(resolved_cls)
+            display_name = _get_agent_class_name(resolved_cls)
             if not module_path:
                 module_path = getattr(resolved_cls, "__module__", None)
 
@@ -594,6 +597,7 @@ def _enrich_agent(
 
     return replace(
         agent,
+        name=display_name or agent.name,
         module_path=module_path,
         suggestions=suggestions,
         logo_url=logo_url,
@@ -796,6 +800,23 @@ async def _reconcile_workspace_agents(
         )
         aligned.append(updated if updated is not None else agent)
     reconciled = aligned
+
+    # The picker reads the stored name. A class rename would otherwise stay
+    # stuck on the row created under the old name.
+    renamed: list[AgentRecord] = []
+    for agent in reconciled:
+        resolved_cls = class_name_to_agent_class.get(agent.class_name) if agent.class_name else None
+        class_label = _get_agent_class_name(resolved_cls) if resolved_cls is not None else None
+        if not class_label or agent.name == class_label:
+            renamed.append(agent)
+            continue
+        updated = await agent_service.update_agent(
+            context=context,
+            agent_id=agent.id,
+            updates=AgentUpdateInput(name=class_label),
+        )
+        renamed.append(updated if updated is not None else agent)
+    reconciled = renamed
 
     # Ensure the workspace (or engine) default agent is enabled and marked.
     if default_class_name:
