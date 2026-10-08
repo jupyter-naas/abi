@@ -6,6 +6,9 @@ Load configured domain owners and modules, then inject service dependencies.
 ## Files
 - EngineServiceLoader.py: local service owners and transitive requirements.
 - EngineNATSLoader.py: endpoints wrapping owners, never the client view.
+  `expose_services` applies `nats.max_concurrent_requests` (`nats_dispatch.configure`)
+  before it builds the primaries: each service then admits that many calls at once
+  (`nats_tracing.ConcurrentRequests`) on as many dispatcher threads.
   `expose_overflow` starts the process's RPC overflow host (`nats_overflow`,
   `nats.rpc_overflow`) once primaries are exposed; shutdown stops it with them.
 - EngineNATSDependencies.py: NATS-backed service facades, ordered cache tiers,

@@ -1,0 +1,50 @@
+# Kernel services handle their calls side by side
+
+Status: Accepted
+
+Date: 2026-10-08
+
+## Context
+
+In NATS mode every module call to a kernel service goes through the service's
+NATS endpoints, even inside one process (`Engine.services` returns the NATS
+facades). nats-py hands a subscription its next message only once the callback
+for the previous one has returned, and `TracedService` awaited the whole
+handler there. Each endpoint therefore answered one call at a time per engine:
+one slow SPARQL query made every call queued behind it miss the 10 s client
+timeout. The handlers' synchronous service code ran on 8 threads per service
+(`DomainRPCDispatcher`), which one endpoint never used in parallel.
+
+Throughput is the number of calls in flight divided by their duration: 1,000
+calls a second at 10 ms needs 10 in flight, at 200 ms it needs 200.
+
+## Decision
+
+- Each endpoint call runs in its own task (`nats_tracing.ConcurrentRequests`),
+  so the subscription takes its next message at once.
+- A service admits at most `nats.max_concurrent_requests` calls at once (64 by
+  default), across its endpoints, and its dispatcher has as many threads, so an
+  admitted call never waits for a thread. With every slot taken, the
+  subscription's callback waits for one, and later calls stay in nats-py's
+  buffer (512k messages or 128 MiB per subscription) until their deadline.
+- The tasks run `nats.micro`'s own request handler, which keeps the endpoint
+  statistics (`$SRV.STATS`, shown in the System app) and answers a handler's
+  exception with a 500 reply.
+- The limit is per process and set once, by `EngineNATSLoader.expose_services`,
+  before the primaries are built.
+
+## Consequences
+
+- Calls to one endpoint run concurrently, as they did in-process before NATS
+  mode (FastAPI's threads). Adapters were already called concurrently there.
+- A drain still answers every call received: a call is counted from the moment
+  it is received, while it waits for a slot too. `stop()` cancels the calls
+  still running, as before.
+- Threads only help while calls wait on I/O. Python CPU work (protobuf, RDF
+  parsing) stays near one core per process; beyond that, services move to
+  separate processes (docs/migrate-to-nats.md, phase 3).
+- A service whose handler calls back into the same service through NATS holds
+  one slot while it waits for another. With every slot held that way, calls
+  wait until their deadline. No kernel service does this today.
+- Streamed reads and transfers (`TransferHost`) and the RPC overflow host keep
+  their own subscriptions and are not covered.
