@@ -12,6 +12,7 @@ import pytest
 pytest.importorskip("opentelemetry.sdk")
 
 import nats
+from naas_abi_core.engine import nats_tracing
 from naas_abi_core.services.keyvalue.adapters.primary.keyvalue__primary_adapter__NATS import (
     KeyValuePrimaryAdapterNATS,
 )
@@ -272,3 +273,157 @@ def test_a_remote_model_call_is_one_trace_through_the_engine(broker, monkeypatch
     ]
     failed_client = clients[failed.parent.span_id]
     assert failed_client.status.status_code is StatusCode.ERROR
+
+
+# --- calls side by side, over a real broker ------------------------------------------------
+
+
+async def _slow_service(url, *, max_concurrency, seconds=0.5, fail=False):
+    """A traced service whose one endpoint takes ``seconds`` and records its peak."""
+    nc = await nats.connect(url)
+    state = {"running": 0, "peak": 0, "started": 0}
+
+    async def handler(request):
+        state["started"] += 1
+        state["running"] += 1
+        state["peak"] = max(state["peak"], state["running"])
+        try:
+            await asyncio.sleep(seconds)
+            if fail:
+                raise RuntimeError("the handler failed")
+            await request.respond(b"ok")
+        finally:
+            state["running"] -= 1
+
+    service = await nats_tracing.add_traced_service(
+        nc, name="slow", version="1.0.0", max_concurrency=max_concurrency
+    )
+    await service.add_endpoint(name="wait", subject="test.slow.wait", handler=handler)
+    return nc, service, state
+
+
+def test_an_endpoint_answers_its_calls_side_by_side(broker):
+    async def scenario():
+        nc, service, state = await _slow_service(broker, max_concurrency=8)
+        client = await nats.connect(broker)
+        try:
+            start = time.monotonic()
+            replies = await asyncio.gather(
+                *(client.request("test.slow.wait", b"", timeout=5) for _ in range(4))
+            )
+            elapsed = time.monotonic() - start
+            (stats,) = service.stats().endpoints
+        finally:
+            await service.stop()
+            await client.close()
+            await nc.close()
+        return replies, elapsed, stats, state
+
+    replies, elapsed, stats, state = asyncio.run(scenario())
+
+    assert [reply.data for reply in replies] == [b"ok"] * 4
+    assert elapsed < 1.5  # one call at a time would take 2 s
+    assert state["peak"] == 4
+    # nats.micro's own statistics still cover the whole call.
+    assert stats.num_requests == 4
+    assert stats.average_processing_time >= 0.5e9
+
+
+def test_a_service_runs_at_most_max_concurrency_calls_at_once(broker):
+    async def scenario():
+        nc, service, state = await _slow_service(broker, max_concurrency=2, seconds=0.2)
+        client = await nats.connect(broker)
+        try:
+            replies = await asyncio.gather(
+                *(client.request("test.slow.wait", b"", timeout=5) for _ in range(6))
+            )
+        finally:
+            await service.stop()
+            await client.close()
+            await nc.close()
+        return replies, state
+
+    replies, state = asyncio.run(scenario())
+
+    assert [reply.data for reply in replies] == [b"ok"] * 6
+    assert state["peak"] == 2
+
+
+def test_a_handler_that_raises_is_still_answered_with_a_500(broker):
+    async def scenario():
+        nc, service, _ = await _slow_service(
+            broker, max_concurrency=8, seconds=0, fail=True
+        )
+        client = await nats.connect(broker)
+        try:
+            reply = await client.request("test.slow.wait", b"", timeout=5)
+            (stats,) = service.stats().endpoints
+        finally:
+            await service.stop()
+            await client.close()
+            await nc.close()
+        return reply, stats
+
+    reply, stats = asyncio.run(scenario())
+
+    assert reply.headers["Nats-Service-Error-Code"] == "500"
+    assert stats.num_errors == 1
+
+
+def test_a_drain_answers_the_calls_already_received(broker):
+    async def scenario():
+        nc, service, state = await _slow_service(broker, max_concurrency=8)
+        client = await nats.connect(broker)
+        try:
+            calls = [
+                asyncio.create_task(client.request("test.slow.wait", b"", timeout=5))
+                for _ in range(3)
+            ]
+            deadline = time.monotonic() + 5
+            while state["started"] < 3:
+                assert time.monotonic() < deadline, "the calls did not start"
+                await asyncio.sleep(0.01)
+            await service.stop_accepting()
+            await asyncio.wait_for(service.requests_finished(), timeout=5)
+            replies = await asyncio.gather(*calls)
+        finally:
+            await service.stop()
+            await client.close()
+            await nc.close()
+        return replies
+
+    replies = asyncio.run(scenario())
+
+    assert [reply.data for reply in replies] == [b"ok"] * 3
+
+
+def test_a_kernel_service_runs_its_synchronous_calls_on_parallel_threads(broker):
+    async def scenario():
+        nc = await nats.connect(broker)
+        backend = Mock(spec=IKeyValueAdapter)
+
+        def get(key):
+            time.sleep(0.5)  # a backend round trip, on a dispatcher thread
+            return b"v"
+
+        backend.get.side_effect = get
+        primary = KeyValuePrimaryAdapterNATS(backend, SECRET)
+        client = KeyValueSecondaryAdapterNATSClient(broker, SECRET, "test")
+        try:
+            await primary.start(nc)
+            await nc.flush()
+            start = time.monotonic()
+            values = await asyncio.gather(
+                *(asyncio.to_thread(client.get, "present") for _ in range(4))
+            )
+            elapsed = time.monotonic() - start
+        finally:
+            await asyncio.to_thread(client.close)
+            await primary.stop()
+            await nc.close()
+        return values, elapsed
+
+    values, elapsed = asyncio.run(scenario())
+
+    assert values == [b"v"] * 4
+    assert elapsed < 1.5  # one call at a time would take 2 s

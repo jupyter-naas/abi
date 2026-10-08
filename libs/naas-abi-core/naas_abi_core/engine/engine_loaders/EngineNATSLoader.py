@@ -33,7 +33,7 @@ clients receive LangChain proxies instead of serialized live model objects.
 from __future__ import annotations
 
 from naas_abi_core import logger
-from naas_abi_core.engine import nats_runtime
+from naas_abi_core.engine import nats_dispatch, nats_runtime
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
 )
@@ -167,6 +167,8 @@ class EngineNATSLoader:
             logger.debug("EngineNATSLoader: no nats: config, nothing to expose")
             return []
 
+        # Before the primaries below build their dispatchers and services.
+        nats_dispatch.configure(nats_config.max_concurrent_requests)
         nc = nats_runtime.get_connection(nats_config.nats_url)
         started: list[object] = []
         if nats_config.discovery is not None:

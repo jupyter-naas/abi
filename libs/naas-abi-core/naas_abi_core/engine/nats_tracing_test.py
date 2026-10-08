@@ -120,3 +120,148 @@ def test_successful_replies_have_no_error_header():
     asyncio.run(respond_protobuf(request, _response(), keyvalue_pb2.GetResponse))
 
     assert request.replies[0][1] is None
+
+
+# --- calls side by side ------------------------------------------------------------------
+
+
+async def _until(predicate, timeout=2.0):
+    deadline = asyncio.get_running_loop().time() + timeout
+    while not predicate():
+        assert asyncio.get_running_loop().time() < deadline, "timed out"
+        await asyncio.sleep(0.005)
+
+
+class _Calls:
+    """An endpoint callback whose calls wait until released."""
+
+    def __init__(self):
+        self.started = []
+        self.running = 0
+        self.peak = 0
+        self.release = asyncio.Event()
+
+    async def __call__(self, msg):
+        self.started.append(msg)
+        self.running += 1
+        self.peak = max(self.peak, self.running)
+        try:
+            await self.release.wait()
+        finally:
+            self.running -= 1
+
+
+def test_calls_to_one_endpoint_run_side_by_side():
+    async def scenario():
+        requests = nats_tracing.ConcurrentRequests(limit=4)
+        calls = _Calls()
+        receive = requests.callback(calls)
+        for msg in range(3):
+            await receive(msg)  # returns at once: the next message can come
+        await _until(lambda: len(calls.started) == 3)
+        assert requests.in_flight == 3
+        calls.release.set()
+        await _until(lambda: requests.in_flight == 0)
+        return calls
+
+    calls = asyncio.run(scenario())
+
+    assert calls.peak == 3
+
+
+def test_beyond_the_limit_a_call_waits_for_a_free_slot():
+    async def scenario():
+        requests = nats_tracing.ConcurrentRequests(limit=2)
+        calls = _Calls()
+        receive = requests.callback(calls)
+        await receive(0)
+        await receive(1)
+        third = asyncio.create_task(receive(2))
+        await asyncio.sleep(0.05)
+        assert not third.done()  # the subscription holds its next messages
+        assert calls.started == [0, 1]
+        # Counted while it waits, so a drain waits for it too.
+        assert requests.in_flight == 3
+        calls.release.set()
+        await third
+        await _until(lambda: requests.in_flight == 0)
+        return calls
+
+    calls = asyncio.run(scenario())
+
+    assert calls.started == [0, 1, 2]
+    assert calls.peak == 2
+
+
+def test_cancel_stops_the_calls_still_running():
+    async def scenario():
+        requests = nats_tracing.ConcurrentRequests(limit=4)
+        calls = _Calls()
+        receive = requests.callback(calls)
+        await receive(0)
+        await receive(1)
+        await _until(lambda: calls.running == 2)
+        await requests.cancel()
+        return requests, calls
+
+    requests, calls = asyncio.run(scenario())
+
+    assert calls.running == 0
+    assert requests.in_flight == 0
+
+
+def test_a_call_that_fails_frees_its_slot():
+    async def scenario():
+        requests = nats_tracing.ConcurrentRequests(limit=1)
+        answered = []
+
+        async def handle(msg):
+            if msg == "broken":
+                raise ConnectionError("the reply could not be sent")
+            answered.append(msg)
+
+        receive = requests.callback(handle)
+        await receive("broken")
+        await receive("next")
+        await _until(lambda: requests.in_flight == 0)
+        return answered
+
+    assert asyncio.run(scenario()) == ["next"]
+
+
+class _Client:
+    def __init__(self):
+        self.subscriptions = []
+        self.flushed = False
+
+    async def subscribe(self, subject, queue="", cb=None, **kwargs):
+        self.subscriptions.append((subject, queue, cb))
+        return NS(subject=subject)
+
+    async def flush(self):
+        self.flushed = True
+
+
+def test_only_endpoint_subscriptions_run_their_calls_side_by_side():
+    async def endpoint(msg):
+        pass
+
+    async def verb(msg):
+        pass
+
+    async def scenario():
+        nc = _Client()
+        client = nats_tracing.ConcurrentRequests(limit=4).client(nc)
+        await client.subscribe(
+            subject="abi.svc.document.v1.get", queue="q", cb=endpoint
+        )
+        await client.subscribe("$SRV.PING", cb=verb)  # nats.micro's own verbs
+        await client.flush()
+        return nc
+
+    nc = asyncio.run(scenario())
+
+    (_, queue, endpoint_cb), (_, _, verb_cb) = nc.subscriptions
+    assert queue == "q" and endpoint_cb is not endpoint
+    assert verb_cb is verb
+    assert nc.flushed

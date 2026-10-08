@@ -79,3 +79,12 @@ def test_timing_follows_the_settings():
 def test_auto_is_a_role_for_one_off_engines():
     assert engine(role="auto").role == "auto"
     assert engine().resolved({"ABI_ENGINE_ROLE": "auto"}).role == "auto"
+
+
+def test_a_kernel_service_handles_64_calls_at_once_by_default():
+    assert NATSConfiguration(jwt_secret="test-only").max_concurrent_requests == 64
+
+
+def test_a_kernel_service_handles_at_least_one_call_at_once():
+    with pytest.raises(ValidationError):
+        NATSConfiguration(jwt_secret="test-only", max_concurrent_requests=0)
