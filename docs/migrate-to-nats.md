@@ -101,16 +101,27 @@ In this phase every engine keeps its services and adds NATS on top.
 
    Every process that talks to NATS must use this same value.
 
+   `abi deploy local` also writes the broker's passwords to `.env`:
+   `NATS_ABI_PASSWORD` for the engine's process and `NATS_MODULE_PASSWORD` for
+   SDK modules. The `nats` service refuses to start without both. Run
+   `abi deploy local --regenerate` if your `.env` predates them.
+
 3. **Add the `nats:` block** at the top level of `config.yaml`, next to `api:`,
    not under `services:`:
 
    ```yaml
    nats:
-     nats_url: "nats://nats:4222"   # the Compose service name
+     # The Compose service name, logged in as the broker user `abi`.
+     nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@nats:4222"
      jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
    ```
 
-   Use `nats://127.0.0.1:4222` when the engine runs outside Docker.
+   Use `nats://abi:{{ secret.NATS_ABI_PASSWORD }}@127.0.0.1:4222` when the
+   engine runs outside Docker on the same machine (the port listens on
+   127.0.0.1 only). SDK modules log in as `module`:
+   `ABI_NATS_URL=nats://module:<NATS_MODULE_PASSWORD>@nats:4222`.
+   `abi dev up --with-nats` runs its own broker on 127.0.0.1, without
+   passwords.
 
 4. **Remove the `bus:` section** from `services:`. Configs created by
    `abi new project` declare one: `rabbitmq` in `config.local.yaml`,
@@ -124,7 +135,8 @@ In this phase every engine keeps its services and adds NATS on top.
        bus_adapter:
          adapter: "nats_jetstream"
          config:
-           nats_url: "nats://nats:4222"   # must equal nats.nats_url
+           # must equal nats.nats_url
+           nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@nats:4222"
    ```
 
 5. **Check the cache tiers.** Either all tiers are local or all are `nats_rpc`.
@@ -217,7 +229,7 @@ services:
     object_storage_adapter:
       adapter: "nats_rpc"
       config:
-        nats_url: "nats://nats:4222"
+        nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@nats:4222"
         jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
         service_identity: "dagster"   # name of the calling process
 ```
@@ -264,7 +276,7 @@ discovery on exactly one engine per project:
 
 ```yaml
 nats:
-  nats_url: "nats://nats:4222"
+  nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@nats:4222"
   jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
   discovery:
     project: default
@@ -295,6 +307,13 @@ version and running `abi deploy local --regenerate` again.
 - Projects are separated by subject prefix and the shared signing secret, not by
   NATS accounts. The token proves which of your processes is calling; it does
   not limit what that process can reach.
+- The broker's passwords keep out clients that don't have one. The `abi` and
+  `module` users have the same rights, and any process holding
+  `NATS_JWT_SECRET` can sign a token for any identity
+  (docs/adr/20261008_nats-broker-passwords.md).
+- Traffic to the broker is not encrypted (no TLS). Keep the broker on a
+  private network; a module on another machine should reach it through a
+  VPN or an SSH tunnel.
 - Remote agent runs stop after 300 seconds without new output, and there is no
   overall time limit. If a Python worker thread hangs, it keeps its run slot
   until it returns.

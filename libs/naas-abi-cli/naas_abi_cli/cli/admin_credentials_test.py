@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -109,3 +110,39 @@ def test_ensure_nats_secret_keeps_an_existing_value(tmp_path):
     env.write_text("NATS_JWT_SECRET=" + "k" * 40 + "\n")
 
     assert ensure_nats_secret(env) == "k" * 40
+
+
+def test_ensure_nats_passwords_generates_each_broker_user_once(tmp_path):
+    from naas_abi_cli.cli.admin_credentials import ensure_nats_passwords
+
+    env = tmp_path / ".env"
+    env.write_text("OTHER=1\n")
+
+    first = ensure_nats_passwords(env)
+    second = ensure_nats_passwords(env)
+
+    assert first == second
+    assert set(first) == {"NATS_ABI_PASSWORD", "NATS_MODULE_PASSWORD"}
+    assert first["NATS_ABI_PASSWORD"] != first["NATS_MODULE_PASSWORD"]
+    for key, password in first.items():
+        assert f"{key}={password}" in env.read_text()
+        # nats.conf reads it as a config value ($VAR): it must start with a
+        # letter, and nats://user:password@host must not need escaping.
+        assert password[0].isalpha() and len(password) >= 32
+        assert re.fullmatch(r"[A-Za-z0-9_-]+", password)
+    assert "OTHER=1" in env.read_text()
+
+
+@pytest.mark.parametrize("value", ["", "short"])
+def test_ensure_nats_passwords_replaces_an_empty_or_short_password(tmp_path, value):
+    """An empty password lets anyone in as that broker user."""
+    from naas_abi_cli.cli.admin_credentials import ensure_nats_passwords
+
+    env = tmp_path / ".env"
+    env.write_text(f"NATS_ABI_PASSWORD={value}\nNATS_MODULE_PASSWORD={'m' * 40}\n")
+
+    passwords = ensure_nats_passwords(env)
+
+    assert len(passwords["NATS_ABI_PASSWORD"]) >= 32
+    assert passwords["NATS_MODULE_PASSWORD"] == "m" * 40
+    assert env.read_text().count("NATS_ABI_PASSWORD=") == 1
