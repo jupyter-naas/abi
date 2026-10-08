@@ -2589,7 +2589,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "greenlet" },
     { name = "httpx" },
-    { name = "naas-abi-core", extra = ["dagster"] },
+    { name = "naas-abi-core", extra = ["dagster", "nats"] },
     { name = "naas-abi-marketplace" },
     { name = "ollama" },
     { name = "openai" },
@@ -2627,7 +2627,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.109.0" },
     { name = "greenlet", specifier = ">=3.0.0" },
     { name = "httpx", specifier = ">=0.26.0" },
-    { name = "naas-abi-core", extras = ["dagster"], editable = "../naas-abi-core" },
+    { name = "naas-abi-core", extras = ["dagster", "nats"], editable = "../naas-abi-core" },
     { name = "naas-abi-marketplace", editable = "../naas-abi-marketplace" },
     { name = "ollama", specifier = ">=0.1.0" },
     { name = "openai", specifier = ">=1.10.0" },
@@ -2737,6 +2737,12 @@ dagster = [
     { name = "dagster" },
     { name = "dagster-postgres" },
     { name = "dagster-webserver" },
+]
+nats = [
+    { name = "naas-abi-proto" },
+    { name = "naas-abi-sdk", extra = ["models"] },
+    { name = "nats-py" },
+    { name = "pyjwt" },
 ]
 qdrant = [
     { name = "qdrant-client" },
@@ -2884,6 +2890,69 @@ dev = [
     { name = "mypy", specifier = ">=1.19.0" },
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "python-semantic-release", specifier = ">=9.21.0" },
+]
+
+[[package]]
+name = "naas-abi-proto"
+version = "0.1.0"
+source = { editable = "../naas-abi-proto" }
+dependencies = [
+    { name = "protobuf" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "protobuf", specifier = ">=6.33.5,<7" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff" },
+]
+
+[[package]]
+name = "naas-abi-sdk"
+version = "0.1.0"
+source = { editable = "../naas-abi-sdk" }
+dependencies = [
+    { name = "naas-abi-proto" },
+    { name = "nats-py" },
+]
+
+[package.optional-dependencies]
+models = [
+    { name = "langchain-core" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "langchain-core", marker = "extra == 'agent'", specifier = ">=1,<2" },
+    { name = "langchain-core", marker = "extra == 'agents'", specifier = ">=1,<2" },
+    { name = "langchain-core", marker = "extra == 'models'", specifier = ">=0.3.78,<2" },
+    { name = "langgraph", marker = "extra == 'agent'", specifier = ">=1,<2" },
+    { name = "langgraph-checkpoint", marker = "extra == 'agent'", specifier = ">=3.0.1,<4" },
+    { name = "langgraph-checkpoint", marker = "extra == 'langgraph'", specifier = ">=3.0.1,<4" },
+    { name = "naas-abi-proto", editable = "../naas-abi-proto" },
+    { name = "nats-py", specifier = ">=2.16.0,<3" },
+    { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.27,<2" },
+    { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.27,<2" },
+    { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.27,<2" },
+    { name = "rdflib", marker = "extra == 'rdf'", specifier = ">=7,<8" },
+]
+provides-extras = ["models", "agents", "rdf", "langgraph", "agent", "otel"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff" },
+]
+
+[[package]]
+name = "nats-py"
+version = "2.16.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2c/c8/739b72c9201081e48000884d476231873ac82f7247c43b33823eaf3c0bfb/nats_py-2.16.0.tar.gz", hash = "sha256:1d137ed7afc9b59033b3199324c6237df2016a5091935871344a787eba6b72fc", size = 79731, upload-time = "2026-09-16T07:47:21.843Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/48/a3/16cec37172144d3362d7551bb823a098b2b2903281fc095dfe4480b8c2fd/nats_py-2.16.0-py3-none-any.whl", hash = "sha256:aeb1ff123966c05833d26c7df7e1d54c1c6d32b612428b21677a2e921f1fecae", size = 93578, upload-time = "2026-09-16T07:47:20.799Z" },
 ]
 
 [[package]]

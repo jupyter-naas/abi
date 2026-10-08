@@ -2361,7 +2361,7 @@ name = "importlib-metadata"
 version = "8.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp", marker = "python_full_version < '3.12'" },
+    { name = "zipp" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f3/49/3b30cad09e7771a4982d9975a8cbf64f00d4a1ececb53297f1d9a7be1b10/importlib_metadata-8.7.1.tar.gz", hash = "sha256:49fef1ae6440c182052f407c8d34a68f72efc36db9ca90dc0113398f2fdde8bb", size = 57107, upload-time = "2025-12-21T10:00:19.278Z" }
 wheels = [
@@ -3614,7 +3614,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "greenlet" },
     { name = "httpx" },
-    { name = "naas-abi-core", extra = ["dagster"] },
+    { name = "naas-abi-core", extra = ["dagster", "nats"] },
     { name = "naas-abi-marketplace" },
     { name = "ollama" },
     { name = "openai" },
@@ -3652,7 +3652,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.109.0" },
     { name = "greenlet", specifier = ">=3.0.0" },
     { name = "httpx", specifier = ">=0.26.0" },
-    { name = "naas-abi-core", extras = ["dagster"], editable = "libs/naas-abi-core" },
+    { name = "naas-abi-core", extras = ["dagster", "nats"], editable = "libs/naas-abi-core" },
     { name = "naas-abi-marketplace", editable = "libs/naas-abi-marketplace" },
     { name = "ollama", specifier = ">=0.1.0" },
     { name = "openai", specifier = ">=1.10.0" },
@@ -3774,6 +3774,12 @@ dagster = [
     { name = "dagster" },
     { name = "dagster-postgres" },
     { name = "dagster-webserver" },
+]
+nats = [
+    { name = "naas-abi-proto" },
+    { name = "naas-abi-sdk", extra = ["models"] },
+    { name = "nats-py" },
+    { name = "pyjwt" },
 ]
 qdrant = [
     { name = "qdrant-client" },

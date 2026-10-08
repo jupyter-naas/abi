@@ -93,14 +93,14 @@ rabbitmq = [
 nats = [
     "nats-py>=2.16.0",
     "pyjwt>=2.11.0",
-    "naas-abi-proto>=0.1.0,<0.2",
-    "naas-abi-sdk[models]>=0.1.0,<0.2",
+    "naas-abi-proto>=0.1.0",
+    "naas-abi-sdk[models]>=0.1.0",
 ]
 microsoft = [
     "msal>=1.37.0",
 ]
 otel = [
-    "naas-abi-sdk[otel]>=0.1.0,<0.2",
+    "naas-abi-sdk[otel]>=0.1.0",
 ]
 [project.scripts]
 onto2py = "naas_abi_core.utils.onto2py.__main__:main"
