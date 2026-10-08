@@ -146,3 +146,12 @@ def test_ensure_nats_passwords_replaces_an_empty_or_short_password(tmp_path, val
     assert len(passwords["NATS_ABI_PASSWORD"]) >= 32
     assert passwords["NATS_MODULE_PASSWORD"] == "m" * 40
     assert env.read_text().count("NATS_ABI_PASSWORD=") == 1
+
+
+@pytest.mark.parametrize(
+    "url", ["nats://127.0.0.1:13042", "nats://abi:old-password@127.0.0.1:13042"]
+)
+def test_nats_login_puts_the_user_and_password_in_the_url(url):
+    from naas_abi_cli.cli.admin_credentials import nats_login
+
+    assert nats_login(url, "module", "nats-pw_1") == "nats://module:nats-pw_1@127.0.0.1:13042"
