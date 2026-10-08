@@ -13,7 +13,7 @@ instead.
 
 Scope note: this contract covers only ``IEventAdapter`` -- the durable-log
 secondary port (``append``/``query``/``max_seq``/``get_cursor``/
-``set_cursor``/``query_for_consumer``) -- not the domain-level
+``set_cursor``/``query_for_consumer``/``list_event_types``) -- not the domain-level
 ``IEventService``. ``EventService(adapter, bus)`` composes an
 ``IEventAdapter`` with a ``BusService``; a client built against this contract
 is only a drop-in replacement for the ``adapter`` argument. ``publish``,
@@ -33,6 +33,9 @@ this pairs with.
 SERVICE_NAME = "event"
 SERVICE_VERSION = "1.0.0"
 SUBJECT_PREFIX = "abi.svc.event.v1"
+# Streamed queries: transfer/v1 sessions, operation ``query``
+# (docs/adr/20261003_nats-streamed-results.md).
+TRANSFER_PREFIX = f"{SUBJECT_PREFIX}.transfer"
 
 # Header carrying the Stage 1 service JWT (see naas_abi_core.engine.nats_auth).
 # The client attaches the token under this exact header name -- both sides

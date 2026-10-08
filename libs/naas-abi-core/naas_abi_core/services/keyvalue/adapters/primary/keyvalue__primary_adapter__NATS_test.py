@@ -17,9 +17,12 @@ from naas_abi_core.services.keyvalue.adapters.primary.keyvalue__primary_adapter_
 )
 from naas_abi_core.services.keyvalue.KeyValuePorts import (
     IKeyValueAdapter,
+    KVKeyPage,
     KVLockTimeoutError,
     KVNotFoundError,
+    paginate_keys,
 )
+from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 
 SECRET = "test-shared-secret"
 
@@ -51,6 +54,7 @@ class _StubAdapter(IKeyValueAdapter):
 
     def __init__(self) -> None:
         self.values: dict[str, bytes] = {}
+        self.ttls: dict[str, int] = {}
 
     def get(self, key: str) -> bytes:
         try:
@@ -60,6 +64,8 @@ class _StubAdapter(IKeyValueAdapter):
 
     def set(self, key: str, value: bytes, ttl: int | None = None) -> None:
         self.values[key] = value
+        if ttl is not None:
+            self.ttls[key] = ttl
 
     def set_if_not_exists(
         self, key: str, value: bytes, ttl: int | None = None
@@ -68,6 +74,16 @@ class _StubAdapter(IKeyValueAdapter):
             return False
         self.values[key] = value
         return True
+
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> KVKeyPage:
+        return paginate_keys(self.values, prefix, limit, after)
+
+    def get_ttl(self, key: str) -> int | None:
+        if key not in self.values:
+            raise KVNotFoundError(f"Key not found: {key}")
+        return self.ttls.get(key)
 
     def delete(self, key: str) -> None:
         try:
@@ -285,3 +301,78 @@ def test_stub_adapter_does_not_expose_client_side_only_lock_helper(method_name):
     # handler exercising it at all.
     adapter = KeyValuePrimaryAdapterNATS(_StubAdapter(), SECRET)
     assert not hasattr(adapter, f"_handle_{method_name}")
+
+
+# ---------------------------------------------------------------------------
+# list_keys / get_ttl.
+# ---------------------------------------------------------------------------
+
+
+def _authed(data: bytes, subject: str) -> _FakeRequest:
+    return _FakeRequest(data=data, headers={AUTH_HEADER: _valid_token()}, subject=subject)
+
+
+def test_list_keys_pages_with_next_after():
+    stub = _StubAdapter()
+    for key in ("app:b", "app:a", "app:c", "other"):
+        stub.set(key, b"v")
+    adapter = KeyValuePrimaryAdapterNATS(stub, SECRET)
+    request = _authed(
+        keyvalue_pb2.ListKeysRequest(prefix="app:", limit=2).SerializeToString(),
+        "abi.svc.keyvalue.v1.list_keys",
+    )
+
+    asyncio.run(adapter._handle_list_keys(request))
+
+    response = keyvalue_pb2.ListKeysResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert list(response.keys) == ["app:a", "app:b"]
+    assert response.next_after == "app:b"
+
+    last = _authed(
+        keyvalue_pb2.ListKeysRequest(prefix="app:", limit=2, after="app:b").SerializeToString(),
+        "abi.svc.keyvalue.v1.list_keys",
+    )
+    asyncio.run(adapter._handle_list_keys(last))
+    response = keyvalue_pb2.ListKeysResponse()
+    response.ParseFromString(last.responses[0])
+    assert list(response.keys) == ["app:c"]
+    assert not response.HasField("next_after")
+
+
+def test_list_keys_rejects_an_out_of_range_limit():
+    adapter = KeyValuePrimaryAdapterNATS(KeyValueService(_StubAdapter()), SECRET)
+    request = _authed(
+        keyvalue_pb2.ListKeysRequest(limit=0).SerializeToString(),
+        "abi.svc.keyvalue.v1.list_keys",
+    )
+
+    asyncio.run(adapter._handle_list_keys(request))
+
+    response = keyvalue_pb2.ListKeysResponse()
+    response.ParseFromString(request.responses[0])
+    assert response.error.code == "INVALID_ARGUMENT"
+    assert response.error.retryable is False
+
+
+def test_get_ttl_reports_seconds_absence_and_missing_keys():
+    stub = _StubAdapter()
+    stub.set("expiring", b"v", ttl=30)
+    stub.set("forever", b"v")
+    adapter = KeyValuePrimaryAdapterNATS(stub, SECRET)
+
+    def ttl_of(key: str) -> keyvalue_pb2.GetTtlResponse:
+        request = _authed(
+            keyvalue_pb2.GetTtlRequest(key=key).SerializeToString(),
+            "abi.svc.keyvalue.v1.get_ttl",
+        )
+        asyncio.run(adapter._handle_get_ttl(request))
+        response = keyvalue_pb2.GetTtlResponse()
+        response.ParseFromString(request.responses[0])
+        return response
+
+    assert ttl_of("expiring").seconds == 30
+    assert not ttl_of("forever").HasField("seconds")
+    assert not ttl_of("forever").HasField("error")
+    assert ttl_of("missing").error.code == "KV_NOT_FOUND"

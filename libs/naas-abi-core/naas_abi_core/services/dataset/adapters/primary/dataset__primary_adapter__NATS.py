@@ -18,20 +18,30 @@ mapping -- one endpoint per port method, no exclusions.
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from functools import partial
 from typing import Any, TypeVar
 
 import nats
 import nats.micro
-from google.protobuf import json_format
 from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
 from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
-from naas_abi_core.engine.nats_rpc import respond_protobuf
+from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
+from naas_abi_core.engine.nats_rpc import (
+    RequestPayloadError,
+    request_payload,
+    respond_protobuf,
+)
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
+from naas_abi_core.engine.nats_transfer import (
+    ServiceWithTransfers,
+    TransferHost,
+    thread_frames,
+)
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.dataset.v1 import dataset_pb2
 from naas_abi_core.services.dataset.adapters.dataset_nats_contract import (
@@ -39,6 +49,16 @@ from naas_abi_core.services.dataset.adapters.dataset_nats_contract import (
     SERVICE_NAME,
     SERVICE_VERSION,
     SUBJECT_PREFIX,
+    TRANSFER_PREFIX,
+)
+from naas_abi_core.services.dataset.adapters.dataset_row_codec import (
+    decode_lines,
+    decode_rows,
+    query_result_to_pb,
+)
+from naas_abi_core.services.dataset.adapters.dataset_stream_codec import (
+    encode_header,
+    row_frames,
 )
 from naas_abi_core.services.dataset.DatasetPort import (
     ColumnSpec,
@@ -54,12 +74,10 @@ from naas_abi_core.services.dataset.DatasetPort import (
     IDatasetPort,
     PartitionSpec,
     PartitionTransform,
-    QueryResult,
     WriteMode,
 )
 from naas_abi_core.services.dataset.DatasetService import DatasetService
 from nats.micro.request import Request
-from nats.micro.service import Service
 
 __all__ = [
     "AUTH_HEADER",
@@ -161,27 +179,17 @@ def _dataset_snapshot_info_to_pb(
     return pb
 
 
-def _struct_to_row(pb: Any) -> dict[str, Any]:
-    """Decode one ``google.protobuf.Struct`` row back into a plain dict.
-
-    ``pb`` is typed ``Any``, not ``struct_pb2.Struct``, deliberately: mypy
-    cannot resolve well-known-type attributes (``Struct``, ``Timestamp``, ...)
-    from ``google.protobuf`` in this project's environment when referenced as
-    a bare annotation outside a generated ``_pb2.pyi`` (see the ``[tool.mypy]``
-    override comment on ``naas_abi_core.proto.*`` in ``pyproject.toml`` for
-    the same upstream quirk). Encoding the other direction needs no such
-    helper: protobuf message constructors accept a plain dict anywhere a
-    ``Struct``-typed field is expected (see ``_query_result_to_pb`` below), so
-    there is no ``_row_to_struct`` counterpart to this function.
-    """
-    return json_format.MessageToDict(pb)
+# The port's exceptions, sent to callers as typed ``DatasetError``s.
+DOMAIN_ERRORS = (
+    DatasetNotFoundError,
+    DatasetAlreadyExistsError,
+    DatasetSnapshotNotFoundError,
+    DatasetSnapshotConflictError,
+    DatasetSchemaError,
+)
 
 
-def _query_result_to_pb(result: QueryResult) -> dataset_pb2.QueryResult:
-    return dataset_pb2.QueryResult(columns=result.columns, rows=result.rows)
-
-
-class DatasetPrimaryAdapterNATS:
+class DatasetPrimaryAdapterNATS(ServiceWithTransfers):
     """Serves datasets over NATS RPC (request/reply).
 
     Wraps a real adapter *or* the domain service and registers one NATS
@@ -209,7 +217,17 @@ class DatasetPrimaryAdapterNATS:
     ) -> None:
         self._adapter = adapter
         self._jwt_secret = jwt_secret
-        self._service: Service | None = None
+        self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
+        self._service: TracedService | None = None
+        # Streamed reads (docs/adr/20261003_nats-streamed-results.md).
+        self._transfer = TransferHost(
+            TRANSFER_PREFIX,
+            jwt_secret,
+            self._transfer_frames,
+            operations=("query", "write"),
+            chunk_bytes=1024 * 1024,
+            error_mapper=self._transfer_error,
+        )
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``dataset`` NATS service on ``nc``.
@@ -221,7 +239,7 @@ class DatasetPrimaryAdapterNATS:
         if self._service is not None:
             return
 
-        service = await nats.micro.add_service(
+        service = await add_traced_service(
             nc,
             name=SERVICE_NAME,
             version=SERVICE_VERSION,
@@ -278,13 +296,69 @@ class DatasetPrimaryAdapterNATS:
             handler=self._handle_drop,
         )
         self._service = service
+        await self._transfer.start(nc)
 
-    async def stop(self) -> None:
-        """Deregister the service, draining its subscriptions."""
-        service = self._service
-        self._service = None
-        if service is not None:
-            await service.stop()
+    # ------------------------------------------------------------------
+    # Streamed reads: one transfer session per query, produced on its own
+    # thread one frame at a time (dataset_stream_codec.py).
+    # ------------------------------------------------------------------
+
+    def _transfer_frames(
+        self, operation: str, metadata: bytes, source: Any
+    ) -> AsyncIterator[bytes]:
+        if operation == "write":
+            write = dataset_pb2.WriteRequest.FromString(metadata)
+            return thread_frames(partial(self._produce_write, write, source))
+        request = dataset_pb2.QueryRequest.FromString(metadata)
+        return thread_frames(partial(self._produce_query, request))
+
+    def _produce_write(
+        self,
+        request: dataset_pb2.WriteRequest,
+        source: Any,
+        emit: Callable[[bytes], bool],
+    ) -> None:
+        """Commit the uploaded rows (one JSON object per line, spooled to disk
+        by the transfer host) with ``write_stream``; the one frame is the
+        ``WriteResponse``, errors included, as the unary reply."""
+        rows = decode_lines(source) if source is not None else iter(())
+        try:
+            info = self._adapter.write_stream(
+                request.name,
+                rows,
+                namespace=request.namespace,
+                mode=_PB_TO_WRITE_MODE.get(request.mode, "append"),
+                snapshot_id=(
+                    request.snapshot_id if request.HasField("snapshot_id") else None
+                ),
+            )
+            response = dataset_pb2.WriteResponse(info=_dataset_info_to_pb(info))
+        except DOMAIN_ERRORS as exc:
+            response = dataset_pb2.WriteResponse(error=self._domain_error(exc))
+        emit(response.SerializeToString())
+
+    def _produce_query(
+        self, request: dataset_pb2.QueryRequest, emit: Callable[[bytes], bool]
+    ) -> None:
+        snapshot_id = request.snapshot_id if request.HasField("snapshot_id") else None
+        with self._adapter.query_stream(
+            request.sql, namespace=request.namespace, snapshot_id=snapshot_id
+        ) as result:
+            if not emit(encode_header(result.columns)):
+                return
+            for frame in row_frames(result.rows):
+                if not emit(frame):
+                    return
+
+    @staticmethod
+    def _transfer_error(exc: Exception) -> tuple[str, str] | None:
+        if isinstance(exc, DatasetSchemaError):
+            return "DATASET_SCHEMA_ERROR", str(exc)
+        if isinstance(exc, DatasetSnapshotNotFoundError):
+            return "DATASET_SNAPSHOT_NOT_FOUND", str(exc)
+        if isinstance(exc, DatasetNotFoundError):
+            return "DATASET_NOT_FOUND", str(exc)
+        return None
 
     # ------------------------------------------------------------------
     # Shared request handling: auth, decode, dispatch, encode.
@@ -309,7 +383,14 @@ class DatasetPrimaryAdapterNATS:
 
         parsed_request = request_cls()
         try:
-            parsed_request.ParseFromString(request.data)
+            parsed_request.ParseFromString(await request_payload(request))
+        except RequestPayloadError as exc:
+            await self._respond_error(
+                request,
+                response_cls,
+                self._error(exc.code, exc.message, retryable=False),
+            )
+            return
         except DecodeError:
             await self._respond_error(
                 request,
@@ -326,70 +407,9 @@ class DatasetPrimaryAdapterNATS:
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await asyncio.to_thread(call, parsed_request)
-        except DatasetNotFoundError as exc:
-            await self._respond_error(
-                request,
-                response_cls,
-                self._error(
-                    "DATASET_NOT_FOUND",
-                    str(exc),
-                    retryable=False,
-                    not_found=dataset_pb2.DatasetNotFoundDetail(
-                        name=exc.name, namespace=exc.namespace
-                    ),
-                ),
-            )
-            return
-        except DatasetAlreadyExistsError as exc:
-            await self._respond_error(
-                request,
-                response_cls,
-                self._error(
-                    "DATASET_ALREADY_EXISTS",
-                    str(exc),
-                    retryable=False,
-                    already_exists=dataset_pb2.DatasetAlreadyExistsDetail(
-                        name=exc.name, namespace=exc.namespace
-                    ),
-                ),
-            )
-            return
-        except DatasetSnapshotNotFoundError as exc:
-            await self._respond_error(
-                request,
-                response_cls,
-                self._error(
-                    "DATASET_SNAPSHOT_NOT_FOUND",
-                    str(exc),
-                    retryable=False,
-                    snapshot_not_found=dataset_pb2.DatasetSnapshotNotFoundDetail(
-                        snapshot_id=exc.snapshot_id
-                    ),
-                ),
-            )
-            return
-        except DatasetSnapshotConflictError as exc:
-            await self._respond_error(
-                request,
-                response_cls,
-                self._error(
-                    "DATASET_SNAPSHOT_CONFLICT",
-                    str(exc),
-                    retryable=False,
-                    snapshot_conflict=dataset_pb2.DatasetSnapshotConflictDetail(
-                        expected_snapshot_id=exc.expected_snapshot_id,
-                        current_snapshot_id=exc.current_snapshot_id,
-                    ),
-                ),
-            )
-            return
-        except DatasetSchemaError as exc:
-            await self._respond_error(
-                request,
-                response_cls,
-                self._error("DATASET_SCHEMA_ERROR", str(exc), retryable=False),
-            )
+            response = await self._dispatch.call(call, parsed_request)
+        except DOMAIN_ERRORS as exc:
+            await self._respond_error(request, response_cls, self._domain_error(exc))
             return
         except Exception:  # noqa: BLE001 - a handler must never crash the service
             logger.opt(exception=True).error(
@@ -414,6 +434,48 @@ class DatasetPrimaryAdapterNATS:
         except InvalidServiceTokenError:
             return False
         return True
+
+    @classmethod
+    def _domain_error(cls, exc: Exception) -> dataset_pb2.DatasetError:
+        """The wire error for one of the port's exceptions (``DOMAIN_ERRORS``)."""
+        if isinstance(exc, DatasetNotFoundError):
+            return cls._error(
+                "DATASET_NOT_FOUND",
+                str(exc),
+                retryable=False,
+                not_found=dataset_pb2.DatasetNotFoundDetail(
+                    name=exc.name, namespace=exc.namespace
+                ),
+            )
+        if isinstance(exc, DatasetAlreadyExistsError):
+            return cls._error(
+                "DATASET_ALREADY_EXISTS",
+                str(exc),
+                retryable=False,
+                already_exists=dataset_pb2.DatasetAlreadyExistsDetail(
+                    name=exc.name, namespace=exc.namespace
+                ),
+            )
+        if isinstance(exc, DatasetSnapshotNotFoundError):
+            return cls._error(
+                "DATASET_SNAPSHOT_NOT_FOUND",
+                str(exc),
+                retryable=False,
+                snapshot_not_found=dataset_pb2.DatasetSnapshotNotFoundDetail(
+                    snapshot_id=exc.snapshot_id
+                ),
+            )
+        if isinstance(exc, DatasetSnapshotConflictError):
+            return cls._error(
+                "DATASET_SNAPSHOT_CONFLICT",
+                str(exc),
+                retryable=False,
+                snapshot_conflict=dataset_pb2.DatasetSnapshotConflictDetail(
+                    expected_snapshot_id=exc.expected_snapshot_id,
+                    current_snapshot_id=exc.current_snapshot_id,
+                ),
+            )
+        return cls._error("DATASET_SCHEMA_ERROR", str(exc), retryable=False)
 
     @staticmethod
     def _error(
@@ -511,7 +573,7 @@ class DatasetPrimaryAdapterNATS:
         mode = _PB_TO_WRITE_MODE.get(req.mode, "append")
         info = self._adapter.write(
             req.name,
-            [_struct_to_row(row) for row in req.rows],
+            decode_rows(req.rows),
             namespace=req.namespace,
             mode=mode,
             snapshot_id=snapshot_id,
@@ -531,7 +593,7 @@ class DatasetPrimaryAdapterNATS:
         result = self._adapter.query(
             req.sql, namespace=req.namespace, snapshot_id=snapshot_id
         )
-        return dataset_pb2.QueryResponse(query_result=_query_result_to_pb(result))
+        return dataset_pb2.QueryResponse(query_result=query_result_to_pb(result))
 
     async def _handle_flush(self, request: Request) -> None:
         await self._handle(
@@ -543,7 +605,7 @@ class DatasetPrimaryAdapterNATS:
 
     def _call_flush(self, req: dataset_pb2.FlushRequest) -> dataset_pb2.FlushResponse:
         result = self._adapter.flush(req.name, namespace=req.namespace)
-        return dataset_pb2.FlushResponse(query_result=_query_result_to_pb(result))
+        return dataset_pb2.FlushResponse(query_result=query_result_to_pb(result))
 
     async def _handle_inlined_row_count(self, request: Request) -> None:
         await self._handle(
@@ -571,7 +633,7 @@ class DatasetPrimaryAdapterNATS:
         self, req: dataset_pb2.CompactRequest
     ) -> dataset_pb2.CompactResponse:
         result = self._adapter.compact(req.name, namespace=req.namespace)
-        return dataset_pb2.CompactResponse(query_result=_query_result_to_pb(result))
+        return dataset_pb2.CompactResponse(query_result=query_result_to_pb(result))
 
     async def _handle_list_snapshots(self, request: Request) -> None:
         await self._handle(

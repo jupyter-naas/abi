@@ -13,6 +13,7 @@ The graph can catalog a dataset (`dcat:Dataset`). This service stores the table 
 ```
 dataset/
 ├── DatasetPort.py                 # IDatasetPort, DatasetSpec, exceptions
+├── DatasetValues.py               # the values a row holds, for every adapter
 ├── DatasetService.py              # public service
 ├── DatasetFactory.py
 ├── DatasetService_test.py
@@ -23,6 +24,21 @@ dataset/
 └── AGENTS.md
 ```
 
+## Row values (`DatasetValues.py`)
+
+Rows hold the same values on every adapter, in-process or over NATS: JSON
+values (`None`, `bool`, exact `int`, finite `float`, `str`, `dict`/`list`).
+A backend value with no JSON form takes a portable one: dates, timestamps and
+times their ISO-8601 string, `Decimal` a float, bytes base64, NaN and
+infinities `None`, anything else its string form. Writes accept the same
+values plus `date`/`datetime` objects; NaN and infinities raise
+`DatasetSchemaError`. Timestamps are stored in UTC: a value with an offset
+(`datetime` or ISO-8601 string, `Z` included) is converted, a naive one is
+taken as UTC (`DatasetValues.timestamp_value`); DuckDB alone would drop the
+offset (12:30+02:00 stored as 12:30). A backend adapter maps its values with
+`DatasetValues.row_value`; the generic contract tests hold every adapter to
+these rules, so a new backend that passes them needs no wire change.
+
 ## Port (`DatasetPort.py`)
 
 ```python
@@ -31,13 +47,19 @@ class IDatasetPort:
     def describe(name, *, namespace="default") -> DatasetInfo
     def list(*, namespace=None) -> list[DatasetInfo]
     def write(name, rows, *, namespace="default", mode="append"|"replace"|"upsert", snapshot_id=None) -> DatasetInfo
-    def query(sql, *, namespace="default", snapshot_id=None) -> QueryResult
-    def compact(name, *, namespace="default") -> QueryResult
-    def flush(name, *, namespace="default") -> QueryResult
+    def query(sql, *, namespace="default", snapshot_id=None, timeout_seconds=None) -> QueryResult
+    def query_stream(sql, *, namespace="default", snapshot_id=None) -> ContextManager[RowStream]
+    def compact(name, *, namespace="default", timeout_seconds=None) -> QueryResult
+    def flush(name, *, namespace="default", timeout_seconds=None) -> QueryResult
     def inlined_row_count(name, *, namespace="default") -> int
     def list_snapshots() -> list[DatasetSnapshotInfo]
     def drop(name, *, namespace="default") -> None
 ```
+
+`timeout_seconds` is how long the caller waits when the adapter calls another
+process (the NATS client); DuckLake runs to completion and ignores it. `None`
+keeps the adapter's default. `DatasetService` passes it on only when given, so
+an adapter written before the keyword keeps working for other calls.
 
 `DatasetSpec` carries `name`, `namespace`, columns (`string|integer|bigint|double|boolean|date|timestamp|json`), partitions (`column` + `identity|year|month|day`), and `primary_key`. Primary-key columns must exist. DuckLake does not enforce uniqueness; the key only defines `MERGE INTO` matching for upsert, and ordinary appends can create duplicate keys.
 
@@ -106,7 +128,7 @@ Without them, a write to an object store fails with HTTP 403 — or, for a batch
 enough for DuckLake to inline in the catalog, appears to succeed while never reaching
 the store. Modules that use the service declare `DatasetService` in `ModuleDependencies.services`.
 
-Each write uses a fresh connection and retries the complete transaction up to 10 times for catalog locks/transaction conflicts. Backoff starts at 50 ms, doubles to a 1-second cap, and has +/-25% jitter. SQLite writers sharing one adapter are serialized before the cross-process retry boundary; PostgreSQL writers remain concurrent. PostgreSQL deployment credentials are rendered from the secret service; do not log the catalog DSN.
+On a SQLite catalog, reads and writes take turns (`_CatalogLock`, reads overlap, a write runs alone): a read overlapping a write could leave DuckDB holding a lock for good, failing every later read in the process. Every catalog access holds it, including connections opened for one call (`inlined_row_count`, which the hourly catalog monitor runs, once missed it). PostgreSQL catalogs stay fully concurrent. Each write uses a fresh connection and retries the complete transaction up to 10 times for catalog locks/transaction conflicts. Backoff starts at 50 ms, doubles to a 1-second cap, and has +/-25% jitter. SQLite writers sharing one adapter are serialized before the cross-process retry boundary; PostgreSQL writers remain concurrent. PostgreSQL deployment credentials are rendered from the secret service; do not log the catalog DSN.
 
 Reads (`describe`, `list`, `list_snapshots`, and `query` without a pinned
 `snapshot_id`) do not pay that fresh-connection cost: they share one
@@ -161,6 +183,12 @@ Every connection attaches with `AUTOMATIC_MIGRATION`, so the adapter initializes
   because it can contain writes or multiple statements.
   Optional op config selects `namespace` and `name`; otherwise it processes all
   service datasets. See `../../apps/dagster/AGENTS.md` for run config and semantics.
+- In NATS mode the engine hosts the same maintenance as kernel jobs
+  (`DatasetMaintenanceJobs`, owner `naas_abi_core.dataset`: `dataset_compaction`
+  daily at 02:00 UTC, `dataset_catalog_monitor` hourly), and Dagster skips its
+  app. The jobs get the engine's own dataset service, so compaction makes no RPC
+  hop. When the dataset is itself `nats_rpc` to another engine, `flush` and
+  `compact` wait `MAINTENANCE_CALL_TIMEOUT` (6 h), not the client's default.
 - `inlined_row_count` reads DuckLake's inline-table registry and counts insertion
   records across schema versions, including deleted/historical records still in
   the inline tables. It does not scan Parquet. It excludes separate inline delete
@@ -187,6 +215,51 @@ Every connection attaches with `AUTOMATIC_MIGRATION`, so the adapter initializes
 uv run pytest naas_abi_core/services/dataset naas_abi_core/engine/engine_configuration/EngineConfiguration_DatasetService_test.py -q
 ```
 
+## Streamed queries
+
+`query_stream` yields a `RowStream` (`columns`, lazy `rows`) read once inside
+the `with` (docs/adr/20261003_nats-streamed-results.md). The port's default
+reads `query`; DuckLake spools the result first (below); over NATS the
+primary hosts `transfer/v1` sessions on `abi.svc.dataset.v1.transfer`
+(operation `query`, frames in
+`adapters/dataset_stream_codec.py`: a `QueryResult` with the columns, then
+`QueryResult`s with rows only), each produced on its own thread, and the core
+client and SDK facade fetch frames as they iterate (unary `query` against an
+older engine). Frames carry JSON rows, like the unary reply (below).
+
+DuckLake never holds the catalog while the caller reads. Under the SQLite
+catalog's shared lock it runs the query, fetches `FETCH_ROWS` at a time and
+writes each batch (the values `query` returns) as one JSON line to an anonymous
+temporary file in the system temp directory. It then releases the cursor and
+the lock and reads the file back lazily. Leaving the block, early or on an
+error, closes and deletes the file. Holding the lock for the whole stream let
+one slow or abandoned reader (an export whose browser went away, whose transfer
+only idles out after 60 s) block every write, then every read queued behind
+that writer. Memory holds one batch: 2M rows (about 420 MB) streamed with RSS
+up 10 MiB, where `query` took 630 MiB. Disk holds the whole result, the lock is
+held while it is written (as for `query`), and the first row arrives only once
+the query has finished. PostgreSQL catalogs have no process lock and were not
+blocked (writes, flush and compaction went through an open stream), but take
+the same path, which also ends the stream's cursor and catalog transaction early.
+
+## Streamed writes
+
+`write_stream(name, rows, namespace, mode, snapshot_id)` takes an iterator of
+rows, read once, and commits them in one snapshot: all or none. The port's
+default collects them and calls `write`. DuckLake validates them `STAGE_ROWS`
+(10,000) at a time (null upsert keys included) and writes them as JSON lines to
+a temporary directory; DuckDB's JSON reader types them into a Parquet file
+(duplicate upsert keys are found there in SQL, so no key set in memory), and
+one transaction commits from that file; a retry replays the file, never the
+iterator. Live, 300k rows over NATS: 4.1 s with flat client memory (inserting
+row by row took 57 s). Over NATS the client uploads one JSON object per line
+on `abi.svc.dataset.v1.transfer` operation `write` (metadata: a `WriteRequest`
+without rows); the transfer host spools the upload to disk, the primary reads it
+line by line into `write_stream`, and the one reply frame is the
+`WriteResponse`, domain errors included. An error while the caller's iterator
+is read discards the upload before anything is written. The SDK facade's
+`write_stream` takes sync or async iterators.
+
 ## NATS RPC adapters
 
 `adapters/primary/dataset__primary_adapter__NATS.py` exposes the service's
@@ -195,13 +268,25 @@ port. Wire contracts live under `naas_abi_core/proto/dataset/v1/`.
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
-mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
-The maximum message size is 8 MiB (or a lower broker limit); oversized replies
-return non-retryable `PAYLOAD_TOO_LARGE`, and micro-service error headers raise
-instead of becoming an empty success. Larger results require streaming or a
-storage reference. No RPC is automatically replayed after transport failure:
+mapping in the adapter. `query`, `flush` and `compact` pass a caller's
+`timeout_seconds` to `_call` and to the request's `CallContext`; other calls
+use the client's `timeout_seconds` (`nats.client_timeout_seconds` for the
+engine's facades). Primaries use `respond_protobuf` for bounded replies.
+Requests and replies above the broker limit (8 MiB, or lower) overflow as
+transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+that, at the overflow host's capacity, or with an older peer, the call fails
+with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
+instead of becoming an empty success. Overflowed values are held whole in
+memory; results that should not be require streaming or a storage reference. No RPC is automatically replayed after transport failure:
 a timeout can hide a completed operation. Reconcile its outcome before retrying.
 `close()` releases only the client's transport, including for vector storage.
+
+Each row crosses the wire as one UTF-8 JSON object (`QueryResult.rows`,
+`WriteRequest.rows`), encoded by `naas_abi_proto/dataset/rows.py`, which the
+core adapters (`adapters/dataset_row_codec.py`) and the SDK share. Integers
+stay exact at any size and any language can read the rows. Do not move rows
+back to `google.protobuf.Struct`: it makes every number a double (42 came back
+as 42.0, integers above 2^53 rounded).
 
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.

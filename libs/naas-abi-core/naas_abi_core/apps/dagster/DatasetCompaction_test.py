@@ -100,8 +100,12 @@ def test_catalog_monitor_only_checks_pressure():
     assert schedule.cron_schedule == "0 * * * *"
 
 
-@pytest.mark.parametrize("available", [True, False])
-def test_app_registers_maintenance_alongside_module_jobs(monkeypatch, available):
+@pytest.mark.parametrize(
+    "available, hosts_jobs", [(True, False), (False, False), (True, True)]
+)
+def test_app_registers_maintenance_alongside_module_jobs(
+    monkeypatch, available, hosts_jobs
+):
     @job
     def module_job():
         pass
@@ -117,6 +121,7 @@ def test_app_registers_maintenance_alongside_module_jobs(monkeypatch, available)
             dataset_available=lambda: available, dataset=Mock(spec=DatasetService)
         ),
         modules={"example": SimpleNamespace(orchestrations=[ModuleOrchestration])},
+        hosts_jobs=hosts_jobs,
     )
     engine_module = ModuleType("naas_abi_core.engine.Engine")
     engine_module.Engine = lambda: engine
@@ -127,5 +132,6 @@ def test_app_registers_maintenance_alongside_module_jobs(monkeypatch, available)
     Definitions.validate_loadable(definitions)
     assert definitions.get_job_def("module_job").name == "module_job"
     names = {definition.name for definition in definitions.jobs}
-    assert ("dataset_compaction_job" in names) is available
+    # An engine that hosts jobs runs dataset maintenance itself.
+    assert ("dataset_compaction_job" in names) is (available and not hosts_jobs)
     engine.load.assert_called_once()

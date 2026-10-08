@@ -12,6 +12,7 @@ import asyncio
 # evaluated in _StubAdapter's class body below (methods after ``list``);
 # use ``builtins.list`` there -- same workaround as DatasetPort.py/DatasetService.py.
 import builtins
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -120,17 +121,34 @@ class _StubAdapter(IDatasetPort):
         return updated
 
     def query(
-        self, sql: str, *, namespace: str = "default", snapshot_id: int | None = None
+        self,
+        sql: str,
+        *,
+        namespace: str = "default",
+        snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> QueryResult:
         return QueryResult(columns=["answer"], rows=[{"answer": 42}])
 
-    def flush(self, name: str, *, namespace: str = "default") -> QueryResult:
+    def flush(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
         return QueryResult(columns=[], rows=[])
 
     def inlined_row_count(self, name: str, *, namespace: str = "default") -> int:
         return 7
 
-    def compact(self, name: str, *, namespace: str = "default") -> QueryResult:
+    def compact(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
         return QueryResult(columns=[], rows=[])
 
     def list_snapshots(self) -> builtins.list[DatasetSnapshotInfo]:
@@ -390,7 +408,7 @@ def test_list_round_trips_datasets():
     assert sorted(item.name for item in response.datasets.items) == ["a", "b"]
 
 
-def test_query_round_trips_rows_via_struct():
+def test_query_answers_json_rows_with_exact_integers():
     adapter = DatasetPrimaryAdapterNATS(_StubAdapter(), SECRET)
     request = _FakeRequest(
         data=dataset_pb2.QueryRequest(
@@ -406,8 +424,7 @@ def test_query_round_trips_rows_via_struct():
     response.ParseFromString(request.responses[0])
     assert not response.HasField("error")
     assert list(response.query_result.columns) == ["answer"]
-    assert len(response.query_result.rows) == 1
-    assert response.query_result.rows[0]["answer"] == 42
+    assert [json.loads(row) for row in response.query_result.rows] == [{"answer": 42}]
 
 
 # ---------------------------------------------------------------------------

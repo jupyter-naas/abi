@@ -28,15 +28,26 @@ from __future__ import annotations
 # evaluated in this class body below (methods after ``list``); use
 # ``builtins.list`` there -- same workaround as DatasetPort.py/DatasetService.py.
 import builtins
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from datetime import UTC
 from typing import Any
 
-from google.protobuf import json_format
-from naas_abi_core.engine.nats_rpc import NatsRPCClient
+from naas_abi_core.engine.nats_rpc import NatsRPCClient, NatsRPCError
 from naas_abi_core.proto.dataset.v1 import dataset_pb2
 from naas_abi_core.services.dataset.adapters.dataset_nats_contract import (
     AUTH_HEADER,
     SUBJECT_PREFIX,
+    TRANSFER_PREFIX,
+)
+from naas_abi_core.services.dataset.adapters.dataset_row_codec import (
+    encode_lines,
+    encode_rows,
+    query_result_from_pb,
+)
+from naas_abi_core.services.dataset.adapters.dataset_stream_codec import (
+    decode_header,
+    decode_rows,
 )
 from naas_abi_core.services.dataset.DatasetPort import (
     ColumnSpec,
@@ -53,6 +64,7 @@ from naas_abi_core.services.dataset.DatasetPort import (
     PartitionSpec,
     PartitionTransform,
     QueryResult,
+    RowStream,
     WriteMode,
 )
 
@@ -142,28 +154,6 @@ def _pb_to_dataset_snapshot_info(
 ) -> DatasetSnapshotInfo:
     return DatasetSnapshotInfo(
         snapshot_id=pb.snapshot_id, created_at=pb.created_at.ToDatetime(tzinfo=UTC)
-    )
-
-
-def _struct_to_row(pb: Any) -> dict[str, Any]:
-    """Decode one ``google.protobuf.Struct`` row back into a plain dict.
-
-    ``pb`` is typed ``Any``, not ``struct_pb2.Struct``, deliberately: mypy
-    cannot resolve well-known-type attributes (``Struct``, ``Timestamp``, ...)
-    from ``google.protobuf`` in this project's environment when referenced as
-    a bare annotation outside a generated ``_pb2.pyi`` (see the ``[tool.mypy]``
-    override comment on ``naas_abi_core.proto.*`` in ``pyproject.toml`` for
-    the same upstream quirk). Encoding the other direction needs no such
-    helper: protobuf message constructors accept a plain dict anywhere a
-    ``Struct``-typed field is expected (see ``write()`` below), so there is
-    no ``_row_to_struct`` counterpart to this function.
-    """
-    return json_format.MessageToDict(pb)
-
-
-def _pb_to_query_result(pb: dataset_pb2.QueryResult) -> QueryResult:
-    return QueryResult(
-        columns=list(pb.columns), rows=[_struct_to_row(row) for row in pb.rows]
     )
 
 
@@ -262,7 +252,7 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
         request = dataset_pb2.WriteRequest(
             context=self._context(),
             name=name,
-            rows=rows,
+            rows=encode_rows(rows),
             namespace=namespace,
             mode=_WRITE_MODE_TO_PB[mode],
         )
@@ -275,35 +265,124 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
             _raise_for_error(response.error)
         return _pb_to_dataset_info(response.info)
 
+    def write_stream(
+        self,
+        name: str,
+        rows: Iterable[dict[str, Any]],
+        *,
+        namespace: str = "default",
+        mode: WriteMode = "append",
+        snapshot_id: int | None = None,
+    ) -> DatasetInfo:
+        """Upload the rows as they are read, one JSON object per line, over a
+        transfer stream (docs/adr/20261003_nats-streamed-results.md); the
+        engine commits them once. An error while reading ``rows`` discards the
+        upload: nothing is written."""
+        request = dataset_pb2.WriteRequest(
+            name=name, namespace=namespace, mode=_WRITE_MODE_TO_PB[mode]
+        )
+        if snapshot_id is not None:
+            request.snapshot_id = snapshot_id
+
+        def raise_error(error: Any) -> None:
+            raise NatsRPCError(error.code, error.message)
+
+        with self._transfer_stream(
+            TRANSFER_PREFIX,
+            "write",
+            request.SerializeToString(),
+            raise_error,
+            upload=encode_lines(rows),
+        ) as frames:
+            if frames is None:
+                raise NatsRPCError(
+                    "UNAVAILABLE", "No dataset engine accepts streamed writes"
+                )
+            frame = next(frames, None)
+        if frame is None:
+            raise NatsRPCError("INTERNAL", "Streamed write ended without its result")
+        response = dataset_pb2.WriteResponse.FromString(frame)
+        if response.HasField("error"):
+            _raise_for_error(response.error)
+        return _pb_to_dataset_info(response.info)
+
     def query(
         self,
         sql: str,
         *,
         namespace: str = "default",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> QueryResult:
         request = dataset_pb2.QueryRequest(
-            context=self._context(), sql=sql, namespace=namespace
+            context=self._context(timeout_seconds), sql=sql, namespace=namespace
         )
         if snapshot_id is not None:
             request.snapshot_id = snapshot_id
         response = self._call(
-            f"{SUBJECT_PREFIX}.query", request, dataset_pb2.QueryResponse
+            f"{SUBJECT_PREFIX}.query",
+            request,
+            dataset_pb2.QueryResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error)
-        return _pb_to_query_result(response.query_result)
+        return query_result_from_pb(response.query_result)
 
-    def flush(self, name: str, *, namespace: str = "default") -> QueryResult:
+    @contextmanager
+    def query_stream(
+        self,
+        sql: str,
+        *,
+        namespace: str = "default",
+        snapshot_id: int | None = None,
+    ) -> Iterator[RowStream]:
+        """Rows fetched as the caller iterates, over a transfer stream
+        (docs/adr/20261003_nats-streamed-results.md); the unary ``query`` on an
+        engine without it. Leaving the block closes the session."""
+        request = dataset_pb2.QueryRequest(sql=sql, namespace=namespace)
+        if snapshot_id is not None:
+            request.snapshot_id = snapshot_id
+
+        def raise_error(error: Any) -> None:
+            if error.code == "DATASET_SCHEMA_ERROR":
+                raise DatasetSchemaError(error.message)
+            if error.code == "DATASET_SNAPSHOT_NOT_FOUND" and snapshot_id is not None:
+                raise DatasetSnapshotNotFoundError(snapshot_id)
+            raise RuntimeError(f"dataset stream failed ({error.code}): {error.message}")
+
+        with self._transfer_stream(
+            TRANSFER_PREFIX, "query", request.SerializeToString(), raise_error
+        ) as frames:
+            if frames is None:
+                raise NatsRPCError("UNAVAILABLE", "No dataset engine hosts streams")
+            header = next(frames, None)
+            if header is None:
+                raise RuntimeError("dataset stream ended without its header")
+            yield RowStream(
+                columns=decode_header(header),
+                rows=(row for frame in frames for row in decode_rows(frame)),
+            )
+
+    def flush(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
         request = dataset_pb2.FlushRequest(
-            context=self._context(), name=name, namespace=namespace
+            context=self._context(timeout_seconds), name=name, namespace=namespace
         )
         response = self._call(
-            f"{SUBJECT_PREFIX}.flush", request, dataset_pb2.FlushResponse
+            f"{SUBJECT_PREFIX}.flush",
+            request,
+            dataset_pb2.FlushResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error)
-        return _pb_to_query_result(response.query_result)
+        return query_result_from_pb(response.query_result)
 
     def inlined_row_count(self, name: str, *, namespace: str = "default") -> int:
         request = dataset_pb2.InlinedRowCountRequest(
@@ -318,16 +397,25 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
             _raise_for_error(response.error)
         return response.count
 
-    def compact(self, name: str, *, namespace: str = "default") -> QueryResult:
+    def compact(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
         request = dataset_pb2.CompactRequest(
-            context=self._context(), name=name, namespace=namespace
+            context=self._context(timeout_seconds), name=name, namespace=namespace
         )
         response = self._call(
-            f"{SUBJECT_PREFIX}.compact", request, dataset_pb2.CompactResponse
+            f"{SUBJECT_PREFIX}.compact",
+            request,
+            dataset_pb2.CompactResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error)
-        return _pb_to_query_result(response.query_result)
+        return query_result_from_pb(response.query_result)
 
     def list_snapshots(self) -> builtins.list[DatasetSnapshotInfo]:
         request = dataset_pb2.ListSnapshotsRequest(context=self._context())

@@ -1,14 +1,15 @@
 # Agent
 
 ## What it is
-A LangGraph/LangChain-based orchestration layer that runs a chat model with tool calling, supports sub-agent handoff via tools, persists conversation state via a checkpointer (in-memory or PostgreSQL), and can stream events (tool usage/response, AI messages) including SSE-friendly output.
+A LangGraph/LangChain-based orchestration layer that runs a chat model with tool calling, supports sub-agent handoff via tools, persists conversation state via a checkpointer (the engine's Document Service, PostgreSQL or in-memory), and can stream events (tool usage/response, AI messages) including SSE-friendly output.
 
 ## Public API
 
 ### Functions
 - `create_checkpointer() -> BaseCheckpointSaver`  
   Creates a conversation checkpointer:
-  - Uses PostgreSQL-backed checkpointer when `POSTGRES_URL` is set (shared across instances).
+  - Inside a loaded engine: the engine's agent checkpointer, a `DocumentCheckpointSaver` in the Document Service (shared namespace `naas_abi_core.services.agent`, agent id `engine.v1`), the same documents as the SDK saver. `abi agent migrate-memory` copies older PostgreSQL memory into it.
+  - Outside an engine: a PostgreSQL-backed checkpointer when `POSTGRES_URL` is set (shared across instances).
   - Falls back to in-memory `MemorySaver` otherwise (or on PostgreSQL init failure).
 
 - `close_shared_checkpointer() -> None`  
@@ -120,7 +121,7 @@ Key constructor and methods:
 
 ### Environment variables
 - `POSTGRES_URL`  
-  When set, `create_checkpointer()` attempts PostgreSQL-backed persistence via `langgraph.checkpoint.postgres.PostgresSaver` + `psycopg`.
+  Outside an engine, when set, `create_checkpointer()` attempts PostgreSQL-backed persistence via `langgraph.checkpoint.postgres.PostgresSaver` + `psycopg`.
   - Uses a shared global connection/checkpointer per process.
   - Retries connection up to 3 times with 2s delay.
 
@@ -129,7 +130,7 @@ Key constructor and methods:
 
 ### Key runtime dependencies
 - LangChain core: `BaseChatModel`, tools (`tool`, `BaseTool`, `StructuredTool`), messages (`HumanMessage`, `AIMessage`, `ToolMessage`, etc.)
-- LangGraph: `StateGraph`, `Command`, `MemorySaver` (and optional Postgres saver)
+- LangGraph: `StateGraph`, `Command`, `MemorySaver` (and the Document Service or Postgres savers)
 - SSE: `sse_starlette.sse.EventSourceResponse` (for API streaming)
 - Internal:
   - `default_tools(self)` (optional injection)

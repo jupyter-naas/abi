@@ -9,6 +9,7 @@ from naas_abi_core import logger
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import GlobalConfig
 from naas_abi_core.engine.EngineProxy import EngineProxy
 from naas_abi_core.integration.integration import Integration
+from naas_abi_core.module.jobs import JobsMixin
 from naas_abi_core.module.ModuleAgentLoader import ModuleAgentLoader
 from naas_abi_core.module.ModuleModelLoader import ModuleModelLoader
 from naas_abi_core.module.ModuleOrchestrationLoader import ModuleOrchestrationLoader
@@ -58,8 +59,14 @@ class ModuleConfiguration(BaseModel):
 TConfig = TypeVar("TConfig", bound=ModuleConfiguration)
 
 
-class BaseModule(Generic[TConfig]):
-    """Base interface class for ABI modules."""
+class BaseModule(JobsMixin, Generic[TConfig]):
+    """Base interface class for ABI modules.
+
+    Jobs: declare ``jobs`` or decorate methods with ``@job`` (``naas_abi_core.module.jobs``).
+    Sync and async handlers are both accepted; the engine hosts them in NATS mode.
+    """
+
+    _sync_jobs = True
 
     _instances: dict[type, Self] = {}
 

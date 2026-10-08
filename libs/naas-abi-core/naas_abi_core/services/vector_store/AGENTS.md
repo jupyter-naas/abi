@@ -38,8 +38,18 @@ class IVectorStorePort:
                       vector=None, metadata=None, payload=None)
     def delete_vectors(collection_name, vector_ids)
     def count_vectors(collection_name) -> int
+    def list_vectors(collection_name, limit=100, cursor=None,
+                     include_vectors=False) -> VectorPage
+    def get_collection_info(collection_name) -> CollectionInfo
     def close()
 ```
+
+`list_vectors` pages through every document (metadata and payload, vectors only
+on request) in a stable, adapter-defined order: SqliteVec by id, Qdrant by point
+id (scroll). `VectorPage.next_cursor` is opaque; pass it back as `cursor` to
+start the next page (`None`: last page). `CollectionInfo` gives `dimension` and
+`distance_metric` (`None` when the backend cannot say, e.g. Qdrant named
+vectors) and `size` (point count).
 
 ## Service API (`VectorStoreService.py`)
 
@@ -64,6 +74,9 @@ delete_documents(collection_name, document_ids)
 
 get_collection_size(collection_name) -> int
 list_collections() -> List[str]
+list_documents(collection_name, *, limit=100, cursor=None,
+               include_vectors=False) -> VectorPage   # 1 <= limit <= 10_000
+get_collection_info(collection_name) -> CollectionInfo
 delete_collection(collection_name)
 
 close()
@@ -95,7 +108,15 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/vector_store/VectorStore
 uv run pytest libs/naas-abi-core/naas_abi_core/services/vector_store/IVectorStorePort_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/vector_store/adapters/QdrantAdapter_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/vector_store/adapters/QdrantInMemoryAdapter_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/vector_store/adapters/SqliteVecAdapter_test.py
+uv run pytest --import-mode=importlib libs/naas-abi-core/naas_abi_core/services/vector_store/adapters/secondary
 ```
+
+`GenericVectorStoreAdapterTest` (`IVectorStorePort_test.py`) runs against every
+adapter: QdrantInMemory, SqliteVec, the NATS client (through a real primary on
+a local `nats-server`, else a Docker container) and remote Qdrant when
+`QDRANT_HOST` is set. SqliteVec reports the distance as `score` (lower is
+closer), so its `test_search_vectors` is a strict xfail.
 
 ## Adding a new adapter
 
@@ -108,19 +129,46 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/vector_store/adapters/Qd
 ## NATS RPC adapters
 
 `adapters/primary/vector_store__primary_adapter__NATS.py` exposes the service's
-protobuf endpoints. `adapters/secondary/VectorStoreSecondaryAdapterNATSClient.py` implements the outbound
+protobuf endpoints, one per port method (`list_vectors` and `get_collection_info`
+included). `adapters/secondary/VectorStoreSecondaryAdapterNATSClient.py` implements the outbound
 port. Wire contracts live under `naas_abi_core/proto/vector_store/v1/`.
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
-The maximum message size is 8 MiB (or a lower broker limit); oversized replies
-return non-retryable `PAYLOAD_TOO_LARGE`, and micro-service error headers raise
-instead of becoming an empty success. Larger results require streaming or a
-storage reference. No RPC is automatically replayed after transport failure:
+Requests and replies above the broker limit (8 MiB, or lower) overflow as
+transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+that, at the overflow host's capacity, or with an older peer, the call fails
+with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
+instead of becoming an empty success. Overflowed values are held whole in
+memory; results that should not be require streaming or a storage reference. No RPC is automatically replayed after transport failure:
 a timeout can hide a completed operation. Reconcile its outcome before retrying.
 `close()` releases only the client's transport, including for vector storage.
+
+Streamed listing: `list_vectors_stream(collection_name, include_vectors=False)`
+on the port (service: `list_documents_stream`) yields every document lazily, in
+`list_vectors` order, inside a `with` block. The port's default walks
+`list_vectors` pages of `STREAM_PAGE` (500) documents, so every backend streams
+in bounded memory without an override, and no adapter lock is held between
+pages. Over NATS the primary hosts `transfer/v1` sessions on
+`abi.svc.vector_store.v1.transfer` (operation `list_vectors`, metadata a
+`ListVectorsRequest`); each frame is a `VectorPage` of documents only, closed at
+about 256 KiB (`adapters/vector_store_stream_codec.py`), produced on one thread.
+The core client and the SDK facade (`list_documents_stream`, async) read frames
+as they iterate; without a streaming engine they raise `UNAVAILABLE` (no unary
+fallback). `search` is not streamed: backends return the top `k` whole.
+
+Metadata, payloads and search filters cross the wire as one JSON object each
+(UTF-8 bytes, `naas_abi_proto/vector_store/values.py`, which also lists the fields in
+`JSON_OBJECT_FIELDS`), converted by `adapters/vector_store_nats_codec.py` on both sides and
+by the SDK codec: integers stay exact (2^60+1 included) and nested values stay plain. Do not
+move them back to `google.protobuf.Struct`, which made every number a double and nested
+values Struct objects. NaN and infinities have no JSON form and are refused.
 
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
 The latter uses a local `nats-server` executable without Docker.
+
+NATS primaries emit mutation audit events through an injected owner-side event
+publisher. Remote VectorStoreService facades must remain unwired for events to
+avoid duplicating them. Failures in audit publication do not fail persistence.

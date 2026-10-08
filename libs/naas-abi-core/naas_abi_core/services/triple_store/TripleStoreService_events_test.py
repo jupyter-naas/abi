@@ -445,3 +445,98 @@ def test_publisher_exception_does_not_break_mutation() -> None:
     service.insert(
         _one_triple_graph(), graph_name=URIRef("http://example.org/g/explode")
     )
+
+
+# --- streamed reads (docs/adr/20261003_nats-streamed-results.md)
+
+
+def _graph_with(*triples) -> Graph:
+    graph = Graph()
+    for triple in triples:
+        graph.add(triple)
+    return graph
+
+
+class _StreamingAdapter(_InMemoryAdapter):
+    """Opens fine, then fails after the first row (a backend aborting mid-response)."""
+
+    def __init__(self, fail_on_open: bool = False) -> None:
+        super().__init__()
+        self.fail_on_open = fail_on_open
+        self.closed = False
+
+    def query_stream(self, query: str):
+        from contextlib import contextmanager
+
+        from naas_abi_core.services.triple_store.TripleStorePorts import QueryStream
+
+        @contextmanager
+        def opened():
+            if self.fail_on_open:
+                raise Exceptions.RequestError(operation="query", message="refused")
+
+            def rows():
+                yield {"s": URIRef("http://example.org/a")}
+                raise Exceptions.RequestError(operation="query", message="aborted")
+
+            try:
+                yield QueryStream("SELECT", vars=["s"], rows=rows())
+            finally:
+                self.closed = True
+
+        return opened()
+
+
+def test_query_stream_reads_through_the_adapter() -> None:
+    adapter = _InMemoryAdapter()
+    service = TripleStoreService(adapter)
+    service.insert(
+        _graph_with(
+            (URIRef("http://example.org/a"), URIRef("http://example.org/p"), Literal(1))
+        ),
+        URIRef("http://example.org/graph/g"),
+    )
+
+    with service.query_stream(
+        "SELECT ?o WHERE { GRAPH <http://example.org/graph/g> { ?s ?p ?o } }"
+    ) as result:
+        assert list(result.rows) == [{"o": Literal(1)}]
+    with service.export(URIRef("http://example.org/graph/g")) as triples:
+        assert len(list(triples)) == 1
+
+
+@pytest.mark.parametrize("fail_on_open", [True, False], ids=["on-open", "mid-stream"])
+def test_a_failing_stream_emits_triple_store_error_and_reraises(fail_on_open) -> None:
+    events = _FakeEventService()
+    adapter = _StreamingAdapter(fail_on_open=fail_on_open)
+    service = TripleStoreService(adapter)
+    service.set_services(_FakeServices(events))
+    events.published.clear()
+
+    with (
+        pytest.raises(Exceptions.RequestError),
+        service.query_stream("SELECT ?s WHERE { ?s ?p ?o }") as result,
+    ):
+        list(result.rows)
+
+    errors = _filter_events(events, TripleStoreError)
+    assert [e.operation for e in errors] == ["query_stream"]
+    assert adapter.closed is not fail_on_open
+
+
+def test_a_callers_own_error_inside_the_block_is_not_a_store_error() -> None:
+    events = _FakeEventService()
+    adapter = _StreamingAdapter()
+    service = TripleStoreService(adapter)
+    service.set_services(_FakeServices(events))
+    events.published.clear()
+
+    with (
+        pytest.raises(KeyError),
+        service.query_stream("SELECT ?s WHERE { ?s ?p ?o }") as result,
+    ):
+        next(result.rows)
+        raise KeyError("caller bug")
+
+    assert _filter_events(events, TripleStoreError) == []
+    assert adapter.closed

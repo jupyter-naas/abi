@@ -28,7 +28,14 @@ from naas_abi_core.services.email.adapters.email_nats_contract import (
     AUTH_HEADER,
     SUBJECT_PREFIX,
 )
-from naas_abi_core.services.email.EmailPorts import EmailAttachment, IEmailAdapter
+from naas_abi_core.services.email.EmailPorts import (
+    EmailAttachment,
+    IEmailAdapter,
+    SentEmail,
+    SentEmailNotFound,
+    SentEmailsNotKept,
+    SentEmailSummary,
+)
 
 
 def _attachment_to_pb(attachment: EmailAttachment) -> email_pb2.EmailAttachment:
@@ -60,14 +67,30 @@ def _to_list(value: list[str] | str | None) -> list[str]:
     return list(value)
 
 
+def _pb_to_summary(pb: email_pb2.SentEmailSummary) -> SentEmailSummary:
+    return SentEmailSummary(
+        message_id=pb.message_id,
+        sent_at=pb.sent_at,
+        size=pb.size,
+        subject=pb.subject,
+        to=pb.to,
+        sender=pb.sender,
+        snippet=pb.snippet,
+    )
+
+
 def _raise_for_error(error: common_pb2.CallError) -> None:
     """Raise the exception matching ``error.code``.
 
     Must stay exactly symmetric with how ``EmailPrimaryAdapterNATS`` encodes
-    errors. ``EmailPorts.py`` declares no domain exceptions, so every
-    non-auth failure the server can report -- including its own catch-all --
-    falls through to the generic ``RuntimeError``.
+    errors: ``SENT_EMAILS_NOT_KEPT`` and ``SENT_EMAIL_NOT_FOUND`` map back to
+    their ``EmailPorts`` exceptions; every other failure the server can report
+    -- including its own catch-all -- falls through to ``RuntimeError``.
     """
+    if error.code == "SENT_EMAILS_NOT_KEPT":
+        raise SentEmailsNotKept(error.message)
+    if error.code == "SENT_EMAIL_NOT_FOUND":
+        raise SentEmailNotFound(error.message)
     raise RuntimeError(f"email NATS RPC failed ({error.code}): {error.message}")
 
 
@@ -106,7 +129,7 @@ class EmailSecondaryAdapterNATSClient(NatsRPCClient, IEmailAdapter):
         attachments: list[EmailAttachment] | None = None,
         to_emails: list[str] | str | None = None,
         cc_emails: list[str] | str | None = None,
-    ) -> None:
+    ) -> str | None:
         request = email_pb2.SendRequest(
             context=self._context(),
             subject=subject,
@@ -126,5 +149,42 @@ class EmailSecondaryAdapterNATSClient(NatsRPCClient, IEmailAdapter):
             request.reply_to = reply_to
 
         response = self._call(f"{SUBJECT_PREFIX}.send", request, email_pb2.SendResponse)
+        if response.HasField("error"):
+            _raise_for_error(response.error)
+        return response.message_id if response.HasField("message_id") else None
+
+    def list_sent(
+        self, *, limit: int = 100, before: str | None = None
+    ) -> list[SentEmailSummary]:
+        request = email_pb2.ListSentRequest(context=self._context(), limit=limit)
+        if before is not None:
+            request.before = before
+        response = self._call(
+            f"{SUBJECT_PREFIX}.list_sent", request, email_pb2.ListSentResponse
+        )
+        if response.HasField("error"):
+            _raise_for_error(response.error)
+        return [_pb_to_summary(pb) for pb in response.messages.messages]
+
+    def get_sent(self, message_id: str) -> SentEmail:
+        request = email_pb2.GetSentRequest(
+            context=self._context(), message_id=message_id
+        )
+        response = self._call(
+            f"{SUBJECT_PREFIX}.get_sent", request, email_pb2.GetSentResponse
+        )
+        if response.HasField("error"):
+            _raise_for_error(response.error)
+        return SentEmail(
+            summary=_pb_to_summary(response.message.summary), raw=response.message.raw
+        )
+
+    def delete_sent(self, message_id: str) -> None:
+        request = email_pb2.DeleteSentRequest(
+            context=self._context(), message_id=message_id
+        )
+        response = self._call(
+            f"{SUBJECT_PREFIX}.delete_sent", request, email_pb2.DeleteSentResponse
+        )
         if response.HasField("error"):
             _raise_for_error(response.error)

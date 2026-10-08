@@ -37,6 +37,12 @@ from naas_abi_core.services.dataset.adapters.primary.dataset__primary_adapter__N
 from naas_abi_core.services.dataset.adapters.secondary.DatasetSecondaryAdapterNATSClient import (
     DatasetSecondaryAdapterNATSClient,
 )
+from naas_abi_core.services.document.adapters.primary.document__primary_adapter__NATS import (
+    DocumentPrimaryAdapterNATS,
+)
+from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterNATSClient import (
+    DocumentSecondaryAdapterNATSClient,
+)
 from naas_abi_core.services.email.adapters.primary.email__primary_adapter__NATS import (
     EmailPrimaryAdapterNATS,
 )
@@ -93,16 +99,47 @@ from naas_abi_core.services.vector_store.adapters.secondary.VectorStoreSecondary
 # constructed from services.<x> itself, the domain service (everyone else
 # -- preserves event publishing / derived behaviour for remote callers).
 _WIRED_SERVICES = [
-    ("object_storage", ObjectStoragePrimaryAdapterNATS, ObjectStorageSecondaryAdapterNATSClient, False),
+    ("document", DocumentPrimaryAdapterNATS, DocumentSecondaryAdapterNATSClient, False),
+    (
+        "object_storage",
+        ObjectStoragePrimaryAdapterNATS,
+        ObjectStorageSecondaryAdapterNATSClient,
+        False,
+    ),
     ("dataset", DatasetPrimaryAdapterNATS, DatasetSecondaryAdapterNATSClient, False),
     ("kv", KeyValuePrimaryAdapterNATS, KeyValueSecondaryAdapterNATSClient, False),
     ("email", EmailPrimaryAdapterNATS, EmailSecondaryAdapterNATSClient, False),
-    ("activity_log", ActivityLogPrimaryAdapterNATS, ActivityLogSecondaryAdapterNATSClient, False),
-    ("coding_environment", CodingEnvironmentPrimaryAdapterNATS, CodingEnvironmentSecondaryAdapterNATSClient, False),
+    (
+        "activity_log",
+        ActivityLogPrimaryAdapterNATS,
+        ActivityLogSecondaryAdapterNATSClient,
+        False,
+    ),
+    (
+        "coding_environment",
+        CodingEnvironmentPrimaryAdapterNATS,
+        CodingEnvironmentSecondaryAdapterNATSClient,
+        False,
+    ),
     ("events", EventPrimaryAdapterNATS, EventSecondaryAdapterNATSClient, True),
-    ("source_control", SourceControlPrimaryAdapterNATS, SourceControlSecondaryAdapterNATSClient, False),
-    ("vector_store", VectorStorePrimaryAdapterNATS, VectorStoreSecondaryAdapterNATSClient, True),
-    ("triple_store", TripleStorePrimaryAdapterNATS, TripleStoreSecondaryAdapterNATSClient, False),
+    (
+        "source_control",
+        SourceControlPrimaryAdapterNATS,
+        SourceControlSecondaryAdapterNATSClient,
+        False,
+    ),
+    (
+        "vector_store",
+        VectorStorePrimaryAdapterNATS,
+        VectorStoreSecondaryAdapterNATSClient,
+        True,
+    ),
+    (
+        "triple_store",
+        TripleStorePrimaryAdapterNATS,
+        TripleStoreSecondaryAdapterNATSClient,
+        False,
+    ),
 ]
 
 _ALL_FLAGS = [name for name, *_ in _WIRED_SERVICES] + ["secret"]
@@ -136,6 +173,8 @@ def _services(available: dict[str, object] | None = None) -> MagicMock:
         adapter = MagicMock() if value is True else value
         if adapter is not None:
             getattr(services, flag).adapter = adapter
+    services.model_registry_available.return_value = "model_registry" in available
+    services.cache_available.return_value = False
     return services
 
 
@@ -153,9 +192,7 @@ def test_expose_services_is_a_noop_without_nats_config(monkeypatch):
 def test_expose_services_is_a_noop_when_nothing_was_loaded(monkeypatch):
     config = SimpleNamespace(nats=NATSConfiguration(jwt_secret="x" * 32))
     loader = EngineNATSLoader(config)
-    monkeypatch.setattr(
-        "naas_abi_core.engine.nats_runtime.get_connection", MagicMock()
-    )
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
     run_coro = MagicMock(side_effect=lambda coro, *a, **k: coro.close())
     monkeypatch.setattr("naas_abi_core.engine.nats_runtime.run_coro", run_coro)
 
@@ -191,7 +228,9 @@ def test_expose_services_starts_a_primary_adapter_for_each_wired_service(
     primary = started[0]
     assert isinstance(primary, primary_cls)
     expected_wrapped = (
-        getattr(services, flag).adapter if wraps_raw_adapter else getattr(services, flag)
+        getattr(services, flag).adapter
+        if wraps_raw_adapter
+        else getattr(services, flag)
     )
     assert primary._adapter is expected_wrapped
     run_coro.assert_called_once()
@@ -205,9 +244,7 @@ def test_expose_services_does_not_re_expose_a_remote_client(
 ):
     config = SimpleNamespace(nats=NATSConfiguration(jwt_secret="x" * 32))
     loader = EngineNATSLoader(config)
-    monkeypatch.setattr(
-        "naas_abi_core.engine.nats_runtime.get_connection", MagicMock()
-    )
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
     run_coro = MagicMock(side_effect=lambda coro, *a, **k: coro.close())
     monkeypatch.setattr("naas_abi_core.engine.nats_runtime.run_coro", run_coro)
 
@@ -226,9 +263,7 @@ def test_expose_services_starts_one_primary_per_available_service(monkeypatch):
         nats=NATSConfiguration(nats_url="nats://example:4222", jwt_secret="x" * 32)
     )
     loader = EngineNATSLoader(config)
-    monkeypatch.setattr(
-        "naas_abi_core.engine.nats_runtime.get_connection", MagicMock()
-    )
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
     run_coro = MagicMock(side_effect=lambda coro, *a, **k: coro.close())
     monkeypatch.setattr("naas_abi_core.engine.nats_runtime.run_coro", run_coro)
 
@@ -246,8 +281,8 @@ def test_expose_services_starts_one_primary_per_available_service(monkeypatch):
 # ---------------------------------------------------------------------------
 # secret: exposed too (at Max's explicit direction, despite Stage 1's auth
 # gap), but with a different re-exposure guard shape -- Secret fans out over
-# a *list* of adapters, so it's only skipped when EVERY one of them is
-# itself a NATS client, not when any single one is.
+# a *list* of adapters: only its local ones are served, and it's skipped only
+# when EVERY one of them is itself a NATS client.
 # ---------------------------------------------------------------------------
 
 
@@ -256,9 +291,7 @@ def test_expose_services_starts_a_primary_adapter_for_secret(monkeypatch):
         nats=NATSConfiguration(nats_url="nats://example:4222", jwt_secret="x" * 32)
     )
     loader = EngineNATSLoader(config)
-    monkeypatch.setattr(
-        "naas_abi_core.engine.nats_runtime.get_connection", MagicMock()
-    )
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
     run_coro = MagicMock(side_effect=lambda coro, *a, **k: coro.close())
     monkeypatch.setattr("naas_abi_core.engine.nats_runtime.run_coro", run_coro)
 
@@ -276,9 +309,7 @@ def test_expose_services_does_not_re_expose_secret_when_every_adapter_is_remote(
 ):
     config = SimpleNamespace(nats=NATSConfiguration(jwt_secret="x" * 32))
     loader = EngineNATSLoader(config)
-    monkeypatch.setattr(
-        "naas_abi_core.engine.nats_runtime.get_connection", MagicMock()
-    )
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
     run_coro = MagicMock(side_effect=lambda coro, *a, **k: coro.close())
     monkeypatch.setattr("naas_abi_core.engine.nats_runtime.run_coro", run_coro)
 
@@ -291,28 +322,245 @@ def test_expose_services_does_not_re_expose_secret_when_every_adapter_is_remote(
     run_coro.assert_not_called()
 
 
-def test_expose_services_still_exposes_secret_when_only_some_adapters_are_remote(
+def test_expose_services_exposes_only_the_local_part_of_a_mixed_secret_fanout(
     monkeypatch,
 ):
-    """The realistic mixed case: a local dotenv/naas adapter alongside a
-    nats_rpc one that reaches a different, upstream secret store -- there's
-    still something local worth serving, so this must NOT be skipped
-    (confirms the guard is `all(...)`, not `any(...)`)."""
+    """A proxy is never served on the global subject (it could route into
+    itself); the local adapters are, with the owner's event wiring."""
+    from naas_abi_core.services.secret.Secret import Secret
+
     config = SimpleNamespace(
         nats=NATSConfiguration(nats_url="nats://example:4222", jwt_secret="x" * 32)
     )
     loader = EngineNATSLoader(config)
-    monkeypatch.setattr(
-        "naas_abi_core.engine.nats_runtime.get_connection", MagicMock()
-    )
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
     run_coro = MagicMock(side_effect=lambda coro, *a, **k: coro.close())
     monkeypatch.setattr("naas_abi_core.engine.nats_runtime.run_coro", run_coro)
 
-    mixed = [MagicMock(), MagicMock(spec=SecretSecondaryAdapterNATSClient)]
-    services = _services({"secret": mixed})
+    dotenv, naas = MagicMock(), MagicMock()
+    upstream = MagicMock(spec=SecretSecondaryAdapterNATSClient)
+    services = _services({"secret": [dotenv, upstream, naas]})
 
     started = loader.expose_services(services)
 
     assert len(started) == 1
-    assert isinstance(started[0], SecretPrimaryAdapterNATS)
+    exposed = started[0]._adapter
+    assert isinstance(exposed, Secret)
+    assert exposed.adapters == [dotenv, naas]
+    assert exposed.services is services.secret.services
     run_coro.assert_called_once()
+
+
+@pytest.mark.parametrize("remote", [False, True])
+def test_cache_exposes_cold_tier_and_skips_remote_proxy(monkeypatch, remote):
+    from naas_abi_core.services.cache.adapters.primary.cache__primary_adapter__NATS import (
+        CachePrimaryAdapterNATS,
+    )
+    from naas_abi_core.services.cache.adapters.secondary.CacheSecondaryAdapterNATSClient import (
+        CacheSecondaryAdapterNATSClient,
+    )
+
+    loader = EngineNATSLoader(
+        SimpleNamespace(nats=NATSConfiguration(jwt_secret="x" * 32))
+    )
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_runtime.run_coro", lambda coro: coro.close()
+    )
+    services = _services()
+    services.cache_available.return_value = True
+    adapter = MagicMock(spec=CacheSecondaryAdapterNATSClient) if remote else MagicMock()
+    services.cache.cold.adapter = adapter
+    started = loader.expose_services(services)
+    if remote:
+        assert started == []
+    else:
+        assert len(started) == 1
+        assert isinstance(started[0], CachePrimaryAdapterNATS)
+        assert started[0]._adapter is adapter
+
+
+def test_expose_model_registry_owner(monkeypatch):
+    from naas_abi_core.services.model_registry.adapters.primary.model_registry_nats import (
+        ModelRegistryNATS,
+    )
+
+    config = SimpleNamespace(nats=NATSConfiguration(jwt_secret="x" * 32))
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_runtime.run_coro",
+        MagicMock(side_effect=lambda coro: coro.close()),
+    )
+    services = _services({"model_registry": True})
+    started = EngineNATSLoader(config).expose_services(services)
+    assert len(started) == 1
+    assert isinstance(started[0], ModelRegistryNATS)
+    assert started[0].registry is services.model_registry
+
+
+def test_streaming_configuration_is_optional_and_validated():
+    from pydantic import ValidationError
+
+    config = NATSConfiguration(jwt_secret="test")
+    assert config.models.generation_timeout_seconds is None
+    assert config.models.streaming.max_upload_bytes == 16 * 1024 * 1024
+    assert config.models.streaming.max_buffered_upload_bytes == 64 * 1024 * 1024
+    with pytest.raises(ValidationError):
+        NATSConfiguration(
+            jwt_secret="test", models={"streaming": {"max_upload_bytes": None}}
+        )
+    assert config.object_storage_streaming.chunk_bytes == 65536
+    for values in (
+        {"idle_seconds": 0},
+        {"idle_seconds": float("nan")},
+        {"max_sessions": 0},
+        {"max_upload_bytes": 0},
+        {"chunk_bytes": 1},
+    ):
+        with pytest.raises(ValidationError):
+            NATSConfiguration(jwt_secret="test", object_storage_streaming=values)
+    with pytest.raises(ValidationError):
+        NATSConfiguration(jwt_secret="test", models={"generation_timeout_seconds": -1})
+
+
+def test_nats_configuration_rejects_conflicting_bus_and_cache_topologies():
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        EngineConfiguration,
+    )
+    from pydantic import ValidationError
+
+    base = {
+        "api": {},
+        "global_config": {"ai_mode": "local"},
+        "modules": [],
+        "nats": {"jwt_secret": "test"},
+    }
+    assert EngineConfiguration(**base, services={}).nats is not None
+    with pytest.raises(ValidationError, match="requires services.bus"):
+        EngineConfiguration(
+            **base,
+            services={"bus": {"bus_adapter": {"adapter": "rabbitmq", "config": {}}}},
+        )
+    with pytest.raises(ValidationError, match="URLs must match"):
+        EngineConfiguration(
+            **base,
+            services={
+                "bus": {
+                    "bus_adapter": {
+                        "adapter": "nats_jetstream",
+                        "config": {"nats_url": "nats://other:4222"},
+                    }
+                }
+            },
+        )
+    with pytest.raises(ValidationError, match="cannot mix local and remote"):
+        EngineConfiguration(
+            **base,
+            services={
+                "cache": {
+                    "adapters": [
+                        {
+                            "tier": "hot",
+                            "adapter": "nats_rpc",
+                            "config": {"jwt_secret": "test"},
+                        },
+                        {"tier": "cold", "adapter": "fs", "config": {}},
+                    ]
+                }
+            },
+        )
+
+
+# --- RPC overflow host (docs/adr/20261003_nats-rpc-overflow.md)
+
+
+def _overflow_loader(monkeypatch, run_coro, **overflow):
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        NATSRPCOverflowConfiguration,
+    )
+
+    config = SimpleNamespace(
+        nats=NATSConfiguration(
+            jwt_secret="x" * 32,
+            rpc_overflow=NATSRPCOverflowConfiguration(**overflow),
+        )
+    )
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.run_coro", run_coro)
+    return EngineNATSLoader(config)
+
+
+def test_expose_overflow_starts_and_installs_one_host_next_to_the_primaries(
+    monkeypatch,
+):
+    from naas_abi_core.engine import nats_overflow
+    from naas_abi_core.engine.nats_overflow import OverflowHost
+
+    run_coro = MagicMock(side_effect=lambda coro, *a, **k: coro.close())
+    loader = _overflow_loader(monkeypatch, run_coro, max_value_bytes=1024 * 1024)
+
+    started = loader.expose_overflow([object()])
+    try:
+        (host,) = started
+        assert isinstance(host, OverflowHost)
+        assert host.max_value_bytes == 1024 * 1024
+        assert nats_overflow.current() is host
+        run_coro.assert_called_once()
+    finally:
+        nats_overflow.uninstall(started[0])
+
+
+@pytest.mark.parametrize(
+    "primaries,enabled",
+    [([], True), ([object()], False)],
+    ids=["no-primary", "disabled"],
+)
+def test_expose_overflow_is_a_noop_without_primaries_or_when_disabled(
+    monkeypatch, primaries, enabled
+):
+    from naas_abi_core.engine import nats_overflow
+
+    run_coro = MagicMock(side_effect=lambda coro, *a, **k: coro.close())
+    loader = _overflow_loader(monkeypatch, run_coro, enabled=enabled)
+
+    assert loader.expose_overflow(primaries) == []
+    assert nats_overflow.current() is None
+    run_coro.assert_not_called()
+
+
+def test_expose_overflow_keeps_the_old_limit_when_the_broker_is_too_small(monkeypatch):
+    from naas_abi_core.engine import nats_overflow
+
+    def refuse(coro, *args, **kwargs):
+        coro.close()
+        raise ValueError("Broker payload is too small for transfers")
+
+    loader = _overflow_loader(monkeypatch, MagicMock(side_effect=refuse))
+
+    assert loader.expose_overflow([object()]) == []
+    assert nats_overflow.current() is None
+
+
+def test_expose_services_sizes_the_services_it_starts_from_the_configuration(
+    monkeypatch,
+):
+    from naas_abi_core.engine import nats_dispatch
+
+    # Restored after the test, like every monkeypatched attribute.
+    monkeypatch.setattr(
+        nats_dispatch,
+        "_max_concurrent_requests",
+        nats_dispatch.DEFAULT_MAX_CONCURRENT_REQUESTS,
+    )
+    config = SimpleNamespace(
+        nats=NATSConfiguration(jwt_secret="x" * 32, max_concurrent_requests=16)
+    )
+    loader = EngineNATSLoader(config)
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    run_coro = MagicMock(side_effect=lambda coro, *a, **k: coro.close())
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.run_coro", run_coro)
+
+    (primary,) = loader.expose_services(_services({"document": True}))
+
+    assert nats_dispatch.max_concurrent_requests() == 16
+    assert primary._dispatch.max_workers == 16

@@ -123,6 +123,53 @@ def test_query_select_returns_rows():
     assert str(result[0].s) == "http://example.org/alice"
 
 
+def test_query_select_returns_rdflib_select_result():
+    """SELECT must honour the port's ``rdflib.query.Result`` contract.
+
+    The NATS primary adapter only serializes ``Result``/``Graph``/``bool``; a
+    bare iterator of rows made every SELECT over NATS fail with INTERNAL.
+    """
+    adapter = _build_adapter()
+
+    response = _ok_response()
+    response.headers = {"Content-Type": "application/sparql-results+json"}
+    response.text = (
+        '{"head":{"vars":["s","name"]},"results":{"bindings":['
+        '{"s":{"type":"uri","value":"http://example.org/alice"},'
+        '"name":{"type":"literal","value":"Alice","xml:lang":"en"}},'
+        '{"s":{"type":"uri","value":"http://example.org/bob"}}'
+        "]}}"
+    )
+    adapter._session.post.return_value = response
+
+    result = adapter.query("SELECT ?s ?name WHERE { ?s ?p ?name }")
+
+    assert isinstance(result, rdflib.query.Result)
+    assert result.type == "SELECT"
+    assert result.vars == [Variable("s"), Variable("name")]
+    rows = list(result)
+    assert rows[0].name == Literal("Alice", lang="en")
+    assert rows[1].s == URIRef("http://example.org/bob")
+    assert rows[1].name is None
+    # A Result is re-iterable, unlike the iterator it replaces.
+    assert len(list(result)) == 2
+
+
+def test_query_select_without_rows_keeps_vars():
+    adapter = _build_adapter()
+
+    response = _ok_response()
+    response.headers = {"Content-Type": "application/sparql-results+json"}
+    response.text = '{"head":{"vars":["g"]},"results":{"bindings":[]}}'
+    adapter._session.post.return_value = response
+
+    result = adapter.query("SELECT ?g WHERE { GRAPH ?g { ?s ?p ?o } }")
+
+    assert isinstance(result, rdflib.query.Result)
+    assert result.vars == [Variable("g")]
+    assert list(result) == []
+
+
 def test_query_construct_returns_graph():
     adapter = _build_adapter()
 
@@ -642,3 +689,85 @@ def test_test_connection_does_not_retry_non_retryable_status(mock_sleep):
     assert exc_info.value.status_code == 401
     assert exc_info.value.attempts == 1
     mock_sleep.assert_not_called()
+
+
+# --- streamed reads (docs/adr/20261003_nats-streamed-results.md)
+
+
+def _streaming_response(content_type: str, lines: list[str], status: int = 200) -> Mock:
+    response = Mock()
+    response.status_code = status
+    response.headers = {"Content-Type": content_type}
+    response.text = "\n".join(lines)
+    response.read_lines = 0
+
+    def iter_lines(decode_unicode=False):
+        for line in lines:
+            response.read_lines += 1
+            yield line
+
+    response.iter_lines = iter_lines
+    return response
+
+
+def test_query_stream_reads_fuseki_tsv_as_it_arrives():
+    adapter = _build_adapter()
+    response = _streaming_response(
+        "text/tab-separated-values", ["?s", "<http://ex/a>", "<http://ex/b>"]
+    )
+    adapter._session.post.return_value = response
+
+    with adapter.query_stream("SELECT ?s WHERE { ?s ?p ?o }") as result:
+        rows = iter(result.rows)
+        assert next(rows) == {"s": URIRef("http://ex/a")}
+        assert response.read_lines == 2  # the rest is still unread
+        assert list(rows) == [{"s": URIRef("http://ex/b")}]
+
+    kwargs = adapter._session.post.call_args.kwargs
+    assert kwargs["stream"] is True
+    assert kwargs["headers"]["Accept"].startswith("text/tab-separated-values")
+    response.close.assert_called_once()
+
+
+@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+def test_query_stream_retries_a_busy_fuseki_before_reading_any_row(mock_sleep):
+    adapter = _build_adapter()
+    busy = _streaming_response("text/plain", ["busy"], status=503)
+    adapter._session.post.side_effect = [
+        busy,
+        _streaming_response("text/tab-separated-values", ["true"]),
+    ]
+
+    with adapter.query_stream("ASK { ?s ?p ?o }") as result:
+        assert result.ask_answer is True
+    busy.close.assert_called_once()
+
+
+def test_query_stream_raises_a_request_error_when_fuseki_aborts_mid_stream():
+    adapter = _build_adapter()
+    adapter._session.post.return_value = _streaming_response(
+        "text/tab-separated-values",
+        ["?s", "<http://ex/a>", "java.lang.NullPointerException: Node.hashCode()\tx"],
+    )
+
+    with adapter.query_stream("SELECT ?s WHERE { ?s ?p ?o }") as result:
+        rows = iter(result.rows)
+        next(rows)
+        with pytest.raises(Exceptions.RequestError) as raised:
+            next(rows)
+    assert raised.value.endpoint == "http://localhost:3030/ds/query"
+
+
+def test_export_streams_a_graph_as_n_triples_without_query():
+    adapter = _build_adapter()
+    adapter._session.post.return_value = _streaming_response(
+        "application/n-triples", ['<http://ex/a> <http://ex/p> "v" .']
+    )
+    adapter.query = Mock(side_effect=AssertionError("not materialized"))
+
+    with adapter.export(URIRef("http://example.org/graph/g")) as triples:
+        assert list(triples) == [
+            (URIRef("http://ex/a"), URIRef("http://ex/p"), Literal("v"))
+        ]
+    sent = adapter._session.post.call_args.kwargs["data"].decode()
+    assert "GRAPH <http://example.org/graph/g>" in sent

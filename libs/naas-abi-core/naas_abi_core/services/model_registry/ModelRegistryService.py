@@ -126,7 +126,8 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
             prov is not None
             and prov not in self._chat_providers
             and prov not in self._embedding_providers
-            and prov not in {
+            and prov
+            not in {
                 model.provider
                 for bucket in self._models.values()
                 for entries in bucket.values()
@@ -336,3 +337,11 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
 
     def list_canonical_ids(self) -> list[str]:
         return list(self._models.keys())
+
+    def list_registered_models(self) -> list[tuple[str, Model]]:
+        return [
+            (cid, model)
+            for cid, bucket in self._models.items()
+            for entries in bucket.values()
+            for model in entries
+        ]

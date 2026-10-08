@@ -155,7 +155,7 @@ class ActivityLogSqliteAdapter(IActivityLogAdapter):
             return []
 
         conn = self._get_connection(actor_id)
-        sql = "SELECT timestamp, event_type, correlation_id, attributes FROM events"
+        sql = "SELECT timestamp, event_type, correlation_id, attributes, id FROM events"
         params: list[object] = []
         clauses: list[str] = []
 
@@ -169,10 +169,17 @@ class ActivityLogSqliteAdapter(IActivityLogAdapter):
             if query.until is not None:
                 clauses.append("timestamp <= ?")
                 params.append(self._format_ts(query.until))
+            if query.before_seq is not None:
+                clauses.append("id < ?")
+                params.append(query.before_seq)
+            if query.after_seq is not None:
+                clauses.append("id > ?")
+                params.append(query.after_seq)
 
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
-        sql += " ORDER BY id ASC"
+        newest_first = query is not None and query.newest_first
+        sql += " ORDER BY id DESC" if newest_first else " ORDER BY id ASC"
         if query is not None and query.limit is not None:
             sql += " LIMIT ?"
             params.append(query.limit)
@@ -188,6 +195,7 @@ class ActivityLogSqliteAdapter(IActivityLogAdapter):
                 timestamp=self._parse_ts(row[0]),
                 correlation_id=row[2],
                 attributes=json.loads(row[3]),
+                seq=row[4],
             )
             for row in rows
         ]

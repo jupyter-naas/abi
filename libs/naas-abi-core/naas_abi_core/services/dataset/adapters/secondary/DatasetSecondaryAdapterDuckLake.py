@@ -6,13 +6,16 @@ import builtins
 import json
 import logging
 import random
+import tempfile
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
+from itertools import islice
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import IO, Any, TypeVar
 
 from naas_abi_core.services.dataset.DatasetPort import (
     DatasetAlreadyExistsError,
@@ -25,7 +28,13 @@ from naas_abi_core.services.dataset.DatasetPort import (
     DatasetSpec,
     IDatasetPort,
     QueryResult,
+    RowStream,
     WriteMode,
+)
+from naas_abi_core.services.dataset.DatasetValues import (
+    is_finite,
+    row_value,
+    timestamp_value,
 )
 
 CATALOG_ALIAS = "abi_datasets"
@@ -48,6 +57,8 @@ DUCKDB_TYPES = {
 }
 
 _T = TypeVar("_T")
+FETCH_ROWS = 1000  # rows per fetch when streaming a query result
+STAGE_ROWS = 10_000  # rows validated and staged at a time by write_stream
 logger = logging.getLogger(__name__)
 
 
@@ -111,6 +122,89 @@ class _S3Settings:
             parts.append(f"URL_STYLE {_sql_literal(self.url_style)}")
         parts.append(f"REGION {_sql_literal(self.region or 'us-east-1')}")
         return ", ".join(parts)
+
+
+class _CatalogLock:
+    """Readers-writer lock for a SQLite DuckLake catalog.
+
+    Reads may overlap each other, a write runs alone: when a read overlapped a
+    write, DuckDB's SQLite layer could keep a lock for good, and every later
+    read in the process failed with "database is locked". Reentrant: a thread
+    may nest reads, nest writes, and read inside its own write; asking to
+    write while reading raises instead of deadlocking. query_stream holds the
+    lock only while it spools, never while its caller reads.
+    PostgreSQL catalogs handle concurrency themselves (``_NoCatalogLock``).
+    """
+
+    def __init__(self) -> None:
+        self._condition = threading.Condition()
+        self._readers = 0
+        self._writer: int | None = None
+        self._writer_depth = 0
+        self._waiting_writers = 0
+        self._local = threading.local()
+
+    @contextmanager
+    def shared(self) -> Iterator[None]:
+        depth = getattr(self._local, "depth", 0)
+        if depth or self._writer == threading.get_ident():
+            self._local.depth = depth + 1
+            try:
+                yield
+            finally:
+                self._local.depth = depth
+            return
+        with self._condition:
+            while self._writer is not None or self._waiting_writers:
+                self._condition.wait()
+            self._readers += 1
+        self._local.depth = 1
+        try:
+            yield
+        finally:
+            self._local.depth = 0
+            with self._condition:
+                self._readers -= 1
+                if not self._readers:
+                    self._condition.notify_all()
+
+    @contextmanager
+    def exclusive(self) -> Iterator[None]:
+        me = threading.get_ident()
+        with self._condition:
+            if self._writer == me:
+                self._writer_depth += 1
+            else:
+                if getattr(self._local, "depth", 0):
+                    raise RuntimeError(
+                        "Cannot write to a SQLite DuckLake catalog while this "
+                        "thread is reading it"
+                    )
+                self._waiting_writers += 1
+                try:
+                    while self._writer is not None or self._readers:
+                        self._condition.wait()
+                finally:
+                    self._waiting_writers -= 1
+                self._writer, self._writer_depth = me, 1
+        try:
+            yield
+        finally:
+            with self._condition:
+                self._writer_depth -= 1
+                if not self._writer_depth:
+                    self._writer = None
+                    self._condition.notify_all()
+
+
+class _NoCatalogLock:
+    @contextmanager
+    def shared(self) -> Iterator[None]:
+        yield
+
+    @contextmanager
+    def exclusive(self) -> Iterator[None]:
+        yield
 
 
 class DatasetSecondaryAdapterDuckLake(IDatasetPort):
@@ -184,8 +278,8 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         self._max_retries = max_retries
         self._retry_base_delay_seconds = retry_base_delay_seconds
         self._retry_max_delay_seconds = retry_max_delay_seconds
-        self._sqlite_write_lock = (
-            threading.RLock() if self._catalog.startswith("sqlite:") else None
+        self._catalog_lock = (
+            _CatalogLock() if self._catalog.startswith("sqlite:") else _NoCatalogLock()
         )
         self._read_connection: Any | None = None
         self._read_connection_lock = threading.Lock()
@@ -317,32 +411,166 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         spec, committed_snapshot = self._write_transaction(operation)
         return self._to_info(spec, committed_snapshot)
 
+    def write_stream(
+        self,
+        name: str,
+        rows: Iterable[dict[str, Any]],
+        *,
+        namespace: str = "default",
+        mode: WriteMode = "append",
+        snapshot_id: int | None = None,
+    ) -> DatasetInfo:
+        """Validate and stage the rows ``STAGE_ROWS`` at a time into a local
+        Parquet file, then commit them in one transaction, whose retries
+        replay the file: the iterator is read once."""
+        if mode not in ("append", "replace", "upsert"):
+            raise ValueError(f"Unknown dataset write mode: {mode}")
+        staged_spec = self._read(lambda con: self._load_spec(con, namespace, name))
+        if mode == "upsert" and not staged_spec.primary_key:
+            raise DatasetSchemaError(
+                f"Dataset {namespace}.{name} has no primary key for upsert"
+            )
+        with tempfile.TemporaryDirectory(prefix="abi-dataset-write-") as directory:
+            staged = self._stage_rows(staged_spec, rows, Path(directory), mode)
+
+            def operation(con: Any) -> DatasetSpec:
+                current_snapshot = self._current_snapshot(con)
+                if snapshot_id is not None and snapshot_id != current_snapshot:
+                    raise DatasetSnapshotConflictError(snapshot_id, current_snapshot)
+                spec = self._load_spec(con, namespace, name)
+                if spec.columns != staged_spec.columns:
+                    raise DatasetSchemaError(
+                        f"Dataset {namespace}.{name} changed during the write"
+                    )
+                target = self._qualified_table(namespace, name)
+                if mode == "replace":
+                    con.execute(f"DELETE FROM {target}")  # nosec B608
+                if staged is None:
+                    return spec
+                columns = ", ".join(self._ident(column.name) for column in spec.columns)
+                source = (
+                    f"(SELECT {columns} FROM read_parquet("  # nosec B608
+                    f"{self._sql_string(staged)}))"
+                )
+                if mode == "upsert":
+                    self._merge_rows(con, spec, source)
+                else:
+                    con.execute(
+                        f"INSERT INTO {target} ({columns}) "  # nosec B608
+                        f"SELECT {columns} FROM {source}"
+                    )
+                return spec
+
+            spec, committed_snapshot = self._write_transaction(operation)
+        return self._to_info(spec, committed_snapshot)
+
+    def _stage_rows(
+        self,
+        spec: DatasetSpec,
+        rows: Iterable[dict[str, Any]],
+        directory: Path,
+        mode: WriteMode,
+    ) -> str | None:
+        """The Parquet file holding ``rows`` in order, ``None`` when empty.
+
+        Rows are validated ``STAGE_ROWS`` at a time and written as JSON lines,
+        then DuckDB's JSON reader types them into Parquet: far faster than
+        inserting rows one by one, and memory holds one batch."""
+        import duckdb
+
+        lines = directory / "rows.jsonl"
+        count = 0
+        with lines.open("w", encoding="utf-8") as stage:
+            iterator = iter(rows)
+            while batch := builtins.list(islice(iterator, STAGE_ROWS)):
+                normalized = self._normalize_rows(spec, batch, count)
+                if mode == "upsert":
+                    self._check_null_keys(spec, normalized, count)
+                stage.writelines(
+                    json.dumps(
+                        row,
+                        default=row_value,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                    + "\n"
+                    for row in normalized
+                )
+                count += len(batch)
+        if count == 0:
+            return None
+        # JSON columns hold their canonical text (_normalize_json); the target
+        # column casts it back.
+        types = ", ".join(
+            f"{self._sql_string(column.name)}: "
+            f"{self._sql_string('VARCHAR' if column.type == 'json' else DUCKDB_TYPES[column.type])}"
+            for column in spec.columns
+        )
+        columns = ", ".join(self._ident(column.name) for column in spec.columns)
+        path = str(directory / "rows.parquet")
+        con = duckdb.connect()
+        try:
+            con.execute(
+                f"COPY (SELECT {columns} FROM read_json("  # nosec B608
+                f"{self._sql_string(str(lines))}, format = 'newline_delimited', "
+                f"columns = {{{types}}})) TO {self._sql_string(path)} (FORMAT parquet)"
+            )
+            if mode == "upsert":
+                self._check_duplicate_keys(con, spec, path)
+        finally:
+            con.close()
+        return path
+
+    @staticmethod
+    def _check_null_keys(
+        spec: DatasetSpec, rows: builtins.list[dict[str, Any]], first_index: int
+    ) -> None:
+        for index, row in enumerate(rows, first_index):
+            if any(row[column] is None for column in spec.primary_key):
+                raise DatasetSchemaError(
+                    f"Row {index} has a null primary key value for "
+                    f"{', '.join(spec.primary_key)}"
+                )
+
+    def _check_duplicate_keys(self, con: Any, spec: DatasetSpec, path: str) -> None:
+        keys = ", ".join(self._ident(column) for column in spec.primary_key)
+        duplicate = con.execute(
+            f"SELECT {keys} FROM read_parquet({self._sql_string(path)}) "  # nosec B608
+            f"GROUP BY {keys} HAVING count(*) > 1 LIMIT 1"
+        ).fetchone()
+        if duplicate is not None:
+            raise DatasetSchemaError(
+                f"Incoming upsert contains duplicate primary key {tuple(duplicate)!r}"
+            )
+
     def query(
         self,
         sql: str,
         *,
         namespace: str = "default",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,  # in process: runs to completion
     ) -> QueryResult:
         if snapshot_id is None:
             return self._read(lambda con: self._run_query(con, sql, namespace))
 
-        if not self._snapshot_exists(snapshot_id):
-            raise DatasetSnapshotNotFoundError(snapshot_id)
-        connection = self._get_snapshot_connection(snapshot_id)
-        cursor = connection.cursor()
-        try:
-            return self._run_query(cursor, sql, namespace)
-        except Exception:
-            # Retire on failure, including stale inline tables after an external
-            # flush. Never replay arbitrary query SQL automatically.
-            with self._snapshot_connection_lock:
-                entry = self._snapshot_connections.get(snapshot_id)
-                if entry is not None and entry[1] is connection:
-                    del self._snapshot_connections[snapshot_id]
-            raise
-        finally:
-            cursor.close()
+        with self._catalog_lock.shared():
+            if not self._snapshot_exists(snapshot_id):
+                raise DatasetSnapshotNotFoundError(snapshot_id)
+            connection = self._get_snapshot_connection(snapshot_id)
+            cursor = connection.cursor()
+            try:
+                return self._run_query(cursor, sql, namespace)
+            except Exception:
+                # Retire on failure, including stale inline tables after an
+                # external flush. Never replay arbitrary query SQL automatically.
+                with self._snapshot_connection_lock:
+                    entry = self._snapshot_connections.get(snapshot_id)
+                    if entry is not None and entry[1] is connection:
+                        del self._snapshot_connections[snapshot_id]
+                raise
+            finally:
+                cursor.close()
 
     def _get_snapshot_connection(self, snapshot_id: int) -> Any:
         with self._snapshot_connection_lock:
@@ -367,6 +595,12 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
     def _run_query(self, con: Any, sql: str, namespace: str) -> QueryResult:
         con.execute(f"USE {self._qualified_schema(namespace)}")
         result = con.execute(sql)
+        columns, json_columns = self._describe(result)
+        rows = [self._row(raw, columns, json_columns) for raw in result.fetchall()]
+        return QueryResult(columns=columns, rows=rows)
+
+    @staticmethod
+    def _describe(result: Any) -> tuple[builtins.list[str], set[int]]:
         description = result.description or []
         columns = [str(column[0]) for column in description]
         json_columns = {
@@ -374,14 +608,78 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             for index, column in enumerate(description)
             if str(column[1]).upper() == "JSON"
         }
-        rows = [
-            {
-                column: self._cell(value, index in json_columns)
-                for index, (column, value) in enumerate(zip(columns, raw))
-            }
-            for raw in result.fetchall()
-        ]
-        return QueryResult(columns=columns, rows=rows)
+        return columns, json_columns
+
+    def _row(
+        self, raw: Any, columns: builtins.list[str], json_columns: set[int]
+    ) -> dict[str, Any]:
+        return {
+            column: self._cell(value, index in json_columns)
+            for index, (column, value) in enumerate(zip(columns, raw))
+        }
+
+    @contextmanager
+    def query_stream(
+        self,
+        sql: str,
+        *,
+        namespace: str = "default",
+        snapshot_id: int | None = None,
+    ) -> Iterator[RowStream]:
+        """Run the query, spool its rows to an anonymous temporary file, then
+        read them back as the caller iterates
+        (docs/adr/20261003_nats-streamed-results.md). Only the spool holds the
+        cursor and, on a SQLite catalog, the shared lock, so a slow or
+        abandoned reader never holds up writes, nor the reads queued behind
+        them. Like ``query``, this never replays the SQL. The file goes when
+        the block exits."""
+        with tempfile.TemporaryFile(prefix="abi-dataset-query-") as spool:
+            with self._catalog_lock.shared():
+                columns = self._spool_query(spool, sql, namespace, snapshot_id)
+            spool.seek(0)
+            yield RowStream(columns=columns, rows=self._spooled(spool, columns))
+
+    def _spool_query(
+        self, spool: IO[bytes], sql: str, namespace: str, snapshot_id: int | None
+    ) -> builtins.list[str]:
+        """Write the rows to ``spool`` ``FETCH_ROWS`` at a time, one line per
+        batch: a JSON array holding each row's values as ``query`` returns
+        them. Return the columns."""
+        if snapshot_id is None:
+            connection = self._get_read_connection()
+        else:
+            if not self._snapshot_exists(snapshot_id):
+                raise DatasetSnapshotNotFoundError(snapshot_id)
+            connection = self._get_snapshot_connection(snapshot_id)
+        cursor = connection.cursor()
+        try:
+            cursor.execute(f"USE {self._qualified_schema(namespace)}")
+            result = cursor.execute(sql)
+            columns, json_columns = self._describe(result)
+            while batch := result.fetchmany(FETCH_ROWS):
+                values = [
+                    [
+                        self._cell(value, index in json_columns)
+                        for index, value in enumerate(raw)
+                    ]
+                    for raw in batch
+                ]
+                spool.write(json.dumps(values, separators=(",", ":")).encode() + b"\n")
+            return columns
+        except Exception as exc:
+            self._retire_if_stale(exc, connection)
+            raise
+        finally:
+            cursor.close()
+
+    @staticmethod
+    def _spooled(
+        spool: IO[bytes], columns: builtins.list[str]
+    ) -> Iterator[dict[str, Any]]:
+        # dict(zip(...)) pairs columns as _row does, duplicate names included.
+        for line in spool:
+            for values in json.loads(line):
+                yield dict(zip(columns, values))
 
     def list_snapshots(self) -> builtins.list[DatasetSnapshotInfo]:
         def read(con: Any) -> builtins.list[DatasetSnapshotInfo]:
@@ -406,6 +704,10 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         self._write_transaction(operation)
 
     def inlined_row_count(self, name: str, *, namespace: str = "default") -> int:
+        with self._catalog_lock.shared():
+            return self._inlined_row_count(name, namespace)
+
+    def _inlined_row_count(self, name: str, namespace: str) -> int:
         con = self._connect()
         try:
             con.execute("BEGIN")
@@ -432,7 +734,13 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         finally:
             con.close()
 
-    def flush(self, name: str, *, namespace: str = "default") -> QueryResult:
+    def flush(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,  # in process: runs to completion
+    ) -> QueryResult:
         result = self._maintain(name, namespace=namespace, flush=True)
         # Flush can drop inline tables from older schema versions. New reads
         # must attach again; existing cursors retain their connection reference.
@@ -442,7 +750,13 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             self._snapshot_connections.clear()
         return result
 
-    def compact(self, name: str, *, namespace: str = "default") -> QueryResult:
+    def compact(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,  # in process: runs to completion
+    ) -> QueryResult:
         return self._maintain(name, namespace=namespace, flush=False)
 
     def _maintain(self, name: str, *, namespace: str, flush: bool) -> QueryResult:
@@ -463,7 +777,10 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             columns = [str(column[0]) for column in result.description or []]
             return QueryResult(
                 columns=columns,
-                rows=[dict(zip(columns, row)) for row in result.fetchall()],
+                rows=[
+                    {column: row_value(value) for column, value in zip(columns, row)}
+                    for row in result.fetchall()
+                ],
             )
 
         result, _ = self._write_transaction(operation)
@@ -526,39 +843,47 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         """
         import duckdb
 
-        for attempt in range(2):
-            connection = self._get_read_connection()
-            cursor = connection.cursor()
-            try:
-                return operation(cursor)
-            except duckdb.Error as exc:
-                # Another process may flush and drop a cached inline table. Retire
-                # this connection for subsequent calls without interrupting cursors
-                # already using it. Do not replay arbitrary SQL: query() allows writes.
-                retire = False
-                if isinstance(exc, duckdb.CatalogException) and (
-                    "Failed to read inlined data from DuckLake" in str(exc)
-                    and "does not exist" in str(exc)
-                ) or "database has been invalidated" in str(exc):
-                    retire = True
-                if retire:
-                    with self._read_connection_lock:
-                        if self._read_connection is connection:
-                            self._read_connection = None
-                    with self._snapshot_connection_lock:
-                        self._snapshot_connections.clear()
-                    if attempt == 0 and "database has been invalidated" in str(exc):
+        with self._catalog_lock.shared():
+            for attempt in range(2):
+                connection = self._get_read_connection()
+                cursor = connection.cursor()
+                try:
+                    return operation(cursor)
+                except duckdb.Error as exc:
+                    # Do not replay arbitrary SQL: query() allows writes.
+                    if (
+                        self._retire_if_stale(exc, connection)
+                        and attempt == 0
+                        and "database has been invalidated" in str(exc)
+                    ):
                         continue
-                raise
-            finally:
-                cursor.close()
+                    raise
+                finally:
+                    cursor.close()
         raise RuntimeError("unreachable")  # pragma: no cover
 
+    def _retire_if_stale(self, exc: Exception, connection: Any) -> bool:
+        """Another process may flush and drop a cached inline table. Retire this
+        connection for subsequent calls without interrupting cursors already
+        using it. Returns whether it was retired."""
+        import duckdb
+
+        if not (
+            isinstance(exc, duckdb.CatalogException)
+            and "Failed to read inlined data from DuckLake" in str(exc)
+            and "does not exist" in str(exc)
+        ) and "database has been invalidated" not in str(exc):
+            return False
+        with self._read_connection_lock:
+            if self._read_connection is connection:
+                self._read_connection = None
+        with self._snapshot_connection_lock:
+            self._snapshot_connections.clear()
+        return True
+
     def _write_transaction(self, operation: Callable[[Any], _T]) -> tuple[_T, int]:
-        if self._sqlite_write_lock is not None:
-            with self._sqlite_write_lock:
-                return self._retry_write_transaction(operation)
-        return self._retry_write_transaction(operation)
+        with self._catalog_lock.exclusive():
+            return self._retry_write_transaction(operation)
 
     def _retry_write_transaction(
         self, operation: Callable[[Any], _T]
@@ -663,11 +988,14 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         )
 
     def _normalize_rows(
-        self, spec: DatasetSpec, rows: builtins.list[dict[str, Any]]
+        self,
+        spec: DatasetSpec,
+        rows: builtins.list[dict[str, Any]],
+        first_index: int = 0,
     ) -> builtins.list[dict[str, Any]]:
         expected = {column.name for column in spec.columns}
         normalized: builtins.list[dict[str, Any]] = []
-        for index, row in enumerate(rows):
+        for index, row in enumerate(rows, first_index):
             missing = expected - set(row)
             extra = set(row) - expected
             if missing:
@@ -680,6 +1008,12 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
                 )
             values = dict(row)
             for column in spec.columns:
+                if column.type == "timestamp":
+                    values[column.name] = timestamp_value(values[column.name])
+                if not is_finite(values[column.name]):
+                    raise DatasetSchemaError(
+                        f"Row {index} column {column.name!r} is not a finite number"
+                    )
                 if column.type == "json" and values[column.name] is not None:
                     values[column.name] = self._normalize_json(
                         values[column.name], column.name, index
@@ -744,7 +1078,9 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             [[row[column.name] for column in spec.columns] for row in rows],
         )
 
-    def _merge_rows(self, con: Any, spec: DatasetSpec) -> None:
+    def _merge_rows(
+        self, con: Any, spec: DatasetSpec, source: str = "incoming"
+    ) -> None:
         target = self._qualified_table(spec.namespace, spec.name)
         conditions = " AND ".join(
             f"target.{self._ident(column)} = source.{self._ident(column)}"
@@ -760,7 +1096,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         )
         con.execute(
             f"MERGE INTO {target} AS target "  # nosec B608
-            f"USING incoming AS source ON ({conditions}) "
+            f"USING {source} AS source ON ({conditions}) "
             f"WHEN MATCHED THEN UPDATE SET {assignments} "
             f"WHEN NOT MATCHED THEN INSERT ({columns}) VALUES ({values})"
         )
@@ -832,10 +1168,6 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
 
     @staticmethod
     def _cell(value: Any, is_json: bool) -> Any:
-        if value is None:
-            return None
         if is_json and isinstance(value, str):
             return json.loads(value)
-        if hasattr(value, "isoformat"):
-            return value.isoformat()
-        return value
+        return row_value(value)

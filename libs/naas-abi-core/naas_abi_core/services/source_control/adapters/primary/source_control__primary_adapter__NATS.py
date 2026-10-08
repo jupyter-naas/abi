@@ -21,7 +21,6 @@ endpoint here.
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -33,7 +32,14 @@ from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
-from naas_abi_core.engine.nats_rpc import respond_protobuf
+from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
+from naas_abi_core.engine.nats_rpc import (
+    RequestPayloadError,
+    request_payload,
+    respond_protobuf,
+)
+from naas_abi_core.engine.nats_sessions import ServicePrimary
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.source_control.v1 import source_control_pb2
 from naas_abi_core.services.source_control.adapters.source_control_nats_contract import (
@@ -71,7 +77,6 @@ from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
 )
 from nats.micro.request import Request
-from nats.micro.service import Service
 
 __all__ = [
     "AUTH_HEADER",
@@ -136,7 +141,7 @@ def _file_write_from_pb(pb: source_control_pb2.FileWrite) -> FileWrite:
         if pb.WhichOneof("content") == "binary_content"
         else pb.text_content
     )
-    return FileWrite(path=pb.path, content=content)
+    return FileWrite(path=pb.path, content=content, delete=pb.delete)
 
 
 def _commit_to_pb(commit: Commit) -> source_control_pb2.Commit:
@@ -248,7 +253,7 @@ def _merge_result_to_pb(result: MergeResult) -> source_control_pb2.MergeResult:
     return pb
 
 
-class SourceControlPrimaryAdapterNATS:
+class SourceControlPrimaryAdapterNATS(ServicePrimary):
     """Serves source_control over NATS RPC (request/reply).
 
     Wraps a real adapter *or* the domain service and registers one NATS
@@ -279,7 +284,8 @@ class SourceControlPrimaryAdapterNATS:
     ) -> None:
         self._adapter = adapter
         self._jwt_secret = jwt_secret
-        self._service: Service | None = None
+        self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
+        self._service: TracedService | None = None
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``source_control`` NATS service on ``nc``.
@@ -291,7 +297,7 @@ class SourceControlPrimaryAdapterNATS:
         if self._service is not None:
             return
 
-        service = await nats.micro.add_service(
+        service = await add_traced_service(
             nc,
             name=SERVICE_NAME,
             version=SERVICE_VERSION,
@@ -311,6 +317,11 @@ class SourceControlPrimaryAdapterNATS:
             name="list_repos",
             subject=f"{SUBJECT_PREFIX}.list_repos",
             handler=self._handle_list_repos,
+        )
+        await service.add_endpoint(
+            name="delete_repo",
+            subject=f"{SUBJECT_PREFIX}.delete_repo",
+            handler=self._handle_delete_repo,
         )
         await service.add_endpoint(
             name="add_collaborator",
@@ -438,8 +449,11 @@ class SourceControlPrimaryAdapterNATS:
         """Deregister the service, draining its subscriptions."""
         service = self._service
         self._service = None
-        if service is not None:
-            await service.stop()
+        try:
+            if service is not None:
+                await service.stop()
+        finally:
+            self._dispatch.close()
 
     # ------------------------------------------------------------------
     # Shared request handling: auth, decode, dispatch, encode.
@@ -464,7 +478,12 @@ class SourceControlPrimaryAdapterNATS:
 
         parsed_request = request_cls()
         try:
-            parsed_request.ParseFromString(request.data)
+            parsed_request.ParseFromString(await request_payload(request))
+        except RequestPayloadError as exc:
+            await self._respond_error(
+                request, response_cls, exc.code, exc.message, retryable=False
+            )
+            return
         except DecodeError:
             await self._respond_error(
                 request,
@@ -481,7 +500,7 @@ class SourceControlPrimaryAdapterNATS:
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await asyncio.to_thread(call, parsed_request)
+            response = await self._dispatch.call(call, parsed_request)
         except RepoNotFoundError as exc:
             await self._respond_error(
                 request,
@@ -560,6 +579,13 @@ class SourceControlPrimaryAdapterNATS:
                 str(exc),
                 retryable=False,
                 status=exc.status,
+            )
+            return
+        except NotImplementedError as exc:
+            # The wrapped adapter cannot do this (e.g. a backend without the
+            # operation): say so instead of a retryable INTERNAL.
+            await self._respond_error(
+                request, response_cls, "UNIMPLEMENTED", str(exc), retryable=False
             )
             return
         except Exception:  # noqa: BLE001 - a handler must never crash the service
@@ -651,6 +677,20 @@ class SourceControlPrimaryAdapterNATS:
         return source_control_pb2.ListReposResponse(
             repos=source_control_pb2.Repos(repos=[_repo_to_pb(r) for r in repos])
         )
+
+    async def _handle_delete_repo(self, request: Request) -> None:
+        await self._handle(
+            request,
+            source_control_pb2.DeleteRepoRequest,
+            source_control_pb2.DeleteRepoResponse,
+            self._call_delete_repo,
+        )
+
+    def _call_delete_repo(
+        self, req: source_control_pb2.DeleteRepoRequest
+    ) -> source_control_pb2.DeleteRepoResponse:
+        self._adapter.delete_repo(repo_id=req.repo_id)
+        return source_control_pb2.DeleteRepoResponse()
 
     async def _handle_add_collaborator(self, request: Request) -> None:
         await self._handle(

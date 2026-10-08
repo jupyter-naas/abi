@@ -223,6 +223,10 @@ class InMemoryAdapter(ISourceControlAdapter):
     def list_repos(self) -> list[Repo]:
         return [self._to_repo(record) for record in self._repos.values()]
 
+    def delete_repo(self, *, repo_id: str) -> None:
+        self._repo(repo_id)
+        del self._repos[repo_id]
+
     def add_collaborator(
         self, *, repo_id: str, username: str, permission: str = "write"
     ) -> None:

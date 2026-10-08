@@ -664,6 +664,8 @@ class AgentConfigModel(Base):
     )  # Provider name (xai, openai, anthropic, etc.)
     is_default = Column(Integer, nullable=False, default=0)
     enabled = Column(Boolean, nullable=False, default=False)  # Whether agent is available for chat
+    # A user's explicit toggle; sync keeps it over the workspace roster. NULL = follow the roster.
+    enabled_override = Column(Boolean, nullable=True)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 

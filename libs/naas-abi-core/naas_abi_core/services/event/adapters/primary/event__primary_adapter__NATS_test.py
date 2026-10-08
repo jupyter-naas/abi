@@ -18,6 +18,7 @@ from naas_abi_core.services.event.adapters.primary.event__primary_adapter__NATS 
 )
 from naas_abi_core.services.event.EventPort import (
     EventNotFoundError,
+    EventTypeSummary,
     IEventAdapter,
     InvalidEventError,
     StoredEvent,
@@ -112,6 +113,18 @@ class _StubAdapter(IEventAdapter):
         if rows:
             self.set_cursor(consumer_id, event_type, rows[-1].seq)
         return rows
+
+    def list_event_types(self) -> list[EventTypeSummary]:
+        types = sorted({e.event_type for e in self.events})
+        return [
+            EventTypeSummary(
+                event_type=t,
+                count=sum(e.event_type == t for e in self.events),
+                last_seq=max(e.seq for e in self.events if e.event_type == t),
+                last_timestamp=[e for e in self.events if e.event_type == t][-1].timestamp,
+            )
+            for t in types
+        ]
 
 
 def _valid_token() -> str:
@@ -408,3 +421,41 @@ def test_stub_adapter_domain_only_methods_are_not_wired_to_any_endpoint(method_n
     # composed above this port, not on it.
     adapter = EventPrimaryAdapterNATS(_StubAdapter(), SECRET)
     assert not hasattr(adapter, f"_handle_{method_name}")
+
+
+def test_list_event_types_returns_each_type_summary():
+    stub = _StubAdapter()
+    stub.append("e1", "urn:A", "2026-01-01T00:00:00Z", b"x")
+    stub.append("e2", "urn:B", "2026-01-01T00:00:01Z", b"y")
+    stub.append("e3", "urn:A", "2026-01-01T00:00:02Z", b"z")
+    adapter = EventPrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=event_pb2.ListEventTypesRequest().SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.event.v1.list_event_types",
+    )
+
+    asyncio.run(adapter._handle_list_event_types(request))
+
+    response = event_pb2.ListEventTypesResponse()
+    response.ParseFromString(request.responses[0])
+    assert [(t.event_type, t.count, t.last_seq) for t in response.types.types] == [
+        ("urn:A", 2, 3),
+        ("urn:B", 1, 2),
+    ]
+    assert response.types.types[0].last_timestamp == "2026-01-01T00:00:02Z"
+
+
+def test_list_event_types_requires_a_token():
+    adapter = EventPrimaryAdapterNATS(_StubAdapter(), SECRET)
+    request = _FakeRequest(
+        data=event_pb2.ListEventTypesRequest().SerializeToString(),
+        headers=None,
+        subject="abi.svc.event.v1.list_event_types",
+    )
+
+    asyncio.run(adapter._handle_list_event_types(request))
+
+    response = event_pb2.ListEventTypesResponse()
+    response.ParseFromString(request.responses[0])
+    assert response.error.code == "UNAUTHENTICATED"

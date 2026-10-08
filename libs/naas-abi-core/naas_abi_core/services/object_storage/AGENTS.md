@@ -92,7 +92,7 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/object_storage/adapters/
 
 ## Adding a new adapter
 
-1. Implement `IObjectStorageAdapter` in `adapters/secondary/<Name>.py`. All five methods.
+1. Implement `IObjectStorageAdapter` in `adapters/secondary/<Name>.py`. All abstract methods, including streaming and recursive listing.
 2. `list_objects` must implement **depth-1** semantics — list direct children of the given prefix, not the full subtree.
 3. `get_object_metadata` must populate at least `file_path`, `file_name`, `file_size_bytes`, `mime_type`. Timestamps / permissions / encoding optional.
 4. Add a `ObjectStorageFactory.<Name>(...)` builder.
@@ -106,13 +106,24 @@ port. Wire contracts live under `naas_abi_core/proto/object_storage/v1/`.
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
-The maximum message size is 8 MiB (or a lower broker limit); oversized replies
-return non-retryable `PAYLOAD_TOO_LARGE`, and micro-service error headers raise
-instead of becoming an empty success. Larger results require streaming or a
-storage reference. No RPC is automatically replayed after transport failure:
+Requests and replies above the broker limit (8 MiB, or lower) overflow as
+transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+that, at the overflow host's capacity, or with an older peer, the call fails
+with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
+instead of becoming an empty success. Overflowed values are held whole in
+memory; results that should not be require streaming or a storage reference. No RPC is automatically replayed after transport failure:
 a timeout can hide a completed operation. Reconcile its outcome before retrying.
 `close()` releases only the client's transport, including for vector storage.
 
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
 The latter uses a local `nats-server` executable without Docker.
+
+
+Object GET/PUT facades now use `transfer/v1` under object-storage subjects. GET
+reads the backend streaming port in bounded chunks; PUT stages chunks on temporary
+disk and calls the streaming port only after an explicit start. The old unary
+endpoints remain compatible and bounded. Transfer sessions are authenticated,
+caller-bound, sequence-checked and never replayed. Configure capacities through
+`nats.object_storage_streaming`; see the chunked-transfers ADR and standalone
+`transfer_integration_test.py` for native-broker coverage.

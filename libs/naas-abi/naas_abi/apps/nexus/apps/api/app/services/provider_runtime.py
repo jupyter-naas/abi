@@ -1511,6 +1511,31 @@ def _extract_opencode_ui_event(event: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+# Agent.stream_invoke event -> key of the Nexus stream event carrying its data.
+_AGENT_STEP_EVENTS = {
+    "tool_usage": "tool",
+    "tool_response": "output",
+    "call_model": "agent",
+    "agent_routing": "agent",
+}
+
+
+def agent_event_chunk(event_name: str, text: str) -> str | dict[str, Any] | None:
+    """Map one core ``Agent.stream_invoke`` event to a Nexus stream chunk.
+
+    ``ai_message`` deltas become text; tool and routing steps become step events.
+    ``message`` (the closing replay), ``done`` and empty events map to None: the
+    caller decides whether the replay is needed. Shared by in-process and remote
+    agents, which emit the same vocabulary.
+    """
+    if not text.strip():
+        return None
+    if event_name == "ai_message":
+        return text
+    key = _AGENT_STEP_EVENTS.get(event_name)
+    return {"event": event_name, key: text} if key else None
+
+
 async def stream_with_abi_inprocess(
     messages: list[Message],
     config: ProviderConfig,
@@ -1665,19 +1690,13 @@ async def stream_with_abi_inprocess(
             # Prefer live ai_message deltas. The closing "message" replay is the
             # only text when the graph errors before an assistant token (for
             # example a recursion-limit stop).
-            if event_name == "ai_message" and text.strip():
-                emitted = True
-                yield text
-            elif event_name == "message" and text.strip():
+            if event_name == "message" and text.strip():
                 final_replay.append(text.strip())
-            elif event_name == "tool_usage" and text.strip():
-                yield {"event": "tool_usage", "tool": text}
-            elif event_name == "tool_response" and text.strip():
-                yield {"event": "tool_response", "output": text}
-            elif event_name == "call_model" and text.strip():
-                yield {"event": "call_model", "agent": text}
-            elif event_name == "agent_routing" and text.strip():
-                yield {"event": "agent_routing", "agent": text}
+                continue
+            chunk = agent_event_chunk(event_name, text)
+            if chunk is not None:
+                emitted = emitted or isinstance(chunk, str)
+                yield chunk
         elif isinstance(event, str) and event.strip():
             emitted = True
             yield event

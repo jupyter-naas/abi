@@ -7,6 +7,7 @@ out for this adapter.
 """
 
 import asyncio
+from typing import Any
 
 import pytest
 from naas_abi_core.engine.nats_auth import issue_service_token
@@ -18,9 +19,11 @@ from naas_abi_core.services.cache.adapters.primary.cache__primary_adapter__NATS 
 from naas_abi_core.services.cache.CachePort import (
     CachedData,
     CacheExpiredError,
+    CacheKeyPage,
     CacheNotFoundError,
     DataType,
     ICacheAdapter,
+    paginate_keys,
 )
 
 SECRET = "test-shared-secret"
@@ -77,6 +80,11 @@ class _StubAdapter(ICacheAdapter):
 
     def exists(self, key: str) -> bool:
         return key in self.entries
+
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> CacheKeyPage:
+        return paginate_keys(self.entries, prefix, limit, after)
 
 
 def _valid_token() -> str:
@@ -202,9 +210,7 @@ def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():
             raise RuntimeError("some sensitive internal detail")
 
     adapter = CachePrimaryAdapterNATS(_BoomAdapter(), SECRET)
-    request = _FakeRequest(
-        data=_get_request(), headers={AUTH_HEADER: _valid_token()}
-    )
+    request = _FakeRequest(data=_get_request(), headers={AUTH_HEADER: _valid_token()})
 
     asyncio.run(adapter._handle_get(request))
 
@@ -385,3 +391,60 @@ def test_data_type_round_trips_through_pb_for_every_value(data_type):
     response.ParseFromString(request.responses[0])
     assert not response.HasField("error")
     assert response.value.data_type == _EXPECTED_PB_DATA_TYPE[data_type]
+
+
+def test_owner_emits_mutation_events_once_and_only_when_written():
+    from naas_abi_core.services.cache.ontologies.modules.CacheEventOntology import (
+        CacheDeleted,
+        CacheSet,
+    )
+
+    events = []
+    primary = CachePrimaryAdapterNATS(
+        _StubAdapter(), SECRET, event_publisher=events.append, tier_name="hot"
+    )
+    req = cache_pb2.SetIfAbsentRequest(
+        key="key",
+        value=cache_pb2.CachedData(
+            key="key", data="value", data_type=cache_pb2.DATA_TYPE_TEXT
+        ),
+    )
+    assert primary._call_set_if_absent(req).value
+    assert not primary._call_set_if_absent(req).value
+    primary._call_delete(cache_pb2.DeleteRequest(key="key"))
+    assert [type(event) for event in events] == [CacheSet, CacheDeleted]
+    assert all(event.tier == "hot" for event in events)
+
+
+def _list_keys(
+    adapter: CachePrimaryAdapterNATS, **fields
+) -> cache_pb2.ListKeysResponse:
+    request: Any = _FakeRequest(
+        data=cache_pb2.ListKeysRequest(**fields).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+    )
+    asyncio.run(adapter._handle_list_keys(request))
+    response = cache_pb2.ListKeysResponse()
+    response.ParseFromString(request.responses[0])
+    return response
+
+
+def test_list_keys_pages_with_next_after():
+    stub = _StubAdapter()
+    for key in ("a:2", "a:1", "a:3", "b:1"):
+        stub.set(key, CachedData(key=key, data="v", data_type=DataType.TEXT))
+    adapter = CachePrimaryAdapterNATS(stub, SECRET)
+
+    first = _list_keys(adapter, prefix="a:", limit=2)
+    rest = _list_keys(adapter, prefix="a:", limit=2, after=first.next_after)
+
+    assert (list(first.keys), first.next_after) == (["a:1", "a:2"], "a:2")
+    assert list(rest.keys) == ["a:3"]
+    assert not rest.HasField("next_after")
+
+
+def test_list_keys_rejects_an_out_of_range_limit():
+    response = _list_keys(CachePrimaryAdapterNATS(_StubAdapter(), SECRET), limit=0)
+
+    assert response.error.code == "INVALID_ARGUMENT"
+    assert response.error.retryable is False

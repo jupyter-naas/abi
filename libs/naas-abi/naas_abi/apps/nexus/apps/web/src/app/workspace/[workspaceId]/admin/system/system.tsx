@@ -1,0 +1,145 @@
+'use client';
+
+import './system.css';
+
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Header } from '@/components/shell/header';
+import { usePlatformStatusStore } from '@/stores/platform-status';
+import type { Loaded } from './system-api';
+import { useSuperadminAccess } from './system-access';
+import { AgentsTab } from './agents/agents';
+import { DataExplorer } from './data/explorer';
+import { useJobFailures } from './jobs/failures';
+import { createJobsApi } from './jobs/jobs-api';
+import { JobsTab } from './jobs/jobs';
+import { TracesTab } from './traces/traces';
+import { SystemModules } from './system-modules';
+import { SystemNats } from './system-nats';
+import { SystemOverview } from './system-overview';
+import { useSystemResource } from './system-resource';
+import { SystemServices } from './system-services';
+import { SystemTraffic } from './system-traffic';
+import { SYSTEM_TABS, parseSystemTab, type SystemTab } from './system-tabs';
+import type {
+  JetStreamSummary,
+  KernelServicesView,
+  ModulesView,
+  NatsConnection,
+  NatsServer,
+  Overview,
+} from './system-types';
+import { SourceNote } from './system-ui';
+
+const POLL_MS = 10_000;
+
+function Loading() {
+  return <p className="system-empty">Loading…</p>;
+}
+
+function Failed({ state }: { state: Extract<Loaded<unknown>, { ok: false }> }) {
+  return <SourceNote label={state.status === 403 ? 'Access' : 'This view'} reason={state.reason} />;
+}
+
+function View<T>({ state, render }: { state: Loaded<T> | null; render: (data: T) => React.ReactNode }) {
+  if (state === null) return <Loading />;
+  return state.ok ? <>{render(state.data)}</> : <Failed state={state} />;
+}
+
+function SystemApp() {
+  const access = useSuperadminAccess();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tab = parseSystemTab(searchParams.get('tab'));
+  const [nonce, setNonce] = useState(0);
+  const setRefresh = usePlatformStatusStore((s) => s.setRefresh);
+  const clearRefresh = usePlatformStatusStore((s) => s.clearRefresh);
+
+  const on = (t: SystemTab) => ({ enabled: access === 'authorized' && tab === t, intervalMs: POLL_MS, nonce });
+  const overview = useSystemResource<Overview>('/overview', on('overview'));
+  const services = useSystemResource<KernelServicesView>('/services', on('services'));
+  const modules = useSystemResource<ModulesView>('/modules', on('modules'));
+  const server = useSystemResource<NatsServer>('/nats/server', on('nats'));
+  const connections = useSystemResource<NatsConnection[]>('/nats/connections', on('nats'));
+  const jetstream = useSystemResource<JetStreamSummary>('/nats/jetstream', on('nats'));
+  // Runs that failed since the admin last looked: a badge on the Jobs tab.
+  const jobsApi = useMemo(() => createJobsApi(), []);
+  const { failures, markSeen } = useJobFailures(jobsApi, access === 'authorized');
+
+  const refresh = useCallback(() => setNonce((n) => n + 1), []);
+  useEffect(() => {
+    if (access !== 'authorized') return;
+    setRefresh({ onRefresh: refresh, title: 'Refresh system views' });
+    return () => clearRefresh();
+  }, [access, refresh, setRefresh, clearRefresh]);
+
+  const selectTab = (next: SystemTab) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === 'overview') params.delete('tab');
+    else params.set('tab', next);
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname);
+  };
+
+  if (access === 'checking') {
+    return <div className="system-gate">Checking access…</div>;
+  }
+  if (access === 'denied') {
+    return (
+      <div className="system-gate">
+        <h1 className="system-gate-title">Forbidden</h1>
+        <p className="system-gate-text">
+          Platform super admin role required. Set <code>is_superadmin: true</code> on the matching
+          user in the API configuration and restart the API to grant access.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="system-page">
+      <Header title="System" subtitle="Kernel services, their data, modules and the NATS network" />
+      <nav className="system-tabs" aria-label="System views">
+        {SYSTEM_TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            className={t.id === tab ? 'system-tab system-tab-active' : 'system-tab'}
+            aria-current={t.id === tab ? 'page' : undefined}
+            onClick={() => selectTab(t.id)}
+          >
+            {t.label}
+            {t.id === 'jobs' && failures && failures.count > 0 && (
+              <span className="system-tab-badge" title={`${failures.count} failed runs since you last looked`}>
+                {failures.more ? `${failures.count}+` : failures.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </nav>
+      <div className={['data', 'jobs', 'agents', 'traces'].includes(tab) ? 'system-body system-body-flush' : 'system-body'}>
+        {tab === 'overview' && <View state={overview} render={(data) => <SystemOverview overview={data} />} />}
+        {tab === 'services' && <View state={services} render={(data) => <SystemServices view={data} />} />}
+        {tab === 'data' && <DataExplorer nonce={nonce} />}
+        {tab === 'jobs' && <JobsTab nonce={nonce} failures={failures} onFailuresSeen={markSeen} />}
+        {tab === 'agents' && <AgentsTab nonce={nonce} />}
+        {tab === 'traces' && <TracesTab nonce={nonce} />}
+        {tab === 'modules' && (
+          <View state={modules} render={(data) => <SystemModules view={data} onChanged={refresh} />} />
+        )}
+        {tab === 'nats' && <SystemNats server={server} connections={connections} jetstream={jetstream} />}
+        {tab === 'traffic' && <SystemTraffic />}
+      </div>
+    </div>
+  );
+}
+
+/** Platform super admins: kernel services, modules and the NATS network of this deployment. */
+export default function SystemPage() {
+  return (
+    <Suspense fallback={<div className="system-gate">Loading…</div>}>
+      <SystemApp />
+    </Suspense>
+  );
+}

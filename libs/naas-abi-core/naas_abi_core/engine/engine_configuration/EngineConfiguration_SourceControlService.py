@@ -2,6 +2,7 @@ from typing import Literal
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
+    config_model,
 )
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
@@ -129,6 +130,19 @@ class SourceControlAdapterConfiguration(GenericLoader):
             return super().load()
         else:
             raise ValueError(f"Unknown adapter: {self.adapter}")
+
+    def local_storage(self) -> str | None:
+        """Where the repositories live (single-serving-engine ADR)."""
+        if self.adapter == "in_memory":
+            return "this process"
+        if self.adapter == "local_git":
+            root = config_model(
+                SourceControlAdapterLocalGitConfiguration, self.config
+            ).repos_root
+            return f"repositories under {root}"
+        if self.adapter == "custom":
+            return self.custom_local_storage()
+        return None  # forgejo; nats_rpc is another engine's
 
 
 class SourceControlServiceConfiguration(BaseModel):

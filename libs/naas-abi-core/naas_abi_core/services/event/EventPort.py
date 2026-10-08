@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from threading import Thread
 from typing import Any
@@ -28,6 +29,19 @@ class StoredEvent:
     seq: int           # global monotonic sequence
     timestamp: str     # ISO 8601
     payload: bytes     # serialized RDF graph (n-triples)
+
+
+@dataclass(frozen=True)
+class EventTypeSummary:
+    """One event type present in the log (admin views, tooling)."""
+
+    event_type: str      # class IRI
+    count: int           # events of this type currently stored
+    last_seq: int        # seq of the newest one
+    last_timestamp: str  # its ISO 8601 timestamp
+
+
+STREAM_PAGE = 500  # events per page read by the default ``query_stream``
 
 
 class IEventAdapter(ABC):
@@ -67,6 +81,79 @@ class IEventAdapter(ABC):
         text (keys and values).
         """
 
+    @contextmanager
+    def query_stream(
+        self,
+        event_type: str | None = None,
+        since_seq: int | None = None,
+        until_seq: int | None = None,
+        since_timestamp: str | None = None,
+        until_timestamp: str | None = None,
+        json_filter: dict | None = None,
+        limit: int | None = None,
+        newest_first: bool = False,
+        search: str | None = None,
+    ) -> Iterator[Iterator[StoredEvent]]:
+        """``query``, read as the caller iterates, inside the block
+        (docs/adr/20261003_nats-streamed-results.md).
+
+        Same filters and order as ``query``. The highest ``seq`` is pinned
+        when the block opens: events appended while it is read are not
+        included, so the stream always ends. This default reads
+        ``STREAM_PAGE`` events at a time, paging on ``seq``; memory holds one
+        page.
+        """
+        upper = self.max_seq(event_type=event_type)
+        if until_seq is not None:
+            upper = min(upper, until_seq)
+        yield self._paged(
+            event_type,
+            since_seq,
+            upper,
+            since_timestamp,
+            until_timestamp,
+            json_filter,
+            limit,
+            newest_first,
+            search,
+        )
+
+    def _paged(
+        self,
+        event_type: str | None,
+        since_seq: int | None,
+        until_seq: int,
+        since_timestamp: str | None,
+        until_timestamp: str | None,
+        json_filter: dict | None,
+        limit: int | None,
+        newest_first: bool,
+        search: str | None,
+    ) -> Iterator[StoredEvent]:
+        remaining = limit
+        while remaining is None or remaining > 0:
+            page = STREAM_PAGE if remaining is None else min(STREAM_PAGE, remaining)
+            rows = self.query(
+                event_type=event_type,
+                since_seq=since_seq,
+                until_seq=until_seq,
+                since_timestamp=since_timestamp,
+                until_timestamp=until_timestamp,
+                json_filter=json_filter,
+                limit=page,
+                newest_first=newest_first,
+                search=search,
+            )
+            yield from rows
+            if len(rows) < page:
+                return
+            if remaining is not None:
+                remaining -= len(rows)
+            if newest_first:
+                until_seq = rows[-1].seq - 1
+            else:
+                since_seq = rows[-1].seq
+
     @abstractmethod
     def max_seq(self, event_type: str | None = None) -> int:
         """Return the highest `seq` currently stored (0 if empty).
@@ -74,6 +161,10 @@ class IEventAdapter(ABC):
         Used by iterators to capture a snapshot upper bound at start of
         iteration so that events appended during iteration are not included.
         """
+
+    @abstractmethod
+    def list_event_types(self) -> list[EventTypeSummary]:
+        """Every event type with at least one stored event, ordered by type IRI."""
 
     @abstractmethod
     def get_cursor(self, consumer_id: str, event_type: str) -> int:
@@ -145,6 +236,60 @@ class IEventService(ABC):
         most recent N matches. ``search`` is a case-insensitive substring match
         over the raw payload text.
         """
+
+    @abstractmethod
+    def query_stream(
+        self,
+        event_class: type | None = None,
+        since_seq: int | None = None,
+        until_seq: int | None = None,
+        since_timestamp: str | None = None,
+        until_timestamp: str | None = None,
+        filter: dict | None = None,
+        limit: int | None = None,
+        newest_first: bool = False,
+        search: str | None = None,
+    ) -> AbstractContextManager[Iterator[Any]]:
+        """:meth:`query`, reconstructed as the caller iterates, inside the
+        block; memory holds one page or frame. Events appended after the block
+        opened are not included (``IEventAdapter.query_stream``)."""
+
+    @abstractmethod
+    def event_types(self) -> list[EventTypeSummary]:
+        """Every event type present in the log, with counts, by type IRI."""
+
+    @abstractmethod
+    def query_stored(
+        self,
+        event_type: str | None = None,
+        since_seq: int | None = None,
+        until_seq: int | None = None,
+        limit: int | None = None,
+        newest_first: bool = False,
+        search: str | None = None,
+    ) -> list[StoredEvent]:
+        """Raw stored records, filtered by type IRI (no event class needed).
+
+        For admin views and tools that must read any type, including ones
+        whose Python class is not importable here. Same ordering and bounds as
+        :meth:`query` (``since_seq`` exclusive, ``until_seq`` inclusive).
+        """
+
+    @abstractmethod
+    def query_stored_stream(
+        self,
+        event_type: str | None = None,
+        since_seq: int | None = None,
+        until_seq: int | None = None,
+        limit: int | None = None,
+        newest_first: bool = False,
+        search: str | None = None,
+    ) -> AbstractContextManager[Iterator[StoredEvent]]:
+        """:meth:`query_stored`, read as the caller iterates, inside the block."""
+
+    @abstractmethod
+    def get_stored(self, seq: int) -> StoredEvent:
+        """The raw record with this ``seq``; ``EventNotFoundError`` if none."""
 
     @abstractmethod
     def iter_query(

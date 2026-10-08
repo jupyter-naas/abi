@@ -172,6 +172,71 @@ def test_engine_proxy_services_denies_document_service_when_not_allowed():
         _ = proxy.services.document
 
 
+def test_unlocked_proxy_reaches_the_document_root_for_administration():
+    from unittest.mock import MagicMock
+
+    from naas_abi_core.services.document.DocumentPort import IDocumentAdapter
+    from naas_abi_core.services.document.DocumentService import DocumentService
+
+    backend = MagicMock(spec=IDocumentAdapter)
+    backend.namespaces.return_value = ["acme.module", "naas_abi"]
+    root = DocumentService._for_engine(backend)
+    engine = _DummyEngine(services=IEngine.Services(document=root))
+    proxy = EngineProxy(
+        engine=engine,
+        module_name="naas_abi",
+        module_dependencies=ModuleDependencies(modules=[], services=[]),
+        unlocked=True,
+    )
+
+    admin = proxy.services.document_admin
+
+    assert admin.namespaces() == ["acme.module", "naas_abi"]
+    assert admin.for_namespace("acme.module").namespace == "acme.module"
+
+
+def test_the_platform_proxy_lists_every_job_owner_of_the_engine():
+    engine = _DummyEngine(services=IEngine.Services())
+    engine.job_owners = lambda: {"naas_abi_core.agent_memory": "owner"}  # type: ignore[attr-defined]
+    platform = EngineProxy(
+        engine=engine,
+        module_name="naas_abi",
+        module_dependencies=ModuleDependencies(modules=[], services=[]),
+        unlocked=True,
+    )
+    module = EngineProxy(
+        engine=engine,
+        module_name="acme.module",
+        module_dependencies=ModuleDependencies(modules=[], services=[]),
+    )
+
+    assert platform.job_owners() == {"naas_abi_core.agent_memory": "owner"}
+    with pytest.raises(PermissionError, match="platform"):
+        module.job_owners()
+
+
+def test_locked_proxies_cannot_reach_the_document_root():
+    from unittest.mock import MagicMock
+
+    from naas_abi_core.services.document.DocumentPort import IDocumentAdapter
+    from naas_abi_core.services.document.DocumentService import DocumentService
+
+    backend = MagicMock(spec=IDocumentAdapter)
+    root = DocumentService._for_engine(backend)
+    engine = _DummyEngine(services=IEngine.Services(document=root))
+    proxy = EngineProxy(
+        engine=engine,
+        module_name="acme.module",
+        module_dependencies=ModuleDependencies(modules=[], services=[DocumentService]),
+    )
+
+    with pytest.raises(PermissionError, match="platform"):
+        _ = proxy.services.document_admin
+    # The module's own scoped view is unaffected.
+    assert proxy.services.document.namespace == "acme.module"
+    backend.namespaces.assert_not_called()
+
+
 def test_engine_proxy_document_view_is_cached_and_rebound_when_root_changes():
     """The scoped per-module DocumentService view is expensive to recreate
     (it binds a namespace), so it must be cached across repeated access and

@@ -272,6 +272,42 @@ class DocumentSecondaryAdapterContract(ABC):
         adapter.ensure_collection("module", CollectionSpec(name="records"))
         return adapter
 
+    def test_a_collection_spec_reads_back_as_declared_and_merged(self, docs):
+        docs.ensure_collection(
+            "module",
+            CollectionSpec(
+                name="people",
+                fields=(
+                    FieldSpec(name="email", type="string", unique=True),
+                    FieldSpec(name="age", type="int", indexed=True),
+                ),
+                unique_together=(("first", "last"),),
+            ),
+        )
+        docs.ensure_collection(
+            "module",
+            CollectionSpec(
+                name="people", fields=(FieldSpec(name="note", type="json"),)
+            ),
+        )
+
+        spec = docs.collection_spec("module", "people")
+
+        assert spec.name == "people"
+        assert {f.name: (f.type, f.indexed, f.unique) for f in spec.fields} == {
+            "email": ("string", False, True),
+            "age": ("int", True, False),
+            "note": ("json", False, False),
+        }
+        assert spec.unique_together == (("first", "last"),)
+        assert docs.collection_spec("module", "records") == CollectionSpec(
+            name="records"
+        )
+        with pytest.raises(CollectionNotFound):
+            docs.collection_spec("module", "absent")
+        with pytest.raises(CollectionNotFound):
+            docs.collection_spec("another", "people")
+
     @pytest.mark.parametrize("value", ROUND_TRIP_VALUES)
     def test_every_value_round_trips(self, docs, value):
         written = docs.put("module", "records", "id", {"value": value}, None)
@@ -417,6 +453,22 @@ class DocumentSecondaryAdapterContract(ABC):
         docs.drop_collection("module", "records")
         docs.ensure_collection("module", CollectionSpec(name="records"))
         assert docs.count("module", "records", ()) == 0
+
+    def test_namespaces_lists_each_namespace_holding_a_collection(self, adapter):
+        adapter.ensure_collection("zeta.module", CollectionSpec(name="a"))
+        adapter.ensure_collection("alpha.module", CollectionSpec(name="b"))
+        adapter.ensure_collection("alpha.module", CollectionSpec(name="c"))
+        adapter.put("alpha.module", "b", "id", {}, None)
+
+        names = adapter.namespaces()
+
+        assert {"alpha.module", "zeta.module"} <= set(names)
+        assert names == sorted(names)
+        assert len(names) == len(set(names))
+
+        adapter.drop_collection("zeta.module", "a")
+        assert "zeta.module" not in adapter.namespaces()
+        assert "alpha.module" in adapter.namespaces()
 
     @pytest.mark.parametrize("operation", ["get", "put", "delete", "find", "count"])
     def test_missing_collection_raises(self, adapter, operation):
@@ -617,3 +669,70 @@ class DocumentSecondaryAdapterContract(ABC):
         adapter.put(name, name, name, {field: name}, None)
         page = adapter.find(name, name, [(field, "eq", name)], (field, "asc"), 1, None)
         assert page.items[0].id == name
+
+    # ------------------------------------------------------------------
+    # max_bytes: pages bounded by size as well as by count.
+    # ------------------------------------------------------------------
+
+    def _pages(self, docs, order_by, limit, max_bytes):
+        pages, cursor = [], None
+        while True:
+            page = docs.find(
+                "module", "records", [], order_by, limit, cursor, max_bytes=max_bytes
+            )
+            pages.append(page)
+            cursor = page.cursor
+            if cursor is None:
+                return pages
+
+    @pytest.mark.parametrize("order_by", [None, ("n", "desc")])
+    def test_max_bytes_cuts_pages_and_cursors_continue_without_gap_or_repeat(
+        self, docs, order_by
+    ):
+        for n in range(10):
+            docs.put(
+                "module", "records", f"d{n:02d}", {"n": n, "text": "x" * 1000}, None
+            )
+
+        pages = self._pages(docs, order_by, limit=10, max_bytes=3_000)
+
+        assert len(pages) > 1
+        assert all(1 <= len(page.items) <= 3 for page in pages)  # ~1 KB each
+        ids = [doc.id for page in pages for doc in page.items]
+        expected = [f"d{n:02d}" for n in range(10)]
+        assert ids == (expected if order_by is None else expected[::-1])
+
+    def test_an_item_larger_than_max_bytes_comes_back_alone(self, docs):
+        docs.put("module", "records", "a", {"text": "small"}, None)
+        docs.put("module", "records", "b", {"text": "x" * 10_000}, None)
+        docs.put("module", "records", "c", {"text": "small"}, None)
+
+        pages = self._pages(docs, None, limit=10, max_bytes=1_000)
+
+        assert [[doc.id for doc in page.items] for page in pages] == [
+            ["a"],
+            ["b"],
+            ["c"],
+        ]
+        assert (
+            docs.find(
+                "module",
+                "records",
+                [("text", "ne", "small")],
+                None,
+                10,
+                None,
+                max_bytes=1,
+            )
+            .items[0]
+            .id
+            == "b"
+        )
+
+    def test_limit_still_caps_a_page_within_max_bytes(self, docs):
+        for id in "abcde":
+            docs.put("module", "records", id, {"text": "small"}, None)
+
+        page = docs.find("module", "records", [], None, 2, None, max_bytes=1_000_000)
+
+        assert [doc.id for doc in page.items] == ["a", "b"] and page.cursor

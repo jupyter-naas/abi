@@ -487,10 +487,23 @@ services:
     image: nats:2-alpine
     pull_policy: always
     restart: unless-stopped
-    command: ["-c", "/etc/nats/nats.conf", "-js", "-sd", "/data", "-m", "8222"]
+    environment:
+      # The broker's users (nats.conf). `abi deploy local` generates them in .env.
+      - NATS_ABI_PASSWORD=${NATS_ABI_PASSWORD:-}
+      - NATS_MODULE_PASSWORD=${NATS_MODULE_PASSWORD:-}
+    # nats-server takes an empty password as is, which would let anyone log in
+    # as that user: refuse to start without both.
+    command:
+      - sh
+      - -c
+      - |
+        for key in NATS_ABI_PASSWORD NATS_MODULE_PASSWORD; do
+          [ -n "$$(printenv $$key)" ] || { echo "$$key is empty: run abi deploy local" >&2; exit 1; }
+        done
+        exec nats-server -c /etc/nats/nats.conf -js -sd /data -m 8222
     ports:
-      - 4222:4222 # client connections
-      - 8222:8222 # HTTP monitoring
+      - 127.0.0.1:4222:4222 # client connections, from this machine only
+      - 127.0.0.1:8222:8222 # HTTP monitoring (no auth)
     volumes:
       - nats_data:/data
       - ./.deploy/docker/nats/nats.conf:/etc/nats/nats.conf:ro # max_payload (no CLI flag)

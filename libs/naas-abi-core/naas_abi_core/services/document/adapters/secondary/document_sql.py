@@ -33,11 +33,16 @@ from naas_abi_core.services.document.DocumentPort import (
     Value,
     VersionConflict,
     validate_data,
+    validate_max_bytes,
     validate_name,
     validate_query,
     validate_value,
     validate_version,
 )
+
+# A document's estimated size is its stored JSON plus this, for its id,
+# timestamps and version on the wire.
+DOCUMENT_OVERHEAD = 64
 
 
 class SortParts(NamedTuple):
@@ -413,6 +418,20 @@ class DocumentSQL(ABC):
                 ).fetchall()
             )
 
+    def collection_spec(self, namespace: str, collection: str) -> CollectionSpec:
+        with self.transaction() as connection:
+            return self.require_collection(connection, namespace, collection)
+
+    def namespaces(self) -> list[str]:
+        with self.transaction() as connection:
+            return sorted(
+                row[0]
+                for row in connection.execute(
+                    f"SELECT DISTINCT namespace FROM {self.collections_table}",  # nosec B608
+                    (),
+                ).fetchall()
+            )
+
     @staticmethod
     def read_data(raw: Any) -> dict[str, Value]:
         return cast(
@@ -512,8 +531,11 @@ class DocumentSQL(ABC):
         order_by: OrderBy,
         limit: int,
         cursor: str | None,
+        *,
+        max_bytes: int | None = None,
     ) -> Page:
         where = validate_query(where, order_by, limit)
+        validate_max_bytes(max_bytes)
         params: list[Any] = [namespace, collection]
         condition = self.predicates(where, params)
         parts = ([] if order_by is None else list(self.sort_parts(order_by[0]))) + [
@@ -576,27 +598,75 @@ class DocumentSQL(ABC):
         ordering = ", ".join(
             part + (" DESC" if descending else " ASC") for part in parts
         )
+        items: list[Document] = []
+        more = False
         with self.transaction() as connection:
             self.require_collection(connection, namespace, collection)
-            rows = connection.execute(
-                f"SELECT id, data, created_at, updated_at, version FROM {self.documents_table} WHERE namespace = {self.p} AND collection = {self.p} AND ({condition}) ORDER BY {ordering} LIMIT {self.p}",  # nosec B608
-                params,
-            ).fetchall()
-        items = [self.document(row) for row in rows[:limit]]
-        next_cursor = None
-        if len(rows) > limit:
-            last = items[-1]
-            last_key = (
-                []
-                if order_by is None
-                else list(value_sort_parts(last.data.get(order_by[0])))
-            ) + [last.id]
-            if fingerprint is None:
-                fingerprint = query_fingerprint()
-            next_cursor = base64.urlsafe_b64encode(
-                dumps({"v": 1, "q": fingerprint, "key": last_key}).encode()
-            ).decode()
-        return Page(items, next_cursor)
+            if max_bytes is None:
+                rows = connection.execute(
+                    f"SELECT id, data, created_at, updated_at, version FROM {self.documents_table} WHERE namespace = {self.p} AND collection = {self.p} AND ({condition}) ORDER BY {ordering} LIMIT {self.p}",  # nosec B608
+                    params,
+                ).fetchall()
+                items = [self.document(row) for row in rows[:limit]]
+                more = len(rows) > limit
+            else:
+                # Sizes first, documents for the kept ids only: memory follows
+                # the byte budget, not limit (a driver buffers whole results).
+                # Stored JSON is ASCII (dumps escapes the rest): its length is
+                # its size.
+                size = "octet_length(data::text)" if self.pg else "length(data)"
+                sized = connection.execute(
+                    f"SELECT id, {size} FROM {self.documents_table} WHERE namespace = {self.p} AND collection = {self.p} AND ({condition}) ORDER BY {ordering} LIMIT {self.p}",  # nosec B608
+                    params,
+                ).fetchall()
+                kept: list[str] = []
+                used = 0
+                for id_, length in sized:
+                    weight = length + len(id_) + DOCUMENT_OVERHEAD
+                    if len(kept) == limit or (kept and used + weight > max_bytes):
+                        more = True
+                        break
+                    kept.append(id_)
+                    used += weight
+                if kept:
+                    found = {
+                        row[0]: self.document(row)
+                        for row in connection.execute(
+                            f"SELECT id, data, created_at, updated_at, version FROM {self.documents_table} WHERE namespace = {self.p} AND collection = {self.p} AND id IN ({', '.join([self.p] * len(kept))})",  # nosec B608
+                            [namespace, collection, *kept],
+                        ).fetchall()
+                    }
+                    # A document deleted between the two reads is left out.
+                    items = [found[id_] for id_ in kept if id_ in found]
+        if more and not items:
+            # Every kept document was deleted between the two reads: read again
+            # rather than end the iteration early (no cursor means the end).
+            return self.find(
+                namespace,
+                collection,
+                where,
+                order_by,
+                limit,
+                cursor,
+                max_bytes=max_bytes,
+            )
+        if not more:
+            return Page(items, None)
+        if fingerprint is None:
+            fingerprint = query_fingerprint()
+        return Page(items, self.next_cursor(fingerprint, order_by, items[-1]))
+
+    @staticmethod
+    def next_cursor(fingerprint: str, order_by: OrderBy, last: Document) -> str:
+        """The opaque cursor resuming a query right after ``last``."""
+        key = (
+            []
+            if order_by is None
+            else list(value_sort_parts(last.data.get(order_by[0])))
+        ) + [last.id]
+        return base64.urlsafe_b64encode(
+            dumps({"v": 1, "q": fingerprint, "key": key}).encode()
+        ).decode()
 
     def count(self, namespace: str, collection: str, where: Sequence[Predicate]) -> int:
         where = validate_query(where)

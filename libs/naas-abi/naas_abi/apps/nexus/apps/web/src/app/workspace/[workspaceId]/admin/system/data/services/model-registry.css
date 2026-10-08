@@ -1,0 +1,112 @@
+/* data/services — model registry */
+
+.data-models-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.data-models-name {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.data-models-summary {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--muted-foreground-hex);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.data-models-providers,
+.data-models-chips,
+.data-models-sheet-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.data-models-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.data-models-sheet-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.data-models-sheet-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.data-models-description {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--muted-foreground-hex);
+}
+
+.data-models-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.data-models-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--background-hex);
+}
+
+.data-models-tile-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground-hex);
+}
+
+.data-models-tile-value {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.data-models-tile-hint {
+  font-size: 10px;
+  color: var(--muted-foreground-hex);
+}
+
+.data-models-providers-table thead th {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.data-models-providers-table th:first-child {
+  width: auto;
+}
+
+.data-models-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.data-models-modalities {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}

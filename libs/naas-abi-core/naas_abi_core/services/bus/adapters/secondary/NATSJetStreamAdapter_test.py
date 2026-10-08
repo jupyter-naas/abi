@@ -1,7 +1,8 @@
+import asyncio
 import threading
 import time
 import uuid
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import nats
 import pytest
@@ -11,6 +12,7 @@ from naas_abi_core.services.bus.adapters.secondary.NATSJetStreamAdapter import (
 from naas_abi_core.services.bus.tests.bus__secondary_adapter__generic_test import (
     GenericBusSecondaryAdapterTest,
 )
+from naas_abi_sdk import lifeline
 from nats.errors import ConnectionClosedError, MaxPayloadError
 from nats.errors import TimeoutError as NatsTimeoutError
 
@@ -292,3 +294,172 @@ class TestNATSJetStreamAdapterIntegration:
 
         assert received_a == [b"one", b"two"]
         assert received_b == [b"one", b"two"]
+
+
+# ---------------------------------------------------------------------------
+# A connection lost for good stops the process (naas_abi_sdk.lifeline); one
+# the adapter closes itself does not.
+# ---------------------------------------------------------------------------
+
+
+class _FakeConnection:
+    """Calls ``closed_cb`` when closed, as nats-py does."""
+
+    def __init__(self, closed_cb, js=None):
+        self.closed_cb = closed_cb
+        self.is_closed = False
+        self.subscribed = asyncio.Event()
+        self._js = js
+
+    def jetstream(self):
+        return self._js
+
+    async def subscribe(self, subject, cb):
+        self.on_message = cb
+        self.subscribed.set()
+        return MagicMock(unsubscribe=AsyncMock())
+
+    async def close(self) -> None:
+        if not self.is_closed:
+            self.is_closed = True
+            if self.closed_cb is not None:
+                await self.closed_cb()
+
+    async def give_up(self) -> None:
+        """What nats-py does once it stops reconnecting."""
+        self.is_closed = True
+        if self.closed_cb is not None:
+            await self.closed_cb()
+
+
+@pytest.fixture
+def stops():
+    stops: list[str] = []
+    restore = lifeline.exit_on_connection_loss(lambda: stops.append("stop"))
+    yield stops
+    restore()
+
+
+def _fake_connections(monkeypatch, js=None) -> list[_FakeConnection]:
+    connections: list[_FakeConnection] = []
+
+    async def connect(url, **options):
+        connections.append(_FakeConnection(options.get("closed_cb"), js))
+        return connections[-1]
+
+    monkeypatch.setattr(nats, "connect", connect)
+    return connections
+
+
+async def _subscribed(connections, subscriber) -> None:
+    """Wait for the subscriber's subscription, or fail with what stopped it."""
+
+    async def wait() -> None:
+        while not connections:
+            if subscriber.done():
+                subscriber.result()
+            await asyncio.sleep(0.01)
+        await connections[0].subscribed.wait()
+
+    await asyncio.wait_for(wait(), timeout=5)
+
+
+def _worker(monkeypatch, fetch):
+    js = MagicMock(pull_subscribe=AsyncMock(return_value=MagicMock(fetch=fetch)))
+    connections = _fake_connections(monkeypatch, js)
+    adapter = NATSJetStreamAdapter("nats://127.0.0.1:4222")
+    monkeypatch.setattr(adapter, "_ensure_stream_async", AsyncMock(return_value="S"))
+    return adapter, connections
+
+
+def test_the_publish_connection_lost_for_good_stops_the_process(monkeypatch, stops):
+    connections = _fake_connections(monkeypatch)
+    adapter = NATSJetStreamAdapter("nats://127.0.0.1:4222")
+    try:
+        adapter._run_coro(adapter._ensure_connection_async())
+        adapter._run_coro(connections[0].give_up())
+    finally:
+        adapter.close()
+
+    assert stops == ["stop"]
+
+
+def test_closing_the_adapter_is_not_a_loss(monkeypatch, stops):
+    connections = _fake_connections(monkeypatch)
+    adapter = NATSJetStreamAdapter("nats://127.0.0.1:4222")
+    adapter._run_coro(adapter._ensure_connection_async())
+
+    adapter.close()
+
+    assert connections[0].is_closed
+    assert stops == []
+
+
+def test_a_worker_connection_lost_for_good_stops_the_process(monkeypatch, stops):
+    async def fetch(batch, timeout):
+        await connections[0].give_up()
+        raise ConnectionClosedError
+
+    adapter, connections = _worker(monkeypatch, fetch)
+
+    with pytest.raises(ConnectionClosedError):
+        asyncio.run(adapter._dequeue_forever("t", "k", lambda body: None))
+
+    assert stops == ["stop"]
+
+
+def test_a_worker_that_finishes_closes_its_connection_without_a_loss(
+    monkeypatch, stops
+):
+    message = MagicMock(headers=None, data=b"{}", ack=AsyncMock(), nak=AsyncMock())
+
+    async def fetch(batch, timeout):
+        return [message]
+
+    def finish(body):
+        raise StopIteration
+
+    adapter, connections = _worker(monkeypatch, fetch)
+
+    asyncio.run(adapter._dequeue_forever("t", "k", finish))
+
+    assert connections[0].is_closed
+    assert stops == []
+
+
+def test_a_subscriber_connection_lost_for_good_stops_the_process(monkeypatch, stops):
+    connections = _fake_connections(monkeypatch)
+    adapter = NATSJetStreamAdapter("nats://127.0.0.1:4222")
+
+    async def scenario():
+        subscriber = asyncio.create_task(
+            adapter._subscribe_forever("t", "k", lambda body: None)
+        )
+        await _subscribed(connections, subscriber)
+        await connections[0].give_up()
+        subscriber.cancel()
+
+    asyncio.run(scenario())
+
+    assert stops == ["stop"]
+
+
+def test_a_subscriber_that_finishes_closes_its_connection_without_a_loss(
+    monkeypatch, stops
+):
+    connections = _fake_connections(monkeypatch)
+    adapter = NATSJetStreamAdapter("nats://127.0.0.1:4222")
+
+    def finish(body):
+        raise StopIteration
+
+    async def scenario():
+        subscriber = asyncio.create_task(adapter._subscribe_forever("t", "k", finish))
+        await _subscribed(connections, subscriber)
+        await connections[0].on_message(MagicMock(headers=None, data=b"{}"))
+        await subscriber
+
+    asyncio.run(scenario())
+
+    assert connections[0].is_closed
+    assert stops == []

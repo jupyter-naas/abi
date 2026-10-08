@@ -152,6 +152,105 @@ class GenericActivityLogSecondaryAdapterTest(ABC):
         assert len(results) == 1
         assert results[0].actor_id == actor
 
+    def test_events_read_back_carry_an_increasing_seq(self, adapter):
+        actor = f"user:{uuid4()}"
+        for i in range(3):
+            adapter.record(ActivityEvent(actor_id=actor, event_type="x", attributes={"i": i}))
+
+        seqs = [e.seq for e in adapter.query(actor)]
+
+        assert all(isinstance(s, int) for s in seqs)
+        assert seqs == sorted(seqs) and len(set(seqs)) == 3
+
+    def test_pages_newest_first_with_a_seq_cursor(self, adapter):
+        actor = f"user:{uuid4()}"
+        for i in range(5):
+            adapter.record(ActivityEvent(actor_id=actor, event_type="x", attributes={"i": i}))
+
+        first = adapter.query(actor, ActivityLogQuery(newest_first=True, limit=2))
+        second = adapter.query(
+            actor, ActivityLogQuery(newest_first=True, limit=2, before_seq=first[-1].seq)
+        )
+        rest = adapter.query(
+            actor, ActivityLogQuery(newest_first=True, before_seq=second[-1].seq)
+        )
+
+        assert [e.attributes["i"] for e in first + second + rest] == [4, 3, 2, 1, 0]
+
+    def test_after_seq_reads_one_event_by_seq(self, adapter):
+        actor = f"user:{uuid4()}"
+        for i in range(3):
+            adapter.record(ActivityEvent(actor_id=actor, event_type="x", attributes={"i": i}))
+        middle = adapter.query(actor)[1]
+
+        (found,) = adapter.query(actor, ActivityLogQuery(after_seq=middle.seq - 1, limit=1))
+
+        assert (found.seq, found.attributes) == (middle.seq, {"i": 1})
+
+    # ------------------------------------------------------------------
+    # query_stream: an actor's log read as the caller iterates.
+    # ------------------------------------------------------------------
+
+    def _record_many(self, adapter, actor: str, count: int, pad: int = 0) -> None:
+        for i in range(count):
+            adapter.record(
+                ActivityEvent(
+                    actor_id=actor,
+                    event_type="x" if i % 3 else "y",
+                    attributes={"i": i, "pad": "p" * pad},
+                )
+            )
+
+    def test_query_stream_reads_what_query_reads(self, adapter):
+        actor = f"user:{uuid4()}"
+        # About 400 KiB: more than one 500-event page and one 256 KiB frame.
+        self._record_many(adapter, actor, 1_100, pad=300)
+
+        with adapter.query_stream(actor) as events:
+            streamed = list(events)
+
+        assert streamed == adapter.query(actor)
+        assert [e.attributes["i"] for e in streamed] == list(range(1_100))
+
+    def test_query_stream_applies_the_same_filters_as_query(self, adapter):
+        actor = f"user:{uuid4()}"
+        self._record_many(adapter, actor, 1_050)
+        seqs = [e.seq for e in adapter.query(actor)]
+
+        for query in (
+            ActivityLogQuery(newest_first=True, limit=700, event_type="x"),
+            ActivityLogQuery(newest_first=True),
+            ActivityLogQuery(after_seq=seqs[100], before_seq=seqs[900], limit=600),
+            ActivityLogQuery(limit=0),
+            None,
+        ):
+            with adapter.query_stream(actor, query) as events:
+                assert list(events) == adapter.query(actor, query), query
+
+    def test_query_stream_excludes_events_recorded_after_it_opened(self, adapter):
+        actor = f"user:{uuid4()}"
+        self._record_many(adapter, actor, 3)
+
+        for query in (None, ActivityLogQuery(newest_first=True)):
+            stored = len(adapter.query(actor))
+            with adapter.query_stream(actor, query) as events:
+                adapter.record(ActivityEvent(actor_id=actor, event_type="late"))
+                assert len(list(events)) == stored
+
+    def test_query_stream_of_an_unknown_actor_is_empty(self, adapter):
+        with adapter.query_stream(f"user:{uuid4()}") as events:
+            assert list(events) == []
+
+    def test_query_stream_can_stop_early(self, adapter):
+        actor = f"user:{uuid4()}"
+        self._record_many(adapter, actor, 1_100)
+
+        with adapter.query_stream(actor) as events:
+            first = [next(events) for _ in range(10)]
+
+        assert [e.attributes["i"] for e in first] == list(range(10))
+        assert len(adapter.query(actor, ActivityLogQuery(limit=5))) == 5
+
     def test_shutdown_is_idempotent(self, adapter):
         adapter.shutdown()
         adapter.shutdown()

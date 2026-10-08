@@ -3,6 +3,8 @@ from __future__ import annotations
 # ``list`` is a port method name, so it shadows the builtin for annotations
 # evaluated in the class bodies below; use ``builtins.list`` there.
 import builtins
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from naas_abi_core import logger
@@ -12,12 +14,19 @@ from naas_abi_core.services.dataset.DatasetPort import (
     DatasetSpec,
     IDatasetPort,
     QueryResult,
+    RowStream,
     WriteMode,
 )
 from naas_abi_core.services.dataset.ontologies.classes.ontology_naas_ai.abi.dataset.DatasetCatalogPressure import (
     DatasetCatalogPressure,
 )
 from naas_abi_core.services.ServiceBase import ServiceBase
+
+
+def _deadline(timeout_seconds: float | None) -> dict[str, float]:
+    """A caller's deadline, passed on only when given: an adapter written
+    before the keyword keeps working for every call without one."""
+    return {} if timeout_seconds is None else {"timeout_seconds": timeout_seconds}
 
 
 class DatasetService(ServiceBase, IDatasetPort):
@@ -66,20 +75,72 @@ class DatasetService(ServiceBase, IDatasetPort):
             snapshot_id=snapshot_id,
         )
 
+    def write_stream(
+        self,
+        name: str,
+        rows: Iterable[dict[str, Any]],
+        *,
+        namespace: str = "default",
+        mode: WriteMode = "append",
+        snapshot_id: int | None = None,
+    ) -> DatasetInfo:
+        return self.__adapter.write_stream(
+            name,
+            rows,
+            namespace=namespace,
+            mode=mode,
+            snapshot_id=snapshot_id,
+        )
+
     def query(
         self,
         sql: str,
         *,
         namespace: str = "default",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> QueryResult:
-        return self.__adapter.query(sql, namespace=namespace, snapshot_id=snapshot_id)
+        return self.__adapter.query(
+            sql,
+            namespace=namespace,
+            snapshot_id=snapshot_id,
+            **_deadline(timeout_seconds),
+        )
 
-    def compact(self, name: str, *, namespace: str = "default") -> QueryResult:
-        return self.__adapter.compact(name, namespace=namespace)
+    @contextmanager
+    def query_stream(
+        self,
+        sql: str,
+        *,
+        namespace: str = "default",
+        snapshot_id: int | None = None,
+    ) -> Iterator[RowStream]:
+        with self.__adapter.query_stream(
+            sql, namespace=namespace, snapshot_id=snapshot_id
+        ) as result:
+            yield result
 
-    def flush(self, name: str, *, namespace: str = "default") -> QueryResult:
-        return self.__adapter.flush(name, namespace=namespace)
+    def compact(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
+        return self.__adapter.compact(
+            name, namespace=namespace, **_deadline(timeout_seconds)
+        )
+
+    def flush(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
+        return self.__adapter.flush(
+            name, namespace=namespace, **_deadline(timeout_seconds)
+        )
 
     def inlined_row_count(self, name: str, *, namespace: str = "default") -> int:
         return self.__adapter.inlined_row_count(name, namespace=namespace)

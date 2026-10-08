@@ -1,0 +1,27 @@
+syntax = "proto3";
+package abi.transfer.v1;
+import "naas_abi_proto/common/v1/common.proto";
+// Ephemeral, caller-bound transfers. Never replay upload/start/read after an
+// uncertain response. A frame is a logical protobuf message or an object chunk.
+message OpenRequest {
+  abi.common.v1.CallContext context = 1;
+  string operation = 2;
+  bytes metadata = 3;
+  uint32 chunk_bytes = 4;
+}
+message OpenResponse { string id = 1; uint32 chunk_bytes = 2; abi.common.v1.CallError error = 15; }
+message WriteRequest { abi.common.v1.CallContext context = 1; string id = 2; uint64 sequence = 3; bytes data = 4; }
+message WriteResponse { abi.common.v1.CallError error = 15; }
+message StartRequest { abi.common.v1.CallContext context = 1; string id = 2; }
+message StartResponse { abi.common.v1.CallError error = 15; }
+message ReadRequest { abi.common.v1.CallContext context = 1; string id = 2; uint64 sequence = 3; }
+message ReadResponse {
+  bytes data = 1;
+  uint64 sequence = 2;
+  bool frame_end = 3;
+  bool pending = 4;
+  bool done = 5;
+  abi.common.v1.CallError error = 15;
+}
+message CloseRequest { abi.common.v1.CallContext context = 1; string id = 2; }
+message CloseResponse { abi.common.v1.CallError error = 15; }

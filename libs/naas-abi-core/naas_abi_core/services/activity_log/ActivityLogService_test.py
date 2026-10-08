@@ -26,6 +26,27 @@ def test_service_delegates_record_and_query(service):
     assert len(service.query(actor)) == 1
 
 
+def test_service_delegates_query_stream_to_the_adapter(tmp_path):
+    adapter = ActivityLogSqliteAdapter(data_dir=str(tmp_path))
+    service = ActivityLogService(adapter=adapter)
+    actor = f"user:{uuid4()}"
+    service.record(ActivityEvent(actor_id=actor, event_type="x"))
+    opened = []
+    stream = adapter.query_stream
+
+    def tracked(actor_id, query=None):
+        opened.append((actor_id, query))
+        return stream(actor_id, query)
+
+    adapter.query_stream = tracked  # type: ignore[method-assign]
+    query = ActivityLogQuery(newest_first=True)
+
+    with service.query_stream(actor, query) as events:
+        assert [e.actor_id for e in events] == [actor]
+    assert opened == [(actor, query)]
+    service.shutdown()
+
+
 def test_service_delegates_list_actors(service):
     a, b = f"user:{uuid4()}", f"user:{uuid4()}"
     service.record(ActivityEvent(actor_id=a, event_type="x"))

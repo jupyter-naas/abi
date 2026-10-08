@@ -6,7 +6,8 @@ readme = "README.md"
 authors = [{ name = "Grace Lambert", email = "maxime@naas.ai" },{ name = "Alice Dupont", email = "florent@naas.ai" }, { name = "Emma Petit", email = "jeremy@naas.ai" }]
 requires-python = ">=3.11,<4"
 dependencies = [
-    "naas-abi-core[dagster]>=1.4.0",
+    # nats: Nexus imports naas_abi_core.engine.nats_transfer (naas-abi-proto, naas-abi-sdk).
+    "naas-abi-core[dagster,nats]>=1.4.0",
     "naas-abi-marketplace>=1.3.3",
     # --- Nexus API runtime dependencies ---
     "fastapi>=0.109.0",
@@ -56,6 +57,7 @@ Homepage = "https://github.com/jupyter-naas/abi"
 Repository = "https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi"
 
 [tool.uv.sources]
+naas-abi-proto = {path = "../naas-abi-proto", editable = true}
 naas-abi-core = { path = "../naas-abi-core", editable = true }
 naas-abi-marketplace = { path = "../naas-abi-marketplace", editable = true }
 

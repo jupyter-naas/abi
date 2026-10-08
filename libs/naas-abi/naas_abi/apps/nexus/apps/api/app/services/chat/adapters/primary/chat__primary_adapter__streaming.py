@@ -42,7 +42,7 @@ OPENAI_COMPATIBLE = [
     "openrouter",
     "perplexity",
 ]
-SUPPORTED_STREAMING = ["ollama", "cloudflare", "abi", *OPENAI_COMPATIBLE]
+SUPPORTED_STREAMING = ["ollama", "cloudflare", "abi", "remote", *OPENAI_COMPATIBLE]
 
 
 def _first_prompt_for_office_title(request: ChatRequest) -> str:
@@ -565,14 +565,22 @@ async def stream_chat_response(
                     context=request_context(current_user),
                     client_context=client_ctx or None,
                 )
-                user_context_preamble = await registry.chat.build_abi_injection_preamble(
-                    prior_messages=prior_messages,
-                    user_id=current_user.id,
-                    workspace_id=request.workspace_id,
-                    conversation_id=conversation_id,
-                    context=request_context(current_user),
-                    client_context=client_ctx or None,
-                )
+                if provider.type == "remote":
+                    user_context_preamble = await registry.chat.build_remote_agent_preamble(
+                        prior_messages=prior_messages,
+                        user_id=current_user.id,
+                        workspace_id=request.workspace_id,
+                        conversation_id=conversation_id,
+                    )
+                else:
+                    user_context_preamble = await registry.chat.build_abi_injection_preamble(
+                        prior_messages=prior_messages,
+                        user_id=current_user.id,
+                        workspace_id=request.workspace_id,
+                        conversation_id=conversation_id,
+                        context=request_context(current_user),
+                        client_context=client_ctx or None,
+                    )
             await db.commit()
         except Exception:
             await db.rollback()
@@ -789,6 +797,21 @@ async def stream_chat_response(
                     yield output
                 if not inprocess_emitted:
                     raise RuntimeError("In-process ABI stream returned no content")
+            elif provider.type == "remote":
+                from naas_abi.apps.nexus.apps.api.app.services.agents.remote.streaming import (
+                    stream_with_remote_agent,
+                )
+
+                async for output in emit_stream(
+                    stream_with_remote_agent(
+                        provider_messages,
+                        provider_config,
+                        thread_id=conversation_id,
+                        user_context_preamble=user_context_preamble,
+                        invocation_id=assistant_msg_id,
+                    )
+                ):
+                    yield output
             elif provider.type in OPENAI_COMPATIBLE:
                 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
                     stream_with_openai_compatible,

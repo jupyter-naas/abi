@@ -24,6 +24,9 @@ the object_storage contract test wraps a real
 """
 
 import asyncio
+import shutil
+import socket
+import subprocess
 import time
 from datetime import UTC, datetime, timedelta
 from threading import Event as ThreadingEvent
@@ -261,8 +264,42 @@ class _PrimaryAdapterServer:
             await self._nc.close()
 
 
+def _local_nats_server(binary: str, workdir):
+    """A throwaway local nats-server (no Docker), yielded as its URL."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    with (workdir / "nats.log").open("w") as log:
+        process = subprocess.Popen(
+            [binary, "-a", "127.0.0.1", "-p", str(port)],
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if process.poll() is not None:
+                    pytest.fail("nats-server exited before accepting connections")
+                try:
+                    with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                        break
+                except OSError:
+                    time.sleep(0.01)
+            else:
+                pytest.fail("nats-server did not become ready")
+            yield f"nats://127.0.0.1:{port}"
+        finally:
+            process.terminate()
+            process.wait(timeout=5)
+
+
 @pytest.fixture(scope="session")
-def nats_url():
+def nats_url(tmp_path_factory):
+    # A local nats-server binary first (fast, no Docker), else a container.
+    binary = shutil.which("nats-server")
+    if binary is not None:
+        yield from _local_nats_server(binary, tmp_path_factory.mktemp("nats"))
+        return
     try:
         # Imported here, not at module level: testcontainers is a dev-only
         # dependency, absent from environments that don't run
@@ -380,3 +417,23 @@ def test_search_round_trips_real_similarity_scores(nats_url):
     finally:
         client.close()
         server.stop()
+
+
+@pytest.mark.integration
+def test_list_vectors_stream_without_a_streaming_engine_raises(nats_url):
+    # No primary at all: nobody answers the transfer open, and the client
+    # does not fall back to paging (NATS mode has no older engines).
+    client = VectorStoreSecondaryAdapterNATSClient(
+        nats_url=nats_url,
+        jwt_secret=JWT_SECRET,
+        service_identity="api",
+        timeout_seconds=5.0,
+    )
+    try:
+        with (
+            pytest.raises(RuntimeError, match="UNAVAILABLE"),
+            client.list_vectors_stream("docs") as documents,
+        ):
+            list(documents)
+    finally:
+        client.close()

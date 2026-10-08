@@ -93,3 +93,19 @@ def test_ollama_control_routes_are_superadmin_only(routes) -> None:
 
     for key in SUPERADMIN_ONLY:
         assert require_superadmin in routes[key], key
+
+
+def test_sysadmin_routes_are_superadmin_only(routes) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
+        require_superadmin,
+    )
+
+    sysadmin = [key for key in routes if key[1].startswith("/api/admin/system/")]
+    assert sysadmin, "the SysAdmin router is not mounted"
+    for key in sysadmin:
+        assert require_superadmin in routes[key], key
+
+
+def test_the_trace_viewer_is_mounted_under_sysadmin(routes) -> None:
+    for path in ("", "/services", "/operations", "/{trace_id}"):
+        assert ("GET", f"/api/admin/system/traces{path}") in routes, path

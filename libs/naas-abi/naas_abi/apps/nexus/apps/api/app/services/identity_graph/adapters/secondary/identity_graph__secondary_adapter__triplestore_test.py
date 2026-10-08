@@ -57,3 +57,21 @@ def test_an_empty_snapshot_still_clears_but_inserts_nothing() -> None:
     IdentityGraphStoreSecondaryAdapterTripleStore(lambda: store).replace_graph(GRAPH, Graph())
 
     assert store.calls == [("clear", GRAPH)]
+
+
+class _UnlistedEmptyGraphStore(_RecordingTripleStore):
+    """Like Oxigraph: an empty named graph exists but list_graphs omits it."""
+
+    def create_graph(self, graph_name: URIRef) -> None:
+        from naas_abi_core.services.triple_store.TripleStorePorts import Exceptions
+
+        self.calls.append(("create", graph_name))
+        raise Exceptions.GraphAlreadyExistsError(str(graph_name))
+
+
+def test_an_existing_graph_that_is_not_listed_is_cleared_instead() -> None:
+    store = _UnlistedEmptyGraphStore(graphs=[])
+
+    IdentityGraphStoreSecondaryAdapterTripleStore(lambda: store).replace_graph(GRAPH, _graph())
+
+    assert store.calls == [("create", GRAPH), ("clear", GRAPH), ("insert", GRAPH)]

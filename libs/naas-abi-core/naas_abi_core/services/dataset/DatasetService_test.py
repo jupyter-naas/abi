@@ -1,9 +1,12 @@
+from unittest.mock import Mock, call
+
 import pytest
 from naas_abi_core.services.dataset.DatasetFactory import DatasetFactory
 from naas_abi_core.services.dataset.DatasetPort import (
     ColumnSpec,
     DatasetNotFoundError,
     DatasetSpec,
+    IDatasetPort,
     PartitionSpec,
 )
 from naas_abi_core.services.dataset.DatasetService import DatasetService
@@ -96,3 +99,25 @@ def test_compaction_merges_partition_files_and_preserves_history(tmp_path):
     assert service.query(files_sql, namespace="analytics").rows[0]["n"] == after
     with pytest.raises(DatasetNotFoundError):
         service.compact("missing", namespace="analytics")
+
+
+def test_a_callers_deadline_reaches_the_adapter_only_when_given():
+    adapter = Mock(spec=IDatasetPort)
+    service = DatasetService(adapter)
+
+    service.query("SELECT 1", namespace="n", timeout_seconds=60.0)
+    service.flush("events", namespace="n", timeout_seconds=60.0)
+    service.compact("events", namespace="n", timeout_seconds=60.0)
+    # Without one, adapters written before the keyword keep working.
+    service.query("SELECT 1")
+    service.flush("events")
+    service.compact("events")
+
+    assert adapter.mock_calls == [
+        call.query("SELECT 1", namespace="n", snapshot_id=None, timeout_seconds=60.0),
+        call.flush("events", namespace="n", timeout_seconds=60.0),
+        call.compact("events", namespace="n", timeout_seconds=60.0),
+        call.query("SELECT 1", namespace="default", snapshot_id=None),
+        call.flush("events", namespace="default"),
+        call.compact("events", namespace="default"),
+    ]

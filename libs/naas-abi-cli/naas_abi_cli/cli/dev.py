@@ -14,6 +14,18 @@ Managed services:
 Optional (not started by default — pass `--service nats` to include):
   - nats        (NATS/JetStream, for the Stage 1 NATS-distributed-modules
                  work; requires the `nats-server` binary on PATH)
+  - jaeger      (Jaeger v2, OpenTelemetry traces; requires the `jaeger` binary)
+
+`abi dev up --with-nats` starts nats and runs the engine in NATS mode;
+`--with-tracing` starts a native Jaeger and has the engine export spans to it.
+The project config is left untouched: a generated overlay
+(`.abi/dev/dev.overlay.yaml`, via ABI_CONFIG_OVERLAY) adds the `nats:` and
+`telemetry:` blocks.
+
+With `--with-nats`, the SDK modules listed under `dev.modules` in the project
+config start once the api is ready, each supervised (restarted when it exits
+on its own; see `dev_modules.py`). They are named like services:
+`--service <name>`, `abi dev logs <name>`, `abi dev down --service <name>`.
 """
 
 from __future__ import annotations
@@ -45,7 +57,20 @@ from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 
-from naas_abi_cli.cli.admin_credentials import ensure_admin_credentials, ensure_api_key
+from naas_abi_cli.cli.admin_credentials import (
+    NATS_USERS,
+    ensure_admin_credentials,
+    ensure_api_key,
+    ensure_nats_passwords,
+    ensure_nats_secret,
+    nats_login,
+)
+from naas_abi_cli.cli.dev_modules import (
+    load_dev_modules,
+    module_command,
+    module_environment,
+    read_overlay,
+)
 
 DEV_DIR_NAME = ".abi/dev"
 INSTANCE_FILENAME = "instance.json"
@@ -82,6 +107,7 @@ PROBE_HOST = (
 )
 
 PORT_OFFSET_RANGE = 900  # ~3-digit per-worktree offset
+PORT_RELEASE_WAIT_SECONDS = 5.0
 
 # Per-service port bases — chosen so that base + offset ranges never overlap.
 SERVICE_PORT_BASES = {
@@ -90,6 +116,7 @@ SERVICE_PORT_BASES = {
     "dagster": 11000,   # 11000..11899
     "nexus-web": 12000, # 12000..12899
     "nats": 13000,      # 13000..13899 (client port; see NATS_MONITOR_PORT_OFFSET)
+    "jaeger": 15000,    # 15000..15899 (query API + UI; see _jaeger_ports)
 }
 
 # nats-server needs two ports: the client port (allocated like every other
@@ -117,7 +144,7 @@ ALL_SERVICES = ("oxigraph", "api", "dagster", "nexus-web")
 # nothing reads these unless you ask for them (config.yaml's bus_adapter
 # still defaults to "python_queue", not "nats_jetstream"). Add explicitly:
 # `abi dev up --service api --service nats`.
-OPTIONAL_SERVICES = ("nats",)
+OPTIONAL_SERVICES = ("nats", "jaeger")
 
 # nats-server refuses any single message above `max_payload` (1 MB by default),
 # which is the hard ceiling for one RPC request or reply. 8 MB is the largest
@@ -130,6 +157,26 @@ NATS_MAX_PAYLOAD = "8MB"
 # accept. `_validate_services` still defaults to just `ALL_SERVICES` when
 # nothing is explicitly selected.
 KNOWN_SERVICES = ALL_SERVICES + OPTIONAL_SERVICES
+
+# Start order. nats comes before the api and dagster: in NATS mode their engine
+# connects to it while booting. Stopping goes the other way round.
+START_ORDER = ("oxigraph", "nats", "jaeger", "api", "dagster", "nexus-web")
+
+# The overlay `--with-nats` hands the engine through this variable.
+CONFIG_OVERLAY_ENV = "ABI_CONFIG_OVERLAY"
+DEV_OVERLAY_FILENAME = "dev.overlay.yaml"
+
+# A dev module's supervisor gives it 15 s to drain on SIGTERM (unregister from
+# discovery) before forcing it; `abi dev down` waits a little longer than that.
+MODULE_STOP_SECONDS = 20.0
+# How long `abi dev up` waits for the api before starting dev modules.
+MODULE_API_WAIT_SECONDS = 180.0
+
+# Jaeger listens on three ports: the query API/UI (allocated like every other
+# service) plus OTLP/HTTP and query gRPC derived from it, clear of every other
+# service's 900-wide window.
+JAEGER_OTLP_PORT_OFFSET = 1000
+JAEGER_GRPC_PORT_OFFSET = 2000
 
 # `abi dev up` exists to watch the stack come up, and the slowest part of api
 # boot — `Engine.load()`, behind the lazy app factory — narrates itself only at
@@ -236,6 +283,10 @@ def _service_url(port: int) -> str:
 
 def _port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        # Bind like the servers do: connections a stopped server closed linger in
+        # TIME_WAIT on its port and would otherwise read as "busy" (and move the
+        # service to another port). A listening socket still conflicts.
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.settimeout(0.3)
         try:
             sock.bind((BIND_HOST, port))
@@ -253,7 +304,14 @@ def _find_free_port(service: str, preferred: int) -> int:
     is busy we wrap to the start. Returns the first free port found, or
     raises if nothing is available.
     """
-    if not _port_in_use(preferred):
+    # A service stopped a moment ago may still be releasing it: moving away
+    # would break the api <-> nexus-web wiring both read at launch.
+    deadline = time.monotonic() + PORT_RELEASE_WAIT_SECONDS
+    while _port_in_use(preferred):
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(0.2)
+    else:
         return preferred
     base = SERVICE_PORT_BASES[service]
     end = base + PORT_OFFSET_RANGE
@@ -366,11 +424,149 @@ def _nats_url(ports: dict[str, int]) -> str:
     return f"nats://{PROBE_HOST}:{ports['nats']}"
 
 
-def _nats_server_config() -> str:
+def _discovery_project() -> str:
+    """Discovery project for the dev engine: the project folder name, sanitized."""
+    name = re.sub(r"[^A-Za-z0-9_-]+", "-", _project_root().name).strip("-")
+    return (name or "dev")[:64]
+
+
+def _jaeger_ports(query_port: int) -> dict[str, int]:
+    return {
+        "query": query_port,
+        "otlp": query_port + JAEGER_OTLP_PORT_OFFSET,
+        "grpc": query_port + JAEGER_GRPC_PORT_OFFSET,
+    }
+
+
+def _write_dev_overlay(
+    ports: dict[str, int],
+    *,
+    nats_secret: str | None,
+    nats_password: str | None = None,
+    tracing: bool = False,
+) -> Path:
+    """The blocks the engine merges over the project config (ABI_CONFIG_OVERLAY).
+
+    `nats:` (and the JetStream bus) when `nats_secret` is given, logged in as the
+    broker user `abi` with `nats_password`; `telemetry:` when `tracing`. JSON is
+    valid YAML, so no YAML writer is needed. Holds the JWT secret and the
+    password: owner-only.
+    """
+    overlay: dict = {}
+    if nats_secret is not None:
+        if not nats_password:
+            raise ValueError("The dev broker needs the engine's password (NATS_ABI_PASSWORD)")
+        nats_url = nats_login(_nats_url(ports), "abi", nats_password)
+        overlay["nats"] = {
+            "nats_url": nats_url,
+            "jwt_secret": nats_secret,
+            "discovery": {"project": _discovery_project()},
+            "monitoring_url": f"http://{PROBE_HOST}:{_nats_monitor_port(ports['nats'])}",
+        }
+        # NATS mode runs the bus on JetStream (replaces the project's bus adapter).
+        overlay["services"] = {
+            "bus": {
+                "bus_adapter": {
+                    "adapter": "nats_jetstream",
+                    "config": {"nats_url": nats_url},
+                }
+            }
+        }
+    if tracing:
+        jaeger = _jaeger_ports(ports["jaeger"])
+        overlay["telemetry"] = {
+            "enabled": True,
+            "otlp_endpoint": f"http://{PROBE_HOST}:{jaeger['otlp']}",
+            "service_name": f"{_discovery_project()}-engine",
+            "ui_url": f"http://{BROWSER_HOST}:{jaeger['query']}",
+            "query_url": f"http://{PROBE_HOST}:{jaeger['query']}",
+        }
+    path = _dev_dir() / DEV_OVERLAY_FILENAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch(mode=0o600, exist_ok=True)
+    path.chmod(0o600)
+    path.write_text(
+        "# Generated by `abi dev up --with-nats/--with-tracing`; rewritten on every start.\n"
+        + json.dumps(overlay, indent=2)
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _jaeger_config(ports: dict[str, int]) -> str:
+    """Jaeger v2 (an OpenTelemetry Collector build): OTLP/HTTP in, in-memory store,
+    query API + UI. Traces are lost when it stops."""
+    return f"""service:
+  extensions: [jaeger_storage, jaeger_query]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [jaeger_storage_exporter]
+  telemetry:
+    metrics:
+      level: none
+extensions:
+  jaeger_query:
+    storage:
+      traces: memstore
+    http:
+      endpoint: {BIND_HOST}:{ports['query']}
+    grpc:
+      endpoint: {BIND_HOST}:{ports['grpc']}
+  jaeger_storage:
+    backends:
+      memstore:
+        memory:
+          max_traces: 100000
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: {BIND_HOST}:{ports['otlp']}
+processors:
+  batch:
+    timeout: 200ms
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: memstore
+"""
+
+
+def _launch_jaeger(spec: ServiceSpec) -> int:
+    """Launch a native Jaeger v2 from a generated config (per-worktree ports)."""
+    binary = shutil.which("jaeger")
+    if binary is None:
+        raise click.ClickException(
+            "`jaeger` (v2) is not on PATH. Download the release for your platform "
+            "from https://github.com/jaegertracing/jaeger/releases, put the `jaeger` "
+            "binary on PATH and retry, or drop `--with-tracing`."
+        )
+    store_path = _project_root() / "storage" / "jaeger"
+    store_path.mkdir(parents=True, exist_ok=True)
+    config_path = store_path / "config.yaml"
+    config_path.write_text(_jaeger_config(_jaeger_ports(spec.port)), encoding="utf-8")
+    env = os.environ.copy()
+    # Jaeger would otherwise try to export its own spans to a default collector.
+    env["OTEL_TRACES_EXPORTER"] = "none"
+    return _spawn(spec, [binary, "--config", str(config_path)], _project_root(), env)
+
+
+def _nats_server_config(passwords: dict[str, str]) -> str:
     """Body of the nats.conf handed to nats-server with -c. Ports, bind
     address and JetStream stay on the command line (flags override the file),
-    so this only carries what has no flag."""
-    return f"max_payload: {NATS_MAX_PAYLOAD}\n"
+    so this only carries what has no flag: max_payload, and the broker's users
+    with their `passwords` (by .env key), as in the Docker stack. A client
+    without a valid user and password is refused."""
+    users = "\n".join(
+        f"    {{ user: {json.dumps(user)}, password: {json.dumps(passwords[key])} }}"
+        for user, key in NATS_USERS.items()
+    )
+    return (
+        f"max_payload: {NATS_MAX_PAYLOAD}\n\n"
+        f"authorization {{\n  users = [\n{users}\n  ]\n}}\n"
+    )
 
 
 def _launch_nats(spec: ServiceSpec) -> int:
@@ -393,8 +589,12 @@ def _launch_nats(spec: ServiceSpec) -> int:
     store_path = _project_root() / "storage" / "nats"
     store_path.mkdir(parents=True, exist_ok=True)
     # Rewritten on every launch so a stale copy can never pin an old limit.
+    # Holds the broker's passwords: owner-only.
     config_path = store_path / "nats.conf"
-    config_path.write_text(_nats_server_config(), encoding="utf-8")
+    config_path.touch(mode=0o600, exist_ok=True)
+    config_path.chmod(0o600)
+    passwords = ensure_nats_passwords(_project_root() / ".env")
+    config_path.write_text(_nats_server_config(passwords), encoding="utf-8")
     env = os.environ.copy()
     cmd = [
         binary,
@@ -414,9 +614,14 @@ def _launch_nats(spec: ServiceSpec) -> int:
 
 
 def _launch_api(
-    spec: ServiceSpec, ports: dict[str, int], log_level: str | None = None
+    spec: ServiceSpec,
+    ports: dict[str, int],
+    log_level: str | None = None,
+    config_overlay: Path | None = None,
 ) -> int:
     env = os.environ.copy()
+    if config_overlay is not None:
+        env[CONFIG_OVERLAY_ENV] = str(config_overlay)
     # Generated per project so Bearer auth works without a hand-authored .env.
     # Never overwrites an explicit value from the parent environment.
     if not env.get("ABI_API_KEY"):
@@ -467,8 +672,11 @@ def _launch_dagster(
     ports: dict[str, int],
     log_level: str | None = None,
     skip_ontology_loading: bool = True,
+    config_overlay: Path | None = None,
 ) -> int:
     env = os.environ.copy()
+    if config_overlay is not None:
+        env[CONFIG_OVERLAY_ENV] = str(config_overlay)
     env.setdefault("DAGSTER_HOME", str(_project_root() / ".dagster"))
     Path(env["DAGSTER_HOME"]).mkdir(parents=True, exist_ok=True)
     # dagster and the api share this stack's single oxigraph, so the ontology
@@ -609,6 +817,7 @@ SERVICE_READY_PATHS = {
     "dagster": "/",
     "nexus-web": "/",
     "nats": "/healthz",  # probed against the derived monitor port, not ports["nats"] -- see _ready_probe_port
+    "jaeger": "/",  # the query API / UI port
 }
 
 
@@ -626,6 +835,7 @@ def _start_service(
     ports: dict[str, int],
     log_level: str | None = None,
     selected: list[str] | None = None,
+    config_overlay: Path | None = None,
 ) -> ServiceSpec:
     existing_spec = _service_spec(name, ports[name])
 
@@ -659,16 +869,20 @@ def _start_service(
         pid = _launch_oxigraph(spec)
     elif name == "nats":
         pid = _launch_nats(spec)
+    elif name == "jaeger":
+        pid = _launch_jaeger(spec)
     elif name == "api":
-        pid = _launch_api(spec, ports, log_level)
+        extra = {"config_overlay": config_overlay} if config_overlay else {}
+        pid = _launch_api(spec, ports, log_level, **extra)
     elif name == "nexus-web":
         pid = _launch_nexus_web(spec, ports)
     elif name == "dagster":
         # No explicit selection == the default `abi dev up`, which starts the
         # api too, so it is the ontology owner.
         api_is_running = "api" in (selected if selected is not None else ALL_SERVICES)
+        extra = {"config_overlay": config_overlay} if config_overlay else {}
         pid = _launch_dagster(
-            spec, ports, log_level, skip_ontology_loading=api_is_running
+            spec, ports, log_level, skip_ontology_loading=api_is_running, **extra
         )
     else:
         raise click.ClickException(f"Unknown service: {name}")
@@ -705,24 +919,145 @@ def _stop_service(name: str, port: int, force: bool = False) -> None:
         return
 
     try:
-        os.killpg(os.getpgid(pid), signal.SIGTERM)
+        # Kept: children (uvicorn workers, next's node) outlive the leader briefly.
+        pgid = os.getpgid(pid)
+        os.killpg(pgid, signal.SIGTERM)
     except ProcessLookupError:
         _pid_path(spec).unlink(missing_ok=True)
         return
 
+    # Done when the leader is gone *and* the port is free; otherwise the next
+    # `abi dev up` finds it busy and moves the service to another port, which
+    # breaks the api <-> nexus-web wiring (URLs, CORS) set at their launch.
     deadline = time.monotonic() + 10.0
     while time.monotonic() < deadline:
-        if not _pid_alive(pid):
+        if not _pid_alive(pid) and not _port_in_use(port):
             break
         time.sleep(0.2)
     else:
         try:
-            os.killpg(os.getpgid(pid), signal.SIGKILL)
+            os.killpg(pgid, signal.SIGKILL)
         except ProcessLookupError:
             pass
+        release = time.monotonic() + 3.0
+        while _port_in_use(port) and time.monotonic() < release:
+            time.sleep(0.1)
 
     _pid_path(spec).unlink(missing_ok=True)
     click.echo(f"{name}: stopped (pid {pid})")
+
+
+# =============================================================================
+# dev.modules: SDK modules run next to the engine (dev_modules.py)
+# =============================================================================
+
+def _dev_modules(strict: bool = True) -> dict:
+    """The enabled `dev.modules` by name. ``strict=False`` (stopping, status)
+    reports an invalid block and carries on without modules."""
+    try:
+        modules = load_dev_modules()
+    except Exception as exc:
+        if not strict:
+            click.echo(f"⚠ ignoring dev.modules: {exc}", err=True)
+            return {}
+        raise click.ClickException(
+            f"Invalid `dev.modules` in the project config: {exc}"
+        ) from exc
+    clashes = sorted(set(modules) & set(KNOWN_SERVICES))
+    if clashes:
+        raise click.ClickException(
+            f"dev.modules names clash with stack services: {', '.join(clashes)}"
+        )
+    return modules
+
+
+def _module_spec(name: str) -> ServiceSpec:
+    # No port: a module only dials out (to nats).
+    return _service_spec(name, 0)
+
+
+def _display_url(spec: ServiceSpec) -> str:
+    return _service_url(spec.port) if spec.port else "dev module"
+
+
+def _split_selection(
+    services: tuple[str, ...], modules: dict
+) -> tuple[tuple[str, ...], list[str]]:
+    """`--service` names split into stack services and dev modules."""
+    unknown = [s for s in services if s not in KNOWN_SERVICES and s not in modules]
+    if unknown:
+        raise click.BadParameter(
+            f"Unknown service(s): {', '.join(unknown)}. "
+            f"Choose from: {', '.join((*KNOWN_SERVICES, *modules))}.",
+            param_hint="'--service'",
+        )
+    core = tuple(s for s in services if s in KNOWN_SERVICES)
+    return core, [name for name in modules if name in services]
+
+
+def _module_overlay(config_overlay: Path | None) -> dict:
+    """The NATS dev stack modules connect to: this run's overlay or the last one."""
+    path = config_overlay or _dev_dir() / DEV_OVERLAY_FILENAME
+    overlay = read_overlay(path) if path.exists() else {}
+    if "nats" not in overlay:
+        raise click.ClickException(
+            "dev.modules run against the NATS dev stack: "
+            "start it with `abi dev up --with-nats` first."
+        )
+    return overlay
+
+
+def _start_module(module, overlay: dict) -> ServiceSpec:
+    spec = _module_spec(module.name)
+    existing = _read_pid(spec)
+    if existing and _pid_alive(existing):
+        click.echo(f"{module.name}: already running (pid {existing})")
+        return spec
+    password = ensure_nats_passwords(_project_root() / ".env")["NATS_MODULE_PASSWORD"]
+    env = module_environment(
+        module, overlay, _project_root(), os.environ, nats_password=password
+    )
+    pid = _spawn(spec, module_command(module), _project_root(), env)
+    _pid_path(spec).write_text(f"{pid}\n")
+    command = " ".join(["python -m", module.module, *module.args])
+    click.echo(f"{module.name}: started (pid {pid}): {command}")
+    return spec
+
+
+def _stop_module(name: str, force: bool = False) -> None:
+    """SIGTERM the module's group (its supervisor and the module, which drains),
+    wait, then SIGKILL; ``force`` kills at once."""
+    spec = _module_spec(name)
+    pid = _read_pid(spec)
+    if pid is None:
+        return
+    if not _pid_alive(pid):
+        _pid_path(spec).unlink(missing_ok=True)
+        return
+    try:
+        pgid = os.getpgid(pid)
+        os.killpg(pgid, signal.SIGKILL if force else signal.SIGTERM)
+    except ProcessLookupError:
+        _pid_path(spec).unlink(missing_ok=True)
+        return
+    if not force:
+        deadline = time.monotonic() + MODULE_STOP_SECONDS
+        while _pid_alive(pid) and time.monotonic() < deadline:
+            time.sleep(0.2)
+        if _pid_alive(pid):
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    _pid_path(spec).unlink(missing_ok=True)
+    click.echo(f"{name}: stopped (pid {pid})")
+
+
+def _stop_any(name: str, ports: dict[str, int], force: bool = False) -> None:
+    if name in KNOWN_SERVICES:
+        _stop_service(name, ports[name], force=force)
+    else:
+        _stop_module(name, force=force)
 
 
 # =============================================================================
@@ -766,7 +1101,9 @@ def _build_status_panel(
     table.add_column("Health", justify="center")
 
     started_names = {spec.name for spec in started}
-    visible = [name for name in KNOWN_SERVICES if name in started_names]
+    visible = [name for name in KNOWN_SERVICES if name in started_names] + [
+        spec.name for spec in started if spec.name not in KNOWN_SERVICES
+    ]
     for idx, name in enumerate(visible, start=1):
         port = ports[name]
         style = _SERVICE_STYLES.get(name, "white")
@@ -796,7 +1133,7 @@ def _build_status_panel(
         table.add_row(
             marker,
             name_text,
-            _service_url(port),
+            _display_url(_service_spec(name, port)),
             pid_cell,
             health,
         )
@@ -818,15 +1155,18 @@ def _health_probe_loop(
             spec_ref = _service_spec(spec.name, port)
             pid = _read_pid(spec_ref)
             alive = pid is not None and _pid_alive(pid)
-            ready = (
-                _http_ready(
-                    _ready_probe_port(spec.name, port),
-                    path=SERVICE_READY_PATHS.get(spec.name, "/"),
-                    timeout=0.4,
+            if spec.name not in KNOWN_SERVICES:  # a dev module: nothing to probe
+                ready = alive
+            else:
+                ready = (
+                    _http_ready(
+                        _ready_probe_port(spec.name, port),
+                        path=SERVICE_READY_PATHS.get(spec.name, "/"),
+                        timeout=0.4,
+                    )
+                    if alive
+                    else False
                 )
-                if alive
-                else False
-            )
             with lock:
                 health_state[spec.name] = {
                     "pid": pid,
@@ -1064,6 +1404,8 @@ def _open_letter_map(started: list[ServiceSpec]) -> dict[str, str]:
     """
     seen: dict[str, str | None] = {}
     for spec in started:
+        if not spec.port:  # a dev module: nothing to open
+            continue
         first = spec.name[:1].lower()
         if not first.isalpha():
             continue
@@ -1111,6 +1453,7 @@ def _follow_until_interrupt(
     started: list[ServiceSpec],
     ports: dict[str, int],
     log_level: str | None = None,
+    start_module=None,
 ) -> None:
     """Live status bar + hint pinned at the bottom; logs scroll above them.
 
@@ -1249,7 +1592,7 @@ def _follow_until_interrupt(
             # 2. Stop the service processes (reverse order: api/dagster
             #    before oxigraph so they don't get cranky losing the store).
             for spec in reversed(started):
-                _stop_service(spec.name, ports[spec.name])
+                _stop_any(spec.name, ports)
 
             # 3. Reset per-service state.
             for buf in buffers.values():
@@ -1263,6 +1606,9 @@ def _follow_until_interrupt(
             # 4. Re-spawn services in the original order.
             started.clear()
             for name in selected_names:
+                if name not in KNOWN_SERVICES:
+                    started.append(start_module(name))
+                    continue
                 spec = _start_service(name, ports, log_level, selected_names)
                 started.append(spec)
                 # Same boot-dependency wait as the initial `dev_up`.
@@ -1401,7 +1747,7 @@ def _follow_until_interrupt(
         else:
             console.print(Text("── stopping services ──", style="dim"))
         for spec in reversed(started):
-            _stop_service(spec.name, ports[spec.name], force=force)
+            _stop_any(spec.name, ports, force=force)
         for t in threads + log_threads:
             t.join(timeout=0.5 if force else 1.0)
 
@@ -1419,8 +1765,26 @@ def _validate_services(selected: tuple[str, ...]) -> list[str]:
             f"Unknown service(s): {', '.join(unknown)}. "
             f"Choose from: {', '.join(KNOWN_SERVICES)}."
         )
-    # Preserve canonical order (api → dagster → nexus-web → nats).
-    return [s for s in KNOWN_SERVICES if s in selected]
+    return [s for s in START_ORDER if s in selected]
+
+
+def _services_for(
+    services: tuple[str, ...], *, with_nats: bool, with_tracing: bool = False
+) -> list[str]:
+    """Services `abi dev up` starts. With NATS, dagster is left out unless asked
+    for: a second engine on the bus would serve every kernel service twice, and
+    module jobs replace its schedules. With tracing, jaeger is added."""
+    extra = (("nats",) if with_nats else ()) + (("jaeger",) if with_tracing else ())
+    if services:
+        return _validate_services((*services, *extra))
+    defaults = [s for s in ALL_SERVICES if not (with_nats and s == "dagster")]
+    return _validate_services((*defaults, *extra))
+
+
+def _services_to_stop(services: tuple[str, ...]) -> list[str]:
+    """Everything (nats included) unless a selection is given, consumers first."""
+    selected = _validate_services(services) if services else list(START_ORDER)
+    return list(reversed(selected))
 
 
 @click.group("dev")
@@ -1433,11 +1797,10 @@ def dev() -> None:
     "--service",
     "services",
     multiple=True,
-    type=click.Choice(KNOWN_SERVICES),
     help=(
-        "Limit to the given service(s). Repeat the flag. Default: start "
-        f"{', '.join(ALL_SERVICES)} ({', '.join(OPTIONAL_SERVICES)} "
-        "available but opt-in)."
+        "Limit to the given service(s) or dev module(s). Repeat the flag. "
+        f"Default: start {', '.join(ALL_SERVICES)} ({', '.join(OPTIONAL_SERVICES)} "
+        "available but opt-in), plus every `dev.modules` entry with --with-nats."
     ),
 )
 @click.option(
@@ -1458,8 +1821,34 @@ def dev() -> None:
         "(engine boot phases are logged at DEBUG)."
     ),
 )
+@click.option(
+    "--with-nats",
+    "with_nats",
+    is_flag=True,
+    default=False,
+    help=(
+        "Run the engine in NATS mode: start nats first and give the api the "
+        "project config plus a generated `nats:` overlay (discovery, monitoring, "
+        "jobs), then the SDK modules of `dev.modules`. Dagster is left out "
+        "unless selected with --service."
+    ),
+)
+@click.option(
+    "--with-tracing",
+    "with_tracing",
+    is_flag=True,
+    default=False,
+    help=(
+        "Start a native Jaeger (`jaeger` v2 on PATH) and have the engine export "
+        "OpenTelemetry spans to it; the System app's live traffic then reads them."
+    ),
+)
 def dev_up(
-    services: tuple[str, ...], detach: bool, log_level: str | None
+    services: tuple[str, ...],
+    detach: bool,
+    log_level: str | None,
+    with_nats: bool,
+    with_tracing: bool,
 ) -> None:
     """Start the selected dev services.
 
@@ -1470,10 +1859,27 @@ def dev_up(
     The api and dagster processes run at LOG_LEVEL=DEBUG so engine boot
     narrates itself; pass `--log-level INFO` (or lower) to quieten them.
     """
-    selected = _validate_services(services)
+    modules = _dev_modules()
+    core, named_modules = _split_selection(services, modules)
+    if services:
+        # Only what was named, plus nats/jaeger when their flag asks for them.
+        selected = (
+            _services_for(core, with_nats=with_nats, with_tracing=with_tracing)
+            if core
+            else [
+                s
+                for s in START_ORDER
+                if (s == "nats" and with_nats) or (s == "jaeger" and with_tracing)
+            ]
+        )
+        to_run = named_modules
+    else:
+        selected = _services_for((), with_nats=with_nats, with_tracing=with_tracing)
+        to_run = list(modules) if with_nats else []
     instance = _load_or_create_instance()
     ports: dict[str, int] = instance["ports"]
     _ensure_storage_layout()
+    config_overlay: Path | None = None
     # Pre-populate `.env` with the default admin credentials so the Nexus
     # seed adopts them instead of generating a random password. Done before
     # the api process spawns and reads .env via the dotenv adapter.
@@ -1483,8 +1889,31 @@ def dev_up(
     started: list[ServiceSpec] = []
     try:
         for name in selected:
-            spec = _start_service(name, ports, log_level, selected)
+            if (with_nats or with_tracing) and name in ("api", "dagster") and config_overlay is None:
+                # Written once nats/jaeger are up, with the ports they actually bound.
+                env_path = _project_root() / ".env"
+                secret = ensure_nats_secret(env_path) if with_nats else None
+                password = (
+                    ensure_nats_passwords(env_path)["NATS_ABI_PASSWORD"] if with_nats else None
+                )
+                config_overlay = _write_dev_overlay(
+                    ports, nats_secret=secret, nats_password=password, tracing=with_tracing
+                )
+            spec = _start_service(name, ports, log_level, selected, config_overlay)
             started.append(spec)
+            if name == "nats":
+                monitor = _nats_monitor_port(spec.port)
+                click.echo("nats: waiting for readiness...")
+                if not _wait_until_ready(monitor, max_wait=15.0, path="/healthz"):
+                    raise click.ClickException(
+                        "nats did not become ready in 15s; see `.abi/dev/logs/nats.log`."
+                    )
+            if name == "jaeger":
+                click.echo("jaeger: waiting for readiness...")
+                if not _wait_until_ready(spec.port, max_wait=30.0, path="/"):
+                    raise click.ClickException(
+                        "jaeger did not become ready in 30s; see `.abi/dev/logs/jaeger.log`."
+                    )
             # api & dagster connect to the oxigraph HTTP endpoint at engine
             # boot; block briefly until it answers so they don't race-crash.
             if name == "oxigraph" and any(
@@ -1498,6 +1927,22 @@ def dev_up(
                         "Check `.abi/dev/logs/oxigraph.log`.",
                         err=True,
                     )
+        if to_run:
+            overlay = _module_overlay(config_overlay)
+            if "api" in selected:
+                # Modules call kernel services from their first second.
+                click.echo("api: waiting for readiness before the dev modules...")
+                if not _wait_until_ready(
+                    ports["api"], max_wait=MODULE_API_WAIT_SECONDS
+                ):
+                    click.echo(
+                        "⚠ api not ready yet; starting the dev modules anyway "
+                        "(they restart until it is).",
+                        err=True,
+                    )
+            for name in to_run:
+                started.append(_start_module(modules[name], overlay))
+                ports[name] = 0
     except Exception:
         if started:
             click.echo(
@@ -1505,14 +1950,24 @@ def dev_up(
                 err=True,
             )
             for spec in reversed(started):
-                _stop_service(spec.name, ports[spec.name])
+                _stop_any(spec.name, ports)
         raise
+
+    if config_overlay is not None:
+        click.echo(f"Engine config + {config_overlay.relative_to(_project_root())}:")
+        if with_nats:
+            click.echo(
+                f"  NATS mode (discovery project {_discovery_project()!r}, "
+                f"monitoring http://{BROWSER_HOST}:{_nats_monitor_port(ports['nats'])})"
+            )
+        if with_tracing:
+            click.echo(f"  tracing to Jaeger: http://{BROWSER_HOST}:{ports['jaeger']}")
 
     if detach:
         click.echo()
         click.echo("ABI dev services:")
         for spec in started:
-            click.echo(f"  {spec.name:<10} {_service_url(spec.port)}")
+            click.echo(f"  {spec.name:<10} {_display_url(spec)}")
         click.echo()
         click.echo(f"Login: {admin_email} / {admin_password}")
         click.echo("Logs: `abi dev logs <service> -f`   Stop: `abi dev down`")
@@ -1530,7 +1985,15 @@ def dev_up(
         )
     )
 
-    _follow_until_interrupt(started, ports, log_level)
+    _follow_until_interrupt(
+        started,
+        ports,
+        log_level,
+        # Only called to restart a module this run started (the `r` hotkey).
+        start_module=lambda name: _start_module(
+            modules[name], _module_overlay(config_overlay)
+        ),
+    )
 
 
 @dev.command("down")
@@ -1538,12 +2001,18 @@ def dev_up(
     "--service",
     "services",
     multiple=True,
-    type=click.Choice(KNOWN_SERVICES),
-    help="Limit to the given service(s). Default: stop all.",
+    help="Limit to the given service(s) or dev module(s). Default: stop all.",
 )
 def dev_down(services: tuple[str, ...]) -> None:
-    """Stop the selected dev services."""
-    selected = _validate_services(services)
+    """Stop the selected dev services (dev modules first)."""
+    modules = _dev_modules(strict=False)
+    core, named_modules = _split_selection(services, modules)
+    if services:
+        selected = _services_to_stop(core) if core else []
+        module_names = named_modules
+    else:
+        selected = _services_to_stop(())
+        module_names = list(modules)
     if not _instance_path().exists():
         click.echo("No dev instance allocated — nothing to stop.")
         return
@@ -1551,8 +2020,11 @@ def dev_down(services: tuple[str, ...]) -> None:
     # from before "nats" existed gets it backfilled rather than KeyError-ing.
     instance = _load_or_create_instance()
     ports: dict[str, int] = instance["ports"]
-    # Stop in reverse order so consumers (api) come down after their deps.
-    for name in reversed(selected):
+    # Modules call the engine, so they go first; then consumers (api) before
+    # their dependencies (nats, oxigraph).
+    for name in reversed(module_names):
+        _stop_module(name)
+    for name in selected:
         _stop_service(name, ports[name])
     click.echo("Done.")
 
@@ -1584,14 +2056,24 @@ def dev_status() -> None:
             f"{name:<12} {port:<7} {pid_status:<10} {http:<13} "
             f"{_service_url(port)}"
         )
+    modules = _dev_modules(strict=False)
+    if modules:
+        click.echo()
+        click.echo(f"{'Dev module':<28} {'PID':<16} Command")
+        for name, module in modules.items():
+            pid = _read_pid(_module_spec(name))
+            if pid is None:
+                pid_status = "-"
+            elif _pid_alive(pid):
+                pid_status = f"{pid} (alive)"
+            else:
+                pid_status = f"{pid} (dead)"
+            command = " ".join(["python -m", module.module, *module.args])
+            click.echo(f"{name:<28} {pid_status:<16} {command}")
 
 
 @dev.command("logs")
-@click.argument(
-    "service",
-    type=click.Choice(KNOWN_SERVICES),
-    required=True,
-)
+@click.argument("service", required=True)
 @click.option("-f", "--follow", is_flag=True, default=False, help="Tail follow.")
 @click.option(
     "-n",
@@ -1609,7 +2091,16 @@ def dev_logs(service: str, follow: bool, lines: int) -> None:
     # _load_or_create_instance (not a raw json.loads) so an instance.json
     # from before "nats" existed gets it backfilled rather than KeyError-ing.
     instance = _load_or_create_instance()
-    spec = _service_spec(service, instance["ports"][service])
+    if service in KNOWN_SERVICES:
+        spec = _service_spec(service, instance["ports"][service])
+    elif service in _dev_modules(strict=False):
+        spec = _module_spec(service)
+    else:
+        raise click.BadParameter(
+            f"Unknown service: {service}. "
+            f"Choose from: {', '.join((*KNOWN_SERVICES, *_dev_modules(strict=False)))}.",
+            param_hint="'SERVICE'",
+        )
     log_file = _log_path(spec)
     if not log_file.exists():
         click.echo(f"No log file yet for {service}.")
@@ -1642,7 +2133,7 @@ _NUKE_TARGETS: tuple[str, ...] = (
 
 
 def _running_services(ports: dict[str, int]) -> list[str]:
-    """Names of services with a live PID."""
+    """Names of services and dev modules with a live PID."""
     alive: list[str] = []
     for name in KNOWN_SERVICES:
         port = ports.get(name)
@@ -1650,6 +2141,10 @@ def _running_services(ports: dict[str, int]) -> list[str]:
             continue
         spec = _service_spec(name, port)
         pid = _read_pid(spec)
+        if pid is not None and _pid_alive(pid):
+            alive.append(name)
+    for name in _dev_modules(strict=False):
+        pid = _read_pid(_module_spec(name))
         if pid is not None and _pid_alive(pid):
             alive.append(name)
     return alive

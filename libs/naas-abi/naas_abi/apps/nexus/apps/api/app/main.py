@@ -584,6 +584,12 @@ def _configure_middleware(app: FastAPI) -> None:
 
     app.add_middleware(RequestIdentityMiddleware)
 
+    # Outermost: one span per request, around everything else (no-op unless the
+    # engine config enables telemetry).
+    from naas_abi.apps.nexus.apps.api.app.core.tracing import TracingMiddleware
+
+    app.add_middleware(TracingMiddleware)
+
 
 async def serve_app_html(path: str) -> FileResponse:
     """Serve a browser asset from any loaded module's apps directory.

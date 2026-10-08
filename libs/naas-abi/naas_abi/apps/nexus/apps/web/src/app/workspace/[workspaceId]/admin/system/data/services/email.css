@@ -1,0 +1,90 @@
+/* data/services — email */
+
+.data-mail-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.data-mail-field {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.data-mail-label {
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.data-mail-body {
+  height: auto;
+  min-height: 200px;
+  padding: 10px 12px;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.data-mail-html-source {
+  min-height: 150px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.data-mail-html {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.data-mail-html-preview {
+  width: 100%;
+  height: 220px;
+  border: 1px solid var(--border-hex);
+  background-color: #FFFFFF;
+}
+
+.data-mail-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-sm);
+  color: var(--foreground-hex);
+}
+
+.data-mail-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 6px -20px -18px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-hex);
+}
+
+.data-mail-to {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-mail-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.data-mail-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+@media (max-width: 767px) {
+  .data-mail-field {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}

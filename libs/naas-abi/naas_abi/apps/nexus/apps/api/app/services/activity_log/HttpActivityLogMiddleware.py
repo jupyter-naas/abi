@@ -50,7 +50,11 @@ SENSITIVE_KEYS: frozenset[str] = frozenset(
 REDACTED = "[REDACTED]"
 
 DEFAULT_MAX_BODY_BYTES = 64 * 1024  # 64 KB
-DEFAULT_SKIP_BODY_PATH_PREFIXES: tuple[str, ...] = ("/api/auth/",)
+# The System app's data endpoints carry raw service values (secrets, objects).
+DEFAULT_SKIP_BODY_PATH_PREFIXES: tuple[str, ...] = (
+    "/api/auth/",
+    "/api/admin/system/resources/",
+)
 
 
 def _redact(value: Any) -> Any:

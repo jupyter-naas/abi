@@ -1,5 +1,9 @@
 import asyncio
+import shutil
+import socket
+import subprocess
 import time
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from email import message_from_bytes
 from pathlib import Path
@@ -210,8 +214,44 @@ class _PrimaryAdapterServer:
             await self._nc.close()
 
 
+@contextmanager
+def _native_nats_server(binary: str, workdir):
+    """A throwaway local ``nats-server`` on a free port (no Docker needed)."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    with (workdir / "nats.log").open("w") as log:
+        process = subprocess.Popen(
+            [binary, "-a", "127.0.0.1", "-p", str(port)],
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if process.poll() is not None:
+                    pytest.fail("nats-server exited before accepting connections")
+                try:
+                    with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                        break
+                except OSError:
+                    time.sleep(0.01)
+            else:
+                pytest.fail("nats-server did not become ready")
+            yield f"nats://127.0.0.1:{port}"
+        finally:
+            process.terminate()
+            process.wait(timeout=5)
+
+
 @pytest.fixture(scope="session")
-def nats_url():
+def nats_url(tmp_path_factory):
+    # A local nats-server binary first (fast, no Docker), else a container.
+    binary = shutil.which("nats-server")
+    if binary is not None:
+        with _native_nats_server(binary, tmp_path_factory.mktemp("nats")) as url:
+            yield url
+        return
     try:
         # Imported here, not at module level: testcontainers is a dev-only
         # dependency, absent from environments that don't run
@@ -292,6 +332,67 @@ class TestEmailSecondaryAdapterNATSClient(GenericEmailSecondaryAdapterTest):
         assert msg["Subject"] == "Hello"
         assert msg["From"] == "NEXUS <noreply@example.com>"
         assert msg["Reply-To"] == "support@example.com"
+
+    def test_kept_mail_round_trips_through_real_nats(
+        self, adapter: EmailSecondaryAdapterNATSClient
+    ) -> None:
+        from naas_abi_core.services.email.EmailPorts import SentEmailNotFound
+
+        first = adapter.send(
+            to_email="alice@example.com",
+            subject="one",
+            text_body="1",
+            from_email="n@example.com",
+        )
+        assert first is not None
+        second = adapter.send(
+            to_email="bob@example.com",
+            subject="two",
+            text_body="2",
+            from_email="n@example.com",
+        )
+
+        listed = adapter.list_sent(limit=10)
+        older = adapter.list_sent(limit=10, before=second)
+        got = adapter.get_sent(first)
+        adapter.delete_sent(first)
+
+        assert [m.message_id for m in listed] == [second, first]
+        assert [m.snippet for m in listed] == ["2", "1"]
+        assert [m.subject for m in older] == ["one"]
+        assert message_from_bytes(got.raw)["To"] == "alice@example.com"
+        with pytest.raises(SentEmailNotFound):
+            adapter.get_sent(first)
+
+
+@pytest.mark.integration
+def test_adapters_keeping_no_mail_say_so_over_nats(nats_url):
+    from naas_abi_core.services.email.EmailPorts import IEmailAdapter, SentEmailsNotKept
+
+    class _HandsOff(IEmailAdapter):
+        def send(self, **kwargs):
+            return None
+
+    server = _PrimaryAdapterServer(nats_url, JWT_SECRET, _HandsOff())
+    server.start()
+    client = EmailSecondaryAdapterNATSClient(
+        nats_url, JWT_SECRET, "api", timeout_seconds=10.0
+    )
+    try:
+        with pytest.raises(SentEmailsNotKept):
+            client.list_sent()
+        assert (
+            client.send(
+                to_email="a@example.com",
+                subject="s",
+                text_body="t",
+                from_email="f@x.io",
+            )
+            is None
+        )
+    finally:
+        client.close()
+        server.stop()
 
 
 @pytest.mark.integration

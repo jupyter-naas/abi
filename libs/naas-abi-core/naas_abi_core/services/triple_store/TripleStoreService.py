@@ -3,8 +3,9 @@ import hashlib
 import io
 import os
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 
 import rdflib
@@ -25,6 +26,8 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStorePort,
     ITripleStoreService,
     OntologyEvent,
+    QueryStream,
+    Triple,
 )
 from rdflib import Graph, URIRef
 
@@ -304,6 +307,59 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                 )
             )
             raise
+
+    @contextmanager
+    def query_stream(self, query: str) -> Iterator[QueryStream]:
+        with ExitStack() as stack:
+            try:
+                result = stack.enter_context(
+                    self.__triple_store_adapter.query_stream(query)
+                )
+            except Exception as exc:
+                self.__report_stream_error(exc)
+                raise
+            result.rows = self.__reporting_errors(result.rows)
+            result.triples = self.__reporting_errors(result.triples)
+            yield result
+
+    @contextmanager
+    def export(self, graph_name: URIRef | None = None) -> Iterator[Iterator[Triple]]:
+        with ExitStack() as stack:
+            try:
+                triples = stack.enter_context(
+                    self.__triple_store_adapter.export(graph_name)
+                )
+            except Exception as exc:
+                self.__report_stream_error(exc, "export", graph_name)
+                raise
+            yield self.__reporting_errors(triples, "export", graph_name)
+
+    def __reporting_errors(
+        self,
+        items: Iterator,
+        operation: str = "query_stream",
+        graph_name: URIRef | None = None,
+    ) -> Iterator:
+        # Errors raised while reading the backend, not by the caller's own block.
+        try:
+            yield from items
+        except Exception as exc:
+            self.__report_stream_error(exc, operation, graph_name)
+            raise
+
+    def __report_stream_error(
+        self,
+        exc: Exception,
+        operation: str = "query_stream",
+        graph_name: URIRef | None = None,
+    ) -> None:
+        self.__publish_event(
+            TripleStoreError(
+                operation=operation,
+                graph_name=str(graph_name) if graph_name is not None else None,
+                message=self._error_message(exc),
+            )
+        )
 
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
         try:

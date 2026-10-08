@@ -1,0 +1,1 @@
+"""Standalone ABI proto."""

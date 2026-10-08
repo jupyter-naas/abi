@@ -12,6 +12,18 @@ from naas_abi_core.services.keyvalue.tests.kv__secondary_adapter__generic_test i
 )
 
 
+class TestPythonAdapterOnSQLite(GenericKVSecondaryAdapterTest):
+    """The same generic contract with SQLite persistence."""
+
+    @pytest.fixture
+    def adapter_class(self):
+        return PythonAdapter
+
+    @pytest.fixture
+    def adapter(self, tmp_path):
+        return PythonAdapter(persistence_path=str(tmp_path / "kv.sqlite"))
+
+
 class TestPythonAdapter(GenericKVSecondaryAdapterTest):
     @pytest.fixture
     def adapter_class(self):

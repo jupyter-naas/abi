@@ -27,6 +27,28 @@ class TestDatasetSecondaryAdapterDuckLake(DatasetSecondaryAdapterContract):
             retry_base_delay_seconds=0.01,
         )
 
+    def test_write_stream_retries_replay_staged_rows_not_the_iterator(
+        self, adapter, monkeypatch
+    ):
+        import duckdb
+
+        adapter.create(self._spec())
+        current_snapshot = adapter._current_snapshot
+        conflicts = []
+
+        def conflict_once(con):
+            if not conflicts:
+                conflicts.append(1)
+                raise duckdb.TransactionException("transaction conflict")
+            return current_snapshot(con)
+
+        monkeypatch.setattr(adapter, "_current_snapshot", conflict_once)
+
+        adapter.write_stream("github_commits", self._commits(500), namespace="acme")
+
+        assert conflicts == [1]  # the transaction ran twice
+        assert self._totals(adapter) == (500, sum(range(500)))
+
     def test_reserved_column_names_are_quoted(self, adapter):
         spec = DatasetSpec(
             name="time_entries",
@@ -503,3 +525,236 @@ class TestObjectStoreDataPath:
         )
         adapter.write("plain", [{"id": 1}])
         assert adapter.query("SELECT id FROM plain").rows == [{"id": 1}]
+
+
+def test_query_stream_fetches_rows_in_batches_not_through_query(tmp_path, monkeypatch):
+    from naas_abi_core.services.dataset.adapters.secondary import (
+        DatasetSecondaryAdapterDuckLake as module,
+    )
+
+    adapter = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'datasets.sqlite'}",
+        data_path=str(tmp_path / "datasets"),
+    )
+    adapter.create(
+        DatasetSpec(
+            name="events",
+            columns=(
+                ColumnSpec(name="id", type="integer"),
+                ColumnSpec(name="payload", type="json"),
+            ),
+        )
+    )
+    adapter.write("events", [{"id": n, "payload": {"n": n}} for n in range(2500)])
+    monkeypatch.setattr(module, "FETCH_ROWS", 1000)
+    monkeypatch.setattr(
+        adapter,
+        "query",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("materialized")),
+    )
+
+    with adapter.query_stream("SELECT id, payload FROM events ORDER BY id") as result:
+        assert result.columns == ["id", "payload"]
+        rows = iter(result.rows)
+        assert next(rows) == {"id": 0, "payload": {"n": 0}}
+        assert sum(1 for _ in rows) == 2499
+
+
+def test_query_stream_rows_equal_query_rows_for_every_kind_of_value(tmp_path):
+    """The stream reads its rows back from a spool; that must not change a
+    value, a key's order, or which of two same-named columns wins."""
+    adapter = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'datasets.sqlite'}",
+        data_path=str(tmp_path / "datasets"),
+    )
+    adapter.create(
+        DatasetSpec(name="seed", columns=(ColumnSpec(name="id", type="integer"),))
+    )
+    sql = (
+        "SELECT 1180591620717411303425::HUGEINT AS huge, 0.1::DOUBLE AS ratio, "
+        "CAST('NaN' AS DOUBLE) AS nan, 12.5::DECIMAL(10, 2) AS price, "
+        "'0b9f2a5e-1c3d-4e5f-8a9b-0c1d2e3f4a5b'::UUID AS uid, "
+        "INTERVAL 1 DAY AS span, '\\x00\\xff'::BLOB AS raw, TIME '12:30:00' AS at, "
+        "TIMESTAMPTZ '2026-10-06 12:00:00+00' AS tz, [1, NULL, 3] AS list, "
+        "{'a': 1, 'b': [true, NULL]} AS struct, MAP {'k': 'v'} AS map, "
+        """'{"z": 1, "a": [1.5, null], "big": 1180591620717411303425}'::JSON AS doc, """
+        """'café' || chr(10) || '"' AS text, NULL AS nothing, 1 AS dup, 2 AS dup"""
+    )
+
+    (row,) = adapter.query(sql).rows
+    with adapter.query_stream(sql) as result:
+        (streamed,) = list(result.rows)
+
+    assert list(streamed.items()) == list(row.items())
+    assert streamed["huge"] == 2**70 + 1 and streamed["dup"] == 2
+    assert list(streamed["doc"]) == ["z", "a", "big"]
+
+
+def test_query_stream_spools_one_batch_at_a_time(tmp_path, monkeypatch):
+    """Rows are spooled FETCH_ROWS at a time and read back lazily: Python
+    memory holds about one batch (0.8 MiB here), never the whole result
+    (20 MiB when the spool fetched it all at once)."""
+    import tracemalloc
+
+    from naas_abi_core.services.dataset.adapters.secondary import (
+        DatasetSecondaryAdapterDuckLake as module,
+    )
+
+    monkeypatch.setattr(module, "FETCH_ROWS", 100)
+    adapter = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'datasets.sqlite'}",
+        data_path=str(tmp_path / "datasets"),
+    )
+    adapter.create(
+        DatasetSpec(name="seed", columns=(ColumnSpec(name="id", type="integer"),))
+    )
+    adapter.describe("seed")  # attach the read connection before measuring
+    sql = "SELECT range AS n, repeat('x', 4000) AS pad FROM range(5000)"  # 20 MB
+
+    tracemalloc.start()
+    try:
+        with adapter.query_stream(sql) as result:
+            count = sum(1 for _ in result.rows)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+
+    assert count == 5000
+    assert peak < 5 * 1024 * 1024
+
+
+def test_query_stream_removes_its_spool_on_early_exit_and_on_error(
+    tmp_path, monkeypatch
+):
+    import tempfile
+
+    spool_dir = tmp_path / "spool"
+    spool_dir.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(spool_dir))
+    spools = []
+    temporary_file = tempfile.TemporaryFile
+
+    def tracked(*args, **kwargs):
+        spools.append(temporary_file(*args, **kwargs))
+        return spools[-1]
+
+    monkeypatch.setattr(tempfile, "TemporaryFile", tracked)
+    adapter = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'datasets.sqlite'}",
+        data_path=str(tmp_path / "datasets"),
+    )
+    adapter.create(
+        DatasetSpec(name="events", columns=(ColumnSpec(name="id", type="integer"),))
+    )
+    adapter.write("events", [{"id": n} for n in range(10)])
+
+    with adapter.query_stream("SELECT id FROM events") as result:
+        next(iter(result.rows))  # leaves with rows unread
+    with (
+        pytest.raises(RuntimeError, match="reader failed"),
+        adapter.query_stream("SELECT id FROM events"),
+    ):
+        raise RuntimeError("reader failed")
+    with (
+        pytest.raises(Exception, match="does not exist"),
+        adapter.query_stream("SELECT id FROM missing"),
+    ):
+        pass  # fails while spooling
+
+    assert len(spools) >= 2 and all(spool.closed for spool in spools)
+    assert list(spool_dir.iterdir()) == []
+
+
+def test_sqlite_catalog_survives_concurrent_reads_and_writes(tmp_path):
+    """Reads overlapping writes on a SQLite catalog used to leave DuckDB holding
+    a lock for good: every later read failed with "database is locked", even
+    from a new adapter in the same process (module jobs hit it in the engine)."""
+    import random
+    import threading
+    import time
+
+    adapter = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'catalog.sqlite'}",
+        data_path=str(tmp_path / "data"),
+        retry_base_delay_seconds=0.01,
+    )
+    columns = (
+        ColumnSpec(name="id", type="string"),
+        ColumnSpec(name="v", type="string"),
+    )
+    for ns in "abc":
+        adapter.create(
+            DatasetSpec(name="t", namespace=ns, columns=columns, primary_key=("id",))
+        )
+    errors: list[str] = []
+    stop = time.monotonic() + 4
+
+    def write(ns: str) -> None:
+        n = 0
+        while time.monotonic() < stop:
+            try:
+                adapter.write(
+                    "t", [{"id": f"{n % 20}", "v": "x"}], namespace=ns, mode="upsert"
+                )
+            except Exception as exc:  # noqa: BLE001 - collected for the assertion
+                errors.append(f"write: {exc}")
+            n += 1
+            time.sleep(random.uniform(0, 0.05))
+
+    def read(ns: str) -> None:
+        while time.monotonic() < stop:
+            try:
+                adapter.describe("t", namespace=ns)
+                adapter.query("SELECT count(*) AS n FROM t", namespace=ns)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"read: {exc}")
+
+    def monitor(ns: str) -> None:
+        # The catalog monitor job reads inlined row counts while writes go on.
+        while time.monotonic() < stop:
+            try:
+                adapter.inlined_row_count("t", namespace=ns)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"inlined_row_count: {exc}")
+
+    threads = [threading.Thread(target=write, args=(ns,)) for ns in "abc"]
+    threads += [
+        threading.Thread(target=read, args=(ns,)) for ns in "abc" for _ in range(2)
+    ]
+    threads += [threading.Thread(target=monitor, args=(ns,)) for ns in "ab"]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert adapter.describe("t", namespace="a").name == "t"  # not locked afterwards
+
+
+def test_inlined_row_count_waits_for_a_write_on_a_sqlite_catalog(tmp_path):
+    """Every catalog access holds the catalog lock: a read outside it that
+    overlapped a write left DuckDB holding a SQLite lock for good."""
+    import threading
+
+    adapter = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'catalog.sqlite'}",
+        data_path=str(tmp_path / "data"),
+    )
+    adapter.create(
+        DatasetSpec(
+            name="t",
+            columns=(ColumnSpec(name="id", type="string"),),
+            primary_key=("id",),
+        )
+    )
+    adapter.write("t", [{"id": "1"}], mode="upsert")
+    counts: list[int] = []
+
+    with adapter._catalog_lock.exclusive():
+        reader = threading.Thread(target=lambda: counts.append(adapter.inlined_row_count("t")))
+        reader.start()
+        reader.join(timeout=0.3)
+        assert reader.is_alive(), "inlined_row_count read the catalog during a write"
+
+    reader.join(timeout=10)
+    assert not reader.is_alive() and len(counts) == 1  # runs once the write is done

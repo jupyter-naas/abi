@@ -1,6 +1,8 @@
 import click
 from naas_abi_core.engine.Engine import Engine
 
+from naas_abi_cli.cli.engine_role import use_auto_engine_role
+
 
 @click.group("run")
 def run():
@@ -18,6 +20,7 @@ def run():
 @click.argument("path", type=str, required=True)
 def run_script(ctx: click.Context, path: str):
     click.echo(f"[abi run script] Loading engine for: {path}")
+    use_auto_engine_role()
     engine = Engine()
     engine.load()
     click.echo("[abi run script] Engine loaded. Running script...")

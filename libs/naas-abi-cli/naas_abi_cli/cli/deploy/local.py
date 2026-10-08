@@ -11,7 +11,11 @@ from rich.prompt import Prompt
 
 import naas_abi_cli
 
-from ..admin_credentials import ensure_admin_credentials, generate_admin_password
+from ..admin_credentials import (
+    ensure_admin_credentials,
+    ensure_nats_passwords,
+    generate_admin_password,
+)
 from ..utils.Copier import Copier
 
 LOCAL_ENV_MARKER = "# Added by abi deploy local command execution"
@@ -543,6 +547,8 @@ def setup_local_deploy(
 
     # Generated per project; a password an older CLI wrote is replaced.
     ensure_admin_credentials(Path(local_env_target_path))
+    # The NATS broker's users (nats.conf), also when the nats profile is off.
+    ensure_nats_passwords(Path(local_env_target_path))
 
     persisted_public_api_host = (
         _get_env_var(local_env_target_path, "PUBLIC_API_HOST")

@@ -538,3 +538,46 @@ def test_build_app_url_lowercases_and_uses_delimiters() -> None:
         wildcard_host="*.coder.example.com",
     )
     assert url == "https://code-server--main--dev--alice.coder.example.com/"
+
+
+def _workspace(n: int, **extra: Any) -> dict:
+    return {
+        **_RUNNING_WORKSPACE,
+        "id": f"ws-{n}",
+        "name": f"dev-{n}",
+        "owner_name": f"user-{n}",
+        "template_name": "docker",
+        "created_at": "2026-10-02T10:00:00Z",
+        **extra,
+    }
+
+
+def test_list_all_environments_pages_through_every_owner() -> None:
+    first = [_workspace(n) for n in range(100)]
+    second = [
+        _workspace(100),
+        _workspace(101, latest_build={"transition": "delete", "status": "running"}),
+    ]
+    session = FakeSession(
+        [
+            ("GET", "/workspaces?limit=100&offset=0", FakeResponse(200, {"workspaces": first, "count": 102})),
+            ("GET", "/workspaces?limit=100&offset=100", FakeResponse(200, {"workspaces": second, "count": 102})),
+        ]
+    )
+
+    environments = _adapter(session).list_all_environments()
+
+    # Mid-deletion workspaces are skipped, as in list_environments.
+    assert len(environments) == 101
+    assert environments[0].owner == "user-0"
+    assert environments[0].template == "docker"
+    assert environments[0].created_at == "2026-10-02T10:00:00Z"
+    assert session.find("GET", "q=owner") is None
+
+
+def test_status_carries_owner_and_template_when_known() -> None:
+    session = FakeSession([("GET", "/workspaces/ws-7", FakeResponse(200, _workspace(7)))])
+
+    status = _adapter(session).get_status(workspace_id="ws-7")
+
+    assert (status.owner, status.template) == ("user-7", "docker")

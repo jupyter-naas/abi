@@ -9,6 +9,7 @@ import nats
 import pytest
 import rdflib
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_rpc import NatsRPCError
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
 from naas_abi_core.services.triple_store.adapters.primary.triple_store__primary_adapter__NATS import (
@@ -398,7 +399,17 @@ class _PrimaryAdapterServer:
 
 
 @pytest.fixture(scope="session")
-def nats_url():
+def nats_url(tmp_path_factory):
+    # A local nats-server when there is one (no Docker needed), else a container.
+    from naas_abi_core.engine.nats_test_server import (
+        native_nats_server,
+        nats_server_binary,
+    )
+
+    if nats_server_binary() is not None:
+        with native_nats_server(tmp_path_factory.mktemp("nats")) as url:
+            yield url
+        return
     try:
         # Imported here, not at module level: testcontainers is a dev-only
         # dependency, absent from environments that don't run
@@ -502,3 +513,129 @@ def test_handle_view_event_round_trips_over_the_wire(nats_url):
     finally:
         client.close()
         server.stop()
+
+
+# --- streamed reads over transfer frames (docs/adr/20261003_nats-streamed-results.md)
+
+
+class _StreamingPort(_InMemoryTripleStorePort):
+    """Streams lazily and refuses the materialized calls: a stream that works
+    proves the client went through the transfer endpoint."""
+
+    ROWS = 20_000
+
+    def query(self, query: str):
+        raise AssertionError("query() must not be called for a stream")
+
+    def get(self):
+        raise AssertionError("get() must not be called for a stream")
+
+    def query_stream(self, query: str):
+        from contextlib import contextmanager
+
+        from naas_abi_core.services.triple_store.TripleStorePorts import QueryStream
+
+        @contextmanager
+        def opened():
+            if query.startswith("ASK"):
+                yield QueryStream("ASK", ask_answer=True)
+            elif query.startswith("CONSTRUCT"):
+                yield QueryStream("CONSTRUCT", triples=iter(self._triples()))
+            else:
+                yield QueryStream(
+                    "SELECT",
+                    vars=["n", "missing"],
+                    rows=({"n": rdflib.Literal(n)} for n in range(self.ROWS)),
+                )
+
+        return opened()
+
+    def export(self, graph_name=None):
+        from contextlib import contextmanager
+
+        @contextmanager
+        def opened():
+            yield iter(self._triples())
+
+        return opened()
+
+    @staticmethod
+    def _triples():
+        blank = rdflib.BNode()
+        return [
+            (blank, URIRef("http://ex/p"), rdflib.Literal(f"line\n{n}"))
+            for n in range(5_000)
+        ]
+
+
+@pytest.fixture
+def streaming_client(nats_url):
+    server = _PrimaryAdapterServer(nats_url, JWT_SECRET, _StreamingPort())
+    server.start()
+    client = TripleStoreSecondaryAdapterNATSClient(
+        nats_url=nats_url, jwt_secret=JWT_SECRET, service_identity="api"
+    )
+    yield client
+    client.close()
+    server.stop()
+
+
+@pytest.mark.integration
+def test_query_stream_reads_select_rows_over_transfer_frames(streaming_client):
+    with streaming_client.query_stream("SELECT ?n ?missing WHERE {}") as result:
+        assert (result.result_type, result.vars) == ("SELECT", ["n", "missing"])
+        values = [int(row["n"]) for row in result.rows]
+    assert values == list(range(_StreamingPort.ROWS))
+
+
+@pytest.mark.integration
+def test_query_stream_reads_ask_and_construct_over_transfer_frames(streaming_client):
+    with streaming_client.query_stream("ASK {}") as asked:
+        assert (asked.result_type, asked.ask_answer) == ("ASK", True)
+    with streaming_client.query_stream("CONSTRUCT {}") as built:
+        triples = list(built.triples)
+    assert len(triples) == 5_000 and len({s for s, _, _ in triples}) == 1
+
+
+@pytest.mark.integration
+def test_export_reads_triples_over_transfer_frames(streaming_client):
+    with streaming_client.export(URIRef("http://ex/graph")) as triples:
+        assert sum(1 for _ in triples) == 5_000
+
+
+@pytest.mark.integration
+def test_leaving_a_stream_early_releases_its_session(streaming_client):
+    with streaming_client.query_stream("SELECT ?n WHERE {}") as result:
+        next(iter(result.rows))
+    # A second stream still gets a session: the first one was closed.
+    with streaming_client.query_stream("ASK {}") as asked:
+        assert asked.ask_answer is True
+
+
+@pytest.mark.integration
+def test_get_reads_the_store_over_the_export_stream(streaming_client):
+    # _StreamingPort.get() fails: the client must read the export stream.
+    graph = streaming_client.get()
+
+    assert len(graph) == 5_000
+    assert len({s for s, _, _ in graph}) == 1  # blank node identity kept
+
+
+@pytest.mark.integration
+def test_streams_without_a_transfer_host_fail_clearly(nats_url):
+    client = TripleStoreSecondaryAdapterNATSClient(
+        nats_url=nats_url, jwt_secret=JWT_SECRET, service_identity="api"
+    )
+    try:
+        with (
+            pytest.raises(NatsRPCError, match="UNAVAILABLE"),
+            client.export() as triples,
+        ):
+            list(triples)
+        with (
+            pytest.raises(NatsRPCError, match="UNAVAILABLE"),
+            client.query_stream("ASK {}"),
+        ):
+            pass
+    finally:
+        client.close()

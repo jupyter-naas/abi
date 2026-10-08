@@ -15,6 +15,7 @@ from __future__ import annotations
 import datetime
 import hashlib
 from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from threading import Thread
 from typing import Any
 
@@ -27,6 +28,8 @@ from naas_abi_core.services.event.context import (
     event_triggered_via,
 )
 from naas_abi_core.services.event.EventPort import (
+    EventNotFoundError,
+    EventTypeSummary,
     IEventAdapter,
     IEventService,
     InvalidEventError,
@@ -182,6 +185,83 @@ class EventService(ServiceBase, IEventService):
             search=search,
         )
         return [self._reconstruct(row, event_class) for row in rows]
+
+    @contextmanager
+    def query_stream(
+        self,
+        event_class: type[LogProcess] | None = None,
+        since_seq: int | None = None,
+        until_seq: int | None = None,
+        since_timestamp: str | None = None,
+        until_timestamp: str | None = None,
+        filter: dict | None = None,
+        limit: int | None = None,
+        newest_first: bool = False,
+        search: str | None = None,
+    ) -> Iterator[Iterator[Any]]:
+        """:meth:`query`, reconstructed as the caller iterates, inside the
+        block (docs/adr/20261003_nats-streamed-results.md). Events appended
+        after the block opened are not included."""
+        event_type = str(event_class._class_uri) if event_class is not None else None
+        with self._adapter.query_stream(
+            event_type=event_type,
+            since_seq=since_seq,
+            until_seq=until_seq,
+            since_timestamp=since_timestamp,
+            until_timestamp=until_timestamp,
+            json_filter=filter,
+            limit=limit,
+            newest_first=newest_first,
+            search=search,
+        ) as rows:
+            yield (self._reconstruct(row, event_class) for row in rows)
+
+    def event_types(self) -> list[EventTypeSummary]:
+        return self._adapter.list_event_types()
+
+    def query_stored(
+        self,
+        event_type: str | None = None,
+        since_seq: int | None = None,
+        until_seq: int | None = None,
+        limit: int | None = None,
+        newest_first: bool = False,
+        search: str | None = None,
+    ) -> list[StoredEvent]:
+        return self._adapter.query(
+            event_type=event_type,
+            since_seq=since_seq,
+            until_seq=until_seq,
+            limit=limit,
+            newest_first=newest_first,
+            search=search,
+        )
+
+    @contextmanager
+    def query_stored_stream(
+        self,
+        event_type: str | None = None,
+        since_seq: int | None = None,
+        until_seq: int | None = None,
+        limit: int | None = None,
+        newest_first: bool = False,
+        search: str | None = None,
+    ) -> Iterator[Iterator[StoredEvent]]:
+        with self._adapter.query_stream(
+            event_type=event_type,
+            since_seq=since_seq,
+            until_seq=until_seq,
+            limit=limit,
+            newest_first=newest_first,
+            search=search,
+        ) as rows:
+            yield rows
+
+    def get_stored(self, seq: int) -> StoredEvent:
+        rows = self._adapter.query(since_seq=seq - 1, until_seq=seq, limit=1)
+        if not rows or rows[0].seq != seq:
+            raise EventNotFoundError(f"No event with seq {seq}")
+        return rows[0]
 
     def iter_query(
         self,

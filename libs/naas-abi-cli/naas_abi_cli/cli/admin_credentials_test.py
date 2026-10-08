@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -86,3 +87,71 @@ def test_a_custom_api_key_is_kept(tmp_path: Path) -> None:
     env.write_text("ABI_API_KEY=configured-key\n")
 
     assert ensure_api_key(env) == "configured-key"
+
+
+def test_ensure_nats_secret_generates_once_and_keeps_it(tmp_path):
+    from naas_abi_cli.cli.admin_credentials import ensure_nats_secret
+
+    env = tmp_path / ".env"
+    env.write_text("OTHER=1\n")
+
+    first = ensure_nats_secret(env)
+    second = ensure_nats_secret(env)
+
+    assert first == second and len(first) >= 32
+    assert "OTHER=1" in env.read_text()
+    assert f"NATS_JWT_SECRET={first}" in env.read_text()
+
+
+def test_ensure_nats_secret_keeps_an_existing_value(tmp_path):
+    from naas_abi_cli.cli.admin_credentials import ensure_nats_secret
+
+    env = tmp_path / ".env"
+    env.write_text("NATS_JWT_SECRET=" + "k" * 40 + "\n")
+
+    assert ensure_nats_secret(env) == "k" * 40
+
+
+def test_ensure_nats_passwords_generates_each_broker_user_once(tmp_path):
+    from naas_abi_cli.cli.admin_credentials import ensure_nats_passwords
+
+    env = tmp_path / ".env"
+    env.write_text("OTHER=1\n")
+
+    first = ensure_nats_passwords(env)
+    second = ensure_nats_passwords(env)
+
+    assert first == second
+    assert set(first) == {"NATS_ABI_PASSWORD", "NATS_MODULE_PASSWORD"}
+    assert first["NATS_ABI_PASSWORD"] != first["NATS_MODULE_PASSWORD"]
+    for key, password in first.items():
+        assert f"{key}={password}" in env.read_text()
+        # nats.conf reads it as a config value ($VAR): it must start with a
+        # letter, and nats://user:password@host must not need escaping.
+        assert password[0].isalpha() and len(password) >= 32
+        assert re.fullmatch(r"[A-Za-z0-9_-]+", password)
+    assert "OTHER=1" in env.read_text()
+
+
+@pytest.mark.parametrize("value", ["", "short"])
+def test_ensure_nats_passwords_replaces_an_empty_or_short_password(tmp_path, value):
+    """An empty password lets anyone in as that broker user."""
+    from naas_abi_cli.cli.admin_credentials import ensure_nats_passwords
+
+    env = tmp_path / ".env"
+    env.write_text(f"NATS_ABI_PASSWORD={value}\nNATS_MODULE_PASSWORD={'m' * 40}\n")
+
+    passwords = ensure_nats_passwords(env)
+
+    assert len(passwords["NATS_ABI_PASSWORD"]) >= 32
+    assert passwords["NATS_MODULE_PASSWORD"] == "m" * 40
+    assert env.read_text().count("NATS_ABI_PASSWORD=") == 1
+
+
+@pytest.mark.parametrize(
+    "url", ["nats://127.0.0.1:13042", "nats://abi:old-password@127.0.0.1:13042"]
+)
+def test_nats_login_puts_the_user_and_password_in_the_url(url):
+    from naas_abi_cli.cli.admin_credentials import nats_login
+
+    assert nats_login(url, "module", "nats-pw_1") == "nats://module:nats-pw_1@127.0.0.1:13042"

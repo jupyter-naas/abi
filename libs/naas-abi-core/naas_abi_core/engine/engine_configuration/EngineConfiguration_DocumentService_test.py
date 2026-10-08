@@ -69,7 +69,7 @@ services:
 
 
 def test_service_is_not_loaded_without_dependency():
-    configuration = Mock()
+    configuration = Mock(nats=None)  # not NATS mode, which loads every service
     services = EngineServiceLoader(configuration).load_services({})
     assert not services.document_available()
     configuration.services.document.load.assert_not_called()
@@ -90,7 +90,7 @@ def test_cached_proxy_tracks_root_replacement_and_still_checks_access():
 
 
 def test_unavailable_backend_fails_at_service_loading():
-    configuration = Mock()
+    configuration = Mock(nats=None)  # not NATS mode, which loads every service
     configuration.services.document.load.side_effect = ConnectionError("unavailable")
     with pytest.raises(ConnectionError, match="unavailable"):
         EngineServiceLoader(configuration).load_services(
@@ -170,3 +170,22 @@ def test_remote_configuration_explicitly_uses_deployment_postgresql(scaffold):
         "POSTGRES_DB",
     ):
         assert "{{ secret." + secret + " }}" in dsn
+
+
+def test_nats_adapter_configuration_and_client_lifetime():
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_DocumentService import (
+        DocumentAdapterConfiguration,
+    )
+    from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterNATSClient import (
+        DocumentSecondaryAdapterNATSClient,
+    )
+    from naas_abi_core.services.document.DocumentPort import DocumentStorageError
+
+    adapter = DocumentAdapterConfiguration(
+        adapter="nats_rpc",
+        config={"nats_url": "nats://unused:4222", "jwt_secret": "x" * 32},
+    ).load()
+    assert isinstance(adapter, DocumentSecondaryAdapterNATSClient)
+    adapter.close()
+    with pytest.raises(DocumentStorageError, match="closed"):
+        adapter.collections("module")

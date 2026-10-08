@@ -150,13 +150,20 @@ The Engine calls `Agent.New()` with the configured model at startup.
 
 ## Persistent memory
 
-Memory is automatic. Set `POSTGRES_URL` in `.env` for persistent cross-session memory:
+Memory is automatic. When the Engine loads the Document Service (`services.document`
+in `config.yaml`; always in NATS mode), agents built with `memory=None` keep their
+conversations there, so history survives restarts and appears in the Nexus System
+app under the `naas_abi_core.services.agent` namespace.
+
+Outside an Engine (scripts, tests), set `POSTGRES_URL` for persistent memory:
 
 ```bash
 POSTGRES_URL=postgresql://abi_user:abi_password@localhost:5432/abi_memory
 ```
 
-Without it, the agent falls back to in-memory storage (history lost on restart).
+Without either, the agent falls back to in-memory storage (history lost on restart).
+Memory written by earlier releases to `POSTGRES_URL` moves over with
+`abi agent migrate-memory` (a dry run until you add `--apply`).
 
 ---
 
