@@ -144,6 +144,16 @@ RUNNING/RETRYING with attempts left whose trigger left the stream).
 trigger is published; `event_filter.py` mirrors core's `EventFilter.matches`,
 change them together.
 
+`lifeline.py` stops a process whose NATS connection closed for good (nats-py
+gave up reconnecting), so its supervisor restarts it (ADR
+docs/adr/20261008_stop-on-nats-loss.md). Every long-lived connection passes a
+`Lifeline`'s `closed` as `closed_cb` and closes on purpose through
+`Lifeline.close(nc)`: `Transport` here, and in core the shared engine
+connection, the lease and the bus. `run_module` opts in for its run
+(`stopping_on_loss`), core's `api()` in NATS mode without reload; otherwise a
+loss is only logged. Stopping is SIGTERM, then `os._exit(1)` after
+`HARD_EXIT_SECONDS` (20). Opting in is process-wide: tests pass their own `stop`.
+
 `telemetry.py` is the one OpenTelemetry implementation (core reuses it): W3C trace
 context in NATS headers, CLIENT spans in `Transport.call`, CONSUMER spans for job
 runs, spans for agent submits and runs, `record_error` on error replies, and the

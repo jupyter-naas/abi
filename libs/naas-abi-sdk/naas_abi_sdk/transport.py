@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import math
 import uuid
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar, cast
 
 from google.protobuf.message import Message
@@ -13,6 +13,7 @@ from nats.aio.client import Client
 from nats.errors import MaxPayloadError, NoRespondersError
 
 from naas_abi_sdk import no_responders, overflow
+from naas_abi_sdk.lifeline import Lifeline
 from naas_abi_sdk.messages import message_size
 from naas_abi_sdk.telemetry import (
     TransferTrace,
@@ -52,28 +53,51 @@ class Transport:
         self._lock = asyncio.Lock()
         self._connected = False
         self._closed = False
+        self._lifeline: Lifeline | None = None
 
     async def connect(self) -> Client:
         async with self._lock:
             if self._closed:
                 raise RuntimeError("Client is closed")
             if not self._connected:
+                connection = self.connection
+                watched = Lifeline(str(self.options.get("name") or "transport"))
                 try:
-                    await self.connection.connect(
-                        self.url, **self.options, pending_size=0
+                    await connection.connect(
+                        self.url,
+                        **self.options,
+                        pending_size=0,
+                        closed_cb=self._on_closed(connection, watched),
                     )
                 except BaseException:
-                    await self.connection.close()
+                    watched.closing = True
+                    await connection.close()
                     self.connection = Client()
                     raise
+                self._lifeline = watched
                 self._connected = True
             return self.connection
+
+    def _on_closed(
+        self, connection: Client, watched: Lifeline
+    ) -> Callable[[], Awaitable[None]]:
+        async def closed() -> None:
+            if not watched.closing and connection is self.connection:
+                # nats-py gave up reconnecting: a later call connects afresh.
+                self._connected = False
+                self.connection = Client()
+            await watched.closed()
+
+        return closed
 
     async def close(self) -> None:
         async with self._lock:
             self._closed = True
             if self._connected:
-                await self.connection.close()
+                if self._lifeline is not None:
+                    await self._lifeline.close(self.connection)
+                else:
+                    await self.connection.close()
 
     async def call(
         self,

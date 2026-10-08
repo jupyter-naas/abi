@@ -48,14 +48,16 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
 )
 
 
-def _load_api_runtime_configuration() -> ApiConfiguration:
+def _load_api_runtime_configuration() -> tuple[ApiConfiguration, bool]:
+    """The API's settings, and whether the engine runs in NATS mode."""
     try:
-        return EngineConfiguration.load_configuration().api
+        configuration = EngineConfiguration.load_configuration()
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             f"Failed to load API runtime configuration from engine configuration: {exc}"
         )
-        return ApiConfiguration()
+        return ApiConfiguration(), False
+    return configuration.api, configuration.nats is not None
 
 
 class LazyEngine:
@@ -74,7 +76,7 @@ class LazyEngine:
 
 
 engine = LazyEngine()
-api_runtime_configuration = _load_api_runtime_configuration()
+api_runtime_configuration, _nats_mode = _load_api_runtime_configuration()
 
 
 async def _shutdown_engine() -> None:
@@ -454,6 +456,13 @@ def api():
     import uvicorn
 
     reload_enabled = api_runtime_configuration.reload
+    if _nats_mode and not reload_enabled:
+        # NATS gone for good stops this process, so its supervisor restarts it,
+        # instead of an engine that serves nothing (naas_abi_sdk.lifeline). Not
+        # with reload: the reloader would not restart a worker that exits.
+        from naas_abi_sdk.lifeline import exit_on_connection_loss
+
+        exit_on_connection_loss()
     host = os.environ.get("ABI_HOST", api_runtime_configuration.host)
     port = int(os.environ.get("ABI_PORT", api_runtime_configuration.port))
 

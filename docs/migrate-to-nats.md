@@ -27,6 +27,11 @@ and the ADRs under [`docs/adr/`](adr/) whose names contain `nats`.
   depend on the broker.
 - Calls are authenticated with short-lived tokens signed by one shared secret.
   This proves that a caller is one of your processes, not what it may access.
+- When the broker stays unreachable for about two minutes (60 reconnect
+  attempts, 2 s apart), the API process stops: SIGTERM, then exit status 1 if
+  the shutdown takes more than 20 s. Run it under a supervisor that restarts it
+  (Docker `restart: unless-stopped`, Kubernetes). With `api.reload: true` the
+  loss is only logged. SDK modules (`run_module`) stop the same way.
 
 ## Before you start
 
