@@ -48,7 +48,10 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
     PeopleStore,
 )
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.people_resolver import (
+    WORKSPACE_BACKENDS,
     resolve_sparql_snapshot,
+    resolve_workspace_dataset,
+    resolve_workspace_graph,
 )
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.api.service import (
     dataset_service,
@@ -98,6 +101,16 @@ def _viewer_id(auth: Any, current_user: Any) -> str | None:
 class PeopleRequestContext:
     store: PeopleStore
     live_graph: Graph | None
+    # Set when the store is a workspace's materialized dataset: the graphs it
+    # was built from, read only by the pages that query a person's triples.
+    graph_iris: tuple[str, ...] = ()
+
+    async def graph(self) -> Graph | None:
+        if self.live_graph is not None:
+            return self.live_graph
+        if self.graph_iris:
+            return await resolve_workspace_graph(self.graph_iris)
+        return None
 
 
 def build_router(config_path: Path | None = None) -> APIRouter:
@@ -114,17 +127,27 @@ def build_router(config_path: Path | None = None) -> APIRouter:
     ) -> PeopleRequestContext:
         settings = config()
         user_id = _viewer_id(auth, current_user)
+        backend = settings["data"].get("backend")
         if (
-            settings["data"].get("backend") == "workspace_graphs"
+            backend in WORKSPACE_BACKENDS
             and workspace_id
             and user_id is None
             and auth is not _authenticated_by_api_key
         ):
             raise HTTPException(status_code=401, detail="Authentication required")
         try:
+            if backend == "workspace_dataset" and workspace_id and user_id:
+                store, graph_iris = await resolve_workspace_dataset(
+                    settings, workspace_id=workspace_id, user_id=user_id
+                )
+                return PeopleRequestContext(
+                    store=store, live_graph=None, graph_iris=graph_iris
+                )
             snapshot = await resolve_sparql_snapshot(
                 settings, workspace_id=workspace_id, user_id=user_id
             )
+        except DatasetsMissingError as exc:
+            raise HTTPException(status_code=404, detail=exc.as_detail()) from exc
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except PermissionError as exc:
@@ -206,12 +229,13 @@ def build_router(config_path: Path | None = None) -> APIRouter:
         """The person graph page's data, run live on this instance's graph."""
         settings = config()
         try:
-            if ctx.live_graph is not None:
+            live_graph = await ctx.graph()
+            if live_graph is not None:
                 return graph_view(
                     ctx.store,
                     settings,
                     slug=slug,
-                    live_graph=ctx.live_graph,
+                    live_graph=live_graph,
                 )
             return graph_view(ctx.store, settings, slug=slug)
         except profile_payload.ProfileNotFoundError as exc:
@@ -244,12 +268,13 @@ def build_router(config_path: Path | None = None) -> APIRouter:
 
         graph_files = tuple(settings["data"]["graph"]["files"]) or None
         try:
+            live_graph = await ctx.graph()
             return execute_profile_query(
                 query_name,
                 slug,
                 max_rows=max_rows,
-                graph_file=None if ctx.live_graph is not None else graph_files,
-                graph=ctx.live_graph,
+                graph_file=None if live_graph is not None else graph_files,
+                graph=live_graph,
                 hidden_columns=()
                 if settings["privacy"].get("publish_contact_details")
                 else CONTACT_VARIABLES,

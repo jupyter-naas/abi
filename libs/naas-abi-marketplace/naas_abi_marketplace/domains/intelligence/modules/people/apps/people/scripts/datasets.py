@@ -173,18 +173,20 @@ class DatasetsMissingError(RuntimeError):
         "&& make people-datasets"
     )
 
-    def __init__(self, table: str, namespace: str) -> None:
+    def __init__(self, table: str, namespace: str, command: str | None = None) -> None:
         self.table = table
         self.namespace = namespace
+        # A workspace dataset is built by its sync job, not by the Makefile.
+        self.command = command or self.BUILD_COMMAND
         super().__init__(
-            f"Dataset not exported: {namespace}.{table}\nRun: {self.BUILD_COMMAND}"
+            f"Dataset not exported: {namespace}.{table}\nRun: {self.command}"
         )
 
     def as_detail(self) -> dict[str, str]:
         return {
             "error": "missing_dataset",
             "dataset": f"{self.namespace}.{self.table}",
-            "command": self.BUILD_COMMAND,
+            "command": self.command,
             "message": str(self),
         }
 

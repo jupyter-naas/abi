@@ -1,4 +1,19 @@
-"""Resolve people directory data: DuckLake datasets or live SPARQL over graphs."""
+"""Resolve people directory data: DuckLake datasets or live SPARQL over graphs.
+
+Backends (``data.backend``):
+
+- ``dataset``: one platform dataset (``make people-datasets``).
+- ``workspace_dataset``: in Nexus, the materialized dataset of each people graph
+  the workspace may read (``graph_datasets``). The production path.
+- ``workspace_graphs``: in Nexus, those graphs merged and exported on the first
+  request. Fine for a small graph or development; slow on a large one.
+- ``file_graphs``: the configured TTL files.
+
+Nexus (``GraphAccessScope``) decides which graphs a workspace reads; the config
+only narrows that set. With a ``workspace_id``, neither workspace backend falls
+back to the TTL files: a workspace with no people graph gets a 404 that names
+the sync job, never another directory's people.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +24,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
+    graph_datasets,
+)
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
     triple_store_graph as tg,
 )
@@ -24,6 +42,8 @@ from rdflib import Graph
 
 _CACHE_MAX = 12
 _sparql_cache: OrderedDict[str, SparqlPeopleSnapshot] = OrderedDict()
+_dataset_cache: OrderedDict[str, MemoryPeopleStore] = OrderedDict()
+_graph_cache: OrderedDict[str, Graph] = OrderedDict()
 _cache_lock = asyncio.Lock()
 
 
@@ -60,15 +80,34 @@ def graph_from_config_files(config: dict[str, Any]) -> Graph:
     return _graph_from_files_key(key)
 
 
+WORKSPACE_BACKENDS = ("workspace_graphs", "workspace_dataset")
+
+
+class NoPeopleGraphError(LookupError):
+    """The workspace may read no people graph this app is configured for."""
+
+    def __init__(self, workspace_id: str) -> None:
+        super().__init__(
+            f"Workspace {workspace_id} has no people graph. Run: {graph_datasets.SYNC_COMMAND}"
+        )
+
+
 def filter_graph_iris(readable: frozenset[str], config: dict[str, Any]) -> list[str]:
-    prefixes = config["data"]["graph"].get("include_prefixes") or []
-    suffixes = config["data"]["graph"].get("include_suffixes") or []
+    """The readable graphs this instance lists people from.
+
+    ``data.graph.iri`` (the instance's own directory) counts when Nexus lets the
+    workspace read it: the policy grants it, the config never does.
+    """
+    graph = config["data"]["graph"]
+    prefixes = graph.get("include_prefixes") or []
+    suffixes = graph.get("include_suffixes") or []
     if not prefixes and not suffixes:
         return sorted(readable)
     return sorted(
         iri
         for iri in readable
-        if any(str(iri).startswith(prefix) for prefix in prefixes)
+        if iri == graph.get("iri")
+        or any(str(iri).startswith(prefix) for prefix in prefixes)
         or any(str(iri).rstrip("/").endswith(suffix) for suffix in suffixes)
     )
 
@@ -99,6 +138,39 @@ def _triple_store() -> Any:
     )
 
     return EngineConfiguration.load_configuration().services.triple_store.load()
+
+
+def _dataset_service() -> Any:
+    try:
+        from intelligence.people_intelligence.apps.people import (
+            ABIModule as FmzModule,
+        )
+
+        module = FmzModule.get_instance()
+        if module is not None and module.engine.services.dataset_available():
+            return module.engine.services.dataset
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(f"people dataset: no engine module, using the app's own: {exc}")
+    from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.api.service import (
+        dataset_service,
+    )
+
+    return dataset_service()
+
+
+async def _cached(cache: OrderedDict[str, Any], key: str, build: Any) -> Any:
+    async with _cache_lock:
+        cached = cache.get(key)
+        if cached is not None:
+            cache.move_to_end(key)
+            return cached
+    value = await asyncio.to_thread(build)
+    async with _cache_lock:
+        cache[key] = value
+        cache.move_to_end(key)
+        while len(cache) > _CACHE_MAX:
+            cache.popitem(last=False)
+    return value
 
 
 def _build_snapshot_from_graph(graph: Graph, config: dict[str, Any]) -> SparqlPeopleSnapshot:
@@ -153,39 +225,81 @@ async def resolve_sparql_snapshot(
         return None
 
     graph_iris: tuple[str, ...] | None = None
-    cache_key = backend
     if backend == "workspace_graphs" and workspace_id and user_id:
-        readable = await workspace_readable_iris(user_id, workspace_id)
-        iris = filter_graph_iris(readable, config)
-        if not iris:
-            logger.warning(
-                "No readable graphs matched people include_prefixes/suffixes for "
-                f"workspace {workspace_id}; readable={sorted(readable)}. "
-                "Falling back to configured TTL files."
-            )
-            cache_key = _file_cache_key(config)
-        else:
-            graph_iris = tuple(iris)
-            cache_key = f"ws:{workspace_id}:{'|'.join(graph_iris)}"
+        graph_iris = await workspace_people_iris(config, workspace_id, user_id)
+        cache_key = f"ws:{workspace_id}:{'|'.join(graph_iris)}"
     else:
         cache_key = _file_cache_key(config)
 
-    async with _cache_lock:
-        cached = _sparql_cache.get(cache_key)
-        if cached is not None:
-            _sparql_cache.move_to_end(cache_key)
-            return cached
-
-    snapshot = await asyncio.to_thread(
-        _build_snapshot_sync, config, graph_iris=graph_iris
+    return await _cached(
+        _sparql_cache,
+        cache_key,
+        lambda: _build_snapshot_sync(config, graph_iris=graph_iris),
     )
 
-    async with _cache_lock:
-        _sparql_cache[cache_key] = snapshot
-        _sparql_cache.move_to_end(cache_key)
-        while len(_sparql_cache) > _CACHE_MAX:
-            _sparql_cache.popitem(last=False)
-    return snapshot
+
+async def workspace_people_iris(
+    config: dict[str, Any], workspace_id: str, user_id: str
+) -> tuple[str, ...]:
+    """The people graphs *user_id* may read in *workspace_id*; never empty."""
+    readable = await workspace_readable_iris(user_id, workspace_id)
+    iris = filter_graph_iris(readable, config)
+    if not iris:
+        logger.warning(
+            f"No readable people graph for workspace {workspace_id}; "
+            f"readable={sorted(readable)}."
+        )
+        raise NoPeopleGraphError(workspace_id)
+    return tuple(iris)
+
+
+async def resolve_workspace_dataset(
+    config: dict[str, Any],
+    *,
+    workspace_id: str,
+    user_id: str,
+) -> tuple[MemoryPeopleStore, tuple[str, ...]]:
+    """The materialized people of every graph the workspace may read.
+
+    Cached until one of those datasets gets a new snapshot, so a sync shows up
+    on the next request without a restart.
+    """
+    graph_iris = await workspace_people_iris(config, workspace_id, user_id)
+    service = _dataset_service()
+    namespaces = [graph_datasets.graph_namespace(config, iri) for iri in graph_iris]
+    versions = await asyncio.to_thread(
+        lambda: [
+            graph_datasets.dataset_version(service, config, namespace)
+            for namespace in namespaces
+        ]
+    )
+    cache_key = "|".join(f"{ns}@{version}" for ns, version in zip(namespaces, versions))
+    store = await _cached(
+        _dataset_cache,
+        cache_key,
+        lambda: graph_datasets.load_store(service, config, namespaces),
+    )
+    return store, graph_iris
+
+
+async def resolve_workspace_graph(graph_iris: tuple[str, ...]) -> Graph:
+    """The merged graphs, for the pages that query a person's triples.
+
+    Search never needs this; a profile's graph view and query runner do.
+    """
+    return await _cached(
+        _graph_cache,
+        "|".join(graph_iris),
+        lambda: tg.merge_named_graphs(_triple_store(), list(graph_iris))[0],
+    )
+
+
+def _uses_workspace_dataset(
+    config: dict[str, Any], workspace_id: str | None, user_id: str | None
+) -> bool:
+    return bool(
+        config["data"].get("backend") == "workspace_dataset" and workspace_id and user_id
+    )
 
 
 async def resolve_people_store(
@@ -194,6 +308,11 @@ async def resolve_people_store(
     workspace_id: str | None,
     user_id: str | None,
 ) -> PeopleStore:
+    if _uses_workspace_dataset(config, workspace_id, user_id):
+        store, _iris = await resolve_workspace_dataset(
+            config, workspace_id=str(workspace_id), user_id=str(user_id)
+        )
+        return store
     snapshot = await resolve_sparql_snapshot(
         config, workspace_id=workspace_id, user_id=user_id
     )
@@ -212,6 +331,9 @@ async def resolve_graph(
     workspace_id: str | None,
     user_id: str | None,
 ) -> Graph:
+    if _uses_workspace_dataset(config, workspace_id, user_id):
+        iris = await workspace_people_iris(config, str(workspace_id), str(user_id))
+        return await resolve_workspace_graph(iris)
     snapshot = await resolve_sparql_snapshot(
         config, workspace_id=workspace_id, user_id=user_id
     )
