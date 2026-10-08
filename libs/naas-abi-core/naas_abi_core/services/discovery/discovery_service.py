@@ -10,7 +10,7 @@ import re
 import secrets
 import time
 from collections.abc import Callable, Iterable
-from typing import TypeVar
+from typing import Any, TypeVar
 
 Result = TypeVar("Result")
 
@@ -116,9 +116,11 @@ class DiscoveryService:
         # polls are allowed from it for snapshot_seconds (see authorize_agent).
         self.snapshot_seconds = snapshot_seconds
         self._snapshot: tuple[float, pb.RegistryState] | None = None
-        # This replica's mutations, one at a time: its endpoint answers calls side
-        # by side, and concurrent writes would exhaust each other's CAS retries.
+        # This replica's writes, one at a time, each taking every mutation
+        # waiting (group commit, see _mutate): its endpoint answers calls side by
+        # side, and concurrent writes would exhaust each other's CAS retries.
         self._mutations = asyncio.Lock()
+        self._pending: list[tuple[Callable[[pb.RegistryState], Any], Any]] = []
 
     async def _read(self) -> tuple[pb.RegistryState, int]:
         data, revision = await self.registry.read()
@@ -450,30 +452,89 @@ class DiscoveryService:
         )
 
     async def _mutate(self, operation: Callable[[pb.RegistryState], Result]) -> Result:
-        async with self._mutations:
-            return await self._mutate_once(operation)
+        """Apply ``operation`` to the registry: group commit.
 
-    async def _mutate_once(
-        self, operation: Callable[[pb.RegistryState], Result]
-    ) -> Result:
-        for _ in range(5):
-            state, revision = await self._read()
-            result = operation(state)
-            payload = state.SerializeToString()
-            _require(
-                len(payload) <= 512 * 1024,
-                "REGISTRY_FULL",
-                "Registry snapshot exceeds 512 KiB",
+        One write at a time per replica, but a write takes every mutation that
+        arrived while the previous one was in flight, applied in order in one
+        compare-and-swap. The result is the one of running them one by one.
+        """
+        settled: asyncio.Future[Result] = asyncio.get_running_loop().create_future()
+        self._pending.append((operation, settled))
+        try:
+            async with self._mutations:
+                if not settled.done():  # not written with the previous batch
+                    batch, self._pending = self._pending, []
+                    await self._write(batch)
+        except asyncio.CancelledError:
+            # Not taken by a writer yet: drop it. Taken: it is written anyway.
+            with contextlib.suppress(ValueError):
+                self._pending.remove((operation, settled))
+            if settled.done() and not settled.cancelled():
+                settled.exception()  # read: nobody waits for it any more
+            raise
+        return settled.result()
+
+    async def _write(self, batch: list[tuple[Callable[[pb.RegistryState], Any], Any]]):
+        """Write ``batch`` in one compare-and-swap and settle each mutation.
+
+        Each one is applied to its own copy of the registry: a mutation that
+        fails is left out without changing what the others see.
+        """
+        try:
+            for _ in range(5):
+                state, revision = await self._read()
+                outcomes: list[tuple[Any, BaseException | None, Any]] = []
+                for operation, settled in batch:
+                    candidate = pb.RegistryState()
+                    candidate.CopyFrom(state)
+                    try:
+                        result = operation(candidate)
+                        _require(
+                            candidate.ByteSize() <= 512 * 1024,
+                            "REGISTRY_FULL",
+                            "Registry snapshot exceeds 512 KiB",
+                        )
+                    except Exception as exc:  # noqa: BLE001 - this caller's error only
+                        outcomes.append((settled, exc, None))
+                        continue
+                    state = candidate
+                    outcomes.append((settled, None, result))
+                if any(error is None for _, error, _ in outcomes):
+                    try:
+                        await self.registry.compare_and_swap(
+                            state.SerializeToString(), revision
+                        )
+                    except RevisionConflict:
+                        continue  # another replica wrote: apply the batch again
+                    self._snapshot = (self.clock(), state)
+                for settled, error, result in outcomes:
+                    if settled.done():  # its caller was cancelled
+                        continue
+                    if error is None:
+                        settled.set_result(result)
+                    else:
+                        settled.set_exception(error)
+                return
+            for _, settled in batch:
+                if not settled.done():
+                    settled.set_exception(
+                        DiscoveryError(
+                            "REGISTRY_BUSY",
+                            "Concurrent registry updates; retry control operation",
+                        )
+                    )
+        except BaseException as exc:
+            # The registry failed (or this writer was cancelled): no caller waits forever.
+            failure = (
+                exc
+                if isinstance(exc, Exception)
+                else DiscoveryError("UNAVAILABLE", "Registry write interrupted")
             )
-            try:
-                await self.registry.compare_and_swap(payload, revision)
-            except RevisionConflict:
-                continue
-            self._snapshot = (self.clock(), state)
-            return result
-        raise DiscoveryError(
-            "REGISTRY_BUSY", "Concurrent registry updates; retry control operation"
-        )
+            for _, settled in batch:
+                if not settled.done():
+                    settled.set_exception(failure)
+            if not isinstance(exc, Exception):
+                raise
 
     async def register(
         self, req: pb.RegisterRequest, owner: str
