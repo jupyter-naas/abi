@@ -14,7 +14,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from naas_abi_sdk import telemetry
+from naas_abi_sdk import lifeline, telemetry
 from naas_abi_sdk.catalog import OPERATIONS
 from naas_abi_sdk.client import ABIClient
 from naas_abi_sdk.discovery import (
@@ -370,7 +370,12 @@ async def run_module(
     telemetry.configure_from_env(identity)
     # Named after the module so the broker's /connz shows which module is which.
     connection_options.setdefault("name", f"{identity}@{socket.gethostname()}")
-    async with ABIClient(url, token, timeout=timeout, **connection_options) as client:
+    # NATS gone for good stops the module (SIGTERM drains it), and its supervisor
+    # restarts it, instead of a process that serves nothing.
+    async with (
+        ABIClient(url, token, timeout=timeout, **connection_options) as client,
+        lifeline.stopping_on_loss(),
+    ):
         dependencies = module_type.get_dependencies()
         discovery_client = (
             DiscoveryClient(client._transport, discovery.project) if discovery else None

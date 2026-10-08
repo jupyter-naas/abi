@@ -12,6 +12,7 @@ from naas_abi_core.engine.nats_naming import connection_name
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
 from naas_abi_core.utils.Logger import logger
 from naas_abi_sdk import claim_check
+from naas_abi_sdk.lifeline import Lifeline
 from nats.aio.client import Client as NATSClient
 from nats.aio.msg import Msg
 from nats.js import JetStreamContext
@@ -68,6 +69,7 @@ class NATSJetStreamAdapter(IBusAdapter):
     __loop: asyncio.AbstractEventLoop | None
     __loop_thread: Thread | None
     __nc: NATSClient | None
+    __nc_lifeline: Lifeline | None
     __js: JetStreamContext | None
     __declared_streams: set[str]
     __publish_lock: RLock
@@ -77,6 +79,7 @@ class NATSJetStreamAdapter(IBusAdapter):
         self.__loop = None
         self.__loop_thread = None
         self.__nc = None
+        self.__nc_lifeline = None
         self.__js = None
         self.__declared_streams = set()
         # Serialize connection bookkeeping and synchronous submissions.
@@ -146,23 +149,31 @@ class NATSJetStreamAdapter(IBusAdapter):
             assert self.__js is not None
             return self.__nc, self.__js
 
+        # Closed for good (nats-py gave up reconnecting): see naas_abi_sdk.lifeline.
+        watched = Lifeline("abi-bus")
         nc = await nats.connect(
-            self.__nats_url, pending_size=0, name=connection_name("abi-bus")
+            self.__nats_url,
+            pending_size=0,
+            name=connection_name("abi-bus"),
+            closed_cb=watched.closed,
         )
         js = nc.jetstream()
         self.__nc = nc
+        self.__nc_lifeline = watched
         self.__js = js
         self.__declared_streams.clear()
         return nc, js
 
     def _close_publish_connection(self) -> None:
-        nc = self.__nc
+        nc, watched = self.__nc, self.__nc_lifeline
         self.__nc = None
+        self.__nc_lifeline = None
         self.__js = None
         self.__declared_streams.clear()
         if nc is not None and self.__loop is not None and self.__loop.is_running():
             try:
-                self._run_coro(nc.close(), timeout=5.0)
+                closing = watched.close(nc) if watched is not None else nc.close()
+                self._run_coro(closing, timeout=5.0)
             except Exception:  # noqa: BLE001
                 # Best-effort close of a connection we're discarding anyway
                 # (already stale, or being replaced by a fresh reconnect) --
@@ -298,8 +309,11 @@ class NATSJetStreamAdapter(IBusAdapter):
     async def _subscribe_forever(
         self, topic: str, routing_key: str, callback: Callable[[bytes], None]
     ) -> None:
+        watched = Lifeline("abi-bus:subscriber")
         nc = await nats.connect(
-            self.__nats_url, name=connection_name("abi-bus:subscriber")
+            self.__nats_url,
+            name=connection_name("abi-bus:subscriber"),
+            closed_cb=watched.closed,
         )
         subject = self._subject(topic, self._to_nats_pattern(routing_key))
         stop_event = asyncio.Event()
@@ -331,7 +345,7 @@ class NATSJetStreamAdapter(IBusAdapter):
                 logger.opt(exception=True).debug(
                     "NATSJetStreamAdapter: error unsubscribing during shutdown"
                 )
-            await nc.close()
+            await watched.close(nc)
 
     # ------------------------------------------------------------------
     # Work queue -- JetStream stream + durable pull consumer per
@@ -377,7 +391,12 @@ class NATSJetStreamAdapter(IBusAdapter):
     async def _dequeue_forever(
         self, topic: str, routing_key: str, callback: Callable[[bytes], None]
     ) -> None:
-        nc = await nats.connect(self.__nats_url, name=connection_name("abi-bus:worker"))
+        watched = Lifeline("abi-bus:worker")
+        nc = await nats.connect(
+            self.__nats_url,
+            name=connection_name("abi-bus:worker"),
+            closed_cb=watched.closed,
+        )
         try:
             js = nc.jetstream()
             stream_name = await self._ensure_stream_async(js, topic)
@@ -406,4 +425,6 @@ class NATSJetStreamAdapter(IBusAdapter):
                         await msg.nak()
                         raise
         finally:
-            await nc.close()
+            # A fetch failed by nats-py giving up can get here before its
+            # closed_cb: Lifeline.close leaves that a loss.
+            await watched.close(nc)
