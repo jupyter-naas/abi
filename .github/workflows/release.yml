@@ -23,6 +23,10 @@ jobs:
       name: pypi
 
     env:
+      # Released in dependency order: naas-abi-core's nats/otel extras need
+      # naas-abi-proto and naas-abi-sdk, and naas-abi needs naas-abi-core[nats].
+      naas_abi_proto_dir: libs/naas-abi-proto
+      naas_abi_sdk_dir: libs/naas-abi-sdk
       naas_abi_core_dir: libs/naas-abi-core
       naas_abi_marketplace_dir: libs/naas-abi-marketplace
       naas_abi_dir: libs/naas-abi
@@ -61,6 +65,16 @@ jobs:
       # their specific release ID to determine if a release occurred.       #
       # ------------------------------------------------------------------- #
 
+      - name: Release naas-abi-proto
+        id: release-naas-abi-proto
+        working-directory: ${{ env.naas_abi_proto_dir }}
+        run: semantic-release -v version
+
+      - name: Release naas-abi-sdk
+        id: release-naas-abi-sdk
+        working-directory: ${{ env.naas_abi_sdk_dir }}
+        run: semantic-release -v version
+
       - name: Release naas-abi-core
         id: release-naas-abi-core
         working-directory: ${{ env.naas_abi_core_dir }}
@@ -80,6 +94,16 @@ jobs:
         id: release-naas-abi-cli
         working-directory: ${{ env.naas_abi_cli_dir }}
         run: semantic-release -v version
+
+      - name: Publish | Upload naas-abi-proto to GitHub Release Assets
+        if: steps.release-naas-abi-proto.outputs.released == 'true'
+        working-directory: ${{ env.naas_abi_proto_dir }}
+        run: semantic-release publish --tag "${{ steps.release-naas-abi-proto.outputs.tag }}"
+
+      - name: Publish | Upload naas-abi-sdk to GitHub Release Assets
+        if: steps.release-naas-abi-sdk.outputs.released == 'true'
+        working-directory: ${{ env.naas_abi_sdk_dir }}
+        run: semantic-release publish --tag "${{ steps.release-naas-abi-sdk.outputs.tag }}"
 
       - name: Publish | Upload naas-abi-core to GitHub Release Assets
         if: steps.release-naas-abi-core.outputs.released == 'true'
@@ -108,6 +132,18 @@ jobs:
       # to work as the action is not maintained by the                      #
       # python-semantic-release team.                                       #
       # ------------------------------------------------------------------- #
+
+      - name: Publish | Upload naas-abi-proto to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        if: steps.release-naas-abi-proto.outputs.released == 'true'
+        with:
+          packages-dir: ${{ format('{0}/dist', env.naas_abi_proto_dir) }}
+
+      - name: Publish | Upload naas-abi-sdk to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        if: steps.release-naas-abi-sdk.outputs.released == 'true'
+        with:
+          packages-dir: ${{ format('{0}/dist', env.naas_abi_sdk_dir) }}
 
       - name: Publish | Upload naas-abi-core to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
