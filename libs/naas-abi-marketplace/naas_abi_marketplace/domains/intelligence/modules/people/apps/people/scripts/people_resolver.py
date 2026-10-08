@@ -16,6 +16,7 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
     MemoryPeopleStore,
     PeopleStore,
 )
+from naas_abi_core import logger
 from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     DEMO_GRAPH_FILE,
 )
@@ -157,11 +158,15 @@ async def resolve_sparql_snapshot(
         readable = await workspace_readable_iris(user_id, workspace_id)
         iris = filter_graph_iris(readable, config)
         if not iris:
-            raise LookupError(
-                "No readable graphs match this workspace for the people app"
+            logger.warning(
+                "No readable graphs matched people include_prefixes/suffixes for "
+                f"workspace {workspace_id}; readable={sorted(readable)}. "
+                "Falling back to configured TTL files."
             )
-        graph_iris = tuple(iris)
-        cache_key = f"ws:{workspace_id}:{'|'.join(graph_iris)}"
+            cache_key = _file_cache_key(config)
+        else:
+            graph_iris = tuple(iris)
+            cache_key = f"ws:{workspace_id}:{'|'.join(graph_iris)}"
     else:
         cache_key = _file_cache_key(config)
 
