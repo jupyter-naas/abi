@@ -21,6 +21,7 @@ from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 
 from naas_abi_sdk import overflow
 from naas_abi_sdk.agent import TERMINAL, agent_subject
+from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
 from naas_abi_sdk.services.models import CollectionSpec
@@ -125,6 +126,7 @@ class AgentHost:
         handlers: dict[str, AgentHandler],
         *,
         idle_timeout_seconds: float = 300.0,
+        max_concurrency: int = DEFAULT_LIMIT,
     ):
         if not math.isfinite(idle_timeout_seconds) or idle_timeout_seconds <= 0:
             raise ValueError("Agent inactivity timeout must be positive and finite")
@@ -143,6 +145,8 @@ class AgentHost:
         self._bound_to = ""  # the instance id the subscriptions serve
         self.accept_lock = asyncio.Lock()
         self.closing = False
+        # Submits, polls and cancels side by side, up to max_concurrency at once.
+        self.calls = ConcurrentCalls(max_concurrency)
 
     async def start(self) -> None:
         for name in (
@@ -171,7 +175,9 @@ class AgentHost:
                                 name,
                                 operation,
                             ),
-                            cb=partial(self._handle, name, operation),
+                            cb=self.calls.callback(
+                                partial(self._handle, name, operation)
+                            ),
                         )
                     )
             await nc.flush()
@@ -793,6 +799,7 @@ class AgentHost:
         for sub in self.subscriptions:
             await sub.drain()
         self.subscriptions.clear()
+        await self.calls.idle()  # calls received are answered, submits included
         runs = list(self.runs.values())
         for run in runs:
             await self._cancel(run, "CANCELLED")

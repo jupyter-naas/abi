@@ -18,6 +18,7 @@ from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 from naas_abi_proto.model_registry.v1 import model_registry_pb2 as pb
 
 from naas_abi_sdk import overflow
+from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.model_codec import decode_json, decode_message, encode_message
 from naas_abi_sdk.transport import RPCError
@@ -44,10 +45,18 @@ class ModuleModelClient:
 
 
 class ModelHost:
-    def __init__(self, session: Any, handlers: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        session: Any,
+        handlers: dict[str, Any],
+        *,
+        max_concurrency: int = DEFAULT_LIMIT,
+    ) -> None:
         self.session, self.handlers = session, handlers
         self.subscriptions: list[Any] = []
         self.closing = False
+        # Chats side by side, up to max_concurrency at once across the models.
+        self.calls = ConcurrentCalls(max_concurrency)
 
     async def start(self) -> None:
         nc = await self.session.client.transport.connect()
@@ -60,7 +69,7 @@ class ModelHost:
                             self.session.instance_id,
                             name,
                         ),
-                        cb=partial(self._handle, name),
+                        cb=self.calls.callback(partial(self._handle, name)),
                     )
                 )
             await nc.flush()
@@ -72,6 +81,7 @@ class ModelHost:
         for subscription in self.subscriptions:
             await subscription.unsubscribe()
         self.subscriptions.clear()
+        await self.calls.cancel()  # chats still running end, as before
 
     async def _handle(self, name: str, msg: Any) -> None:
         response = pb.ChatResponse()

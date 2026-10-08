@@ -789,3 +789,32 @@ def test_snapshot_refusals_are_rechecked_and_still_refused():
         assert registry.reads == reads + 3
 
     asyncio.run(scenario())
+
+
+class YieldingRegistry(MemoryRegistry):
+    """Like the JetStream KV: each read and write lets other calls run."""
+
+    async def read(self):
+        await asyncio.sleep(0)
+        return await super().read()
+
+    async def compare_and_swap(self, data, revision):
+        await asyncio.sleep(0)
+        await super().compare_and_swap(data, revision)
+
+
+def test_concurrent_registrations_in_one_process_all_succeed():
+    async def scenario():
+        service = DiscoveryService(YieldingRegistry())
+        # The NATS endpoint runs calls side by side: without serializing its
+        # own mutations, they would exhaust the CAS retries (REGISTRY_BUSY).
+        await asyncio.gather(
+            *(
+                service.register(registration(f"m{i}", f"i{i}"), "owner")
+                for i in range(20)
+            )
+        )
+        listed = await service.list_modules(pb.ListModulesRequest(limit=100))
+        return {instance.instance_id for instance in listed.instances}
+
+    assert asyncio.run(scenario()) == {f"i{i}" for i in range(20)}
