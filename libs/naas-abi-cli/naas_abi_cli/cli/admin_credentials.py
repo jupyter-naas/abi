@@ -20,6 +20,10 @@ ADMIN_PASSWORD_KEY = f"NEXUS_USER_{_ADMIN_PREFIX}_PASSWORD"
 _LEGACY_ADMIN_PASSWORD_KEY = "NEXUS_USER_ADMIN_PASSWORD"
 API_KEY = "ABI_API_KEY"
 NATS_SECRET = "NATS_JWT_SECRET"
+# The broker's users (.deploy/docker/nats/nats.conf): the engine's process, and
+# the SDK modules joining it.
+NATS_PASSWORDS = ("NATS_ABI_PASSWORD", "NATS_MODULE_PASSWORD")
+_MIN_NATS_PASSWORD = 16
 
 # Values older CLI versions wrote. Mirrors the Nexus auth list in
 # naas_abi/apps/nexus/apps/api/app/services/auth/default_passwords.py.
@@ -115,3 +119,33 @@ def ensure_nats_secret(env_path: Path) -> str:
     secret = secrets.token_urlsafe(48)
     _write(env_path, _set(lines, NATS_SECRET, secret))
     return secret
+
+
+def generate_nats_password() -> str:
+    """A broker password that nats.conf and a ``nats://`` URL take as is.
+
+    nats-server reads ``$VAR`` in nats.conf as a config value, so a value that
+    starts with a digit or ``-`` does not parse; clients pass it in
+    ``nats://user:password@host``, so it holds only URL-safe characters.
+    """
+    return f"nats-{secrets.token_urlsafe(32)}"
+
+
+def ensure_nats_passwords(env_path: Path) -> dict[str, str]:
+    """Return the broker passwords from ``.env``, generating any missing or short.
+
+    nats-server takes an empty ``$VAR`` as an empty password, which lets anyone
+    in as that user.
+    """
+    lines = _read(env_path)
+    original = list(lines)
+    passwords: dict[str, str] = {}
+    for key in NATS_PASSWORDS:
+        password = _value(lines, key) or ""
+        if len(password) < _MIN_NATS_PASSWORD:
+            password = generate_nats_password()
+            lines = _set(lines, key, password)
+        passwords[key] = password
+    if lines != original:
+        _write(env_path, lines)
+    return passwords

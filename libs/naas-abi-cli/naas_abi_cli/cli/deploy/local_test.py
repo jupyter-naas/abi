@@ -1,6 +1,13 @@
+import asyncio
+import os
 import re
+import shutil
+import socket
+import subprocess
+import time
 from pathlib import Path
 
+import pytest
 import yaml
 
 from naas_abi_cli.cli.deploy.local import _build_nexus_api_url, setup_local_deploy
@@ -293,7 +300,7 @@ def test_setup_local_deploy_ships_a_nats_config_raising_max_payload_to_8mb(
     assert nats_conf.exists()
     assert "max_payload: 8MB" in nats_conf.read_text(encoding="utf-8")
     nats_block = compose_content.split("\n  nats:", 1)[1].split("\n  redis:", 1)[0]
-    assert '"-c", "/etc/nats/nats.conf"' in nats_block
+    assert "exec nats-server -c /etc/nats/nats.conf" in nats_block
     assert "./.deploy/docker/nats/nats.conf:/etc/nats/nats.conf:ro" in nats_block
 
 
@@ -346,3 +353,129 @@ def test_setup_local_deploy_replaces_a_shipped_default_admin_password(
         len(_env_values(tmp_path / ".env")["NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD"])
         >= 24
     )
+
+
+NATS_USERS = {"abi": "NATS_ABI_PASSWORD", "module": "NATS_MODULE_PASSWORD"}
+
+
+def _nats_service(compose: Path) -> dict:
+    return yaml.safe_load(compose.read_text(encoding="utf-8"))["services"]["nats"]
+
+
+def _nats_guard(service: dict) -> str:
+    entrypoint, flag, script = service["command"]
+    assert (entrypoint, flag) == ("sh", "-c")
+    # Compose turns $$ into $ before the shell sees it.
+    return script.replace("$$", "$")
+
+
+def test_setup_local_deploy_generates_the_broker_passwords(tmp_path: Path) -> None:
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+
+    env = _env_values(tmp_path / ".env")
+
+    for key in NATS_USERS.values():
+        assert len(env[key]) >= 32
+
+
+def test_the_broker_requires_a_password_and_listens_on_localhost(
+    tmp_path: Path,
+) -> None:
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+    repo_root = Path(__file__).resolve().parents[5]
+
+    for root in (repo_root, tmp_path):
+        service = _nats_service(root / "docker-compose.yml")
+        conf = (root / ".deploy/docker/nats/nats.conf").read_text(encoding="utf-8")
+        for user, key in NATS_USERS.items():
+            assert f"{{ user: {user}, password: ${key} }}" in conf
+            assert f"{key}=${{{key}:-}}" in service["environment"]
+        assert all(port.startswith("127.0.0.1:") for port in service["ports"])
+        assert (
+            _nats_guard(service)
+            .rstrip()
+            .endswith("exec nats-server -c /etc/nats/nats.conf -js -sd /data -m 8222")
+        )
+
+
+@pytest.mark.parametrize("missing", list(NATS_USERS.values()))
+def test_the_broker_does_not_start_without_a_password(tmp_path: Path, missing) -> None:
+    """nats-server takes an empty $VAR as an empty password: anyone could log in."""
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+    env = {key: "p" * 32 for key in NATS_USERS.values()} | {missing: ""}
+
+    result = subprocess.run(
+        ["sh", "-c", _nats_guard(_nats_service(tmp_path / "docker-compose.yml"))],
+        env={"PATH": os.environ["PATH"], **env},
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 1
+    assert missing in result.stderr
+
+
+@pytest.mark.skipif(
+    shutil.which("nats-server") is None, reason="nats-server not installed"
+)
+def test_the_generated_broker_admits_only_its_users(tmp_path: Path) -> None:
+    import nats
+    from nats.errors import Error as NATSError
+
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+    env = _env_values(tmp_path / ".env")
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    server = subprocess.Popen(
+        [
+            str(shutil.which("nats-server")),
+            "-c",
+            str(tmp_path / ".deploy/docker/nats/nats.conf"),
+            "-a",
+            "127.0.0.1",
+            "-p",
+            str(port),
+            "-js",
+            "-sd",
+            str(tmp_path / "jetstream"),
+        ],
+        env={**os.environ, **{key: env[key] for key in NATS_USERS.values()}},
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    async def connect(credentials: str):
+        return await nats.connect(
+            f"nats://{credentials}127.0.0.1:{port}",
+            allow_reconnect=False,
+            connect_timeout=2,
+        )
+
+    async def scenario() -> None:
+        for credentials in ("", "abi:wrong@", f"intruder:{env['NATS_ABI_PASSWORD']}@"):
+            with pytest.raises(NATSError, match="Authorization Violation"):
+                await connect(credentials)
+        for user, key in NATS_USERS.items():
+            nc = await connect(f"{user}:{env[key]}@")
+            # Both users share the default account, so its JetStream too.
+            await nc.jetstream().account_info()
+            await nc.close()
+
+    try:
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                socket.create_connection(("127.0.0.1", port), timeout=0.1).close()
+                break
+            except OSError:
+                assert server.poll() is None, (
+                    "nats-server refused the generated nats.conf"
+                )
+                assert time.monotonic() < deadline
+                time.sleep(0.05)
+        asyncio.run(scenario())
+    finally:
+        server.terminate()
+        server.wait(timeout=5)
