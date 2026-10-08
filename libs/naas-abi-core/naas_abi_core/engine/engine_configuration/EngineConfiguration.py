@@ -947,8 +947,8 @@ class EngineConfiguration(BaseModel):
         if overlay:
             data = deep_merge(data, overlay)
 
-        logger.debug(f"Data: {data}")
-
+        # Never log `data`: it holds every rendered secret. The template above
+        # is logged before rendering.
         return cls(**data)
 
     @classmethod
