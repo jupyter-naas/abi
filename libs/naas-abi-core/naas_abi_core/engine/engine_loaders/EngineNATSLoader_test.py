@@ -539,3 +539,28 @@ def test_expose_overflow_keeps_the_old_limit_when_the_broker_is_too_small(monkey
 
     assert loader.expose_overflow([object()]) == []
     assert nats_overflow.current() is None
+
+
+def test_expose_services_sizes_the_services_it_starts_from_the_configuration(
+    monkeypatch,
+):
+    from naas_abi_core.engine import nats_dispatch
+
+    # Restored after the test, like every monkeypatched attribute.
+    monkeypatch.setattr(
+        nats_dispatch,
+        "_max_concurrent_requests",
+        nats_dispatch.DEFAULT_MAX_CONCURRENT_REQUESTS,
+    )
+    config = SimpleNamespace(
+        nats=NATSConfiguration(jwt_secret="x" * 32, max_concurrent_requests=16)
+    )
+    loader = EngineNATSLoader(config)
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    run_coro = MagicMock(side_effect=lambda coro, *a, **k: coro.close())
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.run_coro", run_coro)
+
+    (primary,) = loader.expose_services(_services({"document": True}))
+
+    assert nats_dispatch.max_concurrent_requests() == 16
+    assert primary._dispatch.max_workers == 16

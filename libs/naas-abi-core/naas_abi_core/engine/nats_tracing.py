@@ -1,8 +1,11 @@
-"""Kernel services exposed as NATS micro services: server spans and handover.
+"""Kernel services exposed as NATS micro services: server spans, concurrency, handover.
 
 ``add_traced_service`` is ``nats.micro.add_service`` whose endpoints run inside a
 SERVER span continuing the caller's trace (``traceparent`` header). No-op without
 OpenTelemetry. See ``naas_abi_sdk.telemetry``.
+
+Calls run side by side, up to ``max_concurrency`` at once for the whole service
+(``ConcurrentRequests``, ``nats.max_concurrent_requests``).
 
 At a handover the service stops taking calls but answers those it already
 received (``stop_accepting``, ``requests_finished``); see
@@ -11,14 +14,19 @@ docs/adr/20261006_single-serving-engine.md.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from typing import Any
 
 import nats.errors
 import nats.micro
+from naas_abi_core import logger
+from naas_abi_core.engine.nats_dispatch import max_concurrent_requests
 from naas_abi_core.engine.nats_sessions import stop_delivery, until
 from naas_abi_sdk.telemetry import server_span
+
+Callback = Callable[[Any], Awaitable[None]]
 
 
 def traced_handler(
@@ -32,25 +40,99 @@ def traced_handler(
     return handle
 
 
+class ConcurrentRequests:
+    """Runs a service's endpoint calls side by side, at most ``limit`` at once.
+
+    nats-py hands a subscription its next message only once the callback for
+    the previous one has returned, so a handler awaited there answers one call
+    at a time. Each call runs in its own task instead. With ``limit`` calls
+    running, the callback waits for a free slot and later calls stay in the
+    subscription's buffer, each until its caller's deadline.
+
+    The callback is ``nats.micro``'s own request handler, which keeps the
+    endpoint statistics (``$SRV.STATS``) and answers a handler's exception with
+    a 500 error reply.
+    """
+
+    def __init__(self, limit: int) -> None:
+        if limit < 1:
+            raise ValueError("A service must handle at least one call at once")
+        self.limit = limit
+        # Calls received and not answered yet, including those waiting for a slot.
+        self.in_flight = 0
+        self._slots = asyncio.Semaphore(limit)
+        self._tasks: set[asyncio.Task[None]] = set()
+
+    def client(self, nc: Any) -> Any:
+        """``nc`` for ``nats.micro``: endpoint subscriptions run their calls here."""
+        return _ConcurrentClient(nc, self)
+
+    def callback(self, cb: Callback) -> Callback:
+        async def receive(msg: Any) -> None:
+            # Counted at once: a drain waits for a call still waiting for a slot.
+            self.in_flight += 1
+            try:
+                await self._slots.acquire()
+            except BaseException:
+                self.in_flight -= 1
+                raise
+            task = asyncio.create_task(self._run(cb, msg))
+            self._tasks.add(task)
+            task.add_done_callback(self._tasks.discard)
+
+        return receive
+
+    async def _run(self, cb: Callback, msg: Any) -> None:
+        try:
+            await cb(msg)
+        except Exception:  # noqa: BLE001 - nats-py would only log it too
+            logger.opt(exception=True).warning(
+                f"NATS service call on {getattr(msg, 'subject', '?')} failed"
+            )
+        finally:
+            self._slots.release()
+            self.in_flight -= 1
+
+    async def cancel(self) -> None:
+        """Cancel the calls still running."""
+        tasks = list(self._tasks)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+class _ConcurrentClient:
+    """A NATS client whose queue subscriptions, ``nats.micro``'s endpoints, run
+    their calls through ``ConcurrentRequests``. Its own verb subscriptions
+    (``$SRV.PING``, ``INFO``, ``STATS``) have no queue group and stay as they are."""
+
+    def __init__(self, nc: Any, requests: ConcurrentRequests) -> None:
+        self._nc = nc
+        self._requests = requests
+
+    async def subscribe(self, *args: Any, **kwargs: Any) -> Any:
+        if kwargs.get("queue") and kwargs.get("cb") is not None:
+            kwargs["cb"] = self._requests.callback(kwargs["cb"])
+        return await self._nc.subscribe(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._nc, name)
+
+
 class TracedService:
     """A micro service whose endpoint handlers are traced; everything else delegates."""
 
-    def __init__(self, service: Any) -> None:
+    def __init__(
+        self, service: Any, requests: ConcurrentRequests | None = None
+    ) -> None:
         self._service = service
-        self._handling = 0  # calls being handled
+        self._requests = requests or ConcurrentRequests(max_concurrent_requests())
         self._draining: list[Any] = []  # endpoint subscriptions the broker has ended
 
     async def add_endpoint(self, *args: Any, handler: Any, **kwargs: Any) -> Any:
-        traced = traced_handler(handler)
-
-        async def handle(request: Any) -> None:
-            self._handling += 1
-            try:
-                await traced(request)
-            finally:
-                self._handling -= 1
-
-        return await self._service.add_endpoint(*args, handler=handle, **kwargs)
+        return await self._service.add_endpoint(
+            *args, handler=traced_handler(handler), **kwargs
+        )
 
     async def stop_accepting(self) -> None:
         """End the endpoints' queue-group subscriptions at the broker, so new calls
@@ -70,7 +152,7 @@ class TracedService:
         """Return once every call received before ``stop_accepting`` is answered."""
         await until(
             lambda: (
-                not self._handling
+                not self._requests.in_flight
                 and not any(sub.pending_msgs for sub in self._draining)
             )
         )
@@ -83,10 +165,19 @@ class TracedService:
             with suppress(nats.errors.Error):  # already gone with the connection
                 await subscription.unsubscribe()
         await self._service.stop()
+        await self._requests.cancel()
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._service, name)
 
 
-async def add_traced_service(nc: Any, **config: Any) -> TracedService:
-    return TracedService(await nats.micro.add_service(nc, **config))
+async def add_traced_service(
+    nc: Any, *, max_concurrency: int | None = None, **config: Any
+) -> TracedService:
+    """``nats.micro.add_service`` with traced endpoints whose calls run side by
+    side, up to ``max_concurrency`` at once (default: ``nats.max_concurrent_requests``)."""
+    requests = ConcurrentRequests(
+        max_concurrent_requests() if max_concurrency is None else max_concurrency
+    )
+    service = await nats.micro.add_service(requests.client(nc), **config)
+    return TracedService(service, requests)

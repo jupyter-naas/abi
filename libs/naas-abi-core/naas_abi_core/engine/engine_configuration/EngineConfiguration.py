@@ -468,6 +468,9 @@ class NATSConfiguration(BaseModel):
     jwt_secret: str
     # How long an engine's facades wait for a reply (calls without their own deadline).
     client_timeout_seconds: float = Field(default=10.0, gt=0, allow_inf_nan=False)
+    # Calls each kernel service of this engine handles at once, on as many worker
+    # threads. Later calls wait in the broker connection's buffer until their deadline.
+    max_concurrent_requests: int = Field(default=64, ge=1, le=4096)
     discovery: DiscoveryConfiguration | None = None
     object_storage_streaming: NATSStreamingConfiguration = Field(
         default_factory=NATSStreamingConfiguration
