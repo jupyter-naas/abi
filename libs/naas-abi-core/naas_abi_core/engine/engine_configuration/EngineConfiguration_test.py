@@ -258,3 +258,33 @@ def test_nats_client_timeout_must_be_a_positive_finite_number(value):
 
     with pytest.raises(ValidationError):
         NATSConfiguration(jwt_secret="test", client_timeout_seconds=value)
+
+
+def test_from_yaml_content_never_logs_a_rendered_secret(tmp_path):
+    """Container logs are not a secret store: only the unrendered template may be logged."""
+    from naas_abi_core import logger
+
+    dotenv = tmp_path / ".env.bootstrap"
+    secret = "s3cr3t-rendered-value-0123456789"
+    dotenv.write_text(f"ENV=local\nOPENCODE_API_KEY={secret}\n", encoding="utf-8")
+    messages: list[str] = []
+    sink = logger.add(lambda message: messages.append(str(message)), level="DEBUG")
+    try:
+        configuration = EngineConfiguration.from_yaml_content(
+            _configuration_yaml(
+                title="BASE",
+                dotenv_path=str(dotenv),
+                extra_top_level="""
+opencode:
+  providers:
+    - id: openrouter
+      key: "{{ secret.OPENCODE_API_KEY }}"
+""".strip(),
+            )
+        )
+    finally:
+        logger.remove(sink)
+
+    assert configuration.opencode.providers[0].key == secret
+    assert messages
+    assert not [message for message in messages if secret in message]
