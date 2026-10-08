@@ -3,7 +3,7 @@ name = "naas-abi-sdk"
 version = "0.1.0"
 description = "Standalone ABI sdk package"
 requires-python = ">=3.10"
-dependencies = ["naas-abi-proto>=0.1.0,<0.2", "nats-py>=2.16.0,<3"]
+dependencies = ["naas-abi-proto>=0.1.0", "nats-py>=2.16.0,<3"]
 readme = "README.md"
 
 [build-system]
