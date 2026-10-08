@@ -54,9 +54,11 @@ up to that second. Every read and successful write refreshes the snapshot.
 ## Concurrency
 `DiscoveryNATS` answers calls side by side, up to `nats.max_concurrent_requests`
 (`naas_abi_sdk.concurrency.ConcurrentCalls`); `stop()` answers the calls received
-first. A replica's writes stay one at a time (`DiscoveryService._mutate` holds a
-lock): concurrent compare-and-swaps on the one registry document would exhaust
-their five retries (`REGISTRY_BUSY`). Reads do not take the lock.
+first. Writes use group commit (`DiscoveryService._mutate`): a replica writes
+once at a time, each write taking every mutation waiting, applied in order on
+its own copy of the registry, in one compare-and-swap. Run side by side, the
+compare-and-swaps on the one registry document would exhaust their five retries
+(`REGISTRY_BUSY`). Reads do not wait for writes.
 
 ## Tests
 Use `uv run pytest .../services/discovery --import-mode=importlib`. Unit tests inject

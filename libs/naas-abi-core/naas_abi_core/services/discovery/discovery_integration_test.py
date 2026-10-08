@@ -223,3 +223,48 @@ def test_admins_evict_a_live_instance_which_registers_again(broker):  # noqa: F8
             await nc.close()
 
     asyncio.run(scenario())
+
+
+def test_concurrent_registrations_through_two_owners_all_succeed(broker):  # noqa: F811
+    from uuid import uuid4
+
+    from naas_abi_sdk.transport import Transport
+
+    async def scenario():
+        nc = await nats.connect(broker[0])
+        primaries = [await start_discovery(nc, SECRET) for _ in range(2)]
+        transport = Transport(broker[0], issue_service_token("test", SECRET))
+        try:
+            responses = await asyncio.gather(
+                *(
+                    transport.call(
+                        "abi.discovery.default.v1.register",
+                        pb.RegisterRequest(
+                            descriptor=pb.ModuleDescriptor(
+                                module_id="crowd", contract_major=1
+                            ),
+                            instance_id=str(uuid4()),
+                            lease_token=uuid4().hex,
+                        ),
+                        pb.RegisterResponse,
+                    )
+                    for _ in range(40)
+                )
+            )
+            result = await transport.call(
+                "abi.discovery.default.v1.get_module",
+                pb.GetModuleRequest(module_id="crowd", contract_major=1),
+                pb.GetModuleResponse,
+            )
+        finally:
+            await transport.close()
+            for primary in primaries:
+                await primary.stop()
+            await nc.close()
+        return responses, result
+
+    responses, result = asyncio.run(scenario())
+
+    # Each owner batches the calls it receives; their writes race on one KV key.
+    assert [r.error.code for r in responses if r.error.code] == []
+    assert len(result.instances) == 40

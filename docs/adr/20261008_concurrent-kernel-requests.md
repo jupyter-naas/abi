@@ -58,12 +58,21 @@ now share one implementation, `naas_abi_sdk.concurrency.ConcurrentCalls`, which
 `nats_tracing.ConcurrentRequests` extends.
 
 - Discovery (`DiscoveryNATS`) answers its calls side by side, up to
-  `nats.max_concurrent_requests`. Its writes still go one at a time within a
-  replica (`DiscoveryService._mutate` holds a lock): they compare-and-swap one
-  registry document, and 20 concurrent registrations without the lock left 15
-  failing with `REGISTRY_BUSY`. Reads (`get_module`, `list_modules`,
+  `nats.max_concurrent_requests`. Reads (`get_module`, `list_modules`,
   `authorize_agent`, `authorize_model`) run side by side. `stop()` answers the
   calls received before it returns.
+- Discovery's writes go through group commit (`DiscoveryService._mutate`).
+  They all compare-and-swap one registry document: run side by side, 20
+  concurrent registrations left 15 failing with `REGISTRY_BUSY`, and one at a
+  time each paid a full read and write. A replica now writes once at a time,
+  and each write takes every mutation that arrived while the previous one was
+  in flight, applied in order, each on its own copy of the registry: one that
+  fails is left out without changing what the others see. The result is the
+  one of running them one by one. On a real JetStream KV, 200 concurrent
+  registrations took 2 writes and 110 ms, against 200 writes and 288 ms one at
+  a time. A write that fails, or a writer cancelled mid-write, fails every
+  mutation it carried; a caller cancelled before its mutation is taken drops
+  it. Another replica's write still makes the batch retry, five times at most.
 - The SDK's `ModelHost` (module models) and `AgentHost` (submits, polls,
   cancels) take `max_concurrency` (64 by default). `ModelHost.close()` cancels
   the chats still running, as unsubscribing did before; `AgentHost.close()`

@@ -818,3 +818,164 @@ def test_concurrent_registrations_in_one_process_all_succeed():
         return {instance.instance_id for instance in listed.instances}
 
     assert asyncio.run(scenario()) == {f"i{i}" for i in range(20)}
+
+
+class CountingWrites(YieldingRegistry):
+    """Counts compare-and-swaps, each one a full snapshot written to JetStream."""
+
+    def __init__(self):
+        super().__init__()
+        self.writes = 0
+
+    async def compare_and_swap(self, data, revision):
+        self.writes += 1
+        await super().compare_and_swap(data, revision)
+
+
+async def _listed(service):
+    listed = await service.list_modules(pb.ListModulesRequest(limit=100))
+    return {instance.instance_id for instance in listed.instances}
+
+
+def test_mutations_that_arrive_together_share_one_registry_write():
+    async def scenario():
+        registry = CountingWrites()
+        service = DiscoveryService(registry)
+        await asyncio.gather(
+            *(
+                service.register(registration(f"m{i}", f"i{i}"), "owner")
+                for i in range(20)
+            )
+        )
+        return registry.writes, await _listed(service)
+
+    writes, listed = asyncio.run(scenario())
+
+    # The first goes alone; the 19 that arrive while it is written go together.
+    assert writes == 2
+    assert listed == {f"i{i}" for i in range(20)}
+
+
+def test_a_mutation_that_fails_leaves_the_others_written_with_it():
+    async def scenario():
+        service = DiscoveryService(CountingWrites())
+        results = await asyncio.gather(
+            service.register(registration("a", "a"), "owner"),
+            service.register(registration("b", "b"), "owner"),
+            service.register(registration("bad.*", "bad"), "owner"),
+            service.register(registration("c", "c"), "owner"),
+            return_exceptions=True,
+        )
+        return results, await _listed(service)
+
+    results, listed = asyncio.run(scenario())
+
+    assert isinstance(results[2], DiscoveryError)
+    assert "INVALID_ARGUMENT" in str(results[2])
+    assert [r.instance.instance_id for r in (results[0], results[1], results[3])] == [
+        "a",
+        "b",
+        "c",
+    ]
+    assert listed == {"a", "b", "c"}
+
+
+def test_a_batch_is_applied_again_after_another_replica_writes_first():
+    class Contended(CountingWrites):
+        conflicts = 2
+
+        async def compare_and_swap(self, data, revision):
+            if self.conflicts:
+                self.conflicts -= 1
+                await asyncio.sleep(0)
+                raise RevisionConflict()
+            await super().compare_and_swap(data, revision)
+
+    async def scenario():
+        service = DiscoveryService(Contended())
+        await asyncio.gather(
+            *(
+                service.register(registration(f"m{i}", f"i{i}"), "owner")
+                for i in range(5)
+            )
+        )
+        return await _listed(service)
+
+    assert asyncio.run(scenario()) == {f"i{i}" for i in range(5)}
+
+
+def test_a_registry_outage_fails_every_mutation_waiting_on_it():
+    class Down(YieldingRegistry):
+        async def read(self):
+            await asyncio.sleep(0)
+            raise ConnectionError("JetStream unavailable")
+
+    async def scenario():
+        service = DiscoveryService(Down())
+        return await asyncio.wait_for(
+            asyncio.gather(
+                *(
+                    service.register(registration(f"m{i}", f"i{i}"), "owner")
+                    for i in range(5)
+                ),
+                return_exceptions=True,
+            ),
+            timeout=2,
+        )
+
+    results = asyncio.run(scenario())
+
+    assert all(isinstance(result, ConnectionError) for result in results)
+
+
+class GatedWrites(CountingWrites):
+    """Holds write number ``gated`` (1-based) until ``release`` is set."""
+
+    def __init__(self, gated):
+        super().__init__()
+        self.gated = gated
+        self.release = asyncio.Event()
+        self.held = asyncio.Event()
+
+    async def compare_and_swap(self, data, revision):
+        if self.writes + 1 == self.gated:
+            self.held.set()
+            await self.release.wait()
+        await super().compare_and_swap(data, revision)
+
+
+def test_a_mutation_cancelled_before_it_is_written_is_dropped():
+    async def scenario():
+        registry = GatedWrites(gated=1)
+        service = DiscoveryService(registry)
+        first = asyncio.create_task(service.register(registration("a", "a"), "owner"))
+        await registry.held.wait()  # "a" is being written
+        waiting = asyncio.create_task(service.register(registration("b", "b"), "owner"))
+        await asyncio.sleep(0.01)
+        waiting.cancel()
+        registry.release.set()
+        await first
+        with pytest.raises(asyncio.CancelledError):
+            await waiting
+        return await _listed(service)
+
+    assert asyncio.run(scenario()) == {"a"}
+
+
+def test_a_writer_cancelled_mid_write_fails_the_mutations_written_with_it():
+    async def scenario():
+        registry = GatedWrites(gated=2)
+        service = DiscoveryService(registry)
+        first = asyncio.create_task(service.register(registration("a", "a"), "owner"))
+        await asyncio.sleep(0)  # "a" takes the lock and starts its write
+        writer = asyncio.create_task(service.register(registration("b", "b"), "owner"))
+        joined = asyncio.create_task(service.register(registration("c", "c"), "owner"))
+        await first
+        await registry.held.wait()  # "b" writes "b" and "c" together
+        writer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await writer
+        with pytest.raises(DiscoveryError, match="UNAVAILABLE"):
+            await asyncio.wait_for(joined, timeout=2)
+
+    asyncio.run(scenario())
