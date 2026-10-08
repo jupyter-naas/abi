@@ -213,3 +213,69 @@ def test_stop_ends_delivery_at_the_broker_before_draining(monkeypatch):
         ("drain", "b"),
     ]
     assert primary.subscriptions == []
+
+
+class _Subscriber:
+    """A NATS connection that records the callbacks it is given."""
+
+    max_payload = 1024 * 1024
+
+    def __init__(self):
+        self.callbacks = {}
+
+    async def subscribe(self, subject, queue="", cb=None):
+        self.callbacks[subject.rsplit(".", 1)[-1]] = cb
+        return SimpleNamespace(
+            unsubscribe=AsyncMock(), drain=AsyncMock(), _id=len(self.callbacks)
+        )
+
+    async def flush(self):
+        pass
+
+
+def _lookup_message():
+    return SimpleNamespace(
+        data=pb.GetModuleRequest(module_id="research").SerializeToString(),
+        headers={"Nats-Auth-Token": issue_service_token("caller", SECRET)},
+        reply="reply",
+        subject="abi.discovery.test.v1.get_module",
+        _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
+    )
+
+
+def test_lookups_are_answered_side_by_side_and_stop_waits_for_them(monkeypatch):
+    from naas_abi_core.services.discovery.adapters.primary import discovery_nats
+
+    monkeypatch.setattr(discovery_nats, "stop_delivery", AsyncMock())
+
+    async def scenario():
+        release = asyncio.Event()
+        running = []
+
+        async def get_module(request):
+            running.append(request.module_id)
+            await release.wait()
+            return pb.GetModuleResponse()
+
+        service = SimpleNamespace(get_module=get_module)
+        primary = DiscoveryNATS(service, SECRET, "test")
+        nc = _Subscriber()
+        await primary.start(nc)
+        messages = [_lookup_message() for _ in range(3)]
+        for msg in messages:
+            await nc.callbacks["get_module"](msg)  # returns at once
+        for _ in range(100):
+            if len(running) == 3:
+                break
+            await asyncio.sleep(0.01)
+        assert len(running) == 3  # one at a time would leave two waiting
+        stopping = asyncio.create_task(primary.stop())
+        await asyncio.sleep(0.05)
+        assert not stopping.done()  # the calls received are answered first
+        release.set()
+        await asyncio.wait_for(stopping, timeout=2)
+        return messages
+
+    messages = asyncio.run(scenario())
+
+    assert all(msg._client.publish.await_count == 1 for msg in messages)

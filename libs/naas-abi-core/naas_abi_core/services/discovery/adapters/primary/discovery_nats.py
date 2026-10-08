@@ -9,6 +9,7 @@ from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_dispatch import max_concurrent_requests
 from naas_abi_core.engine.nats_sessions import stop_delivery
 from naas_abi_core.services.discovery.discovery_service import (
     DiscoveryError,
@@ -16,6 +17,7 @@ from naas_abi_core.services.discovery.discovery_service import (
 )
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 from naas_abi_sdk import overflow
+from naas_abi_sdk.concurrency import ConcurrentCalls
 from naas_abi_sdk.messages import reply
 from nats.aio.client import Client
 from nats.aio.msg import Msg
@@ -35,10 +37,20 @@ OPERATIONS: dict[str, tuple[Any, Any, bool]] = {
 
 
 class DiscoveryNATS:
-    def __init__(self, service: DiscoveryService, secret: str, project: str):
+    def __init__(
+        self,
+        service: DiscoveryService,
+        secret: str,
+        project: str,
+        max_concurrency: int | None = None,
+    ):
         self.service, self.secret, self.project = service, secret, project
         self.subscriptions: list[Subscription] = []
         self.max_payload = 512 * 1024
+        # Calls side by side, as the kernel services (nats.max_concurrent_requests).
+        self.calls = ConcurrentCalls(
+            max_concurrent_requests() if max_concurrency is None else max_concurrency
+        )
 
     async def start(self, nc: Client) -> None:
         self.max_payload = min(nc.max_payload, 512 * 1024)
@@ -48,7 +60,7 @@ class DiscoveryNATS:
                     await nc.subscribe(
                         f"abi.discovery.{self.project}.v1.{operation}",
                         queue=f"abi.discovery.{self.project}.owners",
-                        cb=partial(self._handle, operation),
+                        cb=self.calls.callback(partial(self._handle, operation)),
                     )
                 )
             await nc.flush()
@@ -63,6 +75,7 @@ class DiscoveryNATS:
         for subscription in self.subscriptions:
             await subscription.drain()
         self.subscriptions.clear()
+        await self.calls.idle()  # the calls received are answered
 
     async def _handle(self, operation: str, msg: Msg) -> None:
         request_type, response_type, mutation = OPERATIONS[operation]

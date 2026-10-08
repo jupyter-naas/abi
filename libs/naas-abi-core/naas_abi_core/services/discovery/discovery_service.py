@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import hashlib
 import math
@@ -115,6 +116,9 @@ class DiscoveryService:
         # polls are allowed from it for snapshot_seconds (see authorize_agent).
         self.snapshot_seconds = snapshot_seconds
         self._snapshot: tuple[float, pb.RegistryState] | None = None
+        # This replica's mutations, one at a time: its endpoint answers calls side
+        # by side, and concurrent writes would exhaust each other's CAS retries.
+        self._mutations = asyncio.Lock()
 
     async def _read(self) -> tuple[pb.RegistryState, int]:
         data, revision = await self.registry.read()
@@ -446,6 +450,12 @@ class DiscoveryService:
         )
 
     async def _mutate(self, operation: Callable[[pb.RegistryState], Result]) -> Result:
+        async with self._mutations:
+            return await self._mutate_once(operation)
+
+    async def _mutate_once(
+        self, operation: Callable[[pb.RegistryState], Result]
+    ) -> Result:
         for _ in range(5):
             state, revision = await self._read()
             result = operation(state)

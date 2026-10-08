@@ -51,6 +51,13 @@ reads the registry, so a snapshot never refuses what the registry allows. An
 eviction or unregister through another replica can still let polls through for
 up to that second. Every read and successful write refreshes the snapshot.
 
+## Concurrency
+`DiscoveryNATS` answers calls side by side, up to `nats.max_concurrent_requests`
+(`naas_abi_sdk.concurrency.ConcurrentCalls`); `stop()` answers the calls received
+first. A replica's writes stay one at a time (`DiscoveryService._mutate` holds a
+lock): concurrent compare-and-swaps on the one registry document would exhaust
+their five retries (`REGISTRY_BUSY`). Reads do not take the lock.
+
 ## Tests
 Use `uv run pytest .../services/discovery --import-mode=importlib`. Unit tests inject
 a clock and a fake port; integration tests use native nats-server. Add port
