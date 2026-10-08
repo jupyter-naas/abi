@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.81.1 (2026-10-08)
+
+### Bug Fixes
+
+- **nexus**: Copy the class name onto the stored agent row
+  ([`d7b8105`](https://github.com/jupyter-naas/abi/commit/d7b8105ced6c6371afba3326820a578a5785b22d))
+
+
 ## v2.81.0 (2026-10-07)
 
 ### Bug Fixes
