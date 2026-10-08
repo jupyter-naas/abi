@@ -202,7 +202,9 @@ def _extract_urls_from_text(text: str) -> list[str]:
         return []
     urls: list[str] = []
     seen: set[str] = set()
-    for match in re.findall(r"https?://[^\s<>\]\)]+", text):
+    # Quotes end a URL: tool outputs are often JSON or a repr, and keeping the
+    # closing `"` listed every URL twice (`https://x` and `https://x",`).
+    for match in re.findall(r"https?://[^\s<>\]\)\"'`]+", text):
         url = match.rstrip(".,;)")
         if url not in seen:
             seen.add(url)
@@ -698,7 +700,12 @@ async def stream_chat_response(
                 elif isinstance(chunk, dict):
                     payload = chunk
                     _ingest_stream_event_into_steps(chunk, steps)
-                    if chunk.get("event") == "tool_response":
+                    # A tool may opt out of sources (`metadata={"chat_source":
+                    # False}`): its URLs are internal identifiers, not references.
+                    if (
+                        chunk.get("event") == "tool_response"
+                        and chunk.get("chat_source") is not False
+                    ):
                         output = chunk.get("output") or chunk.get("content") or ""
                         for url in _extract_urls_from_text(str(output)):
                             if url not in web_source_urls:
