@@ -32,7 +32,12 @@ treats its own instance as absent. A lost lease (expiry or eviction) registers
 the same instance id again with a fresh lease token, so run owners, claims and
 agent and model subjects stay valid; `AgentHost._bind` keeps its subscriptions
 when the id did not change. A provider process accepts at most 200 live
-runs, shared by every agent it hosts. `invoke` and `stream_invoke` send a 300
+runs, shared by every agent it hosts. `AgentHost` and `ModelHost` answer their
+calls side by side, up to `max_concurrency` (64) at once (`concurrency.py`,
+`ConcurrentCalls`, shared with core's kernel services and discovery): a
+handler awaited in a subscription callback would answer one call at a time.
+`AgentHost.close()` answers the calls received before it cancels runs;
+`ModelHost.close()` cancels the chats still running. `invoke` and `stream_invoke` send a 300
 second deadline unless the caller passes `timeout`; `deadline_seconds` 0 on
 submit still means no deadline. The 300 second idle watchdog cancels a streamed
 run with no new event, and any run without a deadline. An unstreamed run (invoke

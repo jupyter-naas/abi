@@ -46,5 +46,26 @@ calls a second at 10 ms needs 10 in flight, at 200 ms it needs 200.
 - A service whose handler calls back into the same service through NATS holds
   one slot while it waits for another. With every slot held that way, calls
   wait until their deadline. No kernel service does this today.
-- Streamed reads and transfers (`TransferHost`) and the RPC overflow host keep
-  their own subscriptions and are not covered.
+- Streamed reads, transfers (`TransferHost`) and the RPC overflow host already
+  ran each message in its own task, at most `max_sessions` × 4 at once
+  (`RESOURCE_EXHAUSTED` beyond), as did the model registry (64). They are
+  unchanged.
+
+## Addendum (2026-10-08): discovery and the SDK hosts
+
+Three more handlers awaited each message in their subscription callback. They
+now share one implementation, `naas_abi_sdk.concurrency.ConcurrentCalls`, which
+`nats_tracing.ConcurrentRequests` extends.
+
+- Discovery (`DiscoveryNATS`) answers its calls side by side, up to
+  `nats.max_concurrent_requests`. Its writes still go one at a time within a
+  replica (`DiscoveryService._mutate` holds a lock): they compare-and-swap one
+  registry document, and 20 concurrent registrations without the lock left 15
+  failing with `REGISTRY_BUSY`. Reads (`get_module`, `list_modules`,
+  `authorize_agent`, `authorize_model`) run side by side. `stop()` answers the
+  calls received before it returns.
+- The SDK's `ModelHost` (module models) and `AgentHost` (submits, polls,
+  cancels) take `max_concurrency` (64 by default). `ModelHost.close()` cancels
+  the chats still running, as unsubscribing did before; `AgentHost.close()`
+  answers the calls received before it cancels the runs, as draining the
+  subscriptions did before.

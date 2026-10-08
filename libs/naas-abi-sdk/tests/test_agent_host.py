@@ -771,3 +771,52 @@ def test_drain_lets_a_live_run_finish():
         assert task.done() and not task.cancelled()
 
     asyncio.run(scenario())
+
+
+def _bound(owner):
+    """Bind ``owner`` to a connection that records its subscription callbacks."""
+    callbacks = {}
+
+    async def subscribe(subject, cb=None, **kwargs):
+        callbacks[subject.rsplit(".", 1)[-1]] = cb
+        return AsyncMock()
+
+    nc = SimpleNamespace(subscribe=subscribe, flush=AsyncMock())
+    owner.session.client.transport = SimpleNamespace(connect=AsyncMock(return_value=nc))
+    return callbacks
+
+
+def test_calls_run_side_by_side_and_close_answers_them_first():
+    async def scenario():
+        owner = host(Documents(), Handler())
+        callbacks = _bound(owner)
+        await owner._bind()
+        release, running = asyncio.Event(), []
+
+        async def handle_operation(name, operation, msg):
+            running.append(operation)
+            await release.wait()
+
+        owner._handle_operation = handle_operation
+        for _ in range(3):
+            # Returns at once: one call at a time would block here.
+            await asyncio.wait_for(
+                callbacks["status"](
+                    SimpleNamespace(
+                        subject="abi.agent.default.owner.agent.v1.status", headers={}
+                    )
+                ),
+                timeout=1,
+            )
+        for _ in range(100):
+            if len(running) == 3:
+                break
+            await asyncio.sleep(0.01)
+        assert running == ["status"] * 3  # one at a time would leave two waiting
+        closing = asyncio.create_task(owner.close())
+        await asyncio.sleep(0.05)
+        assert not closing.done()
+        release.set()
+        await asyncio.wait_for(closing, timeout=2)
+
+    asyncio.run(scenario())

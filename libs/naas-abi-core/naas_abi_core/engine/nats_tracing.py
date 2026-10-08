@@ -14,19 +14,16 @@ docs/adr/20261006_single-serving-engine.md.
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from typing import Any
 
 import nats.errors
 import nats.micro
-from naas_abi_core import logger
 from naas_abi_core.engine.nats_dispatch import max_concurrent_requests
 from naas_abi_core.engine.nats_sessions import stop_delivery, until
+from naas_abi_sdk.concurrency import ConcurrentCalls
 from naas_abi_sdk.telemetry import server_span
-
-Callback = Callable[[Any], Awaitable[None]]
 
 
 def traced_handler(
@@ -40,65 +37,17 @@ def traced_handler(
     return handle
 
 
-class ConcurrentRequests:
-    """Runs a service's endpoint calls side by side, at most ``limit`` at once.
-
-    nats-py hands a subscription its next message only once the callback for
-    the previous one has returned, so a handler awaited there answers one call
-    at a time. Each call runs in its own task instead. With ``limit`` calls
-    running, the callback waits for a free slot and later calls stay in the
-    subscription's buffer, each until its caller's deadline.
+class ConcurrentRequests(ConcurrentCalls):
+    """A kernel service's calls side by side (``naas_abi_sdk.concurrency``).
 
     The callback is ``nats.micro``'s own request handler, which keeps the
     endpoint statistics (``$SRV.STATS``) and answers a handler's exception with
     a 500 error reply.
     """
 
-    def __init__(self, limit: int) -> None:
-        if limit < 1:
-            raise ValueError("A service must handle at least one call at once")
-        self.limit = limit
-        # Calls received and not answered yet, including those waiting for a slot.
-        self.in_flight = 0
-        self._slots = asyncio.Semaphore(limit)
-        self._tasks: set[asyncio.Task[None]] = set()
-
     def client(self, nc: Any) -> Any:
         """``nc`` for ``nats.micro``: endpoint subscriptions run their calls here."""
         return _ConcurrentClient(nc, self)
-
-    def callback(self, cb: Callback) -> Callback:
-        async def receive(msg: Any) -> None:
-            # Counted at once: a drain waits for a call still waiting for a slot.
-            self.in_flight += 1
-            try:
-                await self._slots.acquire()
-            except BaseException:
-                self.in_flight -= 1
-                raise
-            task = asyncio.create_task(self._run(cb, msg))
-            self._tasks.add(task)
-            task.add_done_callback(self._tasks.discard)
-
-        return receive
-
-    async def _run(self, cb: Callback, msg: Any) -> None:
-        try:
-            await cb(msg)
-        except Exception:  # noqa: BLE001 - nats-py would only log it too
-            logger.opt(exception=True).warning(
-                f"NATS service call on {getattr(msg, 'subject', '?')} failed"
-            )
-        finally:
-            self._slots.release()
-            self.in_flight -= 1
-
-    async def cancel(self) -> None:
-        """Cancel the calls still running."""
-        tasks = list(self._tasks)
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 class _ConcurrentClient:

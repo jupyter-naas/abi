@@ -192,7 +192,7 @@ These keys have working defaults; change them only when needed.
 | Key | Default | Purpose |
 |---|---|---|
 | `nats.client_timeout_seconds` | 10 | How long the engine's own service calls wait for a reply. Long dataset operations (`compact`, `flush`, `query`) can pass their own deadline. |
-| `nats.max_concurrent_requests` | 64 | Calls each kernel service of the engine handles at once, on as many worker threads. Later calls wait until a call finishes or their deadline passes. Size it to the backend: a PostgreSQL service gains nothing above its connection pool. |
+| `nats.max_concurrent_requests` | 64 | Calls each kernel service of the engine, and discovery, handles at once, on as many worker threads. Later calls wait until a call finishes or their deadline passes. Size it to the backend: a PostgreSQL service gains nothing above its connection pool. |
 | `nats.object_storage_streaming.chunk_bytes` | 64 KiB | Chunk size for object transfers. |
 | `nats.object_storage_streaming.max_upload_bytes` | none | Largest object accepted over NATS. |
 | `nats.object_storage_streaming.max_sessions` | 32 | Concurrent transfers per engine. |
