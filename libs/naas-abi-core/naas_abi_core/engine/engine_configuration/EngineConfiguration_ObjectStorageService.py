@@ -91,10 +91,31 @@ class ObjectStorageAdapterR2Configuration(BaseModel):
     base_prefix: str = ""
 
 
+class ObjectStorageAdapterNATSConfiguration(BaseModel):
+    """Object storage adapter NATS RPC client configuration.
+
+    Talks to a remote ``ObjectStoragePrimaryAdapterNATS`` over NATS
+    request/reply -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
+    (Stage 1) and naas_abi_core/proto/object_storage/v1/object_storage.proto.
+
+    object_storage_adapter:
+      adapter: "nats_rpc"
+      config:
+        nats_url: "nats://127.0.0.1:4222"
+        jwt_secret: "{{ secret.NATS_SERVICE_JWT_SECRET }}"
+        service_identity: "api"
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    nats_url: str = "nats://127.0.0.1:4222"
+    jwt_secret: str
+    service_identity: str = "api"
+
+
 class ObjectStorageAdapterConfiguration(GenericLoader):
-    adapter: Literal["fs", "s3", "naas", "r2", "custom"]
+    adapter: Literal["fs", "s3", "naas", "r2", "nats_rpc", "custom"]
     config: (
-        ObjectStorageAdapterFSConfiguration | ObjectStorageAdapterS3Configuration | ObjectStorageAdapterNaasConfiguration | ObjectStorageAdapterR2Configuration
+        ObjectStorageAdapterFSConfiguration | ObjectStorageAdapterS3Configuration | ObjectStorageAdapterNaasConfiguration | ObjectStorageAdapterR2Configuration | ObjectStorageAdapterNATSConfiguration
         | None
     ) = None
 
@@ -148,6 +169,12 @@ class ObjectStorageAdapterConfiguration(GenericLoader):
                 self.config,
                 "Invalid configuration for services.object_storage.object_storage_adapter 'r2' adapter",
             )
+        if self.adapter == "nats_rpc":
+            pydantic_model_validator(
+                ObjectStorageAdapterNATSConfiguration,
+                self.config,
+                "Invalid configuration for services.object_storage.object_storage_adapter 'nats_rpc' adapter",
+            )
 
         return self
 
@@ -181,6 +208,14 @@ class ObjectStorageAdapterConfiguration(GenericLoader):
                 )
 
                 return ObjectStorageSecondaryAdapterR2(**self.config.model_dump())
+            elif self.adapter == "nats_rpc":
+                from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNATSClient import (
+                    ObjectStorageSecondaryAdapterNATSClient,
+                )
+
+                return ObjectStorageSecondaryAdapterNATSClient(
+                    **self.config.model_dump()
+                )
             else:
                 raise ValueError(f"Unknown adapter: {self.adapter}")
             # return GenericLoader(

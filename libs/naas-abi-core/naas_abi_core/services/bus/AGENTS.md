@@ -88,3 +88,14 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/bus/adapters/secondary/R
 2. Respect the delivery contracts: pub/sub fanout vs. work-queue exactly-one-consumer.
 3. Run the generic contract tests (`tests/bus__secondary_adapter__generic_test.py`) against the new adapter.
 4. Document any backend-specific topic/routing-key syntax in a module docstring.
+
+## NATS / JetStream adapter
+
+`adapters/secondary/NATSJetStreamAdapter.py` uses Core NATS for pub/sub and
+JetStream for durable work queues. Publish/enqueue each attempt a send once;
+a lost flush or publication acknowledgement does not prove the message was not
+accepted. Exceptions retain their original type. The adapter does not replay the
+send or replace a connection merely because it is reconnecting. Reconnect-time
+outgoing buffering is disabled so expired sends are not queued for later delivery.
+Consumer acknowledgements/redelivery remain separate: callbacks must tolerate
+at-least-once delivery. The port has no stable idempotency-key contract yet.

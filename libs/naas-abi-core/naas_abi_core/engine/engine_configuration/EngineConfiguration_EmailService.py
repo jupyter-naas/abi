@@ -54,8 +54,31 @@ class EmailAdapterMicrosoftOutlookConfiguration(BaseModel):
     user: str
 
 
+class EmailAdapterNATSConfiguration(BaseModel):
+    """Email adapter NATS RPC client configuration.
+
+    Talks to a remote ``EmailPrimaryAdapterNATS`` over NATS request/reply --
+    see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
+    (Stage 1) and naas_abi_core/proto/email/v1/email.proto.
+
+    email_adapter:
+      adapter: "nats_rpc"
+      config:
+        nats_url: "nats://127.0.0.1:4222"
+        jwt_secret: "{{ secret.NATS_SERVICE_JWT_SECRET }}"
+        service_identity: "api"
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    nats_url: str = "nats://127.0.0.1:4222"
+    jwt_secret: str
+    service_identity: str = "api"
+
+
 class EmailAdapterConfiguration(GenericLoader):
-    adapter: Literal["smtp", "filesystem", "ses", "sendgrid", "microsoft_outlook", "custom"]
+    adapter: Literal[
+        "smtp", "filesystem", "ses", "sendgrid", "microsoft_outlook", "nats_rpc", "custom"
+    ]
     config: dict | None = None
 
     @model_validator(mode="after")
@@ -94,6 +117,12 @@ class EmailAdapterConfiguration(GenericLoader):
                 EmailAdapterMicrosoftOutlookConfiguration,
                 self.config,
                 "Invalid configuration for services.email.email_adapter 'microsoft_outlook' adapter",
+            )
+        elif self.adapter == "nats_rpc":
+            pydantic_model_validator(
+                EmailAdapterNATSConfiguration,
+                self.config,
+                "Invalid configuration for services.email.email_adapter 'nats_rpc' adapter",
             )
 
         return self
@@ -136,6 +165,13 @@ class EmailAdapterConfiguration(GenericLoader):
             )
 
             return MicrosoftOutlookAdapter(**self.config)
+        elif self.adapter == "nats_rpc":
+            assert self.config is not None, "config is required for nats_rpc adapter"
+            from naas_abi_core.services.email.adapters.secondary.EmailSecondaryAdapterNATSClient import (
+                EmailSecondaryAdapterNATSClient,
+            )
+
+            return EmailSecondaryAdapterNATSClient(**self.config)
         elif self.adapter == "custom":
             return super().load()
         else:

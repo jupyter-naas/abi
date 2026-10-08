@@ -44,8 +44,25 @@ class BusAdapterPythonQueueConfiguration(BaseModel):
     lock_timeout_seconds: float = 1.0
 
 
+class BusAdapterNATSConfiguration(BaseModel):
+    """NATS JetStream bus adapter configuration.
+
+    Opt-in alongside "rabbitmq"/"python_queue", not a replacement yet — see
+    docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md (Stage 1).
+
+    bus_adapter:
+      adapter: "nats_jetstream"
+      config:
+        nats_url: "nats://127.0.0.1:4222"
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    nats_url: str = "nats://127.0.0.1:4222"
+
+
 class BusAdapterConfiguration(GenericLoader):
-    adapter: Literal["rabbitmq", "python_queue", "custom"]
+    adapter: Literal["rabbitmq", "python_queue", "nats_jetstream", "custom"]
     config: dict | None = None
 
     @model_validator(mode="after")
@@ -72,6 +89,14 @@ class BusAdapterConfiguration(GenericLoader):
                     "Invalid configuration for services.bus.bus_adapter 'python_queue' adapter",
                 )
 
+        if self.adapter == "nats_jetstream":
+            if self.config is not None:
+                pydantic_model_validator(
+                    BusAdapterNATSConfiguration,
+                    self.config,
+                    "Invalid configuration for services.bus.bus_adapter 'nats_jetstream' adapter",
+                )
+
         return self
 
     def load(self) -> IBusAdapter:
@@ -92,6 +117,13 @@ class BusAdapterConfiguration(GenericLoader):
                 "config is required for python_queue adapter"
             )
             return PythonQueueAdapter(**self.config)
+        elif self.adapter == "nats_jetstream":
+            from naas_abi_core.services.bus.adapters.secondary.NATSJetStreamAdapter import (
+                NATSJetStreamAdapter,
+            )
+
+            config = self.config or {}
+            return NATSJetStreamAdapter(**config)
         elif self.adapter == "custom":
             return super().load()
         else:

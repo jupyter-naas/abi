@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Self
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
@@ -68,12 +68,43 @@ class VectorStoreAdapterSqliteVecConfiguration(BaseModel):
     busy_timeout_ms: int = 5000
 
 
+class VectorStoreAdapterNATSConfiguration(BaseModel):
+    """Vector store adapter NATS RPC client configuration.
+
+    Talks to a remote ``VectorStorePrimaryAdapterNATS`` over NATS
+    request/reply -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
+    (Stage 1) and naas_abi_core/proto/vector_store/v1/vector_store.proto.
+
+    vector_store_adapter:
+      adapter: "nats_rpc"
+      config:
+        nats_url: "nats://127.0.0.1:4222"
+        jwt_secret: "{{ secret.NATS_SERVICE_JWT_SECRET }}"
+        service_identity: "api"
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    nats_url: str = "nats://127.0.0.1:4222"
+    jwt_secret: str
+    service_identity: str = "api"
+
+
 class VectorStoreAdapterConfiguration(GenericLoader):
-    adapter: Literal["qdrant", "qdrant_in_memory", "sqlite_vec", "custom"]
+    adapter: Literal["qdrant", "qdrant_in_memory", "sqlite_vec", "nats_rpc", "custom"]
+    # Deliberately a loose dict, not a typed Union of the adapter config
+    # classes above (unlike object_storage's equivalent field): qdrant/
+    # qdrant_in_memory/sqlite_vec all have every field defaulted, so an
+    # untagged Union can't reliably tell them apart from a minimal/empty
+    # config dict -- pydantic would happily bind `{}` to whichever member
+    # comes first in the Union regardless of what `adapter:` actually says.
+    # The per-adapter `pydantic_model_validator` calls in `validate_adapter`
+    # below do the real type-checking, branching on `self.adapter` first
+    # (which is unambiguous), so this field only needs to accept "a dict".
     config: dict | None = None
 
     @model_validator(mode="after")
-    def validate_adapter(self) -> "VectorStoreAdapterConfiguration":
+    def validate_adapter(self) -> Self:
         if self.adapter != "custom":
             assert self.config is not None, (
                 "config is required if adapter is not custom"
@@ -98,6 +129,13 @@ class VectorStoreAdapterConfiguration(GenericLoader):
                 VectorStoreAdapterSqliteVecConfiguration,
                 self.config,
                 "Invalid configuration for services.vector_store.vector_store_adapter 'sqlite_vec' adapter",
+            )
+
+        if self.adapter == "nats_rpc":
+            pydantic_model_validator(
+                VectorStoreAdapterNATSConfiguration,
+                self.config,
+                "Invalid configuration for services.vector_store.vector_store_adapter 'nats_rpc' adapter",
             )
 
         return self
@@ -127,6 +165,12 @@ class VectorStoreAdapterConfiguration(GenericLoader):
                 )
 
                 return SqliteVecAdapter(**self.config)
+            elif self.adapter == "nats_rpc":
+                from naas_abi_core.services.vector_store.adapters.secondary.VectorStoreSecondaryAdapterNATSClient import (
+                    VectorStoreSecondaryAdapterNATSClient,
+                )
+
+                return VectorStoreSecondaryAdapterNATSClient(**self.config)
             else:
                 raise ValueError(f"Unknown adapter: {self.adapter}")
         else:

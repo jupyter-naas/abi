@@ -24,6 +24,13 @@ class KeyValueService(ServiceBase):
         super().__init__()
         self.__adapter = adapter
 
+    @property
+    def adapter(self) -> IKeyValueAdapter:
+        """The wrapped secondary adapter -- public so callers (e.g.
+        ``EngineNATSLoader``) can check what kind of adapter this service is
+        backed by, mirroring ``ObjectStorageService.adapter``."""
+        return self.__adapter
+
     def __publish_event(self, event: object) -> None:
         if not self.services_wired:
             return

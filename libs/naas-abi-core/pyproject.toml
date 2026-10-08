@@ -72,6 +72,7 @@ all = [
     "naas-abi-core[dagster]",
     "naas-abi-core[redis]",
     "naas-abi-core[rabbitmq]",
+    "naas-abi-core[nats]",
     "naas-abi-core[microsoft]",
 ]
 openrouter = [
@@ -87,6 +88,11 @@ redis = [
 ]
 rabbitmq = [
     "pika",
+]
+nats = [
+    "nats-py>=2.16.0",
+    "pyjwt>=2.11.0",
+    "protobuf>=6.33.5",
 ]
 microsoft = [
     "msal>=1.37.0",
@@ -108,7 +114,14 @@ dev = [
     "pytest>=9.0.1",
     "python-semantic-release>=9.21.0",
     "testcontainers>=4.13.2",
+    "types-protobuf",
 ]
+# grpcio-tools (protoc for the .proto contracts under naas_abi_core/proto/) is
+# deliberately NOT a workspace dependency: it only depends on protobuf>=7.35,
+# which conflicts with dagster's protobuf<7 pin. It's a one-off codegen tool,
+# not a runtime dependency, so run it isolated instead:
+#   uvx --from grpcio-tools python -m grpc_tools.protoc ...
+# See naas_abi_core/proto/README.md.
 
 [tool.semantic_release]
 commit_parser = "conventional-monorepo"
@@ -144,6 +157,16 @@ prerelease_token = "dev"
 
 [tool.hatch.build.targets.sdist.force-include]
 "assets" = "assets"
+
+[tool.mypy]
+# Generated protobuf code (naas_abi_core/proto/**/*_pb2.py[i]) isn't
+# hand-written and gets overwritten on regeneration. Its generated .pyi
+# stubs don't reliably resolve well-known-types imports (e.g. Timestamp)
+# through types-protobuf's stub package even when installed -- a known
+# upstream quirk, not a real type error in this codebase.
+[[tool.mypy.overrides]]
+module = "naas_abi_core.proto.*"
+ignore_errors = true
 
 [tool.pytest.ini_options]
 markers = [

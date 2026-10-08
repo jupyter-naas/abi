@@ -136,7 +136,19 @@ dev = [
     "pytest-cov>=7.0.0",
     "coverage>=7.10.7",
     "coverage-badge>=1.1.2",
+    "types-protobuf",
 ]
+
+[tool.mypy]
+# Same rationale as [tool.ruff]'s extend-exclude: generated protobuf code
+# isn't hand-written, and its generated .pyi stubs don't reliably resolve
+# well-known-types imports (e.g. Timestamp) through types-protobuf's stub
+# package even when installed — a known upstream quirk, not a real type
+# error in this codebase. Check the .proto sources and the adapters that
+# use these instead of protoc's own output.
+[[tool.mypy.overrides]]
+module = "naas_abi_core.proto.*"
+ignore_errors = true
 
 [build-system]
 requires = ["hatchling"]
@@ -159,6 +171,10 @@ naas-abi-cli = { path = "libs/naas-abi-cli" , editable = true }
 
 [tool.ruff]
 target-version = "py311"
+# Generated protobuf code (naas_abi_core/proto/**/*_pb2.py[i]) is not
+# hand-written and gets overwritten on regeneration — lint the .proto
+# sources and the adapters that use these, not protoc's own output.
+extend-exclude = ["**/*_pb2.py", "**/*_pb2.pyi"]
 
 [tool.ruff.lint]
 # Ruff 0.16 expanded defaults; keep them but suppress rules that conflict with

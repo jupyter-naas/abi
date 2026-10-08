@@ -112,6 +112,13 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
         self._bootstrap_schema_graph()
 
+    @property
+    def adapter(self) -> ITripleStorePort:
+        """The wrapped secondary adapter -- public so callers (e.g.
+        ``EngineNATSLoader``) can check what kind of adapter this service is
+        backed by, mirroring ``ObjectStorageService.adapter``."""
+        return self.__triple_store_adapter
+
     def _schema_graph_bootstrapped(self) -> bool:
         """Return True when the built-in schema vocabulary is already in the store.
 

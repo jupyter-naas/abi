@@ -1,0 +1,668 @@
+// NATS-RPC contract for the source_control kernel domain.
+// Mirrors naas_abi_core/services/source_control/SourceControlPorts.py 1:1 for
+// the ISourceControlAdapter surface. See
+// docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+//
+// Scope of this v1 contract: every ISourceControlAdapter method is plain
+// request/response (no streaming/callback members on this port), so all 27
+// methods are included here.
+//
+// A primary adapter serving this contract wraps the SourceControlService
+// domain object (not a bare ISourceControlAdapter), so create_proposal,
+// submit_review and merge publish the same ProposalOpened/ReviewSubmitted/
+// ProposalMerged/ProposalMergeBlocked events for remote callers that they do
+// for in-process callers -- see source_control__primary_adapter__NATS.py.
+//
+// Subjects (see "Protobuf contract shapes" in the RFC):
+//   abi.svc.source_control.v1.ensure_user
+//   abi.svc.source_control.v1.ensure_repo
+//   abi.svc.source_control.v1.list_repos
+//   abi.svc.source_control.v1.add_collaborator
+//   abi.svc.source_control.v1.list_contents
+//   abi.svc.source_control.v1.get_file
+//   abi.svc.source_control.v1.upsert_file
+//   abi.svc.source_control.v1.upsert_files
+//   abi.svc.source_control.v1.list_commits
+//   abi.svc.source_control.v1.list_branches
+//   abi.svc.source_control.v1.create_branch
+//   abi.svc.source_control.v1.delete_branch
+//   abi.svc.source_control.v1.get_diff
+//   abi.svc.source_control.v1.create_proposal
+//   abi.svc.source_control.v1.list_proposals
+//   abi.svc.source_control.v1.get_proposal
+//   abi.svc.source_control.v1.get_proposal_diff
+//   abi.svc.source_control.v1.list_proposal_commits
+//   abi.svc.source_control.v1.list_comments
+//   abi.svc.source_control.v1.list_reviews
+//   abi.svc.source_control.v1.add_comment
+//   abi.svc.source_control.v1.submit_review
+//   abi.svc.source_control.v1.list_checks
+//   abi.svc.source_control.v1.set_branch_protection
+//   abi.svc.source_control.v1.merge
+//   abi.svc.source_control.v1.list_workflow_runs
+//   abi.svc.source_control.v1.mint_git_token
+syntax = "proto3";
+
+package abi.source_control.v1;
+
+import "naas_abi_core/proto/common/v1/common.proto";
+
+// ---------------------------------------------------------------------------
+// DTOs -- mirror the @dataclass(frozen=True) types in SourceControlPorts.py.
+// ---------------------------------------------------------------------------
+
+message Repo {
+  string id = 1;
+  string name = 2;
+  string owner = 3;
+  string default_branch = 4;
+  string clone_url = 5;
+  string html_url = 6;
+  string description = 7;
+  bool private = 8;
+  bool empty = 9;
+  optional string updated_at = 10;
+}
+
+// One entry in a repository directory listing.
+message ContentEntry {
+  string name = 1;
+  string path = 2;
+  string type = 3;  // "file" | "dir"
+  int64 size = 4;
+}
+
+// FileContent.text/.data are both optional, distinguished together with
+// is_binary: a text file carries text (data unset), a binary file carries
+// data (text unset).
+message FileContent {
+  string path = 1;
+  string name = 2;
+  int64 size = 3;
+  optional string text = 4;
+  bool is_binary = 5;
+  optional bytes data = 6;
+}
+
+// One path to create or replace in a tree write. content is UTF-8 text or
+// raw bytes for binary assets -- the client picks the oneof arm based on
+// isinstance(content, bytes).
+message FileWrite {
+  string path = 1;
+  oneof content {
+    string text_content = 2;
+    bytes binary_content = 3;
+  }
+}
+
+message Commit {
+  string sha = 1;
+  string message = 2;
+  string author = 3;
+  optional string date = 4;
+}
+
+message Branch {
+  string name = 1;
+  string commit_sha = 2;
+  bool protected = 3;
+}
+
+message DiffFile {
+  string path = 1;
+  string status = 2;
+  int32 additions = 3;
+  int32 deletions = 4;
+  optional string patch = 5;
+  optional string old_path = 6;
+}
+
+message Diff {
+  repeated DiffFile files = 1;
+}
+
+message Comment {
+  string id = 1;
+  optional string path = 2;
+  optional int32 line = 3;
+  string body = 4;
+  string author = 5;
+  optional string created_at = 6;
+}
+
+message Review {
+  string id = 1;
+  string state = 2;  // one of REVIEW_*
+  string body = 3;
+  string author = 4;
+  optional string submitted_at = 5;
+}
+
+message Check {
+  string name = 1;
+  string status = 2;  // one of CHECK_*
+  optional string conclusion = 3;
+}
+
+// A normalized pull/merge request ("change proposal").
+message Proposal {
+  string id = 1;
+  int32 number = 2;
+  string title = 3;
+  string body = 4;
+  string state = 5;  // one of PROPOSAL_*
+  string source_branch = 6;
+  string target_branch = 7;
+  string author = 8;
+  bool mergeable = 9;
+  int32 approvals = 10;
+  string html_url = 11;
+}
+
+// A CI/CD workflow run (Forgejo/Gitea Actions, GitHub Actions, ...). status
+// carries the forge's run status verbatim.
+message WorkflowRun {
+  int64 id = 1;
+  string name = 2;
+  string workflow_id = 3;
+  string display_title = 4;
+  int32 run_number = 5;
+  string event = 6;  // push | pull_request | ...
+  string status = 7;
+  string head_branch = 8;
+  string head_sha = 9;
+  string url = 10;
+  optional string created_at = 11;
+  optional string run_started_at = 12;
+  optional string updated_at = 13;
+}
+
+message MergeResult {
+  bool merged = 1;
+  optional string sha = 2;
+  optional string message = 3;
+}
+
+// Repeated-DTO wrappers -- oneof arms can't carry `repeated` directly.
+message Repos {
+  repeated Repo repos = 1;
+}
+message ContentEntries {
+  repeated ContentEntry entries = 1;
+}
+message Commits {
+  repeated Commit commits = 1;
+}
+message Branches {
+  repeated Branch branches = 1;
+}
+message Proposals {
+  repeated Proposal proposals = 1;
+}
+message Comments {
+  repeated Comment comments = 1;
+}
+message Reviews {
+  repeated Review reviews = 1;
+}
+message Checks {
+  repeated Check checks = 1;
+}
+message WorkflowRuns {
+  repeated WorkflowRun workflow_runs = 1;
+}
+
+// ---------------------------------------------------------------------------
+// ensure_user
+// ---------------------------------------------------------------------------
+
+message EnsureUserRequest {
+  abi.common.v1.CallContext context = 1;
+  string external_id = 2;
+  string email = 3;
+  string username = 4;
+}
+message EnsureUserResponse {
+  oneof result {
+    string user_id = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ensure_repo
+// ---------------------------------------------------------------------------
+
+message EnsureRepoRequest {
+  abi.common.v1.CallContext context = 1;
+  string owner = 2;
+  string name = 3;
+  bool private = 4;
+  bool auto_init = 5;
+}
+message EnsureRepoResponse {
+  oneof result {
+    Repo repo = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// list_repos
+// ---------------------------------------------------------------------------
+
+message ListReposRequest {
+  abi.common.v1.CallContext context = 1;
+}
+message ListReposResponse {
+  oneof result {
+    Repos repos = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// add_collaborator
+// ---------------------------------------------------------------------------
+
+message AddCollaboratorRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  string username = 3;
+  string permission = 4;
+}
+message AddCollaboratorResponse {
+  // Empty on success -- the error, if any, is the whole signal.
+  optional abi.common.v1.CallError error = 1;
+}
+
+// ---------------------------------------------------------------------------
+// list_contents
+// ---------------------------------------------------------------------------
+
+message ListContentsRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  string path = 3;
+  optional string ref = 4;
+}
+message ListContentsResponse {
+  oneof result {
+    ContentEntries entries = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// get_file
+// ---------------------------------------------------------------------------
+
+message GetFileRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  string path = 3;
+  optional string ref = 4;
+}
+message GetFileResponse {
+  oneof result {
+    FileContent file = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// upsert_file
+// ---------------------------------------------------------------------------
+
+message UpsertFileRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  string path = 3;
+  oneof content {
+    string text_content = 4;
+    bytes binary_content = 5;
+  }
+  string message = 6;
+  string branch = 7;
+  optional string author_name = 8;
+  optional string author_email = 9;
+}
+message UpsertFileResponse {
+  oneof result {
+    Commit commit = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// upsert_files
+// ---------------------------------------------------------------------------
+
+message UpsertFilesRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  repeated FileWrite files = 3;
+  string message = 4;
+  string branch = 5;
+  optional string author_name = 6;
+  optional string author_email = 7;
+}
+message UpsertFilesResponse {
+  oneof result {
+    Commit commit = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// list_commits
+// ---------------------------------------------------------------------------
+
+message ListCommitsRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  optional string ref = 3;
+  int32 limit = 4;
+}
+message ListCommitsResponse {
+  oneof result {
+    Commits commits = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// list_branches
+// ---------------------------------------------------------------------------
+
+message ListBranchesRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+}
+message ListBranchesResponse {
+  oneof result {
+    Branches branches = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// create_branch
+// ---------------------------------------------------------------------------
+
+message CreateBranchRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  string name = 3;
+  string from_ref = 4;
+}
+message CreateBranchResponse {
+  oneof result {
+    Branch branch = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// delete_branch
+// ---------------------------------------------------------------------------
+
+message DeleteBranchRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  string name = 3;
+}
+message DeleteBranchResponse {
+  optional abi.common.v1.CallError error = 1;
+}
+
+// ---------------------------------------------------------------------------
+// get_diff
+// ---------------------------------------------------------------------------
+
+message GetDiffRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  string base = 3;
+  string head = 4;
+}
+message GetDiffResponse {
+  oneof result {
+    Diff diff = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// create_proposal
+// ---------------------------------------------------------------------------
+
+message CreateProposalRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  string title = 3;
+  string body = 4;
+  string source_branch = 5;
+  string target_branch = 6;
+  // reviewers: list[str] | None on the port -- None and [] both cross the
+  // wire as an empty repeated field, and the adapter treats them the same.
+  repeated string reviewers = 7;
+}
+message CreateProposalResponse {
+  oneof result {
+    Proposal proposal = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// list_proposals
+// ---------------------------------------------------------------------------
+
+message ListProposalsRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  string state = 3;
+}
+message ListProposalsResponse {
+  oneof result {
+    Proposals proposals = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// get_proposal
+// ---------------------------------------------------------------------------
+
+message GetProposalRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  int32 number = 3;
+}
+message GetProposalResponse {
+  oneof result {
+    Proposal proposal = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// get_proposal_diff
+// ---------------------------------------------------------------------------
+
+message GetProposalDiffRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  int32 number = 3;
+}
+message GetProposalDiffResponse {
+  oneof result {
+    Diff diff = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// list_proposal_commits
+// ---------------------------------------------------------------------------
+
+message ListProposalCommitsRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  int32 number = 3;
+}
+message ListProposalCommitsResponse {
+  oneof result {
+    Commits commits = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// list_comments
+// ---------------------------------------------------------------------------
+
+message ListCommentsRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  int32 number = 3;
+}
+message ListCommentsResponse {
+  oneof result {
+    Comments comments = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// list_reviews
+// ---------------------------------------------------------------------------
+
+message ListReviewsRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  int32 number = 3;
+}
+message ListReviewsResponse {
+  oneof result {
+    Reviews reviews = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// add_comment
+// ---------------------------------------------------------------------------
+
+message AddCommentRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  int32 number = 3;
+  string body = 4;
+  optional string path = 5;
+  optional int32 line = 6;
+}
+message AddCommentResponse {
+  oneof result {
+    Comment comment = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// submit_review
+// ---------------------------------------------------------------------------
+
+message SubmitReviewRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  int32 number = 3;
+  string event = 4;
+  string body = 5;
+}
+message SubmitReviewResponse {
+  oneof result {
+    Review review = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// list_checks
+// ---------------------------------------------------------------------------
+
+message ListChecksRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  int32 number = 3;
+}
+message ListChecksResponse {
+  oneof result {
+    Checks checks = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// set_branch_protection
+// ---------------------------------------------------------------------------
+
+message SetBranchProtectionRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  string branch = 3;
+  int32 required_approvals = 4;
+  repeated string required_checks = 5;
+}
+message SetBranchProtectionResponse {
+  optional abi.common.v1.CallError error = 1;
+}
+
+// ---------------------------------------------------------------------------
+// merge
+// ---------------------------------------------------------------------------
+
+message MergeRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  int32 number = 3;
+  string method = 4;
+}
+message MergeResponse {
+  oneof result {
+    MergeResult merge_result = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// list_workflow_runs
+// ---------------------------------------------------------------------------
+
+message ListWorkflowRunsRequest {
+  abi.common.v1.CallContext context = 1;
+  string repo_id = 2;
+  int32 limit = 3;
+}
+message ListWorkflowRunsResponse {
+  oneof result {
+    WorkflowRuns workflow_runs = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// mint_git_token
+// ---------------------------------------------------------------------------
+
+message MintGitTokenRequest {
+  abi.common.v1.CallContext context = 1;
+  string user_id = 2;
+}
+message MintGitTokenResponse {
+  oneof result {
+    string token = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}

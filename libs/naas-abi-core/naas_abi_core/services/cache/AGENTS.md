@@ -88,3 +88,23 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/cache/CacheService_test.
 2. Add a `<Name>Adapter_test.py` next to it.
 3. If the adapter has a stable, off-the-shelf setup, add a `CacheFactory.<Name>(...)` helper.
 4. Verify against the generic contract by writing tests that exercise the public `ICacheAdapter` surface — same shape as the existing `_test.py` siblings.
+
+## NATS RPC adapters
+
+`adapters/primary/cache__primary_adapter__NATS.py` exposes the service's
+protobuf endpoints. `adapters/secondary/CacheSecondaryAdapterNATSClient.py` implements the outbound
+port. Wire contracts live under `naas_abi_core/proto/cache/v1/`.
+
+Clients inherit connection, JWT renewal, deadlines, and error handling from
+`naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
+mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
+The maximum message size is 8 MiB (or a lower broker limit); oversized replies
+return non-retryable `PAYLOAD_TOO_LARGE`, and micro-service error headers raise
+instead of becoming an empty success. Larger results require streaming or a
+storage reference. No RPC is automatically replayed after transport failure:
+a timeout can hide a completed operation. Reconcile its outcome before retrying.
+`close()` releases only the client's transport, including for vector storage.
+
+Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
+are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
+The latter uses a local `nats-server` executable without Docker.

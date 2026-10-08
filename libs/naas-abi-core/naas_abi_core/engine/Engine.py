@@ -27,6 +27,11 @@ class Engine(IEngine):
 
     __services: IEngine.Services
 
+    # Started NATS primary adapters, if config.yaml has a top-level `nats:`
+    # block -- otherwise always []. Consumed by shutdown() below.
+    __nats_primary_adapters: list[object]
+    __nats_runtime_started: bool
+
     @property
     def configuration(self) -> EngineConfiguration:
         return self.__configuration
@@ -49,6 +54,10 @@ class Engine(IEngine):
         self.__configuration = EngineConfiguration.load_configuration(configuration)
         self.__engine_module_loader = EngineModuleLoader(self.__configuration)
         self.__engine_service_loader = EngineServiceLoader(self.__configuration)
+        # Set here, not only inside load(), so shutdown() is safe to call
+        # even if load() was never (or not yet) invoked.
+        self.__nats_primary_adapters = []
+        self.__nats_runtime_started = False
 
     def load(self, module_names: list[str] | None = None):
         # Per-module CLI invocations (e.g. ``abi chat <module> <agent>``)
@@ -86,6 +95,19 @@ class Engine(IEngine):
             module_dependencies
         )
         logger.debug("Engine services loaded")
+
+        # Config-gated: a no-op unless config.yaml has a top-level `nats:`
+        # block. See EngineNATSLoader / EngineConfiguration.NATSConfiguration.
+        if self.__configuration.nats is not None:
+            # The NATS extra must not be imported by existing non-NATS installs.
+            from naas_abi_core.engine.engine_loaders.EngineNATSLoader import (
+                EngineNATSLoader,
+            )
+
+            self.__nats_runtime_started = True
+            self.__nats_primary_adapters = EngineNATSLoader(
+                self.__configuration
+            ).expose_services(self.__services)
 
         logger.debug("Loading engine modules")
         self.__modules = self.__engine_module_loader.load_modules(self, module_names)
@@ -131,6 +153,46 @@ class Engine(IEngine):
     def on_initialized(self):
         for module in self.__modules.values():
             module.on_initialized()
+
+    def shutdown(self) -> None:
+        """Gracefully tear down everything ``load()`` started over NATS.
+
+        A no-op without importing NATS if this engine never started its
+        NATS runtime. Safe to call more than once, including before load().
+        Stops every started primary adapter first (draining its
+        subscriptions with the connection still up) before closing the
+        shared connection those adapters were registered on, not the other
+        order.
+
+        Callers: ``apps/api/api.py``'s FastAPI lifespan shutdown phase,
+        ``abi dev down``, and anywhere else that owns an ``Engine``'s
+        lifecycle end to end. An ungracefully-killed process (e.g. SIGKILL,
+        or a crash) still just drops the NATS connection, which the server
+        reaps naturally -- this only makes the *clean* shutdown path
+        actually clean, it's not required for correctness.
+        """
+        if not self.__nats_runtime_started:
+            return
+        self.__nats_runtime_started = False
+        from naas_abi_core.engine import nats_runtime
+
+        primaries, self.__nats_primary_adapters = self.__nats_primary_adapters, []
+        for primary in primaries:
+            try:
+                # __nats_primary_adapters is list[object] (it holds whichever
+                # of the 11 *PrimaryAdapterNATS classes EngineNATSLoader
+                # started, deliberately untyped there -- see its own return
+                # type) -- every one of them has an async stop(), just not
+                # one mypy can see through `object`.
+                nats_runtime.run_coro(primary.stop())  # type: ignore[attr-defined]
+            except Exception as exc:  # noqa: BLE001
+                # Best-effort: a slow/unresponsive primary must never block
+                # the rest of shutdown or crash the process on the way out.
+                logger.warning(
+                    f"Engine.shutdown: error stopping a NATS primary adapter "
+                    f"({type(primary).__name__}): {exc}"
+                )
+        nats_runtime.close()
 
 
 if __name__ == "__main__":

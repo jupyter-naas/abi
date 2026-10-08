@@ -9,11 +9,17 @@ from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter i
 from naas_abi_core.services.coding_environment.adapters.secondary.CodeServerComposeAdapter import (
     CodeServerComposeAdapter,
 )
+from naas_abi_core.services.coding_environment.adapters.secondary.CodingEnvironmentSecondaryAdapterNATSClient import (
+    CodingEnvironmentSecondaryAdapterNATSClient,
+)
 from naas_abi_core.services.coding_environment.adapters.secondary.InMemoryAdapter import (
     InMemoryAdapter,
 )
 from naas_abi_core.services.coding_environment.adapters.secondary.LocalDirectoryAdapter import (
     LocalDirectoryAdapter,
+)
+from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
+    ICodingEnvironmentAdapter,
 )
 from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
@@ -74,6 +80,27 @@ def test_coding_environment_configuration_local_directory_adapter(tmp_path):
 
     adapter = configuration.coding_environment_adapter.load()
     assert isinstance(adapter, LocalDirectoryAdapter)
+    assert isinstance(configuration.load(), CodingEnvironmentService)
+
+
+def test_coding_environment_configuration_nats_rpc_adapter_is_lazy():
+    """Loading the "nats_rpc" adapter must construct the client without any
+    network I/O -- CodingEnvironmentSecondaryAdapterNATSClient connects
+    lazily on first use, so this must succeed with no live NATS server."""
+    configuration = CodingEnvironmentServiceConfiguration(
+        coding_environment_adapter=CodingEnvironmentAdapterConfiguration(
+            adapter="nats_rpc",
+            config={
+                "nats_url": "nats://127.0.0.1:4222",
+                "jwt_secret": "test-shared-secret",
+                "service_identity": "api",
+            },
+        )
+    )
+
+    adapter = configuration.coding_environment_adapter.load()
+    assert isinstance(adapter, ICodingEnvironmentAdapter)
+    assert isinstance(adapter, CodingEnvironmentSecondaryAdapterNATSClient)
     assert isinstance(configuration.load(), CodingEnvironmentService)
 
 

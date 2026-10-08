@@ -43,8 +43,30 @@ class KeyValueAdapterPythonConfiguration(BaseModel):
     busy_timeout_ms: int = 5000
 
 
+class KeyValueAdapterNATSConfiguration(BaseModel):
+    """KeyValue adapter NATS RPC client configuration.
+
+    Talks to a remote ``KeyValuePrimaryAdapterNATS`` over NATS
+    request/reply -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
+    (Stage 1) and naas_abi_core/proto/keyvalue/v1/keyvalue.proto.
+
+    KV_adapter:
+      adapter: "nats_rpc"
+      config:
+        nats_url: "nats://127.0.0.1:4222"
+        jwt_secret: "{{ secret.NATS_SERVICE_JWT_SECRET }}"
+        service_identity: "api"
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    nats_url: str = "nats://127.0.0.1:4222"
+    jwt_secret: str
+    service_identity: str = "api"
+
+
 class KeyValueAdapterConfiguration(GenericLoader):
-    adapter: Literal["redis", "python", "custom"]
+    adapter: Literal["redis", "python", "nats_rpc", "custom"]
     config: dict | None = None
 
     @model_validator(mode="after")
@@ -68,6 +90,13 @@ class KeyValueAdapterConfiguration(GenericLoader):
                 "Invalid configuration for services.KV.KV_adapter 'python' adapter",
             )
 
+        if self.adapter == "nats_rpc":
+            pydantic_model_validator(
+                KeyValueAdapterNATSConfiguration,
+                self.config,
+                "Invalid configuration for services.KV.KV_adapter 'nats_rpc' adapter",
+            )
+
         return self
 
     def load(self) -> IKeyValueAdapter:
@@ -89,6 +118,12 @@ class KeyValueAdapterConfiguration(GenericLoader):
                 )
 
                 return PythonAdapter(**self.config)
+            elif self.adapter == "nats_rpc":
+                from naas_abi_core.services.keyvalue.adapters.secondary.KeyValueSecondaryAdapterNATSClient import (
+                    KeyValueSecondaryAdapterNATSClient,
+                )
+
+                return KeyValueSecondaryAdapterNATSClient(**self.config)
             else:
                 raise ValueError(f"Unknown adapter: {self.adapter}")
         else:
