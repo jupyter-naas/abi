@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 import secrets
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 ADMIN_EMAIL = "admin@example.com"
 _ADMIN_PREFIX = re.sub(r"[^A-Z0-9]", "_", ADMIN_EMAIL.upper())
@@ -20,9 +21,11 @@ ADMIN_PASSWORD_KEY = f"NEXUS_USER_{_ADMIN_PREFIX}_PASSWORD"
 _LEGACY_ADMIN_PASSWORD_KEY = "NEXUS_USER_ADMIN_PASSWORD"
 API_KEY = "ABI_API_KEY"
 NATS_SECRET = "NATS_JWT_SECRET"
-# The broker's users (.deploy/docker/nats/nats.conf): the engine's process, and
-# the SDK modules joining it.
-NATS_PASSWORDS = ("NATS_ABI_PASSWORD", "NATS_MODULE_PASSWORD")
+# The broker's users and the .env keys of their passwords: the engine's process
+# (abi), and the SDK modules joining it (module). Docker reads them in
+# .deploy/docker/nats/nats.conf, `abi dev` writes them into its own nats.conf.
+NATS_USERS = {"abi": "NATS_ABI_PASSWORD", "module": "NATS_MODULE_PASSWORD"}
+NATS_PASSWORDS = tuple(NATS_USERS.values())
 _MIN_NATS_PASSWORD = 16
 
 # Values older CLI versions wrote. Mirrors the Nexus auth list in
@@ -149,3 +152,13 @@ def ensure_nats_passwords(env_path: Path) -> dict[str, str]:
     if lines != original:
         _write(env_path, lines)
     return passwords
+
+
+def nats_login(url: str, user: str, password: str) -> str:
+    """``url`` logged in as ``user``: nats-py reads ``user:password@`` from it."""
+    parts = urlsplit(url)
+    host = parts.hostname or ""
+    if ":" in host:
+        host = f"[{host}]"
+    port = f":{parts.port}" if parts.port else ""
+    return urlunsplit(parts._replace(netloc=f"{user}:{password}@{host}{port}"))

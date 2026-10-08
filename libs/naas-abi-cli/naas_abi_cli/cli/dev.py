@@ -58,9 +58,12 @@ from rich.table import Table
 from rich.text import Text
 
 from naas_abi_cli.cli.admin_credentials import (
+    NATS_USERS,
     ensure_admin_credentials,
     ensure_api_key,
+    ensure_nats_passwords,
     ensure_nats_secret,
+    nats_login,
 )
 from naas_abi_cli.cli.dev_modules import (
     load_dev_modules,
@@ -436,18 +439,26 @@ def _jaeger_ports(query_port: int) -> dict[str, int]:
 
 
 def _write_dev_overlay(
-    ports: dict[str, int], *, nats_secret: str | None, tracing: bool = False
+    ports: dict[str, int],
+    *,
+    nats_secret: str | None,
+    nats_password: str | None = None,
+    tracing: bool = False,
 ) -> Path:
     """The blocks the engine merges over the project config (ABI_CONFIG_OVERLAY).
 
-    `nats:` (and the JetStream bus) when `nats_secret` is given, `telemetry:`
-    when `tracing`. JSON is valid YAML, so no YAML writer is needed. Holds the
-    JWT secret: owner-only.
+    `nats:` (and the JetStream bus) when `nats_secret` is given, logged in as the
+    broker user `abi` with `nats_password`; `telemetry:` when `tracing`. JSON is
+    valid YAML, so no YAML writer is needed. Holds the JWT secret and the
+    password: owner-only.
     """
     overlay: dict = {}
     if nats_secret is not None:
+        if not nats_password:
+            raise ValueError("The dev broker needs the engine's password (NATS_ABI_PASSWORD)")
+        nats_url = nats_login(_nats_url(ports), "abi", nats_password)
         overlay["nats"] = {
-            "nats_url": _nats_url(ports),
+            "nats_url": nats_url,
             "jwt_secret": nats_secret,
             "discovery": {"project": _discovery_project()},
             "monitoring_url": f"http://{PROBE_HOST}:{_nats_monitor_port(ports['nats'])}",
@@ -457,7 +468,7 @@ def _write_dev_overlay(
             "bus": {
                 "bus_adapter": {
                     "adapter": "nats_jetstream",
-                    "config": {"nats_url": _nats_url(ports)},
+                    "config": {"nats_url": nats_url},
                 }
             }
         }
@@ -542,11 +553,20 @@ def _launch_jaeger(spec: ServiceSpec) -> int:
     return _spawn(spec, [binary, "--config", str(config_path)], _project_root(), env)
 
 
-def _nats_server_config() -> str:
+def _nats_server_config(passwords: dict[str, str]) -> str:
     """Body of the nats.conf handed to nats-server with -c. Ports, bind
     address and JetStream stay on the command line (flags override the file),
-    so this only carries what has no flag."""
-    return f"max_payload: {NATS_MAX_PAYLOAD}\n"
+    so this only carries what has no flag: max_payload, and the broker's users
+    with their `passwords` (by .env key), as in the Docker stack. A client
+    without a valid user and password is refused."""
+    users = "\n".join(
+        f"    {{ user: {json.dumps(user)}, password: {json.dumps(passwords[key])} }}"
+        for user, key in NATS_USERS.items()
+    )
+    return (
+        f"max_payload: {NATS_MAX_PAYLOAD}\n\n"
+        f"authorization {{\n  users = [\n{users}\n  ]\n}}\n"
+    )
 
 
 def _launch_nats(spec: ServiceSpec) -> int:
@@ -569,8 +589,12 @@ def _launch_nats(spec: ServiceSpec) -> int:
     store_path = _project_root() / "storage" / "nats"
     store_path.mkdir(parents=True, exist_ok=True)
     # Rewritten on every launch so a stale copy can never pin an old limit.
+    # Holds the broker's passwords: owner-only.
     config_path = store_path / "nats.conf"
-    config_path.write_text(_nats_server_config(), encoding="utf-8")
+    config_path.touch(mode=0o600, exist_ok=True)
+    config_path.chmod(0o600)
+    passwords = ensure_nats_passwords(_project_root() / ".env")
+    config_path.write_text(_nats_server_config(passwords), encoding="utf-8")
     env = os.environ.copy()
     cmd = [
         binary,
@@ -989,7 +1013,10 @@ def _start_module(module, overlay: dict) -> ServiceSpec:
     if existing and _pid_alive(existing):
         click.echo(f"{module.name}: already running (pid {existing})")
         return spec
-    env = module_environment(module, overlay, _project_root(), os.environ)
+    password = ensure_nats_passwords(_project_root() / ".env")["NATS_MODULE_PASSWORD"]
+    env = module_environment(
+        module, overlay, _project_root(), os.environ, nats_password=password
+    )
     pid = _spawn(spec, module_command(module), _project_root(), env)
     _pid_path(spec).write_text(f"{pid}\n")
     command = " ".join(["python -m", module.module, *module.args])
@@ -1864,8 +1891,14 @@ def dev_up(
         for name in selected:
             if (with_nats or with_tracing) and name in ("api", "dagster") and config_overlay is None:
                 # Written once nats/jaeger are up, with the ports they actually bound.
-                secret = ensure_nats_secret(_project_root() / ".env") if with_nats else None
-                config_overlay = _write_dev_overlay(ports, nats_secret=secret, tracing=with_tracing)
+                env_path = _project_root() / ".env"
+                secret = ensure_nats_secret(env_path) if with_nats else None
+                password = (
+                    ensure_nats_passwords(env_path)["NATS_ABI_PASSWORD"] if with_nats else None
+                )
+                config_overlay = _write_dev_overlay(
+                    ports, nats_secret=secret, nats_password=password, tracing=with_tracing
+                )
             spec = _start_service(name, ports, log_level, selected, config_overlay)
             started.append(spec)
             if name == "nats":
