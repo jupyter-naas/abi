@@ -93,6 +93,7 @@ class EngineOwnershipLoader:
         self._loop: LoopThread | None = None
         self._loop_lock = threading.Lock()
         self._nc: Any = None
+        self._lifeline: Any = None  # naas_abi_sdk.lifeline.Lifeline of _nc
         self._ownership: EngineOwnership | None = None
         self._keeping: concurrent.futures.Future | None = None
         self._standby: concurrent.futures.Future | None = None
@@ -121,9 +122,14 @@ class EngineOwnershipLoader:
         from naas_abi_core.engine.ownership.ownership_factory import (
             create_engine_ownership,
         )
+        from naas_abi_sdk.lifeline import Lifeline
 
+        # Closed for good (nats-py gave up reconnecting): see naas_abi_sdk.lifeline.
+        self._lifeline = Lifeline("abi-engine-ownership")
         self._nc = await nats.connect(
-            self.configuration.nats_url, name=connection_name("abi-engine-ownership")
+            self.configuration.nats_url,
+            name=connection_name("abi-engine-ownership"),
+            closed_cb=self._lifeline.closed,
         )
         return await create_engine_ownership(self._nc, me, settings.timing())
 
@@ -249,8 +255,9 @@ class EngineOwnershipLoader:
             return
         if self._nc is not None:
             nc, self._nc = self._nc, None
+            closing = self._lifeline.close(nc) if self._lifeline else nc.close()
             try:
-                asyncio.run_coroutine_threadsafe(nc.close(), loop.loop).result(5.0)
+                asyncio.run_coroutine_threadsafe(closing, loop.loop).result(5.0)
             except Exception:  # noqa: BLE001
                 logger.opt(exception=True).debug("Closing the lease connection failed")
         loop.stop()

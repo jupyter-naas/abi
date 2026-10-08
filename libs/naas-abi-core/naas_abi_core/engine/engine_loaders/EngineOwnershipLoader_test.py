@@ -23,6 +23,7 @@ from naas_abi_core.engine.ownership.ownership_service_test import FlakyLease
 from naas_abi_core.engine.ownership.tests.lease__secondary_adapter__generic_test import (
     holder,
 )
+from naas_abi_sdk import lifeline
 
 
 def nats_config(**engine) -> NATSConfiguration:
@@ -309,3 +310,69 @@ def test_local_backends_are_fine_without_a_handover(environ):
 
     assert loader.claim() is Claim.SERVING
     loader.close()
+
+
+# --- the lease's connection --------------------------------------------------------------
+
+
+class FakeConnection:
+    """Calls ``closed_cb`` when closed, as nats-py does."""
+
+    def __init__(self, closed_cb):
+        self.closed_cb = closed_cb
+        self.is_closed = False
+
+    async def close(self) -> None:
+        if not self.is_closed:
+            self.is_closed = True
+            if self.closed_cb is not None:
+                await self.closed_cb()
+
+
+@pytest.fixture
+def lease_connections(monkeypatch):
+    """The loader's own JetStream ownership, over fake connections and a memory lease."""
+    import nats
+    from naas_abi_core.engine.ownership import ownership_factory
+
+    connections: list[FakeConnection] = []
+
+    async def connect(url, **options):
+        connections.append(FakeConnection(options.get("closed_cb")))
+        return connections[-1]
+
+    async def create(nc, me, timing):
+        return EngineOwnership(InMemoryLease(), me, timing)
+
+    monkeypatch.setattr(nats, "connect", connect)
+    monkeypatch.setattr(ownership_factory, "create_engine_ownership", create)
+    return connections
+
+
+@pytest.fixture
+def stops():
+    stops: list[str] = []
+    restore = lifeline.exit_on_connection_loss(lambda: stops.append("stop"))
+    yield stops
+    restore()
+
+
+def test_the_lease_connection_lost_for_good_stops_the_process(lease_connections, stops):
+    loader = EngineOwnershipLoader(nats_config(), environ={})
+    try:
+        assert loader.claim() is Claim.SERVING
+        loader.run(lease_connections[0].closed_cb())  # nats-py gave up reconnecting
+    finally:
+        loader.close()
+
+    assert stops == ["stop"]
+
+
+def test_closing_the_lease_connection_is_not_a_loss(lease_connections, stops):
+    loader = EngineOwnershipLoader(nats_config(), environ={})
+    assert loader.claim() is Claim.SERVING
+
+    loader.close()
+
+    assert lease_connections[0].is_closed
+    assert stops == []
