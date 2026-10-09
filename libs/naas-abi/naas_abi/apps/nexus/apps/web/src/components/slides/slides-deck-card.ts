@@ -34,6 +34,23 @@ function displayTitleFromResult(parsed: Record<string, unknown>): string {
 }
 
 /**
+ * Skill saves share ``slug`` and ``name`` with a deck, but they are not decks.
+ * ``create_skill`` adds ``saved`` and ``command``. ``get_workspace_skill``
+ * returns the row plus ``prompt``. ``delete_skill`` returns ``deleted``.
+ */
+function isSkillResult(parsed: Record<string, unknown>): boolean {
+  if (parsed.deleted === true) return true;
+  return (
+    'command' in parsed ||
+    'saved' in parsed ||
+    'scope' in parsed ||
+    'builtin' in parsed ||
+    'prompt' in parsed ||
+    'enabled' in parsed
+  );
+}
+
+/**
  * True when tool JSON looks like a deck create/write/publish result.
  *
  * Contract (tool-name agnostic):
@@ -41,11 +58,13 @@ function displayTitleFromResult(parsed: Record<string, unknown>): string {
  * - optional display name via ``title`` or ``name`` (slug title-cased if absent)
  * - if ``nexus_shipped`` is present (publish-style), require ``ok === true`` and
  *   ``nexus_shipped === true`` so failed/partial publishes never render a card
+ * - skill rows are excluded (see ``isSkillResult``)
  */
 export function isSlidesDeckResult(parsed: Record<string, unknown>): boolean {
   if (!parsed || typeof parsed !== 'object' || parsed.error) return false;
   const slug = typeof parsed.slug === 'string' ? parsed.slug.trim() : '';
   if (!slug) return false;
+  if (isSkillResult(parsed)) return false;
   if ('nexus_shipped' in parsed) {
     return parsed.ok === true && parsed.nexus_shipped === true;
   }

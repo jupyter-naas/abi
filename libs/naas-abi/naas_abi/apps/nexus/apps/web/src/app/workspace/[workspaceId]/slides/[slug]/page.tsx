@@ -230,6 +230,7 @@ export default function SlidesEditorPage() {
 
   useEffect(() => {
     setSelectedIndex(0);
+    useSlidesStore.getState().setSelectedElement(null);
   }, [slug, setSelectedIndex]);
 
   useEffect(() => {
@@ -858,6 +859,9 @@ export default function SlidesEditorPage() {
             onSelectedIndexChange={setSelectedIndex}
             manualEdit={manualEdit}
             onManualEditCommit={onManualEditCommit}
+            onElementSelect={(selection) => {
+              useSlidesStore.getState().setSelectedElement(selection);
+            }}
           />
         </div>
 

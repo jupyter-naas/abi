@@ -473,6 +473,7 @@ class _Builder:
                 (NEXUS.seeded_agent, seed.agents),
                 (NEXUS.seeded_app, seed.apps),
                 (NEXUS.seeded_ontology, seed.ontologies),
+                (NEXUS.seeded_skill, seed.skills),
             ):
                 for value in values:
                     self.graph.add((iri, prop, Literal(value)))

@@ -378,6 +378,8 @@ class WorkspaceSeedConfig(BaseModel):
     # is set: listed on, others off. Missing, null and empty lists show none.
     # owl:imports are not implied; explicitly list shared dependency files too.
     ontologies: list[str] | None = Field(default_factory=list)
+    # Exclusive module skill allowlist; missing, null, and [] expose none.
+    skills: list[str] | None = Field(default_factory=list)
     # Exact data graph grants. Missing policy exposes owned graphs only.
     graphs: WorkspaceGraphPolicyConfig = Field(default_factory=WorkspaceGraphPolicyConfig)
 

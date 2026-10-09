@@ -81,6 +81,60 @@ describe('slidesDeckCardFromToolCalls', () => {
     ).toBeNull();
   });
 
+  it('does not card a saved skill that shares slug and name', () => {
+    const created = JSON.stringify({
+      id: 'c37e4689-5226-4735-9c7c-41ff09e5f5df',
+      slug: 'cloud-souverain-europeen',
+      name: 'Cloud souverain européen',
+      scope: 'user',
+      enabled: true,
+      description: 'Synthèse',
+      builtin: false,
+      saved: true,
+      command: '/cloud-souverain-europeen',
+    });
+    const fetched = JSON.stringify({
+      id: 'c37e4689-5226-4735-9c7c-41ff09e5f5df',
+      workspace_id: 'ws-73939dfee5ca',
+      organization_id: 'org-1',
+      user_id: 'user-1',
+      name: 'Cloud souverain européen',
+      slug: 'cloud-souverain-europeen',
+      description: 'Synthèse',
+      prompt: 'Tu es un expert du cloud souverain européen.',
+      scope: 'user',
+      enabled: true,
+      builtin: false,
+    });
+    const deleted = JSON.stringify({
+      deleted: true,
+      slug: 'cloud-souverain-europeen',
+      name: 'Cloud souverain européen',
+    });
+    expect(
+      slidesDeckCardFromToolCalls([
+        toolCall({
+          rawName: 'create_skill',
+          toolName: 'Create Skill',
+          output: created,
+        }),
+        toolCall({
+          id: 'tc-2',
+          rawName: 'get_workspace_skill',
+          toolName: 'Get Workspace Skill',
+          output: fetched,
+        }),
+      ]),
+    ).toBeNull();
+    expect(
+      slidesDeckCardFromToolCalls([
+        toolCall({ rawName: 'delete_skill', output: deleted }),
+      ]),
+    ).toBeNull();
+    expect(isSlidesDeckResult(JSON.parse(created))).toBe(false);
+    expect(isSlidesDeckResult(JSON.parse(fetched))).toBe(false);
+  });
+
   it('ignores a failed create', () => {
     const failed = JSON.stringify({ error: 'Forgejo is not reachable.' });
     expect(slidesDeckCardFromToolCalls([toolCall({ output: failed })])).toBeNull();

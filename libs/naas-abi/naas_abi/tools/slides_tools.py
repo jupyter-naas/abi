@@ -70,6 +70,33 @@ _ATTR_ID_RE = re.compile(r"""\bid\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 _ATTR_CLASS_RE = re.compile(r"""\bclass\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 _H1_RE = re.compile(r"<h1\b[^>]*>(.*?)</h1>", re.IGNORECASE | re.DOTALL)
 _TAG_RE = re.compile(r"<[^>]+>")
+_EDITABLE_TAGS = frozenset(
+    {
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "p",
+        "li",
+        "button",
+        "a",
+        "figcaption",
+        "blockquote",
+        "label",
+        "td",
+        "th",
+    }
+)
+_ELEMENT_PATH_RE = re.compile(r"^(\d+):([a-z][a-z0-9]*):(\d+)$")
+_SLIDE_SECTION_RE = re.compile(
+    r"<section\b([^>]*)>([\s\S]*?)</section>", re.IGNORECASE
+)
+_SLIDE_CLASS_RE = re.compile(
+    r"""\bclass\s*=\s*["'][^"']*\bslide\b""", re.IGNORECASE
+)
+_TAG_TOKEN_RE = re.compile(r"</?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>")
 _REDACTED_PLACEHOLDER = "[REDACTED_DATA_URL]"
 _SCRIPT_PLACEHOLDER = "<!-- REDACTED_SCRIPT -->"
 _REPO_ID_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
@@ -829,6 +856,129 @@ def _apply_replacements(
     return updated, count, len(selected)
 
 
+def _slide_section_spans(html: str) -> list[tuple[int, int]]:
+    """Spans of ``<section class="...slide...">``, same order as the preview."""
+    spans: list[tuple[int, int]] = []
+    for match in _SLIDE_SECTION_RE.finditer(html):
+        if _SLIDE_CLASS_RE.search(match.group(1) or ""):
+            spans.append((match.start(), match.end()))
+    return spans
+
+
+def _editable_nodes(fragment: str) -> list[dict[str, int | str]]:
+    """Non-nested editable tags, matching the preview ``data-nexus-edit`` walk."""
+    stack: list[dict[str, int | str]] = []
+    nodes: list[dict[str, int | str]] = []
+    for match in _TAG_TOKEN_RE.finditer(fragment):
+        raw = match.group(0)
+        tag = match.group(1).lower()
+        if tag not in _EDITABLE_TAGS:
+            continue
+        if raw.startswith("</"):
+            for i in range(len(stack) - 1, -1, -1):
+                if stack[i]["tag"] == tag:
+                    opened = stack.pop(i)
+                    nodes.append(
+                        {
+                            "tag": tag,
+                            "inner_start": int(opened["inner_start"]),
+                            "inner_end": match.start(),
+                        }
+                    )
+                    break
+            continue
+        if re.search(r"/\s*>$", raw):
+            continue
+        stack.append({"tag": tag, "inner_start": match.end()})
+    nodes.sort(key=lambda node: int(node["inner_start"]))
+    kept: list[dict[str, int | str]] = []
+    for index, node in enumerate(nodes):
+        inner_start = int(node["inner_start"])
+        inner_end = int(node["inner_end"])
+        nested = any(
+            other_index != index
+            and int(other["inner_start"]) < inner_start
+            and int(other["inner_end"]) > inner_end
+            for other_index, other in enumerate(nodes)
+        )
+        if not nested:
+            kept.append(node)
+    return kept
+
+
+def _apply_replacements_at_path(
+    html: str,
+    old: str,
+    new: str,
+    occurrence: int,
+    element_path: str,
+    *,
+    section_index: int | None = None,
+    section_id: str | None = None,
+) -> tuple[str, int, int, int] | dict[str, Any]:
+    """Replace only inside the preview node ``slideIndex:tag:nth``."""
+    path = element_path.strip().lower()
+    parsed = _ELEMENT_PATH_RE.match(path)
+    if not parsed:
+        return {
+            "error": (
+                f"element_path {element_path!r} must look like "
+                "slideIndex:tag:nth (for example 0:h1:0)"
+            )
+        }
+    slide_index = int(parsed.group(1))
+    tag = parsed.group(2)
+    nth = int(parsed.group(3))
+    if section_index is not None and section_index != slide_index:
+        return {
+            "error": (
+                f"element_path slide {slide_index} does not match "
+                f"section_index {section_index}"
+            )
+        }
+    if tag not in _EDITABLE_TAGS:
+        return {"error": f"element_path tag {tag!r} is not an editable slide tag"}
+    spans = _slide_section_spans(html)
+    if slide_index >= len(spans):
+        return {
+            "error": (
+                f"element_path slide {slide_index} is out of range "
+                f"({len(spans)} slide(s))"
+            )
+        }
+    start, end = spans[slide_index]
+    section = html[start:end]
+    if section_id:
+        wanted = section_id.strip()
+        found_id = _section_id(section)
+        if found_id != wanted:
+            return {
+                "error": (
+                    f"element_path slide {slide_index} does not match "
+                    f"section_id {wanted!r}"
+                )
+            }
+    counts: dict[str, int] = {}
+    target: dict[str, int | str] | None = None
+    for node in _editable_nodes(section):
+        node_tag = str(node["tag"])
+        seen = counts.get(node_tag, 0)
+        counts[node_tag] = seen + 1
+        if node_tag == tag and seen == nth:
+            target = node
+            break
+    if target is None:
+        return {"error": f"element_path {path} not found"}
+    inner_start = start + int(target["inner_start"])
+    inner_end = start + int(target["inner_end"])
+    applied = _apply_replacements(html[inner_start:inner_end], old, new, occurrence)
+    if isinstance(applied, dict):
+        return applied
+    updated_inner, found, replaced = applied
+    updated = html[:inner_start] + updated_inner + html[inner_end:]
+    return updated, found, replaced, slide_index
+
+
 def _apply_replacements_in_section(
     html: str,
     old: str,
@@ -837,12 +987,25 @@ def _apply_replacements_in_section(
     *,
     section_index: int | None = None,
     section_id: str | None = None,
+    element_path: str | None = None,
 ) -> tuple[str, int, int, int] | dict[str, Any]:
     """Replace within one ``<section>`` when scoped; else whole deck.
 
-    Returns ``(updated_html, matches_found, replacements, resolved_section_index)``
+    ``element_path`` (``slideIndex:tag:nth``, the preview ``data-nexus-edit``
+    value) limits the replace to that one node. Returns
+    ``(updated_html, matches_found, replacements, resolved_section_index)``
     or an error dict. ``resolved_section_index`` is ``-1`` when unscoped.
     """
+    if element_path and element_path.strip():
+        return _apply_replacements_at_path(
+            html,
+            old,
+            new,
+            occurrence,
+            element_path,
+            section_index=section_index,
+            section_id=section_id,
+        )
     if section_index is None and not section_id:
         applied = _apply_replacements(html, old, new, occurrence)
         if isinstance(applied, dict):
@@ -1791,21 +1954,27 @@ def slides_tools() -> list[BaseTool]:
         occurrence: int = 0,
         section_index: int | None = None,
         section_id: str | None = None,
+        element_path: str = "",
         message: str = "fix(slides): replace text via Abi",
     ) -> dict[str, Any]:
         """Surgically replace a string in the open deck without dumping full HTML in chat.
 
         Omit slug when a deck is open in the Slides UI. occurrence: 0 replaces all
         matches; 1 replaces the first, 2 the second, etc. Matches HTML entities
-        flexibly (``&``/``&amp;``, ``—``/``&mdash;``/``&#8212;``, ``–``/``&ndash;``)
-        so cover ``<h1>`` / subtitle HTML updates. PPTX export reads that live
-        DOM; do not edit ``buildPptx`` or ``FOOTER_TXT``.
+        flexibly (amp, mdash, ndash) so cover h1 and subtitle HTML update.
+        PPTX export reads that live DOM; do not edit buildPptx or FOOTER_TXT.
 
-        For cover / title / \"slide 1\" edits: pass section_index=0 (or
-        section_id of the cover) and occurrence=0. Do not use occurrence=1 for
-        \"the title\": document order hits ``<title>`` / menubar before the cover
-        ``<h1>`` that Preview shows. Confirm ``cover_h1_updated`` /
-        ``cover_subtitle_updated`` in the tool result before claiming Preview
+        element_path limits the replace to one Preview node. Shape is
+        slideIndex:tag:nth, the same value as data-nexus-edit (for example
+        1:h1:0). Pass selected_element_path from the open-deck context when
+        the user clicked an element. occurrence then applies only inside that
+        node.
+
+        For cover / title / "slide 1" edits with no clicked element: pass
+        section_index=0 (or section_id of the cover) and occurrence=0. Do not
+        use occurrence=1 for the title: document order hits title / menubar
+        before the cover h1 Preview shows. Confirm cover_h1_updated /
+        cover_subtitle_updated in the tool result before claiming Preview
         and PPTX changed.
 
         For news, current events, or factual briefs: call web_search once this
@@ -1834,6 +2003,7 @@ def slides_tools() -> list[BaseTool]:
                 occurrence,
                 section_index=section_index,
                 section_id=section_id,
+                element_path=element_path,
             )
             if isinstance(applied, dict):
                 applied["source"] = source
@@ -1875,6 +2045,8 @@ def slides_tools() -> list[BaseTool]:
             )
             if resolved_section >= 0:
                 result["section_index"] = resolved_section
+            if element_path and element_path.strip():
+                result["element_path"] = element_path.strip().lower()
             old_plain = html_lib.unescape(old)
             warnings: list[str] = []
             if (

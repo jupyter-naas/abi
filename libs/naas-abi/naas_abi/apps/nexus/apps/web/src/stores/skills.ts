@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type SkillScope = 'user' | 'workspace' | 'organization';
+export type SkillScope = 'user' | 'workspace' | 'organization' | 'builtin';
 
 export interface Skill {
   id: string;
@@ -14,6 +14,11 @@ export interface Skill {
   prompt: string;
   scope: SkillScope;
   enabled: boolean;
+  builtin?: boolean;
+  source?: 'user' | 'module';
+  catalogRef?: string | null;
+  whenToUse?: string;
+  files?: string[];
   lastUsedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -76,12 +81,26 @@ const mapApiSkill = (s: any): Skill => ({
   slug: s.slug,
   description: s.description ?? '',
   prompt: s.prompt,
-  scope: s.scope === 'workspace' || s.scope === 'organization' ? s.scope : 'user',
+  scope:
+    s.scope === 'workspace' || s.scope === 'organization' || s.scope === 'builtin'
+      ? s.scope
+      : 'user',
   enabled: Boolean(s.enabled),
+  builtin: Boolean(s.builtin) || s.scope === 'builtin',
+  source: s.source === 'module' ? 'module' : 'user',
+  catalogRef: s.catalog_ref ?? null,
+  whenToUse: s.when_to_use ?? '',
+  files: Array.isArray(s.files) ? s.files : [],
   lastUsedAt: s.last_used_at ?? null,
   createdAt: s.created_at,
   updatedAt: s.updated_at,
 });
+
+/** Built-in packages are read-only. User-scoped skills belong to their creator. */
+export function canModifySkill(skill: Skill, userId: string | null | undefined): boolean {
+  if (skill.builtin || skill.scope === 'builtin') return false;
+  return skill.scope !== 'user' || skill.userId === userId;
+}
 
 const apiHelpers = async () => {
   const { authFetch } = await import('./auth');

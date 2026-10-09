@@ -80,6 +80,7 @@ describe('resourceFromPath', () => {
       id: 'agent-7',
     });
     expect(resourceFromPath('/workspace/ws-1/settings/skills/sk-1')?.kind).toBe('skill');
+    expect(resourceFromPath('/workspace/ws-1/settings/skills/new')).toBeNull();
     expect(resourceFromPath('/workspace/ws-1/code/r/abi/monorepo/pulls')).toEqual({
       feature: 'code',
       kind: 'repo',

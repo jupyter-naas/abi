@@ -63,6 +63,19 @@ class SkillCreateBody(BaseModel):
     enabled: bool = True
 
 
+class SkillPackageFileBody(BaseModel):
+    path: str = Field(..., min_length=1, max_length=400)
+    body: str = ""
+
+
+class SkillPackageBody(BaseModel):
+    """A skill package the user asked to write. Not an agent tool."""
+
+    skill_id: str = Field(..., min_length=1, max_length=100)
+    when_to_use: str = Field(..., min_length=1, max_length=2000)
+    files: list[SkillPackageFileBody] = Field(default_factory=list)
+
+
 class SkillUpdateBody(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     slug: str | None = Field(default=None, min_length=1, max_length=100)
@@ -110,6 +123,55 @@ async def create_skill(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@router.post("/package")
+async def write_skill_package(
+    body: SkillPackageBody,
+    current_user: User = Depends(get_current_user_required),
+    skill_service: SkillService = Depends(get_skill_service),
+) -> dict[str, object]:
+    """Write SKILL.md when the user asks. Prompt rows stay on POST /api/skills/."""
+    try:
+        await skill_service.write_requested_skill_package(
+            request_context(current_user),
+            body.skill_id,
+            when_to_use=body.when_to_use,
+            files=[{"path": item.path, "body": item.body} for item in body.files],
+        )
+    except SkillPermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {
+        "skill_id": body.skill_id,
+        "file": "SKILL.md",
+        "files": ["SKILL.md", *[item.path for item in body.files]],
+    }
+
+
+@router.get("/{skill_id}/files/{file_path:path}")
+async def read_skill_file(
+    skill_id: str,
+    file_path: str,
+    current_user: User = Depends(get_current_user_required),
+    skill_service: SkillService = Depends(get_skill_service),
+) -> dict[str, str]:
+    try:
+        skill = await skill_service.get_skill(
+            context=request_context(current_user),
+            skill_id=skill_id,
+        )
+    except SkillPermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    if not skill.builtin:
+        await require_workspace_access(current_user.id, skill.workspace_id)
+    content = skill_service.read_skill_package_file(skill, file_path)
+    if content is None:
+        raise HTTPException(status_code=404, detail="Skill file not found")
+    return {"path": file_path, "content": content}
+
+
 @router.get("/{skill_id}")
 async def get_skill(
     skill_id: str,
@@ -125,7 +187,8 @@ async def get_skill(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
-    await require_workspace_access(current_user.id, skill.workspace_id)
+    if not skill.builtin:
+        await require_workspace_access(current_user.id, skill.workspace_id)
     return skill
 
 
