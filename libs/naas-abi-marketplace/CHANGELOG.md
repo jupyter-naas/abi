@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v3.59.0 (2026-10-09)
+
+### Features
+
+- **people**: Add support for workspace_dataset backend
+  ([`7172bf2`](https://github.com/jupyter-naas/abi/commit/7172bf2a4897177b72cbb61fd1595a6d3d6be28b))
+
+- **people-intel**: Add support for include_suffixes in graph config and workspace manifest
+  ([`ac6e604`](https://github.com/jupyter-naas/abi/commit/ac6e6042f0f2ed92ac97fa889d9a559443ea05ba))
+
+### Refactoring
+
+- **people**: Improve error handling and logging in people resolver and results page
+  ([`723148c`](https://github.com/jupyter-naas/abi/commit/723148c14a68403ae320f4dd68fef9b3b8ba1ff5))
+
+- **people-intel**: Enhance people API routes with authentication and context
+  ([`9de46e2`](https://github.com/jupyter-naas/abi/commit/9de46e257b99d3f0fe16007e69359e0a018050d5))
+
+- **people-intel**: Update multiple modules and scripts for improvements and fixes
+  ([`ed96de9`](https://github.com/jupyter-naas/abi/commit/ed96de9d594768c4053bf24850114b88a122b52c))
+
+- **people-intel**: Update README and CSS for theme chrome variables
+  ([`473d488`](https://github.com/jupyter-naas/abi/commit/473d488dc721cf7c9c099d865f8aab1879f2ebe9))
+
+
 ## v3.58.0 (2026-10-07)
 
 ### Features
