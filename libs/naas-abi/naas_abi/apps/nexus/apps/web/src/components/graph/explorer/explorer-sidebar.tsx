@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Box, ChevronRight, LayoutDashboard, Search, X } from 'lucide-react';
+import { Box, ChevronRight, LayoutGrid, Search, X } from 'lucide-react';
 import { OntologyMultiPicker } from '@/components/shell/sidebar/ontology-multi-picker';
 import { OntologyTopicIcon } from '@/components/ontology/ontology-topic-icon';
 import { useOntologyIconsStore } from '@/stores/ontology-icons';
@@ -260,17 +260,18 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
     );
   }
   return (
+    <>
+    <button
+      type="button"
+      className="shell-sidebar-home"
+      aria-current={isExplorer && scope.dashboard ? 'page' : undefined}
+      onClick={() => navigate({ view: null, class: null, classFilter: null, page: null })}
+    >
+      <LayoutGrid size={14} aria-hidden="true" />
+      <span>Dashboard</span>
+    </button>
     <div className="graph-explorer-sidebar">
       <div className="graph-explorer-filters">
-        <button
-          type="button"
-          className="graph-explorer-dashboard-link"
-          aria-current={isExplorer && scope.dashboard ? 'page' : undefined}
-          onClick={() => navigate({ view: null, class: null, classFilter: null, page: null })}
-        >
-          <LayoutDashboard size={14} />
-          Dashboard
-        </button>
         <OntologyMultiPicker
           {...graphPickerProps}
           items={workspaceGraphs.map((g) => ({
@@ -536,5 +537,6 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
       )}
       </>}
     </div>
+    </>
   );
 }

@@ -70,24 +70,28 @@ function LayoutSwitch({
   entry,
   on,
   onChange,
+  exclusive,
 }: {
   entry: LayoutEntry;
   on: boolean;
   onChange: () => void;
+  /** Basemap: one choice, not a stackable layout. */
+  exclusive?: boolean;
 }) {
-  const title = !entry.combinable
-    ? `${entry.title} draws its own map: open it to view`
+  const title = exclusive
+    ? on
+      ? `${entry.title} is the basemap`
+      : `Use ${entry.title} as the basemap`
     : on
-      ? `On the All layouts map — click to leave ${entry.title} out`
-      : `Not on the All layouts map — click to add ${entry.title}`;
+      ? `On the map — click to leave ${entry.title} out`
+      : `Not on the map — click to add ${entry.title}`;
   return (
     <button
       type="button"
-      role="switch"
+      role={exclusive ? 'radio' : 'switch'}
       aria-checked={on}
-      aria-label={`Show ${entry.title} on All layouts`}
+      aria-label={exclusive ? `Use ${entry.title} as the basemap` : `Show ${entry.title} on the map`}
       title={title}
-      disabled={!entry.combinable}
       onClick={onChange}
       className={cn(
         'relative h-[14px] w-[25px] flex-shrink-0 rounded-none transition-colors disabled:cursor-not-allowed disabled:opacity-40',
@@ -112,10 +116,10 @@ function rowClass(active: boolean) {
 }
 
 /**
- * The layout list, Search-sidebar style: All layouts first, then the
- * Public / Private / Custom groups (always open), each layout with a link that
- * opens it alone and a switch that puts it on the All layouts map. Hidden
- * layouts (Settings → Maps) are left out.
+ * The layout list: All layouts first, then Basemap (pick one), then Public and
+ * Custom. Each row opens that layer alone. A basemap radio changes the
+ * background; a layout switch stacks that data on it. Hidden layouts
+ * (Settings → Maps) are left out.
  */
 export function MapsDatasetGroups({
   dense,
@@ -124,9 +128,10 @@ export function MapsDatasetGroups({
   dense?: boolean;
 }) {
   const pathname = usePathname();
-  const { workspaceId, entries, isOn, error } = useMapLayouts();
+  const { workspaceId, entries, isOn, error, basemapId } = useMapLayouts();
   const setLayoutOn = useMapsStore((s) => s.setLayoutOn);
   const setLayoutsOn = useMapsStore((s) => s.setLayoutsOn);
+  const setBasemap = useMapsStore((s) => s.setBasemap);
   const { datasetId } = parseMapsRoute(pathname);
   const combinable = entries.filter((e) => e.combinable);
   const onCount = combinable.filter(isOn).length;
@@ -138,24 +143,26 @@ export function MapsDatasetGroups({
       <Link
         href={mapsAllLayoutsPath(workspaceId)}
         aria-current={allActive ? 'page' : undefined}
-        // Same row as Apps' "All apps" and Search's "All topics".
-        className={cn(
-          'mb-1 flex w-full items-center gap-1 rounded-md px-2 py-1.5 search-sidebar-list-row transition-colors',
-          allActive ? 'bg-muted text-foreground font-medium' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-        )}
+        className="shell-sidebar-home"
       >
-        <LayoutGrid size={14} />
-        <span className="flex-1 truncate">All layouts</span>
+        <LayoutGrid size={14} aria-hidden="true" />
+        <span>All layouts</span>
         <span className="text-[10px] text-muted-foreground">
           {onCount}/{combinable.length} on
         </span>
       </Link>
 
       {groupLayoutEntries(entries).map((group) => {
+        const basemapGroup = group.id === 'basemap';
         const groupCombinable = group.entries.filter((e) => e.combinable);
         const allOn = groupCombinable.length > 0 && groupCombinable.every(isOn);
         return (
-          <div key={group.id} className="mb-2 space-y-0.5">
+          <div
+            key={group.id}
+            className="mb-2 space-y-0.5"
+            role={basemapGroup ? 'radiogroup' : undefined}
+            aria-label={basemapGroup ? 'Basemap' : undefined}
+          >
             <div className="flex items-center justify-between px-1 py-1 text-xs font-medium text-muted-foreground">
               <span>{group.label}</span>
               {groupCombinable.length > 1 && (
@@ -170,7 +177,7 @@ export function MapsDatasetGroups({
             </div>
             {group.entries.map((entry) => {
               const IconComponent = mapsIconMap[entry.icon] || Map;
-              const on = isOn(entry);
+              const on = basemapGroup ? entry.id === basemapId : isOn(entry);
               const active = datasetId === entry.id;
               return (
                 <div key={entry.id} className={rowClass(active)}>
@@ -180,13 +187,18 @@ export function MapsDatasetGroups({
                     title={entry.description}
                     className={cn(
                       'flex min-w-0 flex-1 items-center gap-2',
-                      entry.combinable && !on && 'text-muted-foreground',
+                      !on && 'text-muted-foreground',
                     )}
                   >
                     <IconComponent size={14} className="flex-shrink-0" />
                     <span className="flex-1 truncate">{entry.title}</span>
                   </Link>
-                  <LayoutSwitch entry={entry} on={on} onChange={() => setLayoutOn(entry.id, !on)} />
+                  <LayoutSwitch
+                    entry={entry}
+                    on={on}
+                    exclusive={basemapGroup}
+                    onChange={() => (basemapGroup ? setBasemap(entry.id) : setLayoutOn(entry.id, !on))}
+                  />
                 </div>
               );
             })}
@@ -218,7 +230,7 @@ export function MapsSection({
       id="maps"
       icon={<Map size={18} />}
       label="Maps"
-      description="Public and private map sources"
+      description="Basemap and map layouts"
       href={getWorkspacePath(currentWorkspaceId, '/maps')}
       collapsed={collapsed}
       detailOnly={detailOnly}
