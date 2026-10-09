@@ -133,6 +133,7 @@ class FilesService:
         search: str | None = None,
         sort_by: str = "name",
         sort_dir: str = "asc",
+        include_hidden: bool = True,
     ) -> FileListResponseData:
         """List a directory's entries.
 
@@ -152,9 +153,15 @@ class FilesService:
         the sort spans every page rather than just the current one. Sorting by
         name needs no per-entry metadata, so only the returned page is stat-ed;
         sorting by size or modified must stat every entry to compare them.
+
+        ``include_hidden=False`` drops system entries (names starting with
+        ``.``) before paging, so ``total`` counts only what is shown.
         """
         normalized_path = self.normalize_relative_path(path, allow_empty=True)
         entries = self._list_directory(normalized_path)
+
+        if not include_hidden:
+            entries = [entry for entry in entries if not entry.split("/")[-1].startswith(".")]
 
         needle = search.strip().lower() if search else ""
         if needle:

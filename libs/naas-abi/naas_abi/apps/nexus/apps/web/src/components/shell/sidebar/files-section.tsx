@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight,
   File,
@@ -25,6 +25,7 @@ import { getWorkspacePath } from './utils';
 import { filesBrowsePath } from '@/app/workspace/[workspaceId]/files/lib/files-route';
 import { driveRootForSource } from '@/app/workspace/[workspaceId]/files/lib/drive-label';
 import { FILES_EXPLORER_REFRESH_EVENT } from '@/app/workspace/[workspaceId]/files/lib/explorer-refresh';
+import { isSystemPath, withoutSystemFiles } from '@/lib/system-files';
 import { shellTokens } from '../tokens';
 import {
   canDropOntoExplorerFolder,
@@ -91,13 +92,25 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const isWorkspaceAdmin = workspaceRole === 'owner' || workspaceRole === 'admin';
   const [starredExpanded, setStarredExpanded] = useState(true);
   const [expandedDirs, setExpandedDirs] = useState<string[]>([]);
-  const [folderCache, setFolderCache] = useState<Record<string, FileInfo[]>>({});
+  const [rawFolderCache, setFolderCache] = useState<Record<string, FileInfo[]>>({});
   const [loadingDirs, setLoadingDirs] = useState<Record<string, boolean>>({});
   const [dirErrors, setDirErrors] = useState<Record<string, string | null>>({});
   const [explorerQuery, setExplorerQuery] = useState('');
   const loadGeneration = useRef(0);
-  const folderCacheRef = useRef(folderCache);
-  folderCacheRef.current = folderCache;
+  const folderCacheRef = useRef(rawFolderCache);
+  folderCacheRef.current = rawFolderCache;
+  // The tree caches whole listings and filters on render, so View → Show
+  // system files flips without refetching every open folder.
+  const showSystemFiles = useFilesStore((s) => s.showSystemFiles);
+  const folderCache = useMemo(
+    () =>
+      showSystemFiles
+        ? rawFolderCache
+        : Object.fromEntries(
+            Object.entries(rawFolderCache).map(([key, entries]) => [key, withoutSystemFiles(entries, false)]),
+          ),
+    [rawFolderCache, showSystemFiles],
+  );
   const {
     expandedCategories: fileExpandedCategories,
     toggleCategory: toggleFileCategory,
@@ -290,7 +303,8 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     async (source: string, folder: FileInfo) => {
       const folderPath = normalizeExplorerPath(folder.path);
       // Drive roots are not rendered as tree rows; still guard empty paths.
-      if (!folderPath) return;
+      // System files are read-only.
+      if (!folderPath || isSystemPath(folderPath)) return;
 
       const newName = await prompt({
         title: 'Rename',
@@ -299,6 +313,14 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
         confirmLabel: 'Rename',
       });
       if (!newName || newName === folder.name) return;
+      if (isSystemPath(newName.trim())) {
+        await confirm({
+          title: 'Invalid name',
+          description: 'Names starting with "." are system files, which are read-only.',
+          confirmLabel: 'OK',
+        });
+        return;
+      }
       if (!isValidExplorerEntryName(newName)) {
         await confirm({
           title: 'Invalid name',
@@ -337,7 +359,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const handleDeleteFolder = useCallback(
     async (source: string, folder: FileInfo) => {
       const folderPath = normalizeExplorerPath(folder.path);
-      if (!folderPath) return;
+      if (!folderPath || isSystemPath(folderPath)) return;
 
       const confirmed = await confirm({
         title: `Delete "${folder.name}"?`,
@@ -384,6 +406,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
       const from = normalizeExplorerPath(draggedPath);
       const toFolder = normalizeExplorerPath(targetPath);
       if (!canDropOntoExplorerFolder(from, toFolder)) return;
+      if (isSystemPath(from) || isSystemPath(toFolder)) return;
 
       const name = from.includes('/') ? from.slice(from.lastIndexOf('/') + 1) : from;
       const newPath = toFolder ? `${toFolder}/${name}` : name;

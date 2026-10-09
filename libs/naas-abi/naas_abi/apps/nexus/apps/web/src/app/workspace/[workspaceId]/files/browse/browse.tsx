@@ -48,6 +48,7 @@ import { CsvPreview } from '@/components/files/csv-preview';
 import { FilesAddSheet } from '../components/files-add-sheet';
 import { FilesMenuBar } from '../components/files-menu-bar';
 import { requestFilesExplorerRefresh } from '../lib/explorer-refresh';
+import { isSystemPath, withoutSystemFiles } from '@/lib/system-files';
 import { FilesMobileRow } from '../components/files-mobile-row';
 import { FilesMobileToolbar } from '../components/files-mobile-toolbar';
 import '../components/files-components.css';
@@ -137,6 +138,8 @@ function sortFiles(
   });
 }
 
+const SYSTEM_FILES_READ_ONLY = 'System files (names starting with ".") are read-only.';
+
 export default function FilesPage() {
   const router = useRouter();
   const params = useParams();
@@ -162,6 +165,8 @@ export default function FilesPage() {
     filesSortBy,
     filesSortDir,
     setFilesSort,
+    showSystemFiles,
+    setShowSystemFiles,
     fetchFiles,
     createFile,
     createFolder,
@@ -485,6 +490,10 @@ export default function FilesPage() {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
+    if (isSystemPath(currentPath)) {
+      setError(SYSTEM_FILES_READ_ONLY);
+      return;
+    }
 
     const items = e.dataTransfer.items;
     if (items && items.length > 0 && typeof items[0].webkitGetAsEntry === 'function') {
@@ -506,16 +515,21 @@ export default function FilesPage() {
     if (droppedFiles.length > 0) {
       await uploadFiles(droppedFiles);
     }
-  }, [uploadFiles]);
+  }, [uploadFiles, currentPath, setError]);
 
   // Internal move via drag onto a folder row.
   const handleRowDragStart = (e: React.DragEvent, file: FileInfo) => {
+    // System files are read-only: they cannot be moved.
+    if (isSystemPath(file.path)) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData(INTERNAL_DRAG_MIME, file.path);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleFolderDragOver = (e: React.DragEvent, folder: FileInfo) => {
-    if (!isInternalDrag(e)) return;
+    if (!isInternalDrag(e) || isSystemPath(folder.path)) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
@@ -535,7 +549,7 @@ export default function FilesPage() {
     setDropTargetPath(null);
 
     const sourcePath = e.dataTransfer.getData(INTERNAL_DRAG_MIME);
-    if (!sourcePath) return;
+    if (!sourcePath || isSystemPath(sourcePath) || isSystemPath(folder.path)) return;
     // dataTransfer.getData isn't always available during dragover, so re-validate here
     const sourceParent = sourcePath.includes('/') ? sourcePath.slice(0, sourcePath.lastIndexOf('/')) : '';
     if (
@@ -553,6 +567,11 @@ export default function FilesPage() {
 
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
+    if (isSystemPath(currentPath)) {
+      setError(SYSTEM_FILES_READ_ONLY);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
     if (selectedFiles && selectedFiles.length > 0) {
       await uploadFiles(selectedFiles);
       // Reset input
@@ -585,6 +604,10 @@ export default function FilesPage() {
     });
     if (name) {
       const fullPath = currentPath ? `${currentPath}/${name}` : name;
+      if (isSystemPath(fullPath)) {
+        setError(SYSTEM_FILES_READ_ONLY);
+        return;
+      }
       await createFile(fullPath);
     }
   };
@@ -599,11 +622,16 @@ export default function FilesPage() {
     });
     if (name) {
       const fullPath = currentPath ? `${currentPath}/${name}` : name;
+      if (isSystemPath(fullPath)) {
+        setError(SYSTEM_FILES_READ_ONLY);
+        return;
+      }
       await createFolder(fullPath);
     }
   };
 
   const handleRename = async (file: FileInfo) => {
+    if (isSystemPath(file.path)) return;
     const existingNames = new Set(files.map((f) => f.name.toLowerCase()));
     const newName = await prompt({
       title: 'Rename',
@@ -621,6 +649,10 @@ export default function FilesPage() {
           confirmLabel: 'Rename',
         }).then(async (retryName) => {
           if (retryName && retryName !== file.name) {
+            if (isSystemPath(retryName)) {
+              setError(SYSTEM_FILES_READ_ONLY);
+              return;
+            }
             const parentPath = file.path.substring(0, file.path.lastIndexOf('/'));
             const newPath = parentPath ? `${parentPath}/${retryName}` : retryName;
             await renameFile(file.path, newPath);
@@ -629,6 +661,10 @@ export default function FilesPage() {
         return;
       }
 
+      if (isSystemPath(newName)) {
+        setError(SYSTEM_FILES_READ_ONLY);
+        return;
+      }
       const parentPath = file.path.substring(0, file.path.lastIndexOf('/'));
       const newPath = parentPath ? `${parentPath}/${newName}` : newName;
       await renameFile(file.path, newPath);
@@ -636,6 +672,7 @@ export default function FilesPage() {
   };
 
   const handleDelete = async (file: FileInfo) => {
+    if (isSystemPath(file.path)) return;
     const confirmed = await confirm({
       title: `Delete "${file.name}"?`,
       description: file.type === 'folder'
@@ -650,8 +687,10 @@ export default function FilesPage() {
   };
 
   const handleDeleteSelected = async () => {
-    if (selectedFiles.length === 0) return;
-    const count = selectedFiles.length;
+    // System files are read-only: a selection that includes one skips it.
+    const deletable = selectedFiles.filter((path) => !isSystemPath(path));
+    if (deletable.length === 0) return;
+    const count = deletable.length;
     const confirmed = await confirm({
       title: `Delete ${count} item${count === 1 ? '' : 's'}?`,
       description: 'The selected files and folders will be permanently deleted.',
@@ -660,7 +699,7 @@ export default function FilesPage() {
     });
     if (!confirmed) return;
     // Delete sequentially so a single failure doesn't abandon the rest.
-    for (const path of selectedFiles) {
+    for (const path of deletable) {
       await deleteFile(path);
     }
     setSelectedFiles([]);
@@ -678,7 +717,7 @@ export default function FilesPage() {
   const filteredFiles = isServerPaginated
     ? files
     : sortFiles(
-        files.filter((file) =>
+        withoutSystemFiles(files, showSystemFiles).filter((file) =>
           file.name.toLowerCase().includes(searchQuery.toLowerCase())
         ),
         filesSortBy,
@@ -1300,6 +1339,8 @@ export default function FilesPage() {
     const starred = starredItems.some(
       (i) => i.path === file.path && i.workspaceId === workspaceId
     );
+    // System files are read-only: view, star and download only.
+    const readOnly = isSystemPath(file.path);
     return (
       <div className={cn('files-browse-row-actions', menuClassName)}>
         <button
@@ -1341,7 +1382,7 @@ export default function FilesPage() {
         >
           <Download size={14} />
         </button>
-        {isExtractableArchive(file) && (
+        {isExtractableArchive(file) && !readOnly && (
           <button
             type="button"
             title="Unzip"
@@ -1474,7 +1515,7 @@ export default function FilesPage() {
                 Download
               </button>
             )}
-            {isExtractableArchive(file) && (
+            {isExtractableArchive(file) && !readOnly && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -1502,28 +1543,36 @@ export default function FilesPage() {
                 Download as ZIP
               </button>
             )}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveContextMenu(null);
-                handleRename(file);
-              }}
-              className="files-browse-row-context-item"
-            >
-              Rename
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveContextMenu(null);
-                handleDelete(file);
-              }}
-              className="files-browse-row-context-item files-browse-row-context-item-destructive"
-            >
-              Delete
-            </button>
+            {readOnly ? (
+              <p className="files-browse-row-context-item text-muted-foreground" title={SYSTEM_FILES_READ_ONLY}>
+                System file · read-only
+              </p>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveContextMenu(null);
+                    handleRename(file);
+                  }}
+                  className="files-browse-row-context-item"
+                >
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveContextMenu(null);
+                    handleDelete(file);
+                  }}
+                  className="files-browse-row-context-item files-browse-row-context-item-destructive"
+                >
+                  Delete
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -1556,6 +1605,14 @@ export default function FilesPage() {
             onOpenDriveSettings={() =>
               router.push(`/workspace/${encodeURIComponent(workspaceId)}/settings/drives`)
             }
+            isSystemFolder={isSystemPath(currentPath)}
+            showSystemFiles={showSystemFiles}
+            onShowSystemFilesChange={(show) => {
+              setShowSystemFiles(show);
+              // Remote drives filter on the server; local folders re-filter on render.
+              if (!isLocalFolder) goToPage(1);
+              requestFilesExplorerRefresh();
+            }}
           />
         }
       />
