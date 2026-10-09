@@ -714,6 +714,10 @@ class BackgroundImageDraft(BaseModel):
     draft: str
 
 
+class BackgroundImageCurrent(BaseModel):
+    background_image_url: str
+
+
 class BackgroundImageCommit(BaseModel):
     """What to show and how: a new ``draft``, or the ``current`` wallpaper
     re-framed. Plus the framing set in the preview (focal point %, zoom)."""
@@ -833,6 +837,36 @@ async def commit_background_image(
         role,
         organization_override=await _load_org_role_override(record.organization_id, org_service),
     )
+
+
+@router.get("/{workspace_id}/background-image/current")
+async def get_current_background_image(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: WorkspaceService = Depends(get_workspace_service),
+    files_service: FilesService = Depends(get_files_service),
+) -> BackgroundImageCurrent:
+    """The wallpaper the home desk should show.
+
+    The URL on the workspace row is the pointer. When that pointer is empty
+    but a file is still committed under ``.home/background-img`` (a restart
+    used to clear the column), point the workspace at the file again.
+    """
+    await require_workspace_access(current_user.id, workspace_id)
+    record = await service.get_workspace(workspace_id=workspace_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    if record.background_image_url:
+        return BackgroundImageCurrent(background_image_url=record.background_image_url)
+    name = WorkspaceBackgroundImage(files_service, workspace_id).current_name()
+    if not name:
+        raise HTTPException(status_code=404, detail="No background image")
+    url = background_image_url(workspace_id, name)
+    await service.update_workspace(
+        workspace_id=workspace_id,
+        updates=WorkspaceUpdateInput(background_image_url=url),
+    )
+    return BackgroundImageCurrent(background_image_url=url)
 
 
 @router.get("/{workspace_id}/background-image")

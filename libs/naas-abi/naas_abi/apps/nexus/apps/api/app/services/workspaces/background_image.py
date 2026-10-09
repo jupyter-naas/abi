@@ -178,6 +178,19 @@ class WorkspaceBackgroundImage:
     def read_current(self, name: str) -> RawFileData:
         return self._read(self._current, name)
 
+    def current_name(self) -> str | None:
+        """File name of the wallpaper in ``.home/background-img``, if one is committed."""
+        names: list[str] = []
+        for entry in self._files.list_files(path=self._current).files:
+            try:
+                self._check_name(entry.name)
+            except BackgroundImageError:
+                continue
+            names.append(entry.name)
+        if not names:
+            return None
+        return sorted(names)[-1]
+
     def commit(self, name: str) -> str:
         """Move the draft into ``.home/background-img``; drop old wallpapers and drafts."""
         self._check_name(name)

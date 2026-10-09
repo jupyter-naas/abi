@@ -22,15 +22,29 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
 class _FakeWorkspaces:
     def __init__(self) -> None:
         self.updates: list[str | None] = []
+        self.url: str | None = None
+
+    async def get_workspace(self, workspace_id):
+        return WorkspaceRecord(
+            id=workspace_id,
+            name="Demo",
+            slug="demo",
+            owner_id="user-1",
+            background_image_url=self.url,
+            created_at=datetime.now(tz=UTC),
+            updated_at=datetime.now(tz=UTC),
+        )
 
     async def update_workspace(self, workspace_id, updates):
+        if updates.background_image_url is not None:
+            self.url = updates.background_image_url
         self.updates.append(updates.background_image_url)
         return WorkspaceRecord(
             id=workspace_id,
             name="Demo",
             slug="demo",
             owner_id="user-1",
-            background_image_url=updates.background_image_url,
+            background_image_url=self.url,
             created_at=datetime.now(tz=UTC),
             updated_at=datetime.now(tz=UTC),
         )
@@ -124,6 +138,25 @@ def test_stage_requires_exactly_one_source_and_a_real_image(client_for) -> None:
         "/api/workspaces/ws-1/background-image/draft", data={"url": "http://127.0.0.1/a.png"}
     )
     assert private.status_code == 400
+
+
+def test_current_restores_the_pointer_when_the_file_is_still_in_home(client_for) -> None:
+    client, workspaces = client_for("admin")
+    missing = client.get("/api/workspaces/ws-1/background-image/current")
+    assert missing.status_code == 404
+
+    draft = client.post(
+        "/api/workspaces/ws-1/background-image/draft", files={"file": ("a.png", PNG, "image/png")}
+    ).json()["draft"]
+    client.post("/api/workspaces/ws-1/background-image", json={"draft": draft})
+    # The file stays in .home; the column is what a restart used to clear.
+    workspaces.url = None
+
+    current = client.get("/api/workspaces/ws-1/background-image/current")
+    assert current.status_code == 200
+    expected = f"/api/workspaces/ws-1/background-image?v={draft}"
+    assert current.json()["background_image_url"] == expected
+    assert workspaces.url == expected
 
 
 def test_discard_removes_the_draft(client_for) -> None:

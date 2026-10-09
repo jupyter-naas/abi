@@ -43,6 +43,19 @@ export async function fetchBackgroundDraft(workspaceId: string, draft: string): 
   return response.blob();
 }
 
+/**
+ * The wallpaper already committed under `.home/background-img`, when the
+ * workspace row has no `background_image_url`. Returns null when there is none.
+ * The API writes the pointer back so the next workspace load has it.
+ */
+export async function fetchCurrentBackgroundImage(workspaceId: string): Promise<string | null> {
+  const response = await authFetch(`${base(workspaceId)}/current`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(await errorDetail(response, 'Could not load the background image'));
+  const data = (await response.json()) as { background_image_url?: string | null };
+  return data.background_image_url || null;
+}
+
 /** Drop the staged draft (Cancel). Best effort: the next stage clears it anyway. */
 export async function discardBackgroundDraft(workspaceId: string): Promise<void> {
   try {

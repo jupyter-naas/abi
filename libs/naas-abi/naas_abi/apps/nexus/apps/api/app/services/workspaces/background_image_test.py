@@ -87,6 +87,16 @@ def test_commit_moves_draft_clears_tmp_and_previous_images(tmp_path) -> None:
     assert bg.read_current(new).content == JPEG
 
 
+def test_current_name_is_the_committed_wallpaper(tmp_path) -> None:
+    files = _files(tmp_path)
+    bg = WorkspaceBackgroundImage(files, WS)
+    assert bg.current_name() is None
+
+    name = bg.commit(bg.stage(PNG))
+
+    assert bg.current_name() == name
+
+
 def test_commit_unknown_draft_fails(tmp_path) -> None:
     bg = WorkspaceBackgroundImage(_files(tmp_path), WS)
 

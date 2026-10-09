@@ -13,7 +13,7 @@ import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useAppsStore } from '@/stores/apps';
 import { useFilesStore } from '@/stores/files';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { parseBackgroundImageUrl } from '@/lib/home-background';
+import { fetchCurrentBackgroundImage, parseBackgroundImageUrl } from '@/lib/home-background';
 import { BackgroundImageDialog } from './components/background-image-dialog';
 import { DeskWallpaper } from './components/desk-wallpaper';
 import { HomeMenuBar } from './components/home-menu-bar';
@@ -30,7 +30,29 @@ export default function HomePage() {
   const applyWorkspaceTheme = useWorkspaceStore((s) => s.applyWorkspaceTheme);
   const canEditBackground = workspace?.currentUserRole === 'owner' || workspace?.currentUserRole === 'admin';
   const [backgroundDialogOpen, setBackgroundDialogOpen] = useState(false);
-  const backgroundUrl = resolveDeskImageUrl(theme?.backgroundImageUrl);
+  const themeBackgroundUrl = resolveDeskImageUrl(theme?.backgroundImageUrl);
+  // The file lives in the workspace drive (.home). The theme URL is only the
+  // pointer, and a restart used to clear it. When it is missing, ask the API
+  // for the committed file and put the pointer back.
+  const [driveBackgroundUrl, setDriveBackgroundUrl] = useState<string | undefined>();
+  useEffect(() => {
+    setDriveBackgroundUrl(undefined);
+    if (!currentWorkspaceId || themeBackgroundUrl) return;
+    let cancelled = false;
+    void fetchCurrentBackgroundImage(currentWorkspaceId)
+      .then((url) => {
+        if (cancelled || !url) return;
+        setDriveBackgroundUrl(url);
+        applyWorkspaceTheme(currentWorkspaceId, { backgroundImageUrl: url });
+      })
+      .catch(() => {
+        // Wallpaper is decoration: the desk colour stays.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentWorkspaceId, themeBackgroundUrl, applyWorkspaceTheme]);
+  const backgroundUrl = themeBackgroundUrl || driveBackgroundUrl;
   // Framing rides in the URL; the image URL without it stays stable, so
   // re-framing does not refetch the image.
   const { imageUrl: backgroundImageUrl, framing: backgroundFraming } = parseBackgroundImageUrl(backgroundUrl);
