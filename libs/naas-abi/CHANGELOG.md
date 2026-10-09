@@ -2,6 +2,69 @@
 
 <!-- version list -->
 
+## v2.82.0 (2026-10-09)
+
+### Bug Fixes
+
+- **agent**: Add chat_source flag to ToolResponseEvent and support tool metadata opt-out
+  ([`e197797`](https://github.com/jupyter-naas/abi/commit/e1977973d8d7c4809c2dd589553ecc7d51563825))
+
+### Features
+
+- **chat**: Add topnav File → New Chat menu to start a new chat
+  ([`fbcca0e`](https://github.com/jupyter-naas/abi/commit/fbcca0ebeac462eb6ec5909d5e67ac141af523d9))
+
+- **files**: Add drive settings and refresh integration in files explorer
+  ([`79bfcd8`](https://github.com/jupyter-naas/abi/commit/79bfcd828833b4ba3a2224f175c6d10d9c4bb722))
+
+- **files**: Enforce read-only system files with dot-prefix
+  ([`697ab03`](https://github.com/jupyter-naas/abi/commit/697ab03ddf46714c6f243ee585e8935b546e5403))
+
+- **maps**: Add comprehensive maps layouts service and UI components
+  ([`5e626e6`](https://github.com/jupyter-naas/abi/commit/5e626e606fb5d942df4f0031afd650e8dbb29031))
+
+- **maps**: Add natural earth countries proxy and enhance maps components
+  ([`1780b95`](https://github.com/jupyter-naas/abi/commit/1780b95d5d235c23b2f0bfbf4e214f86ca0806e5))
+
+- **people-intel**: Add support for include_suffixes in graph config and workspace manifest
+  ([`ac6e604`](https://github.com/jupyter-naas/abi/commit/ac6e6042f0f2ed92ac97fa889d9a559443ea05ba))
+
+- **search**: Add SearchMenuBar component and integrate in workspace search page
+  ([`74c7cb3`](https://github.com/jupyter-naas/abi/commit/74c7cb3f46a2e5b62889958ef6f61380d4af2df0))
+
+- **shell**: Improve quick-open positioning and topnav app menu
+  ([`c9688bc`](https://github.com/jupyter-naas/abi/commit/c9688bc7899ba06fa6cde3cade9a8be80ac92d63))
+
+- **tenant-context**: Add document title detail context and hook
+  ([`b143171`](https://github.com/jupyter-naas/abi/commit/b143171693c9c5121fe2113c0edfd4a70e7512b0))
+
+- **workspaces**: Add background image support with staging, preview, and commit functionality
+  ([`9805a4b`](https://github.com/jupyter-naas/abi/commit/9805a4b6d4e89e8a37608d5a6263c1ebf8db2520))
+
+### Refactoring
+
+- **app-menu**: Use shared app menu classes for consistency
+  ([`93be22a`](https://github.com/jupyter-naas/abi/commit/93be22a54e70117d9e1096765fa1f842143c3669))
+
+- **graph-explorer-sidebar**: Update sidebar layout and search input styling
+  ([`52468b9`](https://github.com/jupyter-naas/abi/commit/52468b934e5527ba2201e41c4d2e1d1b8c4ce23f))
+
+- **maps**: Add basemap radio and home row for layouts
+  ([`fe39897`](https://github.com/jupyter-naas/abi/commit/fe39897bcfd8b25df38f7cbb30a901cad8a8b972))
+
+- **sidebar**: Improve panel section handling and prefetching
+  ([`26bc4c3`](https://github.com/jupyter-naas/abi/commit/26bc4c395d552b2dc49eed0f70910f21ad4ddc9e))
+
+- **sidebar**: Improve styling of 'All topics' row in search section
+  ([`0612d2d`](https://github.com/jupyter-naas/abi/commit/0612d2d77c10d813a3a0d820f3565ba77df78349))
+
+- **workspace**: Minor UI and path comment improvements
+  ([`6ef0a2c`](https://github.com/jupyter-naas/abi/commit/6ef0a2cb78d15d6948d39d84405b8147cac77e4c))
+
+- **workspaces**: Apply workspace seed fields with special handling for background image
+  ([`a8bc929`](https://github.com/jupyter-naas/abi/commit/a8bc929f260b8cb2f3b95f1211c80b46e70d39c1))
+
+
 ## v2.81.1 (2026-10-08)
 
 ### Bug Fixes
