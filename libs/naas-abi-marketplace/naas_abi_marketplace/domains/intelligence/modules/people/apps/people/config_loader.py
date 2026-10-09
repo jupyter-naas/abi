@@ -372,6 +372,18 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
         if not IDENTIFIER.match(name):
             raise ConfigError(f"data.tables.{key} must be a SQL identifier: {name!r}")
 
+    backend = data.get("backend") or "dataset"
+    if backend not in (
+        "dataset",
+        "workspace_dataset",
+        "workspace_graphs",
+        "file_graphs",
+    ):
+        raise ConfigError(
+            "data.backend must be dataset, workspace_dataset, workspace_graphs, "
+            "or file_graphs"
+        )
+
     graph_out: dict[str, Any] = {
         "iri": "http://ontology.naas.ai/graph/people",
         "label": "People",
@@ -380,6 +392,13 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
         # instance reads as one graph; ``file`` is the first of them.
         "file": None,
         "files": [],
+        # When backend is workspace_graphs or workspace_dataset, only these
+        # named graph IRIs are read (prefix match), plus ``iri`` itself when the
+        # workspace may read it. Empty means every graph the workspace may read.
+        "include_prefixes": [],
+        # Also keep graphs whose IRI ends with one of these (workspace people
+        # graphs are ``http://ontology.naas.ai/graph/<workspace_id>/people``).
+        "include_suffixes": [],
     }
     graph = data.get("graph")
     if graph not in (None, {}):
@@ -401,6 +420,22 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
                     )
                 graph_out["files"].append(str(resolved))
             graph_out["file"] = graph_out["files"][0]
+        prefixes = graph_map.get("include_prefixes")
+        if prefixes not in (None, []):
+            if not isinstance(prefixes, list):
+                raise ConfigError("data.graph.include_prefixes must be a list")
+            graph_out["include_prefixes"] = [
+                _text(item, f"data.graph.include_prefixes[{index}]")
+                for index, item in enumerate(prefixes)
+            ]
+        suffixes = graph_map.get("include_suffixes")
+        if suffixes not in (None, []):
+            if not isinstance(suffixes, list):
+                raise ConfigError("data.graph.include_suffixes must be a list")
+            graph_out["include_suffixes"] = [
+                _text(item, f"data.graph.include_suffixes[{index}]")
+                for index, item in enumerate(suffixes)
+            ]
 
     # Portraits are stated in the source relative to the module that owns them.
     # This prefix is what comes off the front so the browser is left with a path
@@ -436,6 +471,7 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
         logo_url_prefix = None
 
     return {
+        "backend": backend,
         "namespace": namespace,
         "tables": dict(tables),
         "graph": graph_out,

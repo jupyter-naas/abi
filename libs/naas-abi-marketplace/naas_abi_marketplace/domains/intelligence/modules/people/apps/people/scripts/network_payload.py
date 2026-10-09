@@ -428,8 +428,13 @@ def network(
     *,
     query: str = "",
     facet: str = "",
+    graph: Graph | None = None,
 ) -> dict[str, Any]:
-    """The search's top results as a graph page payload, focused on the search."""
+    """The search's top results as a graph page payload, focused on the search.
+
+    *graph* is where their acts are read: a workspace's own graphs in Nexus,
+    else this instance's graph files.
+    """
     network_config = {
         **config,
         "search": {**config["search"], "page_size": NETWORK_SIZE},
@@ -444,7 +449,12 @@ def network(
         )
         for hit in found["results"]
     )
-    data = _cached_payload(graph_for(config), people, query.strip(), found["total"])
+    data = _cached_payload(
+        graph if graph is not None else graph_for(config),
+        people,
+        query.strip(),
+        found["total"],
+    )
     return {
         "query": found["query"],
         "facet": found["facet"],

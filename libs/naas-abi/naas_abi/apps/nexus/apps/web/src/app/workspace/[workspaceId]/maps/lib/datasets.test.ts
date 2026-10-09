@@ -10,12 +10,12 @@ import {
 } from './datasets';
 import { CONFLICT_SITES } from './conflict-sites';
 
+const BASEMAP_IDS = ['openstreetmap', 'natural-earth'] as const;
+
 const PUBLIC_IDS = [
-  'openstreetmap',
   'earthquakes',
   'wildfires',
   'temperature',
-  'natural-earth',
   'gdacs',
   'eonet-all',
   'openaq',
@@ -28,23 +28,25 @@ const PUBLIC_IDS = [
   'news',
   'ais',
   'iss',
+  'presence',
 ] as const;
 
 describe('MAPS_DATASETS taxonomy', () => {
-  it('groups sources like Search: Public, Private (Here), Custom (empty upstream)', () => {
+  it('splits basemaps from layouts: Basemap, Public (including Here), Custom empty upstream', () => {
+    expect(getMapsDatasetsByCategory('basemap').map((d) => d.id)).toEqual([
+      ...BASEMAP_IDS,
+    ]);
     expect(getMapsDatasetsByCategory('public').map((d) => d.id)).toEqual([
       ...PUBLIC_IDS,
-    ]);
-    expect(getMapsDatasetsByCategory('private').map((d) => d.id)).toEqual([
-      'presence',
     ]);
     // Custom is the extension point: product-specific layers are registered by a
     // deployment through NEXT_PUBLIC_MAPS_CUSTOM_DATASETS, never shipped here.
     expect(getMapsDatasetsByCategory('custom')).toEqual([]);
   });
 
-  it('marks Here as Private and ships no product-specific datasets', () => {
-    expect(getMapsDataset('presence')?.category).toBe('private');
+  it('keeps Here as a public layout and ships no product-specific datasets', () => {
+    expect(getMapsDataset('presence')?.category).toBe('public');
+    expect(getMapsDataset('openstreetmap')?.category).toBe('basemap');
     expect(getMapsDataset('ontologist-north-america')).toBeNull();
     expect(isMapsDatasetId('ontologist-north-america')).toBe(false);
     expect(getMapsDataset('wog')).toBeNull();
@@ -53,7 +55,7 @@ describe('MAPS_DATASETS taxonomy', () => {
 
   it('exposes Maps-owned public feed URLs and /api/maps proxies', () => {
     expect(MAPS_PUBLIC_FEEDS.earthquakes).toContain('earthquake.usgs.gov');
-    expect(MAPS_PUBLIC_FEEDS.naturalEarth).toContain('natural-earth-vector');
+    expect(MAPS_PUBLIC_FEEDS.naturalEarth).toBe('/api/maps/natural-earth');
     expect(MAPS_PUBLIC_FEEDS.wildfires).toContain('eonet.gsfc.nasa.gov');
     expect(MAPS_PUBLIC_FEEDS.eonetAll).toContain('eonet.gsfc.nasa.gov');
     expect(MAPS_PUBLIC_FEEDS.volcanoes).toContain('category=volcanoes');

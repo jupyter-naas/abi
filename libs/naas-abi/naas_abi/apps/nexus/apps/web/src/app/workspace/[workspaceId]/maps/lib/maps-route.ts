@@ -44,3 +44,18 @@ export function mapsDatasetPath(
 export function mapsLibraryPath(workspaceId: string | null): string {
   return workspaceId ? `/workspace/${workspaceId}/maps` : '/maps';
 }
+
+/** Path of the combined All layouts map. */
+export function mapsAllLayoutsPath(workspaceId: string | null): string {
+  return mapsDatasetPath(workspaceId, 'all');
+}
+
+/** Settings → Maps, optionally on one layout or on a new blank one. */
+export function mapsSettingsPath(
+  workspaceId: string | null,
+  options: { layout?: string; create?: boolean } = {},
+): string {
+  const base = workspaceId ? `/workspace/${encodeURIComponent(workspaceId)}/settings/maps` : '/settings/maps';
+  if (options.create) return `${base}?layout=new`;
+  return options.layout ? `${base}?layout=${encodeURIComponent(options.layout)}` : base;
+}

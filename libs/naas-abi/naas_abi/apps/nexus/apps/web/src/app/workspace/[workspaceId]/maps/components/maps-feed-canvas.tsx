@@ -3,7 +3,8 @@
 import {useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode} from 'react';
 import type {Map as LeafletMap, Marker} from 'leaflet';
 import {ExternalLink, Loader2, ArrowLeft, Search, List, X} from 'lucide-react';
-import {addMapsPinMarkers, captureMapsCamera, clearMapsMarkers, createMapsLeaflet, destroyMapsLeaflet, fitMapsBounds, restoreMapsCamera, type MapsCamera, type MapsPinMarker} from '../lib/leaflet-map';
+import { useMapsStore } from '@/stores/maps';
+import {addMapsPinMarkers, addNaturalEarthLayer, captureMapsCamera, clearMapsMarkers, createMapsLeaflet, destroyMapsLeaflet, fitMapsBounds, restoreMapsCamera, type MapsCamera, type MapsPinMarker} from '../lib/leaflet-map';
 import {formatMapsFeedAge, graphObjectHref, normalizeFeedLoad, type MapsFeedMeta, type MapsFeedResult} from '../lib/maps-feed';
 import {mapsViewFromBounds, type MapsFeedView} from '../lib/maps-view';
 import {MapsCoverageLayer} from './maps-coverage-layer';
@@ -29,6 +30,8 @@ export interface MapsFeedCanvasProps {
   workspaceId?: string;
   /** Pass the current map bounds into fetchPins and refetch on pan/zoom. */
   viewportBound?: boolean;
+  /** Background under the pins. Defaults to OpenStreetMap street tiles. */
+  basemapId?: string;
 }
 
 function viewFromMap(map: LeafletMap): MapsFeedView {
@@ -58,7 +61,9 @@ function metaLine(meta: MapsFeedMeta | null, now: number): string {
   return parts.filter(Boolean).join(' · ');
 }
 
-export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No data', emptyBody='This feed returned no mappable points right now.', sourceHref, sourceLabel='Source', fetchPins, fitMaxZoom=5, legend, refreshMs, inspectable=false, workspaceId='', viewportBound=false}: MapsFeedCanvasProps) {
+export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No data', emptyBody='This feed returned no mappable points right now.', sourceHref, sourceLabel='Source', fetchPins, fitMaxZoom=5, legend, refreshMs, inspectable=false, workspaceId='', viewportBound=false, basemapId}: MapsFeedCanvasProps) {
+  const storedBasemap = useMapsStore((s) => s.basemapId);
+  const basemap = basemapId ?? storedBasemap ?? 'openstreetmap';
   const containerRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
@@ -162,7 +167,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
 
     // One initialization per effect, shared even if a refresh starts while
     // Leaflet is loading. Cleanup cancels it before it can claim the container.
-    const mapReady = createMapsLeaflet(container, {}, lifecycle.signal).then(({L, map}) => {
+    const mapReady = createMapsLeaflet(container, { basemap }, lifecycle.signal).then(async ({L, map}) => {
       if (cancelled) {
         map.remove();
         return null;
@@ -170,6 +175,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
       ownedMap = map;
       mapRef.current = map;
       leafletRef.current = L;
+      if (basemap === 'natural-earth') await addNaturalEarthLayer(L, map, lifecycle.signal);
       return map;
     }).catch((err) => {
       if (cancelled || lifecycle.signal.aborted) return null;
@@ -254,7 +260,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     };
     // Callers remount when dataset/workspace changes. Public feed factories are stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshMs, fitMaxZoom, viewportBound]);
+  }, [refreshMs, fitMaxZoom, viewportBound, basemap]);
 
   useEffect(()=>{
     if(!leafletRef.current || !mapRef.current) return;

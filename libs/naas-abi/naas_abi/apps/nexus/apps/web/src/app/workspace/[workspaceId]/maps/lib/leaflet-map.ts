@@ -1,4 +1,5 @@
 import type { Map as LeafletMap, Marker } from 'leaflet';
+import { MAPS_PUBLIC_FEEDS } from './datasets';
 import {
   isMapsDarkMode,
   MAPS_TILE_ATTR,
@@ -153,9 +154,51 @@ export function observeMapsLeafletSize(map: LeafletMap): () => void {
   return stop;
 }
 
+function addOsmTiles(L: typeof import('leaflet'), map: LeafletMap): void {
+  L.tileLayer(isMapsDarkMode() ? MAPS_TILE_DARK : MAPS_TILE_LIGHT, {
+    className: 'maps-basemap',
+    attribution: MAPS_TILE_ATTR,
+    maxZoom: 18,
+  }).addTo(map);
+}
+
+/** Country polygons for the Natural Earth basemap. Returns the feature count. */
+export async function addNaturalEarthLayer(
+  L: typeof import('leaflet'),
+  map: LeafletMap,
+  signal?: AbortSignal,
+): Promise<number> {
+  const res = await fetch(MAPS_PUBLIC_FEEDS.naturalEarth, {
+    signal: signal ?? AbortSignal.timeout(20000),
+  });
+  if (!res.ok) throw new Error(`Natural Earth ${res.status}`);
+  const gj = (await res.json()) as GeoJSON.FeatureCollection;
+  signal?.throwIfAborted();
+  const layer = L.geoJSON(gj, {
+    attribution: '&copy; Natural Earth',
+    style: {
+      color: '#0f766e',
+      weight: 1,
+      fillColor: '#f5f5f4',
+      fillOpacity: 0.92,
+      opacity: 0.9,
+    },
+  }).addTo(map);
+  try {
+    if (canInvalidateMapsLeaflet(map)) {
+      safeInvalidateMapsLeafletSize(map);
+      const bounds = layer.getBounds();
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [12, 12], maxZoom: 2 });
+    }
+  } catch {
+    // The countries are already on the map. A bad fit must not drop the basemap.
+  }
+  return gj.features?.length ?? 0;
+}
+
 export async function createMapsLeaflet(
   container: HTMLElement,
-  view: { center?: MapsLatLng; zoom?: number } = {},
+  view: { center?: MapsLatLng; zoom?: number; basemap?: string } = {},
   signal?: AbortSignal,
 ): Promise<{ L: typeof import('leaflet'); map: LeafletMap }> {
   signal?.throwIfAborted();
@@ -168,11 +211,11 @@ export async function createMapsLeaflet(
     zoomControl: true,
     attributionControl: true,
   });
-  L.tileLayer(isMapsDarkMode() ? MAPS_TILE_DARK : MAPS_TILE_LIGHT, {
-    className: 'maps-basemap',
-    attribution: MAPS_TILE_ATTR,
-    maxZoom: 18,
-  }).addTo(map);
+  // Street tiles only for OpenStreetMap. Natural Earth is drawn afterwards,
+  // once this map is stored, so a slow country file cannot be replaced by streets.
+  if ((view.basemap ?? 'openstreetmap') !== 'natural-earth') {
+    addOsmTiles(L, map);
+  }
   map.setView(
     [view.center?.lat ?? 20, view.center?.lng ?? 0],
     view.zoom ?? 2,

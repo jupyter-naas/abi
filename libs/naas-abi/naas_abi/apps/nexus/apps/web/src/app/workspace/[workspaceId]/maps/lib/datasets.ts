@@ -30,8 +30,11 @@ export type MapsBuiltinDatasetId =
  */
 export type MapsDatasetId = MapsBuiltinDatasetId | (string & {});
 
-/** Same source buckets as Search (Public / Private / Custom). Custom stays empty upstream. */
-export type MapsDatasetCategory = 'public' | 'private' | 'custom';
+/**
+ * Basemap is the background (one at a time). Public layouts are data drawn on
+ * top of it. Custom stays empty upstream for deployment pin feeds.
+ */
+export type MapsDatasetCategory = 'basemap' | 'public' | 'custom';
 
 export interface MapsDataset {
   id: MapsDatasetId;
@@ -48,15 +51,15 @@ export const MAPS_CATEGORIES: {
   id: MapsDatasetCategory;
   label: string;
 }[] = [
+  { id: 'basemap', label: 'Basemap' },
   { id: 'public', label: 'Public' },
-  { id: 'private', label: 'Private' },
   { id: 'custom', label: 'Custom' },
 ];
 
 /**
- * Built-in Maps datasets, grouped like Search sources:
- * - Public: first-class situation-awareness layers owned by Nexus Maps
- * - Private: presence ("Here"): workspace user's devices / infra
+ * Built-in Maps datasets:
+ * - Basemap: the canvas background. One is active; they do not stack.
+ * - Public: situation-awareness layouts drawn on that basemap, including Here.
  *
  * Custom is the extension point and stays empty here: product-specific datasets
  * belong to the deployment, registered through NEXT_PUBLIC_MAPS_CUSTOM_DATASETS
@@ -71,7 +74,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     id: 'openstreetmap',
     title: 'OpenStreetMap',
     description: 'Standard OpenStreetMap basemap tiles for Maps canvases.',
-    category: 'public',
+    category: 'basemap',
     icon: 'Globe',
     order: 0,
   },
@@ -105,9 +108,9 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     id: 'natural-earth',
     title: 'Natural Earth',
     description: 'Natural Earth 110m country borders (GeoJSON).',
-    category: 'public',
+    category: 'basemap',
     icon: 'Layers',
-    order: 4,
+    order: 1,
   },
   {
     id: 'gdacs',
@@ -219,9 +222,9 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     id: 'presence',
     title: 'Here',
     description: 'Your devices and the deployment server on one map.',
-    category: 'private',
+    category: 'public',
     icon: 'Laptop',
-    order: 0,
+    order: 17,
   },
 ];
 
@@ -240,8 +243,8 @@ function toMapsDataset(custom: MapsCustomDataset): MapsDataset {
 
 /**
  * Built-in datasets plus whatever this deployment registered under Custom.
- * A configured id that shadows a built-in is ignored so the Public/Private
- * layers can never be replaced by config.
+ * A configured id that shadows a built-in is ignored so basemaps and Public
+ * layouts can never be replaced by config.
  */
 export const MAPS_DATASETS: MapsDataset[] = [
   ...MAPS_BUILTIN_DATASETS,
@@ -266,8 +269,8 @@ export const MAPS_PUBLIC_FEEDS = {
   /** FIRMS WMS proxy; enabled only when FIRMS_MAP_KEY is set on nexus-web. */
   firms: '/api/maps/firms',
   temperature: 'https://api.open-meteo.com/v1/forecast',
-  naturalEarth:
-    'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson',
+  /** 110m countries, proxied. The browser must not call GitHub for this file. */
+  naturalEarth: '/api/maps/natural-earth',
   gdacs: '/api/maps/gdacs',
   openaq: '/api/maps/openaq',
   nwsAlerts: '/api/maps/nws',

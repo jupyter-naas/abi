@@ -62,6 +62,8 @@ class _StubAgent:
         self._on_call_model = lambda _: None
         self._on_agent_routing = lambda _: None
         self._state = SimpleNamespace(thread_id=thread_id)
+        self._tools_by_name: dict[str, Any] = {}
+        self._agents: list[Any] = []
 
     # Bind the real methods so we exercise the actual publishing code paths.
     _identity = Agent._identity
@@ -71,6 +73,8 @@ class _StubAgent:
     onAImessage = Agent.onAImessage
     _notify_tool_usage = Agent._notify_tool_usage
     _notify_tool_response = Agent._notify_tool_response
+    _is_chat_source = Agent._is_chat_source
+    _find_tool = Agent._find_tool
     _notify_ai_message = Agent._notify_ai_message
     _notify_call_model = Agent._notify_call_model
     _notify_agent_routing = Agent._notify_agent_routing
@@ -342,3 +346,62 @@ def test_tool_response_key_falls_back_when_there_is_no_tool_call_id() -> None:
     a = AIMessage(content="a")
     b = AIMessage(content="b")
     assert Agent._tool_response_key(a) != Agent._tool_response_key(b)
+
+
+def _queued_tool_responses(agent: _StubAgent) -> list[Any]:
+    queued: list[Any] = []
+    agent._event_queue = SimpleNamespace(put=queued.append)
+    return queued
+
+
+def test_tool_response_is_a_chat_source_by_default() -> None:
+    agent = _StubAgent()
+    agent._tools_by_name = {"search": SimpleNamespace(metadata=None)}
+    queued = _queued_tool_responses(agent)
+
+    agent._notify_tool_response(
+        ToolMessage(content="https://example.com", name="search", tool_call_id="c-1")
+    )
+
+    assert queued[0].chat_source is True
+
+
+def test_a_tool_opts_out_of_chat_sources_through_its_metadata() -> None:
+    agent = _StubAgent()
+    agent._tools_by_name = {"lookup": SimpleNamespace(metadata={"chat_source": False})}
+    queued = _queued_tool_responses(agent)
+
+    agent._notify_tool_response(
+        ToolMessage(content="http://ontology/x", name="lookup", tool_call_id="c-1")
+    )
+
+    assert queued[0].chat_source is False
+
+
+def test_an_unknown_tool_stays_a_chat_source() -> None:
+    agent = _StubAgent()
+    queued = _queued_tool_responses(agent)
+
+    agent._notify_tool_response(
+        ToolMessage(content="https://example.com", name="other", tool_call_id="c-1")
+    )
+
+    assert queued[0].chat_source is True
+
+
+def test_a_sub_agent_tool_opts_out_when_the_supervisor_reports_it() -> None:
+    sub_agent = _StubAgent(name="market")
+    sub_agent._tools_by_name = {
+        "search_organization": SimpleNamespace(metadata={"chat_source": False})
+    }
+    supervisor = _StubAgent(name="bob")
+    supervisor._agents = [sub_agent]
+    queued = _queued_tool_responses(supervisor)
+
+    supervisor._notify_tool_response(
+        ToolMessage(
+            content="http://ontology/x", name="search_organization", tool_call_id="c-1"
+        )
+    )
+
+    assert queued[0].chat_source is False

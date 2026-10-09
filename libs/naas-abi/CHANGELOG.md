@@ -2,6 +2,156 @@
 
 <!-- version list -->
 
+## v2.82.0 (2026-10-09)
+
+### Bug Fixes
+
+- **agent**: Add chat_source flag to ToolResponseEvent and support tool metadata opt-out
+  ([`e197797`](https://github.com/jupyter-naas/abi/commit/e1977973d8d7c4809c2dd589553ecc7d51563825))
+
+### Features
+
+- **chat**: Add topnav File → New Chat menu to start a new chat
+  ([`fbcca0e`](https://github.com/jupyter-naas/abi/commit/fbcca0ebeac462eb6ec5909d5e67ac141af523d9))
+
+- **files**: Add drive settings and refresh integration in files explorer
+  ([`79bfcd8`](https://github.com/jupyter-naas/abi/commit/79bfcd828833b4ba3a2224f175c6d10d9c4bb722))
+
+- **files**: Enforce read-only system files with dot-prefix
+  ([`697ab03`](https://github.com/jupyter-naas/abi/commit/697ab03ddf46714c6f243ee585e8935b546e5403))
+
+- **maps**: Add comprehensive maps layouts service and UI components
+  ([`5e626e6`](https://github.com/jupyter-naas/abi/commit/5e626e606fb5d942df4f0031afd650e8dbb29031))
+
+- **maps**: Add natural earth countries proxy and enhance maps components
+  ([`1780b95`](https://github.com/jupyter-naas/abi/commit/1780b95d5d235c23b2f0bfbf4e214f86ca0806e5))
+
+- **people-intel**: Add support for include_suffixes in graph config and workspace manifest
+  ([`ac6e604`](https://github.com/jupyter-naas/abi/commit/ac6e6042f0f2ed92ac97fa889d9a559443ea05ba))
+
+- **search**: Add SearchMenuBar component and integrate in workspace search page
+  ([`74c7cb3`](https://github.com/jupyter-naas/abi/commit/74c7cb3f46a2e5b62889958ef6f61380d4af2df0))
+
+- **shell**: Improve quick-open positioning and topnav app menu
+  ([`c9688bc`](https://github.com/jupyter-naas/abi/commit/c9688bc7899ba06fa6cde3cade9a8be80ac92d63))
+
+- **tenant-context**: Add document title detail context and hook
+  ([`b143171`](https://github.com/jupyter-naas/abi/commit/b143171693c9c5121fe2113c0edfd4a70e7512b0))
+
+- **workspaces**: Add background image support with staging, preview, and commit functionality
+  ([`9805a4b`](https://github.com/jupyter-naas/abi/commit/9805a4b6d4e89e8a37608d5a6263c1ebf8db2520))
+
+### Refactoring
+
+- **app-menu**: Use shared app menu classes for consistency
+  ([`93be22a`](https://github.com/jupyter-naas/abi/commit/93be22a54e70117d9e1096765fa1f842143c3669))
+
+- **graph-explorer-sidebar**: Update sidebar layout and search input styling
+  ([`52468b9`](https://github.com/jupyter-naas/abi/commit/52468b934e5527ba2201e41c4d2e1d1b8c4ce23f))
+
+- **maps**: Add basemap radio and home row for layouts
+  ([`fe39897`](https://github.com/jupyter-naas/abi/commit/fe39897bcfd8b25df38f7cbb30a901cad8a8b972))
+
+- **sidebar**: Improve panel section handling and prefetching
+  ([`26bc4c3`](https://github.com/jupyter-naas/abi/commit/26bc4c395d552b2dc49eed0f70910f21ad4ddc9e))
+
+- **sidebar**: Improve styling of 'All topics' row in search section
+  ([`0612d2d`](https://github.com/jupyter-naas/abi/commit/0612d2d77c10d813a3a0d820f3565ba77df78349))
+
+- **workspace**: Minor UI and path comment improvements
+  ([`6ef0a2c`](https://github.com/jupyter-naas/abi/commit/6ef0a2cb78d15d6948d39d84405b8147cac77e4c))
+
+- **workspaces**: Apply workspace seed fields with special handling for background image
+  ([`a8bc929`](https://github.com/jupyter-naas/abi/commit/a8bc929f260b8cb2f3b95f1211c80b46e70d39c1))
+
+
+## v2.81.1 (2026-10-08)
+
+### Bug Fixes
+
+- **nexus**: Copy the class name onto the stored agent row
+  ([`d7b8105`](https://github.com/jupyter-naas/abi/commit/d7b8105ced6c6371afba3326820a578a5785b22d))
+
+
+## v2.81.0 (2026-10-07)
+
+### Bug Fixes
+
+- **files**: Handle mixed timezone-aware and naive timestamps in file sorting
+  ([`3390a87`](https://github.com/jupyter-naas/abi/commit/3390a872573c98a9595d9feed8d9589fee23d4ff))
+
+### Features
+
+- **files**: Add My Drive support with manifest and default folders
+  ([`47892ee`](https://github.com/jupyter-naas/abi/commit/47892ee45e13a4c15f2fde4903358889c1ca5d7d))
+
+- **files-section**: Expand default drives on sidebar open and workspace change
+  ([`86615d6`](https://github.com/jupyter-naas/abi/commit/86615d65ba7782366fa8fce35d0ddb7cf83f8832))
+
+- **workspace-drive**: Add workspace drive writer and backfill
+  ([`e556b65`](https://github.com/jupyter-naas/abi/commit/e556b65a6dd74e856514434a08bd0bd4e1e20023))
+
+### Testing
+
+- **auth**: Add tests for avatar storage adapter and legacy avatar migration
+  ([`7905cbb`](https://github.com/jupyter-naas/abi/commit/7905cbb3396b6977b318ffd8f7c4425bd43e1cde))
+
+
+## v2.80.2 (2026-10-07)
+
+### Bug Fixes
+
+- **nexus**: Keep the agent list tied to its workspace
+  ([`2a5b68d`](https://github.com/jupyter-naas/abi/commit/2a5b68de1d6aa1b4b0124187ac971c473181a541))
+
+
+## v2.80.1 (2026-10-07)
+
+### Bug Fixes
+
+- **files**: Update legacy storage migration to handle S3-like listing behavior
+  ([`adc4e9f`](https://github.com/jupyter-naas/abi/commit/adc4e9f086dc035084ddf4f5d71aa5353d0c18b9))
+
+
+## v2.80.0 (2026-10-07)
+
+### Bug Fixes
+
+- **search-topics**: Improve snippet explanation and fix thread safety in search
+  ([`dd0107f`](https://github.com/jupyter-naas/abi/commit/dd0107f9d8eb916ffff1b67cd9ae2000c964f893))
+
+### Features
+
+- **intel-processes**: Add organization and people logo pipelines and utilities
+  ([`d39062b`](https://github.com/jupyter-naas/abi/commit/d39062ba961596f4661354af9a1a47922b1723b3))
+
+- **search**: Add highlight toggle and improve search UI
+  ([`41f5a62`](https://github.com/jupyter-naas/abi/commit/41f5a62214dedc9d55b26be1441bd8d0a4537c5c))
+
+- **search**: Add metadata rows display for topic results
+  ([`3feb48c`](https://github.com/jupyter-naas/abi/commit/3feb48ca6434c1edc1fa81356e4d8463a47c5492))
+
+- **search**: Add multi-tier caching for topic search results and details
+  ([`7436ef7`](https://github.com/jupyter-naas/abi/commit/7436ef7b19892f15965c3baa875f47ff62350078))
+
+- **search**: Enhance person search with weighted text matching and add related test
+  ([`b41fa48`](https://github.com/jupyter-naas/abi/commit/b41fa48f3d3f19b8a99374d927252e962ea1e584))
+
+- **search**: Enhance topic search with LinkedIn and website info
+  ([`889b508`](https://github.com/jupyter-naas/abi/commit/889b508bf3c5f14840b02ed3e19cc5ff5b48d5c6))
+
+- **search-topics**: Add grouping and client info to topic search results
+  ([`c5828e1`](https://github.com/jupyter-naas/abi/commit/c5828e16641d274a00b66e60122edbb944ba05f5))
+
+
+## v2.79.1 (2026-10-06)
+
+### Bug Fixes
+
+- **nexus**: Forward the content type through the app-html proxy
+  ([`e980bf0`](https://github.com/jupyter-naas/abi/commit/e980bf092cf4aa0935c1a87785eee1fea2006a8c))
+
+
 ## v2.79.0 (2026-10-05)
 
 ### Bug Fixes

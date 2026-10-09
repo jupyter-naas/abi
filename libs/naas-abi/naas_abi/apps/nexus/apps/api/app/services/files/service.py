@@ -8,7 +8,7 @@ import tarfile
 import tempfile
 import zipfile
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
 from naas_abi.apps.nexus.apps.api.app.services.files.files__schema import (
@@ -33,6 +33,23 @@ from naas_abi.apps.nexus.apps.api.app.services.files.files__schema import (
 )
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
+
+# Folders carry no timestamp and sort as the oldest entries.
+_UNKNOWN_MODIFIED = datetime.min.replace(tzinfo=UTC)
+
+
+def _modified_sort_key(info: FileInfoData) -> datetime:
+    """Comparable ``modified`` for every entry.
+
+    S3/MinIO report a timezone-aware ``LastModified`` while the filesystem adapter
+    and ``datetime.now()`` give naive values; a naive one is taken as UTC so a
+    folder mixing both still sorts instead of raising ``TypeError``.
+    """
+    if info.modified is None:
+        return _UNKNOWN_MODIFIED
+    if info.modified.tzinfo is None:
+        return info.modified.replace(tzinfo=UTC)
+    return info.modified
 
 
 class FilesService:
@@ -116,6 +133,7 @@ class FilesService:
         search: str | None = None,
         sort_by: str = "name",
         sort_dir: str = "asc",
+        include_hidden: bool = True,
     ) -> FileListResponseData:
         """List a directory's entries.
 
@@ -135,9 +153,15 @@ class FilesService:
         the sort spans every page rather than just the current one. Sorting by
         name needs no per-entry metadata, so only the returned page is stat-ed;
         sorting by size or modified must stat every entry to compare them.
+
+        ``include_hidden=False`` drops system entries (names starting with
+        ``.``) before paging, so ``total`` counts only what is shown.
         """
         normalized_path = self.normalize_relative_path(path, allow_empty=True)
         entries = self._list_directory(normalized_path)
+
+        if not include_hidden:
+            entries = [entry for entry in entries if not entry.split("/")[-1].startswith(".")]
 
         needle = search.strip().lower() if search else ""
         if needle:
@@ -164,7 +188,7 @@ class FilesService:
                     reverse=reverse,
                 )
             else:  # modified
-                infos.sort(key=lambda info: info.modified or datetime.min, reverse=reverse)
+                infos.sort(key=_modified_sort_key, reverse=reverse)
             files = infos[start : start + limit] if limit is not None else infos[start:]
 
         return FileListResponseData(files=files, path=normalized_path, total=total)

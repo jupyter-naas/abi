@@ -22,6 +22,7 @@ import { TopicIcon } from '@/components/search/topic-icon';
 import { TopicScopeView } from '@/components/search/topic-scope-view';
 import { useSearchScopes } from '@/components/search/use-search-scopes';
 import { WebSearchPanel } from '@/components/search/web-search-panel';
+import { SearchMenuBar } from '@/components/search/search-menu-bar';
 import { cn } from '@/lib/utils';
 import { readSearchRoute, resolveScope, searchHref, type SearchRoute } from '@/lib/search-topics';
 import { topicsApi } from '@/lib/search-topics-api';
@@ -94,6 +95,7 @@ function Search() {
       <Header
         title="Search"
         subtitle={active?.description || 'People, organizations, apps, files, chats, ontology and more'}
+        nav={<SearchMenuBar workspaceId={workspaceId} canEdit={canEdit} />}
         actions={
           <button
             type="button"
@@ -161,12 +163,6 @@ function Search() {
                   <TopicIcon name={scope.icon} /> {scope.label}
                 </Link>
               ))}
-              {canEdit && (
-                <Link href={`/workspace/${encodeURIComponent(workspaceId)}/settings/search`}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground">
-                  <Settings2 size={12} /> Topics
-                </Link>
-              )}
             </nav>
           ) : (
             /* Same scopes as the sidebar, for narrow screens where it is hidden. */

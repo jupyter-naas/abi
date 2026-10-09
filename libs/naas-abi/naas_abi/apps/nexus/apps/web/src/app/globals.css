@@ -303,7 +303,11 @@ aside.glass :focus-visible {
  * when the panel is focused via keyboard.
  */
 [data-radix-menu-content],
-[data-radix-popper-content-wrapper] [role='menu'] {
+[data-radix-popper-content-wrapper] [role='menu'],
+/* Items too: Radix focuses the highlighted item, so hover drew a green ring
+   round each row. The row's data-[highlighted] background is the cue. */
+[data-radix-menu-content] :focus-visible,
+[data-radix-menu-content] :focus {
   outline: none !important;
   --tw-ring-width: 0px !important;
   --tw-ring-offset-shadow: 0 0 #0000 !important;
@@ -637,6 +641,57 @@ aside.glass :focus-visible {
 .code-sidebar-list-row {
   font-size: 12px;
   line-height: 18px;
+}
+
+/* Section home row: Ontology Dashboard, Knowledge Graph Dashboard,
+   Search "All topics", Apps "All apps", Maps "All layouts". */
+.shell-sidebar-home {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 16px);
+  min-height: 32px;
+  margin: 4px 8px 0;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  cursor: pointer;
+}
+.shell-sidebar-home > svg {
+  flex-shrink: 0;
+}
+.shell-sidebar-home > span:first-of-type {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell-sidebar-home[aria-current],
+.shell-sidebar-home:hover {
+  background: color-mix(in srgb, var(--workspace-accent, var(--color-primary)) 10%, transparent);
+}
+.shell-sidebar-home[aria-current] {
+  color: var(--workspace-accent, var(--color-primary));
+}
+.shell-sidebar-home:focus-visible {
+  outline: 2px solid var(--workspace-accent, var(--color-primary));
+  outline-offset: -2px;
+}
+.shell-sidebar-home + .graph-explorer-sidebar {
+  padding-top: 4px;
+}
+/* Search and Maps lists share the home row's side edges (8px margin + 8px padding). */
+.shell-sidebar-home-gutter {
+  margin-left: 8px;
+  margin-right: 8px;
 }
 
 .shell-sidebar-section-label {

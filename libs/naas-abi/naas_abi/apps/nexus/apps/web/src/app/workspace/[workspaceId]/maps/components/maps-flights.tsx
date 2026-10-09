@@ -5,7 +5,7 @@ import { fetchMapsFeedPins, withMapsView } from '../lib/maps-feed';
 import type { MapsFeedView } from '../lib/maps-view';
 import { MapsFeedCanvas } from './maps-feed-canvas';
 
-async function fetchFeed(signal: AbortSignal, view?: MapsFeedView) {
+export async function fetchFeed(signal: AbortSignal, view?: MapsFeedView) {
   return fetchMapsFeedPins(withMapsView(MAPS_PUBLIC_FEEDS.flights, view), signal);
 }
 

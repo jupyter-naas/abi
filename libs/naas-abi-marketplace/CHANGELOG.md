@@ -2,6 +2,62 @@
 
 <!-- version list -->
 
+## v3.59.0 (2026-10-09)
+
+### Features
+
+- **people**: Add support for workspace_dataset backend
+  ([`7172bf2`](https://github.com/jupyter-naas/abi/commit/7172bf2a4897177b72cbb61fd1595a6d3d6be28b))
+
+- **people-intel**: Add support for include_suffixes in graph config and workspace manifest
+  ([`ac6e604`](https://github.com/jupyter-naas/abi/commit/ac6e6042f0f2ed92ac97fa889d9a559443ea05ba))
+
+### Refactoring
+
+- **people**: Improve error handling and logging in people resolver and results page
+  ([`723148c`](https://github.com/jupyter-naas/abi/commit/723148c14a68403ae320f4dd68fef9b3b8ba1ff5))
+
+- **people-intel**: Enhance people API routes with authentication and context
+  ([`9de46e2`](https://github.com/jupyter-naas/abi/commit/9de46e257b99d3f0fe16007e69359e0a018050d5))
+
+- **people-intel**: Update multiple modules and scripts for improvements and fixes
+  ([`ed96de9`](https://github.com/jupyter-naas/abi/commit/ed96de9d594768c4053bf24850114b88a122b52c))
+
+- **people-intel**: Update README and CSS for theme chrome variables
+  ([`473d488`](https://github.com/jupyter-naas/abi/commit/473d488dc721cf7c9c099d865f8aab1879f2ebe9))
+
+
+## v3.58.0 (2026-10-07)
+
+### Features
+
+- **intel-processes**: Add organization and people logo pipelines and utilities
+  ([`d39062b`](https://github.com/jupyter-naas/abi/commit/d39062ba961596f4661354af9a1a47922b1723b3))
+
+- **people**: Add optional LinkedIn contact link in search results
+  ([`c0d1cc1`](https://github.com/jupyter-naas/abi/commit/c0d1cc12224e98ffc3d1c49af22baf2a3d0b4b86))
+
+- **people**: Add support for organization logos from graph
+  ([`aa4d605`](https://github.com/jupyter-naas/abi/commit/aa4d6052b4c21646b9870ee55de1b665275cff1b))
+
+- **people**: Enhance graph visualization with ring clustering and image scaling
+  ([`e58d31a`](https://github.com/jupyter-naas/abi/commit/e58d31a7366f1c254a6bc48907fce8930e73d141))
+
+- **people**: Update search views and network API
+  ([`b8f3a2a`](https://github.com/jupyter-naas/abi/commit/b8f3a2a805921940ebca0aa0d57fdcba1eb08cdb))
+
+- **search**: Add highlight toggle and improve search UI
+  ([`41f5a62`](https://github.com/jupyter-naas/abi/commit/41f5a62214dedc9d55b26be1441bd8d0a4537c5c))
+
+
+## v3.57.1 (2026-10-06)
+
+### Bug Fixes
+
+- **people**: Remove deprecated cco:ont00000562 type from Person individuals
+  ([`8637f71`](https://github.com/jupyter-naas/abi/commit/8637f716b6f0f41918fc88000cc38f40b74739ac))
+
+
 ## v3.57.0 (2026-10-05)
 
 ### Features

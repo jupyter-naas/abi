@@ -137,6 +137,22 @@ def test_query_construct_returns_graph():
     assert len(result) == 1
 
 
+def test_query_construct_decodes_utf8_without_a_charset():
+    adapter = _build_adapter()
+
+    body = '<http://example.org/jfd> <http://example.org/name> "Jean-François" .\n'
+    response = _ok_response()
+    response.headers = {"Content-Type": "application/n-triples"}
+    response.content = body.encode()
+    # What requests guessed for a large body sent without a charset.
+    response.text = body.encode().decode("latin-1")
+    adapter._session.post.return_value = response
+
+    result = adapter.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
+
+    assert {str(o) for o in result.objects()} == {"Jean-François"}
+
+
 def test_query_ask_returns_rdflib_ask_result():
     adapter = _build_adapter()
 

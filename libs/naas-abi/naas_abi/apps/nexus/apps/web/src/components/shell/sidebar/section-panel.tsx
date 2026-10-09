@@ -76,6 +76,31 @@ const WorkspacesSection = dynamic(
   { ssr: false, loading: sectionLoading },
 );
 
+/** Same import paths as the dynamic() calls above, so a hover warms the chunk next/dynamic will use. */
+const SECTION_CHUNK: Partial<Record<SidebarSection, () => Promise<unknown>>> = {
+  chat: () => import('@/app/workspace/[workspaceId]/chat/components/chat-section'),
+  maps: () => import('./maps-section'),
+  search: () => import('./search-section'),
+  files: () => import('./files-section'),
+  datasets: () => import('./datasets-section'),
+  ontology: () => import('./ontology-section'),
+  graph: () => import('./knowledge-graph-section'),
+  code: () => import('./code-section'),
+  slides: () => import('./slides-section'),
+  documents: () => import('./documents-section'),
+  sheets: () => import('./sheets-section'),
+  marketplace: () => import('./marketplace-section'),
+  apps: () => import('./apps-section'),
+  infrastructure: () => import('@/app/workspace/[workspaceId]/settings/infrastructure/infrastructure-section'),
+  settings: () => import('./settings-section'),
+  events: () => import('./events-section'),
+  workspaces: () => import('./workspaces-section'),
+};
+
+export function prefetchSectionPanel(section: SidebarSection) {
+  void SECTION_CHUNK[section]?.();
+}
+
 function SectionContent({ section }: { section: SidebarSection }) {
   const canSettings = useFeature('settings.workspace');
   const canMaps = useFeature('maps');

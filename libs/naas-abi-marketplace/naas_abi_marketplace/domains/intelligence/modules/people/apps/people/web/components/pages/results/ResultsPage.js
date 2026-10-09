@@ -173,10 +173,22 @@ export function missingDatasetHtml(detail) {
     </div>`;
 }
 
+function errorDetailText(error) {
+  const detail = error.detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (detail && typeof detail === "object" && typeof detail.message === "string") {
+    return detail.message;
+  }
+  return "";
+}
+
 function errorHtml(error) {
-  return error.detail?.error === "missing_dataset"
-    ? missingDatasetHtml(error.detail)
-    : `<div class="empty-state error-block"><h2>Search failed</h2><p>${escapeHtml(error.message)}</p></div>`;
+  if (error.detail?.error === "missing_dataset") return missingDatasetHtml(error.detail);
+  const extra = errorDetailText(error);
+  const body = extra
+    ? `${escapeHtml(error.message)}<br/>${escapeHtml(extra)}`
+    : escapeHtml(error.message);
+  return `<div class="empty-state error-block"><h2>Search failed</h2><p>${body}</p></div>`;
 }
 
 function networkStatsText(network, query) {

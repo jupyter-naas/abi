@@ -15,6 +15,7 @@ import { getWorkspacePath } from '@/components/shell/sidebar/utils';
 import { newChatPath, NEW_CHAT_SLUG } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { AgentAvatar } from '@/components/chat/agent-selector';
 import { useFeature } from '@/hooks/use-feature';
+import { useStartNewChat } from '../lib/use-start-new-chat';
 import { ConversationItem } from './conversation-item';
 import { ProjectGroup } from './project-group';
 import { chatRosterSections } from './chat-section-agents';
@@ -144,17 +145,8 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
     }));
   }, [conversations, safeProjects]);
 
-  const handleNewChat = useCallback(() => {
-    if (!agentExplicitlySelected) {
-      const defaultAgent =
-        safeAgents.find((a) => a.isDefault && a.enabled) ??
-        safeAgents.find((a) => a.enabled);
-      if (defaultAgent) setSelectedAgent(defaultAgent.id);
-    }
-    setActiveConversation(null);
-    setMobilePendingChatSlug(NEW_CHAT_SLUG);
-    router.push(newChatPath(currentWorkspaceId));
-  }, [safeAgents, agentExplicitlySelected, setSelectedAgent, setActiveConversation, setMobilePendingChatSlug, router, currentWorkspaceId]);
+  // Same action as the topnav File → New Chat.
+  const handleNewChat = useStartNewChat();
 
   const handleChatHeaderNavigate = useCallback(() => {
     if (!agentExplicitlySelected) {

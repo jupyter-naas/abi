@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (  # noqa: E501
     ObjectStorageSecondaryAdapterFS,
@@ -171,3 +173,59 @@ def test_list_files_sort_applies_across_pages(tmp_path) -> None:
     page2 = files_service.list_files(path="dir", sort_by="size", sort_dir="asc", limit=2, offset=2)
     assert page2.total == 6
     assert [f.size for f in page2.files] == [30, 40]
+
+
+def test_list_files_sort_by_modified_mixes_folders_and_timezone_aware_files(tmp_path) -> None:
+    # S3/MinIO report a timezone-aware LastModified; folders carry no timestamp.
+    files_service = _make_files_service(tmp_path)
+    files_service.create_file(path="dir/old.txt", content="a", content_type="text/plain")
+    files_service.create_file(path="dir/new.txt", content="b", content_type="text/plain")
+    files_service.create_folder(path="dir/sub")
+    stamps = {
+        "dir/old.txt": datetime(2026, 1, 1, tzinfo=UTC),
+        "dir/new.txt": datetime(2026, 6, 1, tzinfo=UTC),
+    }
+    files_service._stat_file = lambda path: (1, stamps[path])  # type: ignore[method-assign]
+
+    desc = files_service.list_files(path="dir", sort_by="modified", sort_dir="desc")
+    assert [f.name for f in desc.files] == ["new.txt", "old.txt", "sub"]
+
+    asc = files_service.list_files(path="dir", sort_by="modified", sort_dir="asc")
+    assert [f.name for f in asc.files] == ["sub", "old.txt", "new.txt"]
+
+
+def test_list_files_sort_by_modified_mixes_naive_and_aware_timestamps(tmp_path) -> None:
+    files_service = _make_files_service(tmp_path)
+    files_service.create_file(path="dir/naive.txt", content="a", content_type="text/plain")
+    files_service.create_file(path="dir/aware.txt", content="b", content_type="text/plain")
+    stamps = {
+        "dir/naive.txt": datetime(2026, 1, 1),
+        "dir/aware.txt": datetime(2026, 6, 1, tzinfo=UTC),
+    }
+    files_service._stat_file = lambda path: (1, stamps[path])  # type: ignore[method-assign]
+
+    desc = files_service.list_files(path="dir", sort_by="modified", sort_dir="desc")
+    assert [f.name for f in desc.files] == ["aware.txt", "naive.txt"]
+
+
+def test_list_files_hides_system_files_when_asked(tmp_path) -> None:
+    files_service = _make_files_service(tmp_path)
+    files_service.create_file(path="dir/.env", content="x", content_type="text/plain")
+    files_service.create_folder(path="dir/.abi")
+    files_service.create_file(path="dir/a.txt", content="x", content_type="text/plain")
+
+    result = files_service.list_files(path="dir", include_hidden=False)
+
+    assert [f.name for f in result.files] == ["a.txt"]
+    # total counts what is listed, so paging stays consistent.
+    assert result.total == 1
+
+
+def test_list_files_includes_system_files_by_default(tmp_path) -> None:
+    files_service = _make_files_service(tmp_path)
+    files_service.create_file(path="dir/.env", content="x", content_type="text/plain")
+    files_service.create_file(path="dir/a.txt", content="x", content_type="text/plain")
+
+    result = files_service.list_files(path="dir")
+
+    assert {f.name for f in result.files} == {".env", "a.txt"}
