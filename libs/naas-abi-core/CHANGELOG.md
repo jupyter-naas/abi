@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v2.41.3 (2026-10-09)
+
+### Bug Fixes
+
+- **agent**: Add chat_source flag to ToolResponseEvent and support tool metadata opt-out
+  ([`e197797`](https://github.com/jupyter-naas/abi/commit/e1977973d8d7c4809c2dd589553ecc7d51563825))
+
+- **triple_store**: Decode RDF body as UTF-8 to handle missing charset
+  ([`69f6574`](https://github.com/jupyter-naas/abi/commit/69f657450c054cbee47bbe3d75d7214703358699))
+
+### Refactoring
+
+- **people-intel**: Update multiple modules and scripts for improvements and fixes
+  ([`ed96de9`](https://github.com/jupyter-naas/abi/commit/ed96de9d594768c4053bf24850114b88a122b52c))
+
+
 ## v2.41.2 (2026-10-06)
 
 ### Bug Fixes
