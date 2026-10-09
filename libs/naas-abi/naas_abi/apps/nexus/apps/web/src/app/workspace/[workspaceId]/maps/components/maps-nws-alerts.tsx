@@ -4,7 +4,7 @@ import { MAPS_PUBLIC_FEEDS } from '../lib/datasets';
 import { fetchMapsFeedPins } from '../lib/maps-feed';
 import { MapsFeedCanvas } from './maps-feed-canvas';
 
-async function fetchPins(signal: AbortSignal) {
+export async function fetchPins(signal: AbortSignal) {
   const { pins } = await fetchMapsFeedPins(MAPS_PUBLIC_FEEDS.nwsAlerts, signal);
   return pins;
 }

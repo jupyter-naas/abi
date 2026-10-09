@@ -850,3 +850,26 @@ class SearchSettingsModel(Base):
     settings = Column(Text, nullable=False)  # JSON {"disabled_scopes": [...]}
     updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+class MapsLayoutModel(Base):
+    """A workspace's custom Maps layout: a SPARQL pin layer (JSON definition)."""
+
+    __tablename__ = "maps_layouts"
+
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    layout_id = Column(String(48), primary_key=True)
+    definition = Column(Text, nullable=False)  # JSON MapsLayout
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+class MapsSettingsModel(Base):
+    """A workspace's Maps settings: which layouts are hidden."""
+
+    __tablename__ = "maps_settings"
+
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    settings = Column(Text, nullable=False)  # JSON {"hidden_layouts": [...]}
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)

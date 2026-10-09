@@ -4,7 +4,7 @@ import { MAPS_PUBLIC_FEEDS } from '../lib/datasets';
 import { eonetEventsToPins } from '../lib/maps-feed';
 import { MapsFeedCanvas } from './maps-feed-canvas';
 
-async function fetchPins(signal: AbortSignal) {
+export async function fetchPins(signal: AbortSignal) {
   const res = await fetch(MAPS_PUBLIC_FEEDS.eonetAll, { signal });
   if (!res.ok) throw new Error(`EONET ${res.status}`);
   return eonetEventsToPins(await res.json(), '#7c3aed');

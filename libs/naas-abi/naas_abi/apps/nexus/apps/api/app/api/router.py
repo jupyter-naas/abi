@@ -38,6 +38,9 @@ from naas_abi.apps.nexus.apps.api.app.services.documents.handlers import (
     router as documents_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.handlers import router as files_router
+from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.handlers import (
+    router as maps_layouts_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.modules.handlers import router as modules_router
 from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.handlers import (
     router as openai_gateway_router,
@@ -82,6 +85,7 @@ api_router.include_router(modules_router, prefix="/modules", tags=["modules"])
 api_router.include_router(apps_router, prefix="/apps", tags=["apps"])
 api_router.include_router(app_projects_router, prefix="/app-projects", tags=["app-projects"])
 api_router.include_router(files_router, prefix="/files", tags=["files"])
+api_router.include_router(maps_layouts_router, prefix="/maps/layouts", tags=["maps"])
 api_router.include_router(datasets_router, prefix="/datasets", tags=["datasets"])
 api_router.include_router(secrets.router, prefix="/secrets", tags=["secrets"])
 api_router.include_router(providers_router, prefix="/providers", tags=["providers"])

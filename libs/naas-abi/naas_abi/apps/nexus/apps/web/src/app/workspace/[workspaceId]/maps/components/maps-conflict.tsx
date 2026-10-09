@@ -7,7 +7,7 @@ import {
 import type { MapsPinMarker } from '../lib/leaflet-map';
 import { MapsFeedCanvas } from './maps-feed-canvas';
 
-async function fetchPins(_signal: AbortSignal): Promise<MapsPinMarker[]> {
+export async function fetchPins(_signal: AbortSignal): Promise<MapsPinMarker[]> {
   return CONFLICT_SITES.map((site) => ({
     id: site.id,
     lat: site.lat,
