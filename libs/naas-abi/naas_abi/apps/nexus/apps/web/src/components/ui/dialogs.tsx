@@ -11,14 +11,17 @@ import { useWorkspaceStore } from '@/stores/workspace';
 // Generic Modal Backdrop
 // ============================================================
 
-function ModalBackdrop({
+export function ModalBackdrop({
   open,
   onClose,
   children,
+  widthClassName = 'max-w-md',
 }: {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
+  /** Content width; prompts use the default, previews go wider. */
+  widthClassName?: string;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -39,7 +42,7 @@ function ModalBackdrop({
         onClick={onClose}
       />
       {/* Content */}
-      <div className="relative z-10 w-full max-w-md mx-4 animate-in zoom-in-95 fade-in duration-200">
+      <div className={cn('relative z-10 mx-4 w-full animate-in zoom-in-95 fade-in duration-200', widthClassName)}>
         {children}
       </div>
     </div>,

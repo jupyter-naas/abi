@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
@@ -21,6 +21,10 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     get_auth_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
+from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__dependencies import (  # noqa: E501
+    get_files_service,
+)
+from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
 from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
     issue_and_send_invite_sign_in,
 )
@@ -37,6 +41,15 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary.resou
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
     WorkspaceSecondaryAdapterPostgres,
+)
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.background_image import (
+    MAX_BACKGROUND_IMAGE_BYTES,
+    MAX_ZOOM,
+    MIN_ZOOM,
+    BackgroundImageError,
+    WorkspaceBackgroundImage,
+    background_image_url,
+    fetch_image_url,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     WorkspaceCreateInput,
@@ -218,7 +231,7 @@ def _workspace_public_asset_url(raw: str | None) -> str | None:
     """Rewrite module asset paths (``src/external/…/assets/public/…``) to API URLs."""
     if not raw:
         return raw
-    if raw.startswith(("http://", "https://", "/uploads/")):
+    if raw.startswith(("http://", "https://", "/uploads/", "/api/")):
         return raw
     try:
         return resolve_public_module_asset_url(raw, abi_module_path=None)
@@ -690,3 +703,149 @@ async def upload_workspace_logo(
         "logo_url": logo_url,
         "filename": unique_filename,
     }
+
+
+# ---------------------------------------------------------------------------
+# Home desk wallpaper (workspace drive .home/): stage → preview → commit.
+# ---------------------------------------------------------------------------
+
+
+class BackgroundImageDraft(BaseModel):
+    draft: str
+
+
+class BackgroundImageCommit(BaseModel):
+    """What to show and how: a new ``draft``, or the ``current`` wallpaper
+    re-framed. Plus the framing set in the preview (focal point %, zoom)."""
+
+    draft: str | None = None
+    current: str | None = None
+    x: float = Field(default=50.0, ge=0, le=100)
+    y: float = Field(default=50.0, ge=0, le=100)
+    zoom: float = Field(default=MIN_ZOOM, ge=MIN_ZOOM, le=MAX_ZOOM)
+
+
+async def _require_workspace_admin(user: User, workspace_id: str) -> str:
+    role = await require_workspace_access(user.id, workspace_id)
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only admins can change the background image")
+    return role
+
+
+def _image_response(raw, *, cache: str) -> Response:
+    return Response(
+        content=raw.content,
+        media_type=raw.media_type,
+        headers={"Cache-Control": cache, "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.post("/{workspace_id}/background-image/draft")
+async def stage_background_image(
+    workspace_id: str,
+    file: UploadFile | None = File(default=None),
+    url: str | None = Form(default=None, max_length=2048),
+    current_user: User = Depends(get_current_user_required),
+    files_service: FilesService = Depends(get_files_service),
+) -> BackgroundImageDraft:
+    """Upload a local file or download ``url`` into ``.home/tmp`` for preview."""
+    await _require_workspace_admin(current_user, workspace_id)
+    if (file is None) == (not url):
+        raise HTTPException(status_code=400, detail="Send either a file or a url")
+    background = WorkspaceBackgroundImage(files_service, workspace_id)
+    try:
+        if file is not None:
+            content = await file.read(MAX_BACKGROUND_IMAGE_BYTES + 1)
+        else:
+            content = await fetch_image_url(url or "")
+        draft = background.stage(content)
+    except BackgroundImageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # network errors from the remote host
+        if url and file is None:
+            raise HTTPException(status_code=400, detail="Could not download the image") from exc
+        raise
+    return BackgroundImageDraft(draft=draft)
+
+
+@router.get("/{workspace_id}/background-image/draft/{name}")
+async def preview_background_image_draft(
+    workspace_id: str,
+    name: str,
+    current_user: User = Depends(get_current_user_required),
+    files_service: FilesService = Depends(get_files_service),
+) -> Response:
+    await _require_workspace_admin(current_user, workspace_id)
+    try:
+        raw = WorkspaceBackgroundImage(files_service, workspace_id).read_draft(name)
+    except BackgroundImageError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _image_response(raw, cache="no-store")
+
+
+@router.delete("/{workspace_id}/background-image/draft")
+async def discard_background_image_draft(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user_required),
+    files_service: FilesService = Depends(get_files_service),
+) -> dict:
+    await _require_workspace_admin(current_user, workspace_id)
+    WorkspaceBackgroundImage(files_service, workspace_id).discard()
+    return {"message": "Draft discarded"}
+
+
+@router.post("/{workspace_id}/background-image")
+async def commit_background_image(
+    workspace_id: str,
+    payload: BackgroundImageCommit,
+    current_user: User = Depends(get_current_user_required),
+    service: WorkspaceService = Depends(get_workspace_service),
+    org_service: OrganizationService = Depends(get_organization_service),
+    files_service: FilesService = Depends(get_files_service),
+) -> Workspace:
+    """Point the workspace at the new draft (moved to ``.home/background-img``, old
+    files cleaned up) or at the current wallpaper with new framing."""
+    role = await _require_workspace_admin(current_user, workspace_id)
+    if (payload.draft is None) == (payload.current is None):
+        raise HTTPException(status_code=400, detail="Send either a draft or the current image")
+    background = WorkspaceBackgroundImage(files_service, workspace_id)
+    try:
+        if payload.draft is not None:
+            name = background.commit(payload.draft)
+        else:
+            # Re-framing the wallpaper already in place: nothing moves.
+            name = payload.current or ""
+            background.read_current(name)
+    except BackgroundImageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    record = await service.update_workspace(
+        workspace_id=workspace_id,
+        updates=WorkspaceUpdateInput(
+            background_image_url=background_image_url(
+                workspace_id, name, x=payload.x, y=payload.y, zoom=payload.zoom
+            )
+        ),
+    )
+    if record is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return _to_schema(
+        record,
+        role,
+        organization_override=await _load_org_role_override(record.organization_id, org_service),
+    )
+
+
+@router.get("/{workspace_id}/background-image")
+async def get_background_image(
+    workspace_id: str,
+    v: str,
+    current_user: User = Depends(get_current_user_required),
+    files_service: FilesService = Depends(get_files_service),
+) -> Response:
+    """The committed wallpaper. ``v`` is its file name, so the URL changes on every commit."""
+    await require_workspace_access(current_user.id, workspace_id)
+    try:
+        raw = WorkspaceBackgroundImage(files_service, workspace_id).read_current(v)
+    except BackgroundImageError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _image_response(raw, cache="private, max-age=31536000, immutable")
