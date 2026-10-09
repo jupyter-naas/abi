@@ -365,6 +365,44 @@ class FilesService:
         if self._is_directory(normalized_path):
             raise IsDirectoryError("Cannot preview a directory")
 
+        pdf_path = (
+            f"{normalized_path[:-5]}.pdf"
+            if normalized_path.lower().endswith(".pptx")
+            else str(PurePosixPath(normalized_path).with_suffix(".pdf"))
+        )
+        if self._file_exists(pdf_path):
+            try:
+                _deck_size, deck_modified = self._stat_file(normalized_path)
+                _pdf_size, pdf_modified = self._stat_file(pdf_path)
+                pdf_fresh = pdf_modified is not None and (
+                    deck_modified is None
+                    or _modified_sort_key(
+                        FileInfoData(
+                            name="",
+                            path=pdf_path,
+                            type="file",
+                            modified=pdf_modified,
+                        )
+                    )
+                    >= _modified_sort_key(
+                        FileInfoData(
+                            name="",
+                            path=normalized_path,
+                            type="file",
+                            modified=deck_modified,
+                        )
+                    )
+                )
+                if pdf_fresh:
+                    return PdfPreviewData(
+                        content=self._read_bytes(pdf_path),
+                        filename=PurePosixPath(pdf_path).name,
+                    )
+            except Exceptions.ObjectNotFound:
+                pass
+            except Exception:
+                pass
+
         try:
             content_bytes = self._read_bytes(normalized_path)
         except Exceptions.ObjectNotFound as exc:
