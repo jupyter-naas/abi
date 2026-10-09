@@ -21,6 +21,7 @@ export type FilesMenuBarProps = {
   onNewFolder: () => void;
   onUpload: () => void;
   onRefresh: () => void;
+  onOpenDriveSettings: () => void;
 };
 
 const row =
@@ -45,6 +46,7 @@ export function FilesMenuBar({
   onNewFolder,
   onUpload,
   onRefresh,
+  onOpenDriveSettings,
 }: FilesMenuBarProps) {
   const spacingLabel =
     ONTOLOGY_SPACING.find((option) => option.value === spacing)?.label ?? 'Compact';
@@ -84,6 +86,23 @@ export function FilesMenuBar({
                 data-testid="files-menuitem-upload"
               >
                 Upload…
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+              <DropdownMenu.Item
+                className={row}
+                disabled={loading}
+                onSelect={onRefresh}
+                data-testid="files-menuitem-refresh"
+              >
+                {loading ? 'Refreshing…' : 'Refresh'}
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+              <DropdownMenu.Item
+                className={row}
+                onSelect={onOpenDriveSettings}
+                data-testid="files-menuitem-drive-settings"
+              >
+                Drive settings…
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
@@ -151,15 +170,6 @@ export function FilesMenuBar({
                   </DropdownMenu.SubContent>
                 </DropdownMenu.Portal>
               </DropdownMenu.Sub>
-              <DropdownMenu.Separator className="my-1 h-px bg-border" />
-              <DropdownMenu.Item
-                className={row}
-                disabled={loading}
-                onSelect={onRefresh}
-                data-testid="files-menuitem-refresh"
-              >
-                {loading ? 'Refreshing…' : 'Refresh'}
-              </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>

@@ -47,6 +47,7 @@ import { PdfViewer } from '@/components/files/pdf-viewer';
 import { CsvPreview } from '@/components/files/csv-preview';
 import { FilesAddSheet } from '../components/files-add-sheet';
 import { FilesMenuBar } from '../components/files-menu-bar';
+import { requestFilesExplorerRefresh } from '../lib/explorer-refresh';
 import { FilesMobileRow } from '../components/files-mobile-row';
 import { FilesMobileToolbar } from '../components/files-mobile-toolbar';
 import '../components/files-components.css';
@@ -1548,7 +1549,13 @@ export default function FilesPage() {
             onNewFile={() => void handleNewFile()}
             onNewFolder={() => void handleNewFolder()}
             onUpload={() => fileInputRef.current?.click()}
-            onRefresh={handleRefresh}
+            onRefresh={() => {
+              handleRefresh();
+              requestFilesExplorerRefresh();
+            }}
+            onOpenDriveSettings={() =>
+              router.push(`/workspace/${encodeURIComponent(workspaceId)}/settings/drives`)
+            }
           />
         }
       />
