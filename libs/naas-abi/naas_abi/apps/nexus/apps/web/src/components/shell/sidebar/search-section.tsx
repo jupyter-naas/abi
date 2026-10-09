@@ -54,8 +54,14 @@ export function SearchSection({ collapsed, detailOnly }: { collapsed: boolean; d
       detailOnly={detailOnly}
     >
       <Link href={href(null)} aria-current={active === null ? 'page' : undefined}
-        className={cn(rowClass(active === null), 'mb-1')}>
-        <LayoutGrid size={14} className="flex-shrink-0" />
+        // Same row as Apps' "All apps", so every section's gallery entry reads alike.
+        className={cn(
+          'mb-1 flex w-full items-center gap-1 rounded-md px-2 py-1.5 search-sidebar-list-row transition-colors',
+          active === null
+            ? 'bg-muted text-foreground font-medium'
+            : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+        )}>
+        <LayoutGrid size={14} />
         <span className="flex-1 truncate">All topics</span>
         <span className="text-[10px] text-muted-foreground">{onCount}/{scopes.length} on</span>
       </Link>
