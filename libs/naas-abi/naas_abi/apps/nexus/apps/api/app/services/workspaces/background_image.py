@@ -15,7 +15,9 @@ import socket
 from urllib.parse import urlsplit
 from uuid import uuid4
 
-from naas_abi.apps.nexus.apps.api.app.services.files.drive_roots import workspace_drive_root
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots import (
+    workspace_drive_root,
+)
 from naas_abi.apps.nexus.apps.api.app.services.files.files__schema import (
     NotFoundError,
     RawFileData,

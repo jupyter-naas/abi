@@ -24,7 +24,10 @@ from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__pri
     FileListResponse,
     RenameRequest,
 )
-from naas_abi.apps.nexus.apps.api.app.services.files.drive_roots import (
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.scripts.legacy_storage_migration import (
+    LegacyStorageMigrator,
+)
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots import (
     PLATFORM_DRIVE_ROOT,
     SCOPE_MY_DRIVE,
     SCOPE_PATTERN,
@@ -39,9 +42,6 @@ from naas_abi.apps.nexus.apps.api.app.services.files.files__schema import (
     FileContentData,
     FileInfoData,
     FileListResponseData,
-)
-from naas_abi.apps.nexus.apps.api.app.services.files.legacy_storage_migration import (
-    LegacyStorageMigrator,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
 

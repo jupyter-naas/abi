@@ -164,8 +164,8 @@ def _install_drive_writers() -> None:
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule
-        from naas_abi.apps.nexus.apps.api.app.services.files.my_drive import MyDriveWriter
-        from naas_abi.apps.nexus.apps.api.app.services.files.workspace_drive import (
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.my_drive import MyDriveWriter
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.workspace_drive import (
             WorkspaceDriveWriter,
         )
 
@@ -180,13 +180,18 @@ def _install_drive_writers() -> None:
 
 
 async def _backfill_drives() -> None:
-    """Write the manifest and default folders of every workspace drive and My Drive lacking them."""
+    """Write missing workspace and My Drive defaults, and the platform drive's staff folders."""
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule
         from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-        from naas_abi.apps.nexus.apps.api.app.services.files.my_drive import backfill_my_drives
-        from naas_abi.apps.nexus.apps.api.app.services.files.workspace_drive import (
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.my_drive import (
+            backfill_my_drives,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.platform_drive import (
+            backfill_platform_drive,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.workspace_drive import (
             backfill_workspace_drives,
         )
 
@@ -194,8 +199,14 @@ async def _backfill_drives() -> None:
         async with AsyncSessionLocal() as session:
             workspaces = await backfill_workspace_drives(session, storage)
             users = await backfill_my_drives(session, storage)
-        if any(workspaces.values()) or any(users.values()):
-            _log.info("✓ Drives backfilled: workspaces %s, my drives %s", workspaces, users)
+        platform = await backfill_platform_drive(storage)
+        if any(workspaces.values()) or any(users.values()) or any(platform.values()):
+            _log.info(
+                "✓ Drives backfilled: workspaces %s, my drives %s, platform %s",
+                workspaces,
+                users,
+                platform,
+            )
     except Exception:
         _log.exception("Drive backfill failed")
 

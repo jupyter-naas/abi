@@ -18,7 +18,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_embeddings import 
     chunk_markdown,
     embed_texts,
 )
-from naas_abi.apps.nexus.apps.api.app.services.files.drive_roots import my_drive_root
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots import my_drive_root
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService

@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 
-from naas_abi.apps.nexus.apps.api.app.services.files.drive_roots import (
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots import (
     MODULE_ROOT,
     my_drive_root,
     workspace_drive_root,

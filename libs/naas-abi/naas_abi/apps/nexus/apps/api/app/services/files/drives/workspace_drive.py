@@ -1,5 +1,7 @@
 """Set up every workspace's drive: ``manifest.json`` and the staff system folders.
 
+The platform drive's copy of these folders is ``platform_drive``.
+
 ``naas_abi/workspace-drive/<workspace_id>/`` gets:
 
 - ``.manifest.json``, describing the workspace the folder belongs to, so the
@@ -32,17 +34,27 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Callable
-from datetime import datetime
-from functools import cache
-from pathlib import Path
 from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
-from naas_abi.apps.nexus.apps.api.app.services.files.drive_roots import (
-    MODULE_ROOT,
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots import (
     workspace_drive_root,
 )
-from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.manifest import (
+    LEGACY_MANIFEST_NAME,
+    MANIFEST_NAME,
+    SCHEMA_VERSION,
+)
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.objects import (
+    isoformat as _iso,
+)
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.objects import (
+    object_exists as _exists,
+)
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.staff_folders import (
+    STAFF_FOLDERS_MARKER_ROOT,
+    write_staff_folders,
+)
 from naas_abi_core import logger
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
@@ -51,41 +63,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-MANIFEST_NAME = ".manifest.json"
-# The first version wrote it without the leading dot; backfill removes those.
-LEGACY_MANIFEST_NAME = "manifest.json"
-SCHEMA_VERSION = 1
 # Prefix for workspace named graphs: ``{GRAPH_BASE}<workspace_id>/…``.
 # Which graphs sit under that prefix is the application's choice, not Nexus's.
 GRAPH_BASE = "http://ontology.naas.ai/graph/"
-
-README_NAME = "README.md"
-# The nine staff system functions, S1 to S9.
-STAFF_FOLDERS = (
-    "personnel",
-    "intelligence",
-    "operations",
-    "logistics",
-    "plans",
-    "signals",
-    "training",
-    "finance",
-    "external",
-)
-STAFF_FOLDERS_MARKER_ROOT = f"{MODULE_ROOT}/.scaffolded/staff-folders"
-_TEMPLATES_DIR = Path(__file__).resolve().parents[5] / "assets" / "staff_folders"
-
-
-def _iso(value: Any) -> str | None:
-    return value.isoformat() if isinstance(value, datetime) else None
-
-
-def _exists(storage: ObjectStorageService, prefix: str, key: str) -> bool:
-    try:
-        storage.get_object(prefix, key)
-        return True
-    except Exceptions.ObjectNotFound:
-        return False
 
 
 def _existing_graphs(storage: ObjectStorageService, workspace_id: str) -> dict[str, str]:
@@ -155,27 +135,13 @@ def remove_legacy_manifest(storage: ObjectStorageService, workspace_id: str) -> 
     return ours
 
 
-@cache
-def staff_folder_readme(folder: str) -> str:
-    """The folder's own text followed by the layout section shared by all nine."""
-    body = (_TEMPLATES_DIR / f"{folder}.md").read_text(encoding="utf-8")
-    layout = (_TEMPLATES_DIR / "_layout.md").read_text(encoding="utf-8")
-    return body.rstrip("\n") + "\n" + layout
-
-
 def has_staff_folders(storage: ObjectStorageService, workspace_id: str) -> bool:
     return _exists(storage, STAFF_FOLDERS_MARKER_ROOT, workspace_id)
 
 
 def create_staff_folders(storage: ObjectStorageService, workspace_id: str) -> None:
     """Create the nine folders and their README, keeping anything already there."""
-    root = workspace_drive_root(workspace_id)
-    for folder in STAFF_FOLDERS:
-        prefix = f"{root}/{folder}"
-        if not _exists(storage, prefix, FilesService.folder_marker):
-            storage.put_object(prefix, FilesService.folder_marker, b"")
-        if not _exists(storage, prefix, README_NAME):
-            storage.put_object(prefix, README_NAME, staff_folder_readme(folder).encode("utf-8"))
+    write_staff_folders(storage, workspace_drive_root(workspace_id))
     storage.put_object(STAFF_FOLDERS_MARKER_ROOT, workspace_id, b"")
 
 

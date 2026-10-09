@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from naas_abi.apps.nexus.apps.api.app.services.files.drive_roots import SCOPE_PATTERN
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots import SCOPE_PATTERN
 from pydantic import BaseModel, Field
 
 FileScope = str

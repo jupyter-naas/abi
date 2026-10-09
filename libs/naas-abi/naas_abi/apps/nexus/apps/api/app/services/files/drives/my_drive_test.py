@@ -11,7 +11,7 @@ import json
 import pytest
 import pytest_asyncio
 from naas_abi.apps.nexus.apps.api.app.models import UserModel
-from naas_abi.apps.nexus.apps.api.app.services.files.my_drive import (
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.my_drive import (
     DEFAULT_FOLDERS,
     DEFAULT_FOLDERS_MARKER_ROOT,
     MANIFEST_NAME,
