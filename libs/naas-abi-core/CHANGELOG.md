@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v2.42.0 (2026-10-09)
+
+### Bug Fixes
+
+- **identity_graph**: Drop graph silently instead of clear
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+- **triple_store**: Decode invalid UTF-8 error bodies in _raise_for_status
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+### Features
+
+- **identity_graph**: Retry sync on Fuseki dataset lock races
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+### Testing
+
+- **triple_store**: Add test for _raise_for_status decoding invalid UTF-8
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+
 ## v2.41.3 (2026-10-09)
 
 ### Bug Fixes
