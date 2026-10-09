@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Map as LeafletMap, Marker } from 'leaflet';
 import { Loader2 } from 'lucide-react';
 import { MAPS_PUBLIC_FEEDS } from '../lib/datasets';
-import { observeMapsLeafletSize } from '../lib/leaflet-map';
+import { observeMapsLeafletSize, type MapsPinMarker } from '../lib/leaflet-map';
 import {
   isMapsDarkMode,
   MAPS_TILE_ATTR,
@@ -102,6 +102,50 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
+async function loadTemperatureSamples(signal: AbortSignal): Promise<TempPin[]> {
+  const pins: TempPin[] = [];
+  for (const batch of chunk(TEMP_SAMPLE_POINTS, 40)) {
+    const url = new URL(MAPS_PUBLIC_FEEDS.temperature);
+    url.searchParams.set('latitude', batch.map((p) => p.lat).join(','));
+    url.searchParams.set('longitude', batch.map((p) => p.lng).join(','));
+    url.searchParams.set('current', 'temperature_2m');
+    const res = await fetch(url.toString(), { signal });
+    if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
+    const raw = await res.json();
+    const rows = Array.isArray(raw) ? raw : [raw];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i] as {
+        latitude?: number;
+        longitude?: number;
+        current?: { temperature_2m?: number };
+      };
+      const tempC = row.current?.temperature_2m;
+      if (typeof tempC !== 'number' || !Number.isFinite(tempC)) continue;
+      const meta = batch[i];
+      pins.push({
+        lat: row.latitude ?? meta.lat,
+        lng: row.longitude ?? meta.lng,
+        tempC,
+        label: meta.label,
+      });
+    }
+  }
+  return pins;
+}
+
+/** City temperature samples as pins for the combined map. */
+export async function fetchPins(signal: AbortSignal): Promise<MapsPinMarker[]> {
+  const samples = await loadTemperatureSamples(signal);
+  return samples.map((pin) => ({
+    id: pin.label,
+    lat: pin.lat,
+    lng: pin.lng,
+    label: `${pin.label} · ${pin.tempC.toFixed(1)} °C`,
+    detail: 'Open-Meteo 2m air temperature',
+    color: tempColor(pin.tempC),
+  }));
+}
+
 /**
  * Current 2m air temperature samples via Open-Meteo (free, no API key).
  * OpenWeather temperature tiles require an app id, so we plot city samples instead.
@@ -138,41 +182,7 @@ export function MapsTemperature() {
       }
 
       try {
-        const pins: TempPin[] = [];
-        for (const batch of chunk(TEMP_SAMPLE_POINTS, 40)) {
-          const url = new URL(MAPS_PUBLIC_FEEDS.temperature);
-          url.searchParams.set(
-            'latitude',
-            batch.map((p) => p.lat).join(','),
-          );
-          url.searchParams.set(
-            'longitude',
-            batch.map((p) => p.lng).join(','),
-          );
-          url.searchParams.set('current', 'temperature_2m');
-          const res = await fetch(url.toString(), {
-            signal: AbortSignal.timeout(20000),
-          });
-          if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
-          const raw = await res.json();
-          const rows = Array.isArray(raw) ? raw : [raw];
-          for (let i = 0; i < rows.length; i++) {
-            const row = rows[i] as {
-              latitude?: number;
-              longitude?: number;
-              current?: { temperature_2m?: number };
-            };
-            const tempC = row.current?.temperature_2m;
-            if (typeof tempC !== 'number' || !Number.isFinite(tempC)) continue;
-            const meta = batch[i];
-            pins.push({
-              lat: row.latitude ?? meta.lat,
-              lng: row.longitude ?? meta.lng,
-              tempC,
-              label: meta.label,
-            });
-          }
-        }
+        const pins = await loadTemperatureSamples(AbortSignal.timeout(20000));
 
         if (cancelled || !mapRef.current) return;
         const map = mapRef.current;

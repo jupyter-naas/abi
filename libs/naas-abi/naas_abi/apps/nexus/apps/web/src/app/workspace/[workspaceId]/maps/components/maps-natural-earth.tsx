@@ -1,16 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { GeoJSON as LeafletGeoJSON, Map as LeafletMap } from 'leaflet';
+import type { Map as LeafletMap } from 'leaflet';
 import { Loader2 } from 'lucide-react';
-import { MAPS_PUBLIC_FEEDS } from '../lib/datasets';
-import { observeMapsLeafletSize } from '../lib/leaflet-map';
-import {
-  isMapsDarkMode,
-  MAPS_TILE_ATTR,
-  MAPS_TILE_DARK,
-  MAPS_TILE_LIGHT,
-} from '../lib/leaflet-tiles';
+import { addNaturalEarthLayer, observeMapsLeafletSize } from '../lib/leaflet-map';
 import './maps-components.css';
 
 /**
@@ -19,7 +12,6 @@ import './maps-components.css';
 export function MapsNaturalEarth() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
-  const layerRef = useRef<LeafletGeoJSON | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [count, setCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -37,36 +29,15 @@ export function MapsNaturalEarth() {
           zoomControl: true,
           attributionControl: true,
         });
-        L.tileLayer(isMapsDarkMode() ? MAPS_TILE_DARK : MAPS_TILE_LIGHT, {
-          className: 'maps-basemap',
-          attribution: MAPS_TILE_ATTR,
-          maxZoom: 18,
-        }).addTo(map);
         map.setView([20, 0], 2);
         observeMapsLeafletSize(map);
         mapRef.current = map;
       }
 
       try {
-        const res = await fetch(MAPS_PUBLIC_FEEDS.naturalEarth, {
-          signal: AbortSignal.timeout(20000),
-        });
-        if (!res.ok) throw new Error(`Natural Earth ${res.status}`);
-        const gj = await res.json();
         if (cancelled || !mapRef.current) return;
-
-        layerRef.current?.remove();
-        const layer = L.geoJSON(gj, {
-          style: {
-            color: '#0f766e',
-            weight: 1,
-            fillOpacity: 0.04,
-            opacity: 0.75,
-          },
-        }).addTo(mapRef.current);
-        layerRef.current = layer;
-
-        const features = Array.isArray(gj?.features) ? gj.features.length : 0;
+        const features = await addNaturalEarthLayer(L, mapRef.current, AbortSignal.timeout(20000));
+        if (cancelled) return;
         setCount(features);
         setStatus('ready');
       } catch (err) {
@@ -81,8 +52,6 @@ export function MapsNaturalEarth() {
     void setup();
     return () => {
       cancelled = true;
-      layerRef.current?.remove();
-      layerRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
     };

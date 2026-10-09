@@ -32,6 +32,24 @@
   --graph-node-fill-muted: rgba(255, 255, 255, 0.82);
   --muted-surface: var(--chip-surface);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Chrome an instance may restyle. Each falls back to the look above, so an
+     instance that sets none of them renders exactly as before:
+       --page-surface             behind the pages (cards stay on --panel)
+       --topbar-surface           the topbar background
+       --topbar-height            a fixed topbar height (a menubar), or auto
+       --topbar-padding           the topbar's padding
+       --topbar-logo-height       the logo in the topbar
+       --topbar-search-padding    the search field when it sits in the topbar
+       --topbar-control-padding   the profile's Resume/Graph switch options
+       --brand-name-size          the app name beside the logo
+       --brand-name-weight        its weight
+       --brand-name-font          its font family
+       --brand-name-tracking      its letter-spacing
+       --brand-divider            a rule between the logo and the name, e.g. 1px solid #ccc
+       --brand-divider-gap        the space after that rule
+       --home-logo-height         the logo on the home page
+       --card-top-border          a card's top edge, e.g. 4px solid <accent>
+       --chip-border, --chip-text an outline and text colour for chips */
 }
 
 * {
@@ -45,7 +63,7 @@ body {
 }
 
 body {
-  background: var(--paper);
+  background: var(--page-surface, var(--paper));
   color: var(--ink);
   font-family: var(--font-body);
   font-size: 16px;
@@ -133,8 +151,9 @@ mark,
   display: flex;
   align-items: center;
   gap: 20px;
-  padding: 12px 24px;
-  background: var(--paper);
+  min-height: var(--topbar-height, auto);
+  padding: var(--topbar-padding, 12px 24px);
+  background: var(--topbar-surface, var(--paper));
   border-bottom: 1px solid var(--line);
 }
 
@@ -154,7 +173,7 @@ mark,
 .topbar-brand .brand-logo {
   width: auto;
   min-width: 30px;
-  height: 30px;
+  height: var(--topbar-logo-height, 30px);
   font-size: 15px;
 }
 
@@ -164,9 +183,19 @@ mark,
 }
 
 .brand-name {
-  font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-family: var(--brand-name-font, var(--font-display));
+  font-size: var(--brand-name-size, inherit);
+  font-weight: var(--brand-name-weight, 700);
+  letter-spacing: var(--brand-name-tracking, -0.01em);
+}
+
+.topbar-brand .brand-name {
+  border-left: var(--brand-divider, none);
+  padding-left: var(--brand-divider-gap, 0);
+}
+
+.topbar .search-field {
+  padding: var(--topbar-search-padding, 10px 16px);
 }
 
 .topbar-search {
@@ -337,7 +366,7 @@ mark,
 .home .brand-logo {
   width: auto;
   min-width: 84px;
-  height: 84px;
+  height: var(--home-logo-height, 84px);
   font-size: 40px;
 }
 
@@ -376,7 +405,8 @@ mark,
   display: inline-block;
   padding: 5px 12px;
   background: var(--chip-surface);
-  color: var(--ink);
+  border: var(--chip-border, none);
+  color: var(--chip-text, var(--ink));
   text-decoration: none;
   font-size: 14px;
 }
@@ -809,7 +839,7 @@ a.page:hover {
 
 .profile-view-option {
   min-width: 84px;
-  padding: 6px 14px;
+  padding: var(--topbar-control-padding, 6px 14px);
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -1204,6 +1234,7 @@ body.sparql-modal-open {
 .card {
   background: var(--panel);
   border: 1px solid var(--line);
+  border-top: var(--card-top-border, 1px solid var(--line));
   padding: 22px 28px;
   margin-bottom: 20px;
 }
@@ -1328,6 +1359,8 @@ body.sparql-modal-open {
 
 .chips li {
   background: var(--chip-surface);
+  border: var(--chip-border, none);
+  color: var(--chip-text, inherit);
   padding: 6px 14px;
   font-size: 14px;
 }
@@ -1438,14 +1471,19 @@ body.sparql-modal-open {
 
 @media (max-width: 640px) {
   .topbar {
-    padding: 10px 16px;
+    padding: var(--topbar-padding, 10px 16px);
     gap: 12px;
   }
 
+  /* On a phone the width matters more than lining up with the search field,
+     which sits right of the logo (a wide wordmark would push it far in). */
   .results,
   .profile {
-    margin-left: var(--content-inset-left, 16px);
-    padding-right: 16px;
+    margin-left: 16px;
+    margin-right: 16px;
+    max-width: none;
+    width: auto;
+    padding-right: 0;
   }
 
   .card,

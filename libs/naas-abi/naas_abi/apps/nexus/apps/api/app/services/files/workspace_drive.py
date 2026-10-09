@@ -5,7 +5,9 @@
 - ``.manifest.json``, describing the workspace the folder belongs to, so the
   drive can be identified from object storage alone (a backup, the system
   drive, another tool reading the bucket). It is rewritten whenever the
-  workspace is updated.
+  workspace is updated. ``graph_base`` is the IRI prefix applications use for
+  named graphs under this workspace; which graphs exist is the application's
+  choice and is preserved if already recorded under ``graphs``.
 - one folder per staff system function (``personnel/``, ``intelligence/``, ...
   ``external/``), each with a ``README.md`` explaining what to file there. The
   texts live in ``apps/nexus/assets/staff_folders/``. They are created once per
@@ -53,6 +55,9 @@ MANIFEST_NAME = ".manifest.json"
 # The first version wrote it without the leading dot; backfill removes those.
 LEGACY_MANIFEST_NAME = "manifest.json"
 SCHEMA_VERSION = 1
+# Prefix for workspace named graphs: ``{GRAPH_BASE}<workspace_id>/…``.
+# Which graphs sit under that prefix is the application's choice, not Nexus's.
+GRAPH_BASE = "http://ontology.naas.ai/graph/"
 
 README_NAME = "README.md"
 # The nine staff system functions, S1 to S9.
@@ -83,6 +88,18 @@ def _exists(storage: ObjectStorageService, prefix: str, key: str) -> bool:
         return False
 
 
+def _existing_graphs(storage: ObjectStorageService, workspace_id: str) -> dict[str, str]:
+    """Named graphs an application already recorded; Nexus does not choose their kinds."""
+    try:
+        data = json.loads(storage.get_object(workspace_drive_root(workspace_id), MANIFEST_NAME))
+    except (Exceptions.ObjectNotFound, ValueError, TypeError):
+        return {}
+    graphs = data.get("graphs") if isinstance(data, dict) else None
+    if not isinstance(graphs, dict):
+        return {}
+    return {str(kind): str(iri) for kind, iri in graphs.items() if kind and iri}
+
+
 def build_manifest(workspace: WorkspaceModel) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
@@ -95,12 +112,17 @@ def build_manifest(workspace: WorkspaceModel) -> dict[str, Any]:
             "created_at": _iso(workspace.created_at),
             "updated_at": _iso(workspace.updated_at),
         },
+        "graph_base": GRAPH_BASE,
     }
 
 
 def write_manifest(storage: ObjectStorageService, manifest: dict[str, Any]) -> None:
+    workspace_id = manifest["workspace"]["id"]
+    graphs = _existing_graphs(storage, workspace_id)
+    if graphs:
+        manifest = {**manifest, "graphs": {**graphs, **(manifest.get("graphs") or {})}}
     storage.put_object(
-        workspace_drive_root(manifest["workspace"]["id"]),
+        workspace_drive_root(workspace_id),
         MANIFEST_NAME,
         json.dumps(manifest, indent=2).encode("utf-8"),
     )

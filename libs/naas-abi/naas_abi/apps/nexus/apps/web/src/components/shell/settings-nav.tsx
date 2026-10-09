@@ -13,6 +13,7 @@ import {
   Users,
   Zap,
   Search,
+  Map,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -56,6 +57,7 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
       { href: '/settings/ontologies', label: 'Ontologies', icon: BrainCircuit },
       { href: '/settings/graphs', label: 'Graphs', icon: Network },
       { href: '/settings/search', label: 'Search', icon: Search },
+      { href: '/settings/maps', label: 'Maps', icon: Map },
       { href: '/settings/skills', label: 'Skills', icon: Zap },
       { href: '/settings/apps', label: 'Apps', icon: AppWindow },
       { href: '/settings/models', label: 'Models', icon: Cpu },

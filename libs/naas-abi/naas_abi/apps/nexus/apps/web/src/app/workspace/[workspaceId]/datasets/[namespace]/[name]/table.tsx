@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
+import { DatasetsMenuBar } from '../../components/datasets-menu-bar';
 import {
   useDatasetsStore,
   type DatasetInfo,
@@ -85,7 +86,7 @@ export default function DatasetTable() {
   return (
     <div className="dataset-table-root">
       <div className="dataset-table-header-gap">
-        <Header title="Datasets" subtitle={subtitle} />
+        <Header title="Datasets" subtitle={subtitle} nav={<DatasetsMenuBar />} />
       </div>
       <div className="dataset-table-body">
         {error ? <p className="dataset-table-banner dataset-table-banner--error">{error}</p> : null}

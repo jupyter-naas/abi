@@ -363,6 +363,8 @@ interface WorkspaceState {
   selectWorkspace: (id: string) => void;
   updateWorkspace: (id: string, updates: Partial<Workspace>) => void;
   updateWorkspaceTheme: (updates: Partial<WorkspaceTheme>) => void;
+  /** Apply a theme change the server already saved (no PATCH back). */
+  applyWorkspaceTheme: (workspaceId: string, updates: Partial<WorkspaceTheme>) => void;
   getCurrentWorkspace: () => Workspace | null;
   fetchWorkspaces: () => Promise<void>;
 
@@ -1297,6 +1299,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       ),
     }));
   },
+
+  applyWorkspaceTheme: (workspaceId, updates) =>
+    set((state) => ({
+      workspaces: state.workspaces.map((w) =>
+        w.id === workspaceId ? { ...w, theme: { ...w.theme, ...updates }, updatedAt: new Date() } : w
+      ),
+    })),
 
   updateWorkspaceTheme: async (updates) => {
     const { currentWorkspaceId } = get();

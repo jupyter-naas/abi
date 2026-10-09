@@ -10,6 +10,7 @@ import { useGraphExplorerStore } from '@/stores/graph-explorer';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { useConfirm } from '@/components/ui/dialogs';
+import { APP_MENU_ROW, APP_MENU_SURFACE, APP_MENU_TRIGGER } from '@/components/shell/app-menu-classes';
 
 export function GraphMenuBar() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -28,12 +29,9 @@ export function GraphMenuBar() {
     selected && selected.can_write === true &&
     !['schema', 'nexus'].includes(selected.uri.split('/').pop() || '') &&
     !['schema', 'nexus'].includes(selected.id);
-  const row =
-    'flex cursor-default select-none items-center gap-2 px-3 py-1.5 text-xs outline-none ![border-radius:0] data-[highlighted]:bg-transparent data-[disabled]:opacity-50';
-  const surface =
-    'z-[300] min-w-[190px] border-0 bg-card p-1 text-foreground !shadow-none outline-none !ring-0 focus:!ring-0 focus-visible:!ring-0 ![border-radius:0]';
-  const trigger =
-    'flex items-center gap-1 border-0 bg-transparent px-2 py-1 text-xs shadow-none outline-none ring-0 ![border-radius:0] hover:bg-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 active:bg-transparent data-[state=open]:bg-transparent data-[state=open]:shadow-none';
+  const row = APP_MENU_ROW;
+  const surface = APP_MENU_SURFACE;
+  const trigger = APP_MENU_TRIGGER;
   async function refresh() {
     setBusy(true);
     setError('');

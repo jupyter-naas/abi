@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Box, ChevronRight, LayoutDashboard, Search, X } from 'lucide-react';
+import { Box, ChevronRight, LayoutGrid, Search, X } from 'lucide-react';
 import { OntologyMultiPicker } from '@/components/shell/sidebar/ontology-multi-picker';
 import { OntologyTopicIcon } from '@/components/ontology/ontology-topic-icon';
 import { useOntologyIconsStore } from '@/stores/ontology-icons';
@@ -260,17 +260,19 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
     );
   }
   return (
+    <>
+    <button
+      type="button"
+      className="shell-sidebar-home"
+      aria-current={isExplorer && scope.dashboard ? 'page' : undefined}
+      onClick={() => navigate({ view: null, class: null, classFilter: null, page: null })}
+    >
+      <LayoutGrid size={14} aria-hidden="true" />
+      <span>Dashboard</span>
+    </button>
     <div className="graph-explorer-sidebar">
-      <div className="graph-explorer-filters">
-        <button
-          type="button"
-          className="graph-explorer-dashboard-link"
-          aria-current={isExplorer && scope.dashboard ? 'page' : undefined}
-          onClick={() => navigate({ view: null, class: null, classFilter: null, page: null })}
-        >
-          <LayoutDashboard size={14} />
-          Dashboard
-        </button>
+      <div className="graph-explorer-sidebar-tools">
+      <div className="ontology-sidebar-filters">
         <OntologyMultiPicker
           {...graphPickerProps}
           items={workspaceGraphs.map((g) => ({
@@ -319,8 +321,8 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
           }
         />
       </div>
-      <label className="graph-explorer-search">
-        <Search size={14} />
+      <label className="relative block">
+        <Search size={13} className="absolute left-2 top-2.5 text-muted-foreground" />
         <input
           aria-label="Search instances and classes"
           placeholder="Search instances and classes…"
@@ -333,9 +335,11 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
               document.querySelector<HTMLButtonElement>('.graph-explorer-search-results button[data-ontology-tree-select], .graph-explorer-class-list button[data-ontology-tree-select]')?.focus();
             }
           }}
+          className={`w-full rounded-md border bg-background py-2 pl-7 text-xs ${searching ? 'pr-7' : 'pr-2'}`}
         />
-        {searching && <button type="button" aria-label="Clear search" onClick={() => setSearch('')}><X size={12} /></button>}
+        {searching && <button type="button" aria-label="Clear search" onClick={() => setSearch('')} className="absolute right-2 top-2.5 text-muted-foreground"><X size={12} /></button>}
       </label>
+      </div>
       {searching ? (
         <section {...treeKeyboard} className="graph-explorer-class-list graph-explorer-search-results" aria-label="Search results" aria-busy={hits.loading}>
           {search.trim().length < 2 ? <p className="graph-explorer-message">Type at least two characters.</p> : hits.loading ? <p className="graph-explorer-message" role="status">Searching…</p> : hits.error ? <p className="graph-explorer-message" role="alert">{hits.error} <button onClick={hits.retry}>Retry</button></p> : (
@@ -536,5 +540,6 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
       )}
       </>}
     </div>
+    </>
   );
 }

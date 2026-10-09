@@ -160,7 +160,11 @@ def _payload(
 
 
 def graph_view(
-    service: ds.DatasetService, config: dict[str, Any], *, slug: str
+    service: ds.PeopleStore,
+    config: dict[str, Any],
+    *,
+    slug: str,
+    live_graph: Graph | None = None,
 ) -> dict[str, Any]:
     """The graph payload, the node to open it on, and the view's settings."""
     if not SLUG_PATTERN.match(slug):
@@ -176,14 +180,22 @@ def graph_view(
     if not people:
         raise ProfileNotFoundError(slug)
     person = people[0]
-    payload = _payload(
-        _graph_key(config),
-        slug,
-        person.get("organization") or "",
-    )
-    if payload is None:
-        # In the datasets but not in the graph: the two were built apart.
-        raise ProfileNotFoundError(slug)
+    if live_graph is not None:
+        person_uri = person_by_slug(live_graph, slug)
+        if person_uri is None:
+            raise ProfileNotFoundError(slug)
+        payload = person_graph_payload(
+            live_graph, person_uri, org_label=person.get("organization") or ""
+        )
+    else:
+        payload = _payload(
+            _graph_key(config),
+            slug,
+            person.get("organization") or "",
+        )
+        if payload is None:
+            # In the datasets but not in the graph: the two were built apart.
+            raise ProfileNotFoundError(slug)
     return {
         # The graph page keys people by their label, which is the full name
         # the directory shows.

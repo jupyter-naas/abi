@@ -8,4 +8,3 @@ class EmploymentRecord(_EmploymentRecord):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

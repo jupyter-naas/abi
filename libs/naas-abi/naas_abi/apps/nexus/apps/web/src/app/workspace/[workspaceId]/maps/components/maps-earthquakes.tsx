@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Map as LeafletMap, Marker } from 'leaflet';
 import { Loader2 } from 'lucide-react';
 import { MAPS_PUBLIC_FEEDS } from '../lib/datasets';
-import { observeMapsLeafletSize } from '../lib/leaflet-map';
+import { observeMapsLeafletSize, type MapsPinMarker } from '../lib/leaflet-map';
 import {
   isMapsDarkMode,
   MAPS_TILE_ATTR,
@@ -13,12 +13,37 @@ import {
 } from '../lib/leaflet-tiles';
 import './maps-components.css';
 
-interface QuakePin {
-  id: string;
-  lat: number;
-  lng: number;
-  label: string;
-  mag: number;
+/**
+ * USGS earthquakes (M≥2.5, past day) as pins, so the layer can join the
+ * combined map as well as open on its own.
+ */
+export async function fetchPins(signal: AbortSignal): Promise<MapsPinMarker[]> {
+  const res = await fetch(MAPS_PUBLIC_FEEDS.earthquakes, { signal });
+  if (!res.ok) throw new Error(`USGS ${res.status}`);
+  const gj = (await res.json()) as {
+    features?: Array<{
+      id?: string;
+      properties?: { mag?: number; place?: string };
+      geometry?: { coordinates?: number[] };
+    }>;
+  };
+  const pins: MapsPinMarker[] = [];
+  for (const feature of gj.features ?? []) {
+    const coords = feature.geometry?.coordinates;
+    if (!coords || coords.length < 2) continue;
+    const [lng, lat] = coords;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    const mag = feature.properties?.mag ?? 0;
+    pins.push({
+      id: String(feature.id ?? `${lat},${lng}`),
+      lat,
+      lng,
+      label: `M${mag.toFixed(1)} · ${feature.properties?.place ?? 'Earthquake'}`,
+      color: '#ea580c',
+      size: Math.min(18, Math.max(8, 6 + mag * 2)),
+    });
+  }
+  return pins;
 }
 
 /**
@@ -56,33 +81,7 @@ export function MapsEarthquakes() {
       }
 
       try {
-        const res = await fetch(MAPS_PUBLIC_FEEDS.earthquakes, {
-          signal: AbortSignal.timeout(15000),
-        });
-        if (!res.ok) throw new Error(`USGS ${res.status}`);
-        const gj = (await res.json()) as {
-          features?: Array<{
-            id?: string;
-            properties?: { mag?: number; place?: string; time?: number };
-            geometry?: { coordinates?: number[] };
-          }>;
-        };
-
-        const pins: QuakePin[] = [];
-        for (const f of gj.features ?? []) {
-          const coords = f.geometry?.coordinates;
-          if (!coords || coords.length < 2) continue;
-          const [lng, lat] = coords;
-          if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-          const mag = f.properties?.mag ?? 0;
-          pins.push({
-            id: String(f.id ?? `${lat},${lng}`),
-            lat,
-            lng,
-            mag,
-            label: `M${mag.toFixed(1)} · ${f.properties?.place ?? 'Earthquake'}`,
-          });
-        }
+        const pins = await fetchPins(AbortSignal.timeout(15000));
 
         if (cancelled || !mapRef.current) return;
         const map = mapRef.current;
@@ -91,7 +90,7 @@ export function MapsEarthquakes() {
         const bounds: [number, number][] = [];
 
         for (const pin of pins) {
-          const size = Math.min(18, Math.max(8, 6 + pin.mag * 2));
+          const size = pin.size ?? 10;
           const icon = L.divIcon({
             className: 'maps-pin-icon',
             html: `<span style="display:block;width:${size}px;height:${size}px;border:2px solid #fff;background:#ea580c;box-shadow:0 1px 4px rgba(0,0,0,.35);border-radius:var(--org-border-radius,0px)"></span>`,

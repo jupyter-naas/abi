@@ -56,6 +56,7 @@ def execute_profile_query(
     *,
     max_rows: int = DEFAULT_MAX_ROWS,
     graph_file: str | tuple[str, ...] | None = None,
+    graph: Graph | None = None,
     hidden_columns: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Run one allowed competency query and return tabular results."""
@@ -65,13 +66,13 @@ def execute_profile_query(
         raise ValueError("max_rows must be positive")
 
     sparql = sq.render_query_raw(query_name, slug=slug)
-    graph = people_graph(graph_file)
+    resolved = graph if graph is not None else people_graph(graph_file)
 
     columns: list[str] = []
     rows: list[list[str | None]] = []
     truncated = False
     try:
-        for index, row in enumerate(graph.query(sparql)):
+        for index, row in enumerate(resolved.query(sparql)):
             if index >= max_rows:
                 truncated = True
                 break

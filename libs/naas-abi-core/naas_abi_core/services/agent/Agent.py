@@ -528,7 +528,10 @@ class ToolUsageEvent(Event):
 
 @dataclass
 class ToolResponseEvent(Event):
-    pass
+    # False when the tool's output must not be listed as chat sources: a tool
+    # opts out with ``metadata={"chat_source": False}`` (internal lookups whose
+    # URLs are identifiers, not references).
+    chat_source: bool = True
 
 
 @dataclass
@@ -2458,8 +2461,37 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             return message.get("tool_call_id") or id(message)
         return getattr(message, "tool_call_id", None) or message.id or id(message)
 
+    def _find_tool(self, name: str, seen: set[int] | None = None) -> Any:
+        """The tool called *name* in this agent or, depth first, its sub-agents.
+
+        A supervisor streams its sub-agents' graphs too, so the tool behind a
+        response it reports may belong to any agent below it.
+        """
+        seen = seen if seen is not None else set()
+        if id(self) in seen:
+            return None
+        seen.add(id(self))
+        tool = getattr(self, "_tools_by_name", {}).get(name)
+        if tool is not None:
+            return tool
+        for agent in getattr(self, "_agents", None) or []:
+            tool = agent._find_tool(name, seen)
+            if tool is not None:
+                return tool
+        return None
+
+    def _is_chat_source(self, message: AnyMessage) -> bool:
+        """Whether the URLs in this tool response may be listed as sources."""
+        tool = self._find_tool(str(getattr(message, "name", "") or ""))
+        metadata = getattr(tool, "metadata", None) or {}
+        return metadata.get("chat_source") is not False
+
     def _notify_tool_response(self, message: AnyMessage):
-        self._event_queue.put(ToolResponseEvent(payload=message))
+        self._event_queue.put(
+            ToolResponseEvent(
+                payload=message, chat_source=self._is_chat_source(message)
+            )
+        )
         self._on_tool_response(message)
         content = self._stringify_content(getattr(message, "content", None))
         self._publish_agent_event(
@@ -2985,8 +3017,15 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             new_agent = self.duplicate(
                 queue=fresh_queue, agent_shared_state=fresh_state
             )
+            # Only SSE fields go on the wire; in-process flags such as
+            # `chat_source` are not ServerSentEvent arguments.
             return EventSourceResponse(
-                new_agent.stream_invoke(query.prompt),
+                (
+                    {"event": event["event"], "data": event["data"]}
+                    if isinstance(event, dict)
+                    else event
+                    for event in new_agent.stream_invoke(query.prompt)
+                ),
                 media_type="text/event-stream; charset=utf-8",
             )
 
@@ -3038,10 +3077,13 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                     }
                 elif isinstance(message, ToolResponseEvent):
                     raw = str(pd.get(message, "payload.content", "NULL"))
-                    yield {
+                    tool_response: dict[str, Any] = {
                         "event": "tool_response",
                         "data": _truncate_tool_content(raw, _MAX_TOOL_RESULT_CHARS),
                     }
+                    if not message.chat_source:
+                        tool_response["chat_source"] = False
+                    yield tool_response
                 elif isinstance(message, AIMessageEvent):
                     yield {
                         "event": "ai_message",

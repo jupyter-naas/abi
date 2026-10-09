@@ -1673,7 +1673,10 @@ async def stream_with_abi_inprocess(
             elif event_name == "tool_usage" and text.strip():
                 yield {"event": "tool_usage", "tool": text}
             elif event_name == "tool_response" and text.strip():
-                yield {"event": "tool_response", "output": text}
+                tool_response = {"event": "tool_response", "output": text}
+                if event.get("chat_source") is False:
+                    tool_response["chat_source"] = False
+                yield tool_response
             elif event_name == "call_model" and text.strip():
                 yield {"event": "call_model", "agent": text}
             elif event_name == "agent_routing" and text.strip():

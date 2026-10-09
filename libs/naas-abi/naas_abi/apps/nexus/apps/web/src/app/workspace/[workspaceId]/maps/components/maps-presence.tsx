@@ -7,6 +7,7 @@ import {
   GCP_PRESENCE_PIN,
   MOBILE_GEO_STORAGE_KEY,
 } from '../lib/datasets';
+import type { MapsPinMarker } from '../lib/leaflet-map';
 import type { PresencePin } from './maps-presence-map';
 import './maps-components.css';
 
@@ -42,6 +43,81 @@ function readStoredMobileGeo(): StoredMobileGeo | null {
   } catch {
     return null;
   }
+}
+
+/** Device position only when the browser has already granted it. Never prompts. */
+async function positionIfGranted(
+  signal: AbortSignal,
+): Promise<{ lat: number; lng: number } | null> {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) return null;
+  try {
+    const perm = await navigator.permissions?.query({ name: 'geolocation' });
+    if (!perm || perm.state !== 'granted') return null;
+  } catch {
+    return null;
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value: { lat: number; lng: number } | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), 4000);
+    signal.addEventListener('abort', () => {
+      clearTimeout(timer);
+      finish(null);
+    });
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        clearTimeout(timer);
+        finish({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      () => {
+        clearTimeout(timer);
+        finish(null);
+      },
+      { enableHighAccuracy: false, timeout: 4000, maximumAge: 60_000 },
+    );
+  });
+}
+
+/**
+ * Here, as pins: the deployment server, a stored phone fix, and this device
+ * when location was already allowed. The standalone page still has Locate me.
+ */
+export async function fetchPins(signal: AbortSignal): Promise<MapsPinMarker[]> {
+  const pins: MapsPinMarker[] = [
+    {
+      id: GCP_PRESENCE_PIN.id,
+      lat: GCP_PRESENCE_PIN.lat,
+      lng: GCP_PRESENCE_PIN.lng,
+      label: GCP_PRESENCE_PIN.label,
+      color: '#3b82f6',
+    },
+  ];
+  if (typeof window === 'undefined') return pins;
+  const stored = readStoredMobileGeo();
+  if (stored) {
+    pins.push({
+      id: 'mobile-stored',
+      lat: stored.lat,
+      lng: stored.lng,
+      label: stored.label ?? 'Mobile (approximate)',
+      color: '#a855f7',
+    });
+  }
+  const here = await positionIfGranted(signal);
+  if (here) {
+    pins.unshift({
+      id: 'device',
+      lat: here.lat,
+      lng: here.lng,
+      label: 'This device',
+      color: '#22c55e',
+    });
+  }
+  return pins;
 }
 
 function writeStoredMobileGeo(lat: number, lng: number, label: string) {

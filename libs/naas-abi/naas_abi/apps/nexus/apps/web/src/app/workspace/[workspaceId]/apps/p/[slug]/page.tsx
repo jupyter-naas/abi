@@ -32,6 +32,7 @@ import {
   type AppSubmitConfig,
 } from '@/lib/app-projects';
 import { getApiUrl } from '@/lib/config';
+import { useDocumentTitleDetail } from '@/contexts/tenant-context';
 import { openFeatureAgentPane } from '@/lib/feature-agent-pane';
 import { cn } from '@/lib/utils';
 import { APP_PROJECT_UPDATED_EVENT, useAppProjectsStore } from '@/stores/app-projects';
@@ -70,6 +71,8 @@ export default function AppEditorPage() {
   const [history, setHistory] = useState<AppProjectCommit[] | null>(null);
   const [submitConfig, setSubmitConfig] = useState<AppSubmitConfig | null>(null);
   const [codeWidth, setCodeWidth] = useState(50);
+
+  useDocumentTitleDetail(project?.title);
 
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const buffersRef = useRef(buffers);
