@@ -32,7 +32,7 @@ import { mapsDatasetPath, mapsSettingsPath } from '@/app/workspace/[workspaceId]
 import { useMapLayouts } from '@/app/workspace/[workspaceId]/maps/lib/use-map-layouts';
 
 const KIND_LABEL: Record<LayoutKind, string> = { builtin: 'Built-in', graph: 'Graph layer', workspace: 'Workspace layout' };
-const GROUP_LABEL: Record<string, string> = { public: 'Public', private: 'Private', custom: 'Custom' };
+const GROUP_LABEL: Record<string, string> = { basemap: 'Basemap', public: 'Public', custom: 'Custom' };
 const NEW = 'new';
 const LAYOUT_ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
 
@@ -147,8 +147,8 @@ function MapsSettings() {
           <>
             <SettingsFilterSelect label="Group" value={groupFilter} onChange={setGroupFilter} options={[
               { value: 'all', label: 'All groups' },
+              { value: 'basemap', label: 'Basemap' },
               { value: 'public', label: 'Public' },
-              { value: 'private', label: 'Private' },
               { value: 'custom', label: 'Custom' },
             ]} />
             <SettingsFilterSelect label="Status" value={statusFilter} onChange={setStatusFilter} options={[

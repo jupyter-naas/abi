@@ -2,6 +2,7 @@ import { getApiUrl } from '@/lib/config';
 import { useAuthStore } from '@/stores/auth';
 import { fetchFeed as aisPins } from '../components/maps-ais';
 import { fetchPins as conflictPins } from '../components/maps-conflict';
+import { fetchPins as earthquakePins } from '../components/maps-earthquakes';
 import { fetchPins as eonetPins } from '../components/maps-eonet-all';
 import { fetchFeed as flightsPins } from '../components/maps-flights';
 import { fetchPins as gdacsPins } from '../components/maps-gdacs';
@@ -10,8 +11,11 @@ import { fetchPins as issPins } from '../components/maps-iss';
 import { fetchPins as newsPins } from '../components/maps-news';
 import { fetchPins as nwsAlertsPins } from '../components/maps-nws-alerts';
 import { fetchPins as openaqPins } from '../components/maps-openaq';
+import { fetchPins as presencePins } from '../components/maps-presence';
+import { fetchPins as temperaturePins } from '../components/maps-temperature';
 import { fetchPins as tropicalStormsPins } from '../components/maps-tropical-storms';
 import { fetchPins as volcanoesPins } from '../components/maps-volcanoes';
+import { fetchPins as wildfirePins } from '../components/maps-wildfires';
 import { mapsCustomFeedUrl } from './datasets';
 import type { LayoutEntry } from './layouts';
 import { layoutsApi } from './layouts-api';
@@ -27,6 +31,7 @@ type Fetcher = (signal: AbortSignal, view?: MapsFeedView) => Promise<unknown>;
 const BUILTIN_FETCHERS: Record<string, Fetcher> = {
   ais: aisPins,
   conflict: conflictPins,
+  earthquakes: earthquakePins,
   'eonet-all': eonetPins,
   flights: flightsPins,
   gdacs: gdacsPins,
@@ -35,8 +40,11 @@ const BUILTIN_FETCHERS: Record<string, Fetcher> = {
   news: newsPins,
   'nws-alerts': nwsAlertsPins,
   openaq: openaqPins,
+  presence: presencePins,
+  temperature: temperaturePins,
   'tropical-storms': tropicalStormsPins,
   volcanoes: volcanoesPins,
+  wildfires: wildfirePins,
 };
 
 function authHeader(): HeadersInit {

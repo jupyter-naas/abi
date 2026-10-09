@@ -5,7 +5,7 @@ import { MAPS_CUSTOM_DATASETS } from '@/lib/maps-custom-datasets';
 import { useMapsStore, workspaceLayoutsOf } from '@/stores/maps';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { MAPS_DATASETS } from './datasets';
-import { buildLayoutEntries, isLayoutOn, visibleEntries, type LayoutEntry } from './layouts';
+import { buildLayoutEntries, isLayoutOn, resolveBasemapId, visibleEntries, type LayoutEntry } from './layouts';
 import { useGraphMapLayers } from './use-graph-map-layers';
 
 const CUSTOM_IDS: ReadonlySet<string> = new Set(MAPS_CUSTOM_DATASETS.map((d) => d.id));
@@ -20,6 +20,7 @@ export function useMapLayouts() {
   const loadLayouts = useMapsStore((s) => s.loadLayouts);
   const workspace = useMapsStore((s) => workspaceLayoutsOf(s, workspaceId));
   const overrides = useMapsStore((s) => s.overrides);
+  const storedBasemap = useMapsStore((s) => s.basemapId);
   const storeLoading = useMapsStore((s) => s.loading);
   const storeError = useMapsStore((s) => s.error);
 
@@ -33,11 +34,13 @@ export function useMapLayouts() {
   );
   const entries = useMemo(() => visibleEntries(all, workspace.hidden), [all, workspace.hidden]);
   const isOn = (entry: LayoutEntry) => isLayoutOn(entry, overrides);
+  const basemapId = resolveBasemapId(entries, storedBasemap);
 
   return {
     workspaceId,
     all,
     entries,
+    basemapId,
     hidden: workspace.hidden,
     canEdit: workspace.canEdit,
     workspaceLayouts: workspace.layouts,

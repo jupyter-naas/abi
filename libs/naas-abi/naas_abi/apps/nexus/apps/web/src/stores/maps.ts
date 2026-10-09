@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { WorkspaceMapLayout } from '@/app/workspace/[workspaceId]/maps/lib/layouts';
+import { DEFAULT_BASEMAP_ID, type WorkspaceMapLayout } from '@/app/workspace/[workspaceId]/maps/lib/layouts';
 import { layoutsApi } from '@/app/workspace/[workspaceId]/maps/lib/layouts-api';
 
 interface WorkspaceLayouts {
@@ -19,6 +19,9 @@ export interface MapsState {
   overrides: Record<string, boolean>;
   setLayoutOn: (layoutId: string, on: boolean) => void;
   setLayoutsOn: (layoutIds: string[], on: boolean) => void;
+  /** The one basemap under the combined map. Layouts stack on top of it. */
+  basemapId: string;
+  setBasemap: (basemapId: string) => void;
 
   /** Settings → Maps: the workspace's own layouts and hidden layouts. */
   byWorkspace: Record<string, WorkspaceLayouts>;
@@ -39,6 +42,8 @@ export const useMapsStore = create<MapsState>()(
         set((state) => ({
           overrides: { ...state.overrides, ...Object.fromEntries(layoutIds.map((id) => [id, on])) },
         })),
+      basemapId: DEFAULT_BASEMAP_ID,
+      setBasemap: (basemapId) => set({ basemapId }),
 
       byWorkspace: {},
       loading: false,
@@ -67,7 +72,7 @@ export const useMapsStore = create<MapsState>()(
           },
         })),
     }),
-    { name: 'nexus-maps', partialize: (state) => ({ overrides: state.overrides }) },
+    { name: 'nexus-maps', partialize: (state) => ({ overrides: state.overrides, basemapId: state.basemapId }) },
   ),
 );
 

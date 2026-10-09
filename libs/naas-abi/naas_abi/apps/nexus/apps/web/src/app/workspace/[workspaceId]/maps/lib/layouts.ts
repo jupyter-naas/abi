@@ -7,14 +7,17 @@
  *
  * A workspace admin can hide any layout (Settings → Maps). Each member then
  * switches layouts on or off for the "All layouts" map (per browser, like the
- * Search sidebar). Only layouts that produce pins can join that map; the
- * others (Earthquakes, Wildfires…) draw their own canvas and open on their own.
+ * Search sidebar). Layouts stack on the one selected basemap. A basemap is the
+ * background (OpenStreetMap or Natural Earth) and is never itself a layout.
  */
 import type { MapsDataset, MapsDatasetCategory } from './datasets';
 import { MAPS_CATEGORIES } from './datasets';
 
 /** Reserved route segment for the combined map: no layout can use it. */
 export const ALL_LAYOUTS_ID = 'all';
+
+/** Background used until a member picks another basemap. */
+export const DEFAULT_BASEMAP_ID = 'openstreetmap';
 
 export type LayoutKind = 'builtin' | 'graph' | 'workspace';
 
@@ -32,17 +35,11 @@ export interface WorkspaceMapLayout {
 
 export interface LayoutEntry extends MapsDataset {
   kind: LayoutKind;
-  /** Produces pins, so it can be overlaid on the All layouts map. */
+  /** A data layout (pins). Basemaps are the background and do not stack. */
   combinable: boolean;
   /** Graph layers: the graph the module projects. */
   graphUri?: string;
 }
-
-/** Built-in layouts whose canvas is a pin feed (MapsFeedCanvas), so they combine. */
-export const COMBINABLE_BUILTIN_IDS: ReadonlySet<string> = new Set([
-  'ais', 'conflict', 'eonet-all', 'flights', 'gdacs', 'gulf-strikes',
-  'iss', 'news', 'nws-alerts', 'openaq', 'tropical-storms', 'volcanoes',
-]);
 
 /** On in All layouts until a member says otherwise: light, global feeds. */
 const DEFAULT_ON_BUILTIN_IDS: ReadonlySet<string> = new Set(['gdacs', 'volcanoes', 'tropical-storms', 'iss']);
@@ -51,7 +48,7 @@ export function buildLayoutEntries(
   builtins: MapsDataset[],
   graphLayers: (MapsDataset & { graphUri: string })[],
   workspaceLayouts: WorkspaceMapLayout[],
-  options: { customIds?: ReadonlySet<string> } = {},
+  _options: { customIds?: ReadonlySet<string> } = {},
 ): LayoutEntry[] {
   const taken = new Set<string>([ALL_LAYOUTS_ID]);
   const entries: LayoutEntry[] = [];
@@ -61,9 +58,9 @@ export function buildLayoutEntries(
     entries.push(entry);
   };
   for (const dataset of builtins) {
-    // Deployment Custom datasets are pin feeds by contract (MapsCustomFeed).
-    const combinable = COMBINABLE_BUILTIN_IDS.has(dataset.id) || Boolean(options.customIds?.has(dataset.id));
-    add({ ...dataset, kind: 'builtin', combinable });
+    // Basemaps are the background. Every other built-in, including deployment
+    // Custom datasets, is a pin layout and can join the combined map.
+    add({ ...dataset, kind: 'builtin', combinable: dataset.category !== 'basemap' });
   }
   for (const layer of graphLayers) add({ ...layer, category: 'custom', kind: 'graph', combinable: true });
   for (const layout of workspaceLayouts) {
@@ -86,7 +83,7 @@ export function visibleEntries(entries: LayoutEntry[], hidden: ReadonlySet<strin
   return entries.filter((entry) => !set.has(entry.id));
 }
 
-/** Whether a layout is on the All layouts map. Non-combinable ones never are. */
+/** Whether a layout is drawn on the combined map. Basemaps never are. */
 export function isLayoutOn(entry: LayoutEntry, overrides: Record<string, boolean>): boolean {
   if (!entry.combinable) return false;
   if (entry.id in overrides) return overrides[entry.id];
@@ -99,7 +96,17 @@ export interface LayoutGroup {
   entries: LayoutEntry[];
 }
 
-/** Public / Private / Custom, each sorted; empty groups left out. */
+/**
+ * The basemap currently under the combined map. A hidden or unknown id falls
+ * back to the first visible basemap, then OpenStreetMap.
+ */
+export function resolveBasemapId(entries: LayoutEntry[], stored: string): string {
+  const basemaps = entries.filter((entry) => entry.category === 'basemap');
+  if (basemaps.some((entry) => entry.id === stored)) return stored;
+  return basemaps[0]?.id ?? DEFAULT_BASEMAP_ID;
+}
+
+/** Basemap / Public / Custom, each sorted; empty groups left out. */
 export function groupLayoutEntries(entries: LayoutEntry[]): LayoutGroup[] {
   return MAPS_CATEGORIES.map(({ id, label }) => ({
     id,

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Map as LeafletMap, Marker, TileLayer } from 'leaflet';
 import { Loader2 } from 'lucide-react';
 import { MAPS_PUBLIC_FEEDS } from '../lib/datasets';
-import { observeMapsLeafletSize } from '../lib/leaflet-map';
+import { observeMapsLeafletSize, type MapsPinMarker } from '../lib/leaflet-map';
 import {
   isMapsDarkMode,
   MAPS_TILE_ATTR,
@@ -13,12 +13,54 @@ import {
 } from '../lib/leaflet-tiles';
 import './maps-components.css';
 
-interface FirePin {
-  id: string;
-  lat: number;
-  lng: number;
-  label: string;
-  detail: string;
+/**
+ * NASA EONET named open wildfires (last 7 days) as pins. The standalone canvas
+ * can also paint a FIRMS hotspot overlay; the combined map uses these pins.
+ */
+export async function fetchPins(signal: AbortSignal): Promise<MapsPinMarker[]> {
+  const res = await fetch(MAPS_PUBLIC_FEEDS.wildfires, { signal });
+  if (!res.ok) throw new Error(`EONET ${res.status}`);
+  const data = (await res.json()) as {
+    events?: Array<{
+      id?: string;
+      title?: string;
+      geometry?: Array<{
+        date?: string;
+        type?: string;
+        coordinates?: number[];
+        magnitudeValue?: number;
+        magnitudeUnit?: string;
+      }>;
+    }>;
+  };
+  const pins: MapsPinMarker[] = [];
+  for (const event of data.events ?? []) {
+    const geoms = event.geometry ?? [];
+    const point = [...geoms].reverse().find((g) => g.type === 'Point');
+    const coords = point?.coordinates;
+    if (!coords || coords.length < 2) continue;
+    const [lng, lat] = coords;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    const acres =
+      point?.magnitudeValue != null && point.magnitudeUnit
+        ? `${point.magnitudeValue.toLocaleString()} ${point.magnitudeUnit}`
+        : null;
+    const when = point?.date
+      ? new Date(point.date).toLocaleString(undefined, {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        })
+      : null;
+    pins.push({
+      id: String(event.id ?? `${lat},${lng}`),
+      lat,
+      lng,
+      label: event.title ?? 'Wildfire',
+      detail: [acres, when].filter(Boolean).join(' · '),
+      color: '#dc2626',
+    });
+  }
+  return pins;
 }
 
 /**
@@ -91,51 +133,7 @@ export function MapsWildfires() {
       }
 
       try {
-        const res = await fetch(MAPS_PUBLIC_FEEDS.wildfires, {
-          signal: AbortSignal.timeout(20000),
-        });
-        if (!res.ok) throw new Error(`EONET ${res.status}`);
-        const data = (await res.json()) as {
-          events?: Array<{
-            id?: string;
-            title?: string;
-            link?: string;
-            geometry?: Array<{
-              date?: string;
-              type?: string;
-              coordinates?: number[];
-              magnitudeValue?: number;
-              magnitudeUnit?: string;
-            }>;
-          }>;
-        };
-
-        const pins: FirePin[] = [];
-        for (const event of data.events ?? []) {
-          const geoms = event.geometry ?? [];
-          const point = [...geoms].reverse().find((g) => g.type === 'Point');
-          const coords = point?.coordinates;
-          if (!coords || coords.length < 2) continue;
-          const [lng, lat] = coords;
-          if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-          const acres =
-            point?.magnitudeValue != null && point.magnitudeUnit
-              ? `${point.magnitudeValue.toLocaleString()} ${point.magnitudeUnit}`
-              : null;
-          const when = point?.date
-            ? new Date(point.date).toLocaleString(undefined, {
-                dateStyle: 'medium',
-                timeStyle: 'short',
-              })
-            : null;
-          pins.push({
-            id: String(event.id ?? `${lat},${lng}`),
-            lat,
-            lng,
-            label: event.title ?? 'Wildfire',
-            detail: [acres, when].filter(Boolean).join(' · '),
-          });
-        }
+        const pins = await fetchPins(AbortSignal.timeout(20000));
 
         if (cancelled || !mapRef.current) return;
         const map = mapRef.current;

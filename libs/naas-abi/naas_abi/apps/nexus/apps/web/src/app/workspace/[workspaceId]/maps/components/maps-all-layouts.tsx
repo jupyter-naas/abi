@@ -23,7 +23,7 @@ type LayerStatus = { count: number } | { error: string };
  * what each contributed.
  */
 export function MapsAllLayouts() {
-  const { workspaceId, entries, isOn, loading } = useMapLayouts();
+  const { workspaceId, entries, isOn, loading, basemapId } = useMapLayouts();
   const onEntries = useMemo(() => entries.filter(isOn), [entries, isOn]);
   const [statuses, setStatuses] = useState<Record<string, LayerStatus>>({});
   const onKey = onEntries.map((e) => e.id).join(',');
@@ -71,7 +71,8 @@ export function MapsAllLayouts() {
 
   return (
     <MapsFeedCanvas
-      key={`${workspaceId}:${onKey}`}
+      key={`${workspaceId}:${basemapId}:${onKey}`}
+      basemapId={basemapId}
       title="All layouts"
       loadingLabel={`Loading ${onEntries.length} layout${onEntries.length === 1 ? '' : 's'}…`}
       readyMeta={(n) => `${n} points from ${onEntries.length} layout${onEntries.length === 1 ? '' : 's'}`}
