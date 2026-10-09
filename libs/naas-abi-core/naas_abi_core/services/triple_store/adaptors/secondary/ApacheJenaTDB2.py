@@ -385,7 +385,11 @@ class ApacheJenaTDB2(ITripleStorePort):
         """
         if response.status_code < 400:
             return
-        body = (response.text or "").strip()
+        content = response.content
+        if isinstance(content, bytes):
+            body = content.decode("utf-8", errors="replace").strip()
+        else:
+            body = (response.text or "").strip()
         if len(body) > self._MAX_ERROR_BODY:
             body = body[: self._MAX_ERROR_BODY] + "… [truncated]"
         raise Exceptions.RequestError(
