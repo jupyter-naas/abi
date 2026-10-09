@@ -20,7 +20,6 @@ from naas_abi_core.services.dataset.DatasetPort import (
     DatasetSpec,
 )
 from naas_abi_core.services.dataset.DatasetService import DatasetService
-
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.memory_people_store import (
     MemoryPeopleStore,
     PeopleStore,

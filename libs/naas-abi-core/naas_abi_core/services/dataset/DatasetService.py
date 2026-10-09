@@ -113,5 +113,8 @@ class DatasetService(ServiceBase, IDatasetPort):
     def list_snapshots(self) -> builtins.list[DatasetSnapshotInfo]:
         return self.__adapter.list_snapshots()
 
+    def namespace_version(self, namespace: str) -> int | None:
+        return self.__adapter.namespace_version(namespace)
+
     def drop(self, name: str, *, namespace: str = "default") -> None:
         self.__adapter.drop(name, namespace=namespace)

@@ -16,7 +16,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from naas_abi_core.services.dataset.DatasetPort import DatasetNotFoundError
 from naas_abi_core.services.dataset.DatasetService import DatasetService
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
     datasets as ds,
@@ -89,26 +88,66 @@ def materialize_from_triple_store(
 def dataset_version(
     service: DatasetService, config: dict[str, Any], namespace: str
 ) -> int | None:
-    """The snapshot of the people table in *namespace*; None if never written."""
-    try:
-        return service.describe(
-            config["data"]["tables"]["people"], namespace=namespace
-        ).snapshot_id
-    except DatasetNotFoundError:
-        return None
-    except Exception:  # noqa: BLE001 - an unknown namespace fails in adapter terms
-        return None
+    """The last snapshot that changed *namespace*; None if never written.
+
+    Per namespace on purpose: the catalog's current snapshot moves on every
+    write anywhere, and keying the app's cache on it would drop every
+    workspace's people whenever one workspace syncs.
+    """
+    del config
+    return service.namespace_version(namespace)
 
 
-def _read_namespace(
+def read_namespace(
     service: DatasetService, config: dict[str, Any], namespace: str
-) -> dict[str, list[dict[str, Any]]]:
+) -> dict[str, list[dict[str, Any]]] | None:
+    """Every table of *namespace*, or None if it was never written."""
+    if dataset_version(service, config, namespace) is None:
+        return None
     tables: dict[str, list[dict[str, Any]]] = {}
     for logical, table in config["data"]["tables"].items():
-        tables[logical] = ds.query(
-            service, f"SELECT * FROM {table}", namespace=namespace, table=table
-        )
+        try:
+            tables[logical] = ds.query(
+                service, f"SELECT * FROM {table}", namespace=namespace, table=table
+            )
+        except ds.DatasetsMissingError:
+            # A sync that stopped halfway leaves a section table unwritten:
+            # list the people without it rather than not at all.
+            if logical == "people":
+                raise
+            tables[logical] = []
     return tables
+
+
+def merge_tables(
+    config: dict[str, Any], sources: list[dict[str, list[dict[str, Any]]]]
+) -> MemoryPeopleStore:
+    """One store over *sources*, in that order.
+
+    A person found in two of them is kept from the first, with that source's
+    sections only, so a profile never mixes two sources.
+    """
+    merged: dict[str, list[dict[str, Any]]] = {
+        logical: [] for logical in config["data"]["tables"]
+    }
+    seen: set[str] = set()
+    for tables in sources:
+        own = {row["slug"] for row in tables.get("people", [])} - seen
+        for logical, rows in tables.items():
+            merged[logical].extend(row for row in rows if row.get("slug") in own)
+        seen |= own
+    return MemoryPeopleStore(merged, config)
+
+
+def missing_error(
+    config: dict[str, Any], namespaces: list[str]
+) -> ds.DatasetsMissingError:
+    """No dataset of *namespaces* was ever written: name the job that writes them."""
+    return ds.DatasetsMissingError(
+        config["data"]["tables"]["people"],
+        namespaces[0] if namespaces else config["data"]["namespace"],
+        command=SYNC_COMMAND,
+    )
 
 
 def load_store(
@@ -116,29 +155,14 @@ def load_store(
 ) -> MemoryPeopleStore:
     """One store over the datasets in *namespaces*, in that order.
 
-    A person found in two of them is kept from the first, with that dataset's
-    sections only, so a profile never mixes two sources. A namespace that was
-    never written is skipped; if none was, the error names the sync job.
+    A namespace that was never written is skipped; if none was, the error
+    names the sync job.
     """
-    merged: dict[str, list[dict[str, Any]]] = {
-        logical: [] for logical in config["data"]["tables"]
-    }
-    seen: set[str] = set()
-    found = False
-    for namespace in namespaces:
-        if dataset_version(service, config, namespace) is None:
-            continue
-        found = True
-        tables = _read_namespace(service, config, namespace)
-        own = {row["slug"] for row in tables.get("people", [])} - seen
-        for logical, rows in tables.items():
-            merged[logical].extend(row for row in rows if row.get("slug") in own)
-        seen |= own
-    if not found:
-        people = config["data"]["tables"]["people"]
-        raise ds.DatasetsMissingError(
-            people,
-            namespaces[0] if namespaces else config["data"]["namespace"],
-            command=SYNC_COMMAND,
-        )
-    return MemoryPeopleStore(merged, config)
+    sources = [
+        tables
+        for tables in (read_namespace(service, config, ns) for ns in namespaces)
+        if tables is not None
+    ]
+    if not sources:
+        raise missing_error(config, namespaces)
+    return merge_tables(config, sources)

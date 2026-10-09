@@ -18,12 +18,15 @@ the sync job, never another directory's people.
 from __future__ import annotations
 
 import asyncio
+import threading
+import time
 from collections import OrderedDict
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from naas_abi_core import logger
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
     graph_datasets,
 )
@@ -34,17 +37,24 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
     MemoryPeopleStore,
     PeopleStore,
 )
-from naas_abi_core import logger
 from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     DEMO_GRAPH_FILE,
 )
 from rdflib import Graph
 
 _CACHE_MAX = 12
+# Datasets are rows, not graphs: small enough to keep one per workspace.
+_DATASET_CACHE_MAX = 128
 _sparql_cache: OrderedDict[str, SparqlPeopleSnapshot] = OrderedDict()
 _dataset_cache: OrderedDict[str, MemoryPeopleStore] = OrderedDict()
+# One entry per graph dataset: workspaces granted the same platform directory
+# share its rows instead of each reading them again.
+_namespace_cache: OrderedDict[str, dict[str, list[dict[str, Any]]]] = OrderedDict()
 _graph_cache: OrderedDict[str, Graph] = OrderedDict()
-_cache_lock = asyncio.Lock()
+# A thread lock, not an asyncio one: the dataset refresher fills the same
+# caches from its own thread. Held only around dict operations.
+_cache_lock = threading.Lock()
+_refreshers: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -62,7 +72,9 @@ def _graph_files(config: dict[str, Any]) -> list[Path]:
 
 def _file_cache_key(config: dict[str, Any]) -> str:
     parts = [
-        f"{path}:{path.stat().st_mtime_ns}" for path in _graph_files(config) if path.is_file()
+        f"{path}:{path.stat().st_mtime_ns}"
+        for path in _graph_files(config)
+        if path.is_file()
     ]
     return "files:" + "|".join(parts)
 
@@ -158,22 +170,38 @@ def _dataset_service() -> Any:
     return dataset_service()
 
 
-async def _cached(cache: OrderedDict[str, Any], key: str, build: Any) -> Any:
-    async with _cache_lock:
-        cached = cache.get(key)
-        if cached is not None:
+def _cache_get(cache: OrderedDict[str, Any], key: str) -> Any:
+    with _cache_lock:
+        value = cache.get(key)
+        if value is not None:
             cache.move_to_end(key)
-            return cached
-    value = await asyncio.to_thread(build)
-    async with _cache_lock:
+        return value
+
+
+def _cache_put(
+    cache: OrderedDict[str, Any], key: str, value: Any, limit: int = _CACHE_MAX
+) -> None:
+    with _cache_lock:
         cache[key] = value
         cache.move_to_end(key)
-        while len(cache) > _CACHE_MAX:
+        while len(cache) > limit:
             cache.popitem(last=False)
+
+
+async def _cached(
+    cache: OrderedDict[str, Any], key: str, build: Any, limit: int = _CACHE_MAX
+) -> Any:
+    cached = _cache_get(cache, key)
+    if cached is not None:
+        return cached
+    value = await asyncio.to_thread(build)
+    _cache_put(cache, key, value, limit)
     return value
 
 
-def _build_snapshot_from_graph(graph: Graph, config: dict[str, Any]) -> SparqlPeopleSnapshot:
+def _build_snapshot_from_graph(
+    graph: Graph, config: dict[str, Any]
+) -> SparqlPeopleSnapshot:
     store = MemoryPeopleStore.from_graph(graph, config)
     return SparqlPeopleSnapshot(store=store, graph=graph)
 
@@ -262,7 +290,8 @@ async def resolve_workspace_dataset(
     """The materialized people of every graph the workspace may read.
 
     Cached until one of those datasets gets a new snapshot, so a sync shows up
-    on the next request without a restart.
+    on the next request without a restart. A request costs one version check
+    per graph; the rows are read only when a version moves.
     """
     graph_iris = await workspace_people_iris(config, workspace_id, user_id)
     service = _dataset_service()
@@ -273,13 +302,104 @@ async def resolve_workspace_dataset(
             for namespace in namespaces
         ]
     )
-    cache_key = "|".join(f"{ns}@{version}" for ns, version in zip(namespaces, versions))
-    store = await _cached(
-        _dataset_cache,
-        cache_key,
-        lambda: graph_datasets.load_store(service, config, namespaces),
-    )
+    written = [
+        f"{namespace}@{version}"
+        for namespace, version in zip(namespaces, versions)
+        if version is not None
+    ]
+    if not written:
+        raise graph_datasets.missing_error(config, namespaces)
+
+    key = "|".join(written)
+    store = _cache_get(_dataset_cache, key)
+    if store is None:
+        store = await asyncio.to_thread(
+            lambda: graph_datasets.merge_tables(
+                config,
+                [
+                    _namespace_tables(service, config, *entry.rsplit("@", 1))
+                    for entry in written
+                ],
+            )
+        )
+        _cache_put(_dataset_cache, key, store, _DATASET_CACHE_MAX)
     return store, graph_iris
+
+
+def _namespace_tables(
+    service: Any, config: dict[str, Any], namespace: str, version: str
+) -> dict[str, list[dict[str, Any]]]:
+    """The rows of *namespace* at *version*, read once per version."""
+    key = f"{namespace}@{version}"
+    tables = _cache_get(_namespace_cache, key)
+    if tables is None:
+        tables = graph_datasets.read_namespace(service, config, namespace) or {}
+        _cache_put(_namespace_cache, key, tables, _DATASET_CACHE_MAX)
+        with _cache_lock:
+            for stale in [k for k in _namespace_cache if k.startswith(f"{namespace}@")]:
+                if stale != key:
+                    del _namespace_cache[stale]
+    return tables
+
+
+def refresh_workspace_datasets(config: dict[str, Any]) -> int:
+    """Read every graph dataset of this instance whose version is not cached yet.
+
+    Returns how many were read. A dataset is a few table scans, each a fraction
+    of a second on DuckLake: the first search of a workspace would otherwise pay
+    them, after every restart and after every sync.
+    """
+    service = _dataset_service()
+    prefix = f"{config['data']['namespace']}__"
+    namespaces = sorted(
+        {info.namespace for info in service.list() if info.namespace.startswith(prefix)}
+    )
+    read = 0
+    for namespace in namespaces:
+        version = graph_datasets.dataset_version(service, config, namespace)
+        if version is None or _cache_get(_namespace_cache, f"{namespace}@{version}"):
+            continue
+        try:
+            _namespace_tables(service, config, namespace, str(version))
+        except Exception as exc:  # noqa: BLE001 - one bad dataset must not stop the rest
+            logger.warning(f"people datasets: could not read {namespace}: {exc}")
+            continue
+        read += 1
+    return read
+
+
+def start_dataset_refresher(
+    config: dict[str, Any], *, interval_seconds: float = 300.0
+) -> bool:
+    """Keep this instance's graph datasets cached, from a daemon thread.
+
+    Reads them all at once, then re-reads the ones a sync changed every
+    *interval_seconds*. Requests still check versions, so a change shows up on
+    the next request either way; this only moves the read off it. For the API
+    server's startup, never a job: one thread per instance namespace.
+    """
+    name = config["data"]["namespace"]
+    with _cache_lock:
+        if name in _refreshers:
+            return False
+        _refreshers.add(name)
+
+    def run() -> None:
+        while True:
+            started = time.monotonic()
+            try:
+                read = refresh_workspace_datasets(config)
+                if read:
+                    logger.info(
+                        f"people datasets: cached {read} for {name} in "
+                        f"{time.monotonic() - started:.1f}s"
+                    )
+            except Exception as exc:  # noqa: BLE001 - retried on the next round
+                logger.warning(f"people datasets: refresh of {name} failed: {exc}")
+            time.sleep(interval_seconds)
+
+    threading.Thread(target=run, name=f"people-datasets-{name}", daemon=True).start()
+    return True
 
 
 async def resolve_workspace_graph(graph_iris: tuple[str, ...]) -> Graph:
@@ -298,7 +418,9 @@ def _uses_workspace_dataset(
     config: dict[str, Any], workspace_id: str | None, user_id: str | None
 ) -> bool:
     return bool(
-        config["data"].get("backend") == "workspace_dataset" and workspace_id and user_id
+        config["data"].get("backend") == "workspace_dataset"
+        and workspace_id
+        and user_id
     )
 
 

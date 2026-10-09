@@ -125,3 +125,31 @@ def test_rematerializing_moves_the_snapshot(
     gd.materialize_graph(warehouse, config, WS_PEOPLE, demo_graph)
 
     assert gd.dataset_version(warehouse, config, namespace) != before
+
+
+def test_writing_another_graph_leaves_the_version_alone(
+    warehouse: DatasetService, config: dict[str, Any], demo_graph: Graph
+) -> None:
+    namespace = gd.materialize_graph(warehouse, config, WS_PEOPLE, demo_graph)[
+        "namespace"
+    ]
+    before = gd.dataset_version(warehouse, config, namespace)
+
+    gd.materialize_graph(warehouse, config, OTHER_PEOPLE, Graph())
+
+    assert gd.dataset_version(warehouse, config, namespace) == before
+
+
+def test_a_section_table_a_sync_left_unwritten_reads_as_empty(
+    warehouse: DatasetService, config: dict[str, Any], demo_graph: Graph
+) -> None:
+    written = gd.materialize_graph(warehouse, config, WS_PEOPLE, demo_graph)
+    warehouse.drop(
+        config["data"]["tables"]["education"], namespace=written["namespace"]
+    )
+
+    tables = gd.read_namespace(warehouse, config, written["namespace"])
+
+    assert tables is not None
+    assert tables["education"] == []
+    assert len(tables["people"]) == written["people"]

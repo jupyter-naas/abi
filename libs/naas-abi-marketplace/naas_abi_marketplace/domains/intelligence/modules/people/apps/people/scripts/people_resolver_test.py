@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -118,11 +119,11 @@ def test_workspace_dataset_reads_the_materialized_dataset(
     async def readable(_user: str, _ws: str) -> frozenset[str]:
         return frozenset({AXA_PEOPLE, AXA_KG})
 
-    loaded: list[list[str]] = []
+    loaded: list[str] = []
 
-    def load_store(_service: Any, config: dict[str, Any], namespaces: list[str]) -> Any:
-        loaded.append(namespaces)
-        return MemoryPeopleStore({"people": []}, config)
+    def read_namespace(_service: Any, _config: dict[str, Any], namespace: str) -> Any:
+        loaded.append(namespace)
+        return {"people": []}
 
     def merge(*_args: Any) -> Any:
         raise AssertionError("search must not merge graphs in workspace_dataset")
@@ -130,9 +131,10 @@ def test_workspace_dataset_reads_the_materialized_dataset(
     monkeypatch.setattr(pr, "workspace_readable_iris", readable)
     monkeypatch.setattr(pr, "_dataset_service", lambda: object())
     monkeypatch.setattr(pr.graph_datasets, "dataset_version", lambda *_a: 7)
-    monkeypatch.setattr(pr.graph_datasets, "load_store", load_store)
+    monkeypatch.setattr(pr.graph_datasets, "read_namespace", read_namespace)
     monkeypatch.setattr(pr.tg, "merge_named_graphs", merge)
     pr._dataset_cache.clear()
+    pr._namespace_cache.clear()
 
     config = _workspace_config()
     for _ in range(2):
@@ -141,7 +143,7 @@ def test_workspace_dataset_reads_the_materialized_dataset(
         )
 
     # Built once, then served from the cache while the snapshot is unchanged.
-    assert loaded == [["people_fmz__ws_1fe2cd925ef1_people"]]
+    assert loaded == ["people_fmz__ws_1fe2cd925ef1_people"]
 
 
 def test_a_new_snapshot_invalidates_the_cached_store(
@@ -153,15 +155,16 @@ def test_a_new_snapshot_invalidates_the_cached_store(
     version = {"n": 1}
     builds: list[int] = []
 
-    def load_store(_service: Any, config: dict[str, Any], _ns: list[str]) -> Any:
+    def read_namespace(_service: Any, _config: dict[str, Any], _ns: str) -> Any:
         builds.append(version["n"])
-        return MemoryPeopleStore({"people": []}, config)
+        return {"people": []}
 
     monkeypatch.setattr(pr, "workspace_readable_iris", readable)
     monkeypatch.setattr(pr, "_dataset_service", lambda: object())
     monkeypatch.setattr(pr.graph_datasets, "dataset_version", lambda *_a: version["n"])
-    monkeypatch.setattr(pr.graph_datasets, "load_store", load_store)
+    monkeypatch.setattr(pr.graph_datasets, "read_namespace", read_namespace)
     pr._dataset_cache.clear()
+    pr._namespace_cache.clear()
 
     config = _workspace_config()
     for n in (1, 2):
@@ -171,3 +174,91 @@ def test_a_new_snapshot_invalidates_the_cached_store(
         )
 
     assert builds == [1, 2]
+
+
+def test_a_graph_two_workspaces_read_is_loaded_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    grants = {
+        "ws-france": frozenset(
+            {FMZ_DIRECTORY, "http://ontology.naas.ai/graph/ws-france/people"}
+        ),
+        "ws-group": frozenset(
+            {FMZ_DIRECTORY, "http://ontology.naas.ai/graph/ws-group/people"}
+        ),
+    }
+
+    async def readable(_user: str, ws: str) -> frozenset[str]:
+        return grants[ws]
+
+    loaded: list[str] = []
+
+    def read_namespace(_service: Any, _config: dict[str, Any], namespace: str) -> Any:
+        loaded.append(namespace)
+        return {"people": []}
+
+    monkeypatch.setattr(pr, "workspace_readable_iris", readable)
+    monkeypatch.setattr(pr, "_dataset_service", lambda: object())
+    monkeypatch.setattr(pr.graph_datasets, "dataset_version", lambda *_a: 3)
+    monkeypatch.setattr(pr.graph_datasets, "read_namespace", read_namespace)
+    pr._dataset_cache.clear()
+    pr._namespace_cache.clear()
+
+    config = _workspace_config()
+    for ws in grants:
+        asyncio.run(pr.resolve_people_store(config, workspace_id=ws, user_id="u"))
+
+    assert loaded.count("people_fmz__people_forvismazars") == 1
+    assert len(loaded) == 3
+
+
+def test_the_refresher_reads_only_what_a_sync_changed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    namespaces = [
+        "people_fmz__people_forvismazars",
+        "people_fmz__ws_1fe2cd925ef1_people",
+    ]
+    versions = dict.fromkeys(namespaces, 1)
+    loaded: list[str] = []
+
+    class Service:
+        def list(self) -> list[Any]:
+            return [
+                SimpleNamespace(namespace=ns)
+                for ns in [*namespaces, "market_intelligence"]
+            ]
+
+    def read_namespace(_service: Any, _config: dict[str, Any], namespace: str) -> Any:
+        loaded.append(namespace)
+        return {"people": []}
+
+    async def readable(_user: str, _ws: str) -> frozenset[str]:
+        return frozenset({AXA_PEOPLE})
+
+    monkeypatch.setattr(pr, "_dataset_service", Service)
+    monkeypatch.setattr(pr, "workspace_readable_iris", readable)
+    monkeypatch.setattr(
+        pr.graph_datasets, "dataset_version", lambda _s, _c, ns: versions[ns]
+    )
+    monkeypatch.setattr(pr.graph_datasets, "read_namespace", read_namespace)
+    pr._dataset_cache.clear()
+    pr._namespace_cache.clear()
+    config = _workspace_config()
+
+    assert pr.refresh_workspace_datasets(config) == 2
+    assert pr.refresh_workspace_datasets(config) == 0
+    versions["people_fmz__ws_1fe2cd925ef1_people"] = 2
+    assert pr.refresh_workspace_datasets(config) == 1
+    assert loaded == [*namespaces, "people_fmz__ws_1fe2cd925ef1_people"]
+
+    # The first search after the refresh reads nothing.
+    asyncio.run(
+        pr.resolve_people_store(config, workspace_id="ws-1fe2cd925ef1", user_id="u")
+    )
+    assert len(loaded) == 3
+    # Only the current version of each dataset stays cached.
+    assert sorted(pr._namespace_cache) == [
+        "people_fmz__people_forvismazars@1",
+        "people_fmz__ws_1fe2cd925ef1_people@2",
+    ]

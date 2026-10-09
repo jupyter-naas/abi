@@ -11,14 +11,14 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
 )
 from rdflib import Graph
 
-_SLUG_EQ = re.compile(r"^slug\s*=\s*(?P<lit>'(?:''|[^'])*')\s*$", re.I)
+_SLUG_EQ = re.compile(r"^slug\s*=\s*(?P<lit>'(?:''|[^'])*')\s*$", re.IGNORECASE)
 _FACET_NE = re.compile(
     r"^(?P<field>[a-z_]+)\s*=\s*(?P<lit>'(?:''|[^'])*')\s*AND\s*slug\s*<>\s*(?P<slug>'(?:''|[^'])*')\s*$",
-    re.I,
+    re.IGNORECASE,
 )
 _SEARCH_LIKE_GROUP = re.compile(
     r"\(\s*search_text\s+LIKE\s+'(?P<p1>(?:''|[^'])*)'\s+OR\s+search_text\s+LIKE\s+'(?P<p2>(?:''|[^'])*)'\s*\)",
-    re.I,
+    re.IGNORECASE,
 )
 
 
@@ -40,6 +40,9 @@ class MemoryPeopleStore:
         self._logical_by_physical = {
             physical: logical for logical, physical in self._table_by_logical.items()
         }
+        # Child rows by slug, built on first use: fetch_children is called with
+        # every candidate's slug, which on a full directory is thousands.
+        self._by_slug: dict[str, dict[str, list[dict[str, Any]]]] = {}
 
     @classmethod
     def from_graph(cls, graph: Graph, config: dict[str, Any]) -> MemoryPeopleStore:
@@ -107,6 +110,15 @@ class MemoryPeopleStore:
             rows = rows[: int(limit)]
         return rows
 
+    def _index(self, logical: str) -> dict[str, list[dict[str, Any]]]:
+        index = self._by_slug.get(logical)
+        if index is None:
+            index = {}
+            for row in self._tables.get(logical, []):
+                index.setdefault(str(row.get("slug")), []).append(row)
+            self._by_slug[logical] = index
+        return index
+
     def fetch_children(
         self,
         *,
@@ -117,13 +129,12 @@ class MemoryPeopleStore:
     ) -> dict[str, list[dict[str, Any]]]:
         del namespace
         logical = self._logical_by_physical.get(table, table)
-        rows = self._tables.get(logical, [])
-        grouped: dict[str, list[dict[str, Any]]] = {}
-        for row in rows:
-            slug = row.get("slug")
-            if slug not in slugs:
-                continue
-            grouped.setdefault(str(slug), []).append(dict(row))
+        index = self._index(logical)
+        grouped: dict[str, list[dict[str, Any]]] = {
+            str(slug): [dict(row) for row in index[str(slug)]]
+            for slug in dict.fromkeys(slugs)
+            if str(slug) in index
+        }
         for slug, items in grouped.items():
             if order_by == "skill_name":
                 items.sort(key=lambda item: str(item.get("skill_name") or ""))

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from rdflib import Graph, URIRef
+from rdflib import Graph
 
 SOURCE_CHECKSUM = "http://ontology.naas.ai/abi/sourceChecksum"
 

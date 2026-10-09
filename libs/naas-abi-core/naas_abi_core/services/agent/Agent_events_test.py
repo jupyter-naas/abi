@@ -63,6 +63,7 @@ class _StubAgent:
         self._on_agent_routing = lambda _: None
         self._state = SimpleNamespace(thread_id=thread_id)
         self._tools_by_name: dict[str, Any] = {}
+        self._agents: list[Any] = []
 
     # Bind the real methods so we exercise the actual publishing code paths.
     _identity = Agent._identity
