@@ -3,6 +3,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { ChevronDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { APP_MENU_ROW, APP_MENU_SURFACE, APP_MENU_TRIGGER } from '@/components/shell/app-menu-classes';
 
 /**
  * The Search section's app menu bar, sitting in the topnav through
@@ -11,9 +12,9 @@ import { useRouter } from 'next/navigation';
  */
 export function SearchMenuBar({ workspaceId, canEdit }: { workspaceId: string; canEdit: boolean }) {
   const router = useRouter();
-  const row = 'flex cursor-default select-none items-center gap-2 px-3 py-1.5 text-xs outline-none ![border-radius:0] data-[highlighted]:bg-transparent data-[disabled]:opacity-50';
-  const surface = 'z-[300] min-w-[190px] border-0 bg-card p-1 text-foreground !shadow-none outline-none !ring-0 focus:!ring-0 focus-visible:!ring-0 ![border-radius:0]';
-  const trigger = 'flex items-center gap-1 border-0 bg-transparent px-2 py-1 text-xs shadow-none outline-none ring-0 ![border-radius:0] hover:bg-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 active:bg-transparent data-[state=open]:bg-transparent data-[state=open]:shadow-none';
+  const row = APP_MENU_ROW;
+  const surface = APP_MENU_SURFACE;
+  const trigger = APP_MENU_TRIGGER;
 
   return <nav className="flex min-w-0 shrink-0 items-center gap-1" aria-label="Search menus" data-testid="search-menu-bar">
     <span className="mr-1 hidden text-xs font-semibold text-foreground sm:inline">Search</span>

@@ -6,6 +6,7 @@ import {
   ONTOLOGY_SPACING,
   type OntologySpacingValue,
 } from '@/lib/ontology-spacing';
+import { APP_MENU_ROW, APP_MENU_SURFACE, APP_MENU_TRIGGER } from '@/components/shell/app-menu-classes';
 
 export type FilesViewMode = 'list' | 'grid';
 
@@ -29,12 +30,9 @@ export type FilesMenuBarProps = {
   onShowSystemFilesChange: (show: boolean) => void;
 };
 
-const row =
-  'flex cursor-default select-none items-center gap-2 px-3 py-1.5 text-xs outline-none ![border-radius:0] data-[highlighted]:bg-transparent data-[disabled]:opacity-50';
-const surface =
-  'z-[300] min-w-[190px] border-0 bg-card p-1 text-foreground !shadow-none outline-none !ring-0 focus:!ring-0 focus-visible:!ring-0 ![border-radius:0]';
-const trigger =
-  'flex items-center gap-1 border-0 bg-transparent px-2 py-1 text-xs shadow-none outline-none ring-0 ![border-radius:0] hover:bg-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 active:bg-transparent data-[state=open]:bg-transparent data-[state=open]:shadow-none';
+const row = APP_MENU_ROW;
+const surface = APP_MENU_SURFACE;
+const trigger = APP_MENU_TRIGGER;
 
 /**
  * App menu for Files. Mounted via `<Header nav=…>` into the shell TopNav

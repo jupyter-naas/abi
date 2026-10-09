@@ -303,7 +303,11 @@ aside.glass :focus-visible {
  * when the panel is focused via keyboard.
  */
 [data-radix-menu-content],
-[data-radix-popper-content-wrapper] [role='menu'] {
+[data-radix-popper-content-wrapper] [role='menu'],
+/* Items too: Radix focuses the highlighted item, so hover drew a green ring
+   round each row. The row's data-[highlighted] background is the cue. */
+[data-radix-menu-content] :focus-visible,
+[data-radix-menu-content] :focus {
   outline: none !important;
   --tw-ring-width: 0px !important;
   --tw-ring-offset-shadow: 0 0 #0000 !important;
