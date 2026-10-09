@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from naas_abi.apps.nexus.apps.api.app.services.files.legacy_storage_migration import (
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.scripts.legacy_storage_migration import (
     LegacyStorageMigrator,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService

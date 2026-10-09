@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import pytest
-from naas_abi.apps.nexus.apps.api.app.services.files.drive_roots import workspace_drive_root
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots import (
+    workspace_drive_root,
+)
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.background_image import (
     BackgroundImageError,

@@ -15,16 +15,18 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     UserModel,
     WorkspaceModel,
 )
-from naas_abi.apps.nexus.apps.api.app.services.files.workspace_drive import (
-    GRAPH_BASE,
-    LEGACY_MANIFEST_NAME,
-    MANIFEST_NAME,
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.staff_folders import (
     README_NAME,
     STAFF_FOLDERS,
     STAFF_FOLDERS_MARKER_ROOT,
+    staff_folder_readme,
+)
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.workspace_drive import (
+    GRAPH_BASE,
+    LEGACY_MANIFEST_NAME,
+    MANIFEST_NAME,
     WorkspaceDriveWriter,
     backfill_workspace_drives,
-    staff_folder_readme,
 )
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (  # noqa: E501
     ObjectStorageSecondaryAdapterFS,

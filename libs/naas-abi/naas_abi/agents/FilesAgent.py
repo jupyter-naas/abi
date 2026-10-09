@@ -25,8 +25,8 @@ FILES_CODE_MAP = f"""Web:
 API:
 - {_API}/services/files/adapters/primary/files__primary_adapter__FastAPI.py: /api/files routes (list, create, folder, rename, upload, preview/pdf, archive, raw, read, update, delete) and per-scope authorization (_authorize_path).
 - {_API}/services/files/service.py: FilesService over object storage (list with paging/search/sort, read text, write, rename, upload limits, PDF preview, zip archive).
-- {_API}/services/files/drive_roots.py: object-storage layout: my-drive/<user>, workspace-drive/<workspace>, platform-drive under the module root, plus the system drive.
-- {_API}/services/files/legacy_storage_migration.py: moves legacy paths into the drive layout.
+- {_API}/services/files/drives/utils/drive_roots.py: object-storage layout: my-drive/<user>, workspace-drive/<workspace>, platform-drive under the module root, plus the system drive.
+- {_API}/services/files/drives/scripts/legacy_storage_migration.py: moves legacy paths into the drive layout.
 - {_API}/services/files/files__schema.py: FileInfoData, errors (AlreadyExists, NotFound, NotText, UploadTooLarge).
 Engine: naas_abi_core/services/object_storage/ (ObjectStorageService; MinIO/S3 and local adapters).
 Agent: naas_abi/agents/FilesAgent.py and naas_abi/tools/files_tools.py."""

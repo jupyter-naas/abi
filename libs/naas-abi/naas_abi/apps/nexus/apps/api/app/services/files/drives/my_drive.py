@@ -22,21 +22,25 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Callable
-from datetime import datetime
 from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.models import UserModel
-from naas_abi.apps.nexus.apps.api.app.services.files.drive_roots import (
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots import (
     MODULE_ROOT,
     my_drive_root,
 )
-from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
-from naas_abi.apps.nexus.apps.api.app.services.files.workspace_drive import (
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.manifest import (
     MANIFEST_NAME,
     SCHEMA_VERSION,
 )
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.objects import (
+    isoformat as _iso,
+)
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.objects import (
+    object_exists as _exists,
+)
+from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
 from naas_abi_core import logger
-from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from sqlalchemy import event as sa_event
 from sqlalchemy import inspect as sa_inspect
@@ -48,18 +52,6 @@ DEFAULT_FOLDERS = ("downloads", "documents", "uploads")
 DEFAULT_FOLDERS_MARKER_ROOT = f"{MODULE_ROOT}/.scaffolded/my-drive"
 # The user fields the manifest holds; a change to another one does not rewrite it.
 _MANIFEST_FIELDS = ("name", "email")
-
-
-def _iso(value: Any) -> str | None:
-    return value.isoformat() if isinstance(value, datetime) else None
-
-
-def _exists(storage: ObjectStorageService, prefix: str, key: str) -> bool:
-    try:
-        storage.get_object(prefix, key)
-        return True
-    except Exceptions.ObjectNotFound:
-        return False
 
 
 def build_manifest(user: UserModel) -> dict[str, Any]:

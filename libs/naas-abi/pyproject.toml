@@ -62,6 +62,9 @@ naas-abi-marketplace = { path = "../naas-abi-marketplace", editable = true }
 [tool.setuptools]
 include-package-data = true
 
+[tool.setuptools.packages.find]
+include = ["naas_abi*"]
+
 [tool.setuptools.package-data]
 naas_abi = [
     "apps/nexus/apps/api/migrations/*.sql",
