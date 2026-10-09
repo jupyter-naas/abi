@@ -56,7 +56,7 @@ export function SearchSection({ collapsed, detailOnly }: { collapsed: boolean; d
       <Link href={href(null)} aria-current={active === null ? 'page' : undefined}
         className={cn(rowClass(active === null), 'mb-1')}>
         <LayoutGrid size={14} className="flex-shrink-0" />
-        <span className="flex-1 truncate">All</span>
+        <span className="flex-1 truncate">All topics</span>
         <span className="text-[10px] text-muted-foreground">{onCount}/{scopes.length} on</span>
       </Link>
 
