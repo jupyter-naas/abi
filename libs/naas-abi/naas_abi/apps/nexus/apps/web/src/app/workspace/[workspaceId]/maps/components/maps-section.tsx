@@ -110,7 +110,7 @@ function LayoutSwitch({
 
 function rowClass(active: boolean) {
   return cn(
-    'flex w-full items-center gap-2 rounded-md px-2 py-1 pr-1 text-left search-sidebar-list-row transition-colors hover:bg-workspace-accent-10',
+    'flex w-full items-center gap-2 rounded-md px-2 py-1 text-left search-sidebar-list-row transition-colors hover:bg-workspace-accent-10',
     active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-foreground',
   );
 }
@@ -159,11 +159,11 @@ export function MapsDatasetGroups({
         return (
           <div
             key={group.id}
-            className="mb-2 space-y-0.5"
+            className="shell-sidebar-home-gutter mb-2 space-y-0.5"
             role={basemapGroup ? 'radiogroup' : undefined}
             aria-label={basemapGroup ? 'Basemap' : undefined}
           >
-            <div className="flex items-center justify-between px-1 py-1 text-xs font-medium text-muted-foreground">
+            <div className="flex items-center justify-between px-2 py-1 text-xs font-medium text-muted-foreground">
               <span>{group.label}</span>
               {groupCombinable.length > 1 && (
                 <button

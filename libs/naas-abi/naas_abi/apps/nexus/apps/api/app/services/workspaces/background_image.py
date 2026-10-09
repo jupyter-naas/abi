@@ -152,7 +152,7 @@ class WorkspaceBackgroundImage:
     ) -> None:
         self._files = files
         home = f"{workspace_drive_root(workspace_id)}/.home"
-        self._tmp = f"{home}/tmp"
+        self._tmp = f"{home}/tmp"  # nosec B108 - workspace drive folder, not the system temp dir
         self._current = f"{home}/background-img"
         self._max_bytes = max_bytes
 

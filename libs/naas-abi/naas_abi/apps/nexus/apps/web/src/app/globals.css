@@ -688,6 +688,11 @@ aside.glass :focus-visible {
 .shell-sidebar-home + .graph-explorer-sidebar {
   padding-top: 4px;
 }
+/* Search and Maps lists share the home row's side edges (8px margin + 8px padding). */
+.shell-sidebar-home-gutter {
+  margin-left: 8px;
+  margin-right: 8px;
+}
 
 .shell-sidebar-section-label {
   font-size: 12px;

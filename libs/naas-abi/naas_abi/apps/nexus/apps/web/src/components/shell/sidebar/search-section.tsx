@@ -62,8 +62,8 @@ export function SearchSection({ collapsed, detailOnly }: { collapsed: boolean; d
       {scopeGroups(scopes).map(group => {
         const allOn = group.id === 'web' ? webEngines.every(e => e.enabled) : group.scopes.every(isOn);
         return (
-          <div key={group.id} className="mb-2 space-y-0.5">
-            <div className="flex items-center justify-between px-1 py-1 text-xs font-medium text-muted-foreground">
+          <div key={group.id} className="shell-sidebar-home-gutter mb-2 space-y-0.5">
+            <div className="flex items-center justify-between px-2 py-1 text-xs font-medium text-muted-foreground">
               <span>{group.label}</span>
               {(group.id === 'web' ? webEngines.length : group.scopes.length) > 1 && (
                 <button type="button" className="text-[10px] hover:text-foreground"
@@ -78,7 +78,7 @@ export function SearchSection({ collapsed, detailOnly }: { collapsed: boolean; d
             </div>
             {group.id === 'web' ? webEngines.map(engine => (
               // Web has no row of its own: its engines are the switches, its title opens it.
-              <div key={engine.id} className={cn(rowClass(active === WEB_SCOPE), 'pr-1')}>
+              <div key={engine.id} className={rowClass(active === WEB_SCOPE)}>
                 <Link href={href(WEB_SCOPE)} title={engine.description}
                   className={cn('flex min-w-0 flex-1 items-center gap-2', !engine.enabled && 'text-muted-foreground')}>
                   <TopicIcon name={engine.icon} className="flex-shrink-0" />
@@ -91,7 +91,7 @@ export function SearchSection({ collapsed, detailOnly }: { collapsed: boolean; d
               const hits = on ? count(scope.id) : null;
               return (
                 <div key={scope.id}>
-                  <div className={cn(rowClass(active === scope.id), 'pr-1')}>
+                  <div className={rowClass(active === scope.id)}>
                     <Link href={href(scope.id)} aria-current={active === scope.id ? 'page' : undefined} title={scope.description}
                       className={cn('flex min-w-0 flex-1 items-center gap-2', !on && 'text-muted-foreground')}>
                       <TopicIcon name={scope.icon} className="flex-shrink-0" />
