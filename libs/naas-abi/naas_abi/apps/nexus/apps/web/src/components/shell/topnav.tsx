@@ -115,9 +115,19 @@ export function TopNav() {
               <PanelLeft size={14} />
             </button>
           )}
+
+          {/* The app menu bar belongs to the page, not the section panel:
+              with the panel closed it stays on the bar, after the toggle. */}
+          {mounted && nav && !sectionTitleOpen && (
+            <div className="ml-1 flex min-w-0 items-center" data-testid="app-menu-bar">
+              {nav}
+            </div>
+          )}
         </div>
 
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-8">
+        {/* Below xl the bar is too narrow for the centred workspace title to
+            clear the menu bar and actions, so it is hidden rather than overlap. */}
+        <div className="pointer-events-none absolute inset-0 hidden items-center justify-center px-8 xl:flex">
           <div className="pointer-events-auto w-full max-w-[32rem]">
             <QuickOpen />
           </div>
