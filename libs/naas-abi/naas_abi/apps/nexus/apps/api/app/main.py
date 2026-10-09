@@ -125,7 +125,26 @@ async def _sync_identity_graph() -> None:
                     module_config_getter=lambda: ABIModule.get_instance().configuration,
                 ),
             )
-            result = await service.sync()
+            # Boot races Fuseki writes from schema load and seeds. A single
+            # CLEAR/DROP can lose the dataset lock; retry rather than skip.
+            delays = (0.0, 2.0, 8.0)
+            result = None
+            for attempt, delay in enumerate(delays):
+                if delay:
+                    await asyncio.sleep(delay)
+                try:
+                    result = await service.sync()
+                    break
+                except Exception:
+                    if attempt == len(delays) - 1:
+                        raise
+                    _log.warning(
+                        "Identity graph sync failed (attempt %d/%d); retrying",
+                        attempt + 1,
+                        len(delays),
+                        exc_info=True,
+                    )
+        assert result is not None
         _log.info(
             "✓ Identity graph synced (%d users, %d organizations, %d workspaces, %d memberships, %d triples)",
             result.users,
