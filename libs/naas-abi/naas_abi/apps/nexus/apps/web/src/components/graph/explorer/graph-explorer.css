@@ -4,11 +4,12 @@
   line-height: 1.5;
   color: var(--foreground-hex);
 }
-.graph-explorer-filters {
+/* Same inset as Ontology's px-2 filter stack (sidebar padding is 12px). */
+.graph-explorer-sidebar-tools {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin: 0 -4px 12px;
 }
 .graph-explorer-sidebar [aria-current='page'],
 .graph-explorer-tabs [aria-pressed='true'] {

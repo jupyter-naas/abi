@@ -271,7 +271,8 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
       <span>Dashboard</span>
     </button>
     <div className="graph-explorer-sidebar">
-      <div className="graph-explorer-filters">
+      <div className="graph-explorer-sidebar-tools">
+      <div className="ontology-sidebar-filters">
         <OntologyMultiPicker
           {...graphPickerProps}
           items={workspaceGraphs.map((g) => ({
@@ -320,8 +321,8 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
           }
         />
       </div>
-      <label className="graph-explorer-search">
-        <Search size={14} />
+      <label className="relative block">
+        <Search size={13} className="absolute left-2 top-2.5 text-muted-foreground" />
         <input
           aria-label="Search instances and classes"
           placeholder="Search instances and classes…"
@@ -334,9 +335,11 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
               document.querySelector<HTMLButtonElement>('.graph-explorer-search-results button[data-ontology-tree-select], .graph-explorer-class-list button[data-ontology-tree-select]')?.focus();
             }
           }}
+          className={`w-full rounded-md border bg-background py-2 pl-7 text-xs ${searching ? 'pr-7' : 'pr-2'}`}
         />
-        {searching && <button type="button" aria-label="Clear search" onClick={() => setSearch('')}><X size={12} /></button>}
+        {searching && <button type="button" aria-label="Clear search" onClick={() => setSearch('')} className="absolute right-2 top-2.5 text-muted-foreground"><X size={12} /></button>}
       </label>
+      </div>
       {searching ? (
         <section {...treeKeyboard} className="graph-explorer-class-list graph-explorer-search-results" aria-label="Search results" aria-busy={hits.loading}>
           {search.trim().length < 2 ? <p className="graph-explorer-message">Type at least two characters.</p> : hits.loading ? <p className="graph-explorer-message" role="status">Searching…</p> : hits.error ? <p className="graph-explorer-message" role="alert">{hits.error} <button onClick={hits.retry}>Retry</button></p> : (
