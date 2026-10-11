@@ -95,7 +95,7 @@
   max-width: 8.5rem;
   padding: 0.25rem 0.5rem;
   border: 1px solid hsl(var(--border));
-  border-radius: calc(var(--radius) - 2px);
+  border-radius: 0;
   background: hsl(var(--background));
   color: hsl(var(--foreground));
   font: inherit;
@@ -172,6 +172,25 @@
   color: hsl(var(--primary));
 }
 
+.maps-leaflet .leaflet-control-zoom.leaflet-bar {
+  margin-bottom: 0.75rem;
+  margin-right: 0.75rem;
+  border-radius: 0;
+  box-shadow: 0 1px 4px hsl(0 0% 0% / 0.2);
+}
+
+.maps-leaflet .leaflet-control-zoom.leaflet-bar a {
+  border-radius: 0;
+}
+
+.maps-leaflet .leaflet-bar {
+  border-radius: 0;
+}
+
+.maps-leaflet .leaflet-bar a {
+  border-radius: 0;
+}
+
 /* Leaflet popups: squared chrome matching Maps / Account semantic surfaces. */
 .maps-leaflet .leaflet-popup-content-wrapper {
   border: 1px solid hsl(var(--border));
@@ -224,7 +243,7 @@
   max-width: min(18rem, calc(100% - 1.5rem));
   padding: 0.65rem 0.75rem;
   border: 1px solid hsl(var(--border));
-  border-radius: var(--org-border-radius, 0px);
+  border-radius: 0;
   background: hsl(var(--card) / 0.92);
   backdrop-filter: blur(8px);
   box-shadow: 0 4px 16px hsl(0 0% 0% / 0.12);
@@ -238,12 +257,41 @@
   color: hsl(var(--muted-foreground));
 }
 
+.maps-legend__hint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: hsl(var(--muted-foreground));
+}
+
 .maps-legend__row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.45rem;
   font-size: 0.75rem;
   line-height: 1.35;
+}
+
+/* Layer badge: shared by All layers legend and map pins (maps-layer-pin-html.ts). */
+.maps-layer-marker {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid #fff;
+  border-radius: 0;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+  color: #fff;
+}
+
+.maps-layer-marker svg {
+  display: block;
+}
+
+.maps-leaflet .maps-pin-icon .maps-layer-marker {
+  pointer-events: none;
 }
 
 .maps-legend__dot {
@@ -561,7 +609,7 @@
 /* Leaflet basemap picker (standard layers control, top-right on the map). */
 .maps-leaflet .leaflet-control-layers {
   border: 1px solid hsl(var(--border));
-  border-radius: var(--org-border-radius, 0);
+  border-radius: 0;
   background: hsl(var(--background) / 0.94);
   box-shadow: none;
   font-size: 12px;

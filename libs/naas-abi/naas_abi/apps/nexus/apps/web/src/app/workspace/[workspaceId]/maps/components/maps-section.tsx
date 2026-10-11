@@ -1,31 +1,6 @@
 'use client';
 
-import {
-  Activity,
-  Building2,
-  AlertTriangle,
-  Bell,
-  Brain,
-  CloudLightning,
-  Crosshair,
-  Flame,
-  Globe,
-  Laptop,
-  Layers,
-  LayoutGrid,
-  Map,
-  MapPin,
-  Mountain,
-  Newspaper,
-  Plane,
-  Rocket,
-  Satellite,
-  Ship,
-  Sparkles,
-  Thermometer,
-  Wind,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { LayoutGrid, Map } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -34,36 +9,13 @@ import { useMapsStore } from '@/stores/maps';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from '@/components/shell/sidebar/collapsible-section';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
+import { mapsIconMap } from '../lib/maps-icons';
 import { ALL_LAYERS_ID, groupLayerEntries, type LayoutEntry } from '../lib/layouts';
 import { mapsAllLayersPath, mapsDatasetPath, mapsLibraryPath, parseMapsRoute } from '../lib/maps-route';
 import { useMapLayers } from '../lib/use-map-layouts';
 import './maps-components.css';
 
-export const mapsIconMap: Record<string, LucideIcon> = {
-  Activity,
-  Building2,
-  AlertTriangle,
-  Bell,
-  Brain,
-  CloudLightning,
-  Crosshair,
-  Flame,
-  Globe,
-  Laptop,
-  Layers,
-  LayoutGrid,
-  Map,
-  MapPin,
-  Mountain,
-  Newspaper,
-  Plane,
-  Rocket,
-  Satellite,
-  Ship,
-  Sparkles,
-  Thermometer,
-  Wind,
-};
+export { mapsIconMap } from '../lib/maps-icons';
 
 function LayerSwitch({
   entry,

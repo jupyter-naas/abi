@@ -33,6 +33,7 @@ describe('buildLayoutEntries', () => {
       ['offices', 'workspace', true],
     ]);
     expect(entries.find((e) => e.id === 'offices')?.category).toBe('custom');
+    expect(entries.find((e) => e.id === 'offices')?.color).toBe('#2563eb');
   });
 
   it('treats deployment Custom datasets as pin feeds', () => {

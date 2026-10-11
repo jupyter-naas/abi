@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Map as LeafletMap, Marker } from 'leaflet';
 import { Loader2 } from 'lucide-react';
 import { MAPS_PUBLIC_FEEDS } from '../lib/datasets';
-import { observeMapsLeafletSize, type MapsPinMarker } from '../lib/leaflet-map';
+import { attachMapsZoomControl, observeMapsLeafletSize, type MapsPinMarker } from '../lib/leaflet-map';
 import {
   isMapsDarkMode,
   MAPS_TILE_ATTR,
@@ -67,9 +67,10 @@ export function MapsEarthquakes() {
 
       if (!mapRef.current) {
         const map = L.map(containerRef.current, {
-          zoomControl: true,
+          zoomControl: false,
           attributionControl: true,
         });
+        attachMapsZoomControl(L, map);
         L.tileLayer(isMapsDarkMode() ? MAPS_TILE_DARK : MAPS_TILE_LIGHT, {
           className: 'maps-basemap',
           attribution: MAPS_TILE_ATTR,

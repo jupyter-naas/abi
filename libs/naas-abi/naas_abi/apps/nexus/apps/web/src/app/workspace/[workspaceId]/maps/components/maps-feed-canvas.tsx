@@ -33,6 +33,8 @@ export interface MapsFeedCanvasProps {
   viewportBound?: boolean;
   /** Background under the pins. Defaults to OpenStreetMap street tiles. */
   basemapId?: string;
+  /** When false, empty feeds only update the toolbar (map stays visible). */
+  emptyOverlay?: boolean;
 }
 
 function viewFromMap(map: LeafletMap): MapsFeedView {
@@ -62,7 +64,7 @@ function metaLine(meta: MapsFeedMeta | null, now: number): string {
   return parts.filter(Boolean).join(' · ');
 }
 
-export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No data', emptyBody='This feed returned no mappable points right now.', sourceHref, sourceLabel='Source', fetchPins, fitMaxZoom=5, legend, refreshMs, inspectable=false, workspaceId='', viewportBound=false, basemapId}: MapsFeedCanvasProps) {
+export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No data', emptyBody='This feed returned no mappable points right now.', sourceHref, sourceLabel='Source', fetchPins, fitMaxZoom=5, legend, refreshMs, inspectable=false, workspaceId='', viewportBound=false, basemapId, emptyOverlay=true}: MapsFeedCanvasProps) {
   const storedBasemap = useMapsStore((s) => s.basemapId);
   const setBasemap = useMapsStore((s) => s.setBasemap);
   const basemap = normalizeBasemapId(basemapId ?? storedBasemap);
@@ -336,7 +338,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     <div className={`maps-canvas__workspace${inspectable?' maps-canvas__workspace--inspectable':''}`}>
       <div className="maps-canvas__stage">
         <div ref={containerRef} className="maps-leaflet"/>
-        {(status==='empty'||status==='error') && <div className="maps-empty-overlay"><h3>{overlayTitle}</h3><p>{overlayBody}</p>{sourceHref && <a className="maps-btn" href={sourceHref} target="_blank" rel="noreferrer"><ExternalLink size={12}/>{sourceLabel}</a>}</div>}
+        {(status==='error' || (status==='empty' && emptyOverlay)) && <div className="maps-empty-overlay"><h3>{overlayTitle}</h3><p>{overlayBody}</p>{sourceHref && <a className="maps-btn" href={sourceHref} target="_blank" rel="noreferrer"><ExternalLink size={12}/>{sourceLabel}</a>}</div>}
         {view==='coverage' && status==='ready' && mapRef.current && leafletRef.current && <MapsCoverageLayer map={mapRef.current} leaflet={leafletRef.current} pins={coveragePins} selectedCountry={country} onSelectCountry={selectCountry}/>}
         {legend && (status==='ready'||status==='empty') ? legend : null}
       </div>

@@ -5,6 +5,7 @@ import {
   MAPS_TILE_DARK,
   MAPS_TILE_LIGHT,
 } from './leaflet-tiles';
+import { MAPS_LAYER_MARKER_PX, mapsLayerPinHtml } from './maps-layer-pin-html';
 import { resolvePinMedia } from './maps-pin-media';
 
 export interface MapsLatLng {
@@ -19,6 +20,8 @@ export interface MapsPinMarker {
   label: string;
   detail?: string;
   color?: string;
+  /** Lucide key (mapsIconMap) for badge pins on the combined map. */
+  markerIcon?: string;
   size?: number;
   entityUri?: string;
   graphUri?: string;
@@ -62,7 +65,12 @@ export function mapsPinPopupHtml(pin: MapsPinMarker): string {
 }
 
 export function mapsPinHtml(color: string, size: number): string {
-  return `<span style="display:block;width:${size}px;height:${size}px;border:2px solid #fff;background:${color};box-shadow:0 1px 4px rgba(0,0,0,.35);border-radius:var(--org-border-radius,0px)"></span>`;
+  return `<span style="display:block;width:${size}px;height:${size}px;border:2px solid #fff;background:${color};box-shadow:0 1px 4px rgba(0,0,0,.35);border-radius:0"></span>`;
+}
+
+/** Zoom +/- control: bottom-right, squared (see maps-components.css). */
+export function attachMapsZoomControl(L: typeof import('leaflet'), map: LeafletMap): void {
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
 }
 
 type LeafletMapInternal = LeafletMap & {
@@ -173,9 +181,10 @@ export async function createMapsLeaflet(
   // Check before Leaflet claims the DOM container, not after creating the map.
   signal?.throwIfAborted();
   const map = L.map(container, {
-    zoomControl: true,
+    zoomControl: false,
     attributionControl: true,
   });
+  attachMapsZoomControl(L, map);
   map.setView(
     [view.center?.lat ?? 20, view.center?.lng ?? 0],
     view.zoom ?? 2,
@@ -198,11 +207,12 @@ export function addMapsPinMarkers(
 ): MapsLatLng[] {
   const bounds: MapsLatLng[] = [];
   for (const pin of pins) {
-    const size = pin.size ?? 10;
+    const layerBadge = pin.markerIcon && pin.color;
+    const size = layerBadge ? MAPS_LAYER_MARKER_PX : (pin.size ?? 10);
     const color = pin.color ?? '#2563eb';
     const icon = L.divIcon({
       className: 'maps-pin-icon',
-      html: mapsPinHtml(color, size),
+      html: layerBadge ? mapsLayerPinHtml(pin.markerIcon!, color) : mapsPinHtml(color, size),
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],
     });

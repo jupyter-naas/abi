@@ -25,7 +25,7 @@ import { getApiUrl } from '@/lib/config';
 import { cn } from '@/lib/utils';
 import { authFetch } from '@/stores/auth';
 import { useMapsStore } from '@/stores/maps';
-import { mapsIconMap } from '@/app/workspace/[workspaceId]/maps/components/maps-section';
+import { mapsIconMap } from '@/app/workspace/[workspaceId]/maps/lib/maps-icons';
 import { ALL_LAYERS_ID, type LayoutEntry, type LayoutKind, type WorkspaceMapLayout } from '@/app/workspace/[workspaceId]/maps/lib/layouts';
 import { LayoutApiError, blankLayout, layoutsApi, type LayoutDraft, type LayoutPreview } from '@/app/workspace/[workspaceId]/maps/lib/layouts-api';
 import { mapsDatasetPath, mapsSettingsPath } from '@/app/workspace/[workspaceId]/maps/lib/maps-route';

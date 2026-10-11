@@ -33,6 +33,8 @@ export interface LayoutEntry extends MapsDataset {
   combinable: boolean;
   /** Graph layers: the graph the module projects. */
   graphUri?: string;
+  /** Workspace SPARQL layer color from Settings → Maps (optional). */
+  color?: string;
 }
 
 /** On on All layers until a member toggles them off. */
@@ -65,6 +67,7 @@ export function buildLayoutEntries(
       order: layout.order,
       kind: 'workspace',
       combinable: true,
+      color: layout.color,
     });
   }
   return entries;

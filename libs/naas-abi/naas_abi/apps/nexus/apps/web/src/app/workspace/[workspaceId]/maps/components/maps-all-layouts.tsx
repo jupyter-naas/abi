@@ -1,8 +1,11 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
+import { Map } from 'lucide-react';
 import Link from 'next/link';
 import type { MapsPinMarker } from '../lib/leaflet-map';
+import { mapsIconMap } from '../lib/maps-icons';
+import { layerPinColor } from '../lib/maps-layer-colors';
 import { layoutPinSource } from '../lib/layout-sources';
 import type { LayoutEntry } from '../lib/layouts';
 import type { MapsFeedResult } from '../lib/maps-feed';
@@ -33,6 +36,11 @@ export function MapsAllLayers() {
 
   const fetchPins = async (signal: AbortSignal, view?: MapsFeedView): Promise<MapsFeedResult> => {
     const layers = entriesRef.current;
+    if (!layers.length) {
+      setStatuses({});
+      signal.throwIfAborted();
+      return { pins: [], empty: true };
+    }
     const results = await Promise.allSettled(
       layers.map(async (entry) => {
         const source = workspaceId ? layoutPinSource(entry, workspaceId) : null;
@@ -44,8 +52,16 @@ export function MapsAllLayers() {
     const next: Record<string, LayerStatus> = {};
     results.forEach((result, index) => {
       const entry = layers[index];
+      const color = layerPinColor(entry);
       if (result.status === 'fulfilled') {
-        for (const pin of result.value.pins) pins.push({ ...pin, id: `${entry.id}:${pin.id}` });
+        for (const pin of result.value.pins) {
+          pins.push({
+            ...pin,
+            id: `${entry.id}:${pin.id}`,
+            color,
+            markerIcon: entry.icon,
+          });
+        }
         next[entry.id] = { count: result.value.pins.length };
       } else {
         next[entry.id] = { error: result.reason instanceof Error ? result.reason.message : 'Failed to load' };
@@ -56,24 +72,27 @@ export function MapsAllLayers() {
     return { pins, empty: pins.length === 0 };
   };
 
-  if (loading && !onEntries.length) return <div className="maps-empty">Loading map layers…</div>;
-  if (!onEntries.length) {
-    return (
-      <div className="maps-empty">
-        <h3>No layer switched on</h3>
-        <p>Switch layers on in the sidebar to overlay them here.</p>
-      </div>
-    );
-  }
+  const noLayers = onEntries.length === 0;
 
   return (
     <MapsFeedCanvas
       key={`${workspaceId}:${onKey}`}
       title="All layers"
-      loadingLabel={`Loading ${onEntries.length} layer${onEntries.length === 1 ? '' : 's'}…`}
+      loadingLabel={
+        noLayers
+          ? loading
+            ? 'Loading map layers…'
+            : 'Basemap only'
+          : `Loading ${onEntries.length} layer${onEntries.length === 1 ? '' : 's'}…`
+      }
       readyMeta={(n) => `${n} points from ${onEntries.length} layer${onEntries.length === 1 ? '' : 's'}`}
-      emptyTitle="No points right now"
-      emptyBody="The layers switched on returned no mappable points."
+      emptyTitle={noLayers ? 'No layer switched on' : 'No points right now'}
+      emptyBody={
+        noLayers
+          ? 'Switch layers on in the sidebar to overlay data.'
+          : 'The layers switched on returned no mappable points.'
+      }
+      emptyOverlay={!noLayers}
       fetchPins={fetchPins}
       viewportBound={viewportBound}
       inspectable={inspectable && Boolean(workspaceId)}
@@ -81,14 +100,22 @@ export function MapsAllLayers() {
       legend={
         <div className="maps-legend">
           <span className="maps-legend__title">Layers</span>
+          {noLayers ? (
+            <p className="maps-legend__hint">None on — use the sidebar switches to add data.</p>
+          ) : null}
           {onEntries.map((entry) => {
             const status = statuses[entry.id];
+            const color = layerPinColor(entry);
+            const Icon = mapsIconMap[entry.icon] ?? Map;
             return (
               <div key={entry.id} className="maps-legend__row" title={status && 'error' in status ? status.error : undefined}>
-                <Link href={mapsDatasetPath(workspaceId, entry.id)} className="hover:underline">
+                <span className="maps-layer-marker maps-legend__layer-swatch" style={{ background: color }} aria-hidden>
+                  <Icon size={11} strokeWidth={2.25} />
+                </span>
+                <Link href={mapsDatasetPath(workspaceId, entry.id)} className="min-w-0 flex-1 hover:underline">
                   {entry.title}
                 </Link>
-                <span className="ml-auto pl-2 tabular-nums text-muted-foreground">
+                <span className="pl-2 tabular-nums text-muted-foreground">
                   {!status ? '…' : 'error' in status ? 'error' : status.count}
                 </span>
               </div>
