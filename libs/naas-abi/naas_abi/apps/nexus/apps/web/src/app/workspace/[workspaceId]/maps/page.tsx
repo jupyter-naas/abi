@@ -3,11 +3,10 @@
 import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useIsMobile } from '@/hooks/use-is-mobile';
-import { mapsAllLayoutsPath } from './lib/maps-route';
+import { mapsAllLayersPath } from './lib/maps-route';
 
 /**
- * Desktop: /maps opens the All layouts map (every layout switched on, overlaid).
- * Mobile: /maps is the dataset library list (workspace-layout renders MapsSection).
+ * Desktop: /maps opens the All layers map. Mobile: library list (MapsSection).
  */
 export default function MapsIndexPage() {
   const isMobile = useIsMobile();
@@ -18,14 +17,14 @@ export default function MapsIndexPage() {
 
   useEffect(() => {
     if (isMobile) return;
-    router.replace(mapsAllLayoutsPath(workspaceId));
+    router.replace(mapsAllLayersPath(workspaceId));
   }, [isMobile, router, workspaceId]);
 
   if (isMobile) return null;
 
   return (
     <div className="flex h-full items-center justify-center">
-      <p className="text-sm text-muted-foreground">Opening All layouts…</p>
+      <p className="text-sm text-muted-foreground">Opening All layers…</p>
     </div>
   );
 }

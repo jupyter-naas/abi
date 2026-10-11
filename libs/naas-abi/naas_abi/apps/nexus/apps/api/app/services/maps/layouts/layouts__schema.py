@@ -16,11 +16,9 @@ MAX_PINS = 2_000
 # ``all`` is the route of the combined map.
 BUILTIN_LAYOUT_IDS = frozenset(
     {
-        "openstreetmap",
         "earthquakes",
         "wildfires",
         "temperature",
-        "natural-earth",
         "gdacs",
         "eonet-all",
         "openaq",
@@ -34,7 +32,7 @@ BUILTIN_LAYOUT_IDS = frozenset(
         "ais",
         "iss",
         "presence",
-        "all",  # the combined "All layouts" map's route
+        "all",  # the combined All layers map route (/maps/all)
     }
 )
 

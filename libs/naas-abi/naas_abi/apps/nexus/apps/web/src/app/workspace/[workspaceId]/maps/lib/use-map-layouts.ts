@@ -5,16 +5,17 @@ import { MAPS_CUSTOM_DATASETS } from '@/lib/maps-custom-datasets';
 import { useMapsStore, workspaceLayoutsOf } from '@/stores/maps';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { MAPS_DATASETS } from './datasets';
-import { buildLayoutEntries, isLayoutOn, resolveBasemapId, visibleEntries, type LayoutEntry } from './layouts';
+import { normalizeBasemapId } from './maps-basemaps';
+import { buildLayoutEntries, isLayerOn, visibleEntries, type LayoutEntry } from './layouts';
 import { useGraphMapLayers } from './use-graph-map-layers';
 
 const CUSTOM_IDS: ReadonlySet<string> = new Set(MAPS_CUSTOM_DATASETS.map((d) => d.id));
 
 /**
- * Every Maps layout of the current workspace. `entries` leaves out what an
- * admin hid in Settings → Maps; `all` keeps them (for that settings page).
+ * Every Maps data layer for the current workspace. `entries` omits layers hidden
+ * in Settings → Maps; `all` includes them (for that settings page).
  */
-export function useMapLayouts() {
+export function useMapLayers() {
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const graphLayers = useGraphMapLayers();
   const loadLayouts = useMapsStore((s) => s.loadLayouts);
@@ -33,8 +34,8 @@ export function useMapLayouts() {
     [graphLayers.layers, workspace.layouts],
   );
   const entries = useMemo(() => visibleEntries(all, workspace.hidden), [all, workspace.hidden]);
-  const isOn = (entry: LayoutEntry) => isLayoutOn(entry, overrides);
-  const basemapId = resolveBasemapId(entries, storedBasemap);
+  const isOn = (entry: LayoutEntry) => isLayerOn(entry, overrides);
+  const basemapId = normalizeBasemapId(storedBasemap);
 
   return {
     workspaceId,
@@ -49,3 +50,6 @@ export function useMapLayouts() {
     error: graphLayers.error || storeError,
   };
 }
+
+/** @deprecated use useMapLayers */
+export const useMapLayouts = useMapLayers;

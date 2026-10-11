@@ -45,10 +45,13 @@ export function mapsLibraryPath(workspaceId: string | null): string {
   return workspaceId ? `/workspace/${workspaceId}/maps` : '/maps';
 }
 
-/** Path of the combined All layouts map. */
-export function mapsAllLayoutsPath(workspaceId: string | null): string {
+/** Path of the combined All layers map (`/maps/all`). */
+export function mapsAllLayersPath(workspaceId: string | null): string {
   return mapsDatasetPath(workspaceId, 'all');
 }
+
+/** @deprecated use mapsAllLayersPath */
+export const mapsAllLayoutsPath = mapsAllLayersPath;
 
 /** Settings → Maps, optionally on one layout or on a new blank one. */
 export function mapsSettingsPath(

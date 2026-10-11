@@ -26,13 +26,13 @@ import { cn } from '@/lib/utils';
 import { authFetch } from '@/stores/auth';
 import { useMapsStore } from '@/stores/maps';
 import { mapsIconMap } from '@/app/workspace/[workspaceId]/maps/components/maps-section';
-import { ALL_LAYOUTS_ID, type LayoutEntry, type LayoutKind, type WorkspaceMapLayout } from '@/app/workspace/[workspaceId]/maps/lib/layouts';
+import { ALL_LAYERS_ID, type LayoutEntry, type LayoutKind, type WorkspaceMapLayout } from '@/app/workspace/[workspaceId]/maps/lib/layouts';
 import { LayoutApiError, blankLayout, layoutsApi, type LayoutDraft, type LayoutPreview } from '@/app/workspace/[workspaceId]/maps/lib/layouts-api';
 import { mapsDatasetPath, mapsSettingsPath } from '@/app/workspace/[workspaceId]/maps/lib/maps-route';
 import { useMapLayouts } from '@/app/workspace/[workspaceId]/maps/lib/use-map-layouts';
 
-const KIND_LABEL: Record<LayoutKind, string> = { builtin: 'Built-in', graph: 'Graph layer', workspace: 'Workspace layout' };
-const GROUP_LABEL: Record<string, string> = { basemap: 'Basemap', public: 'Public', custom: 'Custom' };
+const KIND_LABEL: Record<LayoutKind, string> = { builtin: 'Built-in', graph: 'Graph layer', workspace: 'Workspace layer' };
+const GROUP_LABEL: Record<string, string> = { public: 'Public', custom: 'Custom' };
 const NEW = 'new';
 const LAYOUT_ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
 
@@ -80,14 +80,14 @@ function MapsSettings() {
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-2">
           <Button variant="secondary" onClick={() => select(null)}>
-            <ArrowLeft size={16} /> All layouts
+            <ArrowLeft size={16} /> All layers
           </Button>
           <SettingsReloadButton />
         </div>
         {loading && selectedId !== NEW && !layout ? (
           <SettingsLoading />
         ) : selectedId !== NEW && !layout ? (
-          <SettingsEmpty title={<>There is no workspace layout “{selectedId}”.</>} />
+          <SettingsEmpty title={<>There is no workspace layer “{selectedId}”.</>} />
         ) : (
           <LayoutEditor
             key={selectedId}
@@ -127,27 +127,26 @@ function MapsSettings() {
       <SettingsPageHeader
         title="Maps"
         badge={`${shownCount} shown`}
-        description="The layouts the Maps section of this workspace offers. A hidden layout disappears from Maps for every member. Workspace layouts are SPARQL queries over the graphs this workspace can read."
+        description="Layers offered in Maps for this workspace. A hidden layer disappears for every member. Workspace layers are SPARQL queries over the graphs this workspace can read."
         actions={canEdit && (
           <Button onClick={() => select(NEW)}>
-            <Plus size={16} /> New layout
+            <Plus size={16} /> New layer
           </Button>
         )}
       />
 
       {error && <SettingsNotice tone="error"><span role="alert">{error}</span></SettingsNotice>}
       {tableError && <SettingsNotice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></SettingsNotice>}
-      {!canEdit && !loading && <SettingsNotice>Only workspace owners and admins can change map layouts.</SettingsNotice>}
+      {!canEdit && !loading && <SettingsNotice>Only workspace owners and admins can change map layers.</SettingsNotice>}
 
       <SettingsTableToolbar
         search={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="Search layouts..."
+        searchPlaceholder="Search layers..."
         filters={
           <>
             <SettingsFilterSelect label="Group" value={groupFilter} onChange={setGroupFilter} options={[
               { value: 'all', label: 'All groups' },
-              { value: 'basemap', label: 'Basemap' },
               { value: 'public', label: 'Public' },
               { value: 'custom', label: 'Custom' },
             ]} />
@@ -176,7 +175,7 @@ function MapsSettings() {
               <tr><td colSpan={4} className={cn(settingsTable.td, 'text-muted-foreground')}><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
             )}
             {!loading && rows.length === 0 && (
-              <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">No layouts match the current search and filters</td></tr>
+              <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">No layers match the current search and filters</td></tr>
             )}
             {rows.map((entry) => {
               const Icon = mapsIconMap[entry.icon] || MapIcon;
@@ -275,7 +274,7 @@ function LayoutEditor({
 
   const idError = isNew && id && (!LAYOUT_ID.test(id)
     ? 'Lowercase letters, digits and dashes, starting with a letter or digit (max 48).'
-    : id === ALL_LAYOUTS_ID || takenIds.has(id) ? 'This id is already used by another layout.' : null);
+    : id === ALL_LAYERS_ID || takenIds.has(id) ? 'This id is already used by another layer.' : null);
 
   const save = async () => {
     setBusy('save'); setErrors([]); setSaved(false);

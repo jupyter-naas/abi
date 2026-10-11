@@ -82,6 +82,32 @@
   color: hsl(var(--muted-foreground));
 }
 
+.maps-basemap-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.maps-basemap-picker select {
+  max-width: 8.5rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) - 2px);
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.maps-basemap-picker select:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 1px;
+}
+
 .maps-canvas__stage {
   position: relative;
   flex: 1;
@@ -531,3 +557,36 @@
 .maps-record-detail { white-space: pre-line; }
 .maps-coverage-addresses button { align-items: flex-start; flex-direction: column; }
 @media (max-width: 767px) { .maps-coverage-legend { bottom: 34px; max-width: 200px; } }
+
+/* Leaflet basemap picker (standard layers control, top-right on the map). */
+.maps-leaflet .leaflet-control-layers {
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--org-border-radius, 0);
+  background: hsl(var(--background) / 0.94);
+  box-shadow: none;
+  font-size: 12px;
+  color: hsl(var(--foreground));
+}
+
+.maps-leaflet .leaflet-control-layers-toggle {
+  width: 36px;
+  height: 36px;
+  background-size: 20px 20px;
+}
+
+.maps-leaflet .leaflet-control-layers-list {
+  padding: 6px 8px;
+}
+
+.maps-leaflet .leaflet-control-layers label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+  cursor: pointer;
+}
+
+.maps-leaflet .leaflet-control-layers-separator {
+  border-top-color: hsl(var(--border));
+  margin: 6px 0;
+}

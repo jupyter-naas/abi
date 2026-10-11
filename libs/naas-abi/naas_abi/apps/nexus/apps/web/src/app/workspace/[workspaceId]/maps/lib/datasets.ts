@@ -4,11 +4,9 @@ import {
 } from '@/lib/maps-custom-datasets';
 
 export type MapsBuiltinDatasetId =
-  | 'openstreetmap'
   | 'earthquakes'
   | 'wildfires'
   | 'temperature'
-  | 'natural-earth'
   | 'gdacs'
   | 'eonet-all'
   | 'openaq'
@@ -30,11 +28,8 @@ export type MapsBuiltinDatasetId =
  */
 export type MapsDatasetId = MapsBuiltinDatasetId | (string & {});
 
-/**
- * Basemap is the background (one at a time). Public layouts are data drawn on
- * top of it. Custom stays empty upstream for deployment pin feeds.
- */
-export type MapsDatasetCategory = 'basemap' | 'public' | 'custom';
+/** Public data layers on the map. Custom is for deployment pin feeds. */
+export type MapsDatasetCategory = 'public' | 'custom';
 
 export interface MapsDataset {
   id: MapsDatasetId;
@@ -47,19 +42,17 @@ export interface MapsDataset {
   order: number;
 }
 
+/** Sidebar groups: Public first, then Custom. Basemaps are chosen on the map. */
 export const MAPS_CATEGORIES: {
   id: MapsDatasetCategory;
   label: string;
 }[] = [
-  { id: 'basemap', label: 'Basemap' },
   { id: 'public', label: 'Public' },
   { id: 'custom', label: 'Custom' },
 ];
 
 /**
- * Built-in Maps datasets:
- * - Basemap: the canvas background. One is active; they do not stack.
- * - Public: situation-awareness layouts drawn on that basemap, including Here.
+ * Built-in Maps data layers (Public). The basemap is separate (see maps-basemaps.ts).
  *
  * Custom is the extension point and stays empty here: product-specific datasets
  * belong to the deployment, registered through NEXT_PUBLIC_MAPS_CUSTOM_DATASETS
@@ -70,14 +63,6 @@ export const MAPS_CATEGORIES: {
  * /api/maps/ for CORS / User-Agent proxies.
  */
 const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
-  {
-    id: 'openstreetmap',
-    title: 'OpenStreetMap',
-    description: 'Standard OpenStreetMap basemap tiles for Maps canvases.',
-    category: 'basemap',
-    icon: 'Globe',
-    order: 0,
-  },
   {
     id: 'earthquakes',
     title: 'Earthquakes',
@@ -103,14 +88,6 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     category: 'public',
     icon: 'Thermometer',
     order: 3,
-  },
-  {
-    id: 'natural-earth',
-    title: 'Natural Earth',
-    description: 'Natural Earth 110m country borders (GeoJSON).',
-    category: 'basemap',
-    icon: 'Layers',
-    order: 1,
   },
   {
     id: 'gdacs',
@@ -269,8 +246,6 @@ export const MAPS_PUBLIC_FEEDS = {
   /** FIRMS WMS proxy; enabled only when FIRMS_MAP_KEY is set on nexus-web. */
   firms: '/api/maps/firms',
   temperature: 'https://api.open-meteo.com/v1/forecast',
-  /** 110m countries, proxied. The browser must not call GitHub for this file. */
-  naturalEarth: '/api/maps/natural-earth',
   gdacs: '/api/maps/gdacs',
   openaq: '/api/maps/openaq',
   nwsAlerts: '/api/maps/nws',

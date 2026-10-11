@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  mapsAllLayoutsPath,
+  mapsAllLayersPath,
   mapsDatasetPath,
   mapsLibraryPath,
   mapsSettingsPath,
@@ -77,9 +77,9 @@ describe('mapsLibraryPath', () => {
   });
 });
 
-describe('maps layout paths', () => {
-  it('builds the All layouts map and Settings → Maps paths', () => {
-    expect(mapsAllLayoutsPath('ws-1')).toBe('/workspace/ws-1/maps/all');
+describe('maps layer paths', () => {
+  it('builds the All layers map and Settings → Maps paths', () => {
+    expect(mapsAllLayersPath('ws-1')).toBe('/workspace/ws-1/maps/all');
     expect(mapsSettingsPath('ws-1')).toBe('/workspace/ws-1/settings/maps');
     expect(mapsSettingsPath('ws-1', { create: true })).toBe('/workspace/ws-1/settings/maps?layout=new');
     expect(mapsSettingsPath('ws-1', { layout: 'offices' })).toBe('/workspace/ws-1/settings/maps?layout=offices');

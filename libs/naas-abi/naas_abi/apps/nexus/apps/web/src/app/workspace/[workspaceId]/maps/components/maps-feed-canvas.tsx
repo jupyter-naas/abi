@@ -2,9 +2,10 @@
 
 import {useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode} from 'react';
 import type {Map as LeafletMap, Marker} from 'leaflet';
-import {ExternalLink, Loader2, ArrowLeft, Search, List, X} from 'lucide-react';
+import {ExternalLink, Loader2, ArrowLeft, Search, List, X, Layers} from 'lucide-react';
 import { useMapsStore } from '@/stores/maps';
-import {addMapsPinMarkers, addNaturalEarthLayer, captureMapsCamera, clearMapsMarkers, createMapsLeaflet, destroyMapsLeaflet, fitMapsBounds, restoreMapsCamera, type MapsCamera, type MapsPinMarker} from '../lib/leaflet-map';
+import { installMapsBasemap, MAPS_BASEMAPS, normalizeBasemapId, type MapsBasemapHandle } from '../lib/maps-basemaps';
+import {addMapsPinMarkers, captureMapsCamera, clearMapsMarkers, createMapsLeaflet, destroyMapsLeaflet, fitMapsBounds, restoreMapsCamera, type MapsCamera, type MapsPinMarker} from '../lib/leaflet-map';
 import {formatMapsFeedAge, graphObjectHref, normalizeFeedLoad, type MapsFeedMeta, type MapsFeedResult} from '../lib/maps-feed';
 import {mapsViewFromBounds, type MapsFeedView} from '../lib/maps-view';
 import {MapsCoverageLayer} from './maps-coverage-layer';
@@ -63,13 +64,15 @@ function metaLine(meta: MapsFeedMeta | null, now: number): string {
 
 export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No data', emptyBody='This feed returned no mappable points right now.', sourceHref, sourceLabel='Source', fetchPins, fitMaxZoom=5, legend, refreshMs, inspectable=false, workspaceId='', viewportBound=false, basemapId}: MapsFeedCanvasProps) {
   const storedBasemap = useMapsStore((s) => s.basemapId);
-  const basemap = basemapId ?? storedBasemap ?? 'openstreetmap';
+  const setBasemap = useMapsStore((s) => s.setBasemap);
+  const basemap = normalizeBasemapId(basemapId ?? storedBasemap);
   const containerRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
   const [panelOpen, setPanelOpen] = useState(false);
   const mapRef = useRef<LeafletMap|null>(null);
   const leafletRef = useRef<typeof import('leaflet')|null>(null);
+  const basemapHandleRef = useRef<MapsBasemapHandle | null>(null);
   const markersRef = useRef<Marker[]>([]);
   const [status,setStatus] = useState<MapsFeedStatus>('loading');
   const [error,setError] = useState<string|null>(null);
@@ -167,7 +170,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
 
     // One initialization per effect, shared even if a refresh starts while
     // Leaflet is loading. Cleanup cancels it before it can claim the container.
-    const mapReady = createMapsLeaflet(container, { basemap }, lifecycle.signal).then(async ({L, map}) => {
+    const mapReady = createMapsLeaflet(container, {}, lifecycle.signal).then(({L, map}) => {
       if (cancelled) {
         map.remove();
         return null;
@@ -175,7 +178,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
       ownedMap = map;
       mapRef.current = map;
       leafletRef.current = L;
-      if (basemap === 'natural-earth') await addNaturalEarthLayer(L, map, lifecycle.signal);
+      basemapHandleRef.current = installMapsBasemap(L, map, basemap);
       return map;
     }).catch((err) => {
       if (cancelled || lifecycle.signal.aborted) return null;
@@ -252,6 +255,8 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
       try { active?.abort(); } catch { /* ignore */ }
       if (timer) clearInterval(timer);
       if (moveTimer) clearTimeout(moveTimer);
+      basemapHandleRef.current?.cleanup();
+      basemapHandleRef.current = null;
       destroyMapsLeaflet(ownedMap, ownedMarkers);
       if (mapRef.current === ownedMap) {
         mapRef.current = null;
@@ -260,7 +265,11 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     };
     // Callers remount when dataset/workspace changes. Public feed factories are stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshMs, fitMaxZoom, viewportBound, basemap]);
+  }, [refreshMs, fitMaxZoom, viewportBound]);
+
+  useEffect(() => {
+    basemapHandleRef.current?.setBasemap(basemap);
+  }, [basemap]);
 
   useEffect(()=>{
     if(!leafletRef.current || !mapRef.current) return;
@@ -310,6 +319,19 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
       </div>}
       {inspectable && (country || search) && <button type="button" className="maps-coverage-reset" aria-label="Clear map filters" onClick={()=>{setCountry('');setSearch('');deselectPin();}}>Show all{country ? ': '+country : ''}<X size={12}/></button>}
       {inspectable && <button ref={toggleRef} type="button" className="maps-record-toggle" aria-expanded={panelOpen} aria-controls={panelId} onClick={() => panelOpen ? closePanel() : setPanelOpen(true)}><List size={15}/>{view==='coverage'?'Cities':'Locations'}</button>}
+      <label className="maps-basemap-picker">
+        <Layers size={15} aria-hidden />
+        <span className="sr-only">Basemap</span>
+        <select
+          value={basemap}
+          aria-label="Basemap"
+          onChange={(event) => setBasemap(event.target.value)}
+        >
+          {MAPS_BASEMAPS.map((def) => (
+            <option key={def.id} value={def.id}>{def.label}</option>
+          ))}
+        </select>
+      </label>
     </div>
     <div className={`maps-canvas__workspace${inspectable?' maps-canvas__workspace--inspectable':''}`}>
       <div className="maps-canvas__stage">
