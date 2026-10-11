@@ -24,7 +24,6 @@ import { MapsIss } from '../components/maps-iss';
 import { MapsNews } from '../components/maps-news';
 import { MapsNwsAlerts } from '../components/maps-nws-alerts';
 import { MapsOpenaq } from '../components/maps-openaq';
-import { MapsPresence } from '../components/maps-presence';
 import { MapsTemperature } from '../components/maps-temperature';
 import { MapsTropicalStorms } from '../components/maps-tropical-storms';
 import { MapsVolcanoes } from '../components/maps-volcanoes';
@@ -99,7 +98,6 @@ export default function MapsDatasetPage() {
         {dataset?.id === 'news' ? <MapsNews /> : null}
         {dataset?.id === 'ais' ? <MapsAis /> : null}
         {dataset?.id === 'iss' ? <MapsIss /> : null}
-        {dataset?.id === 'presence' ? <MapsPresence /> : null}
         {customDataset ? <MapsCustomFeed key={customDataset.id} dataset={customDataset} /> : null}
         {graphDataset ? <MapsGraphFeed dataset={graphDataset} /> : null}
       </div>

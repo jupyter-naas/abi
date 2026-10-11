@@ -20,7 +20,7 @@ const workspaceLayer = (id: string): WorkspaceMapLayout => ({
 describe('buildLayoutEntries', () => {
   it('merges built-in, graph and workspace layers, first id wins', () => {
     const entries = buildLayoutEntries(
-      [ds('gdacs', 'public'), ds('earthquakes', 'public'), ds('presence', 'public')],
+      [ds('gdacs', 'public'), ds('earthquakes', 'public'), ds('iss', 'public')],
       [{ ...ds('kg-sites', 'custom'), graphUri: 'http://g' }, { ...ds('gdacs', 'custom'), graphUri: 'http://g' }],
       [workspaceLayer('offices'), workspaceLayer(ALL_LAYERS_ID)],
     );
@@ -28,7 +28,7 @@ describe('buildLayoutEntries', () => {
     expect(entries.map((e) => [e.id, e.kind, e.combinable])).toEqual([
       ['gdacs', 'builtin', true],
       ['earthquakes', 'builtin', true],
-      ['presence', 'builtin', true],
+      ['iss', 'builtin', true],
       ['kg-sites', 'graph', true],
       ['offices', 'workspace', true],
     ]);
@@ -62,17 +62,17 @@ describe('isLayerOn', () => {
 
 describe('visibleEntries / groupLayerEntries', () => {
   const entries = buildLayoutEntries(
-    [ds('volcanoes', 'public', 2), ds('gdacs', 'public', 1), ds('presence', 'public', 3)],
+    [ds('volcanoes', 'public', 2), ds('gdacs', 'public', 1), ds('iss', 'public', 3)],
     [],
     [workspaceLayer('offices')],
   );
 
   it('drops hidden layers', () => {
-    expect(visibleEntries(entries, ['gdacs', 'offices']).map((e) => e.id)).toEqual(['volcanoes', 'presence']);
+    expect(visibleEntries(entries, ['gdacs', 'offices']).map((e) => e.id)).toEqual(['volcanoes', 'iss']);
   });
 
   it('groups Public then Custom, leaving empty groups out', () => {
-    const groups = groupLayerEntries(visibleEntries(entries, ['presence']));
+    const groups = groupLayerEntries(visibleEntries(entries, ['iss']));
     expect(groups.map((g) => [g.id, g.entries.map((e) => e.id)])).toEqual([
       ['public', ['gdacs', 'volcanoes']],
       ['custom', ['offices']],

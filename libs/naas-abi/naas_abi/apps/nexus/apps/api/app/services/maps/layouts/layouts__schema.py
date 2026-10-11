@@ -31,7 +31,6 @@ BUILTIN_LAYOUT_IDS = frozenset(
         "news",
         "ais",
         "iss",
-        "presence",
         "all",  # the combined All layers map route (/maps/all)
     }
 )

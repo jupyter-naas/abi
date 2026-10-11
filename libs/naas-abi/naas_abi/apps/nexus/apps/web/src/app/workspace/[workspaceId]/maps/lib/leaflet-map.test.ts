@@ -2,11 +2,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   canInvalidateMapsLeaflet,
   captureMapsCamera,
+  flyMapToUserLocation,
+  mapsLocateZoomForAccuracy,
   mapsPinPopupHtml,
   observeMapsLeafletSize,
   restoreMapsCamera,
   safeInvalidateMapsLeafletSize,
 } from './leaflet-map';
+
+describe('mapsLocateZoomForAccuracy', () => {
+  it('zooms in for a precise fix and eases out when accuracy is coarse', () => {
+    expect(mapsLocateZoomForAccuracy(20)).toBe(17);
+    expect(mapsLocateZoomForAccuracy(200)).toBe(15);
+    expect(mapsLocateZoomForAccuracy(2000)).toBe(13);
+    expect(mapsLocateZoomForAccuracy(undefined)).toBe(17);
+  });
+});
+
+describe('flyMapToUserLocation', () => {
+  it('flies to coordinates at the chosen zoom', () => {
+    const flyTo = vi.fn();
+    flyMapToUserLocation({ flyTo } as never, 48.85, 2.35, 30);
+    expect(flyTo).toHaveBeenCalledWith([48.85, 2.35], 17, { duration: 0.65 });
+  });
+});
 
 describe('maps camera restore', () => {
   it('flies back to the saved center and zoom', () => {

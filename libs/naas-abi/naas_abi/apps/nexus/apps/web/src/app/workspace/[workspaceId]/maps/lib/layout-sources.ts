@@ -11,7 +11,6 @@ import { fetchPins as issPins } from '../components/maps-iss';
 import { fetchPins as newsPins } from '../components/maps-news';
 import { fetchPins as nwsAlertsPins } from '../components/maps-nws-alerts';
 import { fetchPins as openaqPins } from '../components/maps-openaq';
-import { fetchPins as presencePins } from '../components/maps-presence';
 import { fetchPins as temperaturePins } from '../components/maps-temperature';
 import { fetchPins as tropicalStormsPins } from '../components/maps-tropical-storms';
 import { fetchPins as volcanoesPins } from '../components/maps-volcanoes';
@@ -40,7 +39,6 @@ const BUILTIN_FETCHERS: Record<string, Fetcher> = {
   news: newsPins,
   'nws-alerts': nwsAlertsPins,
   openaq: openaqPins,
-  presence: presencePins,
   temperature: temperaturePins,
   'tropical-storms': tropicalStormsPins,
   volcanoes: volcanoesPins,

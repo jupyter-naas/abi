@@ -51,7 +51,7 @@ describe('mergeFeatureFlags', () => {
 describe('getFeatureForWorkspacePath', () => {
   it('maps workspace paths to features', () => {
     expect(getFeatureForWorkspacePath('/workspace/ws1/maps')).toBe('maps');
-    expect(getFeatureForWorkspacePath('/workspace/ws1/maps/presence')).toBe('maps');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/maps/all')).toBe('maps');
     expect(getFeatureForWorkspacePath('/workspace/ws1/chat')).toBe('chat');
     expect(getFeatureForWorkspacePath('/workspace/ws1/search')).toBe('search');
     expect(getFeatureForWorkspacePath('/workspace/ws1/ontology')).toBe('ontology');
@@ -177,11 +177,11 @@ describe('getWorkspaceSwitchPath', () => {
     ).toBe('/workspace/ws-other/chat');
     expect(
       getWorkspaceSwitchPath({
-        pathname: '/workspace/ws-next-gen/maps/presence',
+        pathname: '/workspace/ws-next-gen/maps/all',
         targetWorkspaceId: 'ws-other',
         role: 'owner',
       }),
-    ).toBe('/workspace/ws-other/maps/presence');
+    ).toBe('/workspace/ws-other/maps/all');
   });
 
   it('sends retired lab routes to code when the target has code', () => {

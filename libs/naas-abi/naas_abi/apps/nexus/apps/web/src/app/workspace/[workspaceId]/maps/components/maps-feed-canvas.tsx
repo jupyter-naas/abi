@@ -6,6 +6,7 @@ import {ExternalLink, Loader2, ArrowLeft, Search, List, X} from 'lucide-react';
 import { useMapsStore } from '@/stores/maps';
 import { installMapsBasemap, normalizeBasemapId, type MapsBasemapHandle } from '../lib/maps-basemaps';
 import { MapsBasemapControl } from './maps-basemap-control';
+import { MapsLocateControl } from './maps-locate-control';
 import {addMapsPinMarkers, captureMapsCamera, clearMapsMarkers, createMapsLeaflet, destroyMapsLeaflet, fitMapsBounds, restoreMapsCamera, type MapsCamera, type MapsPinMarker} from '../lib/leaflet-map';
 import {formatMapsFeedAge, graphObjectHref, normalizeFeedLoad, type MapsFeedMeta, type MapsFeedResult} from '../lib/maps-feed';
 import {mapsViewFromBounds, type MapsFeedView} from '../lib/maps-view';
@@ -79,6 +80,8 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   const [panelOpen, setPanelOpen] = useState(false);
   const mapRef = useRef<LeafletMap|null>(null);
   const leafletRef = useRef<typeof import('leaflet')|null>(null);
+  const preserveUserViewRef = useRef(false);
+  const [mapReady, setMapReady] = useState(false);
   const basemapHandleRef = useRef<MapsBasemapHandle | null>(null);
   const markersRef = useRef<Marker[]>([]);
   const [status,setStatus] = useState<MapsFeedStatus>('loading');
@@ -198,6 +201,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
       mapRef.current = map;
       leafletRef.current = L;
       basemapHandleRef.current = installMapsBasemap(L, map, basemap);
+      setMapReady(true);
       return map;
     }).catch((err) => {
       if (cancelled || lifecycle.signal.aborted) return null;
@@ -238,7 +242,9 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
         });
         setEmptyDetail(loaded.reason ?? null);
         setSelected(current => current ? [...loaded.pins,...cities].find(p => p.id === current.id) ?? null : null);
-        if (!isRefresh && !viewportBound) fitMapsBounds(map, loaded.pins, {maxZoom: fitMaxZoom});
+        if (!isRefresh && !viewportBound && !preserveUserViewRef.current) {
+          fitMapsBounds(map, loaded.pins, {maxZoom: fitMaxZoom});
+        }
         setError(null);
         setStatus(loaded.pins.length ? 'ready' : 'empty');
       } catch (err) {
@@ -281,6 +287,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
         mapRef.current = null;
         leafletRef.current = null;
       }
+      setMapReady(false);
     };
     // Callers remount when dataset/workspace changes. Public feed factories are stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -305,9 +312,23 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
       const pin = pendingFocusRef.current;
       mapRef.current.setView([pin.lat,pin.lng],14);
       pendingFocusRef.current = null;
-    } else if(inspectable && !viewportBound) fitMapsBounds(mapRef.current,visiblePins,{maxZoom:fitMaxZoom});
+    } else if (inspectable && !viewportBound && !preserveUserViewRef.current) {
+      fitMapsBounds(mapRef.current, visiblePins, {maxZoom: fitMaxZoom});
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[visiblePins,inspectable,fitMaxZoom,viewportBound,view]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const clearPreserve = () => {
+      preserveUserViewRef.current = false;
+    };
+    map.on('dragstart', clearPreserve);
+    return () => {
+      map.off('dragstart', clearPreserve);
+    };
+  }, [mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -352,6 +373,14 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
           />
         ) : null}
         <MapsBasemapControl basemapId={basemap} onBasemapChange={setBasemap} />
+        <MapsLocateControl
+          mapRef={mapRef}
+          leafletRef={leafletRef}
+          mapReady={mapReady}
+          onLocated={() => {
+            preserveUserViewRef.current = true;
+          }}
+        />
         {legend && (status==='ready'||status==='empty') ? legend : null}
       </div>
       {inspectable && panelOpen && <aside id={panelId} className="maps-record-panel" aria-label="Map locations and evidence" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); closePanel(); } }}>

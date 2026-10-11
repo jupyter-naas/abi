@@ -21,10 +21,10 @@ describe('parseMapsRoute', () => {
   });
 
   it('opens a dataset canvas on /maps/{datasetId}', () => {
-    expect(parseMapsRoute(`${BASE}/presence`)).toEqual({
+    expect(parseMapsRoute(`${BASE}/iss`)).toEqual({
       isMapsRoute: true,
       isDataset: true,
-      datasetId: 'presence',
+      datasetId: 'iss',
     });
   });
 
@@ -38,12 +38,12 @@ describe('parseMapsRoute', () => {
 
   it('ignores a trailing slash on the index', () => {
     expect(parseMapsRoute(`${BASE}/`).isDataset).toBe(false);
-    expect(parseMapsRoute(`${BASE}/presence/`).isDataset).toBe(true);
+    expect(parseMapsRoute(`${BASE}/iss/`).isDataset).toBe(true);
   });
 
   it('stops at a query string or fragment', () => {
-    expect(parseMapsRoute(`${BASE}/presence?zoom=4`).isDataset).toBe(true);
-    expect(parseMapsRoute(`${BASE}/presence#pin`).datasetId).toBe('presence');
+    expect(parseMapsRoute(`${BASE}/iss?zoom=4`).isDataset).toBe(true);
+    expect(parseMapsRoute(`${BASE}/iss#pin`).datasetId).toBe('iss');
   });
 
   it('does not claim routes that merely contain the word maps', () => {
@@ -59,7 +59,7 @@ describe('parseMapsRoute', () => {
 
 describe('mapsDatasetPath', () => {
   it('points at the dataset detail inside the workspace', () => {
-    expect(mapsDatasetPath(WS, 'presence')).toBe(`${BASE}/presence`);
+    expect(mapsDatasetPath(WS, 'iss')).toBe(`${BASE}/iss`);
   });
 
   it('degrades to a workspace-less path before a workspace is known', () => {

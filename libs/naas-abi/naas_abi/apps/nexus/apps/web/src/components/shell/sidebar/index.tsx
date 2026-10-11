@@ -298,7 +298,7 @@ export function Sidebar() {
   const getDefaultPath = useCallback((sectionId: SidebarSection): string | undefined => {
     switch (sectionId) {
       case 'home':     return getWorkspacePath(currentWorkspaceId, '/home');
-      case 'maps':     return getWorkspacePath(currentWorkspaceId, '/maps/presence');
+      case 'maps':     return getWorkspacePath(currentWorkspaceId, '/maps/all');
       case 'search':   return getWorkspacePath(currentWorkspaceId, '/search');
       case 'chat':     return getWorkspacePath(currentWorkspaceId, '/chat');
       case 'ontology': {

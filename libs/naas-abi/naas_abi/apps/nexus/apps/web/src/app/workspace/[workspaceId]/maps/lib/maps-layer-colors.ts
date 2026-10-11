@@ -28,7 +28,6 @@ const BUILTIN_LAYER_COLORS: Record<string, string> = {
   news: '#6366f1',
   ais: '#0284c7',
   iss: '#22c55e',
-  presence: '#8b5cf6',
 };
 
 function hashLayerColor(id: string): string {

@@ -64,8 +64,51 @@ export function mapsPinPopupHtml(pin: MapsPinMarker): string {
   return `<div class="maps-pin-popup"><strong>${escapeMapsHtml(pin.label)}</strong>${addressHtml}${detailHtml}${previewHtml}<div class="maps-pin-popup__actions"><a class="maps-pin-popup__streetview-btn" href="${escapeMapsHtml(media.streetViewUrl)}" target="_blank" rel="noreferrer">Open Street View</a></div></div>`;
 }
 
+export const MAPS_USER_LOCATION_COLOR = '#4285F4';
+
 export function mapsPinHtml(color: string, size: number): string {
   return `<span style="display:block;width:${size}px;height:${size}px;border:2px solid #fff;background:${color};box-shadow:0 1px 4px rgba(0,0,0,.35);border-radius:0"></span>`;
+}
+
+/** Google Maps–style blue dot for the device location. */
+export function mapsUserLocationPinHtml(size = 16): string {
+  return `<span style="display:block;width:${size}px;height:${size}px;border:2px solid #fff;background:${MAPS_USER_LOCATION_COLOR};box-shadow:0 1px 4px rgba(0,0,0,.35);border-radius:50%"></span>`;
+}
+
+/** Default zoom when centering on the device location (Google Maps–like street scale). */
+export const MAPS_LOCATE_ZOOM = 17;
+
+export function mapsLocateZoomForAccuracy(accuracyMeters: number | null | undefined): number {
+  if (accuracyMeters == null || !Number.isFinite(accuracyMeters)) return MAPS_LOCATE_ZOOM;
+  if (accuracyMeters <= 50) return 17;
+  if (accuracyMeters <= 500) return 15;
+  return 13;
+}
+
+export function flyMapToUserLocation(
+  map: LeafletMap,
+  lat: number,
+  lng: number,
+  accuracyMeters?: number,
+): void {
+  const zoom = mapsLocateZoomForAccuracy(accuracyMeters);
+  map.flyTo([lat, lng], zoom, { duration: 0.65 });
+}
+
+export function createUserLocationMarker(
+  L: typeof import('leaflet'),
+  map: LeafletMap,
+  lat: number,
+  lng: number,
+): Marker {
+  const size = 16;
+  const icon = L.divIcon({
+    className: 'maps-pin-icon maps-user-location-pin',
+    html: mapsUserLocationPinHtml(size),
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+  return L.marker([lat, lng], { icon, title: 'Your location', zIndexOffset: 1000 }).addTo(map);
 }
 
 /** Zoom +/- control: bottom-right, squared (see maps-components.css). */

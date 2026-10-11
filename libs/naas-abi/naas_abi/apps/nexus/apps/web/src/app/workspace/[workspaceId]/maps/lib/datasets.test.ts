@@ -26,11 +26,10 @@ const PUBLIC_IDS = [
   'news',
   'ais',
   'iss',
-  'presence',
 ] as const;
 
 describe('MAPS_DATASETS taxonomy', () => {
-  it('lists Public data layers (including Here); Custom empty upstream', () => {
+  it('lists Public data layers; Custom empty upstream', () => {
     expect(getMapsDatasetsByCategory('public').map((d) => d.id)).toEqual([
       ...PUBLIC_IDS,
     ]);
@@ -39,8 +38,8 @@ describe('MAPS_DATASETS taxonomy', () => {
     expect(getMapsDatasetsByCategory('custom')).toEqual([]);
   });
 
-  it('keeps Here as a public layer and ships no product-specific datasets', () => {
-    expect(getMapsDataset('presence')?.category).toBe('public');
+  it('ships no product-specific datasets and rejects legacy basemap ids', () => {
+    expect(getMapsDataset('presence')).toBeNull();
     expect(getMapsDataset('openstreetmap')).toBeNull();
     expect(getMapsDataset('ontologist-north-america')).toBeNull();
     expect(isMapsDatasetId('ontologist-north-america')).toBe(false);

@@ -18,8 +18,7 @@ export type MapsBuiltinDatasetId =
   | 'gulf-strikes'
   | 'news'
   | 'ais'
-  | 'iss'
-  | 'presence';
+  | 'iss';
 
 /**
  * A built-in id, or an id a deployment registered through
@@ -194,14 +193,6 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     category: 'public',
     icon: 'Satellite',
     order: 16,
-  },
-  {
-    id: 'presence',
-    title: 'Here',
-    description: 'Your devices and the deployment server on one map.',
-    category: 'public',
-    icon: 'Laptop',
-    order: 17,
   },
 ];
 
