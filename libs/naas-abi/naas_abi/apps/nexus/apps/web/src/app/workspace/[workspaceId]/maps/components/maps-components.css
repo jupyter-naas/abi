@@ -235,8 +235,8 @@
 .maps-legend {
   position: absolute;
   z-index: 400;
-  left: 0.75rem;
-  bottom: 0.75rem;
+  top: 0.75rem;
+  right: 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -604,7 +604,7 @@
 .maps-coverage-swatch { display: inline-block; width: 12px; height: 10px; background: var(--color-primary); opacity: 0.7; }
 .maps-record-detail { white-space: pre-line; }
 .maps-coverage-addresses button { align-items: flex-start; flex-direction: column; }
-@media (max-width: 767px) { .maps-coverage-legend { bottom: 34px; max-width: 200px; } }
+@media (max-width: 767px) { .maps-coverage-legend { max-width: min(200px, calc(100% - 1.5rem)); } }
 
 /* Leaflet basemap picker (standard layers control, top-right on the map). */
 .maps-leaflet .leaflet-control-layers {
