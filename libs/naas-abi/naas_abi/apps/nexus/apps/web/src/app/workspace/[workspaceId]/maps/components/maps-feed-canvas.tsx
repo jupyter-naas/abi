@@ -9,6 +9,7 @@ import {addMapsPinMarkers, captureMapsCamera, clearMapsMarkers, createMapsLeafle
 import {formatMapsFeedAge, graphObjectHref, normalizeFeedLoad, type MapsFeedMeta, type MapsFeedResult} from '../lib/maps-feed';
 import {mapsViewFromBounds, type MapsFeedView} from '../lib/maps-view';
 import {MapsCoverageLayer} from './maps-coverage-layer';
+import {MapsPointSearch} from './maps-point-search';
 import {MapsRecordMedia} from './maps-record-media';
 import './maps-components.css';
 
@@ -35,6 +36,9 @@ export interface MapsFeedCanvasProps {
   basemapId?: string;
   /** When false, empty feeds only update the toolbar (map stays visible). */
   emptyOverlay?: boolean;
+  /** Top-left search over loaded pins (submit on Enter). */
+  pointSearch?: boolean;
+  layerTitleForPin?: (pin: MapsPinMarker) => string | undefined;
 }
 
 function viewFromMap(map: LeafletMap): MapsFeedView {
@@ -64,7 +68,7 @@ function metaLine(meta: MapsFeedMeta | null, now: number): string {
   return parts.filter(Boolean).join(' · ');
 }
 
-export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No data', emptyBody='This feed returned no mappable points right now.', sourceHref, sourceLabel='Source', fetchPins, fitMaxZoom=5, legend, refreshMs, inspectable=false, workspaceId='', viewportBound=false, basemapId, emptyOverlay=true}: MapsFeedCanvasProps) {
+export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No data', emptyBody='This feed returned no mappable points right now.', sourceHref, sourceLabel='Source', fetchPins, fitMaxZoom=5, legend, refreshMs, inspectable=false, workspaceId='', viewportBound=false, basemapId, emptyOverlay=true, pointSearch=true, layerTitleForPin}: MapsFeedCanvasProps) {
   const storedBasemap = useMapsStore((s) => s.basemapId);
   const setBasemap = useMapsStore((s) => s.setBasemap);
   const basemap = normalizeBasemapId(basemapId ?? storedBasemap);
@@ -89,6 +93,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   const [search,setSearch] = useState('');
   const [country,setCountry] = useState('');
   const activePins = view === 'coverage' ? coveragePins : pins;
+  const pointSearchPins = activePins;
   const visiblePins = useMemo(() => activePins.filter(p => (!country || p.country===country) && `${p.label} ${p.country??''} ${p.detail??''} ${p.address??''}`.toLowerCase().includes(search.toLowerCase())),[activePins,country,search]);
   const countries = useMemo(() => Array.from(new Set(activePins.map(p=>p.country).filter((v):v is string=>!!v))).sort(),[activePins]);
   const freshness = metaLine(feedMeta, Date.now());
@@ -117,6 +122,17 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     setPanelOpen(true);
     mapRef.current?.setView([pin.lat,pin.lng],Math.max(mapRef.current.getZoom(),pin.memberIds ? 8 : 14));
   }
+
+  const focusMapPin = useCallback(
+    (pin: MapsPinMarker) => {
+      mapRef.current?.setView(
+        [pin.lat, pin.lng],
+        Math.max(mapRef.current.getZoom(), pin.memberIds ? 8 : 14),
+      );
+      if (inspectable) selectPin(pin);
+    },
+    [inspectable],
+  );
 
   const selectCountry = useCallback((value: string) => {
     setCountry(value);
@@ -340,6 +356,13 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
         <div ref={containerRef} className="maps-leaflet"/>
         {(status==='error' || (status==='empty' && emptyOverlay)) && <div className="maps-empty-overlay"><h3>{overlayTitle}</h3><p>{overlayBody}</p>{sourceHref && <a className="maps-btn" href={sourceHref} target="_blank" rel="noreferrer"><ExternalLink size={12}/>{sourceLabel}</a>}</div>}
         {view==='coverage' && status==='ready' && mapRef.current && leafletRef.current && <MapsCoverageLayer map={mapRef.current} leaflet={leafletRef.current} pins={coveragePins} selectedCountry={country} onSelectCountry={selectCountry}/>}
+        {pointSearch && (status === 'ready' || status === 'empty') && pointSearchPins.length > 0 ? (
+          <MapsPointSearch
+            pins={pointSearchPins}
+            layerTitleForPin={layerTitleForPin}
+            onSelectPin={focusMapPin}
+          />
+        ) : null}
         {legend && (status==='ready'||status==='empty') ? legend : null}
       </div>
       {inspectable && panelOpen && <aside id={panelId} className="maps-record-panel" aria-label="Map locations and evidence" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); closePanel(); } }}>

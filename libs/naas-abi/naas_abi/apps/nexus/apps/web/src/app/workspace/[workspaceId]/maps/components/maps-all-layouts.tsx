@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { Map } from 'lucide-react';
+import { Map as MapIcon } from 'lucide-react';
 import Link from 'next/link';
 import type { MapsPinMarker } from '../lib/leaflet-map';
 import { mapsIconMap } from '../lib/maps-icons';
@@ -73,6 +73,11 @@ export function MapsAllLayers() {
   };
 
   const noLayers = onEntries.length === 0;
+  const layerTitleById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const entry of onEntries) map.set(entry.id, entry.title);
+    return map;
+  }, [onEntries]);
 
   return (
     <MapsFeedCanvas
@@ -93,6 +98,11 @@ export function MapsAllLayers() {
           : 'The layers switched on returned no mappable points.'
       }
       emptyOverlay={!noLayers}
+      layerTitleForPin={(pin) => {
+        const colon = pin.id.indexOf(':');
+        if (colon <= 0) return undefined;
+        return layerTitleById.get(pin.id.slice(0, colon));
+      }}
       fetchPins={fetchPins}
       viewportBound={viewportBound}
       inspectable={inspectable && Boolean(workspaceId)}
@@ -106,7 +116,7 @@ export function MapsAllLayers() {
           {onEntries.map((entry) => {
             const status = statuses[entry.id];
             const color = layerPinColor(entry);
-            const Icon = mapsIconMap[entry.icon] ?? Map;
+            const Icon = mapsIconMap[entry.icon] ?? MapIcon;
             return (
               <div key={entry.id} className="maps-legend__row" title={status && 'error' in status ? status.error : undefined}>
                 <span className="maps-layer-marker maps-legend__layer-swatch" style={{ background: color }} aria-hidden>
