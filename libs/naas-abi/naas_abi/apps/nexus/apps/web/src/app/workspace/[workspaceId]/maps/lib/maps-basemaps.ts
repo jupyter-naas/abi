@@ -27,6 +27,11 @@ export function basemapLabel(id: string): string {
   return MAPS_BASEMAPS.find((b) => b.id === normalizeBasemapId(id))?.label ?? 'Basemap';
 }
 
+/** Static tile preview for the map-type popover (`public/maps/basemaps/`). */
+export function basemapPreviewSrc(id: string): string {
+  return `/maps/basemaps/${normalizeBasemapId(id)}.png`;
+}
+
 export function createBasemapTileLayer(
   L: typeof import('leaflet'),
   basemapId: string,

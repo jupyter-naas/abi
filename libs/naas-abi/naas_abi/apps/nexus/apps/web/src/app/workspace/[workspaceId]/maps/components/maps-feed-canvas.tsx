@@ -2,9 +2,10 @@
 
 import {useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode} from 'react';
 import type {Map as LeafletMap, Marker} from 'leaflet';
-import {ExternalLink, Loader2, ArrowLeft, Search, List, X, Layers} from 'lucide-react';
+import {ExternalLink, Loader2, ArrowLeft, Search, List, X} from 'lucide-react';
 import { useMapsStore } from '@/stores/maps';
-import { installMapsBasemap, MAPS_BASEMAPS, normalizeBasemapId, type MapsBasemapHandle } from '../lib/maps-basemaps';
+import { installMapsBasemap, normalizeBasemapId, type MapsBasemapHandle } from '../lib/maps-basemaps';
+import { MapsBasemapControl } from './maps-basemap-control';
 import {addMapsPinMarkers, captureMapsCamera, clearMapsMarkers, createMapsLeaflet, destroyMapsLeaflet, fitMapsBounds, restoreMapsCamera, type MapsCamera, type MapsPinMarker} from '../lib/leaflet-map';
 import {formatMapsFeedAge, graphObjectHref, normalizeFeedLoad, type MapsFeedMeta, type MapsFeedResult} from '../lib/maps-feed';
 import {mapsViewFromBounds, type MapsFeedView} from '../lib/maps-view';
@@ -337,19 +338,6 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
       </div>}
       {inspectable && (country || search) && <button type="button" className="maps-coverage-reset" aria-label="Clear map filters" onClick={()=>{setCountry('');setSearch('');deselectPin();}}>Show all{country ? ': '+country : ''}<X size={12}/></button>}
       {inspectable && <button ref={toggleRef} type="button" className="maps-record-toggle" aria-expanded={panelOpen} aria-controls={panelId} onClick={() => panelOpen ? closePanel() : setPanelOpen(true)}><List size={15}/>{view==='coverage'?'Cities':'Locations'}</button>}
-      <label className="maps-basemap-picker">
-        <Layers size={15} aria-hidden />
-        <span className="sr-only">Basemap</span>
-        <select
-          value={basemap}
-          aria-label="Basemap"
-          onChange={(event) => setBasemap(event.target.value)}
-        >
-          {MAPS_BASEMAPS.map((def) => (
-            <option key={def.id} value={def.id}>{def.label}</option>
-          ))}
-        </select>
-      </label>
     </div>
     <div className={`maps-canvas__workspace${inspectable?' maps-canvas__workspace--inspectable':''}`}>
       <div className="maps-canvas__stage">
@@ -363,6 +351,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
             onSelectPin={focusMapPin}
           />
         ) : null}
+        <MapsBasemapControl basemapId={basemap} onBasemapChange={setBasemap} />
         {legend && (status==='ready'||status==='empty') ? legend : null}
       </div>
       {inspectable && panelOpen && <aside id={panelId} className="maps-record-panel" aria-label="Map locations and evidence" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); closePanel(); } }}>
