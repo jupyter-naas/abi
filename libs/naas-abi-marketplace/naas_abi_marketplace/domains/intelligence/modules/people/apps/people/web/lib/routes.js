@@ -6,6 +6,10 @@
  * without knowing its own base path.
  */
 
+function defaultPageId(config) {
+  return config.app?.default_page || "home";
+}
+
 export function parseRoute(config) {
   const raw = window.location.hash.replace(/^#/, "") || "/";
   const [path, queryString] = raw.split("?");
@@ -14,13 +18,25 @@ export function parseRoute(config) {
   const pages = config.app?.pages || [];
   const byUrl = Object.fromEntries(pages.map((page) => [page.url, page.page_id]));
 
-  if (!segments.length) return { pageId: "home", params };
+  if (!segments.length) return { pageId: defaultPageId(config), params };
   const pageId = byUrl[segments[0]];
   if (pageId === "profile") {
     return { pageId: "profile", slug: decodeURIComponent(segments[1] || ""), params };
   }
   if (pageId) return { pageId, params };
   return { pageId: "home", params };
+}
+
+/** Canonical hash when the location bar is empty (respects default page and results tab). */
+export function landingHref(config) {
+  const pageId = defaultPageId(config);
+  if (pageId === "home") return "#/";
+  const page = (config.app?.pages || []).find((item) => item.page_id === pageId);
+  if (!page) return "#/";
+  if (pageId === "results") {
+    return searchHref(config, { view: config.app?.default_results_view || "" });
+  }
+  return `#/${page.url}`;
 }
 
 export function searchHref(config, { query = "", facet = "", page = 1, view = "" } = {}) {
