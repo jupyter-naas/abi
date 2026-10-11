@@ -320,6 +320,46 @@ aside.glass :focus-visible {
   border-color: var(--border-hex);
 }
 
+/*
+ * Bordered search shells: keep neutral border on focus (no workspace-accent ring).
+ */
+.graph-explorer-search:focus-within,
+.graph-browser-search:focus-within,
+.ontology-icon-picker-search:focus-within,
+.image-square-picker-search:focus-within,
+.maps-point-search__field:focus-within,
+.maps-record-search:focus-within,
+.infrastructure-search:focus-within,
+.workspace-omni-search:focus-within {
+  border-color: var(--border-hex, hsl(var(--border)));
+  box-shadow: none;
+}
+
+.graph-explorer-search :focus-visible,
+.graph-browser-search :focus-visible,
+.ontology-icon-picker-search :focus-visible,
+.image-square-picker-search :focus-visible,
+.maps-point-search__field :focus-visible,
+.maps-record-search :focus-visible,
+.infrastructure-search :focus-visible,
+.chat-agent-selector-search:focus-visible,
+.files-browse-toolbar-search-input:focus-visible,
+.files-mobile-toolbar-search input:focus-visible,
+.workspace-omni-search :focus-visible {
+  outline: none;
+  --tw-ring-width: 0px;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+  box-shadow: none;
+}
+
+.chat-agent-selector-search:focus,
+.files-browse-toolbar-search-input:focus,
+.files-mobile-toolbar-search input:focus {
+  border-color: var(--border-hex, hsl(var(--border)));
+  box-shadow: none;
+}
+
 /* ============================================
  * WORKSPACE THEME DYNAMIC COLORS
  * These use CSS variables set by workspace-layout
