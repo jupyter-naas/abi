@@ -190,3 +190,32 @@ def test_a_response_that_fails_mid_stream_is_not_ended_cleanly(monkeypatch, code
 
     with pytest.raises(RPCError):
         asyncio.run(read())
+
+
+def test_a_browser_that_drops_its_upload_fails_the_body():
+    """Else the app waits in receive() until its idle limit."""
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters import discovery
+    from starlette.requests import ClientDisconnect
+
+    class Source:
+        def __init__(self):
+            self.chunks, self.failed, self.finished = [], None, False
+
+        async def put(self, chunk):
+            self.chunks.append(chunk)
+
+        async def finish(self):
+            self.finished = True
+
+        async def fail(self, code, message):
+            self.failed = code
+
+    async def browser():
+        yield b"part"
+        raise ClientDisconnect()
+
+    source = Source()
+    nc = type("NC", (), {"max_payload": 1024 * 1024})()
+    asyncio.run(discovery._pump(browser(), source, 0, nc))
+
+    assert (source.failed, source.finished) == ("CANCELLED", False)

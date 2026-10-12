@@ -253,6 +253,10 @@ async def _pump(stream: AsyncIterator[bytes], source: Any, max_bytes: int, nc: A
         await source.finish()
     except ReaderGone:
         pass
+    except Exception as exc:  # noqa: BLE001 - the browser left (ClientDisconnect)
+        # Tell the app, or it waits in receive() until its idle limit.
+        with contextlib.suppress(ReaderGone):
+            await source.fail("CANCELLED", f"The upload ended early: {exc!r}")
 
 
 async def _upload(call: Any, source: Any) -> Any:
