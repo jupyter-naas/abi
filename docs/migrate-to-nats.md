@@ -1,8 +1,15 @@
 # Migrate a deployment to NATS
 
-NATS mode is opt-in. A deployment switches to it when `config.yaml` has a top-level
-`nats:` block. Without that block, the engine keeps its in-process wiring and
-behaves as before, even on a version that ships NATS support.
+**New projects are already on NATS.** `abi new project` creates them in NATS
+mode, with discovery on, and `abi new module` creates modules that run in their
+own process. This guide is for **existing projects**: ones created before
+NATS became the default, or with `abi new project --without-nats`.
+
+A deployment runs in NATS mode when its config has a top-level `nats:` block.
+Without that block, the engine keeps its in-process wiring and behaves as
+before, even on a version that ships NATS support. `abi deploy local
+--regenerate` follows the config: it does not move a project without the block
+to NATS, and points here instead.
 
 This guide moves an existing project, such as one created with
 `abi deploy local`, from in-process wiring to NATS. It runs in three phases.
@@ -120,9 +127,10 @@ In this phase every engine keeps its services and adds NATS on top.
    engine runs outside Docker on the same machine (the port listens on
    127.0.0.1 only). SDK modules log in as `module`:
    `ABI_NATS_URL=nats://module:<NATS_MODULE_PASSWORD>@nats:4222`.
-   `abi dev up --with-nats` runs its own broker on 127.0.0.1 with the same
-   two users and passwords: its overlay logs the engine in as `abi`, and the
-   `dev.modules` it starts as `module`.
+   `abi dev up` runs its own broker on 127.0.0.1 with the same two users and
+   passwords (NATS mode is its default, also for a project without the
+   block; `--without-nats` turns it off): its overlay logs the engine in as
+   `abi`, and the `dev.modules` it starts as `module`.
 
 4. **Remove the `bus:` section** from `services:`. Configs created by
    `abi new project` declare one: `rabbitmq` in `config.local.yaml`,
@@ -148,6 +156,12 @@ In this phase every engine keeps its services and adds NATS on top.
    ```bash
    docker compose --profile nats up -d
    ```
+
+   Once `config.local.yaml` has the `nats:` block, `abi deploy local
+   --regenerate` renders the NATS stack instead: `nats` starts without a
+   profile and the engine waits for it, RabbitMQ moves behind the `rabbitmq`
+   profile, and Dagster is left out (move its schedules to module jobs first,
+   or restore the previous `docker-compose.yml` from the backup it writes).
 
 7. **Verify:**
    - `curl -s http://localhost:8222/healthz` returns `ok`.
@@ -286,8 +300,14 @@ nats:
 
 Because the API and Dagster read the same `config.yaml`, adding this block turns
 discovery on in both. Discovery is designed for a single owner, so give the
-second process a config without the `discovery:` block. The registry holds at
-most 256 live module instances per project.
+second process a config without the `discovery:` block, or drop Dagster once
+module jobs replace its schedules, as projects created with `abi new project`
+do. The registry holds at most 256 live module instances per project.
+
+To add a module that runs in its own process, run `abi new module <name>` in
+the project: it scaffolds an SDK module under `src/`, adds it to `dev.modules`
+and `docker-compose.override.yml`. Use `lease_seconds: 180` so remote modules
+outlive an engine restart.
 
 ## Roll back
 
