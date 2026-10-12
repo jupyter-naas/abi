@@ -16,7 +16,25 @@ global_config:
   # "local" when you enable the Ollama module below instead.
   ai_mode: "cloud"
   public_api_host: "{{ secret.PUBLIC_API_HOST }}"
-
+{% endraw %}{% if nats %}
+# NATS mode: kernel services, the bus (JetStream), module jobs and discovery
+# go through the broker. Remote modules (`abi new module`) run in their own
+# process and register here. `abi dev up` starts its own broker and overlays
+# the URL, password and monitoring port it bound (.abi/dev/dev.overlay.yaml);
+# these values fit an engine run outside Docker against `abi start`'s broker.
+nats:
+  nats_url: "nats://abi:{% raw %}{{ secret.NATS_ABI_PASSWORD }}{% endraw %}@127.0.0.1:4222"
+  jwt_secret: "{% raw %}{{ secret.NATS_JWT_SECRET }}{% endraw %}"
+  # One engine per project hosts the module registry: this one.
+  discovery:
+    project: "{{ project_name_snake }}"
+    # Outlives an engine restart: remote modules renew instead of dropping
+    # out. A crashed module stays listed up to this long; a clean stop
+    # (SIGTERM) unregisters at once.
+    lease_seconds: 180
+  # The broker's HTTP monitoring port, read by the Nexus System app. No auth.
+  monitoring_url: "http://127.0.0.1:8222"
+{% endif %}{% raw %}
 opencode:
   auth_file_path: "~/.local/share/opencode/auth.json"
   # The coding agent reuses the same gateway key as the rest of the project.
@@ -159,6 +177,7 @@ services:
         persistence_path: "storage/vectorstore/vectors.sqlite3"
         journal_mode: "WAL"
         busy_timeout_ms: 5000
+{% endraw %}{% if not nats %}{% raw %}
   bus:
     bus_adapter:
       adapter: "python_queue"
@@ -168,6 +187,7 @@ services:
         busy_timeout_ms: 5000
         poll_interval_seconds: 0.05
         lock_timeout_seconds: 1.0
+{% endraw %}{% endif %}{% raw %}
   kv:
     kv_adapter:
       adapter: "python"

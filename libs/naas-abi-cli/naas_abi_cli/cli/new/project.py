@@ -11,6 +11,8 @@ import naas_abi_cli
 from naas_abi_cli.cli.admin_credentials import (
     ADMIN_PASSWORD_KEY,
     ensure_admin_credentials,
+    ensure_nats_passwords,
+    ensure_nats_secret,
 )
 from naas_abi_cli.cli.deploy.local import _build_hosts_from_domain, setup_local_deploy
 from naas_abi_cli.cli.utils.Copier import Copier
@@ -21,6 +23,17 @@ from .utils import to_kebab_case, to_pascal_case, to_snake_case
 
 ABI_SUBMODULE_URL = "https://github.com/jupyter-naas/abi.git"
 ABI_SUBMODULE_PATH = ".abi"
+
+# naas-abi-proto and naas-abi-sdk, which NATS mode needs, are not on PyPI yet:
+# a NATS project resolves the framework from the `.abi` submodule or not at all.
+# Falling back to PyPI would install a naas-abi-core without NATS support and a
+# project whose config the engine cannot load.
+NATS_NEEDS_SUBMODULE = (
+    "A NATS project installs naas-abi-proto and naas-abi-sdk from the .abi "
+    "submodule; they are not on PyPI yet. Keep the submodule "
+    "(--with-abi-submodule, the default), or create a classic project with "
+    "--without-nats."
+)
 
 
 def _add_abi_submodule(project_path: str) -> bool:
@@ -96,7 +109,7 @@ def _cd_argument(project_path: str) -> str:
     return shlex.quote(relative)
 
 
-def _print_next_steps(project_path: str, admin_email: str) -> None:
+def _print_next_steps(project_path: str, admin_email: str, nats: bool) -> None:
     """Report where the project landed and how to start it."""
     click.echo()
     click.secho(f"✓ Project created at {project_path}", fg="green", bold=True)
@@ -110,6 +123,15 @@ def _print_next_steps(project_path: str, admin_email: str) -> None:
     click.echo(f"  cd {_cd_argument(project_path)}")
     click.echo("  abi dev up")
     click.echo()
+    if nats:
+        click.echo(
+            "The project runs on NATS: `abi dev up` needs `nats-server` on PATH "
+            "(https://docs.nats.io/running-a-nats-service/introduction/installation)."
+        )
+        click.echo(
+            "Add a module that runs in its own process with `abi new module <name>`."
+        )
+        click.echo()
 
 
 @new.command("project")
@@ -142,6 +164,16 @@ def _print_next_steps(project_path: str, admin_email: str) -> None:
     ),
 )
 @click.option(
+    "--with-nats/--without-nats",
+    default=True,
+    help=(
+        "Run the project on NATS (default): kernel services, the bus, jobs and "
+        "module discovery go through a NATS broker, and modules can run in "
+        "their own process. --without-nats creates the classic in-process "
+        "project (RabbitMQ in docker-compose, no broker for `abi dev`)."
+    ),
+)
+@click.option(
     "--domain",
     "base_domain",
     prompt="Base domain",
@@ -160,8 +192,12 @@ def new_project(
     with_headscale: bool,
     with_coding: bool,
     with_abi_submodule: bool,
+    with_nats: bool,
     base_domain: str,
 ):
+    if with_nats and not with_abi_submodule:
+        raise click.UsageError(NATS_NEEDS_SUBMODULE)
+
     # Defaults must be evaluated at runtime so they reflect the caller's CWD.
     if project_name is None:
         project_name = os.path.basename(os.getcwd())
@@ -175,7 +211,8 @@ def new_project(
     if os.path.basename(os.path.normpath(project_path)) != project_name:
         project_path = os.path.join(project_path, project_name)
 
-    if not os.path.exists(project_path):
+    created = not os.path.exists(project_path)
+    if created:
         os.makedirs(project_path, exist_ok=True)
     elif len(os.listdir(project_path)) > 0:
         print(f"Folder {project_path} already exists and is not empty.")
@@ -185,6 +222,12 @@ def new_project(
     # what decides if `pyproject.toml` resolves the framework from source or
     # from PyPI, and that has to be baked into the file we are about to write.
     abi_submodule_added = with_abi_submodule and _add_abi_submodule(project_path)
+    if with_nats and not abi_submodule_added:
+        if created:
+            shutil.rmtree(project_path, ignore_errors=True)
+        raise click.ClickException(
+            "Could not add the .abi submodule (see above). " + NATS_NEEDS_SUBMODULE
+        )
 
     copier = Copier(
         templates_path=os.path.join(
@@ -205,6 +248,7 @@ def new_project(
             # enables the "code" feature flag for workspace admins by default.
             "include_coding": with_coding,
             "use_local_abi_sources": abi_submodule_added,
+            "nats": with_nats,
         }
     )
 
@@ -217,15 +261,24 @@ def new_project(
             include_headscale=with_headscale,
             include_coding=with_coding,
             base_domain=base_domain,
+            nats=with_nats,
         )
 
+    env_path = Path(project_path) / ".env"
     # The one seeded account gets a password generated for this project only.
-    admin_email, _password = ensure_admin_credentials(Path(project_path) / ".env")
+    admin_email, _password = ensure_admin_credentials(env_path)
+    if with_nats:
+        # The configs name these: the token signing secret, and the broker
+        # users' passwords (the engine logs in as `abi`, modules as `module`).
+        ensure_nats_secret(env_path)
+        ensure_nats_passwords(env_path)
 
     # Run dependency install without shell to avoid quoting issues on paths with spaces.
     # ai-openrouter is the marketplace extra the generated config.yaml enables:
     # one gateway key serves both defaults — Gemma 4 for chat and
     # text-embedding-3-small for embeddings.
+    # naas-abi-core[all] includes the nats extra. A NATS project also adds the
+    # SDK with its agent extra, which the remote modules under src/ import.
     subprocess.run(
         [
             "uv",
@@ -234,6 +287,7 @@ def new_project(
             "naas-abi-marketplace[ai-openrouter]",
             "naas-abi",
             "naas-abi-cli",
+            *(["naas-abi-sdk[agent]"] if with_nats else []),
         ],
         cwd=project_path,
         check=True,
@@ -245,4 +299,4 @@ def new_project(
         check=True,
     )
 
-    _print_next_steps(project_path, admin_email)
+    _print_next_steps(project_path, admin_email, with_nats)

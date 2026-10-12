@@ -5,7 +5,13 @@
 # - Multi-model AI capabilities (chat, embeddings, reasoning)
 # - Knowledge graph storage (Apache Jena Fuseki + TDB2)
 # - Agent memory persistence (PostgreSQL)
+{% if NATS %}
+# - NATS + JetStream: kernel services, bus, module jobs and discovery. Modules
+#   created with `abi new module` run in their own containers, declared in
+#   docker-compose.override.yml (never touched by `abi deploy local --regenerate`).
+{% else %}
 # - Workflow orchestration (Dagster)
+{% endif %}
 # =============================================================================
 
 # models:
@@ -93,8 +99,13 @@ x-abi-template: &abi_template
   depends_on:
     postgres:
       condition: service_healthy
+{% if NATS %}
+    nats:
+      condition: service_healthy
+{% else %}
     rabbitmq:
       condition: service_healthy
+{% endif %}
     qdrant:
       condition: service_healthy
     redis:
@@ -349,6 +360,7 @@ services:
     networks:
       - abi-network
 
+{% if not NATS %}
   # -----------------------------------------------------------------------------
   # Dagster - Workflow Orchestration & Data Pipeline Management
   # -----------------------------------------------------------------------------
@@ -400,6 +412,7 @@ services:
 {% endif %}
     networks:
       - abi-network
+{% endif %}
 
   # -----------------------------------------------------------------------------
   # MinIO - S3-compatible Object Storage for Dagster Compute Logs
@@ -444,7 +457,14 @@ services:
   # -----------------------------------------------------------------------------
   # RabbitMQ - Message Bus (AMQP)
   # -----------------------------------------------------------------------------
+{% if NATS %}
+  # Not used in NATS mode (the bus is JetStream). Kept for modules that talk
+  # AMQP themselves: docker compose --profile rabbitmq up -d rabbitmq
+{% endif %}
   rabbitmq:
+{% if NATS %}
+    profiles: ["rabbitmq"]
+{% endif %}
     image: rabbitmq:3-management
     pull_policy: always
     restart: unless-stopped
@@ -466,12 +486,19 @@ services:
       - abi-network
 
   # -----------------------------------------------------------------------------
-  # NATS - Distributed module fabric (JetStream: bus, RPC, discovery)
+  # NATS - Distributed module fabric (JetStream: bus, RPC, jobs, discovery)
   # -----------------------------------------------------------------------------
-  # Opt-in alongside RabbitMQ, not a replacement yet — see
-  # docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+{% if NATS %}
+  # The engine (abi) reaches every kernel service through it, and modules
+  # register here. Check it: curl -s localhost:8222/healthz, then
+  # curl -s localhost:8222/connz lists the engine's and modules' connections.
+  nats:
+{% else %}
+  # Opt-in: this project runs without NATS (no `nats:` block in its config).
+  # See docs/migrate-to-nats.md to move it over.
   nats:
     profiles: ["nats"]
+{% endif %}
     image: nats:2-alpine
     pull_policy: always
     restart: unless-stopped
@@ -760,7 +787,9 @@ volumes:
   huggingface_cache: # Hugging Face model cache (docling layout / table models)
   fuseki_data:    # RDF triple store data (knowledge graph persistence)
   postgres_data:  # PostgreSQL database files (agent memory persistence)
+{% if not NATS %}
   dagster_home:   # Dagster metadata, run history, and configuration
+{% endif %}
   qdrant_storage: # Qdrant vector store data
 {% if INCLUDE_CODING %}
   coder_data:      # Coder control-plane state (home dir)

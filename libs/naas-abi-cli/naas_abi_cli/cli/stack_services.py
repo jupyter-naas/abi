@@ -84,6 +84,14 @@ SERVICE_CATALOG: dict[str, ServiceDefinition] = {
         description="Initialization container for MinIO buckets.",
         is_one_shot=True,
     ),
+    "nats": ServiceDefinition(
+        key="nats",
+        display_name="NATS",
+        category="Messaging",
+        description="Broker for kernel services, bus, module jobs and discovery.",
+        urls=("http://127.0.0.1:8222/healthz",),
+        tcp_targets=(("127.0.0.1", 4222),),
+    ),
     "rabbitmq": ServiceDefinition(
         key="rabbitmq",
         display_name="RabbitMQ",
