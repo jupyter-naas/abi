@@ -9,6 +9,7 @@ engine only through NATS, with ``naas-abi-sdk``. It never imports
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -33,6 +34,8 @@ from {{module_name_snake}}.agents.{{module_name_pascal}}Agent import (
 MODULE_ID = "{{module_id}}"
 # Remote callers (Nexus, other modules) invoke the agent through this capability.
 AGENT_INVOKE = ("agent.invoke.v1",)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -66,4 +69,7 @@ class ABIModule(BaseModule[{{module_name_pascal}}Configuration]):
     async def run(self) -> None:
         # Agents and jobs are served in the background; stay up until stopped.
         # SIGTERM drains the module: it finishes running work and unregisters.
+        while self.discovery_status != "READY":
+            await asyncio.sleep(0.5)
+        logger.info("%s READY: registered in discovery, serving %s", MODULE_ID, NAME)
         await asyncio.Event().wait()
