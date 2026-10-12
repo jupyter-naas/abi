@@ -979,3 +979,93 @@ def test_a_writer_cancelled_mid_write_fails_the_mutations_written_with_it():
             await asyncio.wait_for(joined, timeout=2)
 
     asyncio.run(scenario())
+
+
+def _with_app(req, name="console", **fields):
+    req.descriptor.apps.add(name=name, contract_major=1, **fields)
+    return req
+
+
+def test_app_authorization_requires_provider_lease_and_readiness():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        req = _with_app(registration("provider", "instance"), title="Console")
+        await service.register(req, "provider-identity")
+        auth = pb.AuthorizeAppRequest(
+            instance_id="instance", lease_token=req.lease_token, app_name="console"
+        )
+        with pytest.raises(DiscoveryError, match="MODULE_UNAVAILABLE"):
+            await service.authorize_app(auth, "provider-identity")
+        await service.renew(
+            pb.RenewRequest(
+                instance_id="instance", lease_token=req.lease_token, initialized=True
+            ),
+            "provider-identity",
+        )
+        await service.authorize_app(auth, "provider-identity")
+        with pytest.raises(DiscoveryError, match="PERMISSION_DENIED"):
+            await service.authorize_app(auth, "someone-else")
+        auth.app_name = "missing"
+        with pytest.raises(DiscoveryError, match="APP_NOT_FOUND"):
+            await service.authorize_app(auth, "provider-identity")
+        auth.instance_id = "gone"
+        with pytest.raises(DiscoveryError, match="LEASE_EXPIRED"):
+            await service.authorize_app(auth, "provider-identity")
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"name": "a.b"},  # a URL segment: no dots
+        {"name": "a/b"},
+        {"name": ""},
+        {"entry": "../secret.html"},
+        {"entry": "/index.html"},
+        {"title": "t" * 257},
+        {"description": "d" * 4097},
+        {"category": "c" * 65},
+    ],
+)
+def test_invalid_apps_are_refused(fields):
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        req = registration("provider", "instance")
+        req.descriptor.apps.add(**{"name": "console", "contract_major": 1, **fields})
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+            await service.register(req, "owner")
+
+    asyncio.run(scenario())
+
+
+def test_apps_are_bounded_and_unique():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        req = registration("provider", "instance")
+        for _ in range(2):
+            _with_app(req)
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+            await service.register(req, "owner")
+        req = registration("provider", "instance")
+        for index in range(17):
+            _with_app(req, f"app{index}")
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+            await service.register(req, "owner")
+        req = registration("provider", "instance")
+        for index in range(16):
+            _with_app(req, f"app{index}", entry="pages/index.html")
+        await service.register(req, "owner")
+
+    asyncio.run(scenario())
+
+
+def test_replicas_must_declare_the_same_apps():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        await service.register(_with_app(registration("m", "one")), "owner")
+        other = _with_app(registration("m", "two"), title="Different")
+        with pytest.raises(DiscoveryError, match="DESCRIPTOR_CONFLICT"):
+            await service.register(other, "owner")
+
+    asyncio.run(scenario())
