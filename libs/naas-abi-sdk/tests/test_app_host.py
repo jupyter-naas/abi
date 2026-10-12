@@ -2,6 +2,7 @@ import asyncio
 import json
 import sys
 import types
+from functools import partial
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -316,6 +317,54 @@ def test_draining_and_oversized_requests_are_refused(tmp_path):
         host.closing = True
         draining = await _send(host, _request("/"))
         assert draining.error.code == "MODULE_UNAVAILABLE"
+
+    asyncio.run(scenario())
+
+
+def _in_flight(host, request):
+    """Deliver ``request`` as the subscription does: in its own task."""
+    msg = FakeMsg(request)
+    host.subscriptions.append(SimpleNamespace(drain=AsyncMock(), unsubscribe=AsyncMock()))
+    return msg, host.calls.callback(partial(host._handle, "console"))(msg)
+
+
+def test_draining_lets_requests_in_progress_answer(tmp_path):
+    """On SIGTERM a request already running answers; Nexus does not wait 65 s
+    for a reply that never comes."""
+    release = asyncio.Event()
+
+    async def slow(scope, receive, send):
+        await release.wait()
+        await send({"type": "http.response.start", "status": 201, "headers": []})
+        await send({"type": "http.response.body", "body": b"done"})
+
+    async def scenario():
+        host = _host(tmp_path, slow)
+        msg, receive = _in_flight(host, _request("/x", method="POST"))
+        await receive
+        subscription = host.subscriptions[0]
+        drain = asyncio.create_task(host.drain(30))
+        await asyncio.sleep(0.05)
+        assert not drain.done()
+        subscription.drain.assert_awaited()  # new requests go elsewhere
+        release.set()
+        await asyncio.wait_for(drain, 5)
+        assert (msg.response.status, msg.response.body) == (201, b"done")
+        await host.close()
+
+    asyncio.run(scenario())
+
+
+def test_draining_gives_up_after_its_timeout(tmp_path):
+    async def stuck(scope, receive, send):
+        await asyncio.Event().wait()
+
+    async def scenario():
+        host = _host(tmp_path, stuck)
+        _, receive = _in_flight(host, _request("/x"))
+        await receive
+        await asyncio.wait_for(host.drain(0.05), 5)
+        await host.close()  # cancels what is still running
 
     asyncio.run(scenario())
 
