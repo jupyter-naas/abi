@@ -308,12 +308,12 @@ async def _invoke(hook):
 async def _drain_hosts(
     agent_host, job_host, model_host, timeout: float, app_host=None
 ) -> None:
-    """Stop new work and wait for runs and jobs that already started."""
+    """Stop new work and wait for runs, jobs and app requests that already started."""
     if model_host is not None:
         model_host.closing = True
-    if app_host is not None:
-        app_host.closing = True
     waits = []
+    if app_host is not None:
+        waits.append(asyncio.create_task(app_host.drain(timeout)))
     if agent_host is not None:
         waits.append(asyncio.create_task(agent_host.drain(timeout)))
     if job_host is not None:

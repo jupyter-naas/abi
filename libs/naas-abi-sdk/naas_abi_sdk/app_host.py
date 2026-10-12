@@ -155,6 +155,29 @@ class AppHost:
             await self.close()
             raise
 
+    async def drain(self, timeout: float) -> None:
+        """Stop taking requests and let those in progress finish, for up to
+        ``timeout`` seconds.
+
+        A request arriving now finds no responder, and Nexus sends it to
+        another instance; one cut off mid-call would wait out its timeout
+        (504). close() cancels whatever is still running afterwards.
+        """
+        self.closing = True
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        for subscription in self.subscriptions:
+            await subscription.drain()
+        self.subscriptions.clear()
+        idle = asyncio.ensure_future(self.calls.idle())
+        try:
+            await asyncio.wait({idle}, timeout=timeout)
+        finally:
+            idle.cancel()
+        # Answered, but still reading an upload or streaming the response.
+        if self._streams and (remaining := deadline - loop.time()) > 0:
+            await asyncio.wait(set(self._streams), timeout=remaining)
+
     async def close(self) -> None:
         for subscription in self.subscriptions:
             await subscription.unsubscribe()
