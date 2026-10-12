@@ -2,7 +2,7 @@
 
 import {useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode} from 'react';
 import type {Map as LeafletMap, Marker} from 'leaflet';
-import {ExternalLink, Loader2, ArrowLeft, Search, List, X} from 'lucide-react';
+import {ExternalLink, Loader2, ArrowLeft, Search, List, X, Braces} from 'lucide-react';
 import { useMapsStore } from '@/stores/maps';
 import { basemapLabel, installMapsBasemap, normalizeBasemapId, type MapsBasemapHandle } from '../lib/maps-basemaps';
 import { formatMapsToolbarViewLine } from '../lib/maps-toolbar-view';
@@ -60,6 +60,8 @@ export interface MapsFeedCanvasProps {
     L: typeof import('leaflet');
     map: LeafletMap;
   }) => void | (() => void);
+  geoJsonDebug?: boolean;
+  onGeoJsonDebugChange?: (enabled: boolean) => void;
 }
 
 function viewFromMap(map: LeafletMap): MapsFeedView {
@@ -89,7 +91,7 @@ function metaLine(meta: MapsFeedMeta | null, now: number): string {
   return parts.filter(Boolean).join(' · ');
 }
 
-export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No data', emptyBody='This feed returned no mappable points right now.', sourceHref, sourceLabel='Source', fetchPins, fitMaxZoom=5, legend, legendLayerIds, legendStatuses, feedLegendsByLayerId, legendLayerId, refreshMs, inspectable=false, workspaceId='', viewportBound=false, basemapId, emptyOverlay=true, pointSearch=true, layerTitleForPin, onMapReady}: MapsFeedCanvasProps) {
+export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No data', emptyBody='This feed returned no mappable points right now.', sourceHref, sourceLabel='Source', fetchPins, fitMaxZoom=5, legend, legendLayerIds, legendStatuses, feedLegendsByLayerId, legendLayerId, refreshMs, inspectable=false, workspaceId='', viewportBound=false, basemapId, emptyOverlay=true, pointSearch=true, layerTitleForPin, onMapReady, geoJsonDebug=false, onGeoJsonDebugChange}: MapsFeedCanvasProps) {
   const mapLayers = useMapLayers();
   const layerOverrides = useMapsStore((s) => s.overrides);
   const legendWorkspaceId = workspaceId || mapLayers.workspaceId;
@@ -467,6 +469,18 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
         <button type="button" aria-pressed={view==='coverage'} onClick={()=>switchView('coverage')}>City coverage</button>
       </div>}
       {inspectable && (country || search) && <button type="button" className="maps-coverage-reset" aria-label="Clear map filters" onClick={()=>{setCountry('');setSearch('');deselectPin();}}>Show all{country ? ': '+country : ''}<X size={12}/></button>}
+      {onGeoJsonDebugChange ? (
+        <button
+          type="button"
+          className="maps-toolbar-icon-btn"
+          aria-pressed={geoJsonDebug}
+          aria-label={geoJsonDebug ? 'Hide layer GeoJSON debug' : 'Show layer GeoJSON debug'}
+          title={geoJsonDebug ? 'Hide layer GeoJSON (local)' : 'Layer GeoJSON loaded per layer (localStorage)'}
+          onClick={() => onGeoJsonDebugChange(!geoJsonDebug)}
+        >
+          <Braces size={16} aria-hidden />
+        </button>
+      ) : null}
       {inspectable && <button ref={toggleRef} type="button" className="maps-record-toggle" aria-expanded={panelOpen} aria-controls={panelId} onClick={() => panelOpen ? closePanel() : setPanelOpen(true)}><List size={15}/>{view==='coverage'?'Cities':'Locations'}</button>}
     </div>
     <div className={`maps-canvas__workspace${inspectable?' maps-canvas__workspace--inspectable':''}`}>

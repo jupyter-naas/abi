@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { MapsAllLayers } from './maps-all-layouts';
+import { MapsLayerGeoJsonDebugPanel } from './maps-layer-geojson-debug-panel';
 import { MapsMenuBar } from './maps-menu-bar';
+import { isMapsGeoJsonDebugEnabled, setGeoJsonDebugUiEnabled } from '../lib/maps-layer-geojson-debug';
 import { useMapLayers } from '../lib/use-map-layouts';
 import { useMapsLayerParams } from '../lib/use-maps-layer-params';
 import { mapsPath } from '../lib/maps-route';
@@ -14,7 +16,18 @@ import './maps-components.css';
 export function MapsMapView() {
   const isMobile = useIsMobile();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [geoJsonDebug, setGeoJsonDebug] = useState(false);
   const { layerIds, rawLayerIds, defaultLayerIds, workspaceId } = useMapsLayerParams();
+
+  useEffect(() => {
+    setGeoJsonDebug(isMapsGeoJsonDebugEnabled(searchParams));
+  }, [searchParams]);
+
+  const onGeoJsonDebugChange = useCallback((enabled: boolean) => {
+    setGeoJsonDebug(enabled);
+    setGeoJsonDebugUiEnabled(enabled);
+  }, []);
   const { entries, canEdit, loading } = useMapLayers();
 
   useEffect(() => {
@@ -39,7 +52,12 @@ export function MapsMapView() {
         <Header title="Maps" subtitle={subtitle} nav={menu} />
       </div>
       <div className="maps-body">
-        <MapsAllLayers layerIds={layerIds} />
+        <MapsAllLayers
+          layerIds={layerIds}
+          geoJsonDebug={geoJsonDebug}
+          onGeoJsonDebugChange={onGeoJsonDebugChange}
+        />
+        <MapsLayerGeoJsonDebugPanel open={geoJsonDebug} onClose={() => onGeoJsonDebugChange(false)} />
       </div>
     </div>
   );

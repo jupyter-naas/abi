@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MapsPinMarker } from '../lib/leaflet-map';
 import { layerPinColor } from '../lib/maps-layer-colors';
 import { layoutPinSource } from '../lib/layout-sources';
@@ -11,6 +11,8 @@ import { useMapLayers } from '../lib/use-map-layouts';
 import type { LayerLegendStatus } from './maps-active-layers-legend';
 import { aggregateLayerLegendSublayers } from '../lib/maps-layer-legend-utils';
 import { mapsLayerFeedLegendsFor } from '../lib/maps-layer-feed-legends';
+import { saveLayerGeoJsonDebug } from '../lib/maps-layer-geojson-debug';
+import { pinsToFeatureCollection } from '../lib/maps-pin-geojson';
 import { MapsFeedCanvas } from './maps-feed-canvas';
 
 /** Layers whose feed depends on the map bounds (live traffic). */
@@ -20,7 +22,15 @@ const VIEWPORT_BOUND_IDS = new Set(['flights', 'ais']);
  * All layers on one map: every layer switched on in the sidebar, overlaid on
  * the basemap chosen from the map control.
  */
-export function MapsAllLayers({ layerIds }: { layerIds: string[] }) {
+export function MapsAllLayers({
+  layerIds,
+  geoJsonDebug = false,
+  onGeoJsonDebugChange,
+}: {
+  layerIds: string[];
+  geoJsonDebug?: boolean;
+  onGeoJsonDebugChange?: (enabled: boolean) => void;
+}) {
   const { workspaceId, entries, loading } = useMapLayers();
   const activeIds = useMemo(() => new Set(layerIds), [layerIds]);
   const onEntries = useMemo(
@@ -31,6 +41,9 @@ export function MapsAllLayers({ layerIds }: { layerIds: string[] }) {
   const onKey = onEntries.map((e) => e.id).join(',');
   const entriesRef = useRef<LayoutEntry[]>(onEntries);
   entriesRef.current = onEntries;
+  const lastDisplayPinsByLayer = useRef<
+    Map<string, { title: string; pins: MapsPinMarker[]; fetchedAt: string }>
+  >(new Map());
 
   const viewportBound = onEntries.some((e) => VIEWPORT_BOUND_IDS.has(e.id));
   const inspectable = onEntries.some((e) => e.kind !== 'builtin');
@@ -56,6 +69,29 @@ export function MapsAllLayers({ layerIds }: { layerIds: string[] }) {
       const color = layerPinColor(entry);
       if (result.status === 'fulfilled') {
         const layerPins = result.value.pins;
+        const fetchedAt = new Date().toISOString();
+        const displayPins = layerPins.map((pin) => ({
+          ...pin,
+          id: `${entry.id}:${pin.id}`,
+          color,
+          markerIcon: entry.icon,
+        }));
+        lastDisplayPinsByLayer.current.set(entry.id, {
+          title: entry.title,
+          pins: displayPins,
+          fetchedAt,
+        });
+        if (geoJsonDebug) {
+          saveLayerGeoJsonDebug(
+            entry.id,
+            pinsToFeatureCollection(displayPins, {
+              layerId: entry.id,
+              layerTitle: entry.title,
+              fetchedAt,
+              featureCount: displayPins.length,
+            }),
+          );
+        }
         for (const pin of layerPins) {
           pins.push({
             ...pin,
@@ -88,6 +124,21 @@ export function MapsAllLayers({ layerIds }: { layerIds: string[] }) {
     [onEntries],
   );
 
+  useEffect(() => {
+    if (!geoJsonDebug) return;
+    for (const [layerId, snapshot] of lastDisplayPinsByLayer.current.entries()) {
+      saveLayerGeoJsonDebug(
+        layerId,
+        pinsToFeatureCollection(snapshot.pins, {
+          layerId,
+          layerTitle: snapshot.title,
+          fetchedAt: snapshot.fetchedAt,
+          featureCount: snapshot.pins.length,
+        }),
+      );
+    }
+  }, [geoJsonDebug]);
+
   return (
     <MapsFeedCanvas
       key={`${workspaceId}:${onKey}`}
@@ -119,6 +170,8 @@ export function MapsAllLayers({ layerIds }: { layerIds: string[] }) {
       legendLayerIds={layerIds}
       legendStatuses={statuses}
       feedLegendsByLayerId={feedLegendsByLayerId}
+      geoJsonDebug={geoJsonDebug}
+      onGeoJsonDebugChange={onGeoJsonDebugChange}
     />
   );
 }
