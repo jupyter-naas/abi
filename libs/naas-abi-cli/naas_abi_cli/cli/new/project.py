@@ -252,8 +252,11 @@ def new_project(
         }
     )
 
-    # Calling new_module to create the module in the src folder
-    new_module(project_name, os.path.join(project_path, "src"), quiet=True)
+    # The project's own module holds the default agent, which the engine loads,
+    # so it stays in-engine in both modes. `abi new module` adds remote ones.
+    new_module(
+        project_name, os.path.join(project_path, "src"), quiet=True, kind="in-engine"
+    )
 
     if with_local_deploy:
         setup_local_deploy(

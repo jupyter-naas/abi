@@ -55,6 +55,28 @@ def load_dev_modules() -> dict[str, DevModuleConfiguration]:
     return {module.name: module for module in modules}
 
 
+def configured_nats(config_file: str | Path) -> dict | None:
+    """The top-level ``nats:`` block of a project config, rendered without
+    secrets (their values are empty); None when the config has none."""
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        EngineConfiguration,
+    )
+
+    path = Path(config_file)
+    data = EngineConfiguration.render_without_secrets(
+        path.read_text(encoding="utf-8"), base_dir=str(path.resolve().parent)
+    )
+    nats = data.get("nats") if isinstance(data, dict) else None
+    return nats if isinstance(nats, dict) else None
+
+
+def configured_discovery_project(config_file: str | Path) -> str | None:
+    """``nats.discovery.project`` of a project config, if it declares one."""
+    discovery = (configured_nats(config_file) or {}).get("discovery")
+    project = discovery.get("project") if isinstance(discovery, dict) else None
+    return project if isinstance(project, str) and project else None
+
+
 def read_overlay(path: Path) -> dict:
     """The generated dev overlay: JSON after a comment line."""
     body = "\n".join(
