@@ -16,6 +16,7 @@ if TYPE_CHECKING:
         InvocationHandle,
         SubmissionUncertain,
     )
+    from naas_abi_sdk.apps import AppDescriptor
     from naas_abi_sdk.client import ABIClient
     from naas_abi_sdk.discovery import (
         AgentDescriptor,
@@ -36,6 +37,7 @@ _EXPORTS = {
     "AgentDescriptor": "naas_abi_sdk.discovery",
     "AgentProxy": "naas_abi_sdk.agent",
     "AgentState": "naas_abi_sdk.agent",
+    "AppDescriptor": "naas_abi_sdk.apps",
     "BaseModule": "naas_abi_sdk.module",
     "DiscoveryConfiguration": "naas_abi_sdk.discovery",
     "InvocationHandle": "naas_abi_sdk.agent",
@@ -53,6 +55,7 @@ __all__ = [
     "AgentDescriptor",
     "AgentProxy",
     "AgentState",
+    "AppDescriptor",
     "BaseModule",
     "DiscoveryConfiguration",
     "InvocationHandle",
