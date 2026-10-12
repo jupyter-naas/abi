@@ -83,9 +83,34 @@ message HttpResponse {
 ```
 
 Requests go to `abi.mod.<project>.<instance_id>.app.<name>.http`, the
-instance-addressed shape model hosts use. A request body is at most 1 MiB and
-a response at most 6 MiB, below the 8 MB broker limit. Larger answers return
-502 with a clear message; streaming and WebSockets are later work.
+instance-addressed shape model hosts use.
+
+### Streamed bodies
+Bodies up to 256 KiB travel inline. Larger ones stream, in both directions:
+
+- **Uploads.** Nexus sends the request with `body_follows` and a random
+  `_INBOX` subject, `body_inbox`. The module pulls the body with `BodyPull`, one
+  `BodyChunk` at a time, as its app reads `receive()` (`request.stream()` in
+  FastAPI). Nothing is read from the browser faster than the app consumes it,
+  so memory holds about one chunk in Nexus and in the module, and the app can
+  pass the stream on, for example into object storage
+  (`put_object_stream(prefix, key, request.stream())`). Nexus answers 413
+  above the app's `max_upload_bytes` (manifest; default 1 GiB).
+- **Responses.** A response sent in parts, or larger than 256 KiB, is answered
+  with `body_follows`: Nexus pulls it as the browser reads it. This serves
+  downloads, large files and server-sent events. A pull with nothing new is
+  answered empty after 15 s, which keeps an idle stream alive; when the
+  browser leaves, Nexus cancels the pull and the module cancels the app.
+- **Timeouts are idle limits**, not totals: an app that neither reads nor
+  answers for 60 s gets 504; a holder nobody pulls from for 60 s stops.
+- **Retries.** A request moves to another instance only while none of its
+  body was delivered; after that it is tied to the instance reading it.
+
+Pulls are per chunk (256 KiB, or less under a smaller broker limit), so
+throughput is bounded by round trips; measured locally at about 20 MB/s up
+and 30 MB/s down. Every byte crosses NATS twice (browser to Nexus to module),
+the price of keeping the module the owner of its data. WebSockets remain later
+work.
 
 ### SDK
 - `BaseModule` finds `apps/<name>/manifest.json` next to the module's package
@@ -140,4 +165,5 @@ TLS, and its own check of Nexus tokens. Rejected: a module must only need NATS.
   only trusted modules should be run.
 - The user id a module receives is asserted by Nexus. It is as trustworthy as
   the service-token boundary (Stage 1: a secret shared by the project).
-- Not covered yet: responses above 6 MiB, streaming responses, WebSockets.
+- Not covered yet: WebSockets. Uploads and downloads are bounded by round
+  trips per chunk; prefetching chunks would raise throughput.

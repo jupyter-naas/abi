@@ -8,16 +8,19 @@ and a ``?token=`` are removed before forwarding.
 
 from __future__ import annotations
 
+import contextlib
 import logging
+from collections.abc import AsyncIterator, Iterator
 from urllib.parse import parse_qsl, urlencode
 
 from fastapi import HTTPException, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.factory import (
     get_remote_app_directory,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
-    MAX_REQUEST_BODY,
+    INLINE_BYTES,
+    MAX_UPLOADS_PER_MODULE,
     AppRequest,
     RemoteAppUnavailable,
 )
@@ -95,13 +98,54 @@ def _returned_headers(headers: tuple[tuple[str, str], ...]) -> list[tuple[str, s
     ]
 
 
+class _Uploads:
+    """Uploads streaming to each module from this worker (MAX_UPLOADS_PER_MODULE)."""
+
+    def __init__(self) -> None:
+        self.active: dict[str, int] = {}
+
+    @contextlib.contextmanager
+    def slot(self, module_id: str) -> Iterator[None]:
+        if self.active.get(module_id, 0) >= MAX_UPLOADS_PER_MODULE:
+            raise HTTPException(status_code=503, detail="Too many uploads to this app")
+        self.active[module_id] = self.active.get(module_id, 0) + 1
+        try:
+            yield
+        finally:
+            self.active[module_id] -= 1
+            if not self.active[module_id]:
+                del self.active[module_id]
+
+
+_uploads = _Uploads()
+
+
+async def _read_head(request: Request) -> tuple[bytes, AsyncIterator[bytes] | None]:
+    """The whole body when it is small; else its first bytes and the rest,
+    read only as the module pulls it."""
+    stream = request.stream().__aiter__()
+    head = bytearray()
+    async for chunk in stream:
+        head += chunk
+        if len(head) > INLINE_BYTES:
+            return b"", _rest(bytes(head), stream)
+    return bytes(head), None
+
+
+async def _rest(head: bytes, stream: AsyncIterator[bytes]) -> AsyncIterator[bytes]:
+    yield head
+    async for chunk in stream:
+        if chunk:
+            yield chunk
+
+
 async def serve_remote_app(module_id: str, app: str, path: str, request: Request) -> Response:
+    directory = get_remote_app_directory()
+    limit = await directory.upload_limit(module_id, app)
     declared = request.headers.get("content-length", "")
-    if declared.isdigit() and int(declared) > MAX_REQUEST_BODY:
-        raise HTTPException(status_code=413, detail="App request exceeds 1 MiB")
-    body = await request.body()
-    if len(body) > MAX_REQUEST_BODY:
-        raise HTTPException(status_code=413, detail="App request exceeds 1 MiB")
+    if declared.isdigit() and int(declared) > limit:
+        raise HTTPException(status_code=413, detail=f"Upload exceeds {limit} bytes")
+    body, rest = await _read_head(request)
     forwarded = AppRequest(
         method=request.method,
         path="/" + path,
@@ -109,14 +153,23 @@ async def serve_remote_app(module_id: str, app: str, path: str, request: Request
         headers=_forwarded_headers(request),
         body=body,
         user_id=_user_id(request),
+        body_stream=rest,
+        max_body_bytes=limit if rest is not None else 0,
     )
     try:
-        answer = await get_remote_app_directory().forward(module_id, app, forwarded)
+        if rest is None:
+            answer = await directory.forward(module_id, app, forwarded)
+        else:
+            with _uploads.slot(module_id):
+                answer = await directory.forward(module_id, app, forwarded)
     except RemoteAppUnavailable as exc:
         if exc.status >= 500:
             _log.warning("Remote app %s/%s: %s", module_id, app, exc.reason)
         raise HTTPException(status_code=exc.status, detail=exc.reason) from exc
-    response = Response(content=answer.body, status_code=answer.status)
+    if answer.body_stream is not None:
+        response: Response = StreamingResponse(answer.body_stream, status_code=answer.status)
+    else:
+        response = Response(content=answer.body, status_code=answer.status)
     for name, value in _returned_headers(answer.headers):
         response.headers.append(name, value)
     return response

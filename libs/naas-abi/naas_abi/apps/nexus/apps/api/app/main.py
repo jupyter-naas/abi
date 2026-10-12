@@ -665,10 +665,10 @@ def _register_routes(app: FastAPI) -> None:
     # The core API's middleware already guards /app-html/; checking here too keeps
     # the route closed when Nexus is served without that middleware.
     # Apps of remote modules, forwarded over NATS; before the catch-all below.
-    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http import (
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
         METHODS as REMOTE_APP_METHODS,
     )
-    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http import (
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
         redirect_remote_app_root,
         serve_remote_app,
     )

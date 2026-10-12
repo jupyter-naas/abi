@@ -8,12 +8,18 @@ HTTP entry point.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Protocol
 
 ROUTE_PREFIX = "/app-html/remote"
-# A request body the module accepts (naas_abi_sdk.app_host.MAX_REQUEST_BODY).
-MAX_REQUEST_BODY = 1024 * 1024
+# Bodies up to this travel inline; larger ones stream, pulled by the reader
+# (naas_abi_sdk.app_streams.INLINE_BYTES).
+INLINE_BYTES = 256 * 1024
+# The largest upload Nexus forwards to an app that sets no max_upload_bytes.
+DEFAULT_MAX_UPLOAD_BYTES = 1024 * 1024 * 1024
+# Uploads streaming at once to one module, per API worker.
+MAX_UPLOADS_PER_MODULE = 16
 
 
 class RemoteAppUnavailable(Exception):
@@ -33,6 +39,11 @@ class RemoteApp:
     category: str = "module"
     icon_emoji: str = ""
     entry: str = "index.html"
+    max_upload_bytes: int = 0  # 0: DEFAULT_MAX_UPLOAD_BYTES
+
+    @property
+    def upload_limit(self) -> int:
+        return self.max_upload_bytes or DEFAULT_MAX_UPLOAD_BYTES
 
     @property
     def root_path(self) -> str:
@@ -61,6 +72,9 @@ class AppRequest:
     headers: tuple[tuple[str, str], ...] = ()
     body: bytes = b""
     user_id: str = ""
+    # A large body, read as the module pulls it (after ``body``).
+    body_stream: AsyncIterator[bytes] | None = None
+    max_body_bytes: int = 0
 
 
 @dataclass(frozen=True)
@@ -68,6 +82,9 @@ class AppResponse:
     status: int
     headers: tuple[tuple[str, str], ...] = ()
     body: bytes = b""
+    # A large, chunked or endless body (downloads, server-sent events), pulled
+    # from the module as it is iterated; closing it tells the module.
+    body_stream: AsyncIterator[bytes] | None = None
 
 
 class RemoteAppDirectory(Protocol):
@@ -77,4 +94,8 @@ class RemoteAppDirectory(Protocol):
 
     async def forward(self, module_id: str, app: str, request: AppRequest) -> AppResponse:
         """The module's answer; RemoteAppUnavailable when there is none."""
+        ...
+
+    async def upload_limit(self, module_id: str, app: str) -> int:
+        """The largest request body to forward to the app."""
         ...

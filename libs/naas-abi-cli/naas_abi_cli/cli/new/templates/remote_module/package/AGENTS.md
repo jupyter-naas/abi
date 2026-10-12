@@ -58,7 +58,10 @@ It is up when it logs `READY`. `ABI_HEALTH_PORT=8080` opens `/health` and
   Apps page while the module runs. For a backend, bind an ASGI app (FastAPI)
   in `on_initialized`: `self.expose_app("<name>", api)`; the page calls it
   with relative URLs (`fetch("api/...")`), and
-  `request.scope["abi"]["user_id"]` is the signed-in user. Limits: 1 MiB per
-  request, 6 MiB per response, 60 s.
+  `request.scope["abi"]["user_id"]` is the signed-in user. Bodies stream: read
+  an upload with `request.stream()` (pass it to
+  `put_object_stream(prefix, key, request.stream())`), answer with a
+  `StreamingResponse`. Uploads up to `max_upload_bytes` in the manifest
+  (default 1 GiB); an app idle for 60 s gets 504.
 
 SDK reference: the ABI repository's `libs/naas-abi-sdk/README.md`.
