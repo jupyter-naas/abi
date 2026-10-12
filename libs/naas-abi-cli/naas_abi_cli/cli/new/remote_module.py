@@ -75,11 +75,20 @@ def find_project(start: Path) -> Project | None:
     return None
 
 
+# Folders without __init__.py climbed to reach the enclosing package
+# (apps/<name>/assets/ in a module).
+_NON_PACKAGE_LEVELS = 3
+
+
 def is_remote_module(path: Path) -> bool:
     """Whether ``path`` lies in a remote module: a package whose ``__init__.py``
     (it, or a parent package's) builds on ``naas_abi_sdk``."""
     folder = path
     while not folder.exists() and folder != folder.parent:
+        folder = folder.parent
+    for _ in range(_NON_PACKAGE_LEVELS):
+        if (folder / "__init__.py").is_file() or folder == folder.parent:
+            break
         folder = folder.parent
     while (folder / "__init__.py").is_file():
         if "naas_abi_sdk" in (folder / "__init__.py").read_text(encoding="utf-8"):

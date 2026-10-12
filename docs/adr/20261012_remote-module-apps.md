@@ -99,13 +99,13 @@ a response at most 6 MiB, below the 8 MB broker limit. Larger answers return
   `self.expose_app(name, asgi_app)` in `on_initialized`, else answers 404.
 - The ASGI app is called in process, without an HTTP server: FastAPI or
   Starlette routes work as they are. `root_path` is set, so generated URLs
-  point back through Nexus. `request.scope["abi.user_id"]` holds the Nexus
+  point back through Nexus. `request.scope["abi"]["user_id"]` holds the Nexus
   user.
 
 ### Nexus
 - The catalog adds the apps of READY remote instances, read from discovery and
   cached for 10 seconds, not for the life of the process. Their id is
-  `remote/<module_id>/<app>` and their URL
+  `remote/<module_id>:<app>` and their URL
   `/app-html/remote/<module_id>/<app>/<entry>`.
 - `/app-html/remote/<module_id>/<app>/{path}` accepts every method, behind the
   same `/app-html/` access check. It picks a READY instance, forwards the

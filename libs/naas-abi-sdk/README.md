@@ -487,6 +487,43 @@ launches it in a separate environment containing LangChain, SDK and proto, with
 no ABI core installed. The base worker still verifies its four-package install.
 
 
+## Apps
+
+A module serves web apps through Nexus without a port, hostname or route of its
+own (docs/adr/20261012_remote-module-apps.md). Each `apps/<name>/manifest.json`
+next to the module's package is an app: discovery announces it, Nexus lists it
+and forwards its requests under `/app-html/remote/<module_id>/<name>/` over
+NATS, and the module answers. Files of the folder (HTML, scripts, styles,
+images, fonts, JSON) are served as they are. Any other request goes to the ASGI
+application bound to the app, so an app can have a backend:
+
+```python
+from fastapi import FastAPI, Request
+from naas_abi_sdk import BaseModule, ModuleDependencies
+
+api = FastAPI()
+
+@api.get("/api/report")
+async def report(request: Request):
+    user = request.scope["abi"]["user_id"]  # the signed-in Nexus user
+    return {"user": user}
+
+class ABIModule(BaseModule):
+    module_id = "acme.research"
+    dependencies = ModuleDependencies(services=("document",))
+
+    async def on_initialized(self):
+        self.expose_app("console", api)  # apps/console/manifest.json
+```
+
+The app's page calls `fetch("api/report")`, relative to its folder. The ASGI
+app runs in the module's process with `root_path` set to the Nexus path, and its
+lifespan (startup and shutdown) runs with the module. Nexus checks the user's
+access, then forwards the request without the user's credential. Limits: 1 MiB
+per request body, 6 MiB per response, 60 s per request; no streaming responses
+or WebSockets yet. Declare `apps = (AppDescriptor(...),)` on the class instead
+of the folder for an app without files.
+
 ## Object streams and transfer configuration
 
 Object `get_object` uses chunked transfers; small byte `put_object` calls use one
