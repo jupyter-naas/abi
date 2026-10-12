@@ -18,20 +18,71 @@ pip install naas-abi-cli
 
 ### Project Management
 
-#### `abi new project <project-name> [project-path] [--with-local-deploy/--without-local-deploy]`
+#### `abi new project <project-name> [project-path] [--with-local-deploy/--without-local-deploy] [--without-nats]`
 Creates a new ABI project with all necessary starter files and dependencies.
 
 **What it does:**
 - Creates a new project directory (must be empty or non-existent)
 - Generates project structure with configuration files, Docker setup, and Python package structure
 - Generates local deployment scaffolding (`docker-compose.yml`, `.deploy/`, and local `.env` values) by default
-- Automatically installs required dependencies (`naas-abi-core`, `naas-abi-marketplace`, `naas-abi`, and `naas-abi-cli`)
+- Automatically installs required dependencies (`naas-abi-core`, `naas-abi-marketplace`, `naas-abi`, and `naas-abi-cli`; `naas-abi-sdk` and `naas-abi-proto` in NATS mode)
 - Customizes project files with your project name
+
+**NATS by default.** The project runs the engine on NATS: every config has a
+`nats:` block with discovery on (project = the project name), the bus is
+JetStream, and `.env` holds `NATS_JWT_SECRET` and the broker passwords
+(`NATS_ABI_PASSWORD`, `NATS_MODULE_PASSWORD`). The Docker stack starts the
+`nats` service, keeps RabbitMQ behind the `rabbitmq` profile and runs no
+Dagster: one engine hosts discovery, and module jobs replace Dagster's
+schedules. Check the broker with `curl -s localhost:8222/healthz` and
+`curl -s localhost:8222/connz`.
+
+NATS mode installs `naas-abi-proto` and `naas-abi-sdk` from the `.abi`
+submodule (they are not on PyPI yet), so it refuses `--without-abi-submodule`.
+`--without-nats` creates the classic in-process project (RabbitMQ in Docker,
+no broker for `abi dev`). The project's own module (`src/<project>/`, holding
+the default agent) is an in-engine module either way.
 
 **Example:**
 ```bash
 abi new project my-abi-project
 abi new project my-abi-project --without-local-deploy
+abi new project my-abi-project --without-nats   # classic, in-process
+```
+
+#### `abi new module <name> [path] [--in-engine] [--standalone] [--abi-ref <ref>]`
+Creates a module. By default a **remote module**: a `naas-abi-sdk` package that
+runs in its own process, reaches the engine only through NATS, and never
+imports `naas_abi_core`. It has an agent (an SDK `IntentAgent` on the engine's
+default models, its memory in the Document Service), an hourly `@job`, a
+`python -m <name>` entrypoint with discovery and SIGTERM handling, a service
+token signer, an app scaffold and offline tests.
+
+- **In a project** (a folder with `config.yaml` and `pyproject.toml`), it goes
+  to `src/<name>/` with an SDK-only `Dockerfile`, gets a `dev.modules` entry in
+  `config.yaml` (`abi dev up` runs it) and a service in
+  `docker-compose.override.yml` (`abi start` runs it; `abi deploy local
+  --regenerate` never touches that file). It is not added to `modules:`: it
+  registers itself through discovery, and Nexus lists its agent once the
+  module logs `READY`.
+- **`--standalone`** (the default outside a project) creates a repository of
+  its own: `pyproject.toml` (`naas-abi-sdk[agent,otel]` and `naas-abi-proto`
+  from git at `--abi-ref`, default `main`), `Dockerfile`, `README.md`,
+  `AGENTS.md`, ready for `git init`.
+- **`--in-engine`** (alias `--local`) creates the classic module the engine
+  loads (agents, integrations, pipelines, workflows, orchestrations,
+  ontologies); add it under `modules:`.
+
+Inside a remote module, `abi new agent` writes an SDK agent and `abi new app`
+works (Nexus does not list remote modules' apps yet); `abi new workflow`,
+`pipeline`, `integration` and `orchestration` scaffold core code, so they
+refuse and say what to use instead.
+
+**Example:**
+```bash
+abi new module research                 # remote, in the project
+abi new module research --standalone    # its own repository
+abi new module legacy --in-engine       # loaded by the engine
 ```
 
 #### `abi init <path>`
@@ -112,10 +163,10 @@ abi module list
 
 ### Local dev stack
 
-#### `abi dev up [--service <name>]... [-d] [--with-nats] [--with-tracing]`
-Runs the stack natively (no Docker): oxigraph, api, dagster, nexus-web; `--with-nats` adds nats and runs the engine in NATS mode, `--with-tracing` adds Jaeger. `abi dev down`, `abi dev status`, `abi dev logs <name> [-f]` manage it; pids and logs live in `.abi/dev/`.
+#### `abi dev up [--service <name>]... [-d] [--without-nats] [--with-tracing]`
+Runs the stack natively (no Docker). By default the engine runs in NATS mode: oxigraph, nats, api, nexus-web, then the `dev.modules`. Dagster is left out (module jobs replace it). It needs `nats-server` on `PATH` and fails with an install hint without it, rather than falling back to in-process mode. `--without-nats` runs the engine in-process with oxigraph, api, dagster and nexus-web, even when the project config has a `nats:` block (the overlay sets `nats: null`). `--with-tracing` adds Jaeger. `abi dev down`, `abi dev status`, `abi dev logs <name> [-f]` manage it; pids and logs live in `.abi/dev/`. The discovery project is the config's `nats.discovery.project`, else the folder name.
 
-With `--with-nats`, the SDK modules listed under `dev.modules` in the project config start once the api is ready, each under a supervisor that restarts it when it exits on its own (backing off from 1 s to 30 s):
+In NATS mode, the SDK modules listed under `dev.modules` in the project config (`abi new module` adds them) start once the api is ready, each under a supervisor that restarts it when it exits on its own (backing off from 1 s to 30 s):
 
 ```yaml
 dev:
@@ -127,7 +178,7 @@ dev:
       restart: on-failure                   # or always, never
 ```
 
-Each module gets `ABI_NATS_URL`, `NATS_JWT_SECRET`, `ABI_SERVICE_TOKEN` (for `python -m naas_abi_sdk.module_runner`), `ABI_DISCOVERY_PROJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT` with tracing, and the project's `src/` on `PYTHONPATH`; `env` values may name them as `${VAR}`. A module is addressed like a service: `abi dev up --service probe-researcher -d` (against a running NATS stack), `abi dev logs probe-researcher -f`, `abi dev down --service probe-researcher`. `abi dev down` stops modules before the stack. The engine validates the block and otherwise ignores it.
+Each module gets `ABI_NATS_URL`, `NATS_JWT_SECRET`, `ABI_SERVICE_TOKEN` (for `python -m naas_abi_sdk.module_runner`), `ABI_DISCOVERY_PROJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT` with tracing, and the project's `src/` on `PYTHONPATH`; `env` values may name them as `${VAR}`. A module is addressed like a service: `abi dev up --service probe-researcher -d` (it joins the running NATS stack and starts no broker of its own), `abi dev logs probe-researcher -f`, `abi dev down --service probe-researcher`. `abi dev down` stops modules before the stack. The engine validates the block and otherwise ignores it.
 
 ### Deployment
 
