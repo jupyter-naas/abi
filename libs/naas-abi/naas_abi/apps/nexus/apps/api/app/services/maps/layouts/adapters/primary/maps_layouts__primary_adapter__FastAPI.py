@@ -154,13 +154,18 @@ async def preview_layout(
     layout = _layout("preview", body)
     errors = service.validate(layout)
     if errors:
-        return {"errors": errors, "count": 0, "pins": []}
+        return {"errors": errors, "count": 0, "type": "FeatureCollection", "features": []}
     try:
         store = await _scoped_store(current_user.id, body.workspace_id, layout.graphs)
         payload = await service.feed(layout, store)
     except Exception as exc:
         raise _http_error(exc) from exc
-    return {"errors": [], "count": payload["count"], "pins": payload["pins"][:PREVIEW_PINS]}
+    return {
+        "errors": [],
+        "count": min(payload["count"], PREVIEW_PINS),
+        "type": "FeatureCollection",
+        "features": payload["features"][:PREVIEW_PINS],
+    }
 
 
 @router.get("/{layout_id}/feed")

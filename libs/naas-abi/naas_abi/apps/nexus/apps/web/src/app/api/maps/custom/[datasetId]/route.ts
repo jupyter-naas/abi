@@ -1,10 +1,14 @@
 import { getMapsCustomDataset } from '@/lib/maps-custom-datasets';
-import { mapsJson } from '../../_lib';
+import { isMapsFeatureCollection } from '@/app/workspace/[workspaceId]/maps/lib/maps-pin-geojson';
+
+import { mapsFeedResponse, mapsPinResponse, nexusInternalApiBase } from '../../_lib';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-type PinsPayload = {
+type FeedPayload = {
+  type?: string;
+  features?: Array<Record<string, unknown>>;
   pins?: Array<Record<string, unknown>>;
   count?: number;
   source?: string;
@@ -16,18 +20,8 @@ type PinsPayload = {
   error?: string;
 };
 
-function errorJson(body: unknown, status: number): Response {
-  return mapsJson(body, { status, cacheSeconds: 0 });
-}
-
-function nexusApiBase(): string {
-  const apiHost =
-    process.env.NEXUS_API_URL ||
-    process.env.PUBLIC_API_HOST ||
-    process.env.NEXT_PUBLIC_API_HOST ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    '127.0.0.1:9879';
-  return apiHost.startsWith('http') ? apiHost : `http://${apiHost}`;
+function errorJson(body: Record<string, unknown>, status: number): Response {
+  return mapsPinResponse([], body, { status, cacheSeconds: 0 });
 }
 
 /**
@@ -45,22 +39,22 @@ export async function GET(
 ) {
   const dataset = getMapsCustomDataset(params.datasetId);
   if (!dataset) {
-    return errorJson({ error: 'Unknown dataset', pins: [], count: 0 }, 404);
+    return errorJson({ error: 'Unknown dataset' }, 404);
   }
 
   const auth = request.headers.get('authorization');
   if (!auth?.toLowerCase().startsWith('bearer ')) {
-    return errorJson({ error: 'Not authenticated', pins: [], count: 0 }, 401);
+    return errorJson({ error: 'Not authenticated' }, 401);
   }
 
   const url = new URL(request.url);
   const workspaceId = (url.searchParams.get('workspace_id') || '').trim();
   if (!workspaceId) {
-    return errorJson({ error: 'workspace_id required', pins: [], count: 0 }, 400);
+    return errorJson({ error: 'workspace_id required' }, 400);
   }
 
   try {
-    const target = new URL(`${nexusApiBase()}${dataset.endpoint}`);
+    const target = new URL(`${nexusInternalApiBase()}${dataset.endpoint}`);
     target.searchParams.set('workspace_id', workspaceId);
 
     const res = await fetch(target.toString(), {
@@ -68,13 +62,11 @@ export async function GET(
       headers: { Authorization: auth },
       signal: AbortSignal.timeout(15000),
     });
-    const data = (await res.json()) as PinsPayload;
+    const data = (await res.json()) as FeedPayload;
     if (res.status === 401 || res.status === 403) {
       return errorJson(
         {
           error: data.detail || data.error || data.message || 'Not authenticated',
-          pins: [],
-          count: 0,
         },
         res.status,
       );
@@ -83,17 +75,27 @@ export async function GET(
       return errorJson(
         {
           error: data.message || data.error || `${dataset.title} feed ${res.status}`,
-          pins: [],
-          count: 0,
         },
         502,
       );
     }
+    if (isMapsFeatureCollection(data)) {
+      return mapsFeedResponse(
+        {
+          ...data,
+          source: data.source ?? dataset.endpoint,
+          layer_title: data.layer_title ?? dataset.title,
+          observation_date: data.observation_date,
+          empty: data.empty,
+          message: data.message,
+        },
+        { cacheSeconds: 0 },
+      );
+    }
     const pins = Array.isArray(data.pins) ? data.pins : [];
-    return mapsJson(
+    return mapsPinResponse(
+      pins,
       {
-        pins,
-        count: pins.length,
         source: data.source ?? dataset.endpoint,
         layer_title: data.layer_title ?? dataset.title,
         observation_date: data.observation_date,
@@ -107,8 +109,6 @@ export async function GET(
       {
         error:
           err instanceof Error ? err.message : `${dataset.title} feed failed`,
-        pins: [],
-        count: 0,
         empty: true,
       },
       502,

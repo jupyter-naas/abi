@@ -56,6 +56,7 @@ describe('parseMapsRoute', () => {
   it('does not claim routes that merely contain the word maps', () => {
     expect(parseMapsRoute(`/workspace/${WS}/chat`).isMapsRoute).toBe(false);
     expect(parseMapsRoute(`/workspace/${WS}/mapshare`).isMapsRoute).toBe(false);
+    expect(parseMapsRoute(`/workspace/${WS}/settings/maps`).isMapsRoute).toBe(false);
   });
 });
 

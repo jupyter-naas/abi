@@ -17,6 +17,7 @@ import { fetchPins as volcanoesPins } from '../components/maps-volcanoes';
 import { fetchPins as wildfirePins } from '../components/maps-wildfires';
 import { mapsCustomFeedUrl } from './datasets';
 import type { LayoutEntry } from './layouts';
+import { getImportedMapLayer } from './maps-imported-layers';
 import { layoutsApi } from './layouts-api';
 import { fetchMapsFeedPins, normalizeFeedLoad, type MapsFeedResult } from './maps-feed';
 import type { MapsFeedView } from './maps-view';
@@ -56,6 +57,13 @@ export function layoutPinSource(
   workspaceId: string,
 ): ((signal: AbortSignal, view?: MapsFeedView) => Promise<MapsFeedResult>) | null {
   if (!entry.combinable) return null;
+  if (entry.kind === 'imported') {
+    return async () => {
+      const layer = getImportedMapLayer(workspaceId, entry.id);
+      if (!layer) throw new Error(`Imported layer ${entry.id} not found in this browser`);
+      return normalizeFeedLoad(layer.featureCollection);
+    };
+  }
   if (entry.kind === 'workspace') {
     return (signal) => fetchMapsFeedPins(layoutsApi.feedUrl(workspaceId, entry.id), signal, authHeader());
   }

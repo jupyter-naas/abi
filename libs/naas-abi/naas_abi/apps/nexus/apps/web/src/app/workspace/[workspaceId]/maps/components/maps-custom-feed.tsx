@@ -51,6 +51,7 @@ export function MapsCustomFeed({ dataset }: { dataset: MapsCustomDataset }) {
         return pins;
       }}
       fitMaxZoom={dataset.fitMaxZoom ?? 5}
+      basemapId={dataset.basemapId}
     />
   );
 }

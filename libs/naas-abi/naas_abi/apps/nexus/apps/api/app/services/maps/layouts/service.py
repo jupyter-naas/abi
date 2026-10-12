@@ -92,6 +92,24 @@ def _coordinate(value: str, bound: float) -> float | None:
     return number if math.isfinite(number) and -bound <= number <= bound else None
 
 
+def pin_to_feature(pin: dict[str, Any]) -> dict[str, Any]:
+    """Maps pin dict → GeoJSON Point feature (properties hold Nexus fields)."""
+    lat, lng = pin["lat"], pin["lng"]
+    props = {k: v for k, v in pin.items() if k not in ("lat", "lng")}
+    feature: dict[str, Any] = {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [lng, lat]},
+        "properties": props,
+    }
+    if (fid := props.pop("id", None)) is not None:
+        feature["id"] = fid
+    return feature
+
+
+def maps_feed_payload(features: list[dict[str, Any]], **meta: Any) -> dict[str, Any]:
+    return {"type": "FeatureCollection", "features": features, "count": len(features), **meta}
+
+
 def rows_to_pins(layout: MapsLayout, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Pins in the Maps feed shape; rows without valid coordinates are skipped."""
     pins: list[dict[str, Any]] = []
@@ -178,4 +196,5 @@ class MapsLayoutService:
     async def feed(self, layout: MapsLayout, store: IGraphQueryStore) -> dict[str, Any]:
         rows = await asyncio.to_thread(store.select, _with_limit(layout.query))
         pins = rows_to_pins(layout, rows)
-        return {"pins": pins, "count": len(pins), "source": layout.title}
+        features = [pin_to_feature(pin) for pin in pins]
+        return maps_feed_payload(features, source=layout.title)

@@ -127,17 +127,20 @@ def test_feed_turns_rows_into_pins_and_skips_bad_coordinates(service) -> None:
     payload = asyncio.run(service.feed(_layout(color="#ff0000"), store))
 
     assert payload["count"] == 2
-    paris, other = payload["pins"]
+    assert payload["type"] == "FeatureCollection"
+    paris, other = payload["features"]
     assert paris == {
+        "type": "Feature",
         "id": "offices:http://ex/paris",
-        "lat": 48.85,
-        "lng": 2.35,
-        "label": "Paris",
-        "color": "#ff0000",
-        "entityUri": "http://ex/paris",
+        "geometry": {"type": "Point", "coordinates": [2.35, 48.85]},
+        "properties": {
+            "label": "Paris",
+            "color": "#ff0000",
+            "entityUri": "http://ex/paris",
+        },
     }
-    assert other["detail"] == "note"
-    assert "entityUri" not in other
+    assert other["properties"]["detail"] == "note"
+    assert "entityUri" not in other["properties"]
 
 
 def test_feed_caps_rows_with_a_limit(service) -> None:

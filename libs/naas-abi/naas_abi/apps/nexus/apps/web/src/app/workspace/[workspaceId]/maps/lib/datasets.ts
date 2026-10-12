@@ -2,6 +2,10 @@ import {
   MAPS_CUSTOM_DATASETS,
   type MapsCustomDataset,
 } from '@/lib/maps-custom-datasets';
+import {
+  isMapsCategoryVisible,
+  MAPS_VISIBLE_CATEGORIES,
+} from './maps-deployment';
 
 export type MapsBuiltinDatasetId =
   | 'earthquakes'
@@ -28,29 +32,44 @@ export type MapsBuiltinDatasetId =
 export type MapsDatasetId = MapsBuiltinDatasetId | (string & {});
 
 /** Sidebar / legend grouping for map layers. */
-export type MapsDatasetCategory = 'environment' | 'sigint' | 'situation' | 'custom';
+export type MapsDatasetCategory =
+  | 'environment'
+  | 'sigint'
+  | 'situation'
+  | 'organizations-facility'
+  | 'custom';
+
+/** Built-in sidebar group or `user-*` group created in File → New layer. */
+export type MapsLayerGroupId = MapsDatasetCategory | `user-${string}`;
 
 export interface MapsDataset {
   id: MapsDatasetId;
   title: string;
   description: string;
-  category: MapsDatasetCategory;
+  category: MapsLayerGroupId;
   /** Lucide icon key (see mapsIconMap). */
   icon: string;
   /** Sort order within a category (lower first). */
   order: number;
+  /** Optional brand logo for sidebar and legend (HTTPS or /api/…). */
+  layerLogoUrl?: string;
 }
 
-/** Sidebar groups. Basemaps are chosen on the map control. */
-export const MAPS_CATEGORIES: {
+const MAPS_CATEGORIES_ALL: {
   id: MapsDatasetCategory;
   label: string;
 }[] = [
   { id: 'environment', label: 'Environment' },
   { id: 'sigint', label: 'SIGINT' },
   { id: 'situation', label: 'Situation' },
+  { id: 'organizations-facility', label: 'Organizations Facilities' },
   { id: 'custom', label: 'Custom' },
 ];
+
+/** Sidebar groups. Basemaps are chosen on the map control. */
+export const MAPS_CATEGORIES = MAPS_VISIBLE_CATEGORIES
+  ? MAPS_CATEGORIES_ALL.filter(({ id }) => MAPS_VISIBLE_CATEGORIES.includes(id))
+  : MAPS_CATEGORIES_ALL;
 
 export const MAPS_CATEGORY_LABEL: Record<MapsDatasetCategory, string> = Object.fromEntries(
   MAPS_CATEGORIES.map(({ id, label }) => [id, label]),
@@ -205,13 +224,18 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
 const MAPS_BUILTIN_DATASET_IDS = new Set(MAPS_BUILTIN_DATASETS.map((d) => d.id));
 
 function toMapsDataset(custom: MapsCustomDataset): MapsDataset {
+  const category =
+    custom.category && MAPS_CATEGORIES.some((g) => g.id === custom.category)
+      ? custom.category
+      : 'custom';
   return {
     id: custom.id,
     title: custom.title,
     description: custom.description,
-    category: 'custom',
+    category,
     icon: custom.icon,
     order: custom.order,
+    layerLogoUrl: custom.layerLogoUrl,
   };
 }
 
@@ -220,11 +244,17 @@ function toMapsDataset(custom: MapsCustomDataset): MapsDataset {
  * A configured id that shadows a built-in is ignored so basemaps and Public
  * layouts can never be replaced by config.
  */
+function visibleDeploymentDataset(dataset: MapsDataset): boolean {
+  return isMapsCategoryVisible(dataset.category as MapsDatasetCategory);
+}
+
 export const MAPS_DATASETS: MapsDataset[] = [
-  ...MAPS_BUILTIN_DATASETS,
-  ...MAPS_CUSTOM_DATASETS.filter((d) => !MAPS_BUILTIN_DATASET_IDS.has(d.id)).map(
-    toMapsDataset,
-  ),
+  ...(MAPS_VISIBLE_CATEGORIES
+    ? MAPS_BUILTIN_DATASETS.filter((d) => isMapsCategoryVisible(d.category))
+    : MAPS_BUILTIN_DATASETS),
+  ...MAPS_CUSTOM_DATASETS.filter((d) => !MAPS_BUILTIN_DATASET_IDS.has(d.id))
+    .map(toMapsDataset)
+    .filter(visibleDeploymentDataset),
 ];
 
 /**

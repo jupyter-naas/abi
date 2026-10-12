@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { MapsPinMarker } from '../lib/leaflet-map';
 import { layerPinColor } from '../lib/maps-layer-colors';
 import { layoutPinSource } from '../lib/layout-sources';
@@ -22,15 +22,7 @@ const VIEWPORT_BOUND_IDS = new Set(['flights', 'ais']);
  * All layers on one map: every layer switched on in the sidebar, overlaid on
  * the basemap chosen from the map control.
  */
-export function MapsAllLayers({
-  layerIds,
-  geoJsonDebug = false,
-  onGeoJsonDebugChange,
-}: {
-  layerIds: string[];
-  geoJsonDebug?: boolean;
-  onGeoJsonDebugChange?: (enabled: boolean) => void;
-}) {
+export function MapsAllLayers({ layerIds }: { layerIds: string[] }) {
   const { workspaceId, entries, loading } = useMapLayers();
   const activeIds = useMemo(() => new Set(layerIds), [layerIds]);
   const onEntries = useMemo(
@@ -81,17 +73,15 @@ export function MapsAllLayers({
           pins: displayPins,
           fetchedAt,
         });
-        if (geoJsonDebug) {
-          saveLayerGeoJsonDebug(
-            entry.id,
-            pinsToFeatureCollection(displayPins, {
-              layerId: entry.id,
-              layerTitle: entry.title,
-              fetchedAt,
-              featureCount: displayPins.length,
-            }),
-          );
-        }
+        saveLayerGeoJsonDebug(
+          entry.id,
+          pinsToFeatureCollection(displayPins, {
+            layerId: entry.id,
+            layerTitle: entry.title,
+            fetchedAt,
+            featureCount: displayPins.length,
+          }),
+        );
         for (const pin of layerPins) {
           pins.push({
             ...pin,
@@ -124,21 +114,6 @@ export function MapsAllLayers({
     [onEntries],
   );
 
-  useEffect(() => {
-    if (!geoJsonDebug) return;
-    for (const [layerId, snapshot] of lastDisplayPinsByLayer.current.entries()) {
-      saveLayerGeoJsonDebug(
-        layerId,
-        pinsToFeatureCollection(snapshot.pins, {
-          layerId,
-          layerTitle: snapshot.title,
-          fetchedAt: snapshot.fetchedAt,
-          featureCount: snapshot.pins.length,
-        }),
-      );
-    }
-  }, [geoJsonDebug]);
-
   return (
     <MapsFeedCanvas
       key={`${workspaceId}:${onKey}`}
@@ -170,8 +145,6 @@ export function MapsAllLayers({
       legendLayerIds={layerIds}
       legendStatuses={statuses}
       feedLegendsByLayerId={feedLegendsByLayerId}
-      geoJsonDebug={geoJsonDebug}
-      onGeoJsonDebugChange={onGeoJsonDebugChange}
     />
   );
 }

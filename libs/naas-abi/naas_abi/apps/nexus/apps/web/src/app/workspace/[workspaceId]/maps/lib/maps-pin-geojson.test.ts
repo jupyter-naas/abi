@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { pinToFeature, pinsToFeatureCollection } from './maps-pin-geojson';
+import {
+  buildMapsFeedPayload,
+  pinRecordToFeature,
+  pinToFeature,
+  pinsToFeatureCollection,
+} from './maps-pin-geojson';
 import type { MapsPinMarker } from './leaflet-map';
 
 describe('maps-pin-geojson', () => {
@@ -28,5 +33,20 @@ describe('maps-pin-geojson', () => {
     expect(fc.features).toHaveLength(1);
     expect(fc.nexus?.layerId).toBe('earthquakes');
     expect(fc.nexus?.featureCount).toBe(1);
+  });
+
+  it('converts loose pin records into a Maps feed FeatureCollection', () => {
+    const feature = pinRecordToFeature({
+      id: 'x',
+      lat: 10,
+      lng: 20,
+      label: 'Point',
+      color: '#fff',
+    });
+    expect(feature?.geometry.coordinates).toEqual([20, 10]);
+    const body = buildMapsFeedPayload([{ id: 'x', lat: 10, lng: 20, label: 'Point' }], { source: 'test' });
+    expect(body.type).toBe('FeatureCollection');
+    expect(body.count).toBe(1);
+    expect(body.source).toBe('test');
   });
 });

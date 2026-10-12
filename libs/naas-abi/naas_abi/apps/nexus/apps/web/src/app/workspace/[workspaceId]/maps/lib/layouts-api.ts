@@ -10,10 +10,34 @@ export interface WorkspaceLayoutsResponse {
   can_edit: boolean;
 }
 
+export interface LayoutPreviewFeature {
+  type: 'Feature';
+  id?: string;
+  geometry: { type: 'Point'; coordinates: [number, number] };
+  properties: Record<string, unknown>;
+}
+
 export interface LayoutPreview {
   errors: string[];
   count: number;
-  pins: { id: string; label: string; lat: number; lng: number; detail?: string }[];
+  type?: 'FeatureCollection';
+  features: LayoutPreviewFeature[];
+}
+
+export function layoutPreviewPinRows(
+  preview: LayoutPreview,
+): { id: string; label: string; lat: number; lng: number; detail?: string }[] {
+  return preview.features.map((feature) => {
+    const [lng, lat] = feature.geometry.coordinates;
+    const props = feature.properties;
+    return {
+      id: String(feature.id ?? props.id ?? `${lat},${lng}`),
+      label: typeof props.label === 'string' ? props.label : 'Point',
+      lat,
+      lng,
+      detail: typeof props.detail === 'string' ? props.detail : undefined,
+    };
+  });
 }
 
 export type LayoutDraft = Omit<WorkspaceMapLayout, 'id'>;

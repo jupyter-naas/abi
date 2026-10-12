@@ -5,6 +5,9 @@ import { ChevronDown, Map as MapIcon } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { groupLayerEntries } from '../lib/layouts';
+import { useMapLayers } from '../lib/use-map-layouts';
+import { MapsLayerBrandIcon } from './maps-layer-brand-icon';
+import { resolveMapsPinImageUrl } from '../lib/maps-pin-image-url';
 import { mapsIconMap } from '../lib/maps-icons';
 import { layerPinColor } from '../lib/maps-layer-colors';
 import type { LayoutEntry } from '../lib/layouts';
@@ -45,6 +48,7 @@ function LayerRow({
   feedDetail?: ReactNode;
 }) {
   const color = layerPinColor(entry);
+  const logoUrl = resolveMapsPinImageUrl(entry.layerLogoUrl);
   const Icon = mapsIconMap[entry.icon] ?? MapIcon;
   const sublayers =
     status && 'count' in status && status.sublayers && status.sublayers.length > 1
@@ -55,9 +59,15 @@ function LayerRow({
   return (
     <div className="maps-legend__layer">
       <div className="maps-legend__row">
-        <span className="maps-layer-marker maps-legend__layer-swatch" style={{ background: color }} aria-hidden>
-          <Icon size={11} strokeWidth={2.25} />
-        </span>
+        {logoUrl ? (
+          <span className="maps-layer-marker maps-layer-marker--logo maps-legend__layer-swatch" aria-hidden>
+            <img src={logoUrl} alt="" className="maps-layer-marker__logo" />
+          </span>
+        ) : (
+          <span className="maps-layer-marker maps-legend__layer-swatch" style={{ background: color }} aria-hidden>
+            <Icon size={11} strokeWidth={2.25} />
+          </span>
+        )}
         {expandable ? (
           <button
             type="button"
@@ -110,7 +120,11 @@ export function MapsActiveLayersLegend({
   noLayers,
   feedLegendsByLayerId,
 }: MapsActiveLayersLegendProps) {
-  const groups = useMemo(() => groupLayerEntries(entries), [entries]);
+  const { customLayerGroups } = useMapLayers();
+  const groups = useMemo(
+    () => groupLayerEntries(entries, customLayerGroups),
+    [entries, customLayerGroups],
+  );
 
   const [collapsedLayers, setCollapsedLayers] = useState<Record<string, boolean>>({});
 

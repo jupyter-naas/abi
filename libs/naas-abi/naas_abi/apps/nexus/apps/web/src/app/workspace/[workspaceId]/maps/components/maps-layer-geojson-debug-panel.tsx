@@ -49,18 +49,18 @@ export function MapsLayerGeoJsonDebugPanel({
       <button
         type="button"
         className="maps-geojson-modal__backdrop"
-        aria-label="Close layer GeoJSON dialog"
+        aria-label="Close GeoJSON layers dialog"
         onClick={onClose}
       />
       <div className="maps-geojson-modal__card">
         <header className="maps-geojson-modal__header">
           <div className="min-w-0">
             <h2 id="maps-geojson-modal-title" className="maps-geojson-modal__title">
-              Layer GeoJSON (local)
+              GeoJSON layers
             </h2>
             <p className="maps-geojson-modal__hint">
-              Last fetch per layer in <code>localStorage</code> key{' '}
-              <code>nexus-maps-layer-geojson-debug</code>.
+              Last fetch per active layer, stored in this browser (
+              <code>nexus-maps-layer-geojson-debug</code>).
             </p>
           </div>
           <button

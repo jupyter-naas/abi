@@ -8,6 +8,7 @@ import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from '@/components/shell/sidebar/collapsible-section';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
+import { MapsLayerBrandIcon } from './maps-layer-brand-icon';
 import { mapsIconMap } from '../lib/maps-icons';
 import { groupLayerEntries, type LayoutEntry } from '../lib/layouts';
 import { mapsLayerPath, mapsLibraryPath, mapsPath } from '../lib/maps-route';
@@ -69,7 +70,7 @@ export function MapsDatasetGroups({
 }) {
   const { workspaceId, layerIds, isOn, setLayerOn, setLayersOn, selectLayerExclusive } =
     useMapsLayerParams();
-  const { entries, error } = useMapLayers();
+  const { entries, error, customLayerGroups } = useMapLayers();
   const combinable = entries.filter((e) => e.combinable);
   const onCount = layerIds.length;
   const allActive = layerIds.length !== 1;
@@ -89,7 +90,7 @@ export function MapsDatasetGroups({
         </span>
       </Link>
 
-      {groupLayerEntries(entries).map((group) => {
+      {groupLayerEntries(entries, customLayerGroups).map((group) => {
         const groupCombinable = group.entries.filter((e) => e.combinable);
         const allOn = groupCombinable.length > 0 && groupCombinable.every(isOn);
         return (
@@ -107,7 +108,6 @@ export function MapsDatasetGroups({
               )}
             </div>
             {group.entries.map((entry) => {
-              const IconComponent = mapsIconMap[entry.icon] || Map;
               const on = isOn(entry);
               const active = layerIds.length === 1 && layerIds[0] === entry.id;
               return (
@@ -122,7 +122,7 @@ export function MapsDatasetGroups({
                       !on && 'text-muted-foreground',
                     )}
                   >
-                    <IconComponent size={14} className="flex-shrink-0" />
+                    <MapsLayerBrandIcon entry={entry} size={14} />
                     <span className="flex-1 truncate">{entry.title}</span>
                   </Link>
                   <LayerSwitch entry={entry} on={on} onChange={() => setLayerOn(entry.id, !on)} />

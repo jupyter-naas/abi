@@ -18,7 +18,14 @@ describe('graph map pin contract', () => {
   });
   it('keeps feed freshness and attribution without treating needsKey as a thrown error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ok:true, json:async () => ({
-      pins: [{id:'ship',lat:1,lng:2,label:'Vessel'}],
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        id: 'ship',
+        geometry: { type: 'Point', coordinates: [2, 1] },
+        properties: { label: 'Vessel' },
+      }],
+      count: 1,
       source: 'aisstream',
       attribution: 'AISStream',
       observedAt: '2026-09-21T00:00:00Z',
@@ -65,6 +72,27 @@ describe('normalizeFeedLoad', () => {
     expect(feed.coveragePins).toHaveLength(1);
     expect(feed.coverage).toBeUndefined();
     expect(feed.reason).toBe('Source-reported street addresses');
+  });
+
+  it('reads a canonical GeoJSON FeatureCollection feed', () => {
+    const feed = normalizeFeedLoad({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          id: 'paris',
+          geometry: { type: 'Point', coordinates: [2.35, 48.86] },
+          properties: { label: 'Paris', entityUri: 'urn:office' },
+        },
+      ],
+      count: 1,
+      source: 'graph',
+      empty: false,
+    });
+    expect(feed.pins).toEqual([
+      expect.objectContaining({ id: 'paris', lat: 48.86, lng: 2.35, label: 'Paris', entityUri: 'urn:office' }),
+    ]);
+    expect(feed.source).toBe('graph');
   });
 
   it('reads GeoJSON Point features and URI-keyed pin dicts', () => {

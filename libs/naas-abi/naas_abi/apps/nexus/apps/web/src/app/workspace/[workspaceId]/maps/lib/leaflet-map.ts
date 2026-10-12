@@ -5,7 +5,8 @@ import {
   MAPS_TILE_DARK,
   MAPS_TILE_LIGHT,
 } from './leaflet-tiles';
-import { MAPS_LAYER_MARKER_PX, mapsLayerPinHtml } from './maps-layer-pin-html';
+import { MAPS_LAYER_MARKER_PX, mapsLayerLogoPinHtml, mapsLayerPinHtml } from './maps-layer-pin-html';
+import { resolveMapsPinImageUrl } from './maps-pin-image-url';
 import { resolvePinMedia } from './maps-pin-media';
 
 export interface MapsLatLng {
@@ -22,6 +23,8 @@ export interface MapsPinMarker {
   color?: string;
   /** Lucide key (mapsIconMap) for badge pins on the combined map. */
   markerIcon?: string;
+  /** HTTPS logo URL for map pins (overrides markerIcon when set). */
+  markerLogoUrl?: string;
   size?: number;
   entityUri?: string;
   graphUri?: string;
@@ -250,12 +253,18 @@ export function addMapsPinMarkers(
 ): MapsLatLng[] {
   const bounds: MapsLatLng[] = [];
   for (const pin of pins) {
-    const layerBadge = pin.markerIcon && pin.color;
+    const logoUrl = resolveMapsPinImageUrl(pin.markerLogoUrl);
+    const layerBadge = pin.color && (logoUrl || pin.markerIcon);
     const size = layerBadge ? MAPS_LAYER_MARKER_PX : (pin.size ?? 10);
     const color = pin.color ?? '#2563eb';
+    const badgeHtml = logoUrl
+      ? mapsLayerLogoPinHtml(logoUrl, color)
+      : pin.markerIcon
+        ? mapsLayerPinHtml(pin.markerIcon, color)
+        : mapsPinHtml(color, size);
     const icon = L.divIcon({
       className: 'maps-pin-icon',
-      html: layerBadge ? mapsLayerPinHtml(pin.markerIcon!, color) : mapsPinHtml(color, size),
+      html: layerBadge ? badgeHtml : mapsPinHtml(color, size),
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],
     });

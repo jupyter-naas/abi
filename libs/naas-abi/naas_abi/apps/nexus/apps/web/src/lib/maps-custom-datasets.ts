@@ -1,3 +1,6 @@
+import type { MapsDatasetCategory } from '@/app/workspace/[workspaceId]/maps/lib/datasets';
+import { mapsPinImageUrl } from '@/app/workspace/[workspaceId]/maps/lib/maps-pin-image-url';
+
 /**
  * Custom Maps datasets: the extension point product overlays register into.
  *
@@ -18,8 +21,12 @@ export interface MapsCustomDataset {
   description: string;
   /** Lucide icon key (see mapsIconMap); unknown keys fall back to Map. */
   icon: string;
-  /** Sort order within the Custom bucket (lower first). */
+  /** Sidebar / legend brand mark (HTTPS or /api/organizations/logos/…). */
+  layerLogoUrl?: string;
+  /** Sort order within the sidebar group (lower first). */
   order: number;
+  /** Sidebar group when set to a built-in category id (e.g. organizations-facility). */
+  category?: MapsDatasetCategory;
   /** Nexus API path returning a Maps pin payload ({ pins: [...] }). */
   endpoint: string;
   emptyTitle?: string;
@@ -28,6 +35,8 @@ export interface MapsCustomDataset {
   metaLabel?: string;
   sourceLabel?: string;
   fitMaxZoom?: number;
+  /** Default Nexus basemap id (e.g. natural-earth for country-only background). */
+  basemapId?: string;
 }
 
 /** Route-safe: keeps a dataset id from escaping its /api/maps/custom segment. */
@@ -61,18 +70,24 @@ function toCustomDataset(entry: unknown, index: number): MapsCustomDataset | nul
   if (!DATASET_ID_PATTERN.test(id)) return null;
   if (!title || !isNexusApiPath(endpoint)) return null;
 
+  const categoryRaw = readString(raw.category);
+  const category = categoryRaw ? (categoryRaw as MapsDatasetCategory) : undefined;
+
   return {
     id,
     title,
     description: readString(raw.description),
     icon: readString(raw.icon) || 'Map',
     order: readNumber(raw.order, index),
+    category,
+    layerLogoUrl: mapsPinImageUrl(raw.layerLogoUrl),
     endpoint,
     emptyTitle: readOptionalString(raw.emptyTitle),
     emptyBody: readOptionalString(raw.emptyBody),
     metaLabel: readOptionalString(raw.metaLabel),
     sourceLabel: readOptionalString(raw.sourceLabel),
     fitMaxZoom: typeof raw.fitMaxZoom === 'number' ? raw.fitMaxZoom : undefined,
+    basemapId: readOptionalString(raw.basemapId),
   };
 }
 

@@ -79,7 +79,7 @@ def test_admin_creates_layout_and_member_reads_its_feed(client_for) -> None:
 
     feed = member.get("/api/maps/layouts/offices/feed?workspace_id=ws-1")
     assert feed.status_code == 200
-    assert feed.json()["pins"][0]["entityUri"] == "http://ex/p"
+    assert feed.json()["features"][0]["properties"]["entityUri"] == "http://ex/p"
     # The query is narrowed to the layout's graphs.
     assert client_for.scoped_calls[-1] == ("ws-1", ("http://g/a",))
 
@@ -138,8 +138,8 @@ def test_preview_reports_errors_or_pins(client_for) -> None:
     ).json()
     assert invalid["errors"] and invalid["count"] == 0
     ok = admin.post("/api/maps/layouts/preview", json={**BODY, "workspace_id": "ws-1"}).json()
-    assert ok == {"errors": [], "count": 1, "pins": ok["pins"]}
-    assert ok["pins"][0]["label"] == "Paris"
+    assert ok["errors"] == [] and ok["count"] == 1 and ok["type"] == "FeatureCollection"
+    assert ok["features"][0]["properties"]["label"] == "Paris"
 
 
 def test_delete_unknown_layout_is_404(client_for) -> None:

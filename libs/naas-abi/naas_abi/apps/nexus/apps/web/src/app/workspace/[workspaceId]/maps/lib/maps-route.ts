@@ -17,7 +17,13 @@ export interface MapsRoute {
   datasetId: string | null;
 }
 
-const MAPS_SEGMENT = /(?:^|\/)maps(?=[/?#]|$)/;
+/** Workspace Maps app only — not Settings → Maps (`…/settings/maps`). */
+const MAPS_SEGMENT = /\/maps(?=[/?#]|$)/;
+
+function isWorkspaceMapsPath(pathname: string): boolean {
+  if (pathname.includes('/settings/')) return false;
+  return MAPS_SEGMENT.test(pathname);
+}
 
 export function parseMapsLayerIds(
   search: string | URLSearchParams | null | undefined,
@@ -42,8 +48,7 @@ export function parseMapsRoute(
   pathname: string | null | undefined,
   search?: string | URLSearchParams | null,
 ): MapsRoute {
-  const match = pathname ? MAPS_SEGMENT.exec(pathname) : null;
-  if (!match) {
+  if (!pathname || !isWorkspaceMapsPath(pathname)) {
     return { isMapsRoute: false, layerIds: [], isMapView: false, isDataset: false, datasetId: null };
   }
   const layerIds = parseMapsLayerIds(search);

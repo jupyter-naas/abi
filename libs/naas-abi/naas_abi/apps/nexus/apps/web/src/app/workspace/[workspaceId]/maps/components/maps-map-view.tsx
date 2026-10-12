@@ -7,7 +7,8 @@ import { useIsMobile } from '@/hooks/use-is-mobile';
 import { MapsAllLayers } from './maps-all-layouts';
 import { MapsLayerGeoJsonDebugPanel } from './maps-layer-geojson-debug-panel';
 import { MapsMenuBar } from './maps-menu-bar';
-import { isMapsGeoJsonDebugEnabled, setGeoJsonDebugUiEnabled } from '../lib/maps-layer-geojson-debug';
+import { MapsNewLayerModal } from './maps-new-layer-modal';
+import { isMapsGeoJsonDebugEnabled } from '../lib/maps-layer-geojson-debug';
 import { useMapLayers } from '../lib/use-map-layouts';
 import { useMapsLayerParams } from '../lib/use-maps-layer-params';
 import { mapsPath } from '../lib/maps-route';
@@ -17,18 +18,14 @@ export function MapsMapView() {
   const isMobile = useIsMobile();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [geoJsonDebug, setGeoJsonDebug] = useState(false);
+  const [geoJsonLayersOpen, setGeoJsonLayersOpen] = useState(false);
   const { layerIds, rawLayerIds, defaultLayerIds, workspaceId } = useMapsLayerParams();
 
   useEffect(() => {
-    setGeoJsonDebug(isMapsGeoJsonDebugEnabled(searchParams));
+    if (isMapsGeoJsonDebugEnabled(searchParams)) setGeoJsonLayersOpen(true);
   }, [searchParams]);
-
-  const onGeoJsonDebugChange = useCallback((enabled: boolean) => {
-    setGeoJsonDebug(enabled);
-    setGeoJsonDebugUiEnabled(enabled);
-  }, []);
-  const { entries, canEdit, loading } = useMapLayers();
+  const { all, entries, loading, customLayerGroups, canEdit } = useMapLayers();
+  const [newLayerOpen, setNewLayerOpen] = useState(false);
 
   useEffect(() => {
     if (isMobile || rawLayerIds.length > 0 || loading) return;
@@ -44,7 +41,23 @@ export function MapsMapView() {
     return `${layerIds.length} active layers`;
   }, [entries, layerIds]);
 
-  const menu = <MapsMenuBar workspaceId={workspaceId} canEdit={canEdit} />;
+  const takenLayerIds = useMemo(() => new Set(all.map((entry) => entry.id)), [all]);
+
+  const menu = (
+    <MapsMenuBar
+      workspaceId={workspaceId}
+      onNewLayer={() => setNewLayerOpen(true)}
+      onGeoJsonLayers={() => setGeoJsonLayersOpen(true)}
+    />
+  );
+
+  const onLayerCreated = useCallback(
+    (layerId: string) => {
+      const next = [...new Set([...layerIds, layerId])];
+      router.push(mapsPath(workspaceId, next));
+    },
+    [layerIds, router, workspaceId],
+  );
 
   return (
     <div className="maps-root">
@@ -52,12 +65,22 @@ export function MapsMapView() {
         <Header title="Maps" subtitle={subtitle} nav={menu} />
       </div>
       <div className="maps-body">
-        <MapsAllLayers
-          layerIds={layerIds}
-          geoJsonDebug={geoJsonDebug}
-          onGeoJsonDebugChange={onGeoJsonDebugChange}
+        <MapsAllLayers layerIds={layerIds} />
+        <MapsLayerGeoJsonDebugPanel
+          open={geoJsonLayersOpen}
+          onClose={() => setGeoJsonLayersOpen(false)}
         />
-        <MapsLayerGeoJsonDebugPanel open={geoJsonDebug} onClose={() => onGeoJsonDebugChange(false)} />
+        {workspaceId ? (
+          <MapsNewLayerModal
+            open={newLayerOpen}
+            onClose={() => setNewLayerOpen(false)}
+            workspaceId={workspaceId}
+            takenIds={takenLayerIds}
+            customLayerGroups={customLayerGroups}
+            canEdit={canEdit}
+            onCreated={onLayerCreated}
+          />
+        ) : null}
       </div>
     </div>
   );
