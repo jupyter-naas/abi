@@ -315,6 +315,19 @@ const NODES_DEF = [
       { label: () => `redis://${HOST}:6379`, badge: 'non-HTTP' },
     ],
   },
+{% if NATS %}
+  {
+    id: 'nats', label: 'NATS', group: 'messaging',
+    type: 'Module Fabric',
+    desc: 'NATS + JetStream — kernel services, bus, module jobs and discovery. Remote modules connect here.',
+    status: 'running',
+    links: [
+      { label: 'Health',      port: 8222, path: '/healthz' },
+      { label: 'Connections', port: 8222, path: '/connz' },
+      { label: 'NATS :4222', badge: 'non-HTTP' },
+    ],
+  },
+{% else %}
   {
     id: 'rabbitmq', label: 'RabbitMQ', group: 'messaging',
     type: 'Message Bus',
@@ -325,7 +338,9 @@ const NODES_DEF = [
       { label: 'AMQP :5672', badge: 'non-HTTP' },
     ],
   },
+{% endif %}
 
+{% if not NATS %}
   // ── TOOLING ──────────────────────────────────────────────────────────────
   {
     id: 'dagster', label: 'Dagster', group: 'ui',
@@ -334,6 +349,7 @@ const NODES_DEF = [
     status: 'local',
     links: [{ label: 'Dagster UI', port: 3001, path: '/' }],
   },
+{% endif %}
 
   // ── CUSTOM MODULES ────────────────────────────────────────────────────────
   // These nodes are populated from the abi00-modules package loaded by the
@@ -355,12 +371,17 @@ const EDGES_DEF = [
   { from: 'abi-api', to: 'minio'    },
   // core ↔ messaging
   { from: 'abi-api',  to: 'redis'    },
+{% if NATS %}
+  { from: 'abi-api',  to: 'nats'     },
+  { from: 'nats',     to: 'abi-api'  },
+{% else %}
   { from: 'abi-api',  to: 'rabbitmq' },
   { from: 'rabbitmq', to: 'abi-api'  },
   // core ↔ orchestration
   { from: 'abi-api', to: 'dagster' },
   { from: 'dagster', to: 'minio'   },
   { from: 'dagster', to: 'postgres' },
+{% endif %}
   // nexus ↔ data
   { from: 'nexus', to: 'postgres' },
   { from: 'nexus', to: 'redis'    },

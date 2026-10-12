@@ -22,7 +22,8 @@ docker/
 
 ### **compose/**
 Contains Docker Compose configurations for orchestrating multi-container applications:
-- **`docker-compose.yml`** - Main service orchestration (Apache Jena Fuseki, PostgreSQL, Dagster, etc.)
+- **`docker-compose.yml`** - Main service orchestration (Apache Jena Fuseki, PostgreSQL, {% if NATS %}NATS{% else %}Dagster{% endif %}, etc.){% if NATS %}
+- **`docker-compose.override.yml`** (project root, optional) - Remote modules added with `abi new module`. `abi deploy local --regenerate` never rewrites it.{% endif %}
 
 ### **images/**
 Contains all Dockerfile variants for different deployment scenarios:
