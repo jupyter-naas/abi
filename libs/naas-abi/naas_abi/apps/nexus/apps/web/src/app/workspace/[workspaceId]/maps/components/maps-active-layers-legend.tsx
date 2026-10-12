@@ -4,7 +4,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown, Map as MapIcon } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { MAPS_CATEGORIES } from '../lib/datasets';
+import { groupLayerEntries } from '../lib/layouts';
 import { mapsIconMap } from '../lib/maps-icons';
 import { layerPinColor } from '../lib/maps-layer-colors';
 import type { LayoutEntry } from '../lib/layouts';
@@ -110,15 +110,7 @@ export function MapsActiveLayersLegend({
   noLayers,
   feedLegendsByLayerId,
 }: MapsActiveLayersLegendProps) {
-  const groups = useMemo(() => {
-    return MAPS_CATEGORIES.map(({ id, label }) => ({
-      id,
-      label,
-      entries: entries
-        .filter((e) => e.category === id)
-        .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title)),
-    })).filter((g) => g.entries.length > 0);
-  }, [entries]);
+  const groups = useMemo(() => groupLayerEntries(entries), [entries]);
 
   const [collapsedLayers, setCollapsedLayers] = useState<Record<string, boolean>>({});
 

@@ -4,6 +4,7 @@ import type { MapsDataset } from './datasets';
 import {
   ALL_LAYERS_ID,
   buildLayoutEntries,
+  compareLayerEntriesAsc,
   groupLayerEntries,
   isLayerOn,
   visibleEntries,
@@ -20,7 +21,7 @@ const workspaceLayer = (id: string): WorkspaceMapLayout => ({
 describe('buildLayoutEntries', () => {
   it('merges built-in, graph and workspace layers, first id wins', () => {
     const entries = buildLayoutEntries(
-      [ds('gdacs', 'public'), ds('earthquakes', 'public'), ds('iss', 'public')],
+      [ds('gdacs', 'environment'), ds('earthquakes', 'environment'), ds('iss', 'sigint')],
       [{ ...ds('kg-sites', 'custom'), graphUri: 'http://g' }, { ...ds('gdacs', 'custom'), graphUri: 'http://g' }],
       [workspaceLayer('offices'), workspaceLayer(ALL_LAYERS_ID)],
     );
@@ -43,7 +44,11 @@ describe('buildLayoutEntries', () => {
 });
 
 describe('isLayerOn', () => {
-  const [gdacs, earthquakes, news] = buildLayoutEntries([ds('gdacs', 'public'), ds('earthquakes', 'public'), ds('news', 'public')], [], []);
+  const [gdacs, earthquakes, news] = buildLayoutEntries(
+    [ds('gdacs', 'environment'), ds('earthquakes', 'environment'), ds('news', 'situation')],
+    [],
+    [],
+  );
   const [offices] = buildLayoutEntries([], [], [workspaceLayer('offices')]);
 
   it('defaults light built-ins and every workspace layer on', () => {
@@ -60,9 +65,20 @@ describe('isLayerOn', () => {
   });
 });
 
+describe('compareLayerEntriesAsc', () => {
+  it('sorts by title ascending', () => {
+    expect(compareLayerEntriesAsc(ds('z', 'environment'), ds('a', 'environment'))).toBeGreaterThan(0);
+    expect(
+      [ds('iss', 'sigint'), ds('ais', 'sigint'), ds('flights', 'sigint')].sort(compareLayerEntriesAsc).map(
+        (e) => e.id,
+      ),
+    ).toEqual(['ais', 'flights', 'iss']);
+  });
+});
+
 describe('visibleEntries / groupLayerEntries', () => {
   const entries = buildLayoutEntries(
-    [ds('volcanoes', 'public', 2), ds('gdacs', 'public', 1), ds('iss', 'public', 3)],
+    [ds('volcanoes', 'environment', 2), ds('gdacs', 'environment', 1), ds('iss', 'sigint', 3)],
     [],
     [workspaceLayer('offices')],
   );
@@ -71,10 +87,10 @@ describe('visibleEntries / groupLayerEntries', () => {
     expect(visibleEntries(entries, ['gdacs', 'offices']).map((e) => e.id)).toEqual(['volcanoes', 'iss']);
   });
 
-  it('groups Public then Custom, leaving empty groups out', () => {
+  it('groups Environment, SIGINT, Situation, then Custom; empty groups omitted', () => {
     const groups = groupLayerEntries(visibleEntries(entries, ['iss']));
     expect(groups.map((g) => [g.id, g.entries.map((e) => e.id)])).toEqual([
-      ['public', ['gdacs', 'volcanoes']],
+      ['environment', ['gdacs', 'volcanoes']],
       ['custom', ['offices']],
     ]);
   });

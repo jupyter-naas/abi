@@ -28,11 +28,11 @@ import { useMapsStore } from '@/stores/maps';
 import { mapsIconMap } from '@/app/workspace/[workspaceId]/maps/lib/maps-icons';
 import { ALL_LAYERS_ID, type LayoutEntry, type LayoutKind, type WorkspaceMapLayout } from '@/app/workspace/[workspaceId]/maps/lib/layouts';
 import { LayoutApiError, blankLayout, layoutsApi, type LayoutDraft, type LayoutPreview } from '@/app/workspace/[workspaceId]/maps/lib/layouts-api';
+import { MAPS_CATEGORIES, MAPS_CATEGORY_LABEL } from '@/app/workspace/[workspaceId]/maps/lib/datasets';
 import { mapsLayerPath, mapsSettingsPath } from '@/app/workspace/[workspaceId]/maps/lib/maps-route';
 import { useMapLayouts } from '@/app/workspace/[workspaceId]/maps/lib/use-map-layouts';
 
 const KIND_LABEL: Record<LayoutKind, string> = { builtin: 'Built-in', graph: 'Graph layer', workspace: 'Workspace layer' };
-const GROUP_LABEL: Record<string, string> = { public: 'Public', custom: 'Custom' };
 const NEW = 'new';
 const LAYOUT_ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
 
@@ -147,8 +147,7 @@ function MapsSettings() {
           <>
             <SettingsFilterSelect label="Group" value={groupFilter} onChange={setGroupFilter} options={[
               { value: 'all', label: 'All groups' },
-              { value: 'public', label: 'Public' },
-              { value: 'custom', label: 'Custom' },
+              ...MAPS_CATEGORIES.map(({ id, label }) => ({ value: id, label })),
             ]} />
             <SettingsFilterSelect label="Status" value={statusFilter} onChange={setStatusFilter} options={[
               { value: 'all', label: 'All statuses' },
@@ -198,7 +197,7 @@ function MapsSettings() {
                       </div>
                     </div>
                   </td>
-                  <td className={settingsTable.td}><Badge variant="outline">{GROUP_LABEL[entry.category] ?? entry.category}</Badge></td>
+                  <td className={settingsTable.td}><Badge variant="outline">{MAPS_CATEGORY_LABEL[entry.category] ?? entry.category}</Badge></td>
                   <td className={cn(settingsTable.td, 'text-muted-foreground')}>{KIND_LABEL[entry.kind]}</td>
                   <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
                     <span className="inline-flex items-center gap-2">

@@ -100,14 +100,19 @@ export interface LayoutGroup {
   entries: LayoutEntry[];
 }
 
-/** Public then Custom; empty groups omitted. */
+/** Ascending title sort within a sidebar / legend group. */
+export function compareLayerEntriesAsc(a: LayoutEntry, b: LayoutEntry): number {
+  return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+}
+
+/** Environment → SIGINT → Situation → Custom; empty groups omitted. */
 export function groupLayerEntries(entries: LayoutEntry[]): LayoutGroup[] {
   return MAPS_CATEGORIES.map(({ id, label }) => ({
     id,
     label,
     entries: entries
       .filter((entry) => entry.category === id)
-      .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title)),
+      .sort(compareLayerEntriesAsc),
   })).filter((group) => group.entries.length > 0);
 }
 

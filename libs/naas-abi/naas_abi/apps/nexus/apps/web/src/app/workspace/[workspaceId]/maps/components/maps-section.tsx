@@ -60,7 +60,7 @@ function rowClass(active: boolean) {
 }
 
 /**
- * Sidebar: All layers, then Public and Custom. Basemap is chosen on the map.
+ * Sidebar: Active layers, then Environment, SIGINT, Situation, and Custom.
  */
 export function MapsDatasetGroups({
   dense,

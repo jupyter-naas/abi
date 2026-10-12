@@ -27,8 +27,8 @@ export type MapsBuiltinDatasetId =
  */
 export type MapsDatasetId = MapsBuiltinDatasetId | (string & {});
 
-/** Public data layers on the map. Custom is for deployment pin feeds. */
-export type MapsDatasetCategory = 'public' | 'custom';
+/** Sidebar / legend grouping for map layers. */
+export type MapsDatasetCategory = 'environment' | 'sigint' | 'situation' | 'custom';
 
 export interface MapsDataset {
   id: MapsDatasetId;
@@ -41,17 +41,23 @@ export interface MapsDataset {
   order: number;
 }
 
-/** Sidebar groups: Public first, then Custom. Basemaps are chosen on the map. */
+/** Sidebar groups. Basemaps are chosen on the map control. */
 export const MAPS_CATEGORIES: {
   id: MapsDatasetCategory;
   label: string;
 }[] = [
-  { id: 'public', label: 'Public' },
+  { id: 'environment', label: 'Environment' },
+  { id: 'sigint', label: 'SIGINT' },
+  { id: 'situation', label: 'Situation' },
   { id: 'custom', label: 'Custom' },
 ];
 
+export const MAPS_CATEGORY_LABEL: Record<MapsDatasetCategory, string> = Object.fromEntries(
+  MAPS_CATEGORIES.map(({ id, label }) => [id, label]),
+) as Record<MapsDatasetCategory, string>;
+
 /**
- * Built-in Maps data layers (Public). The basemap is separate (see maps-basemaps.ts).
+ * Built-in Maps data layers. The basemap is separate (see maps-basemaps.ts).
  *
  * Custom is the extension point and stays empty here: product-specific datasets
  * belong to the deployment, registered through NEXT_PUBLIC_MAPS_CUSTOM_DATASETS
@@ -66,133 +72,133 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     id: 'earthquakes',
     title: 'Earthquakes',
     description: 'USGS GeoJSON feed (M≥2.5, past day). Free public layer.',
-    category: 'public',
+    category: 'environment',
     icon: 'Activity',
-    order: 1,
+    order: 2,
   },
   {
     id: 'wildfires',
     title: 'Wildfires',
     description:
       'EONET named open wildfires (7d). Optional FIRMS VIIRS 24h WMS when FIRMS_MAP_KEY is set.',
-    category: 'public',
+    category: 'environment',
     icon: 'Flame',
-    order: 2,
+    order: 3,
   },
   {
     id: 'temperature',
     title: 'Temperature',
     description:
       'Current 2m air temperature city samples via Open-Meteo (free, no API key).',
-    category: 'public',
+    category: 'environment',
     icon: 'Thermometer',
-    order: 3,
+    order: 8,
   },
   {
     id: 'gdacs',
     title: 'GDACS',
     description:
       'UN GDACS multi-hazard events (quakes, storms, floods, volcanoes, drought, wildfire).',
-    category: 'public',
+    category: 'environment',
     icon: 'AlertTriangle',
-    order: 5,
+    order: 1,
   },
   {
     id: 'eonet-all',
     title: 'EONET Events',
     description:
       'NASA EONET open natural events (all categories, last 30 days). Wildfires stay as a dedicated layer.',
-    category: 'public',
+    category: 'environment',
     icon: 'Sparkles',
-    order: 6,
+    order: 7,
   },
   {
     id: 'openaq',
     title: 'Air Quality',
     description:
       'OpenAQ when OPENAQ_API_KEY is set; Open-Meteo PM2.5 city samples otherwise.',
-    category: 'public',
+    category: 'environment',
     icon: 'Wind',
-    order: 7,
+    order: 9,
   },
   {
     id: 'nws-alerts',
     title: 'NWS Alerts',
     description:
       'US NWS active weather alerts (centroid pins). Proxied with a Maps User-Agent.',
-    category: 'public',
+    category: 'environment',
     icon: 'Bell',
-    order: 8,
+    order: 6,
   },
   {
     id: 'tropical-storms',
     title: 'Tropical Storms',
     description: 'NHC active tropical cyclones (CurrentStorms GeoJSON-compatible).',
-    category: 'public',
+    category: 'environment',
     icon: 'CloudLightning',
-    order: 9,
+    order: 5,
   },
   {
     id: 'volcanoes',
     title: 'Volcanoes',
     description: 'NASA EONET open volcano events (last 90 days).',
-    category: 'public',
+    category: 'environment',
     icon: 'Mountain',
-    order: 10,
+    order: 4,
   },
   {
     id: 'flights',
     title: 'Flights',
     description:
       'Live aircraft: viewport query via adsb.lol, global sample via airplanes.live.',
-    category: 'public',
+    category: 'sigint',
     icon: 'Plane',
-    order: 11,
+    order: 1,
   },
   {
     id: 'conflict',
     title: 'Conflict Sites',
     description:
       'Curated static OSINT conflict pins (Maps-owned list under maps/lib).',
-    category: 'public',
+    category: 'situation',
     icon: 'Crosshair',
-    order: 12,
+    order: 1,
   },
   {
     id: 'gulf-strikes',
     title: 'Gulf Strikes',
     description:
       'Live Gulf / Iran / Israel strike headlines from RSS, geocoded to theater sites via /api/maps/gulf-strikes.',
-    category: 'public',
+    category: 'situation',
     icon: 'Rocket',
-    order: 13,
+    order: 2,
   },
   {
     id: 'news',
     title: 'News',
     description:
       'World RSS headlines (BBC / Al Jazeera / Reuters) mapped to light region geocodes.',
-    category: 'public',
+    category: 'situation',
     icon: 'Newspaper',
-    order: 14,
+    order: 3,
   },
   {
     id: 'ais',
     title: 'AIS Vessels',
     description:
       'Live ships via AISStream when AISSTREAM_API_KEY is set on nexus-web. Honest empty state without a key.',
-    category: 'public',
+    category: 'sigint',
     icon: 'Ship',
-    order: 15,
+    order: 2,
   },
   {
     id: 'iss',
     title: 'ISS',
     description:
       'International Space Station current position (open-notify). Thin CelesTrak substitute.',
-    category: 'public',
+    category: 'sigint',
     icon: 'Satellite',
-    order: 16,
+    order: 3,
   },
 ];
 
