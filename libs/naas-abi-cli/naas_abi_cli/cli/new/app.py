@@ -6,6 +6,7 @@ import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
 from .new import new
+from .remote_module import is_remote_module, target_dir
 from .utils import to_kebab_case, to_pascal_case, to_snake_case
 
 
@@ -14,6 +15,11 @@ from .utils import to_kebab_case, to_pascal_case, to_snake_case
 @click.argument("app_path", required=False, default=".")
 def _new_app(app_name: str, app_path: str = "."):
     new_app(app_name, app_path)
+    if is_remote_module(target_dir(app_path)):
+        click.echo(
+            "Note: Nexus builds its app catalog from the modules the engine "
+            "loads, so it does not list apps of remote modules yet."
+        )
 
 
 def new_app(app_name: str, app_path: str = ".", extra_values: dict | None = None):

@@ -282,6 +282,10 @@ def test_new_project_runs_on_nats_by_default(tmp_path, monkeypatch) -> None:
     assert env["NATS_ABI_PASSWORD"] and env["NATS_MODULE_PASSWORD"]
     assert "naas-abi-sdk[agent]" in _uv_add(commands)
     assert "nats-server" in result.output
+    # The project's own module holds the default agent the engine loads.
+    module = (tmp_path / "demo" / "src" / "demo" / "__init__.py").read_text()
+    assert "naas_abi_core" in module
+    assert not (tmp_path / "demo" / "docker-compose.override.yml").exists()
 
 
 def test_new_project_without_nats_is_the_classic_project(tmp_path, monkeypatch) -> None:
