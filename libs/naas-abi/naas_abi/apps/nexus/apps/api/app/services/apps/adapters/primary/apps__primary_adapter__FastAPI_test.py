@@ -36,3 +36,41 @@ def test_build_app_info_reads_manifest_agent(tmp_path: Path) -> None:
         },
     )
     assert info.agent == "operations.counter_uas CounterUASAgent"
+
+
+def test_remote_module_apps_join_the_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import factory
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters.in_memory import (
+        InMemoryRemoteAppDirectory,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import RemoteApp
+
+    console = RemoteApp("acme.research", "console", "Console", "Ops", "operations", "🛰")
+    monkeypatch.setattr(
+        factory,
+        "get_remote_app_directory",
+        lambda: InMemoryRemoteAppDirectory({console: None}),
+    )
+
+    (info,) = asyncio.run(adapter._remote_apps_catalog())
+
+    assert info.app_id == "remote/acme.research:console"
+    assert info.module_path == "remote/acme.research"
+    assert info.url == "/app-html/remote/acme.research/console/index.html"
+    assert (info.name, info.category, info.icon_emoji) == ("Console", "operations", "🛰")
+
+
+def test_a_discovery_outage_still_lists_the_local_apps(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import factory
+
+    class Down:
+        async def list_apps(self):
+            raise ConnectionError("nats down")
+
+    monkeypatch.setattr(factory, "get_remote_app_directory", lambda: Down())
+
+    assert asyncio.run(adapter._remote_apps_catalog()) == ()

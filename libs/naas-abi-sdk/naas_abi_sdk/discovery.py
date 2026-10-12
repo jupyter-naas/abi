@@ -48,6 +48,7 @@ class ModuleInstance:
     # (module_id, contract_major) of each required module.
     dependencies: tuple[tuple[str, int], ...] = ()
     models: tuple[ModelDescriptor, ...] = ()
+    apps: tuple[Any, ...] = ()  # naas_abi_sdk.apps.AppDescriptor, without root
 
 
 def _instance(value: pb.Instance) -> ModuleInstance:
@@ -68,6 +69,24 @@ def _instance(value: pb.Instance) -> ModuleInstance:
         _jobs(d),
         tuple((x.module_id, x.contract_major) for x in d.dependencies),
         tuple(ModelDescriptor(m.name, m.description, m.kind) for m in d.models),
+        _apps(d),
+    )
+
+
+def _apps(descriptor: pb.ModuleDescriptor) -> tuple[Any, ...]:
+    from naas_abi_sdk.apps import AppDescriptor
+
+    return tuple(
+        AppDescriptor(
+            a.name,
+            a.title,
+            a.description,
+            a.category,
+            a.icon_emoji,
+            a.entry or "index.html",
+            a.contract_major,
+        )
+        for a in descriptor.apps
     )
 
 

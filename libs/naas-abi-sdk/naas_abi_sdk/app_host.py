@@ -62,6 +62,20 @@ def app_subject(project: str, instance_id: str, name: str) -> str:
     return f"abi.mod.{project}.{instance_id}.app.{name}.http"
 
 
+async def call_app(
+    transport: Any,
+    project: str,
+    instance_id: str,
+    request: pb.HttpRequest,
+) -> pb.HttpResponse:
+    """Send ``request`` to the app ``request.app`` of one module instance
+    (what Nexus does for each browser request); RPCError on an error reply.
+    Give ``transport`` a timeout above REQUEST_TIMEOUT_SECONDS."""
+    return await transport.call(
+        app_subject(project, instance_id, request.app), request, pb.HttpResponse
+    )
+
+
 @dataclass
 class _Answer:
     status: int
