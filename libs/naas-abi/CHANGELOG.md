@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.83.1 (2026-10-12)
+
+### Bug Fixes
+
+- **nexus**: Restrict org admin reads to owners and admins
+  ([`9bf1349`](https://github.com/jupyter-naas/abi/commit/9bf134980ee79673e942a3400534cfb89b457082))
+
+
 ## v2.83.0 (2026-10-09)
 
 ### Bug Fixes
