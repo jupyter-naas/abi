@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC
 from pathlib import Path
 
 import pytest
@@ -107,3 +108,49 @@ def test_a_grant_names_one_path_segment_each(module_id: str, app: str) -> None:
 
     with pytest.raises(ValidationError):
         adapter.RemoteAppGrantRequest(module_id=module_id, app=app)
+
+
+def test_a_listed_remote_app_can_be_enabled_in_a_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Remote apps are listed disabled: the toggle (PATCH) must accept their id."""
+    import asyncio
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+    from naas_abi.apps.nexus.apps.api.app.services.apps.port import AppConfigRecord
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import factory
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters.in_memory import (
+        InMemoryRemoteAppDirectory,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import RemoteApp
+
+    async def allowed(user_id: str, workspace_id: str) -> None:
+        return None
+
+    class Configs:
+        async def upsert_app_config(self, workspace_id, app_id, updates):
+            now = datetime.now(UTC)
+            return AppConfigRecord("c1", workspace_id, app_id, updates.enabled, now, now)
+
+    monkeypatch.setattr(adapter, "require_workspace_access", allowed)
+    monkeypatch.setattr(adapter, "_scan_apps_catalog", lambda: ())
+    monkeypatch.setattr(
+        factory,
+        "get_remote_app_directory",
+        lambda: InMemoryRemoteAppDirectory({RemoteApp("acme.research", "console"): None}),
+    )
+    user = SimpleNamespace(id="u1")
+
+    def enable(app_id: str) -> dict:
+        return asyncio.run(
+            adapter.update_app_config(
+                "ws1", app_id, adapter.AppConfigUpdate(enabled=True), user, Configs()
+            )
+        )
+
+    assert enable("remote/acme.research:console")["enabled"] is True
+    with pytest.raises(HTTPException) as unknown:
+        enable("remote/acme.research:missing")
+    assert unknown.value.status_code == 404
