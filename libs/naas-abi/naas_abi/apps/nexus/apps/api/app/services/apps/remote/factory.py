@@ -36,9 +36,7 @@ class ServiceToken:
     module's authorization cache, keyed on the token, would never hit.
     """
 
-    def __init__(
-        self, jwt_secret: str, *, clock: Callable[[], datetime] | None = None
-    ) -> None:
+    def __init__(self, jwt_secret: str, *, clock: Callable[[], datetime] | None = None) -> None:
         self._secret = jwt_secret
         self._clock = clock or (lambda: datetime.now(UTC))
         self._token: str | None = None

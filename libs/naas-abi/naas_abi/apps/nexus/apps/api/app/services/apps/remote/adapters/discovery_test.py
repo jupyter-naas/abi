@@ -219,3 +219,30 @@ def test_a_browser_that_drops_its_upload_fails_the_body():
     asyncio.run(discovery._pump(browser(), source, 0, nc))
 
     assert (source.failed, source.finished) == ("CANCELLED", False)
+
+
+def test_an_unknown_app_is_not_looked_up_again_for_5_seconds():
+    """Stale tabs polling a removed module's assets must not hold the discovery
+    lock that every remote app request waits on."""
+    discovery = FakeDiscovery([])
+    now = [0.0]
+    directory = _directory(discovery, [], [], now)
+
+    async def missing():
+        with pytest.raises(RemoteAppUnavailable):
+            await directory.forward("acme.gone", "console", AppRequest("GET", "/"))
+
+    async def scenario():
+        await missing()  # snapshot, then a fresh read
+        now[0] = 4.0
+        await missing()  # neither: the snapshot is current, the miss is recent
+        assert discovery.reads == 2
+        now[0] = 6.0
+        await missing()  # the miss is stale: one fresh read
+        assert discovery.reads == 3
+        discovery.instances.append(_instance("acme.gone", "i-9", CONSOLE))
+        now[0] = 20.0
+        answer = await directory.forward("acme.gone", "console", AppRequest("GET", "/"))
+        assert answer.body == b"ok"
+
+    asyncio.run(scenario())
