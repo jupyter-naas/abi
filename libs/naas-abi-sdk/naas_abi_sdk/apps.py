@@ -33,6 +33,8 @@ class AppDescriptor:
     icon_emoji: str = ""
     entry: str = DEFAULT_ENTRY
     contract_major: int = 1
+    # Largest request body Nexus forwards to it; 0: Nexus's default (1 GiB).
+    max_upload_bytes: int = 0
     # The folder its files are served from; None: the ASGI app serves everything.
     root: Path | None = None
 
@@ -44,6 +46,8 @@ class AppDescriptor:
             )
         if self.entry.startswith("/") or ".." in self.entry.split("/"):
             raise ValueError(f"App {self.name}: entry must be a relative path")
+        if self.max_upload_bytes < 0:
+            raise ValueError(f"App {self.name}: max_upload_bytes must not be negative")
 
     def to_pb(self) -> pb.AppDescriptor:
         return pb.AppDescriptor(
@@ -54,6 +58,7 @@ class AppDescriptor:
             icon_emoji=self.icon_emoji,
             entry=self.entry,
             contract_major=self.contract_major,
+            max_upload_bytes=self.max_upload_bytes,
         )
 
 
@@ -67,6 +72,14 @@ def _entry(url: Any) -> str:
 def _text(manifest: dict, key: str, default: str = "") -> str:
     value = manifest.get(key, default)
     return value if isinstance(value, str) else default
+
+
+def _size(value: Any) -> int:
+    if value is None:
+        return 0
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("max_upload_bytes must be a non-negative integer")
+    return value
 
 
 def read_app(folder: Path) -> AppDescriptor:
@@ -84,6 +97,7 @@ def read_app(folder: Path) -> AppDescriptor:
         category=_text(manifest, "category", "module"),
         icon_emoji=_text(manifest, "icon_emoji"),
         entry=_entry(manifest.get("url")),
+        max_upload_bytes=_size(manifest.get("max_upload_bytes")),
         root=folder,
     )
 

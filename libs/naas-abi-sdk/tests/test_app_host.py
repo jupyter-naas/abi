@@ -9,7 +9,8 @@ import pytest
 from naas_abi_proto.app.v1 import app_pb2 as pb
 from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 
-from naas_abi_sdk.app_host import MAX_RESPONSE_BODY, AppHost, app_subject
+from naas_abi_sdk.app_host import AppHost, app_subject
+from naas_abi_sdk.app_streams import INLINE_BYTES
 from naas_abi_sdk.apps import AppDescriptor, discover_apps, read_app
 from naas_abi_sdk.discovery import module_descriptor
 from naas_abi_sdk.module import BaseModule
@@ -198,16 +199,17 @@ def test_without_a_backend_unknown_paths_are_404(tmp_path):
     asyncio.run(scenario())
 
 
-def test_a_response_above_6_mib_is_refused(tmp_path):
-    async def big(scope, receive, send):
+def test_a_whole_small_response_travels_inline(tmp_path):
+    """Larger, or sent in parts, it streams (test_app_streams.py)."""
+
+    async def small(scope, receive, send):
         await send({"type": "http.response.start", "status": 200, "headers": []})
-        await send(
-            {"type": "http.response.body", "body": b"x" * (MAX_RESPONSE_BODY + 1)}
-        )
+        await send({"type": "http.response.body", "body": b"x" * INLINE_BYTES})
 
     async def scenario():
-        response = await _send(_host(tmp_path, big), _request("/big"))
-        assert response.status == 502 and b"6 MiB" in response.body
+        response = await _send(_host(tmp_path, small), _request("/small"))
+        assert response.status == 200 and not response.body_follows
+        assert len(response.body) == INLINE_BYTES
 
     asyncio.run(scenario())
 
