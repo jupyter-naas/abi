@@ -7,6 +7,7 @@ import {
   groupFeedLayers,
   compareLayerEntriesAsc,
   groupLayerEntries,
+  isForvisMazarsFacilityLayer,
   isLayerOn,
   visibleEntries,
   type WorkspaceMapLayout,
@@ -41,6 +42,15 @@ describe('buildLayoutEntries', () => {
   it('treats deployment Custom datasets as pin feeds', () => {
     const [entry] = buildLayoutEntries([ds('fleet', 'custom')], [], [], { customIds: new Set(['fleet']) });
     expect(entry.combinable).toBe(true);
+  });
+});
+
+describe('isForvisMazarsFacilityLayer', () => {
+  it('matches the Forvis Mazars feed layer id', () => {
+    expect(isForvisMazarsFacilityLayer({ id: 'forvis-mazars-facilities', feedId: 'forvis-mazars-facilities' })).toBe(
+      true,
+    );
+    expect(isForvisMazarsFacilityLayer({ id: 'valeo-facilities', feedId: 'valeo-facilities' })).toBe(false);
   });
 });
 

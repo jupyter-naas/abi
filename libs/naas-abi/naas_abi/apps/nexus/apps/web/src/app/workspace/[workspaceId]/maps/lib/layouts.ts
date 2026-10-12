@@ -9,7 +9,12 @@
 import type { CustomLayerGroup } from './maps-layer-groups';
 import { layerGroupDefinitions } from './maps-layer-groups';
 import type { MapsDataset, MapsLayerGroupId } from './datasets';
-import { isMapsCategoryVisible, isMapsLayerGroupIdVisible } from './maps-deployment';
+import {
+  FORVIS_MAZARS_FACILITIES_FEED_ID,
+  isMapsCategoryVisible,
+  isMapsLayerGroupIdVisible,
+  isMapsOrganizationFacilityOnlyDeployment,
+} from './maps-deployment';
 import { mapsPinImageUrl } from './maps-pin-image-url';
 
 /** Reserved route for the combined map (`/maps/all`). */
@@ -219,9 +224,19 @@ export function visibleEntries(entries: LayoutEntry[], hidden: ReadonlySet<strin
   return entries.filter((entry) => !set.has(entry.id));
 }
 
+export function isForvisMazarsFacilityLayer(entry: Pick<LayoutEntry, 'id' | 'feedId'>): boolean {
+  return (
+    entry.feedId === FORVIS_MAZARS_FACILITIES_FEED_ID
+    || entry.id === FORVIS_MAZARS_FACILITIES_FEED_ID
+  );
+}
+
 /** Default on for a new session before the URL is seeded. */
 export function defaultLayerOn(entry: LayoutEntry): boolean {
   if (!entry.combinable) return false;
+  if (isMapsOrganizationFacilityOnlyDeployment()) {
+    return isForvisMazarsFacilityLayer(entry);
+  }
   return entry.kind !== 'builtin' || DEFAULT_ON_BUILTIN_IDS.has(entry.id);
 }
 

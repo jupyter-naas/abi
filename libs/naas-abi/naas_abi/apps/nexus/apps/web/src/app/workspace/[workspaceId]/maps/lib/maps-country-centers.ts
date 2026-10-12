@@ -1,11 +1,11 @@
-import type { NaturalEarthFeatureCollection } from './maps-natural-earth-basemap';
+import type { CountryCenterRow } from '@/app/api/maps/country-centers/centers';
 
 /**
- * Country "centers" for group-by-country: Natural Earth's label point
- * (LABEL_X / LABEL_Y — inside the country, where its name is drawn), matched by
- * any of its names (English, local, ~25 languages, ISO code) plus aliases seen in
- * facility feeds. Countries missing from the 110m data (small islands, city
- * states) have no center: callers fall back to the mean of the pins.
+ * Country "centers" for map grouping: Natural Earth 50m label points (inside
+ * the country, where its name is drawn), matched by any of the country's names
+ * (own names win over translations, codes last) plus aliases seen in facility
+ * feeds, with each country's continent. Unknown countries have no center:
+ * callers fall back to the mean of the pins.
  */
 
 export interface CountryCenter {
@@ -13,6 +13,7 @@ export interface CountryCenter {
   name: string;
   lat: number;
   lng: number;
+  continent?: string | null;
 }
 
 export type CountryCenterIndex = ReadonlyMap<string, CountryCenter>;
@@ -45,24 +46,32 @@ const ALIASES: Record<string, string> = {
   'emirats arabes unis': 'United Arab Emirates',
 };
 
-const NAME_KEYS = /^(NAME(_[A-Z]{2,3})?|NAME_LONG|NAME_ALT|NAME_SORT|NAME_CIAWF|ADMIN|GEOUNIT|SOVEREIGNT|FORMAL_EN|ISO_A2)$/;
+/** Where a continent marker sits (visual centers, not centroids). */
+export const CONTINENT_CENTERS: Readonly<Record<string, { lat: number; lng: number }>> = {
+  Africa: { lat: 4, lng: 20 },
+  Europe: { lat: 52, lng: 15 },
+  Asia: { lat: 38, lng: 95 },
+  'North America': { lat: 45, lng: -100 },
+  'South America': { lat: -15, lng: -60 },
+  Oceania: { lat: -25, lng: 135 },
+  Antarctica: { lat: -80, lng: 0 },
+};
 
-export function buildCountryCenterIndex(collection: NaturalEarthFeatureCollection): CountryCenterIndex {
+export function buildCountryCenterIndex(rows: readonly CountryCenterRow[]): CountryCenterIndex {
   const index = new Map<string, CountryCenter>();
+  const rank = new Map<string, number>();
   const byName = new Map<string, CountryCenter>();
-  for (const feature of collection.features) {
-    const props = (feature.properties ?? {}) as Record<string, unknown>;
-    const name = typeof props.NAME === 'string' ? props.NAME : null;
-    const lng = Number(props.LABEL_X);
-    const lat = Number(props.LABEL_Y);
-    if (!name || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-    const center = { name, lat, lng };
-    byName.set(name, center);
-    for (const [key, value] of Object.entries(props)) {
-      if (!NAME_KEYS.test(key) || typeof value !== 'string' || !value.trim() || value === '-99') continue;
-      const normalized = normalizeCountryName(value);
-      if (normalized && !index.has(normalized)) index.set(normalized, center);
-    }
+  for (const row of rows) {
+    const center: CountryCenter = { name: row.name, lat: row.lat, lng: row.lng, continent: row.continent };
+    byName.set(row.name, center);
+    row.names.forEach((value, position) => {
+      const key = normalizeCountryName(value);
+      // A country's own name beats another country's translation or code.
+      if (key && (rank.get(key) ?? Infinity) > position) {
+        index.set(key, center);
+        rank.set(key, position);
+      }
+    });
   }
   for (const [alias, name] of Object.entries(ALIASES)) {
     const center = byName.get(name);

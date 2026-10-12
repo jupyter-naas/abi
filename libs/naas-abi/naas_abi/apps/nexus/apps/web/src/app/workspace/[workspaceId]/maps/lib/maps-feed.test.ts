@@ -129,3 +129,24 @@ it('validates coverage coordinates and evidence and links only members in the sa
   expect(feed.coveragePins?.[0].sources).toHaveLength(1);
   expect(feed.coveragePins?.[0].entityUri).toBe('urn:city');
 });
+
+describe('normalizeFeedLoad keeps combined-map fields', () => {
+  it('passes layer and feed identity through (grouping depends on them)', async () => {
+    const { normalizeFeedLoad } = await import('./maps-feed');
+    const [pin] = normalizeFeedLoad({
+      pins: [
+        {
+          id: 'edf-solar:1', lat: 46, lng: 2, label: 'Parc', country: 'France',
+          layerId: 'edf-solar', layerColor: '#fe5815', featureId: '1',
+          feedId: 'edf-power-facilities', feedColor: '#fe5815', feedTitle: 'EDF',
+          classLabels: ['Solar', 'Storage'],
+        },
+      ],
+    }).pins;
+    expect(pin).toMatchObject({
+      layerId: 'edf-solar', layerColor: '#fe5815', featureId: '1',
+      feedId: 'edf-power-facilities', feedColor: '#fe5815', feedTitle: 'EDF',
+      classLabels: ['Solar', 'Storage'],
+    });
+  });
+});

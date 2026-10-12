@@ -158,6 +158,10 @@ export async function fetchMapsFeedPins(
   return normalizeFeedLoad(data);
 }
 
+function hexColor(value: unknown): string | undefined {
+  return typeof value === 'string' && /^#[0-9a-f]{3,8}$/i.test(value) ? value : undefined;
+}
+
 function parseFeedPins(input: Array<Partial<MapsPinMarker>> | undefined): MapsPinMarker[] {
   const pins: MapsPinMarker[] = [];
   for (const p of Array.isArray(input) ? input : []) {
@@ -174,6 +178,10 @@ function parseFeedPins(input: Array<Partial<MapsPinMarker>> | undefined): MapsPi
       size: typeof p.size === 'number' ? Math.min(30, Math.max(4, p.size)) : undefined,
       entityUri: text(p.entityUri), graphUri: text(p.graphUri), classLabel: text(p.classLabel),
       classLabels: Array.isArray(p.classLabels) ? p.classLabels.filter((v): v is string => typeof v === 'string' && v.trim().length > 0) : undefined,
+      // Set on the combined map (layer / feed of the pin): grouping and badges need them.
+      layerId: text(p.layerId), layerColor: hexColor(p.layerColor),
+      feedId: text(p.feedId), feedColor: hexColor(p.feedColor), feedTitle: text(p.feedTitle),
+      featureId: text(p.featureId),
       country: text(p.country), precision: text(p.precision), observedAt: text(p.observedAt),
       sources: evidenceSources(p.sources),
       memberIds: Array.isArray(p.memberIds) ? p.memberIds.filter((id): id is string => typeof id === "string") : undefined,

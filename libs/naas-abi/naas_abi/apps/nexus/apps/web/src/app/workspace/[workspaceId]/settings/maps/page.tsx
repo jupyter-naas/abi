@@ -7,31 +7,27 @@
  * path (e.g. organization facilities, often seeded by the deployment). A layer
  * is what Maps lists and draws: a view on one feed — every feature, or only some
  * feature types — with its own title, color and icon. A feed keeps one layer at
- * least. Built-in and module graph layers have no feed here; they can be hidden
- * and recolored. Access (which workspaces) is set per feed; hiding per layer.
+ * least. The overview lists feeds ("Layers"); a feed's page edits its layers,
+ * their colors and which are shown. Access is set per feed; hiding per layer.
  */
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Loader2, Map as MapIcon, Pencil, Plus, Trash2 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
 import { SettingsReloadButton } from '@/components/settings/settings-reload';
 import {
-  SettingsEmpty, SettingsFilterSelect, SettingsLoading, SettingsNotice, SettingsPageHeader,
-  SettingsSection, SettingsTableToolbar, countLabel, settingsTable,
+  SettingsEmpty, SettingsLoading, SettingsNotice, SettingsPageHeader, SettingsSection, settingsTable,
 } from '@/components/settings/settings-ui';
 import { cn } from '@/lib/utils';
 import { useMapsStore } from '@/stores/maps';
-import { MapsLayerBrandIcon } from '@/app/workspace/[workspaceId]/maps/components/maps-layer-brand-icon';
 import {
-  isFeedLayout, type LayoutEntry, type LayoutKind, type WorkspaceFeedLayer, type WorkspaceMapLayout,
+  isFeedLayout, type WorkspaceFeedLayer, type WorkspaceMapLayout,
 } from '@/app/workspace/[workspaceId]/maps/lib/layouts';
 import {
   LayoutApiError, feedLayerDraft, feedLayersApi, layoutsApi,
 } from '@/app/workspace/[workspaceId]/maps/lib/layouts-api';
-import { layerPinColor } from '@/app/workspace/[workspaceId]/maps/lib/maps-layer-colors';
 import { mapsIconMap } from '@/app/workspace/[workspaceId]/maps/lib/maps-icons';
 import { facilityClassIcon } from '@/app/workspace/[workspaceId]/maps/lib/maps-facility-class-symbology';
 import { MapsAccessCell, useMapsPermissions } from '@/app/workspace/[workspaceId]/maps/components/maps-settings-access';
@@ -39,8 +35,7 @@ import { MapsLayerEditorForm } from '@/app/workspace/[workspaceId]/maps/componen
 import {
   MapsFeedLayerForm, slugifyLayerId, useFeedTypes,
 } from '@/app/workspace/[workspaceId]/maps/components/maps-feed-layer-form';
-import { MAPS_CATEGORIES, type MapsLayerGroupId } from '@/app/workspace/[workspaceId]/maps/lib/datasets';
-import { layerGroupLabel } from '@/app/workspace/[workspaceId]/maps/lib/maps-layer-groups';
+import type { MapsLayerGroupId } from '@/app/workspace/[workspaceId]/maps/lib/datasets';
 import { getWorkspaceLayerGroupId, removeWorkspaceLayerMeta } from '@/app/workspace/[workspaceId]/maps/lib/maps-workspace-layer-meta';
 import {
   mapsLayerPath, mapsPath, mapsSettingsPath, mapsSettingsSelectedFeed, mapsSettingsSelectedLayer,
@@ -49,13 +44,6 @@ import { mapsDeploymentRestrictsLayerCatalog } from '@/app/workspace/[workspaceI
 import { useMapLayouts } from '@/app/workspace/[workspaceId]/maps/lib/use-map-layouts';
 import { MapsSettingsBasemapsSection } from '@/app/workspace/[workspaceId]/maps/components/maps-settings-basemaps-section';
 
-const KIND_LABEL: Record<LayoutKind, string> = {
-  builtin: 'Built-in',
-  graph: 'Graph layer',
-  workspace: 'SPARQL feed',
-  feed: 'API feed',
-  imported: 'Imported GeoJSON (this browser)',
-};
 const NEW = 'new';
 const SEEDED_FEED_HINT = 'Provided by the deployment: hide its layers, or narrow its Access, instead of deleting it';
 const SEEDED_LAYER_HINT = 'Provided by the deployment: hide it instead of deleting it';
@@ -90,15 +78,12 @@ function MapsSettings() {
   const selectedFeed = mapsSettingsSelectedFeed(search);
   const forFeed = search?.get('for') ?? undefined;
   const {
-    all, hidden, canEdit, workspaceLayouts: feeds, feedLayers, loading, error, customLayerGroups, layerColors,
+    all, hidden, canEdit, workspaceLayouts: feeds, feedLayers, loading, error, customLayerGroups,
   } = useMapLayouts();
   const applyLayouts = useMapsStore((s) => s.applyLayouts);
   const loadLayouts = useMapsStore((s) => s.loadLayouts);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [tableError, setTableError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [groupFilter, setGroupFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
   const permissions = useMapsPermissions(workspaceId, canEdit);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
@@ -126,20 +111,14 @@ function MapsSettings() {
     } finally { setBusyId(null); }
   };
 
-  const toggleShown = (entry: LayoutEntry) => run(entry.id, async () => {
-    const result = await layoutsApi.setHidden(workspaceId, entry.id, !hidden.includes(entry.id));
+  const toggleShown = (layerId: string) => run(layerId, async () => {
+    const result = await layoutsApi.setHidden(workspaceId, layerId, !hidden.includes(layerId));
     applyLayouts(workspaceId, { hidden: result.hidden });
   }, 'Could not change the layer');
 
-  const setColor = (entry: LayoutEntry, color: string) => run(entry.id, async () => {
-    const record = layerRecord(entry.id);
-    if (record) {
-      const saved = await feedLayersApi.save(workspaceId, record.id, { ...feedLayerDraft(record), color });
-      applyLayouts(workspaceId, { feedLayers: feedLayers.map((l) => (l.id === saved.id ? saved : l)) });
-      return;
-    }
-    const result = await layoutsApi.setColor(workspaceId, entry.id, color);
-    applyLayouts(workspaceId, { colors: result.colors });
+  const setLayerColor = (layer: WorkspaceFeedLayer, color: string) => run(layer.id, async () => {
+    const saved = await feedLayersApi.save(workspaceId, layer.id, { ...feedLayerDraft(layer), color });
+    applyLayouts(workspaceId, { feedLayers: feedLayers.map((l) => (l.id === saved.id ? saved : l)) });
   }, 'Could not change the layer color');
 
   const deleteLayer = async (layer: WorkspaceFeedLayer) => {
@@ -219,6 +198,9 @@ function MapsSettings() {
             onNewLayer={(feedId) => go({ layer: NEW, forFeed: feedId })}
             onDeleteLayer={(layer) => void deleteLayer(layer)}
             onLayersChanged={reload}
+            hidden={hidden}
+            onToggleShown={(layer) => void toggleShown(layer.id)}
+            onColor={(layer, color) => void setLayerColor(layer, color)}
           />
         )}
       </div>
@@ -299,13 +281,6 @@ function MapsSettings() {
   }
 
   // ── Overview ──────────────────────────────────────────────────────────────
-  const query = searchQuery.trim().toLowerCase();
-  const rows = all.filter((entry) => {
-    const shown = !hidden.includes(entry.id);
-    return (groupFilter === 'all' || groupFilter === entry.category)
-      && (statusFilter === 'all' || (statusFilter === 'shown') === shown)
-      && (!query || [entry.title, entry.id, entry.description, entry.feedTitle ?? ''].some((t) => t.toLowerCase().includes(query)));
-  });
   const shownCount = all.filter((e) => !hidden.includes(e.id)).length;
 
   return (
@@ -334,7 +309,10 @@ function MapsSettings() {
       {tableError && <SettingsNotice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></SettingsNotice>}
       {!canEdit && !loading && <SettingsNotice>Only workspace owners and admins can change feeds and layers.</SettingsNotice>}
 
-      <SettingsSection title="Feeds">
+      <SettingsSection
+        title="Layers"
+        description="Each row is a feed (data source); open it to edit its layers, their colors and which are shown."
+      >
         <div className="overflow-x-hidden border border-border bg-card">
           <table className={cn(settingsTable.table, 'table-fixed')}>
             <thead>
@@ -399,139 +377,6 @@ function MapsSettings() {
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Layers">
-        <SettingsTableToolbar
-          search={searchQuery}
-          onSearchChange={setSearchQuery}
-          searchPlaceholder="Search layers..."
-          filters={
-            <>
-              <SettingsFilterSelect label="Group" value={groupFilter} onChange={setGroupFilter} options={[
-                { value: 'all', label: 'All groups' },
-                ...MAPS_CATEGORIES.map(({ id, label }) => ({ value: id, label })),
-              ]} />
-              <SettingsFilterSelect label="Status" value={statusFilter} onChange={setStatusFilter} options={[
-                { value: 'all', label: 'All statuses' },
-                { value: 'shown', label: 'Shown' },
-                { value: 'hidden', label: 'Hidden' },
-              ]} />
-            </>
-          }
-          meta={`${countLabel(rows.length, all.length, 'layer')} · ${shownCount} shown`}
-        />
-        <div className="max-h-[65vh] overflow-y-auto overflow-x-hidden border border-border bg-card">
-          <table className={cn(settingsTable.table, 'table-fixed')}>
-            <thead>
-              <tr className={settingsTable.headRow}>
-                <th className={settingsTable.th}>Name</th>
-                <th className={cn(settingsTable.th, 'w-36')}>Feed</th>
-                <th className={cn(settingsTable.th, 'w-28')}>Group</th>
-                <th className={cn(settingsTable.th, 'w-20')}>Color</th>
-                <th className={cn(settingsTable.th, 'w-20')}>Shown</th>
-                {canEdit && <th className={cn(settingsTable.th, 'w-24')} aria-label="Actions" />}
-              </tr>
-            </thead>
-            <tbody>
-              {loading && !all.length && (
-                <tr><td colSpan={6} className={cn(settingsTable.td, 'text-muted-foreground')}><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
-              )}
-              {!loading && rows.length === 0 && (
-                <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No layers match the current search and filters</td></tr>
-              )}
-              {rows.map((entry) => {
-                const shown = !hidden.includes(entry.id);
-                const record = layerRecord(entry.id);
-                const editable = Boolean(record && !record.shared_from);
-                const block = record ? layerDeleteBlock(record, layersByFeed.get(record.feed_id)?.length ?? 0) : null;
-                const color = layerPinColor(entry);
-                return (
-                  <tr
-                    key={entry.id}
-                    onClick={record ? () => go({ layer: entry.id }) : undefined}
-                    className={cn(settingsTable.row, record && 'cursor-pointer')}
-                  >
-                    <td className={cn(settingsTable.td, 'max-w-0')}>
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-muted">
-                          <MapsLayerBrandIcon entry={entry} size={20} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className={cn('truncate font-medium', !shown && 'text-muted-foreground')} title={entry.title}>
-                            {entry.title}
-                          </div>
-                          <div className="truncate text-xs text-muted-foreground" title={[entry.id, entry.description].filter(Boolean).join(' · ')}>
-                            <span className="font-mono">{entry.id}</span>
-                            {entry.classLabels?.length ? ` · ${entry.classLabels.join(', ')}` : entry.description ? ` · ${entry.description}` : ''}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className={cn(settingsTable.td, 'max-w-0 truncate text-muted-foreground')} onClick={(e) => e.stopPropagation()}>
-                      {entry.feedId ? (
-                        <button type="button" className="truncate hover:underline" onClick={() => go({ feed: entry.feedId })}>
-                          {entry.feedTitle ?? entry.feedId}
-                        </button>
-                      ) : (
-                        KIND_LABEL[entry.kind]
-                      )}
-                    </td>
-                    <td className={cn(settingsTable.td, 'max-w-0')}>
-                      <Badge variant="outline" className="max-w-full truncate">
-                        {layerGroupLabel(entry.category, customLayerGroups)}
-                      </Badge>
-                    </td>
-                    <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
-                      {canEdit && entry.kind !== 'imported' && !entry.sharedFrom ? (
-                        <LayerColorInput
-                          color={color}
-                          label={`${entry.title} color`}
-                          title={layerColors[entry.id] || entry.color ? color : `${color} (default)`}
-                          onCommit={(next) => void setColor(entry, next)}
-                        />
-                      ) : (
-                        <span className="inline-block h-4 w-4 border border-border" style={{ background: color }} aria-label={color} />
-                      )}
-                    </td>
-                    <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
-                      <span className="inline-flex items-center gap-2">
-                        <Checkbox
-                          checked={shown}
-                          disabled={!canEdit || busyId === entry.id}
-                          onCheckedChange={() => void toggleShown(entry)}
-                          aria-label={`${entry.title} shown`}
-                        />
-                        {busyId === entry.id && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
-                      </span>
-                    </td>
-                    {canEdit && (
-                      <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
-                        {record ? (
-                          <span className="inline-flex items-center gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => go({ layer: entry.id })} aria-label={`Edit ${entry.title}`} title={editable ? 'Edit' : 'View'}>
-                              <Pencil size={14} />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              disabled={Boolean(block) || busyId === entry.id}
-                              onClick={() => void deleteLayer(record)}
-                              aria-label={`Delete ${entry.title}`}
-                              title={block ?? 'Delete'}
-                            >
-                              <Trash2 size={14} />
-                            </Button>
-                          </span>
-                        ) : null}
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </SettingsSection>
-
       <MapsSettingsBasemapsSection workspaceId={workspaceId} canEdit={canEdit} permissions={permissions} />
     </div>
   );
@@ -552,6 +397,9 @@ function FeedPage({
   onNewLayer,
   onDeleteLayer,
   onLayersChanged,
+  hidden,
+  onToggleShown,
+  onColor,
 }: {
   workspaceId: string;
   feed: WorkspaceMapLayout | null;
@@ -567,6 +415,9 @@ function FeedPage({
   onNewLayer: (feedId: string) => void;
   onDeleteLayer: (layer: WorkspaceFeedLayer) => void;
   onLayersChanged: () => Promise<void>;
+  hidden: string[];
+  onToggleShown: (layer: WorkspaceFeedLayer) => void;
+  onColor: (layer: WorkspaceFeedLayer, color: string) => void;
 }) {
   const isNew = feed === null;
   const shared = Boolean(feed?.shared_from);
@@ -678,6 +529,8 @@ function FeedPage({
                   <th className={settingsTable.th}>Layer</th>
                   <th className={settingsTable.th}>Feature types</th>
                   <th className={cn(settingsTable.th, 'w-16')}>Order</th>
+                  <th className={cn(settingsTable.th, 'w-16')}>Color</th>
+                  <th className={cn(settingsTable.th, 'w-20')}>Shown</th>
                   {canEdit && <th className={cn(settingsTable.th, 'w-24')} aria-label="Actions" />}
                 </tr>
               </thead>
@@ -702,6 +555,29 @@ function FeedPage({
                         {layer.class_labels.length ? layer.class_labels.join(', ') : 'Every feature'}
                       </td>
                       <td className={cn(settingsTable.td, 'text-muted-foreground')}>{layer.order}</td>
+                      <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
+                        {canEdit && !shared ? (
+                          <LayerColorInput
+                            color={layer.color}
+                            label={`${layer.title} color`}
+                            title={layer.color}
+                            onCommit={(next) => onColor(layer, next)}
+                          />
+                        ) : (
+                          <span className="inline-block h-4 w-4 border border-border" style={{ background: layer.color }} aria-label={layer.color} />
+                        )}
+                      </td>
+                      <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
+                        <span className="inline-flex items-center gap-2">
+                          <Checkbox
+                            checked={!hidden.includes(layer.id)}
+                            disabled={!canEdit || busyId === layer.id}
+                            onCheckedChange={() => onToggleShown(layer)}
+                            aria-label={`${layer.title} shown`}
+                          />
+                          {busyId === layer.id && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
+                        </span>
+                      </td>
                       {canEdit && (
                         <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
                           <span className="inline-flex items-center gap-1">

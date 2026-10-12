@@ -195,7 +195,8 @@ describe('mapsCountryClusterLayersHtml', () => {
     expect(html).toContain('--maps-cluster-color:#171c8f');
     expect(html).toContain('--maps-cluster-color:#00a651');
     expect(html).toContain('>2<');
-    expect(html).toContain('>99+<');
+    expect(html).toContain('>120<');
+    expect(html).toContain('font-size:9px');
     expect(html).toContain('title="2 Forvis &lt;b&gt;"');
     expect(html).toContain('grid-template-columns:repeat(2,24px)');
     // One badge: its own size; several: a grid of at most 3 columns.
@@ -207,5 +208,15 @@ describe('mapsCountryClusterLayersHtml', () => {
   it('never injects a non-hex color into the style attribute', async () => {
     const { mapsCountryClusterPinHtml } = await import('./leaflet-map');
     expect(mapsCountryClusterPinHtml('red;background:url(x)', 3)).toContain('--maps-cluster-color:#2563eb');
+  });
+});
+
+describe('clusterCountLabel', () => {
+  it('shows every count', async () => {
+    const { clusterCountLabel } = await import('./leaflet-map');
+    expect(clusterCountLabel(207)).toBe('207');
+    expect(clusterCountLabel(999)).toBe('999');
+    expect(clusterCountLabel(1234)).toBe('1.2k');
+    expect(clusterCountLabel(15400)).toBe('15k');
   });
 });

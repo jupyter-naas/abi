@@ -163,7 +163,7 @@ function FeedRow({
   const loading = counts.some((status) => !status);
   const total = counts.reduce((sum, status) => sum + (status && 'count' in status ? status.count : 0), 0);
   return (
-    <div className="maps-legend__layer">
+    <div className="maps-legend__layer maps-legend__feed">
       <div className="maps-legend__row">
         {logo ? (
           <span className="maps-layer-marker maps-layer-marker--logo maps-legend__layer-swatch" aria-hidden>

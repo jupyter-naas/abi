@@ -1,20 +1,40 @@
 import type { MapsPinMarker } from './leaflet-map';
 import {
+  CONTINENT_CENTERS,
   findCountryCenter,
   normalizeCountryName,
   type CountryCenter,
   type CountryCenterIndex,
 } from './maps-country-centers';
 
-/** Below this zoom, country clustering replaces individual pins when enabled. */
-export const COUNTRY_CLUSTER_EXPAND_ZOOM = 7;
+/** From this zoom pins are shown one by one (grouping stops). */
+export const COUNTRY_CLUSTER_EXPAND_ZOOM = 5;
+/** Grouping by continent: continents below this zoom, then countries. */
+export const CONTINENT_CLUSTER_EXPAND_ZOOM = 3;
 
+/** Map grouping: one badge per layer feed (default) or per layer, or none. */
+export type MapsGroupBy = 'feed' | 'layer' | 'off';
+/** Map grouping area. */
+export type MapsGroupArea = 'country' | 'continent';
+
+/** The area pins are grouped into at this zoom, or null to show every pin. */
+export function groupAreaAt(
+  by: MapsGroupBy,
+  area: MapsGroupArea,
+  zoom: number,
+  view: 'addresses' | 'coverage',
+): MapsGroupArea | null {
+  if (by === 'off' || view !== 'addresses' || zoom >= COUNTRY_CLUSTER_EXPAND_ZOOM) return null;
+  return area === 'continent' && zoom < CONTINENT_CLUSTER_EXPAND_ZOOM ? 'continent' : 'country';
+}
+
+/** @deprecated use groupAreaAt */
 export function shouldClusterPinsByCountry(
   enabled: boolean,
   zoom: number,
   view: 'addresses' | 'coverage',
 ): boolean {
-  return enabled && view === 'addresses' && zoom < COUNTRY_CLUSTER_EXPAND_ZOOM;
+  return groupAreaAt(enabled ? 'feed' : 'off', 'country', zoom, view) !== null;
 }
 
 const DEFAULT_CLUSTER_COLOR = '#2563eb';
@@ -28,6 +48,8 @@ export interface CountryClusterOptions {
   groupBy?: CountryClusterBy;
   /** Country label points; without one a country sits at the mean of its pins. */
   centers?: CountryCenterIndex | null;
+  /** Group into countries (default) or continents (countries without one stay alone). */
+  area?: MapsGroupArea;
 }
 
 type ClusterBadge = NonNullable<MapsPinMarker['clusterLayers']>[number];
@@ -87,8 +109,16 @@ export function clusterPinsByCountry(
       continue;
     }
     // Feeds spell countries differently ("Brasil", "Brazil"): group on the matched country.
-    const center = findCountryCenter(opts.centers, country);
-    const key = center ? `ne:${center.name}` : `raw:${normalizeCountryName(country)}`;
+    const match = findCountryCenter(opts.centers, country);
+    const continent = opts.area === 'continent' && match?.continent ? match.continent : null;
+    const continentCenter = continent ? CONTINENT_CENTERS[continent] : undefined;
+    const center: CountryCenter | undefined =
+      continent && continentCenter ? { name: continent, ...continentCenter } : match;
+    const key = continent
+      ? `continent:${continent}`
+      : match
+        ? `ne:${match.name}`
+        : `raw:${normalizeCountryName(country)}`;
     const group = byCountry.get(key) ?? { label: center?.name ?? country, center, members: [] };
     group.members.push(pin);
     byCountry.set(key, group);
@@ -110,7 +140,7 @@ export function clusterPinsByCountry(
       lng,
       label,
       detail,
-      country: label,
+      country: key.startsWith('continent:') ? undefined : label,
       memberIds: members.map((p) => p.id),
       clusterCount: total,
       clusterLayers: layers,

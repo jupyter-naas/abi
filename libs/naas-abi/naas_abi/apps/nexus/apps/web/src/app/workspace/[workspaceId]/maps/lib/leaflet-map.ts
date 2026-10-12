@@ -89,15 +89,21 @@ export function mapsPinHtml(color: string, size: number): string {
   return `<span style="display:block;width:${size}px;height:${size}px;border:2px solid #fff;background:${color};box-shadow:0 1px 4px rgba(0,0,0,.35);border-radius:0"></span>`;
 }
 
-function clusterCountLabel(count: number): string {
-  return count > 99 ? '99+' : String(count);
+/** Every count is shown (no "99+"): up to 999 as is, then 1.2k, 15k. */
+export function clusterCountLabel(count: number): string {
+  if (count < 1000) return String(count);
+  const thousands = count / 1000;
+  return `${thousands < 10 ? Math.floor(thousands * 10) / 10 : Math.floor(thousands)}k`;
 }
 
 const SAFE_COLOR = /^#[0-9a-f]{3,8}$/i;
 
 export function mapsCountryClusterPinHtml(color: string, count: number, size = 28): string {
   const fill = SAFE_COLOR.test(color) ? color : '#2563eb';
-  return `<span class="maps-country-cluster-pin" style="--maps-cluster-color:${fill};width:${size}px;height:${size}px"><span class="maps-country-cluster-pin__count">${clusterCountLabel(count)}</span></span>`;
+  const label = clusterCountLabel(count);
+  // Three characters still fit the badge with a smaller font.
+  const font = label.length >= 3 ? 'font-size:9px;letter-spacing:-0.02em;' : '';
+  return `<span class="maps-country-cluster-pin" style="--maps-cluster-color:${fill};width:${size}px;height:${size}px;${font}"><span class="maps-country-cluster-pin__count">${label}</span></span>`;
 }
 
 /** Country markers: badges per row, and badge size once a country has several. */
@@ -340,10 +346,9 @@ export function addMapsPinMarkers(
       iconAnchor: [box.width / 2, box.height / 2],
     });
     const marker = L.marker([pin.lat, pin.lng], { icon, title: pin.label }).addTo(map);
-    const isCluster = cluster;
+    // With onSelect the canvas shows the pin under its search box (no popup).
     if (onSelect) {
       marker.on('click', () => onSelect(pin));
-      if (!isCluster) marker.bindPopup(mapsPinPopupHtml(pin));
     } else {
       marker.bindPopup(mapsPinPopupHtml(pin));
     }

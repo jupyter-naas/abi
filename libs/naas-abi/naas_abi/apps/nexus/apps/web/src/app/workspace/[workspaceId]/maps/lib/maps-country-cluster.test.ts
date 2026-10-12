@@ -4,6 +4,7 @@ import {
   clusterPinsByCountry,
   countryClusterLayers,
   COUNTRY_CLUSTER_EXPAND_ZOOM,
+  groupAreaAt,
   resolveClusterMemberPins,
   shouldClusterPinsByCountry,
 } from './maps-country-cluster';
@@ -106,5 +107,34 @@ describe('maps-country-cluster', () => {
       { layerId: 'edf', title: 'EDF', color: '#fe5815', count: 1 },
     ]);
     expect(out[0]?.clusterCount).toBe(2);
+  });
+
+  it('groups until zoom 5; continents first when asked', () => {
+    expect(COUNTRY_CLUSTER_EXPAND_ZOOM).toBe(5);
+    expect(groupAreaAt('feed', 'country', 4, 'addresses')).toBe('country');
+    expect(groupAreaAt('feed', 'country', 5, 'addresses')).toBeNull();
+    expect(groupAreaAt('off', 'country', 2, 'addresses')).toBeNull();
+    expect(groupAreaAt('layer', 'continent', 2, 'addresses')).toBe('continent');
+    expect(groupAreaAt('layer', 'continent', 3, 'addresses')).toBe('country');
+    expect(groupAreaAt('feed', 'country', 2, 'coverage')).toBeNull();
+  });
+
+  it('groups countries into their continent', () => {
+    const centers = new Map([
+      ['france', { name: 'France', lat: 46.7, lng: 2.55, continent: 'Europe' }],
+      ['germany', { name: 'Germany', lat: 51, lng: 10, continent: 'Europe' }],
+    ]);
+    const out = clusterPinsByCountry(
+      [
+        pin({ id: 'a', lat: 48, lng: 2, label: 'Paris', country: 'France', layerId: 'l' }),
+        pin({ id: 'b', lat: 52, lng: 13, label: 'Berlin', country: 'Germany', layerId: 'l' }),
+        pin({ id: 'c', lat: 1, lng: 103, label: 'Singapore', country: 'Singapore', layerId: 'l' }),
+      ],
+      { centers, area: 'continent' },
+    );
+    const europe = out.find((p) => p.label === 'Europe');
+    expect(europe).toMatchObject({ clusterCount: 2, lat: 52, lng: 15, country: undefined });
+    // No known continent: the country stays its own group.
+    expect(out.find((p) => p.label === 'Singapore')?.clusterCount).toBe(1);
   });
 });

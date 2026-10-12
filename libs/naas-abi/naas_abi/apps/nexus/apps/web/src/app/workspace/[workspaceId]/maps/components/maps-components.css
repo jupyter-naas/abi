@@ -967,14 +967,195 @@
   z-index: 450;
   top: 0.75rem;
   left: 0.75rem;
+  display: flex;
+  flex-direction: column;
   width: min(22rem, calc(100% - 1.5rem));
+  --maps-search-bar-height: 2rem;
+  /* Leave the basemap button (bottom-left) clear. */
+  max-height: calc(100% - 4.5rem);
+}
+
+.maps-point-search__bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.maps-point-search__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* Locations button, right of the search field. */
+.maps-point-search .maps-record-toggle,
+.maps-point-search .maps-country-filter__toggle {
+  flex-shrink: 0;
+  align-self: flex-start;
+  box-sizing: border-box;
+  min-height: var(--maps-search-bar-height);
+  background: hsl(var(--card) / 0.96);
+  box-shadow: 0 2px 10px hsl(0 0% 0% / 0.12);
+}
+
+.maps-point-search .maps-record-toggle[aria-expanded="true"],
+.maps-point-search .maps-country-filter__toggle[aria-expanded="true"] {
+  background: hsl(var(--muted));
+}
+
+.maps-record-header__spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.maps-country-filter {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.maps-country-filter__panel {
+  position: absolute;
+  z-index: 460;
+  top: calc(100% + 2px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  width: min(18rem, calc(100vw - 2rem));
+  max-height: min(14rem, 38vh);
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card) / 0.98);
+  box-shadow: 0 4px 16px hsl(0 0% 0% / 0.14);
+  font-size: 0.8125rem;
+}
+
+.maps-country-filter__search {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  margin: 0.45rem 0.5rem 0.35rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid hsl(var(--border));
+}
+
+.maps-country-filter__search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.maps-country-filter__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.65rem;
+  margin: 0 0.5rem 0.35rem;
+}
+
+.maps-country-filter__reset {
+  flex-shrink: 0;
+  padding: 0.25rem 0.35rem;
+  border: 0;
+  background: transparent;
+  color: hsl(var(--primary));
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.maps-country-filter__list {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0 0.35rem 0.45rem;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.maps-country-filter__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.2rem 0.15rem;
+  cursor: pointer;
+}
+
+.maps-country-filter__option span {
+  line-height: 1.35;
+}
+
+.maps-country-filter__empty {
+  padding: 0.35rem 0.5rem;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Locations, a pin or a group: under the search field, like its results. */
+.maps-point-search .maps-record-panel {
+  position: static;
+  width: auto;
+  max-width: none;
+  max-height: none;
+  min-height: 0;
+  margin-top: 2px;
+  overflow-y: auto;
+  background: hsl(var(--card) / 0.98);
+  box-shadow: 0 4px 16px hsl(0 0% 0% / 0.14);
+}
+
+.maps-point-search .maps-record-panel--list {
+  padding: 0;
+  margin-top: 2px;
+}
+
+.maps-point-search .maps-record-panel--list .maps-record-list button:first-child {
+  border-top: 0;
+}
+
+.maps-point-search .maps-record-panel--list > p {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+}
+
+.maps-record-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.maps-record-group__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid hsl(var(--border));
+  font-size: 11px;
+}
+
+.maps-record-group__badge strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.maps-record-group__swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
 }
 
 .maps-point-search__field {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.35rem 0.5rem;
+  box-sizing: border-box;
+  min-height: var(--maps-search-bar-height);
+  padding: 0 0.5rem;
   border: 1px solid hsl(var(--border));
   border-radius: 0;
   background: hsl(var(--card) / 0.96);
@@ -1013,6 +1194,12 @@
 
 .maps-point-search__clear:hover {
   color: hsl(var(--foreground));
+}
+
+.maps-point-search__main > .maps-point-search__results,
+.maps-point-search__main > .maps-record-panel {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .maps-point-search__results {
@@ -1537,7 +1724,15 @@
 .maps-record-close { padding: 4px; }
 .maps-record-search { display: flex; align-items: center; gap: 8px; border: 1px solid hsl(var(--border)); padding: 7px 8px; border-radius: var(--org-border-radius, 0px); }
 .maps-record-search input { width: 100%; min-width: 0; background: transparent; color: inherit; border: 0; outline: none; }
-.maps-record-panel select { width: 100%; padding: 7px; margin-top: 8px; background: hsl(var(--background)); color: inherit; border: 1px solid hsl(var(--border)); border-radius: var(--org-border-radius, 0px); }
+.maps-record-panel select {
+  width: 100%;
+  padding: 7px;
+  margin-top: 0;
+  background: hsl(var(--background));
+  color: inherit;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--org-border-radius, 0px);
+}
 .maps-record-list { display: flex; flex-direction: column; }
 .maps-record-list button { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 2px; border: 0; border-bottom: 1px solid hsl(var(--border)); background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .maps-record-list button:hover { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
@@ -1567,9 +1762,6 @@
 .maps-record-fact span { color: hsl(var(--muted-foreground)); margin-right: 6px; }
 .maps-pin-popup__photo img { display: block; width: 100%; max-width: 220px; height: 110px; object-fit: cover; margin: 6px 0; border-radius: 0; }
 .maps-pin-popup__streetview, .maps-pin-popup__actions { margin-top: 6px; font-size: 12px; }
-@media (max-width: 767px) {
-  .maps-record-panel { top: auto; bottom: 32px; width: calc(100% - 24px); max-height: 45%; }
-}
 
 
 /* Coverage shares the same map and evidence panel as street-address markers. */
@@ -1622,32 +1814,77 @@
   margin: 6px 0;
 }
 
-/* Group by country: on/off, then Layer | Feed. */
-.maps-cluster-control {
+/* Toolbar "Group" button and its panel (Group: feed | layers | off; Type: country | continent). */
+.maps-group-control {
+  position: relative;
   display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
 }
 
-.maps-cluster-control__by {
-  display: inline-flex;
+.maps-group-panel {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 5000;
+  min-width: 15rem;
+  padding: 0.6rem 0.7rem;
   border: 1px solid hsl(var(--border));
+  background: hsl(var(--popover, var(--card)));
+  color: hsl(var(--foreground));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  font-size: 0.8125rem;
 }
 
-.maps-cluster-control__option {
-  padding: 0 0.4rem;
-  height: 1.5rem;
+.maps-group-panel__section {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.maps-group-panel__section + .maps-group-panel__section {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid hsl(var(--border));
+}
+
+.maps-group-panel__section:disabled {
+  opacity: 0.5;
+}
+
+.maps-group-panel__title {
+  margin-bottom: 0.3rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.maps-group-panel__option {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.15rem 0;
+  cursor: pointer;
+}
+
+.maps-group-panel__default,
+.maps-group-panel__hint {
+  margin-left: auto;
   font-size: 0.6875rem;
   color: hsl(var(--muted-foreground));
-  background: transparent;
-}
-
-.maps-cluster-control__option--active {
-  background: hsl(var(--foreground));
-  color: hsl(var(--background));
 }
 
 /* Legend: a feed's layers sit slightly in from the feed row (as in the sidebar). */
 .maps-legend__layer--in-feed {
   padding-left: 0.75rem;
+}
+
+/* A little air between a feed row and its layer rows, and between layers. */
+.maps-legend__feed {
+  gap: 0.35rem;
+}
+
+.maps-legend__group-items > .maps-legend__feed:not(:first-child),
+.maps-legend__feed + .maps-legend__layer {
+  margin-top: 0.2rem;
 }

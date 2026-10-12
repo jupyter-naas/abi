@@ -45,6 +45,9 @@ export function isMapsOrganizationFacilityOnlyDeployment(): boolean {
   );
 }
 
+/** Default GeoJSON feed when {@link isMapsOrganizationFacilityOnlyDeployment} is true. */
+export const FORVIS_MAZARS_FACILITIES_FEED_ID = 'forvis-mazars-facilities';
+
 /**
  * Hide File → New layer / New basemap / GeoJSON layers and Settings → New layer.
  * Sidebar filtering uses {@link MAPS_VISIBLE_CATEGORIES} alone — that must not

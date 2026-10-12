@@ -360,6 +360,44 @@ aside.glass :focus-visible {
   box-shadow: none;
 }
 
+/*
+ * Maps dropdowns (group panel, basemap strip, country filter): no green focus ring.
+ */
+.maps-group-panel,
+.maps-group-panel :focus,
+.maps-group-panel :focus-visible,
+.maps-basemap-popover,
+.maps-basemap-popover :focus,
+.maps-basemap-popover :focus-visible,
+.maps-record-panel select:focus,
+.maps-record-panel select:focus-visible {
+  outline: none !important;
+  --tw-ring-width: 0px !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  box-shadow: none !important;
+}
+
+.maps-record-panel select:focus,
+.maps-record-panel select:focus-visible {
+  border-color: hsl(var(--border));
+}
+
+.maps-country-filter__panel,
+.maps-country-filter__panel :focus,
+.maps-country-filter__panel :focus-visible {
+  outline: none !important;
+  --tw-ring-width: 0px !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  box-shadow: none !important;
+}
+
+.maps-country-filter__search:focus-within {
+  border-color: var(--border-hex, hsl(var(--border)));
+  box-shadow: none;
+}
+
 /* ============================================
  * WORKSPACE THEME DYNAMIC COLORS
  * These use CSS variables set by workspace-layout

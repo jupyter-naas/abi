@@ -3,9 +3,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { FALLBACK_BASEMAP_ID } from '@/app/workspace/[workspaceId]/maps/lib/maps-basemaps';
-import type { CountryClusterBy } from '@/app/workspace/[workspaceId]/maps/lib/maps-country-cluster';
+import type { MapsGroupArea, MapsGroupBy } from '@/app/workspace/[workspaceId]/maps/lib/maps-country-cluster';
 import type { WorkspaceFeedLayer, WorkspaceMapLayout } from '@/app/workspace/[workspaceId]/maps/lib/layouts';
 import { mapsCatalogApi, type WorkspaceBasemap } from '@/app/workspace/[workspaceId]/maps/lib/basemaps-api';
+
+function list<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
 
 /** The workspace Maps catalog (`/api/maps/catalog`), shared by Settings and the map. */
 export interface WorkspaceLayouts {
@@ -34,15 +38,15 @@ export interface MapsState {
   /** Background tiles; switched from the map (Leaflet layers control). */
   basemapId: string;
   setBasemap: (basemapId: string) => void;
-  /** When zoomed out, group pins by country (one marker per country). */
-  countryClusterByCountry: boolean;
   /** Data points per layer id (and `feed:<id>` per feed) from the last map load. */
   layerCounts: Record<string, number>;
   setLayerCounts: (counts: Record<string, number>) => void;
-  /** Group-by-country badges: one per layer, or one per layer feed. */
-  countryClusterBy: CountryClusterBy;
-  setCountryClusterBy: (by: CountryClusterBy) => void;
-  setCountryClusterByCountry: (enabled: boolean) => void;
+  /** Map grouping when zoomed out: badges per layer feed (default), per layer, or off. */
+  groupBy: MapsGroupBy;
+  setGroupBy: (by: MapsGroupBy) => void;
+  /** Group by country (default) or by continent. */
+  groupArea: MapsGroupArea;
+  setGroupArea: (area: MapsGroupArea) => void;
 
   /** Settings → Maps: layer records, basemaps, hidden ids and layer colors. */
   byWorkspace: Record<string, WorkspaceLayouts>;
@@ -78,16 +82,16 @@ export const useMapsStore = create<MapsState>()(
       basemapId: FALLBACK_BASEMAP_ID,
       // Normalized against the workspace catalog where it is drawn.
       setBasemap: (basemapId) => set({ basemapId: basemapId || FALLBACK_BASEMAP_ID }),
-      countryClusterByCountry: false,
-      setCountryClusterByCountry: (countryClusterByCountry) => set({ countryClusterByCountry }),
       layerCounts: {},
       setLayerCounts: (counts) => {
         const current = get().layerCounts;
         if (Object.entries(counts).every(([id, n]) => current[id] === n)) return;
         set({ layerCounts: { ...current, ...counts } });
       },
-      countryClusterBy: 'layer',
-      setCountryClusterBy: (countryClusterBy) => set({ countryClusterBy }),
+      groupBy: 'feed',
+      setGroupBy: (groupBy) => set({ groupBy }),
+      groupArea: 'country',
+      setGroupArea: (groupArea) => set({ groupArea }),
 
       byWorkspace: {},
       loading: false,
@@ -101,14 +105,15 @@ export const useMapsStore = create<MapsState>()(
             byWorkspace: {
               ...state.byWorkspace,
               [workspaceId]: {
-                layouts: data.layouts,
-                feedLayers: data.feed_layers ?? [],
-                hidden: data.hidden_layouts,
-                colors: data.layer_colors,
-                basemaps: data.basemaps,
-                hiddenBasemaps: data.hidden_basemaps,
-                defaultBasemapId: data.default_basemap_id,
-                canEdit: data.can_edit,
+                // A malformed or partial response degrades to an empty catalog.
+                layouts: list(data.layouts),
+                feedLayers: list(data.feed_layers),
+                hidden: list(data.hidden_layouts),
+                colors: data.layer_colors ?? {},
+                basemaps: list(data.basemaps),
+                hiddenBasemaps: list(data.hidden_basemaps),
+                defaultBasemapId: data.default_basemap_id ?? EMPTY.defaultBasemapId,
+                canEdit: data.can_edit === true,
               },
             },
             loading: false,
@@ -130,8 +135,8 @@ export const useMapsStore = create<MapsState>()(
       partialize: (state) => ({
         overrides: state.overrides,
         basemapId: state.basemapId,
-        countryClusterByCountry: state.countryClusterByCountry,
-        countryClusterBy: state.countryClusterBy,
+        groupBy: state.groupBy,
+        groupArea: state.groupArea,
       }),
     },
   ),

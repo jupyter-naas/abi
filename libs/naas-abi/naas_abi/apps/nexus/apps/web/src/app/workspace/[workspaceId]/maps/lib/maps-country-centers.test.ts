@@ -1,35 +1,34 @@
 import { describe, expect, it } from 'vitest';
+import type { CountryCenterRow } from '@/app/api/maps/country-centers/centers';
 import { buildCountryCenterIndex, findCountryCenter } from './maps-country-centers';
-import type { NaturalEarthFeatureCollection } from './maps-natural-earth-basemap';
 
-const country = (props: Record<string, unknown>) => ({
-  type: 'Feature' as const,
-  geometry: { type: 'Point' as const, coordinates: [0, 0] },
-  properties: props,
+const row = (name: string, names: string[], lat: number, lng: number, continent: string | null = 'Europe'): CountryCenterRow => ({
+  name,
+  names: [name, ...names],
+  lat,
+  lng,
+  continent,
 });
 
-const NE = {
-  type: 'FeatureCollection',
-  features: [
-    country({ NAME: 'France', NAME_FR: 'France', NAME_DE: 'Frankreich', ISO_A2: 'FR', LABEL_X: 2.55, LABEL_Y: 46.7 }),
-    country({ NAME: 'South Africa', NAME_FR: 'Afrique du Sud', LABEL_X: 23.6, LABEL_Y: -29.7 }),
-    country({ NAME: 'China', NAME_FR: 'République populaire de Chine', LABEL_X: 106.3, LABEL_Y: 32.9 }),
-    country({ NAME: 'Nowhere', LABEL_X: 'x' }),
-  ],
-} as unknown as NaturalEarthFeatureCollection;
+const ROWS = [
+  // Listed first and named "France" in another language: must not take France.
+  row('Fr. S. Antarctic Lands', ['Terres australes françaises', 'France'], -49, 69, null),
+  row('France', ['Frankreich', 'FRA'], 46.7, 2.55),
+  row('South Africa', ['Afrique du Sud'], -29.7, 23.6, 'Africa'),
+  row('China', ['République populaire de Chine'], 32.9, 106.3, 'Asia'),
+];
 
 describe('country centers', () => {
-  const index = buildCountryCenterIndex(NE);
+  const index = buildCountryCenterIndex(ROWS);
 
-  it('matches any name, case and accents aside', () => {
-    expect(findCountryCenter(index, 'Afrique du Sud')).toEqual({ name: 'South Africa', lat: -29.7, lng: 23.6 });
-    expect(findCountryCenter(index, 'frankreich')?.name).toBe('France');
-    expect(findCountryCenter(index, 'FR')?.name).toBe('France');
+  it('prefers a country own name over another country translation', () => {
+    expect(findCountryCenter(index, 'France')).toEqual({ name: 'France', lat: 46.7, lng: 2.55, continent: 'Europe' });
   });
 
-  it('knows feed aliases and skips unknown countries', () => {
+  it('matches any name, case and accents aside, and knows aliases', () => {
+    expect(findCountryCenter(index, 'afrique du sud')?.name).toBe('South Africa');
+    expect(findCountryCenter(index, 'FRA')?.name).toBe('France');
     expect(findCountryCenter(index, 'Chine')?.name).toBe('China');
-    expect(findCountryCenter(index, 'Singapore')).toBeUndefined();
-    expect(findCountryCenter(index, 'Nowhere')).toBeUndefined();
+    expect(findCountryCenter(index, 'Atlantis')).toBeUndefined();
   });
 });

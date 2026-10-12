@@ -2,7 +2,7 @@
 
 import {useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode} from 'react';
 import type {Map as LeafletMap, Marker} from 'leaflet';
-import {ExternalLink, Loader2, ArrowLeft, Search, List, X} from 'lucide-react';
+import {ExternalLink, Loader2, ArrowLeft, X} from 'lucide-react';
 import { useMapsStore } from '@/stores/maps';
 import {
   basemapLabel,
@@ -21,13 +21,21 @@ import {
   clusterPinsByCountry,
   COUNTRY_CLUSTER_EXPAND_ZOOM,
   resolveClusterMemberPins,
-  shouldClusterPinsByCountry,
+  groupAreaAt,
 } from '../lib/maps-country-cluster';
 import {addMapsPinMarkers, captureMapsCamera, clearMapsMarkers, createMapsLeaflet, destroyMapsLeaflet, fitMapsBounds, MAPS_DEFAULT_CAMERA, restoreMapsCamera, type MapsCamera, type MapsPinMarker} from '../lib/leaflet-map';
 import {formatMapsFeedAge, graphObjectHref, normalizeFeedLoad, type MapsFeedMeta, type MapsFeedResult} from '../lib/maps-feed';
 import {mapsViewFromBounds, type MapsFeedView} from '../lib/maps-view';
 import {MapsCoverageLayer} from './maps-coverage-layer';
 import {MapsPointSearch} from './maps-point-search';
+import {pinSearchHaystack} from '../lib/maps-pin-search';
+import {
+  MapsCountryFilterControl,
+  isCountryFilterActive,
+  mapsCountryFilterAll,
+  pinMatchesCountryFilter,
+  type MapsCountryFilter,
+} from './maps-country-filter-control';
 import {MapsRecordMedia} from './maps-record-media';
 import { MapsActiveLayersLegend, type LayerLegendStatus } from './maps-active-layers-legend';
 import { aggregateLayerLegendSublayers } from '../lib/maps-layer-legend-utils';
@@ -115,11 +123,12 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   const basemapDefs = basemapDefsProp ?? workspaceBasemaps.allDefs;
   const pickerDefsBase = basemapPickerDefs ?? workspaceBasemaps.defs;
   const layerOverrides = useMapsStore((s) => s.overrides);
-  const countryClusterByCountry = useMapsStore((s) => s.countryClusterByCountry);
-  const setCountryClusterByCountry = useMapsStore((s) => s.setCountryClusterByCountry);
-  const countryClusterBy = useMapsStore((s) => s.countryClusterBy);
-  const setCountryClusterBy = useMapsStore((s) => s.setCountryClusterBy);
-  const countryCenters = useCountryCenters(countryClusterByCountry);
+  const groupBy = useMapsStore((s) => s.groupBy);
+  const setGroupBy = useMapsStore((s) => s.setGroupBy);
+  const groupArea = useMapsStore((s) => s.groupArea);
+  const setGroupArea = useMapsStore((s) => s.setGroupArea);
+  const grouping = groupBy !== 'off';
+  const countryCenters = useCountryCenters(grouping);
   const legendWorkspaceId = workspaceId || mapLayers.workspaceId;
   const legendEntries = useMemo(() => {
     if (legendLayerIds) {
@@ -157,9 +166,9 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     return drawn ? [...pickerDefsBase, drawn] : pickerDefsBase;
   }, [pickerDefsBase, basemap, basemapDefs]);
   const containerRef = useRef<HTMLDivElement>(null);
-  const toggleRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
   const [panelOpen, setPanelOpen] = useState(false);
+  const [countryPickerOpen, setCountryPickerOpen] = useState(false);
   const mapRef = useRef<LeafletMap|null>(null);
   const leafletRef = useRef<typeof import('leaflet')|null>(null);
   const preserveUserViewRef = useRef(false);
@@ -184,28 +193,55 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   const [feedMeta,setFeedMeta] = useState<MapsFeedMeta|null>(null);
   const [emptyDetail,setEmptyDetail] = useState<string|null>(null);
   const [selected,setSelected] = useState<MapsPinMarker|null>(null);
+  // Country / continent marker whose locations the panel lists.
+  const [group,setGroup] = useState<MapsPinMarker|null>(null);
+  // Bumped whenever the panel under search opens, which closes search results.
+  const [panelKey,setPanelKey] = useState(0);
   const [search,setSearch] = useState('');
-  const [country,setCountry] = useState('');
+  const [countryFilter,setCountryFilter] = useState<MapsCountryFilter>(mapsCountryFilterAll);
+  const [coverageCountry,setCoverageCountry] = useState('');
   const activePins = view === 'coverage' ? coveragePins : pins;
   const pointSearchPins = activePins;
-  const visiblePins = useMemo(() => activePins.filter(p => (!country || p.country===country) && `${p.label} ${p.country??''} ${p.detail??''} ${p.address??''}`.toLowerCase().includes(search.toLowerCase())),[activePins,country,search]);
+  const locationsListMode = panelOpen && !selected && !group;
+  const visiblePins = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const applyText = locationsListMode;
+    return activePins.filter((p) => {
+      if (!pinMatchesCountryFilter(p.country, countryFilter)) return false;
+      if (applyText && q && !pinSearchHaystack(p).includes(q)) return false;
+      return true;
+    });
+  }, [activePins, countryFilter, search, locationsListMode]);
   const canCountryCluster = useMemo(
     () => visiblePins.some((p) => p.country?.trim()),
     [visiblePins],
   );
   const mapZoom = camera?.zoom ?? MAPS_DEFAULT_CAMERA.zoom;
   const displayPins = useMemo(() => {
-    if (!shouldClusterPinsByCountry(countryClusterByCountry, mapZoom, view)) {
-      return visiblePins;
-    }
+    const area = groupAreaAt(groupBy, groupArea, mapZoom, view);
+    if (!area || groupBy === 'off') return visiblePins;
     return clusterPinsByCountry(visiblePins, {
       layerTitle: layerTitleForPin,
-      groupBy: countryClusterBy,
+      groupBy,
       centers: countryCenters,
+      area,
     });
     // layerTitleForPin is a render-time callback; titles only label the badges.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visiblePins, countryClusterByCountry, countryClusterBy, countryCenters, mapZoom, view]);
+  }, [visiblePins, groupBy, groupArea, countryCenters, mapZoom, view]);
+  const groupMembers = useMemo(() => {
+    if (!group) return [];
+    const members = resolveClusterMemberPins(group, visiblePins);
+    if (groupBy !== 'feed') return members;
+    // Feed grouping counts a site once even when it sits in several layers.
+    const seen = new Set<string>();
+    return members.filter((pin) => {
+      const site = `${pin.feedId ?? pin.layerId ?? ''}:${pin.featureId ?? pin.id}`;
+      if (seen.has(site)) return false;
+      seen.add(site);
+      return true;
+    });
+  }, [group, visiblePins, groupBy]);
   const countries = useMemo(() => Array.from(new Set(activePins.map(p=>p.country).filter((v):v is string=>!!v))).sort(),[activePins]);
   const freshness = metaLine(feedMeta, Date.now());
 
@@ -227,47 +263,55 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     if (!viewportBound) fitMapsBounds(map, visiblePins, {maxZoom: fitMaxZoom});
   }
 
+  function openPanel() {
+    setPanelOpen(true);
+    setPanelKey((key) => key + 1);
+  }
+
   function selectPin(pin:MapsPinMarker) {
     rememberView();
     setSelected(pin);
-    setPanelOpen(true);
+    openPanel();
     mapRef.current?.setView([pin.lat,pin.lng],Math.max(mapRef.current.getZoom(),pin.memberIds ? 8 : 14));
   }
 
   const handleMapPinSelect = useCallback(
     (pin: MapsPinMarker) => {
       const map = mapRef.current;
-      // Country marker (any size): zoom in on its sites.
+      // Country marker (any size): zoom in on its sites and list them under search.
       if (pin.clusterCount && pin.memberIds?.length && map) {
+        rememberView();
         preserveUserViewRef.current = true;
         const members = resolveClusterMemberPins(pin, visiblePins);
         fitMapsBounds(map, members, {
           maxZoom: Math.max(COUNTRY_CLUSTER_EXPAND_ZOOM, map.getZoom() + 1),
         });
-        if (pin.country) setCountry('');
+        if (pin.country) setCountryFilter(mapsCountryFilterAll());
+        setSelected(null);
+        setGroup(pin);
+        openPanel();
         return;
       }
-      if (inspectable) selectPin(pin);
+      selectPin(pin);
     },
-    [inspectable, visiblePins],
+    // selectPin / openPanel only use setters and refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visiblePins],
   );
 
-  const focusMapPin = useCallback(
-    (pin: MapsPinMarker) => {
-      mapRef.current?.setView(
-        [pin.lat, pin.lng],
-        Math.max(mapRef.current.getZoom(), pin.memberIds ? 8 : 14),
-      );
-      if (inspectable) selectPin(pin);
-    },
-    [inspectable],
-  );
+  const focusMapPin = useCallback((pin: MapsPinMarker) => {
+    setGroup(null);
+    selectPin(pin);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const selectCountry = useCallback((value: string) => {
-    setCountry(value);
+    setCountryFilter({ mode: 'some', countries: new Set([value]) });
+    setCoverageCountry(value);
     setSearch('');
     setSelected(null);
-    setPanelOpen(true);
+    setGroup(null);
+    openPanel();
     const map = mapRef.current;
     const saved = returnViewRef.current;
     returnViewRef.current = null;
@@ -287,19 +331,27 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     setView('addresses');
     setSearch('');
     setSelected(pin);
-    setPanelOpen(true);
+    openPanel();
   }
 
+  /** Back from a location: to its group when it came from one, else to the list. */
   function deselectPin() {
     setSelected(null);
-    restoreView();
+    if (!group) restoreView();
   }
 
   function closePanel() {
     setPanelOpen(false);
+    setCountryPickerOpen(false);
     setSelected(null);
+    setGroup(null);
     restoreView();
-    toggleRef.current?.focus();
+  }
+
+  function openLocationsList() {
+    setSelected(null);
+    setGroup(null);
+    openPanel();
   }
 
   useEffect(() => {
@@ -453,7 +505,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
       mapRef.current,
       displayPins,
       markersRef.current,
-      inspectable || countryClusterByCountry ? handleMapPinSelect : undefined,
+      handleMapPinSelect,
     );
     if (view === 'coverage') {
       markersRef.current.forEach((marker, index) => {
@@ -476,7 +528,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     }
     fittedPinsRef.current = visiblePins;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[displayPins,inspectable,fitMaxZoom,viewportBound,view,countryClusterByCountry,handleMapPinSelect]);
+  },[displayPins,inspectable,fitMaxZoom,viewportBound,view,handleMapPinSelect]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -516,11 +568,12 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !selected) return;
+    if (!map || (!selected && !group)) return;
     const onBackground = () => closePanel();
     map.on('click', onBackground);
     return () => { map.off('click', onBackground); };
-  }, [selected]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, group]);
 
   const overlayTitle =
     status === 'error'
@@ -550,6 +603,52 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
         })
       : null;
 
+  const recordListOnly = !selected && !group && view !== 'coverage';
+  const recordPanel = <section id={panelId} className={`maps-record-panel${recordListOnly ? ' maps-record-panel--list' : ''}`} aria-label="Map locations and evidence" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); closePanel(); } }}>
+    {!recordListOnly ? (
+      <div className="maps-record-header">
+        {selected ? (
+          group || inspectable
+            ? <button className="maps-record-back" onClick={deselectPin}><ArrowLeft size={14}/>{group ? group.label : view==='coverage'?'All cities':'All locations'}</button>
+            : <span/>
+        ) : group ? (
+          <h2>{group.label}</h2>
+        ) : (
+          <h2>{coverageCountry || 'Cities'}</h2>
+        )}
+        <button type="button" className="maps-record-close" aria-label="Close location panel" onClick={closePanel}><X size={16}/></button>
+      </div>
+    ) : null}
+    {selected ? <>
+      <MapsRecordMedia pin={selected} />
+      {selected.precision && <p className="maps-record-precision">{selected.precision}</p>}
+      {selected.detail && <p className="maps-record-detail">{selected.detail}</p>}
+      {selected.observedAt && <p>Observed: <time>{selected.observedAt}</time></p>}
+      {selected.entityUri && selected.graphUri && <a className="maps-btn maps-record-kg" href={graphObjectHref(workspaceId,selected.graphUri,selected.entityUri)}>Open in Knowledge Graph <ExternalLink size={14}/></a>}
+      {selected.memberIds && <>
+        <h3>Addresses ({selected.memberIds.length})</h3>
+        <div className="maps-record-list maps-coverage-addresses">{pins.filter(pin=>selected.memberIds?.includes(pin.id)).map(pin=><button key={pin.id} onClick={()=>showAddress(pin)}><strong>{pin.detail?.split('\n')[0] || pin.label}</strong><span>View address</span></button>)}</div>
+        {!selected.memberIds.length && <p>No street address is linked to this city yet.</p>}
+      </>}
+      {selected.relationships?.length ? <>
+        <h3>Relationships</h3>
+        <dl>{selected.relationships.map((r,i)=><div key={i}><dt>{r.label}</dt><dd>{r.entityUri && selected.graphUri ? <a href={graphObjectHref(workspaceId,selected.graphUri,r.entityUri)}>{r.value}</a>:r.value}</dd></div>)}</dl>
+      </> : null}
+      {selected.sources?.length ? <>
+        <h3>Evidence</h3><ul className="maps-record-sources">{selected.sources.map(s=><li key={s.url}><a href={s.url} target="_blank" rel="noreferrer">{s.title}<ExternalLink size={12}/></a></li>)}</ul>
+      </> : null}
+    </> : group ? <>
+      <div className="maps-record-group">
+        {(group.clusterLayers ?? []).map(layer => <span key={layer.layerId} className="maps-record-group__badge"><span className="maps-record-group__swatch" style={{background: layer.color}} aria-hidden/>{layer.title ?? 'Locations'}<strong>{layer.count}</strong></span>)}
+      </div>
+      <div className="maps-record-list">{groupMembers.map(p=><button key={p.id} onClick={()=>selectPin(p)}><strong>{p.label}</strong><span>{(groupBy === 'feed' ? p.feedTitle : undefined) ?? layerTitleForPin?.(p) ?? p.country}</span></button>)}</div>
+      {!groupMembers.length && <p>No locations in this group.</p>}
+    </> : <>
+      <div className="maps-record-list">{visiblePins.map(p=><button key={p.id} onClick={()=>selectPin(p)}><strong>{p.label}</strong><span>{p.memberIds ? `${p.memberIds.length} address${p.memberIds.length===1?'':'es'}` : p.country}</span></button>)}</div>
+      {status==='ready' && !visiblePins.length && <p>No locations match these filters.</p>}
+    </>}
+  </section>;
+
   return <div className="maps-canvas">
     <div className="maps-canvas__toolbar">
       <span className="maps-canvas__toolbar-title">{title}</span>
@@ -561,15 +660,14 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
         <button type="button" aria-pressed={view==='addresses'} onClick={()=>switchView('addresses')}>Addresses</button>
         <button type="button" aria-pressed={view==='coverage'} onClick={()=>switchView('coverage')}>City coverage</button>
       </div>}
-      {inspectable && (country || search) && <button type="button" className="maps-coverage-reset" aria-label="Clear map filters" onClick={()=>{setCountry('');setSearch('');deselectPin();}}>Show all{country ? ': '+country : ''}<X size={12}/></button>}
-      {inspectable && <button ref={toggleRef} type="button" className="maps-record-toggle" aria-expanded={panelOpen} aria-controls={panelId} onClick={() => panelOpen ? closePanel() : setPanelOpen(true)}><List size={15}/>{view==='coverage'?'Cities':'Locations'}</button>}
+      {inspectable && (isCountryFilterActive(countryFilter) || search) && <button type="button" className="maps-coverage-reset" aria-label="Clear map filters" onClick={()=>{setCountryFilter(mapsCountryFilterAll());setCoverageCountry('');setSearch('');deselectPin();}}>Show all<X size={12}/></button>}
       <div className="maps-canvas__toolbar-actions">
         <MapsCountryClusterControl
-          enabled={countryClusterByCountry}
+          groupBy={groupBy}
+          area={groupArea}
+          onGroupByChange={setGroupBy}
+          onAreaChange={setGroupArea}
           visible={canCountryCluster && view === 'addresses'}
-          onToggle={() => setCountryClusterByCountry(!countryClusterByCountry)}
-          groupBy={countryClusterBy}
-          onGroupByChange={setCountryClusterBy}
         />
       </div>
     </div>
@@ -588,13 +686,41 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
             ) : null}
           </div>
         ) : null}
-        {view==='coverage' && status==='ready' && mapRef.current && leafletRef.current && <MapsCoverageLayer map={mapRef.current} leaflet={leafletRef.current} pins={coveragePins} selectedCountry={country} onSelectCountry={selectCountry}/>}
-        {pointSearch && (status === 'ready' || status === 'empty') && pointSearchPins.length > 0 ? (
+        {view==='coverage' && status==='ready' && mapRef.current && leafletRef.current && <MapsCoverageLayer map={mapRef.current} leaflet={leafletRef.current} pins={coveragePins} selectedCountry={coverageCountry} onSelectCountry={selectCountry}/>}
+        {status === 'ready' || status === 'empty' || panelOpen ? (
           <MapsPointSearch
             pins={pointSearchPins}
+            searchable={pointSearch && pointSearchPins.length > 0}
             layerTitleForPin={layerTitleForPin}
             onSelectPin={focusMapPin}
-          />
+            resetKey={panelKey}
+            recordPanelMode={inspectable}
+            query={search}
+            onQueryChange={inspectable ? setSearch : undefined}
+            liveEdit={inspectable && locationsListMode}
+            placeholder="Search locations…"
+            onSearchSubmit={() => {
+              setSelected(null);
+              setGroup(null);
+              openLocationsList();
+            }}
+            onResultsOpen={() => {
+              setPanelOpen(false);
+              setSelected(null);
+              setGroup(null);
+            }}
+            actions={inspectable ? (
+              <MapsCountryFilterControl
+                countries={countries}
+                selected={countryFilter}
+                onChange={setCountryFilter}
+                open={countryPickerOpen}
+                onOpenChange={setCountryPickerOpen}
+              />
+            ) : null}
+          >
+            {panelOpen ? recordPanel : null}
+          </MapsPointSearch>
         ) : null}
         <MapsBasemapControl
           basemapId={basemap}
@@ -620,33 +746,6 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
           />
         </div>
       </div>
-      {inspectable && panelOpen && <aside id={panelId} className="maps-record-panel" aria-label="Map locations and evidence" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); closePanel(); } }}>
-        <div className="maps-record-header">
-          {selected ? <button className="maps-record-back" onClick={deselectPin}><ArrowLeft size={14}/>{view==='coverage'?'All cities':'All locations'}</button> : <h2>{view==='coverage' ? country || 'Cities' : 'Locations'}</h2>}
-          <button type="button" className="maps-record-close" aria-label="Close location panel" onClick={closePanel}><X size={16}/></button>
-        </div>
-        {selected ? <>
-          <MapsRecordMedia pin={selected} />
-          <p className="maps-record-precision">{selected.precision}</p>
-          <p className="maps-record-detail">{selected.detail}</p>
-          {selected.observedAt && <p>Observed: <time>{selected.observedAt}</time></p>}
-          {selected.entityUri && selected.graphUri && <a className="maps-btn maps-record-kg" href={graphObjectHref(workspaceId,selected.graphUri,selected.entityUri)}>Open in Knowledge Graph <ExternalLink size={14}/></a>}
-          {selected.memberIds && <>
-            <h3>Addresses ({selected.memberIds.length})</h3>
-            <div className="maps-record-list maps-coverage-addresses">{pins.filter(pin=>selected.memberIds?.includes(pin.id)).map(pin=><button key={pin.id} onClick={()=>showAddress(pin)}><strong>{pin.detail?.split('\n')[0] || pin.label}</strong><span>View address</span></button>)}</div>
-            {!selected.memberIds.length && <p>No street address is linked to this city yet.</p>}
-          </>}
-          <h3>Relationships</h3>
-          <dl>{selected.relationships?.map((r,i)=><div key={i}><dt>{r.label}</dt><dd>{r.entityUri && selected.graphUri ? <a href={graphObjectHref(workspaceId,selected.graphUri,r.entityUri)}>{r.value}</a>:r.value}</dd></div>)}</dl>
-          <h3>Evidence</h3><ul className="maps-record-sources">{selected.sources?.map(s=><li key={s.url}><a href={s.url} target="_blank" rel="noreferrer">{s.title}<ExternalLink size={12}/></a></li>)}</ul>
-        </> : <>
-          <label className="maps-record-search"><Search size={15}/><input aria-label="Search locations" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search locations…"/></label>
-          <select aria-label="Filter locations by country" value={country} onChange={e=>setCountry(e.target.value)}><option value="">All countries</option>{countries.map(c=><option key={c}>{c}</option>)}</select>
-          <p className="maps-record-note">{view==='coverage'?'Select a city to see its addresses and graph evidence.':'Select a location for its address, source and map precision.'}</p>
-          <div className="maps-record-list">{visiblePins.map(p=><button key={p.id} onClick={()=>selectPin(p)}><strong>{p.label}</strong><span>{p.memberIds ? `${p.memberIds.length} address${p.memberIds.length===1?'':'es'}` : p.country}</span></button>)}</div>
-          {status==='ready' && !visiblePins.length && <p>No locations match these filters.</p>}
-        </>}
-      </aside>}
     </div>
   </div>;
 }
