@@ -93,6 +93,40 @@ def _valid_job(job: pb.JobDescriptor) -> bool:
     )
 
 
+# Apps a module serves over NATS (docs/adr/20261012_remote-module-apps.md): few
+# and small, so they stay a minor part of the bounded registry snapshot.
+MAX_APPS = 16
+MAX_APP_BYTES = 4096
+
+
+def _app_name(value: str) -> bool:
+    """A URL segment under /app-html/remote/<module_id>/."""
+    return bool(re.fullmatch(r"[A-Za-z0-9_-]{1,64}", value))
+
+
+def _app_entry(value: str) -> bool:
+    """A relative page below the app's root: no leading slash, no ``..``."""
+    return value == "" or (
+        len(value) <= 256
+        and not value.startswith("/")
+        and ".." not in value.split("/")
+        and "\\" not in value
+    )
+
+
+def _valid_app(app: pb.AppDescriptor) -> bool:
+    return (
+        _app_name(app.name)
+        and app.contract_major > 0
+        and len(app.title) <= 256
+        and len(app.description) <= 4096
+        and len(app.category) <= 64
+        and len(app.icon_emoji) <= 16
+        and _app_entry(app.entry)
+        and app.ByteSize() <= MAX_APP_BYTES
+    )
+
+
 class DiscoveryService:
     def __init__(
         self,
@@ -365,6 +399,16 @@ class DiscoveryService:
             "INVALID_ARGUMENT",
             "Invalid model descriptor",
         )
+        _require(
+            len(d.apps) <= MAX_APPS and len({x.name for x in d.apps}) == len(d.apps),
+            "INVALID_ARGUMENT",
+            "Too many or duplicate apps",
+        )
+        _require(
+            all(_valid_app(x) for x in d.apps),
+            "INVALID_ARGUMENT",
+            "Invalid app descriptor",
+        )
         for record in state.records:
             other = record.instance.descriptor
             if req.rollout_id and record.rollout_id == req.rollout_id:
@@ -384,9 +428,10 @@ class DiscoveryService:
                     other.dependencies == d.dependencies
                     and other.agents == d.agents
                     and other.jobs == d.jobs
-                    and other.models == d.models,
+                    and other.models == d.models
+                    and other.apps == d.apps,
                     "DESCRIPTOR_CONFLICT",
-                    "Replicas of a contract in one rollout must declare identical dependencies, agents, jobs and models",
+                    "Replicas of a contract in one rollout must declare identical dependencies, agents, jobs, models and apps",
                 )
         self._refuse_cycles(req, state)
 
@@ -775,3 +820,41 @@ class DiscoveryService:
             "Provider is not ready",
         )
         return pb.AuthorizeModelResponse()
+
+    async def authorize_app(
+        self, req: pb.AuthorizeAppRequest, owner: str
+    ) -> pb.AuthorizeAppResponse:
+        """Every app request is authorized (the SDK caches the answer briefly),
+        so a recent snapshot serves it when it already shows the app READY."""
+        recent = self._recent_record(req.instance_id)
+        if recent is not None:
+            with contextlib.suppress(DiscoveryError):
+                return self._authorize_app(recent, req, owner)
+        state, _ = await self._read()
+        self._ready(state)
+        record = next(
+            (r for r in state.records if r.instance.instance_id == req.instance_id),
+            None,
+        )
+        return self._authorize_app(record, req, owner)
+
+    def _authorize_app(
+        self,
+        record: pb.RegistryRecord | None,
+        req: pb.AuthorizeAppRequest,
+        owner: str,
+    ) -> pb.AuthorizeAppResponse:
+        if record is None:
+            raise DiscoveryError("LEASE_EXPIRED", "Provider registration expired")
+        self._authorize(record, req.lease_token, owner)
+        _require(
+            any(a.name == req.app_name for a in record.instance.descriptor.apps),
+            "APP_NOT_FOUND",
+            req.app_name,
+        )
+        _require(
+            record.instance.status == "READY",
+            "MODULE_UNAVAILABLE",
+            "Provider is not ready",
+        )
+        return pb.AuthorizeAppResponse()

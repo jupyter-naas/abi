@@ -67,8 +67,26 @@ class ModelDescriptor(_message.Message):
     kind: str
     def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., kind: _Optional[str] = ...) -> None: ...
 
+class AppDescriptor(_message.Message):
+    __slots__ = ("name", "title", "description", "category", "icon_emoji", "entry", "contract_major")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    TITLE_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    CATEGORY_FIELD_NUMBER: _ClassVar[int]
+    ICON_EMOJI_FIELD_NUMBER: _ClassVar[int]
+    ENTRY_FIELD_NUMBER: _ClassVar[int]
+    CONTRACT_MAJOR_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    title: str
+    description: str
+    category: str
+    icon_emoji: str
+    entry: str
+    contract_major: int
+    def __init__(self, name: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., category: _Optional[str] = ..., icon_emoji: _Optional[str] = ..., entry: _Optional[str] = ..., contract_major: _Optional[int] = ...) -> None: ...
+
 class ModuleDescriptor(_message.Message):
-    __slots__ = ("module_id", "package_version", "contract_major", "dependencies", "agents", "jobs", "models")
+    __slots__ = ("module_id", "package_version", "contract_major", "dependencies", "agents", "jobs", "models", "apps")
     MODULE_ID_FIELD_NUMBER: _ClassVar[int]
     PACKAGE_VERSION_FIELD_NUMBER: _ClassVar[int]
     CONTRACT_MAJOR_FIELD_NUMBER: _ClassVar[int]
@@ -76,6 +94,7 @@ class ModuleDescriptor(_message.Message):
     AGENTS_FIELD_NUMBER: _ClassVar[int]
     JOBS_FIELD_NUMBER: _ClassVar[int]
     MODELS_FIELD_NUMBER: _ClassVar[int]
+    APPS_FIELD_NUMBER: _ClassVar[int]
     module_id: str
     package_version: str
     contract_major: int
@@ -83,7 +102,8 @@ class ModuleDescriptor(_message.Message):
     agents: _containers.RepeatedCompositeFieldContainer[AgentDescriptor]
     jobs: _containers.RepeatedCompositeFieldContainer[JobDescriptor]
     models: _containers.RepeatedCompositeFieldContainer[ModelDescriptor]
-    def __init__(self, module_id: _Optional[str] = ..., package_version: _Optional[str] = ..., contract_major: _Optional[int] = ..., dependencies: _Optional[_Iterable[_Union[Dependency, _Mapping]]] = ..., agents: _Optional[_Iterable[_Union[AgentDescriptor, _Mapping]]] = ..., jobs: _Optional[_Iterable[_Union[JobDescriptor, _Mapping]]] = ..., models: _Optional[_Iterable[_Union[ModelDescriptor, _Mapping]]] = ...) -> None: ...
+    apps: _containers.RepeatedCompositeFieldContainer[AppDescriptor]
+    def __init__(self, module_id: _Optional[str] = ..., package_version: _Optional[str] = ..., contract_major: _Optional[int] = ..., dependencies: _Optional[_Iterable[_Union[Dependency, _Mapping]]] = ..., agents: _Optional[_Iterable[_Union[AgentDescriptor, _Mapping]]] = ..., jobs: _Optional[_Iterable[_Union[JobDescriptor, _Mapping]]] = ..., models: _Optional[_Iterable[_Union[ModelDescriptor, _Mapping]]] = ..., apps: _Optional[_Iterable[_Union[AppDescriptor, _Mapping]]] = ...) -> None: ...
 
 class Instance(_message.Message):
     __slots__ = ("descriptor", "instance_id", "status", "expires_at", "rollout_id")
@@ -286,6 +306,30 @@ class AuthorizeModelRequest(_message.Message):
     def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., instance_id: _Optional[str] = ..., lease_token: _Optional[str] = ..., model_name: _Optional[str] = ..., caller_token: _Optional[str] = ...) -> None: ...
 
 class AuthorizeModelResponse(_message.Message):
+    __slots__ = ("error", "caller_identity", "caller_admin")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    CALLER_IDENTITY_FIELD_NUMBER: _ClassVar[int]
+    CALLER_ADMIN_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    caller_identity: str
+    caller_admin: bool
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., caller_identity: _Optional[str] = ..., caller_admin: bool = ...) -> None: ...
+
+class AuthorizeAppRequest(_message.Message):
+    __slots__ = ("context", "instance_id", "lease_token", "app_name", "caller_token")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
+    LEASE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    APP_NAME_FIELD_NUMBER: _ClassVar[int]
+    CALLER_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    instance_id: str
+    lease_token: str
+    app_name: str
+    caller_token: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., instance_id: _Optional[str] = ..., lease_token: _Optional[str] = ..., app_name: _Optional[str] = ..., caller_token: _Optional[str] = ...) -> None: ...
+
+class AuthorizeAppResponse(_message.Message):
     __slots__ = ("error", "caller_identity", "caller_admin")
     ERROR_FIELD_NUMBER: _ClassVar[int]
     CALLER_IDENTITY_FIELD_NUMBER: _ClassVar[int]
