@@ -376,8 +376,14 @@ def loaded_modules() -> list[Any]:
     return list(_iter_loaded_modules())
 
 
-def _app_exists(app_id: str) -> bool:
-    return any(a.app_id == app_id for a in _scan_apps_catalog())
+async def _app_exists(app_id: str) -> bool:
+    """In the catalog ``list_apps`` returns: a loaded module's app, or a
+    remote module's app (``remote/<module_id>:<app>``) that discovery lists."""
+    if any(a.app_id == app_id for a in _scan_apps_catalog()):
+        return True
+    if not app_id.startswith("remote/"):
+        return False
+    return any(a.app_id == app_id for a in await _remote_apps_catalog())
 
 
 # ---------------------------------------------------------------------------
@@ -398,8 +404,8 @@ def _serialize_record(record: AppConfigRecord) -> dict:
     return data
 
 
-def _ensure_app_exists(app_id: str) -> None:
-    if not _app_exists(app_id):
+async def _ensure_app_exists(app_id: str) -> None:
+    if not await _app_exists(app_id):
         raise HTTPException(status_code=404, detail=f"Unknown app_id: {app_id}")
 
 
@@ -610,7 +616,7 @@ async def create_app_config(
 ) -> dict:
     """Create a new app config row (errors if one already exists)."""
     await require_workspace_access(current_user.id, workspace_id)
-    _ensure_app_exists(body.app_id)
+    await _ensure_app_exists(body.app_id)
     try:
         record = await apps_service.create_app_config(
             AppConfigCreateInput(
@@ -633,7 +639,7 @@ async def get_app_config(
 ) -> dict:
     """Get a single app config row."""
     await require_workspace_access(current_user.id, workspace_id)
-    _ensure_app_exists(app_id)
+    await _ensure_app_exists(app_id)
     record = await apps_service.get_app_config(workspace_id, app_id)
     if record is None:
         raise HTTPException(status_code=404, detail="App config not found")
@@ -654,7 +660,7 @@ async def update_app_config(
     values. This lets the UI toggle simply call PATCH without a prior POST.
     """
     await require_workspace_access(current_user.id, workspace_id)
-    _ensure_app_exists(app_id)
+    await _ensure_app_exists(app_id)
 
     record = await apps_service.upsert_app_config(
         workspace_id=workspace_id,
@@ -673,7 +679,7 @@ async def delete_app_config(
 ) -> dict[str, str]:
     """Delete the app config (reverts to the default ``enabled=False``)."""
     await require_workspace_access(current_user.id, workspace_id)
-    _ensure_app_exists(app_id)
+    await _ensure_app_exists(app_id)
     deleted = await apps_service.delete_app_config(workspace_id, app_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="App config not found")
