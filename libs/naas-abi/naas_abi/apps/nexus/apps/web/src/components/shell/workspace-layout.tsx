@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import dynamic from 'next/dynamic';
 import { Sidebar } from './sidebar';
@@ -252,7 +252,9 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   const chatRoute = parseChatRoute(pathname);
   const { isChatRoute, isThread } = chatRoute;
   const { isFilesRoute, isBrowse: isFilesBrowse } = parseFilesRoute(pathname);
-  const { isMapsRoute, isDataset: isMapsDataset } = parseMapsRoute(pathname);
+  const searchParams = useSearchParams();
+  const mapsRoute = parseMapsRoute(pathname, searchParams);
+  const { isMapsRoute, isMapView: isMapsDataset } = mapsRoute;
   const { isDatasetsRoute, isTable: isDatasetsTable } = parseDatasetsRoute(pathname);
   const showMobileChatThread = isMobile && isMobileChatThreadOpen(chatRoute, mobilePendingChatSlug);
   const showMobileChatList = isMobile && isChatRoute && !showMobileChatThread;

@@ -2,16 +2,16 @@
 
 import { LayoutGrid, Map } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-is-mobile';
-import { useMapsStore } from '@/stores/maps';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from '@/components/shell/sidebar/collapsible-section';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
 import { mapsIconMap } from '../lib/maps-icons';
-import { ALL_LAYERS_ID, groupLayerEntries, type LayoutEntry } from '../lib/layouts';
-import { mapsAllLayersPath, mapsDatasetPath, mapsLibraryPath, parseMapsRoute } from '../lib/maps-route';
+import { groupLayerEntries, type LayoutEntry } from '../lib/layouts';
+import { mapsLayerPath, mapsLibraryPath, mapsPath } from '../lib/maps-route';
+import { useMapsLayerParams } from '../lib/use-maps-layer-params';
 import { useMapLayers } from '../lib/use-map-layouts';
 import './maps-components.css';
 
@@ -67,25 +67,23 @@ export function MapsDatasetGroups({
 }: {
   dense?: boolean;
 }) {
-  const pathname = usePathname();
-  const { workspaceId, entries, isOn, error } = useMapLayers();
-  const setLayerOn = useMapsStore((s) => s.setLayerOn);
-  const setLayersOn = useMapsStore((s) => s.setLayersOn);
-  const { datasetId } = parseMapsRoute(pathname);
+  const { workspaceId, layerIds, isOn, setLayerOn, setLayersOn, selectLayerExclusive } =
+    useMapsLayerParams();
+  const { entries, error } = useMapLayers();
   const combinable = entries.filter((e) => e.combinable);
-  const onCount = combinable.filter(isOn).length;
-  const allActive = datasetId === ALL_LAYERS_ID;
+  const onCount = layerIds.length;
+  const allActive = layerIds.length !== 1;
 
   return (
     <div className={cn('maps-section-list', dense && 'maps-section-list--dense')}>
       {error && <p className="maps-status maps-status--error">{error}</p>}
       <Link
-        href={mapsAllLayersPath(workspaceId)}
+        href={mapsPath(workspaceId, layerIds)}
         aria-current={allActive ? 'page' : undefined}
         className="shell-sidebar-home"
       >
         <LayoutGrid size={14} aria-hidden="true" />
-        <span>All layers</span>
+        <span>Active layers</span>
         <span className="text-[10px] text-muted-foreground">
           {onCount}/{combinable.length} on
         </span>
@@ -111,13 +109,14 @@ export function MapsDatasetGroups({
             {group.entries.map((entry) => {
               const IconComponent = mapsIconMap[entry.icon] || Map;
               const on = isOn(entry);
-              const active = datasetId === entry.id;
+              const active = layerIds.length === 1 && layerIds[0] === entry.id;
               return (
                 <div key={entry.id} className={rowClass(active)}>
                   <Link
-                    href={mapsDatasetPath(workspaceId, entry.id)}
+                    href={mapsLayerPath(workspaceId, entry.id)}
                     aria-current={active ? 'page' : undefined}
                     title={entry.description}
+                    onClick={() => selectLayerExclusive(entry.id)}
                     className={cn(
                       'flex min-w-0 flex-1 items-center gap-2',
                       !on && 'text-muted-foreground',

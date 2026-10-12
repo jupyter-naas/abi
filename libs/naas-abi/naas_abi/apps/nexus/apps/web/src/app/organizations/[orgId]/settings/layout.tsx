@@ -122,7 +122,7 @@ export default function OrganizationSettingsLayout({
     }
     if (orgCount === 1) {
       if (currentWorkspaceId) {
-        router.push(`/workspace/${currentWorkspaceId}/maps/all`);
+        router.push(`/workspace/${currentWorkspaceId}/maps`);
       } else {
         router.push('/');
       }

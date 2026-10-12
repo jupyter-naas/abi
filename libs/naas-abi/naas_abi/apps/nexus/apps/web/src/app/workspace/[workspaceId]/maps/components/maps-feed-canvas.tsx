@@ -4,15 +4,20 @@ import {useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode
 import type {Map as LeafletMap, Marker} from 'leaflet';
 import {ExternalLink, Loader2, ArrowLeft, Search, List, X} from 'lucide-react';
 import { useMapsStore } from '@/stores/maps';
-import { installMapsBasemap, normalizeBasemapId, type MapsBasemapHandle } from '../lib/maps-basemaps';
+import { basemapLabel, installMapsBasemap, normalizeBasemapId, type MapsBasemapHandle } from '../lib/maps-basemaps';
+import { formatMapsToolbarViewLine } from '../lib/maps-toolbar-view';
 import { MapsBasemapControl } from './maps-basemap-control';
 import { MapsLocateControl } from './maps-locate-control';
-import {addMapsPinMarkers, captureMapsCamera, clearMapsMarkers, createMapsLeaflet, destroyMapsLeaflet, fitMapsBounds, restoreMapsCamera, type MapsCamera, type MapsPinMarker} from '../lib/leaflet-map';
+import {addMapsPinMarkers, captureMapsCamera, clearMapsMarkers, createMapsLeaflet, destroyMapsLeaflet, fitMapsBounds, MAPS_DEFAULT_CAMERA, restoreMapsCamera, type MapsCamera, type MapsPinMarker} from '../lib/leaflet-map';
 import {formatMapsFeedAge, graphObjectHref, normalizeFeedLoad, type MapsFeedMeta, type MapsFeedResult} from '../lib/maps-feed';
 import {mapsViewFromBounds, type MapsFeedView} from '../lib/maps-view';
 import {MapsCoverageLayer} from './maps-coverage-layer';
 import {MapsPointSearch} from './maps-point-search';
 import {MapsRecordMedia} from './maps-record-media';
+import { MapsActiveLayersLegend, type LayerLegendStatus } from './maps-active-layers-legend';
+import { aggregateLayerLegendSublayers } from '../lib/maps-layer-legend-utils';
+import { isLayerOn } from '../lib/layouts';
+import { useMapLayers } from '../lib/use-map-layouts';
 import './maps-components.css';
 
 export type MapsFeedStatus = 'loading' | 'ready' | 'error' | 'empty';
@@ -28,7 +33,16 @@ export interface MapsFeedCanvasProps {
   sourceLabel?: string;
   fetchPins: (signal: AbortSignal, view?: MapsFeedView) => Promise<MapsFeedLoad>;
   fitMaxZoom?: number;
+  /** Pin / symbology rows (expand under this feed’s layer row in the legend). */
   legend?: ReactNode;
+  /** Layer ids shown in the active-layers legend (defaults to store overrides). */
+  legendLayerIds?: string[];
+  /** Counts for sidebar layers switched on (Active layers map). */
+  legendStatuses?: Record<string, LayerLegendStatus>;
+  /** Symbology for multiple layers (Active layers map). Merged with `legend` + `legendLayerId`. */
+  feedLegendsByLayerId?: Record<string, ReactNode>;
+  /** This feed’s dataset id — updates that row’s count on single-layer maps. */
+  legendLayerId?: string;
   refreshMs?: number;
   inspectable?: boolean;
   workspaceId?: string;
@@ -41,6 +55,11 @@ export interface MapsFeedCanvasProps {
   /** Top-left search over loaded pins (submit on Enter). */
   pointSearch?: boolean;
   layerTitleForPin?: (pin: MapsPinMarker) => string | undefined;
+  /** Extra layers after basemap (e.g. FIRMS WMS). Return cleanup on unmount. */
+  onMapReady?: (ctx: {
+    L: typeof import('leaflet');
+    map: LeafletMap;
+  }) => void | (() => void);
 }
 
 function viewFromMap(map: LeafletMap): MapsFeedView {
@@ -70,7 +89,27 @@ function metaLine(meta: MapsFeedMeta | null, now: number): string {
   return parts.filter(Boolean).join(' · ');
 }
 
-export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No data', emptyBody='This feed returned no mappable points right now.', sourceHref, sourceLabel='Source', fetchPins, fitMaxZoom=5, legend, refreshMs, inspectable=false, workspaceId='', viewportBound=false, basemapId, emptyOverlay=true, pointSearch=true, layerTitleForPin}: MapsFeedCanvasProps) {
+export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No data', emptyBody='This feed returned no mappable points right now.', sourceHref, sourceLabel='Source', fetchPins, fitMaxZoom=5, legend, legendLayerIds, legendStatuses, feedLegendsByLayerId, legendLayerId, refreshMs, inspectable=false, workspaceId='', viewportBound=false, basemapId, emptyOverlay=true, pointSearch=true, layerTitleForPin, onMapReady}: MapsFeedCanvasProps) {
+  const mapLayers = useMapLayers();
+  const layerOverrides = useMapsStore((s) => s.overrides);
+  const legendWorkspaceId = workspaceId || mapLayers.workspaceId;
+  const legendEntries = useMemo(() => {
+    if (legendLayerIds) {
+      const active = new Set(legendLayerIds);
+      return mapLayers.entries.filter((entry) => active.has(entry.id));
+    }
+    return mapLayers.entries.filter((entry) => isLayerOn(entry, layerOverrides));
+  }, [legendLayerIds, mapLayers.entries, layerOverrides]);
+  const [feedLegendStatuses, setFeedLegendStatuses] = useState<Record<string, LayerLegendStatus>>({});
+  const mergedLegendStatuses = useMemo(
+    () => ({ ...feedLegendStatuses, ...legendStatuses }),
+    [feedLegendStatuses, legendStatuses],
+  );
+  const mergedFeedLegends = useMemo(() => {
+    const merged = { ...feedLegendsByLayerId };
+    if (legendLayerId && legend) merged[legendLayerId] = legend;
+    return Object.keys(merged).length ? merged : undefined;
+  }, [feedLegendsByLayerId, legendLayerId, legend]);
   const storedBasemap = useMapsStore((s) => s.basemapId);
   const setBasemap = useMapsStore((s) => s.setBasemap);
   const basemap = normalizeBasemapId(basemapId ?? storedBasemap);
@@ -81,7 +120,12 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   const mapRef = useRef<LeafletMap|null>(null);
   const leafletRef = useRef<typeof import('leaflet')|null>(null);
   const preserveUserViewRef = useRef(false);
+  const onMapReadyRef = useRef(onMapReady);
+  onMapReadyRef.current = onMapReady;
+  const mapReadyExtraCleanupRef = useRef<(() => void) | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [camera, setCamera] = useState<MapsCamera | null>(null);
+  const [viewRadiusNm, setViewRadiusNm] = useState<number | null>(null);
   const basemapHandleRef = useRef<MapsBasemapHandle | null>(null);
   const markersRef = useRef<Marker[]>([]);
   const [status,setStatus] = useState<MapsFeedStatus>('loading');
@@ -201,7 +245,11 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
       mapRef.current = map;
       leafletRef.current = L;
       basemapHandleRef.current = installMapsBasemap(L, map, basemap);
+      mapReadyExtraCleanupRef.current?.();
+      const extra = onMapReadyRef.current?.({ L, map });
+      mapReadyExtraCleanupRef.current = typeof extra === 'function' ? extra : null;
       setMapReady(true);
+      setCamera(captureMapsCamera(map));
       return map;
     }).catch((err) => {
       if (cancelled || lifecycle.signal.aborted) return null;
@@ -247,6 +295,14 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
         }
         setError(null);
         setStatus(loaded.pins.length ? 'ready' : 'empty');
+        if (legendLayerId) {
+          setFeedLegendStatuses({
+            [legendLayerId]: {
+              count: loaded.pins.length,
+              sublayers: aggregateLayerLegendSublayers(loaded.pins),
+            },
+          });
+        }
       } catch (err) {
         if (cancelled || active !== controller) return;
         setPins([]);
@@ -257,6 +313,13 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
         setEmptyDetail(null);
         setError(err instanceof Error ? err.message : 'Failed to load feed');
         setStatus('error');
+        if (legendLayerId) {
+          setFeedLegendStatuses({
+            [legendLayerId]: {
+              error: err instanceof Error ? err.message : 'Failed to load feed',
+            },
+          });
+        }
       } finally {
         clearTimeout(timeout);
       }
@@ -280,6 +343,8 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
       try { active?.abort(); } catch { /* ignore */ }
       if (timer) clearInterval(timer);
       if (moveTimer) clearTimeout(moveTimer);
+      mapReadyExtraCleanupRef.current?.();
+      mapReadyExtraCleanupRef.current = null;
       basemapHandleRef.current?.cleanup();
       basemapHandleRef.current = null;
       destroyMapsLeaflet(ownedMap, ownedMarkers);
@@ -332,6 +397,30 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map || !mapReady) {
+      setCamera(null);
+      setViewRadiusNm(null);
+      return;
+    }
+    const syncView = () => {
+      setCamera(captureMapsCamera(map));
+      if (viewportBound) {
+        setViewRadiusNm(viewFromMap(map).radiusNm);
+      } else {
+        setViewRadiusNm(null);
+      }
+    };
+    syncView();
+    map.on('moveend', syncView);
+    map.on('zoomend', syncView);
+    return () => {
+      map.off('moveend', syncView);
+      map.off('zoomend', syncView);
+    };
+  }, [mapReady, viewportBound]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map || !selected) return;
     const onBackground = () => closePanel();
     map.on('click', onBackground);
@@ -346,12 +435,32 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
         : emptyTitle;
   const overlayBody = status==='error' ? error : (emptyDetail || emptyBody);
 
+  const feedMetaLine =
+    status === 'ready'
+      ? view === 'coverage'
+        ? `${visiblePins.length} cities · ${new Set(visiblePins.map((p) => p.country)).size} countries`
+        : `${readyMeta(visiblePins.length)}${visiblePins.length !== pins.length ? ` of ${pins.length}` : ''}${freshness ? ` · ${freshness}` : ''}`
+      : status === 'empty'
+        ? `${overlayTitle}${freshness ? ` · ${freshness}` : ''}`
+        : null;
+
+  const viewMetaLine =
+    status !== 'error'
+      ? formatMapsToolbarViewLine({
+          zoom: camera?.zoom ?? MAPS_DEFAULT_CAMERA.zoom,
+          lat: camera?.lat ?? MAPS_DEFAULT_CAMERA.lat,
+          lng: camera?.lng ?? MAPS_DEFAULT_CAMERA.lng,
+          basemapLabel: basemapLabel(basemap),
+          radiusNm: viewRadiusNm ?? undefined,
+        })
+      : null;
+
   return <div className="maps-canvas">
     <div className="maps-canvas__toolbar">
       <span className="maps-canvas__toolbar-title">{title}</span>
       {status==='loading' && <span className="maps-status maps-status--row"><Loader2 size={14} className="animate-spin"/>{loadingLabel}</span>}
-      {status==='ready' && <span className="maps-canvas__toolbar-meta">{view==='coverage' ? `${visiblePins.length} cities · ${new Set(visiblePins.map(p=>p.country)).size} countries` : `${readyMeta(visiblePins.length)}${visiblePins.length!==pins.length?` of ${pins.length}`:''}${freshness?` · ${freshness}`:''}`}</span>}
-      {status==='empty' && <span className="maps-canvas__toolbar-meta">{overlayTitle}{freshness?` · ${freshness}`:''}</span>}
+      {feedMetaLine ? <span className="maps-canvas__toolbar-meta">{feedMetaLine}</span> : null}
+      {viewMetaLine ? <span className="maps-canvas__toolbar-view">{viewMetaLine}</span> : null}
       {status==='error' && <span className="maps-status maps-status--error">{error}</span>}
       {inspectable && coveragePins.length > 0 && <div className="maps-view-switch" role="group" aria-label="Map view">
         <button type="button" aria-pressed={view==='addresses'} onClick={()=>switchView('addresses')}>Addresses</button>
@@ -363,7 +472,18 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     <div className={`maps-canvas__workspace${inspectable?' maps-canvas__workspace--inspectable':''}`}>
       <div className="maps-canvas__stage">
         <div ref={containerRef} className="maps-leaflet"/>
-        {(status==='error' || (status==='empty' && emptyOverlay)) && <div className="maps-empty-overlay"><h3>{overlayTitle}</h3><p>{overlayBody}</p>{sourceHref && <a className="maps-btn" href={sourceHref} target="_blank" rel="noreferrer"><ExternalLink size={12}/>{sourceLabel}</a>}</div>}
+        {(status==='error' || (status==='empty' && emptyOverlay)) ? (
+          <div className="maps-empty-overlay" aria-live="polite">
+            <h3>{overlayTitle}</h3>
+            <p>{overlayBody}</p>
+            {sourceHref ? (
+              <a className="maps-btn" href={sourceHref} target="_blank" rel="noreferrer">
+                <ExternalLink size={12} />
+                {sourceLabel}
+              </a>
+            ) : null}
+          </div>
+        ) : null}
         {view==='coverage' && status==='ready' && mapRef.current && leafletRef.current && <MapsCoverageLayer map={mapRef.current} leaflet={leafletRef.current} pins={coveragePins} selectedCountry={country} onSelectCountry={selectCountry}/>}
         {pointSearch && (status === 'ready' || status === 'empty') && pointSearchPins.length > 0 ? (
           <MapsPointSearch
@@ -381,7 +501,15 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
             preserveUserViewRef.current = true;
           }}
         />
-        {legend && (status==='ready'||status==='empty') ? legend : null}
+        <div className="maps-legend-panel">
+          <MapsActiveLayersLegend
+            workspaceId={legendWorkspaceId}
+            entries={legendEntries}
+            statuses={mergedLegendStatuses}
+            noLayers={legendEntries.length === 0}
+            feedLegendsByLayerId={mergedFeedLegends}
+          />
+        </div>
       </div>
       {inspectable && panelOpen && <aside id={panelId} className="maps-record-panel" aria-label="Map locations and evidence" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); closePanel(); } }}>
         <div className="maps-record-header">

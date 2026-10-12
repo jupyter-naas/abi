@@ -28,7 +28,7 @@ import { useMapsStore } from '@/stores/maps';
 import { mapsIconMap } from '@/app/workspace/[workspaceId]/maps/lib/maps-icons';
 import { ALL_LAYERS_ID, type LayoutEntry, type LayoutKind, type WorkspaceMapLayout } from '@/app/workspace/[workspaceId]/maps/lib/layouts';
 import { LayoutApiError, blankLayout, layoutsApi, type LayoutDraft, type LayoutPreview } from '@/app/workspace/[workspaceId]/maps/lib/layouts-api';
-import { mapsDatasetPath, mapsSettingsPath } from '@/app/workspace/[workspaceId]/maps/lib/maps-route';
+import { mapsLayerPath, mapsSettingsPath } from '@/app/workspace/[workspaceId]/maps/lib/maps-route';
 import { useMapLayouts } from '@/app/workspace/[workspaceId]/maps/lib/use-map-layouts';
 
 const KIND_LABEL: Record<LayoutKind, string> = { builtin: 'Built-in', graph: 'Graph layer', workspace: 'Workspace layer' };
@@ -80,7 +80,7 @@ function MapsSettings() {
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-2">
           <Button variant="secondary" onClick={() => select(null)}>
-            <ArrowLeft size={16} /> All layers
+            <ArrowLeft size={16} /> Active layers
           </Button>
           <SettingsReloadButton />
         </div>
@@ -328,7 +328,7 @@ function LayoutEditor({
         actions={
           <>
             {!isNew && (
-              <Button variant="secondary" onClick={() => window.open(mapsDatasetPath(workspaceId, layout.id), '_self')}>
+              <Button variant="secondary" onClick={() => window.open(mapsLayerPath(workspaceId, layout.id), '_self')}>
                 <MapIcon size={16} /> Open in Maps
               </Button>
             )}

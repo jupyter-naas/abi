@@ -181,7 +181,7 @@ const PROVIDERS: Record<string, Provider> = {
         title: m.title,
         subtitle: m.category,
         snippet: m.description,
-        action: href(ws(ctx, `/maps/${encodeURIComponent(m.id)}`)),
+        action: href(ws(ctx, `/maps?layer=${encodeURIComponent(m.id)}`)),
       })),
     };
   },

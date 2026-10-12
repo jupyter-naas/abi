@@ -229,8 +229,8 @@ export async function createMapsLeaflet(
   });
   attachMapsZoomControl(L, map);
   map.setView(
-    [view.center?.lat ?? 20, view.center?.lng ?? 0],
-    view.zoom ?? 2,
+    [view.center?.lat ?? MAPS_DEFAULT_CAMERA.lat, view.center?.lng ?? MAPS_DEFAULT_CAMERA.lng],
+    view.zoom ?? MAPS_DEFAULT_CAMERA.zoom,
   );
   observeMapsLeafletSize(map);
   return { L, map };
@@ -276,6 +276,9 @@ export type MapsCamera = {
   lng: number;
   zoom: number;
 };
+
+/** Initial view before fit-bounds or user interaction (matches createMapsLeaflet). */
+export const MAPS_DEFAULT_CAMERA: MapsCamera = { lat: 20, lng: 0, zoom: 2 };
 
 export function captureMapsCamera(map: LeafletMap): MapsCamera {
   const center = map.getCenter();

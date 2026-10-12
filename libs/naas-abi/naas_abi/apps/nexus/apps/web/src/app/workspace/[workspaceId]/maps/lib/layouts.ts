@@ -78,11 +78,17 @@ export function visibleEntries(entries: LayoutEntry[], hidden: ReadonlySet<strin
   return entries.filter((entry) => !set.has(entry.id));
 }
 
-/** Whether a layer is drawn on the All layers map. */
+/** Default on for a new session before the URL is seeded. */
+export function defaultLayerOn(entry: LayoutEntry): boolean {
+  if (!entry.combinable) return false;
+  return entry.kind !== 'builtin' || DEFAULT_ON_BUILTIN_IDS.has(entry.id);
+}
+
+/** Whether a layer is drawn on the map (URL is preferred; overrides are legacy). */
 export function isLayerOn(entry: LayoutEntry, overrides: Record<string, boolean>): boolean {
   if (!entry.combinable) return false;
   if (entry.id in overrides) return overrides[entry.id];
-  return entry.kind !== 'builtin' || DEFAULT_ON_BUILTIN_IDS.has(entry.id);
+  return defaultLayerOn(entry);
 }
 
 /** @deprecated use isLayerOn */

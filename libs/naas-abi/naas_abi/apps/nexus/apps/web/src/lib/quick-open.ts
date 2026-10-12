@@ -31,7 +31,7 @@ export const QUICK_OPEN_SECTIONS: readonly QuickOpenSection[] = [
   { id: 'files', label: 'Files', href: '/files', feature: 'files' },
   { id: 'chat', label: 'Chat', href: '/chat', feature: 'chat' },
   { id: 'search', label: 'Search', href: '/search', feature: 'search' },
-  { id: 'maps', label: 'Maps', href: '/maps/all', feature: 'maps' },
+  { id: 'maps', label: 'Maps', href: '/maps', feature: 'maps' },
   { id: 'ontology', label: 'Ontology', href: '/ontology', feature: 'ontology' },
   { id: 'graph', label: 'Knowledge Graph', href: '/graph/explorer', feature: 'graph' },
   { id: 'datasets', label: 'Datasets', href: '/datasets', feature: 'datasets' },

@@ -1,53 +1,89 @@
 /**
- * The maps URL drives the mobile list-then-detail shell.
+ * Maps routes use query parameters for active layers:
  *
- *   /workspace/{id}/maps              → dataset library (mobile list / desktop library)
- *   /workspace/{id}/maps/{datasetId}  → loaded dataset canvas (mobile detail)
+ *   /workspace/{id}/maps
+ *   /workspace/{id}/maps?layer=earthquakes&layer=temperature
  */
 
 export interface MapsRoute {
-  /** On a maps route at all. */
   isMapsRoute: boolean;
-  /** A dataset canvas is open (mobile detail). */
+  /** Layer ids from repeated `layer` query params (may include unknown ids). */
+  layerIds: string[];
+  /** Mobile map detail when at least one layer is selected. */
+  isMapView: boolean;
+  /** @deprecated use isMapView */
   isDataset: boolean;
-  /** Dataset id from the URL, when present. */
+  /** @deprecated use layerIds[0] */
   datasetId: string | null;
 }
 
-// Lookahead, not a consumed terminator: same contract as parseFilesRoute.
-const MAPS_SEGMENT = /(?:^|\/)maps(?:\/([^/?#]+))?(?=[/?#]|$)/;
+const MAPS_SEGMENT = /(?:^|\/)maps(?=[/?#]|$)/;
 
-export function parseMapsRoute(pathname: string | null | undefined): MapsRoute {
+export function parseMapsLayerIds(
+  search: string | URLSearchParams | null | undefined,
+): string[] {
+  if (!search) return [];
+  const params =
+    typeof search === 'string'
+      ? new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
+      : search;
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const raw of params.getAll('layer')) {
+    const id = raw.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
+export function parseMapsRoute(
+  pathname: string | null | undefined,
+  search?: string | URLSearchParams | null,
+): MapsRoute {
   const match = pathname ? MAPS_SEGMENT.exec(pathname) : null;
   if (!match) {
-    return { isMapsRoute: false, isDataset: false, datasetId: null };
+    return { isMapsRoute: false, layerIds: [], isMapView: false, isDataset: false, datasetId: null };
   }
-  const datasetId = match[1] ?? null;
+  const layerIds = parseMapsLayerIds(search);
+  const isMapView = layerIds.length > 0;
   return {
     isMapsRoute: true,
-    isDataset: datasetId !== null,
-    datasetId,
+    layerIds,
+    isMapView,
+    isDataset: isMapView,
+    datasetId: layerIds[0] ?? null,
   };
 }
 
-/** Path of a dataset canvas for a workspace (mobile detail). */
-export function mapsDatasetPath(
-  workspaceId: string | null,
-  datasetId: string,
-): string {
-  return workspaceId
-    ? `/workspace/${workspaceId}/maps/${datasetId}`
-    : `/maps/${datasetId}`;
-}
-
-/** Path of the maps library for a workspace. */
+/** Path of the maps library / map shell for a workspace. */
 export function mapsLibraryPath(workspaceId: string | null): string {
   return workspaceId ? `/workspace/${workspaceId}/maps` : '/maps';
 }
 
-/** Path of the combined All layers map (`/maps/all`). */
+/** Map URL with zero or more active layers. */
+export function mapsPath(workspaceId: string | null, layerIds: readonly string[]): string {
+  const base = mapsLibraryPath(workspaceId);
+  const unique = [...new Set(layerIds.filter(Boolean))];
+  if (!unique.length) return base;
+  const qs = unique.map((id) => `layer=${encodeURIComponent(id)}`).join('&');
+  return `${base}?${qs}`;
+}
+
+/** Single-layer map URL. */
+export function mapsLayerPath(workspaceId: string | null, layerId: string): string {
+  return mapsPath(workspaceId, [layerId]);
+}
+
+/** @deprecated use mapsLayerPath */
+export function mapsDatasetPath(workspaceId: string | null, datasetId: string): string {
+  return mapsLayerPath(workspaceId, datasetId);
+}
+
+/** @deprecated use mapsPath(workspaceId, layerIds) */
 export function mapsAllLayersPath(workspaceId: string | null): string {
-  return mapsDatasetPath(workspaceId, 'all');
+  return mapsLibraryPath(workspaceId);
 }
 
 /** @deprecated use mapsAllLayersPath */

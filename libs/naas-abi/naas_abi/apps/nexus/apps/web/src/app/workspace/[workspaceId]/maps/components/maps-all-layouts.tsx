@@ -1,32 +1,33 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { Map as MapIcon } from 'lucide-react';
-import Link from 'next/link';
 import type { MapsPinMarker } from '../lib/leaflet-map';
-import { mapsIconMap } from '../lib/maps-icons';
 import { layerPinColor } from '../lib/maps-layer-colors';
 import { layoutPinSource } from '../lib/layout-sources';
 import type { LayoutEntry } from '../lib/layouts';
 import type { MapsFeedResult } from '../lib/maps-feed';
-import { mapsDatasetPath } from '../lib/maps-route';
 import type { MapsFeedView } from '../lib/maps-view';
 import { useMapLayers } from '../lib/use-map-layouts';
+import type { LayerLegendStatus } from './maps-active-layers-legend';
+import { aggregateLayerLegendSublayers } from '../lib/maps-layer-legend-utils';
+import { mapsLayerFeedLegendsFor } from '../lib/maps-layer-feed-legends';
 import { MapsFeedCanvas } from './maps-feed-canvas';
 
 /** Layers whose feed depends on the map bounds (live traffic). */
 const VIEWPORT_BOUND_IDS = new Set(['flights', 'ais']);
 
-type LayerStatus = { count: number } | { error: string };
-
 /**
  * All layers on one map: every layer switched on in the sidebar, overlaid on
  * the basemap chosen from the map control.
  */
-export function MapsAllLayers() {
-  const { workspaceId, entries, isOn, loading } = useMapLayers();
-  const onEntries = useMemo(() => entries.filter(isOn), [entries, isOn]);
-  const [statuses, setStatuses] = useState<Record<string, LayerStatus>>({});
+export function MapsAllLayers({ layerIds }: { layerIds: string[] }) {
+  const { workspaceId, entries, loading } = useMapLayers();
+  const activeIds = useMemo(() => new Set(layerIds), [layerIds]);
+  const onEntries = useMemo(
+    () => entries.filter((e) => activeIds.has(e.id)),
+    [entries, activeIds],
+  );
+  const [statuses, setStatuses] = useState<Record<string, LayerLegendStatus>>({});
   const onKey = onEntries.map((e) => e.id).join(',');
   const entriesRef = useRef<LayoutEntry[]>(onEntries);
   entriesRef.current = onEntries;
@@ -49,12 +50,13 @@ export function MapsAllLayers() {
       }),
     );
     const pins: MapsPinMarker[] = [];
-    const next: Record<string, LayerStatus> = {};
+    const next: Record<string, LayerLegendStatus> = {};
     results.forEach((result, index) => {
       const entry = layers[index];
       const color = layerPinColor(entry);
       if (result.status === 'fulfilled') {
-        for (const pin of result.value.pins) {
+        const layerPins = result.value.pins;
+        for (const pin of layerPins) {
           pins.push({
             ...pin,
             id: `${entry.id}:${pin.id}`,
@@ -62,7 +64,10 @@ export function MapsAllLayers() {
             markerIcon: entry.icon,
           });
         }
-        next[entry.id] = { count: result.value.pins.length };
+        next[entry.id] = {
+          count: layerPins.length,
+          sublayers: aggregateLayerLegendSublayers(layerPins),
+        };
       } else {
         next[entry.id] = { error: result.reason instanceof Error ? result.reason.message : 'Failed to load' };
       }
@@ -78,11 +83,15 @@ export function MapsAllLayers() {
     for (const entry of onEntries) map.set(entry.id, entry.title);
     return map;
   }, [onEntries]);
+  const feedLegendsByLayerId = useMemo(
+    () => mapsLayerFeedLegendsFor(onEntries.map((e) => e.id)),
+    [onEntries],
+  );
 
   return (
     <MapsFeedCanvas
       key={`${workspaceId}:${onKey}`}
-      title="All layers"
+      title="Active layers"
       loadingLabel={
         noLayers
           ? loading
@@ -107,32 +116,9 @@ export function MapsAllLayers() {
       viewportBound={viewportBound}
       inspectable={inspectable && Boolean(workspaceId)}
       workspaceId={workspaceId ?? ''}
-      legend={
-        <div className="maps-legend">
-          <span className="maps-legend__title">Layers</span>
-          {noLayers ? (
-            <p className="maps-legend__hint">None on — use the sidebar switches to add data.</p>
-          ) : null}
-          {onEntries.map((entry) => {
-            const status = statuses[entry.id];
-            const color = layerPinColor(entry);
-            const Icon = mapsIconMap[entry.icon] ?? MapIcon;
-            return (
-              <div key={entry.id} className="maps-legend__row" title={status && 'error' in status ? status.error : undefined}>
-                <span className="maps-layer-marker maps-legend__layer-swatch" style={{ background: color }} aria-hidden>
-                  <Icon size={11} strokeWidth={2.25} />
-                </span>
-                <Link href={mapsDatasetPath(workspaceId, entry.id)} className="min-w-0 flex-1 hover:underline">
-                  {entry.title}
-                </Link>
-                <span className="pl-2 tabular-nums text-muted-foreground">
-                  {!status ? '…' : 'error' in status ? 'error' : status.count}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      }
+      legendLayerIds={layerIds}
+      legendStatuses={statuses}
+      feedLegendsByLayerId={feedLegendsByLayerId}
     />
   );
 }
