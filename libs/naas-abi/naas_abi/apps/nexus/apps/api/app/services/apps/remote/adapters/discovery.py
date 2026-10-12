@@ -33,6 +33,10 @@ _log = logging.getLogger(__name__)
 CONTRACT_MAJOR = 1
 # Discovery is read at most this often: the catalog and every request share it.
 SNAPSHOT_SECONDS = 10.0
+# An app discovery just did not list is not looked up again for this long:
+# stale tabs polling a removed module must not hold the discovery lock.
+MISS_SECONDS = 5.0
+MAX_MISSES = 1024
 # After the last upload chunk, the module answers within its idle limit.
 ANSWER_AFTER_UPLOAD_SECONDS = 65.0
 # The module is gone or going: another READY instance may answer.
@@ -60,6 +64,8 @@ class _Client:
         self.transport, self.upload_transport = transport, upload_transport
         self.snapshot: _Snapshot | None = None
         self.lock = asyncio.Lock()
+        # (module_id, app) -> when a fresh read did not find it
+        self.misses: dict[tuple[str, str], float] = {}
 
 
 class _Retry(Exception):
@@ -153,14 +159,21 @@ class DiscoveryRemoteAppDirectory:
         from naas_abi_sdk.app_streams import BodySource
 
         client = self._client()
+        key = (module_id, app)
         snapshot = await self._snapshot(client)
-        candidates = list(snapshot.instances.get((module_id, app), ()))
-        if not candidates:
+        candidates = list(snapshot.instances.get(key, ()))
+        missed = client.misses.get(key)
+        if not candidates and (missed is None or self._now() - missed >= MISS_SECONDS):
             # Just started? Read discovery again before answering 404.
             snapshot = await self._snapshot(client, fresh=True)
-            candidates = list(snapshot.instances.get((module_id, app), ()))
+            candidates = list(snapshot.instances.get(key, ()))
+            if not candidates:
+                if len(client.misses) >= MAX_MISSES:
+                    client.misses.clear()
+                client.misses[key] = self._now()
         if not candidates:
             raise RemoteAppUnavailable(404, "App not published by a ready module")
+        client.misses.pop(key, None)
         message = pb.HttpRequest(
             app=app,
             method=request.method,

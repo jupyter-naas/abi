@@ -18,7 +18,5 @@ def test_the_service_token_is_reused_until_close_to_expiry():
     renewed = token()
 
     assert renewed != first
-    claims = jwt.decode(
-        renewed, "s" * 32, algorithms=["HS256"], options={"verify_exp": False}
-    )
+    claims = jwt.decode(renewed, "s" * 32, algorithms=["HS256"], options={"verify_exp": False})
     assert claims["sub"] == "api"

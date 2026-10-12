@@ -324,7 +324,9 @@ def test_draining_and_oversized_requests_are_refused(tmp_path):
 def _in_flight(host, request):
     """Deliver ``request`` as the subscription does: in its own task."""
     msg = FakeMsg(request)
-    host.subscriptions.append(SimpleNamespace(drain=AsyncMock(), unsubscribe=AsyncMock()))
+    host.subscriptions.append(
+        SimpleNamespace(drain=AsyncMock(), unsubscribe=AsyncMock())
+    )
     return msg, host.calls.callback(partial(host._handle, "console"))(msg)
 
 
