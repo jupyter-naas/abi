@@ -173,6 +173,7 @@ function parseFeedPins(input: Array<Partial<MapsPinMarker>> | undefined): MapsPi
       color: /^#[0-9a-f]{3,8}$/i.test(p.color ?? '') ? p.color : undefined,
       size: typeof p.size === 'number' ? Math.min(30, Math.max(4, p.size)) : undefined,
       entityUri: text(p.entityUri), graphUri: text(p.graphUri), classLabel: text(p.classLabel),
+      classLabels: Array.isArray(p.classLabels) ? p.classLabels.filter((v): v is string => typeof v === 'string' && v.trim().length > 0) : undefined,
       country: text(p.country), precision: text(p.precision), observedAt: text(p.observedAt),
       sources: evidenceSources(p.sources),
       memberIds: Array.isArray(p.memberIds) ? p.memberIds.filter((id): id is string => typeof id === "string") : undefined,

@@ -1,8 +1,4 @@
 import {
-  MAPS_CUSTOM_DATASETS,
-  type MapsCustomDataset,
-} from '@/lib/maps-custom-datasets';
-import {
   isMapsCategoryVisible,
   MAPS_VISIBLE_CATEGORIES,
 } from './maps-deployment';
@@ -25,9 +21,8 @@ export type MapsBuiltinDatasetId =
   | 'iss';
 
 /**
- * A built-in id, or an id a deployment registered through
- * NEXT_PUBLIC_MAPS_CUSTOM_DATASETS. `string & {}` keeps autocomplete for the
- * built-ins while still admitting configured Custom ids.
+ * A built-in id, or the id of a workspace layer record (Settings → Maps).
+ * `string & {}` keeps autocomplete for the built-ins.
  */
 export type MapsDatasetId = MapsBuiltinDatasetId | (string & {});
 
@@ -78,9 +73,9 @@ export const MAPS_CATEGORY_LABEL: Record<MapsDatasetCategory, string> = Object.f
 /**
  * Built-in Maps data layers. The basemap is separate (see maps-basemaps.ts).
  *
- * Custom is the extension point and stays empty here: product-specific datasets
- * belong to the deployment, registered through NEXT_PUBLIC_MAPS_CUSTOM_DATASETS
- * (see MAPS_CUSTOM_DATASETS), not hard-coded into upstream ABI.
+ * Product-specific layers are not hard-coded here: deployments seed layer
+ * records server-side (services/maps/seeds.py) and admins manage them in
+ * Settings → Maps.
  *
  * World Situation Room (marketplace alpha) is a legacy demo for these feeds.
  * Do not import from naas_abi_marketplace/.../wsr. Prefer Maps API routes under
@@ -221,41 +216,10 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
   },
 ];
 
-const MAPS_BUILTIN_DATASET_IDS = new Set(MAPS_BUILTIN_DATASETS.map((d) => d.id));
-
-function toMapsDataset(custom: MapsCustomDataset): MapsDataset {
-  const category =
-    custom.category && MAPS_CATEGORIES.some((g) => g.id === custom.category)
-      ? custom.category
-      : 'custom';
-  return {
-    id: custom.id,
-    title: custom.title,
-    description: custom.description,
-    category,
-    icon: custom.icon,
-    order: custom.order,
-    layerLogoUrl: custom.layerLogoUrl,
-  };
-}
-
-/**
- * Built-in datasets plus whatever this deployment registered under Custom.
- * A configured id that shadows a built-in is ignored so basemaps and Public
- * layouts can never be replaced by config.
- */
-function visibleDeploymentDataset(dataset: MapsDataset): boolean {
-  return isMapsCategoryVisible(dataset.category as MapsDatasetCategory);
-}
-
-export const MAPS_DATASETS: MapsDataset[] = [
-  ...(MAPS_VISIBLE_CATEGORIES
-    ? MAPS_BUILTIN_DATASETS.filter((d) => isMapsCategoryVisible(d.category))
-    : MAPS_BUILTIN_DATASETS),
-  ...MAPS_CUSTOM_DATASETS.filter((d) => !MAPS_BUILTIN_DATASET_IDS.has(d.id))
-    .map(toMapsDataset)
-    .filter(visibleDeploymentDataset),
-];
+/** Built-in feeds drawn by this app; layer records come from `/api/maps/catalog`. */
+export const MAPS_DATASETS: MapsDataset[] = MAPS_VISIBLE_CATEGORIES
+  ? MAPS_BUILTIN_DATASETS.filter((d) => isMapsCategoryVisible(d.category))
+  : MAPS_BUILTIN_DATASETS;
 
 /**
  * Public feed URLs and Maps-owned API proxies.
@@ -284,7 +248,7 @@ export const MAPS_PUBLIC_FEEDS = {
   iss: '/api/maps/iss',
 } as const;
 
-/** Authed proxy for a configured Custom dataset (see maps-custom-datasets). */
+/** Authed proxy for a feed layer record (`feed_type: geojson_url`, see app/api/maps/custom). */
 export function mapsCustomFeedUrl(datasetId: string, workspaceId: string): string {
   const query = new URLSearchParams({ workspace_id: workspaceId });
   return `/api/maps/custom/${encodeURIComponent(datasetId)}?${query.toString()}`;

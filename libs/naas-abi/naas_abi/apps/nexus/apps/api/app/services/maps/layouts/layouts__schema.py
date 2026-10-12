@@ -1,4 +1,10 @@
-"""Workspace map layouts: SPARQL-defined pin layers plus which layouts are hidden."""
+"""Workspace map layers ("layouts"): SPARQL pin layers and GeoJSON feed layers.
+
+A layout is the server record behind one Maps layer: its metadata (title, group,
+icon, logo, color, order, default basemap) and how its pins are fetched. The
+feed itself stays where it was: a SPARQL query run on the workspace graphs, or
+a GeoJSON/pins endpoint on the Nexus API that the web proxy calls.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +16,14 @@ LAYOUT_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,47}$")
 COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
 MAX_QUERY_LENGTH = 20_000
 MAX_PINS = 2_000
+CATEGORY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,47}$")
+MAX_URL_LENGTH = 500
+
+FEED_SPARQL = "sparql"
+# Pins / GeoJSON served by an endpoint on the Nexus API (e.g. a module router).
+FEED_GEOJSON_URL = "geojson_url"
+FEED_TYPES = frozenset({FEED_SPARQL, FEED_GEOJSON_URL})
+
 
 # Built-in layouts drawn by the web app (web/src/app/workspace/[workspaceId]/maps/lib/datasets.ts).
 # A custom layout cannot take one of these ids; any of them can be hidden.
@@ -43,16 +57,31 @@ OPTIONAL_VARIABLES = frozenset({"uri", "graph", "detail"})
 
 @dataclass(frozen=True)
 class MapsLayout:
-    """A custom layout: pins from a SELECT over the workspace's graphs."""
+    """A workspace layer: pins from a SPARQL SELECT or from a Nexus API feed path."""
 
     id: str
     title: str
-    query: str
+    query: str = ""
     description: str = ""
     icon: str = "MapPin"
     color: str = "#2563eb"
     graphs: tuple[str, ...] = field(default_factory=tuple)
     order: int = 100
+    feed_type: str = FEED_SPARQL
+    # FEED_GEOJSON_URL: path on the Nexus API ("/api/..."), never an absolute URL,
+    # because the web proxy forwards the caller's Bearer token to it.
+    feed_url: str = ""
+    # Sidebar group id (built-in category such as "organizations-facility", or "custom").
+    category: str = "custom"
+    # Sidebar / pin logo: HTTPS URL or a Nexus API path (/api/organizations/logos/...).
+    logo_url: str = ""
+    basemap_id: str = ""
+    meta_label: str = ""
+    fit_max_zoom: int | None = None
+    # Seeded by the deployment: editable and hideable, never deleted.
+    system: bool = False
+    # Set on records another workspace shares with this one (read-only here).
+    shared_from: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -61,15 +90,25 @@ class MapsLayout:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> MapsLayout:
+        fit = data.get("fit_max_zoom")
         return cls(
             id=str(data["id"]),
             title=str(data.get("title", "")),
-            query=str(data.get("query", "")),
-            description=str(data.get("description", "")),
-            icon=str(data.get("icon", "MapPin")),
-            color=str(data.get("color", "#2563eb")),
+            query=str(data.get("query", "") or ""),
+            description=str(data.get("description", "") or ""),
+            icon=str(data.get("icon", "MapPin") or "MapPin"),
+            color=str(data.get("color", "#2563eb") or "#2563eb"),
             graphs=tuple(str(g) for g in data.get("graphs", []) or []),
             order=int(data.get("order", 100)),
+            feed_type=str(data.get("feed_type", FEED_SPARQL) or FEED_SPARQL),
+            feed_url=str(data.get("feed_url", "") or ""),
+            category=str(data.get("category", "custom") or "custom"),
+            logo_url=str(data.get("logo_url", "") or ""),
+            basemap_id=str(data.get("basemap_id", "") or ""),
+            meta_label=str(data.get("meta_label", "") or ""),
+            fit_max_zoom=int(fit) if isinstance(fit, int | float) else None,
+            system=bool(data.get("system", False)),
+            shared_from=str(data.get("shared_from", "") or ""),
         )
 
 
@@ -77,6 +116,8 @@ class MapsLayout:
 class MapsLayoutList:
     layouts: list[MapsLayout]
     hidden: set[str]
+    # Color per layer id for layers without a record (built-in, graph layers).
+    colors: dict[str, str] = field(default_factory=dict)
 
 
 class MapsLayoutValidationError(ValueError):
@@ -87,3 +128,7 @@ class MapsLayoutValidationError(ValueError):
 
 class MapsLayoutNotFoundError(LookupError):
     pass
+
+
+class MapsLayoutPolicyError(PermissionError):
+    """The operation is refused by policy (e.g. deleting a seeded layer)."""

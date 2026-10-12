@@ -1,9 +1,11 @@
 """HTTP routes for workspace Maps layouts, mounted under ``/api/maps/layouts``.
 
-Reading (list, feed) needs workspace access; creating, editing, deleting,
-hiding and previewing layouts needs a workspace owner or admin. Every query
-runs through the workspace-scoped graph store, narrowed to the layout's
-graphs, so a layout only ever reads what the workspace may read.
+Reading (list, get, feed) needs workspace access; creating, editing,
+deleting, hiding, recoloring and previewing layouts needs a workspace owner or
+admin. Every SPARQL query runs through the workspace-scoped graph store,
+narrowed to the layout's graphs, so a layout only ever reads what the
+workspace may read. Feed layers (``feed_type=geojson_url``) are fetched by the
+web proxy at ``/api/maps/custom/{id}``, which reads the record from here.
 """
 
 from __future__ import annotations
@@ -27,21 +29,38 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.secondary.gr
     GraphQueryTripleStoreAdapter,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import IGraphQueryStore
+from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.dependencies import (
+    get_maps_feed_layer_service,
+)
+from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.service import (
+    MapsFeedLayerService,
+)
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.adapters.secondary.postgres import (
     PostgresMapsLayoutStore,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.layouts__schema import (
     BUILTIN_LAYOUT_IDS,
+    FEED_SPARQL,
     MapsLayout,
     MapsLayoutNotFoundError,
+    MapsLayoutPolicyError,
     MapsLayoutValidationError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.service import MapsLayoutService
+from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.factory import (
+    postgres_maps_access,
+)
+from naas_abi.apps.nexus.apps.api.app.services.maps.seeds import maps_seed_registry
+from naas_abi.apps.nexus.apps.api.app.services.maps.settings.adapters.secondary.postgres import (
+    PostgresMapsSettingsStore,
+)
 from pydantic import BaseModel, Field
 
 router = APIRouter()
 
-_service = MapsLayoutService(PostgresMapsLayoutStore())
+_service = MapsLayoutService(
+    PostgresMapsLayoutStore(), PostgresMapsSettingsStore(), postgres_maps_access()
+)
 PREVIEW_PINS = 50
 
 
@@ -54,9 +73,16 @@ class LayoutIn(BaseModel):
     description: str = Field(default="", max_length=500)
     icon: str = Field(default="MapPin", max_length=48)
     color: str = "#2563eb"
-    query: str
+    query: str = ""
     graphs: list[str] = Field(default_factory=list, max_length=50)
     order: int = 100
+    feed_type: str = FEED_SPARQL
+    feed_url: str = Field(default="", max_length=500)
+    category: str = Field(default="custom", max_length=48)
+    logo_url: str = Field(default="", max_length=500)
+    basemap_id: str = Field(default="", max_length=48)
+    meta_label: str = Field(default="", max_length=120)
+    fit_max_zoom: int | None = None
 
 
 class PreviewIn(LayoutIn):
@@ -65,6 +91,18 @@ class PreviewIn(LayoutIn):
 
 class VisibilityIn(BaseModel):
     hidden: bool
+
+
+class ColorIn(BaseModel):
+    color: str | None
+
+
+def layout_seed_revisions(request: Request) -> dict[str, int]:
+    return maps_seed_registry(request.app).layout_revisions()
+
+
+def layout_seeds(request: Request) -> list[MapsLayout]:
+    return list(maps_seed_registry(request.app).layouts.values())
 
 
 def _reserved(request: Request) -> set[str]:
@@ -103,6 +141,8 @@ def _http_error(exc: Exception) -> HTTPException:
         return HTTPException(status_code=422, detail={"errors": exc.errors})
     if isinstance(exc, MapsLayoutNotFoundError):
         return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, MapsLayoutPolicyError):
+        return HTTPException(status_code=409, detail=str(exc))
     if isinstance(exc, GraphAccessError):
         return HTTPException(status_code=403, detail=str(exc))
     if isinstance(exc, GraphQuerySpecError):
@@ -122,11 +162,19 @@ def _layout(layout_id: str, body: LayoutIn) -> MapsLayout:
         query=body.query,
         graphs=tuple(body.graphs),
         order=body.order,
+        feed_type=body.feed_type,
+        feed_url=body.feed_url.strip(),
+        category=body.category.strip() or "custom",
+        logo_url=body.logo_url.strip(),
+        basemap_id=body.basemap_id.strip(),
+        meta_label=body.meta_label.strip(),
+        fit_max_zoom=body.fit_max_zoom,
     )
 
 
 @router.get("")
 async def list_layouts(
+    request: Request,
     response: Response,
     workspace_id: str = Query(..., min_length=1),
     current_user=Depends(get_current_user_required),
@@ -134,11 +182,14 @@ async def list_layouts(
 ) -> dict[str, Any]:
     await require_workspace_access(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
-    listed = await service.list(workspace_id)
+    listed = await service.list(
+        workspace_id, seeds=layout_seeds(request), revisions=layout_seed_revisions(request)
+    )
     role = await get_workspace_role(current_user.id, workspace_id)
     return {
         "layouts": [layout.to_dict() for layout in listed.layouts],
         "hidden": sorted(listed.hidden),
+        "colors": listed.colors,
         "can_edit": role in ("owner", "admin"),
     }
 
@@ -184,6 +235,42 @@ async def layout_feed(
         return await service.feed(layout, store)
     except Exception as exc:
         raise _http_error(exc) from exc
+
+
+@router.get("/{layout_id}")
+async def get_layout(
+    layout_id: str,
+    response: Response,
+    workspace_id: str = Query(..., min_length=1),
+    current_user=Depends(get_current_user_required),
+    service: MapsLayoutService = Depends(get_maps_layout_service),
+) -> dict[str, Any]:
+    """One layer record (the web feed proxy reads ``feed_url`` from here)."""
+    await require_workspace_access(current_user.id, workspace_id)
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return (await service.get(workspace_id, layout_id)).to_dict()
+    except Exception as exc:
+        raise _http_error(exc) from exc
+
+
+@router.put("/{layout_id}/color")
+async def set_layout_color(
+    layout_id: str,
+    body: ColorIn,
+    workspace_id: str = Query(..., min_length=1),
+    current_user=Depends(get_current_user_required),
+    service: MapsLayoutService = Depends(get_maps_layout_service),
+) -> dict[str, Any]:
+    """Default pin / group-by-country color of any layer; null resets a built-in."""
+    await require_workspace_admin(current_user.id, workspace_id)
+    try:
+        colors = await service.set_color(
+            workspace_id, layout_id, body.color, user_id=current_user.id
+        )
+    except Exception as exc:
+        raise _http_error(exc) from exc
+    return {"colors": colors}
 
 
 @router.put("/{layout_id}/visibility")
@@ -232,11 +319,12 @@ async def delete_layout(
     layout_id: str,
     workspace_id: str = Query(..., min_length=1),
     current_user=Depends(get_current_user_required),
-    service: MapsLayoutService = Depends(get_maps_layout_service),
+    layers: MapsFeedLayerService = Depends(get_maps_feed_layer_service),
 ) -> dict[str, str]:
+    """Delete a feed and every layer on it."""
     await require_workspace_admin(current_user.id, workspace_id)
     try:
-        await service.delete(workspace_id, layout_id)
+        await layers.delete_feed(workspace_id, layout_id)
     except Exception as exc:
         raise _http_error(exc) from exc
     return {"message": "Layout deleted"}

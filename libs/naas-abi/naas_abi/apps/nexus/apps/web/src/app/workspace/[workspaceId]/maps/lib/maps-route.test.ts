@@ -5,6 +5,8 @@ import {
   mapsLibraryPath,
   mapsPath,
   mapsSettingsPath,
+  mapsSettingsSelectedFeed,
+  mapsSettingsSelectedLayer,
   parseMapsLayerIds,
   parseMapsRoute,
 } from './maps-route';
@@ -83,9 +85,23 @@ describe('mapsLibraryPath', () => {
 describe('mapsSettingsPath', () => {
   it('builds Settings → Maps paths', () => {
     expect(mapsSettingsPath('ws-1')).toBe('/workspace/ws-1/settings/maps');
-    expect(mapsSettingsPath('ws-1', { create: true })).toBe('/workspace/ws-1/settings/maps?layout=new');
-    expect(mapsSettingsPath('ws-1', { layout: 'offices' })).toBe(
-      '/workspace/ws-1/settings/maps?layout=offices',
+    expect(mapsSettingsPath('ws-1', { create: true })).toBe('/workspace/ws-1/settings/maps?layer=new');
+    expect(mapsSettingsPath('ws-1', { layer: 'offices' })).toBe(
+      '/workspace/ws-1/settings/maps?layer=offices',
     );
+  });
+
+  it('builds feed and new-layer paths', () => {
+    expect(mapsSettingsPath('ws-1', { feed: 'edf' })).toBe('/workspace/ws-1/settings/maps?feed=edf');
+    expect(mapsSettingsPath('ws-1', { layer: 'new', forFeed: 'edf' })).toBe(
+      '/workspace/ws-1/settings/maps?layer=new&for=edf',
+    );
+    expect(mapsSettingsSelectedFeed(new URLSearchParams('feed=edf'))).toBe('edf');
+  });
+
+  it('reads the selected layer, including older ?layout= links', () => {
+    expect(mapsSettingsSelectedLayer(new URLSearchParams('layer=edf'))).toBe('edf');
+    expect(mapsSettingsSelectedLayer(new URLSearchParams('layout=edf'))).toBe('edf');
+    expect(mapsSettingsSelectedLayer(new URLSearchParams(''))).toBeNull();
   });
 });

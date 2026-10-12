@@ -30,6 +30,7 @@ const PIN_KEYS = [
   'entityUri',
   'graphUri',
   'classLabel',
+  'classLabels',
   'country',
   'precision',
   'observedAt',

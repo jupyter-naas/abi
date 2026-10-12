@@ -4,6 +4,7 @@ import type { MapsDataset } from './datasets';
 import {
   ALL_LAYERS_ID,
   buildLayoutEntries,
+  groupFeedLayers,
   compareLayerEntriesAsc,
   groupLayerEntries,
   isLayerOn,
@@ -93,5 +94,68 @@ describe('visibleEntries / groupLayerEntries', () => {
       ['environment', ['gdacs', 'volcanoes']],
       ['custom', ['offices']],
     ]);
+  });
+});
+
+describe('feed layers', () => {
+  const edf = {
+    id: 'edf',
+    title: 'EDF',
+    description: '',
+    icon: 'Zap',
+    color: '#001a70',
+    query: '',
+    graphs: [],
+    order: 3,
+    feed_type: 'geojson_url' as const,
+    feed_url: '/api/maps/organization-facilities/edf',
+    category: 'custom',
+    logo_url: '/api/organizations/logos/EDF/EDF.ico',
+  };
+  const layer = (id: string, title: string, order: number, icon = '', class_labels: string[] = []) => ({
+    id,
+    feed_id: 'edf',
+    title,
+    description: '',
+    color: '#e85130',
+    icon,
+    order,
+    class_labels,
+    system: true,
+  });
+
+  it('lists one entry per layer, carrying its feed', () => {
+    const entries = buildLayoutEntries([], [], [edf], {
+      feedLayers: [layer('edf-solar', 'Solar', 2, 'Sun', ['Solar']), layer('edf-all', 'All sites', 1)],
+    });
+    const solar = entries.find((e) => e.id === 'edf-solar')!;
+    expect(solar).toMatchObject({
+      kind: 'feed',
+      feedId: 'edf',
+      feedTitle: 'EDF',
+      icon: 'Sun',
+      ownIcon: true,
+      classLabels: ['Solar'],
+      layerLogoUrl: undefined,
+    });
+    // No own icon: the feed's logo.
+    expect(entries.find((e) => e.id === 'edf-all')!.layerLogoUrl).toBe('/api/organizations/logos/EDF/EDF.ico');
+  });
+
+  it('falls back to one layer per feed with the feed id', () => {
+    expect(buildLayoutEntries([], [], [edf]).map((e) => [e.id, e.feedId])).toEqual([['edf', 'edf']]);
+  });
+
+  it('groups a feed with several layers into one sidebar row', () => {
+    const entries = buildLayoutEntries([], [], [edf], {
+      feedLayers: [layer('edf-solar', 'Solar', 2), layer('edf-wind', 'Wind', 1)],
+    });
+    const items = groupFeedLayers(entries);
+    expect(items).toHaveLength(1);
+    const [feed] = items;
+    expect(feed?.type).toBe('feed');
+    if (feed?.type === 'feed') expect(feed.layers.map((l) => l.id)).toEqual(['edf-wind', 'edf-solar']);
+    // One layer: a plain row.
+    expect(groupFeedLayers(buildLayoutEntries([], [], [edf]))[0]?.type).toBe('layer');
   });
 });

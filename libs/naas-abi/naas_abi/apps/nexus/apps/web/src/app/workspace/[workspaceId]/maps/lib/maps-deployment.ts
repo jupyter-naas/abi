@@ -45,6 +45,11 @@ export function isMapsOrganizationFacilityOnlyDeployment(): boolean {
   );
 }
 
+/**
+ * Hide File → New layer / New basemap / GeoJSON layers and Settings → New layer.
+ * Sidebar filtering uses {@link MAPS_VISIBLE_CATEGORIES} alone — that must not
+ * disable these tools (BOB sets visible categories without locking the catalog).
+ */
 export function mapsDeploymentRestrictsLayerCatalog(): boolean {
-  return MAPS_VISIBLE_CATEGORIES != null;
+  return process.env.NEXT_PUBLIC_MAPS_RESTRICT_LAYER_CATALOG === 'true';
 }

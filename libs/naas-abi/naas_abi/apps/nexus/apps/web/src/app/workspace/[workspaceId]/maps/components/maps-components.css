@@ -466,6 +466,43 @@
   margin-left: 0;
 }
 
+.maps-canvas__toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.maps-country-cluster-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--maps-cluster-color, #2563eb);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+}
+
+.maps-country-cluster-pin__count {
+  pointer-events: none;
+}
+
+/* Group by country: one numbered badge per layer (or feed) in a centered grid. */
+.maps-country-cluster-group {
+  display: grid;
+  justify-content: center;
+  align-items: center;
+}
+
+.maps-country-cluster-group > span {
+  display: flex;
+  justify-content: center;
+}
+
 .maps-basemap-control {
   position: absolute;
   z-index: 450;
@@ -507,11 +544,8 @@
   box-shadow: 0 0 0 2px hsl(var(--border));
 }
 
-/* Compact popover anchored to the layers button, expanding to the right (Google Maps style). */
+/* Map type strip — portaled beside the layers button (see maps-basemap-popover--portal). */
 .maps-basemap-popover {
-  position: absolute;
-  left: calc(100% + 6px);
-  bottom: 0;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -520,6 +554,12 @@
   border-radius: 0;
   background: hsl(var(--card) / 0.98);
   box-shadow: 0 4px 18px hsl(0 0% 0% / 0.16);
+}
+
+.maps-basemap-popover--portal {
+  position: fixed;
+  z-index: 5000;
+  margin: 0;
 }
 
 .maps-basemap-popover__heading {
@@ -535,8 +575,23 @@
 .maps-basemap-popover__options {
   display: flex;
   flex-direction: row;
-  align-items: flex-end;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.maps-basemap-popover__column {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
   gap: 0.45rem;
+}
+
+.maps-basemap-popover__column + .maps-basemap-popover__column {
+  margin-left: 0.5rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid hsl(var(--border));
 }
 
 .maps-basemap-popover__option {
@@ -573,6 +628,12 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: top center;
+}
+
+.maps-basemap-thumb-empty {
+  display: block;
+  background: hsl(var(--muted));
 }
 
 .maps-basemap-popover__thumb--selected {
@@ -590,15 +651,15 @@
 }
 
 @media (max-width: 480px) {
-  .maps-basemap-popover {
-    left: 0;
-    bottom: calc(100% + 6px);
-    max-width: calc(100vw - 2rem);
+  .maps-basemap-popover--portal {
+    max-width: min(calc(100vw - 3.5rem), 36rem);
   }
 
   .maps-basemap-popover__options {
-    flex-wrap: wrap;
-    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+    padding-bottom: 2px;
   }
 }
 
@@ -651,10 +712,15 @@
   background: hsl(var(--background));
 }
 
-.maps-leaflet .maps-basemap-countries-path {
+/* Theme-aware fills; a basemap palette (light mode) sets SVG fill/stroke attributes instead. */
+.maps-leaflet .maps-basemap-countries-path:not([fill]),
+.maps-leaflet .maps-basemap-countries-path[fill='#3388ff'] {
   fill: hsl(var(--muted) / 0.45);
+}
+
+.maps-leaflet .maps-basemap-countries-path:not([stroke]),
+.maps-leaflet .maps-basemap-countries-path[stroke='#3388ff'] {
   stroke: hsl(var(--border));
-  stroke-width: 1;
 }
 
 .dark .maps-leaflet .maps-basemap-countries-path {
@@ -1105,9 +1171,22 @@
   gap: 0.15rem;
 }
 
+.maps-legend__sublayer-leading {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.maps-legend__sublayer-swatch {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
 .maps-legend__sublayer {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
   font-size: 0.6875rem;
@@ -1541,4 +1620,34 @@
 .maps-leaflet .leaflet-control-layers-separator {
   border-top-color: hsl(var(--border));
   margin: 6px 0;
+}
+
+/* Group by country: on/off, then Layer | Feed. */
+.maps-cluster-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.maps-cluster-control__by {
+  display: inline-flex;
+  border: 1px solid hsl(var(--border));
+}
+
+.maps-cluster-control__option {
+  padding: 0 0.4rem;
+  height: 1.5rem;
+  font-size: 0.6875rem;
+  color: hsl(var(--muted-foreground));
+  background: transparent;
+}
+
+.maps-cluster-control__option--active {
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+}
+
+/* Legend: a feed's layers sit slightly in from the feed row (as in the sidebar). */
+.maps-legend__layer--in-feed {
+  padding-left: 0.75rem;
 }

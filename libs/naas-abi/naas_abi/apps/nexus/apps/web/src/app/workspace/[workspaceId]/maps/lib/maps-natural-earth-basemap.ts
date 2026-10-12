@@ -1,5 +1,7 @@
 import type { GeoJSON as GeoJSONLayer, Map as LeafletMap } from 'leaflet';
 
+import type { BasemapPalette } from './basemaps-api';
+
 export type NaturalEarthFeatureCollection = GeoJSON.FeatureCollection<
   GeoJSON.Geometry,
   Record<string, unknown>
@@ -30,16 +32,26 @@ export function fetchNaturalEarthCountries(): Promise<NaturalEarthFeatureCollect
 const NATURAL_EARTH_ATTRIBUTION =
   '&copy; <a href="https://www.naturalearthdata.com/">Natural Earth</a>';
 
-export function addNaturalEarthBasemapLayer(
+export interface VectorBasemapStyle {
+  /** Fixed colors (light mode); without one the layer follows the workspace theme. */
+  palette?: BasemapPalette;
+  strokeWidth?: number;
+}
+
+/** Country (or uploaded region) polygons under the data layers. */
+export function addVectorCountriesBasemapLayer(
   L: typeof import('leaflet'),
   map: LeafletMap,
   geojson: NaturalEarthFeatureCollection,
+  { palette, strokeWidth }: VectorBasemapStyle = {},
 ): GeoJSONLayer {
   const layer = L.geoJSON(geojson, {
     style: () => ({
       className: 'maps-basemap-countries-path',
-      weight: 1,
+      weight: strokeWidth ?? 1,
       fillOpacity: 1,
+      ...(palette?.fill ? { fillColor: palette.fill } : {}),
+      ...(palette?.stroke ? { color: palette.stroke } : {}),
     }),
     attribution: NATURAL_EARTH_ATTRIBUTION,
     interactive: false,

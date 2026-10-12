@@ -1,11 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { MAPS_CUSTOM_DATASETS } from '@/lib/maps-custom-datasets';
 import { useMapsStore, workspaceLayoutsOf } from '@/stores/maps';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { MAPS_DATASETS } from './datasets';
-import { normalizeBasemapId } from './maps-basemaps';
 import { buildLayoutEntries, isLayerOn, visibleEntries, type LayoutEntry } from './layouts';
 import {
   loadImportedMapLayers,
@@ -21,8 +19,6 @@ import {
   subscribeWorkspaceLayerMeta,
 } from './maps-workspace-layer-meta';
 import { useGraphMapLayers } from './use-graph-map-layers';
-
-const CUSTOM_IDS: ReadonlySet<string> = new Set(MAPS_CUSTOM_DATASETS.map((d) => d.id));
 
 /**
  * Every Maps data layer for the current workspace. `entries` omits layers hidden
@@ -84,7 +80,9 @@ export function useMapLayers() {
   const all = useMemo(
     () =>
       buildLayoutEntries(MAPS_DATASETS, graphLayers.layers, workspace.layouts, {
-        customIds: CUSTOM_IDS,
+        colors: workspace.colors,
+        // The API gives every feed a layer; fall back to one per feed until it has.
+        feedLayers: workspace.feedLayers.length ? workspace.feedLayers : undefined,
         importedLayers: importedLayers.map((layer) => ({
           ...layer,
           groupId: layer.groupId ?? 'custom',
@@ -93,11 +91,13 @@ export function useMapLayers() {
           ? (layoutId) => getWorkspaceLayerGroupId(workspaceId, layoutId)
           : undefined,
       }),
-    [graphLayers.layers, workspace.layouts, importedLayers, workspaceId, workspaceMetaVersion],
+    // workspaceMetaVersion: re-read browser-side group overrides when they change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [graphLayers.layers, workspace.layouts, workspace.feedLayers, workspace.colors, importedLayers, workspaceId, workspaceMetaVersion],
   );
   const entries = useMemo(() => visibleEntries(all, workspace.hidden), [all, workspace.hidden]);
   const isOn = (entry: LayoutEntry) => isLayerOn(entry, overrides);
-  const basemapId = normalizeBasemapId(storedBasemap);
+  const basemapId = storedBasemap;
 
   return {
     workspaceId,
@@ -105,9 +105,11 @@ export function useMapLayers() {
     entries,
     basemapId,
     hidden: workspace.hidden,
+    layerColors: workspace.colors,
     customLayerGroups,
     canEdit: workspace.canEdit,
     workspaceLayouts: workspace.layouts,
+    feedLayers: workspace.feedLayers,
     isOn,
     loading: graphLayers.loading || storeLoading,
     error: graphLayers.error || storeError,

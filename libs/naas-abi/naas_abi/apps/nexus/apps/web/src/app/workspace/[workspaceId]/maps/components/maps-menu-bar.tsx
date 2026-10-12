@@ -15,10 +15,12 @@ import { useWorkspaceStore } from '@/stores/workspace';
 export function MapsMenuBar({
   workspaceId,
   onNewLayer,
+  onNewBasemap,
   onGeoJsonLayers,
 }: {
   workspaceId: string | null;
   onNewLayer: () => void;
+  onNewBasemap: () => void;
   onGeoJsonLayers: () => void;
 }) {
   const router = useRouter();
@@ -47,6 +49,18 @@ export function MapsMenuBar({
                   data-testid="maps-menuitem-new-layer"
                 >
                   New layer
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  className={APP_MENU_ROW}
+                  disabled={!workspaceId}
+                  title={workspaceId ? undefined : 'Open Maps inside a workspace'}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    onNewBasemap();
+                  }}
+                  data-testid="maps-menuitem-new-basemap"
+                >
+                  New basemap
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
                   className={APP_MENU_ROW}

@@ -8,11 +8,16 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.adapters.secondary.m
     InMemoryMapsLayoutStore,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.layouts__schema import (
+    FEED_GEOJSON_URL,
     MapsLayout,
     MapsLayoutNotFoundError,
+    MapsLayoutPolicyError,
     MapsLayoutValidationError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.service import MapsLayoutService
+from naas_abi.apps.nexus.apps.api.app.services.maps.settings.adapters.secondary.memory import (
+    InMemoryMapsSettingsStore,
+)
 
 QUERY = """
 PREFIX ex: <http://example.org/>
@@ -48,7 +53,7 @@ def _row(**cells):
 
 @pytest.fixture
 def service() -> MapsLayoutService:
-    return MapsLayoutService(InMemoryMapsLayoutStore())
+    return MapsLayoutService(InMemoryMapsLayoutStore(), InMemoryMapsSettingsStore())
 
 
 def test_save_list_delete_round_trip(service: MapsLayoutService) -> None:
@@ -56,7 +61,7 @@ def test_save_list_delete_round_trip(service: MapsLayoutService) -> None:
 
     listed = asyncio.run(service.list("ws-1"))
     assert [layout.id for layout in listed.layouts] == ["offices"]
-    assert asyncio.run(service.list("ws-2")) == type(listed)(layouts=[], hidden=set())
+    assert asyncio.run(service.list("ws-2")) == type(listed)(layouts=[], hidden=set(), colors={})
 
     asyncio.run(service.delete("ws-1", "offices"))
     assert (asyncio.run(service.list("ws-1"))).layouts == []
@@ -149,3 +154,97 @@ def test_feed_caps_rows_with_a_limit(service) -> None:
     asyncio.run(service.feed(_layout(), store))
 
     assert "LIMIT" in store.queries[0].upper()
+
+
+def _feed(**overrides) -> MapsLayout:
+    values = {
+        "id": "acme-facilities",
+        "title": "Acme",
+        "feed_type": FEED_GEOJSON_URL,
+        "feed_url": "/api/maps/organization-facilities/acme-facilities",
+        "category": "organizations-facility",
+        "logo_url": "/api/organizations/logos/Acme/Acme.ico",
+        "color": "#171c8f",
+    }
+    values.update(overrides)
+    return MapsLayout(**values)
+
+
+def test_feed_layers_need_a_same_host_api_path(service) -> None:
+    saved = asyncio.run(service.save("ws-1", _feed(query="ignored"), user_id="u"))
+    assert saved.query == "" and saved.feed_url.startswith("/api/")
+
+    for bad in ("https://evil.example/x", "//evil.example/x", "/api/../admin", "/other/x", ""):
+        with pytest.raises(MapsLayoutValidationError) as exc_info:
+            asyncio.run(service.save("ws-1", _feed(feed_url=bad), user_id="u"))
+        assert any("feed_url" in e for e in exc_info.value.errors)
+
+
+def test_feed_layer_logo_and_category_are_checked(service) -> None:
+    with pytest.raises(MapsLayoutValidationError) as exc_info:
+        asyncio.run(
+            service.save(
+                "ws-1", _feed(logo_url="javascript:alert(1)", category="Bad Group"), user_id="u"
+            )
+        )
+    assert any("logo_url" in e for e in exc_info.value.errors)
+    assert any("category" in e for e in exc_info.value.errors)
+
+
+def test_seeds_are_copied_once_and_cannot_be_deleted(service) -> None:
+    seed = _feed()
+    first = asyncio.run(service.list("ws-1", seeds=[seed]))
+    assert [(layout.id, layout.system) for layout in first.layouts] == [("acme-facilities", True)]
+
+    # Edits survive later lists; the request cannot drop the system flag.
+    asyncio.run(service.save("ws-1", _feed(title="Acme sites", system=False), user_id="u"))
+    again = asyncio.run(service.list("ws-1", seeds=[seed]))
+    assert [(layout.title, layout.system) for layout in again.layouts] == [("Acme sites", True)]
+
+    with pytest.raises(MapsLayoutPolicyError):
+        asyncio.run(service.delete("ws-1", "acme-facilities"))
+
+    hidden = asyncio.run(service.set_hidden("ws-1", "acme-facilities", True, user_id="u"))
+    assert hidden == {"acme-facilities"}
+
+
+def test_seed_removed_from_store_is_not_recreated(service) -> None:
+    store = InMemoryMapsLayoutStore()
+    settings = InMemoryMapsSettingsStore()
+    service = MapsLayoutService(store, settings)
+    asyncio.run(service.list("ws-1", seeds=[_feed()]))
+    asyncio.run(store.delete("ws-1", "acme-facilities"))
+
+    assert asyncio.run(service.list("ws-1", seeds=[_feed()])).layouts == []
+
+
+def test_layer_colors_for_records_and_builtins(service) -> None:
+    asyncio.run(service.save("ws-1", _layout(), user_id="u"))
+
+    colors = asyncio.run(service.set_color("ws-1", "earthquakes", "#123456", user_id="u"))
+    assert colors == {"earthquakes": "#123456"}
+    asyncio.run(service.set_color("ws-1", "offices", "#abcdef", user_id="u"))
+
+    listed = asyncio.run(service.list("ws-1"))
+    assert listed.colors == {"earthquakes": "#123456"}
+    assert listed.layouts[0].color == "#abcdef"
+
+    assert asyncio.run(service.set_color("ws-1", "earthquakes", None, user_id="u")) == {}
+    with pytest.raises(MapsLayoutValidationError):
+        asyncio.run(service.set_color("ws-1", "offices", "blue", user_id="u"))
+
+
+def test_hidden_flags_keep_other_settings(service) -> None:
+    settings = InMemoryMapsSettingsStore()
+    service = MapsLayoutService(InMemoryMapsLayoutStore(), settings)
+    asyncio.run(service.set_color("ws-1", "earthquakes", "#123456", user_id="u"))
+    asyncio.run(service.set_hidden("ws-1", "earthquakes", True, user_id="u"))
+
+    stored = asyncio.run(settings.get("ws-1"))
+    assert stored.layer_colors == {"earthquakes": "#123456"}
+    assert stored.hidden_layouts == {"earthquakes"}
+
+
+def test_feed_layers_do_not_run_sparql(service) -> None:
+    with pytest.raises(MapsLayoutValidationError):
+        asyncio.run(service.feed(_feed(), _Store([])))

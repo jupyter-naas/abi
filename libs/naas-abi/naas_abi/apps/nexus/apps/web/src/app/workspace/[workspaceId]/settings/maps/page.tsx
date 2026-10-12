@@ -1,16 +1,18 @@
 'use client';
 
 /**
- * Settings → Maps: the workspace's map layouts.
+ * Settings → Maps: feeds, the layers drawn from them, and basemaps.
  *
- * Every layout (built-in, module graph layer, or one made here) can be hidden
- * for the whole workspace. Workspace layouts are SPARQL queries over the
- * workspace graphs returning ?label ?lat ?lng (and optionally ?uri ?detail
- * ?graph); each one is checked on save and can be run from here first.
+ * A feed is a data source: SPARQL over the workspace graphs, or a Nexus API
+ * path (e.g. organization facilities, often seeded by the deployment). A layer
+ * is what Maps lists and draws: a view on one feed — every feature, or only some
+ * feature types — with its own title, color and icon. A feed keeps one layer at
+ * least. Built-in and module graph layers have no feed here; they can be hidden
+ * and recolored. Access (which workspaces) is set per feed; hiding per layer.
  */
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Loader2, Map as MapIcon, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Map as MapIcon, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -23,23 +25,41 @@ import {
 import { cn } from '@/lib/utils';
 import { useMapsStore } from '@/stores/maps';
 import { MapsLayerBrandIcon } from '@/app/workspace/[workspaceId]/maps/components/maps-layer-brand-icon';
-import { type LayoutEntry, type LayoutKind, type WorkspaceMapLayout } from '@/app/workspace/[workspaceId]/maps/lib/layouts';
-import { LayoutApiError, layoutsApi } from '@/app/workspace/[workspaceId]/maps/lib/layouts-api';
+import {
+  isFeedLayout, type LayoutEntry, type LayoutKind, type WorkspaceFeedLayer, type WorkspaceMapLayout,
+} from '@/app/workspace/[workspaceId]/maps/lib/layouts';
+import {
+  LayoutApiError, feedLayerDraft, feedLayersApi, layoutsApi,
+} from '@/app/workspace/[workspaceId]/maps/lib/layouts-api';
+import { layerPinColor } from '@/app/workspace/[workspaceId]/maps/lib/maps-layer-colors';
+import { mapsIconMap } from '@/app/workspace/[workspaceId]/maps/lib/maps-icons';
+import { facilityClassIcon } from '@/app/workspace/[workspaceId]/maps/lib/maps-facility-class-symbology';
+import { MapsAccessCell, useMapsPermissions } from '@/app/workspace/[workspaceId]/maps/components/maps-settings-access';
 import { MapsLayerEditorForm } from '@/app/workspace/[workspaceId]/maps/components/maps-layer-editor-form';
-import { MAPS_CATEGORIES } from '@/app/workspace/[workspaceId]/maps/lib/datasets';
+import {
+  MapsFeedLayerForm, slugifyLayerId, useFeedTypes,
+} from '@/app/workspace/[workspaceId]/maps/components/maps-feed-layer-form';
+import { MAPS_CATEGORIES, type MapsLayerGroupId } from '@/app/workspace/[workspaceId]/maps/lib/datasets';
 import { layerGroupLabel } from '@/app/workspace/[workspaceId]/maps/lib/maps-layer-groups';
 import { getWorkspaceLayerGroupId, removeWorkspaceLayerMeta } from '@/app/workspace/[workspaceId]/maps/lib/maps-workspace-layer-meta';
-import { mapsLayerPath, mapsSettingsPath } from '@/app/workspace/[workspaceId]/maps/lib/maps-route';
+import {
+  mapsLayerPath, mapsPath, mapsSettingsPath, mapsSettingsSelectedFeed, mapsSettingsSelectedLayer,
+} from '@/app/workspace/[workspaceId]/maps/lib/maps-route';
 import { mapsDeploymentRestrictsLayerCatalog } from '@/app/workspace/[workspaceId]/maps/lib/maps-deployment';
 import { useMapLayouts } from '@/app/workspace/[workspaceId]/maps/lib/use-map-layouts';
+import { MapsSettingsBasemapsSection } from '@/app/workspace/[workspaceId]/maps/components/maps-settings-basemaps-section';
 
 const KIND_LABEL: Record<LayoutKind, string> = {
   builtin: 'Built-in',
   graph: 'Graph layer',
-  workspace: 'Workspace layer',
+  workspace: 'SPARQL feed',
+  feed: 'API feed',
   imported: 'Imported GeoJSON (this browser)',
 };
 const NEW = 'new';
+const SEEDED_FEED_HINT = 'Provided by the deployment: hide its layers, or narrow its Access, instead of deleting it';
+const SEEDED_LAYER_HINT = 'Provided by the deployment: hide it instead of deleting it';
+const LAST_LAYER_HINT = 'A feed needs at least one layer: delete the feed instead';
 
 export default function MapsSettingsPage() {
   return <Suspense fallback={null}><MapsSettings /></Suspense>;
@@ -50,296 +70,716 @@ function errorText(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
+function feedTypeLabel(feed: WorkspaceMapLayout): string {
+  return isFeedLayout(feed) ? 'API feed' : 'SPARQL feed';
+}
+
+/** Why a feed layer cannot be deleted, or null when it can. */
+function layerDeleteBlock(layer: WorkspaceFeedLayer, siblings: number): string | null {
+  if (layer.shared_from) return 'Shared from another workspace';
+  if (layer.system) return SEEDED_LAYER_HINT;
+  if (siblings <= 1) return LAST_LAYER_HINT;
+  return null;
+}
+
 function MapsSettings() {
   const workspaceId = useParams().workspaceId as string;
   const router = useRouter();
-  const selectedId = useSearchParams()?.get('layout');
-  const { all, hidden, canEdit, workspaceLayouts, loading, error, customLayerGroups } = useMapLayouts();
+  const search = useSearchParams();
+  const selectedLayer = mapsSettingsSelectedLayer(search);
+  const selectedFeed = mapsSettingsSelectedFeed(search);
+  const forFeed = search?.get('for') ?? undefined;
+  const {
+    all, hidden, canEdit, workspaceLayouts: feeds, feedLayers, loading, error, customLayerGroups, layerColors,
+  } = useMapLayouts();
   const applyLayouts = useMapsStore((s) => s.applyLayouts);
   const loadLayouts = useMapsStore((s) => s.loadLayouts);
-  const [toggling, setToggling] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [tableError, setTableError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [groupFilter, setGroupFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const permissions = useMapsPermissions(workspaceId, canEdit);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   // Fresh from the server whenever the page opens.
   useEffect(() => { if (workspaceId) void loadLayouts(workspaceId, true); }, [workspaceId, loadLayouts]);
 
-  const select = (id: string | null) =>
-    router.push(id ? mapsSettingsPath(workspaceId, { layout: id }) : mapsSettingsPath(workspaceId), { scroll: false });
+  const go = (options: Parameters<typeof mapsSettingsPath>[1]) =>
+    router.push(mapsSettingsPath(workspaceId, options), { scroll: false });
+  const reload = () => loadLayouts(workspaceId, true);
 
-  const toggleShown = async (entry: LayoutEntry) => {
-    setToggling(entry.id); setTableError(null);
+  const layersByFeed = useMemo(() => {
+    const map = new Map<string, WorkspaceFeedLayer[]>();
+    for (const layer of feedLayers) map.set(layer.feed_id, [...(map.get(layer.feed_id) ?? []), layer]);
+    return map;
+  }, [feedLayers]);
+  const layerRecord = (id: string) => feedLayers.find((layer) => layer.id === id) ?? null;
+  const takenLayerIds = useMemo(() => new Set(all.map((e) => e.id)), [all]);
+
+  const run = async (id: string, action: () => Promise<unknown>, failure: string) => {
+    setBusyId(id); setTableError(null);
     try {
-      const result = await layoutsApi.setHidden(workspaceId, entry.id, !hidden.includes(entry.id));
-      applyLayouts(workspaceId, { hidden: result.hidden });
+      await action();
     } catch (e) {
-      setTableError(errorText(e, 'Could not change the layout'));
-    } finally { setToggling(null); }
+      setTableError(errorText(e, failure));
+    } finally { setBusyId(null); }
+  };
+
+  const toggleShown = (entry: LayoutEntry) => run(entry.id, async () => {
+    const result = await layoutsApi.setHidden(workspaceId, entry.id, !hidden.includes(entry.id));
+    applyLayouts(workspaceId, { hidden: result.hidden });
+  }, 'Could not change the layer');
+
+  const setColor = (entry: LayoutEntry, color: string) => run(entry.id, async () => {
+    const record = layerRecord(entry.id);
+    if (record) {
+      const saved = await feedLayersApi.save(workspaceId, record.id, { ...feedLayerDraft(record), color });
+      applyLayouts(workspaceId, { feedLayers: feedLayers.map((l) => (l.id === saved.id ? saved : l)) });
+      return;
+    }
+    const result = await layoutsApi.setColor(workspaceId, entry.id, color);
+    applyLayouts(workspaceId, { colors: result.colors });
+  }, 'Could not change the layer color');
+
+  const deleteLayer = async (layer: WorkspaceFeedLayer) => {
+    const ok = await confirm({
+      title: `Delete the layer “${layer.title}”?`,
+      description: 'It is removed from Maps for every member of this workspace. Its feed stays.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
+    await run(layer.id, async () => {
+      await feedLayersApi.remove(workspaceId, layer.id);
+      await reload();
+      if (selectedLayer === layer.id) go({});
+    }, 'Could not delete the layer');
+  };
+
+  const deleteFeed = async (feed: WorkspaceMapLayout) => {
+    const count = layersByFeed.get(feed.id)?.length ?? 0;
+    const ok = await confirm({
+      title: `Delete the feed “${feed.title}”?`,
+      description: `Its ${count} layer${count === 1 ? '' : 's'} go with it, for every member of this workspace.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
+    await run(feed.id, async () => {
+      await layoutsApi.remove(workspaceId, feed.id);
+      removeWorkspaceLayerMeta(workspaceId, feed.id);
+      await reload();
+      if (selectedFeed === feed.id) go({});
+    }, 'Could not delete the feed');
   };
 
   const catalogRestricted = mapsDeploymentRestrictsLayerCatalog();
+  const ownFeeds = feeds.filter((feed) => !feed.shared_from);
+  const backBar = (
+    <div className="flex items-center justify-between gap-2">
+      <Button variant="secondary" onClick={() => go({})}>
+        <ArrowLeft size={16} /> Maps settings
+      </Button>
+      <SettingsReloadButton />
+    </div>
+  );
 
-  if (selectedId) {
-    if (catalogRestricted && selectedId === NEW) {
-      select(null);
-      return null;
-    }
-    const layout = selectedId === NEW ? null : workspaceLayouts.find((l) => l.id === selectedId) ?? null;
+  // ── One feed ──────────────────────────────────────────────────────────────
+  if (selectedFeed) {
+    const creating = selectedFeed === NEW;
+    if (catalogRestricted && creating) { go({}); return null; }
+    const feed = creating ? null : feeds.find((f) => f.id === selectedFeed) ?? null;
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between gap-2">
-          <Button variant="secondary" onClick={() => select(null)}>
-            <ArrowLeft size={16} /> Active layers
-          </Button>
-          <SettingsReloadButton />
-        </div>
-        {loading && selectedId !== NEW && !layout ? (
+        {confirmDialog}
+        {backBar}
+        {tableError && <SettingsNotice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></SettingsNotice>}
+        {loading && !creating && !feed ? (
           <SettingsLoading />
-        ) : selectedId !== NEW && !layout ? (
-          <SettingsEmpty title={<>There is no workspace layer “{selectedId}”.</>} />
+        ) : !creating && !feed ? (
+          <SettingsEmpty title={<>There is no feed “{selectedFeed}”.</>} />
         ) : (
-          <LayoutEditor
-            key={selectedId}
+          <FeedPage
+            key={selectedFeed}
             workspaceId={workspaceId}
-            layout={layout}
-            takenIds={new Set(all.map((e) => e.id))}
+            feed={feed}
+            layers={feed ? layersByFeed.get(feed.id) ?? [] : []}
+            takenIds={takenLayerIds}
             canEdit={canEdit}
             customLayerGroups={customLayerGroups}
+            busyId={busyId}
             onSavedGeoJson={(layerId) => router.push(mapsLayerPath(workspaceId, layerId))}
-            onSaved={(saved) => {
-              const rest = workspaceLayouts.filter((l) => l.id !== saved.id);
-              applyLayouts(workspaceId, { layouts: [...rest, saved] });
-              if (selectedId === NEW) select(saved.id);
+            onSaved={async (saved) => {
+              await reload();
+              if (creating) go({ feed: saved.id });
             }}
-            onDeleted={(id) => {
-              applyLayouts(workspaceId, {
-                layouts: workspaceLayouts.filter((l) => l.id !== id),
-                hidden: hidden.filter((h) => h !== id),
-              });
-              select(null);
-            }}
+            onDelete={(f) => void deleteFeed(f)}
+            onEditLayer={(id) => go({ layer: id })}
+            onNewLayer={(feedId) => go({ layer: NEW, forFeed: feedId })}
+            onDeleteLayer={(layer) => void deleteLayer(layer)}
+            onLayersChanged={reload}
           />
         )}
       </div>
     );
   }
 
+  // ── One layer ─────────────────────────────────────────────────────────────
+  if (selectedLayer) {
+    const creating = selectedLayer === NEW;
+    const layer = creating ? null : layerRecord(selectedLayer);
+    const siblings = layer ? layersByFeed.get(layer.feed_id)?.length ?? 0 : 0;
+    const feed = layer ? feeds.find((f) => f.id === layer.feed_id) : undefined;
+    const block = layer ? layerDeleteBlock(layer, siblings) : null;
+    return (
+      <div className="space-y-6">
+        {confirmDialog}
+        {backBar}
+        {tableError && <SettingsNotice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></SettingsNotice>}
+        {loading && !creating && !layer ? (
+          <SettingsLoading />
+        ) : !creating && !layer ? (
+          <SettingsEmpty title={<>There is no editable layer “{selectedLayer}”. Built-in and graph layers are hidden or recolored from the table.</>} />
+        ) : (
+          <>
+            <SettingsPageHeader
+              title={layer ? layer.title : 'New layer'}
+              badge={layer ? (layer.system ? 'Seeded layer' : 'Layer') : 'Draft'}
+              description={
+                layer
+                  ? `A view on the feed “${feed?.title ?? layer.feed_id}”.${layer.shared_from ? ' Shared from another workspace: read-only here.' : ''}`
+                  : 'A layer draws from a feed: every feature, or only the feature types you pick.'
+              }
+              actions={
+                layer ? (
+                  <>
+                    {feed && (
+                      <Button variant="secondary" onClick={() => go({ feed: feed.id })}>
+                        Feed: {feed.title}
+                      </Button>
+                    )}
+                    <Button variant="secondary" onClick={() => window.open(mapsLayerPath(workspaceId, layer.id), '_self')}>
+                      <MapIcon size={16} /> Open in Maps
+                    </Button>
+                    {canEdit && (
+                      <Button
+                        variant="destructive-ghost"
+                        onClick={() => void deleteLayer(layer)}
+                        disabled={Boolean(block) || busyId === layer.id}
+                        title={block ?? undefined}
+                      >
+                        <Trash2 size={16} /> Delete
+                      </Button>
+                    )}
+                  </>
+                ) : undefined
+              }
+            />
+            {!canEdit && <SettingsNotice>Only workspace owners and admins can edit layers.</SettingsNotice>}
+            <SettingsSection title="Layer">
+              <MapsFeedLayerForm
+                key={selectedLayer}
+                workspaceId={workspaceId}
+                layer={layer}
+                feeds={layer ? feeds.filter((f) => f.id === layer.feed_id) : ownFeeds}
+                initialFeedId={forFeed}
+                takenIds={takenLayerIds}
+                canEdit={canEdit}
+                onSaved={async (saved) => {
+                  await reload();
+                  if (creating) go({ layer: saved.id });
+                }}
+              />
+            </SettingsSection>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // ── Overview ──────────────────────────────────────────────────────────────
   const query = searchQuery.trim().toLowerCase();
   const rows = all.filter((entry) => {
     const shown = !hidden.includes(entry.id);
     return (groupFilter === 'all' || groupFilter === entry.category)
       && (statusFilter === 'all' || (statusFilter === 'shown') === shown)
-      && (!query || [entry.title, entry.id, entry.description].some((t) => t.toLowerCase().includes(query)));
+      && (!query || [entry.title, entry.id, entry.description, entry.feedTitle ?? ''].some((t) => t.toLowerCase().includes(query)));
   });
   const shownCount = all.filter((e) => !hidden.includes(e.id)).length;
 
   return (
     <div className="min-w-0 space-y-6">
+      {confirmDialog}
       <SettingsPageHeader
         title="Maps"
         badge={`${shownCount} shown`}
-        description={
-          catalogRestricted
-            ? 'Organization facility layers for this deployment. Hidden layers disappear for every member of the workspace.'
-            : 'Layers offered in Maps for this workspace. Hidden layers disappear for every member. Create or edit workspace layers with the same editor as File → New layer in Maps.'
-        }
+        description="Feeds are data sources; layers are what Maps lists and draws, each a view on one feed. Hidden layers disappear for every member of the workspace."
         actions={
           catalogRestricted ? undefined : (
-            <Button onClick={() => select(NEW)}>
-              <Plus size={16} /> New layer
-            </Button>
+            <>
+              <Button variant="secondary" onClick={() => go({ feed: NEW })}>
+                <Plus size={16} /> New feed
+              </Button>
+              <Button onClick={() => go({ layer: NEW })} disabled={ownFeeds.length === 0}>
+                <Plus size={16} /> New layer
+              </Button>
+            </>
           )
         }
       />
 
       {error && <SettingsNotice tone="error"><span role="alert">{error}</span></SettingsNotice>}
+      {permissions.error && <SettingsNotice tone="error"><span role="alert">{permissions.error}</span></SettingsNotice>}
       {tableError && <SettingsNotice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></SettingsNotice>}
-      {!canEdit && !loading && <SettingsNotice>Only workspace owners and admins can change map layers.</SettingsNotice>}
+      {!canEdit && !loading && <SettingsNotice>Only workspace owners and admins can change feeds and layers.</SettingsNotice>}
 
-      <SettingsTableToolbar
-        search={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder="Search layers..."
-        filters={
-          <>
-            <SettingsFilterSelect label="Group" value={groupFilter} onChange={setGroupFilter} options={[
-              { value: 'all', label: 'All groups' },
-              ...MAPS_CATEGORIES.map(({ id, label }) => ({ value: id, label })),
-            ]} />
-            <SettingsFilterSelect label="Status" value={statusFilter} onChange={setStatusFilter} options={[
-              { value: 'all', label: 'All statuses' },
-              { value: 'shown', label: 'Shown' },
-              { value: 'hidden', label: 'Hidden' },
-            ]} />
-          </>
-        }
-        meta={`${countLabel(rows.length, all.length, 'layout')} · ${shownCount} shown · ${workspaceLayouts.length} workspace layout${workspaceLayouts.length === 1 ? '' : 's'}`}
-      />
+      <SettingsSection title="Feeds">
+        <div className="overflow-x-hidden border border-border bg-card">
+          <table className={cn(settingsTable.table, 'table-fixed')}>
+            <thead>
+              <tr className={settingsTable.headRow}>
+                <th className={settingsTable.th}>Name</th>
+                <th className={cn(settingsTable.th, 'w-28')}>Source</th>
+                <th className={cn(settingsTable.th, 'w-20')}>Layers</th>
+                {canEdit && <th className={cn(settingsTable.th, 'w-44')}>Access</th>}
+                {canEdit && <th className={cn(settingsTable.th, 'w-24')} aria-label="Actions" />}
+              </tr>
+            </thead>
+            <tbody>
+              {loading && !feeds.length && (
+                <tr><td colSpan={5} className={cn(settingsTable.td, 'text-muted-foreground')}><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
+              )}
+              {!loading && feeds.length === 0 && (
+                <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">No feeds yet</td></tr>
+              )}
+              {feeds.map((feed) => {
+                const count = layersByFeed.get(feed.id)?.length ?? 0;
+                const editable = !feed.shared_from;
+                return (
+                  <tr key={feed.id} onClick={() => go({ feed: feed.id })} className={cn(settingsTable.row, 'cursor-pointer')}>
+                    <td className={cn(settingsTable.td, 'max-w-0')}>
+                      <div className="truncate font-medium" title={feed.title}>{feed.title}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        <span className="font-mono">{feed.id}</span>
+                        {feed.system ? ' · seeded' : ''}{feed.shared_from ? ' · shared' : ''}
+                      </div>
+                    </td>
+                    <td className={cn(settingsTable.td, 'text-muted-foreground')}>{feedTypeLabel(feed)}</td>
+                    <td className={cn(settingsTable.td, 'text-muted-foreground')}>{count}</td>
+                    {canEdit && (
+                      <td className={cn(settingsTable.td, 'max-w-0 text-xs')} onClick={(e) => e.stopPropagation()}>
+                        <MapsAccessCell workspaceId={workspaceId} kind="layout" itemId={feed.id} permissions={permissions} />
+                      </td>
+                    )}
+                    {canEdit && (
+                      <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
+                        <span className="inline-flex items-center gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => go({ feed: feed.id })} aria-label={`Edit ${feed.title}`} title="Edit">
+                            <Pencil size={14} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled={!editable || feed.system || busyId === feed.id}
+                            onClick={() => void deleteFeed(feed)}
+                            aria-label={`Delete ${feed.title}`}
+                            title={feed.system ? SEEDED_FEED_HINT : !editable ? 'Shared from another workspace' : 'Delete the feed and its layers'}
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        </span>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </SettingsSection>
 
-      <div className="max-h-[65vh] overflow-y-auto overflow-x-hidden border border-border bg-card">
-        <table className={cn(settingsTable.table, 'table-fixed')}>
-          <thead>
-            <tr className={settingsTable.headRow}>
-              <th className={settingsTable.th}>Name</th>
-              <th className={cn(settingsTable.th, 'w-28')}>Group</th>
-              <th className={cn(settingsTable.th, 'w-40')}>Type</th>
-              <th className={cn(settingsTable.th, 'w-24')}>Shown</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && !all.length && (
-              <tr><td colSpan={4} className={cn(settingsTable.td, 'text-muted-foreground')}><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
-            )}
-            {!loading && rows.length === 0 && (
-              <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">No layers match the current search and filters</td></tr>
-            )}
-            {rows.map((entry) => {
-              const shown = !hidden.includes(entry.id);
-              const editable = entry.kind === 'workspace';
-              return (
-                <tr
-                  key={entry.id}
-                  onClick={editable ? () => select(entry.id) : undefined}
-                  className={cn(settingsTable.row, editable && 'cursor-pointer')}
-                >
-                  <td className={cn(settingsTable.td, 'max-w-0')}>
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-muted">
-                        <MapsLayerBrandIcon entry={entry} size={20} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className={cn('truncate font-medium', !shown && 'text-muted-foreground')} title={entry.title}>
-                          {entry.title}
+      <SettingsSection title="Layers">
+        <SettingsTableToolbar
+          search={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search layers..."
+          filters={
+            <>
+              <SettingsFilterSelect label="Group" value={groupFilter} onChange={setGroupFilter} options={[
+                { value: 'all', label: 'All groups' },
+                ...MAPS_CATEGORIES.map(({ id, label }) => ({ value: id, label })),
+              ]} />
+              <SettingsFilterSelect label="Status" value={statusFilter} onChange={setStatusFilter} options={[
+                { value: 'all', label: 'All statuses' },
+                { value: 'shown', label: 'Shown' },
+                { value: 'hidden', label: 'Hidden' },
+              ]} />
+            </>
+          }
+          meta={`${countLabel(rows.length, all.length, 'layer')} · ${shownCount} shown`}
+        />
+        <div className="max-h-[65vh] overflow-y-auto overflow-x-hidden border border-border bg-card">
+          <table className={cn(settingsTable.table, 'table-fixed')}>
+            <thead>
+              <tr className={settingsTable.headRow}>
+                <th className={settingsTable.th}>Name</th>
+                <th className={cn(settingsTable.th, 'w-36')}>Feed</th>
+                <th className={cn(settingsTable.th, 'w-28')}>Group</th>
+                <th className={cn(settingsTable.th, 'w-20')}>Color</th>
+                <th className={cn(settingsTable.th, 'w-20')}>Shown</th>
+                {canEdit && <th className={cn(settingsTable.th, 'w-24')} aria-label="Actions" />}
+              </tr>
+            </thead>
+            <tbody>
+              {loading && !all.length && (
+                <tr><td colSpan={6} className={cn(settingsTable.td, 'text-muted-foreground')}><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
+              )}
+              {!loading && rows.length === 0 && (
+                <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No layers match the current search and filters</td></tr>
+              )}
+              {rows.map((entry) => {
+                const shown = !hidden.includes(entry.id);
+                const record = layerRecord(entry.id);
+                const editable = Boolean(record && !record.shared_from);
+                const block = record ? layerDeleteBlock(record, layersByFeed.get(record.feed_id)?.length ?? 0) : null;
+                const color = layerPinColor(entry);
+                return (
+                  <tr
+                    key={entry.id}
+                    onClick={record ? () => go({ layer: entry.id }) : undefined}
+                    className={cn(settingsTable.row, record && 'cursor-pointer')}
+                  >
+                    <td className={cn(settingsTable.td, 'max-w-0')}>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-muted">
+                          <MapsLayerBrandIcon entry={entry} size={20} />
                         </div>
-                        <div
-                          className="truncate text-xs text-muted-foreground"
-                          title={[entry.id, entry.description].filter(Boolean).join(' · ')}
-                        >
-                          <span className="font-mono">{entry.id}</span>{entry.description ? ` · ${entry.description}` : ''}
+                        <div className="min-w-0 flex-1">
+                          <div className={cn('truncate font-medium', !shown && 'text-muted-foreground')} title={entry.title}>
+                            {entry.title}
+                          </div>
+                          <div className="truncate text-xs text-muted-foreground" title={[entry.id, entry.description].filter(Boolean).join(' · ')}>
+                            <span className="font-mono">{entry.id}</span>
+                            {entry.classLabels?.length ? ` · ${entry.classLabels.join(', ')}` : entry.description ? ` · ${entry.description}` : ''}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className={cn(settingsTable.td, 'max-w-0')}>
-                    <Badge variant="outline" className="max-w-full truncate">
-                      {layerGroupLabel(entry.category, customLayerGroups)}
-                    </Badge>
-                  </td>
-                  <td className={cn(settingsTable.td, 'max-w-0 truncate text-muted-foreground')} title={KIND_LABEL[entry.kind]}>
-                    {KIND_LABEL[entry.kind]}
-                  </td>
-                  <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
-                    <span className="inline-flex items-center gap-2">
-                      <Checkbox
-                        checked={shown}
-                        disabled={!canEdit || toggling === entry.id}
-                        onCheckedChange={() => void toggleShown(entry)}
-                        aria-label={`${entry.title} shown`}
-                      />
-                      {toggling === entry.id && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                    <td className={cn(settingsTable.td, 'max-w-0 truncate text-muted-foreground')} onClick={(e) => e.stopPropagation()}>
+                      {entry.feedId ? (
+                        <button type="button" className="truncate hover:underline" onClick={() => go({ feed: entry.feedId })}>
+                          {entry.feedTitle ?? entry.feedId}
+                        </button>
+                      ) : (
+                        KIND_LABEL[entry.kind]
+                      )}
+                    </td>
+                    <td className={cn(settingsTable.td, 'max-w-0')}>
+                      <Badge variant="outline" className="max-w-full truncate">
+                        {layerGroupLabel(entry.category, customLayerGroups)}
+                      </Badge>
+                    </td>
+                    <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
+                      {canEdit && entry.kind !== 'imported' && !entry.sharedFrom ? (
+                        <LayerColorInput
+                          color={color}
+                          label={`${entry.title} color`}
+                          title={layerColors[entry.id] || entry.color ? color : `${color} (default)`}
+                          onCommit={(next) => void setColor(entry, next)}
+                        />
+                      ) : (
+                        <span className="inline-block h-4 w-4 border border-border" style={{ background: color }} aria-label={color} />
+                      )}
+                    </td>
+                    <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
+                      <span className="inline-flex items-center gap-2">
+                        <Checkbox
+                          checked={shown}
+                          disabled={!canEdit || busyId === entry.id}
+                          onCheckedChange={() => void toggleShown(entry)}
+                          aria-label={`${entry.title} shown`}
+                        />
+                        {busyId === entry.id && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
+                      </span>
+                    </td>
+                    {canEdit && (
+                      <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
+                        {record ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => go({ layer: entry.id })} aria-label={`Edit ${entry.title}`} title={editable ? 'Edit' : 'View'}>
+                              <Pencil size={14} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              disabled={Boolean(block) || busyId === entry.id}
+                              onClick={() => void deleteLayer(record)}
+                              aria-label={`Delete ${entry.title}`}
+                              title={block ?? 'Delete'}
+                            >
+                              <Trash2 size={14} />
+                            </Button>
+                          </span>
+                        ) : null}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </SettingsSection>
+
+      <MapsSettingsBasemapsSection workspaceId={workspaceId} canEdit={canEdit} permissions={permissions} />
     </div>
   );
 }
 
-function LayoutEditor({
+function FeedPage({
   workspaceId,
-  layout,
+  feed,
+  layers,
   takenIds,
   canEdit,
   customLayerGroups,
+  busyId,
   onSaved,
   onSavedGeoJson,
-  onDeleted,
+  onDelete,
+  onEditLayer,
+  onNewLayer,
+  onDeleteLayer,
+  onLayersChanged,
 }: {
   workspaceId: string;
-  layout: WorkspaceMapLayout | null;
+  feed: WorkspaceMapLayout | null;
+  layers: WorkspaceFeedLayer[];
   takenIds: Set<string>;
   canEdit: boolean;
   customLayerGroups: ReturnType<typeof useMapLayouts>['customLayerGroups'];
-  onSaved: (layout: WorkspaceMapLayout) => void;
+  busyId: string | null;
+  onSaved: (feed: WorkspaceMapLayout) => void;
   onSavedGeoJson: (layerId: string) => void;
-  onDeleted: (id: string) => void;
+  onDelete: (feed: WorkspaceMapLayout) => void;
+  onEditLayer: (layerId: string) => void;
+  onNewLayer: (feedId: string) => void;
+  onDeleteLayer: (layer: WorkspaceFeedLayer) => void;
+  onLayersChanged: () => Promise<void>;
 }) {
-  const isNew = layout === null;
-  const [busy, setBusy] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const isNew = feed === null;
+  const shared = Boolean(feed?.shared_from);
+  const { types } = useFeedTypes(workspaceId, feed);
+  const [adding, setAdding] = useState<string | null>(null);
+  const [addError, setAddError] = useState<string | null>(null);
+  const sortedLayers = [...layers].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
 
-  const remove = async () => {
-    if (!layout) return;
-    const ok = await confirm({
-      title: `Delete “${layout.title}”?`,
-      description: 'The layer is removed from Maps for every member of this workspace.',
-      confirmLabel: 'Delete',
-      destructive: true,
-    });
-    if (!ok) return;
-    setBusy(true);
-    setDeleteError(null);
+  // Feature types no layer of this feed lists yet (a layer with no types already shows them all).
+  const covered = new Set(layers.flatMap((layer) => layer.class_labels));
+  const showsAll = layers.some((layer) => layer.class_labels.length === 0);
+  const uncovered = (types ?? []).filter((t) => !covered.has(t.label));
+
+  const addTypeLayer = async (label: string) => {
+    if (!feed) return;
+    setAdding(label); setAddError(null);
+    let id = slugifyLayerId(`${feed.id}-${label}`);
+    for (let n = 2; takenIds.has(id); n += 1) id = slugifyLayerId(`${feed.id}-${label}-${n}`);
     try {
-      await layoutsApi.remove(workspaceId, layout.id);
-      removeWorkspaceLayerMeta(workspaceId, layout.id);
-      onDeleted(layout.id);
+      await feedLayersApi.save(workspaceId, id, {
+        feed_id: feed.id,
+        title: label,
+        description: '',
+        color: feed.color,
+        icon: facilityClassIcon(label) ?? '',
+        order: 100 + layers.length,
+        class_labels: [label],
+      });
+      await onLayersChanged();
     } catch (e) {
-      setDeleteError(errorText(e, 'Could not delete the layer'));
-      setBusy(false);
-    }
+      setAddError(errorText(e, 'Could not add the layer'));
+    } finally { setAdding(null); }
   };
 
-  const initialGroupId = layout
-    ? getWorkspaceLayerGroupId(workspaceId, layout.id) ?? 'custom'
-    : 'custom';
+  const initialGroupId = (
+    feed
+      ? isFeedLayout(feed)
+        ? feed.category || 'custom'
+        : getWorkspaceLayerGroupId(workspaceId, feed.id) ?? feed.category ?? 'custom'
+      : 'custom'
+  ) as MapsLayerGroupId;
 
   return (
     <div className="space-y-6">
-      {confirmDialog}
       <SettingsPageHeader
-        title={isNew ? 'New layer' : layout.title}
-        badge={isNew ? 'Draft' : 'Workspace layer'}
-        description="Same editor as File → New layer in Maps: GeoJSON (browser-only) or SPARQL over workspace graphs (shared)."
+        title={feed ? feed.title : 'New feed'}
+        badge={feed ? `${feed.system ? 'Seeded ' : ''}${feedTypeLabel(feed)}` : 'Draft'}
+        description={
+          isNew
+            ? 'A feed is a data source: SPARQL over the workspace graphs or a Nexus API path. It starts with one layer showing every feature; add layers for its feature types below. (GeoJSON makes a layer kept in this browser only.)'
+            : shared
+              ? 'Shared from another workspace: read-only here.'
+              : feed!.system
+                ? 'Provided by this deployment: edit it and its layers; its availability is set in Access.'
+                : 'Shared with every member of this workspace.'
+        }
         actions={
-          <>
-            {!isNew && (
-              <Button variant="secondary" onClick={() => window.open(mapsLayerPath(workspaceId, layout.id), '_self')}>
+          feed ? (
+            <>
+              <Button variant="secondary" onClick={() => window.open(mapsPath(workspaceId, layers.map((l) => l.id)), '_self')}>
                 <MapIcon size={16} /> Open in Maps
               </Button>
-            )}
-            {!isNew && canEdit && (
-              <Button variant="destructive-ghost" onClick={() => void remove()} disabled={busy}>
-                <Trash2 size={16} /> Delete
-              </Button>
-            )}
-          </>
+              {canEdit && (
+                <Button
+                  variant="destructive-ghost"
+                  onClick={() => onDelete(feed)}
+                  disabled={feed.system || shared || busyId === feed.id}
+                  title={feed.system ? SEEDED_FEED_HINT : shared ? 'Shared from another workspace' : 'Delete the feed and its layers'}
+                >
+                  <Trash2 size={16} /> Delete
+                </Button>
+              )}
+            </>
+          ) : undefined
         }
       />
 
-      {!canEdit && <SettingsNotice>Only workspace owners and admins can save SPARQL workspace layers.</SettingsNotice>}
-      {deleteError ? <SettingsNotice tone="error"><span role="alert">{deleteError}</span></SettingsNotice> : null}
+      {!canEdit && <SettingsNotice>Only workspace owners and admins can edit feeds.</SettingsNotice>}
 
-      <SettingsSection title="Layer">
+      <SettingsSection title="Feed">
         <MapsLayerEditorForm
-          key={layout?.id ?? 'new'}
+          key={feed?.id ?? 'new'}
           variant="page"
           workspaceId={workspaceId}
           takenIds={takenIds}
           customLayerGroups={customLayerGroups}
-          canEdit={canEdit}
-          workspaceLayout={layout}
+          canEdit={canEdit && !shared}
+          workspaceLayout={feed}
           initialGroupId={initialGroupId}
+          initialSource="feed"
           onSavedWorkspace={onSaved}
           onSavedGeoJson={onSavedGeoJson}
         />
       </SettingsSection>
+
+      {feed ? (
+        <SettingsSection
+          title="Layers"
+          actions={canEdit && !shared ? (
+            <Button variant="secondary" onClick={() => onNewLayer(feed.id)}>
+              <Plus size={16} /> New layer
+            </Button>
+          ) : undefined}
+        >
+          <div className="overflow-x-hidden border border-border bg-card">
+            <table className={cn(settingsTable.table, 'table-fixed')}>
+              <thead>
+                <tr className={settingsTable.headRow}>
+                  <th className={settingsTable.th}>Layer</th>
+                  <th className={settingsTable.th}>Feature types</th>
+                  <th className={cn(settingsTable.th, 'w-16')}>Order</th>
+                  {canEdit && <th className={cn(settingsTable.th, 'w-24')} aria-label="Actions" />}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedLayers.map((layer) => {
+                  const Icon = mapsIconMap[layer.icon] ?? null;
+                  const block = layerDeleteBlock(layer, layers.length);
+                  return (
+                    <tr key={layer.id} onClick={() => onEditLayer(layer.id)} className={cn(settingsTable.row, 'cursor-pointer')}>
+                      <td className={cn(settingsTable.td, 'max-w-0')}>
+                        <span className="inline-flex min-w-0 items-center gap-2">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center text-white" style={{ background: layer.color }}>
+                            {Icon ? <Icon size={14} aria-hidden /> : null}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium">{layer.title}</span>
+                            <span className="block truncate font-mono text-xs text-muted-foreground">{layer.id}{layer.system ? ' · seeded' : ''}</span>
+                          </span>
+                        </span>
+                      </td>
+                      <td className={cn(settingsTable.td, 'max-w-0 truncate text-muted-foreground')} title={layer.class_labels.join(', ')}>
+                        {layer.class_labels.length ? layer.class_labels.join(', ') : 'Every feature'}
+                      </td>
+                      <td className={cn(settingsTable.td, 'text-muted-foreground')}>{layer.order}</td>
+                      {canEdit && (
+                        <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
+                          <span className="inline-flex items-center gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => onEditLayer(layer.id)} aria-label={`Edit ${layer.title}`} title="Edit">
+                              <Pencil size={14} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              disabled={Boolean(block) || busyId === layer.id}
+                              onClick={() => onDeleteLayer(layer)}
+                              aria-label={`Delete ${layer.title}`}
+                              title={block ?? 'Delete'}
+                            >
+                              <Trash2 size={14} />
+                            </Button>
+                          </span>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {canEdit && !shared && isFeedLayout(feed) && uncovered.length > 0 ? (
+            <div className="mt-4 space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Feature types in this feed with no layer of their own
+                {showsAll ? ' (an “every feature” layer still shows them)' : ''}:
+              </p>
+              {addError ? <SettingsNotice tone="error">{addError}</SettingsNotice> : null}
+              <div className="flex flex-wrap gap-2">
+                {uncovered.map((t) => (
+                  <Button key={t.label} variant="secondary" size="sm" disabled={adding !== null} onClick={() => void addTypeLayer(t.label)}>
+                    {adding === t.label ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                    {t.label} <span className="text-muted-foreground">({t.count})</span>
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </SettingsSection>
+      ) : null}
     </div>
+  );
+}
+
+/** Color swatch that saves once the pick settles (the native input fires on every drag step). */
+function LayerColorInput({
+  color,
+  label,
+  title,
+  onCommit,
+}: {
+  color: string;
+  label: string;
+  title: string;
+  onCommit: (color: string) => void;
+}) {
+  const [value, setValue] = useState(color);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => setValue(color), [color]);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  return (
+    <input
+      type="color"
+      className="h-6 w-8 cursor-pointer border border-border bg-transparent p-0"
+      value={value}
+      aria-label={label}
+      title={title}
+      onChange={(e) => {
+        const next = e.target.value;
+        setValue(next);
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => { if (next !== color) onCommit(next); }, 400);
+      }}
+    />
   );
 }

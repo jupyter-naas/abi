@@ -184,3 +184,28 @@ describe('canInvalidateMapsLeaflet / safeInvalidateMapsLeafletSize', () => {
     expect(() => safeInvalidateMapsLeafletSize(map as never)).not.toThrow();
   });
 });
+
+describe('mapsCountryClusterLayersHtml', () => {
+  it('renders one numbered badge per layer in its color', async () => {
+    const { mapsCountryClusterLayersHtml, mapsCountryClusterBox } = await import('./leaflet-map');
+    const html = mapsCountryClusterLayersHtml([
+      { layerId: 'fm', title: 'Forvis <b>', color: '#171c8f', count: 2 },
+      { layerId: 'va', color: '#00a651', count: 120 },
+    ]);
+    expect(html).toContain('--maps-cluster-color:#171c8f');
+    expect(html).toContain('--maps-cluster-color:#00a651');
+    expect(html).toContain('>2<');
+    expect(html).toContain('>99+<');
+    expect(html).toContain('title="2 Forvis &lt;b&gt;"');
+    expect(html).toContain('grid-template-columns:repeat(2,24px)');
+    // One badge: its own size; several: a grid of at most 3 columns.
+    expect(mapsCountryClusterBox(1)).toEqual({ width: 28, height: 28 });
+    expect(mapsCountryClusterBox(2)).toEqual({ width: 50, height: 24 });
+    expect(mapsCountryClusterBox(8)).toEqual({ width: 76, height: 76 });
+  });
+
+  it('never injects a non-hex color into the style attribute', async () => {
+    const { mapsCountryClusterPinHtml } = await import('./leaflet-map');
+    expect(mapsCountryClusterPinHtml('red;background:url(x)', 3)).toContain('--maps-cluster-color:#2563eb');
+  });
+});

@@ -4,10 +4,25 @@ import {useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode
 import type {Map as LeafletMap, Marker} from 'leaflet';
 import {ExternalLink, Loader2, ArrowLeft, Search, List, X} from 'lucide-react';
 import { useMapsStore } from '@/stores/maps';
-import { basemapLabel, installMapsBasemap, normalizeBasemapId, type MapsBasemapHandle } from '../lib/maps-basemaps';
+import {
+  basemapLabel,
+  installMapsBasemap,
+  normalizeBasemapId,
+  type MapsBasemapDef,
+  type MapsBasemapHandle,
+} from '../lib/maps-basemaps';
 import { formatMapsToolbarViewLine } from '../lib/maps-toolbar-view';
 import { MapsBasemapControl } from './maps-basemap-control';
+import { useWorkspaceBasemaps } from '../lib/use-workspace-basemaps';
+import { MapsCountryClusterControl } from './maps-country-cluster-control';
+import { useCountryCenters } from '../lib/use-country-centers';
 import { MapsLocateControl } from './maps-locate-control';
+import {
+  clusterPinsByCountry,
+  COUNTRY_CLUSTER_EXPAND_ZOOM,
+  resolveClusterMemberPins,
+  shouldClusterPinsByCountry,
+} from '../lib/maps-country-cluster';
 import {addMapsPinMarkers, captureMapsCamera, clearMapsMarkers, createMapsLeaflet, destroyMapsLeaflet, fitMapsBounds, MAPS_DEFAULT_CAMERA, restoreMapsCamera, type MapsCamera, type MapsPinMarker} from '../lib/leaflet-map';
 import {formatMapsFeedAge, graphObjectHref, normalizeFeedLoad, type MapsFeedMeta, type MapsFeedResult} from '../lib/maps-feed';
 import {mapsViewFromBounds, type MapsFeedView} from '../lib/maps-view';
@@ -16,6 +31,7 @@ import {MapsPointSearch} from './maps-point-search';
 import {MapsRecordMedia} from './maps-record-media';
 import { MapsActiveLayersLegend, type LayerLegendStatus } from './maps-active-layers-legend';
 import { aggregateLayerLegendSublayers } from '../lib/maps-layer-legend-utils';
+import { layerPinColor } from '../lib/maps-layer-colors';
 import { isLayerOn } from '../lib/layouts';
 import { useMapLayers } from '../lib/use-map-layouts';
 import './maps-components.css';
@@ -48,8 +64,12 @@ export interface MapsFeedCanvasProps {
   workspaceId?: string;
   /** Pass the current map bounds into fetchPins and refetch on pan/zoom. */
   viewportBound?: boolean;
-  /** Background under the pins. Defaults to OpenStreetMap street tiles. */
+  /** Background under the pins. Defaults to the member's choice, then the catalog default. */
   basemapId?: string;
+  /** Full basemap catalog; defaults to the workspace catalog. */
+  basemapDefs?: readonly MapsBasemapDef[];
+  /** Subset for the map type picker; defaults to the workspace's shown basemaps. */
+  basemapPickerDefs?: readonly MapsBasemapDef[];
   /** When false, empty feeds only update the toolbar (map stays visible). */
   emptyOverlay?: boolean;
   /** Top-left search over loaded pins (submit on Enter). */
@@ -89,9 +109,17 @@ function metaLine(meta: MapsFeedMeta | null, now: number): string {
   return parts.filter(Boolean).join(' · ');
 }
 
-export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No data', emptyBody='This feed returned no mappable points right now.', sourceHref, sourceLabel='Source', fetchPins, fitMaxZoom=5, legend, legendLayerIds, legendStatuses, feedLegendsByLayerId, legendLayerId, refreshMs, inspectable=false, workspaceId='', viewportBound=false, basemapId, emptyOverlay=true, pointSearch=true, layerTitleForPin, onMapReady}: MapsFeedCanvasProps) {
+export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No data', emptyBody='This feed returned no mappable points right now.', sourceHref, sourceLabel='Source', fetchPins, fitMaxZoom=5, legend, legendLayerIds, legendStatuses, feedLegendsByLayerId, legendLayerId, refreshMs, inspectable=false, workspaceId='', viewportBound=false, basemapId, basemapDefs: basemapDefsProp, basemapPickerDefs, emptyOverlay=true, pointSearch=true, layerTitleForPin, onMapReady}: MapsFeedCanvasProps) {
   const mapLayers = useMapLayers();
+  const workspaceBasemaps = useWorkspaceBasemaps(workspaceId || mapLayers.workspaceId);
+  const basemapDefs = basemapDefsProp ?? workspaceBasemaps.allDefs;
+  const pickerDefsBase = basemapPickerDefs ?? workspaceBasemaps.defs;
   const layerOverrides = useMapsStore((s) => s.overrides);
+  const countryClusterByCountry = useMapsStore((s) => s.countryClusterByCountry);
+  const setCountryClusterByCountry = useMapsStore((s) => s.setCountryClusterByCountry);
+  const countryClusterBy = useMapsStore((s) => s.countryClusterBy);
+  const setCountryClusterBy = useMapsStore((s) => s.setCountryClusterBy);
+  const countryCenters = useCountryCenters(countryClusterByCountry);
   const legendWorkspaceId = workspaceId || mapLayers.workspaceId;
   const legendEntries = useMemo(() => {
     if (legendLayerIds) {
@@ -100,6 +128,11 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     }
     return mapLayers.entries.filter((entry) => isLayerOn(entry, layerOverrides));
   }, [legendLayerIds, mapLayers.entries, layerOverrides]);
+  const legendLayerColor = useMemo(() => {
+    if (!legendLayerId) return undefined;
+    const entry = mapLayers.entries.find((e) => e.id === legendLayerId);
+    return entry ? layerPinColor(entry) : undefined;
+  }, [legendLayerId, mapLayers.entries]);
   const [feedLegendStatuses, setFeedLegendStatuses] = useState<Record<string, LayerLegendStatus>>({});
   const mergedLegendStatuses = useMemo(
     () => ({ ...feedLegendStatuses, ...legendStatuses }),
@@ -112,7 +145,17 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   }, [feedLegendsByLayerId, legendLayerId, legend]);
   const storedBasemap = useMapsStore((s) => s.basemapId);
   const setBasemap = useMapsStore((s) => s.setBasemap);
-  const basemap = normalizeBasemapId(basemapId ?? storedBasemap);
+  const basemap = normalizeBasemapId(
+    basemapId ?? storedBasemap,
+    basemapDefs,
+    workspaceBasemaps.defaultBasemapId,
+  );
+  const pickerDefs = useMemo(() => {
+    if (pickerDefsBase.some((def) => def.id === basemap)) return pickerDefsBase;
+    // A layer's default basemap may be hidden from the picker: still show what is drawn.
+    const drawn = basemapDefs.find((def) => def.id === basemap);
+    return drawn ? [...pickerDefsBase, drawn] : pickerDefsBase;
+  }, [pickerDefsBase, basemap, basemapDefs]);
   const containerRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
@@ -120,6 +163,9 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   const mapRef = useRef<LeafletMap|null>(null);
   const leafletRef = useRef<typeof import('leaflet')|null>(null);
   const preserveUserViewRef = useRef(false);
+  // Pins the view was last fitted to: re-fit on new data, not when the same
+  // pins are re-drawn (e.g. group-by-country switching at the zoom threshold).
+  const fittedPinsRef = useRef<MapsPinMarker[] | null>(null);
   const onMapReadyRef = useRef(onMapReady);
   onMapReadyRef.current = onMapReady;
   const mapReadyExtraCleanupRef = useRef<(() => void) | null>(null);
@@ -143,6 +189,23 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   const activePins = view === 'coverage' ? coveragePins : pins;
   const pointSearchPins = activePins;
   const visiblePins = useMemo(() => activePins.filter(p => (!country || p.country===country) && `${p.label} ${p.country??''} ${p.detail??''} ${p.address??''}`.toLowerCase().includes(search.toLowerCase())),[activePins,country,search]);
+  const canCountryCluster = useMemo(
+    () => visiblePins.some((p) => p.country?.trim()),
+    [visiblePins],
+  );
+  const mapZoom = camera?.zoom ?? MAPS_DEFAULT_CAMERA.zoom;
+  const displayPins = useMemo(() => {
+    if (!shouldClusterPinsByCountry(countryClusterByCountry, mapZoom, view)) {
+      return visiblePins;
+    }
+    return clusterPinsByCountry(visiblePins, {
+      layerTitle: layerTitleForPin,
+      groupBy: countryClusterBy,
+      centers: countryCenters,
+    });
+    // layerTitleForPin is a render-time callback; titles only label the badges.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visiblePins, countryClusterByCountry, countryClusterBy, countryCenters, mapZoom, view]);
   const countries = useMemo(() => Array.from(new Set(activePins.map(p=>p.country).filter((v):v is string=>!!v))).sort(),[activePins]);
   const freshness = metaLine(feedMeta, Date.now());
 
@@ -170,6 +233,24 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     setPanelOpen(true);
     mapRef.current?.setView([pin.lat,pin.lng],Math.max(mapRef.current.getZoom(),pin.memberIds ? 8 : 14));
   }
+
+  const handleMapPinSelect = useCallback(
+    (pin: MapsPinMarker) => {
+      const map = mapRef.current;
+      // Country marker (any size): zoom in on its sites.
+      if (pin.clusterCount && pin.memberIds?.length && map) {
+        preserveUserViewRef.current = true;
+        const members = resolveClusterMemberPins(pin, visiblePins);
+        fitMapsBounds(map, members, {
+          maxZoom: Math.max(COUNTRY_CLUSTER_EXPAND_ZOOM, map.getZoom() + 1),
+        });
+        if (pin.country) setCountry('');
+        return;
+      }
+      if (inspectable) selectPin(pin);
+    },
+    [inspectable, visiblePins],
+  );
 
   const focusMapPin = useCallback(
     (pin: MapsPinMarker) => {
@@ -244,7 +325,9 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
       ownedMap = map;
       mapRef.current = map;
       leafletRef.current = L;
-      basemapHandleRef.current = installMapsBasemap(L, map, basemap);
+      basemapHandleRef.current = installMapsBasemap(L, map, basemap, undefined, {
+        defs: basemapDefs,
+      });
       mapReadyExtraCleanupRef.current?.();
       const extra = onMapReadyRef.current?.({ L, map });
       mapReadyExtraCleanupRef.current = typeof extra === 'function' ? extra : null;
@@ -299,7 +382,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
           setFeedLegendStatuses({
             [legendLayerId]: {
               count: loaded.pins.length,
-              sublayers: aggregateLayerLegendSublayers(loaded.pins),
+              sublayers: aggregateLayerLegendSublayers(loaded.pins, legendLayerColor),
             },
           });
         }
@@ -359,17 +442,23 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   }, [refreshMs, fitMaxZoom, viewportBound]);
 
   useEffect(() => {
-    basemapHandleRef.current?.setBasemap(basemap);
-  }, [basemap]);
+    basemapHandleRef.current?.setBasemap(basemap, basemapDefs);
+  }, [basemap, basemapDefs]);
 
   useEffect(()=>{
     if(!leafletRef.current || !mapRef.current) return;
     clearMapsMarkers(markersRef.current);
-    addMapsPinMarkers(leafletRef.current,mapRef.current,visiblePins,markersRef.current,inspectable?selectPin:undefined);
+    addMapsPinMarkers(
+      leafletRef.current,
+      mapRef.current,
+      displayPins,
+      markersRef.current,
+      inspectable || countryClusterByCountry ? handleMapPinSelect : undefined,
+    );
     if (view === 'coverage') {
       markersRef.current.forEach((marker, index) => {
         const text = document.createElement('span');
-        text.textContent = visiblePins[index].label;
+        text.textContent = displayPins[index].label;
         marker.bindTooltip(text, {direction: 'top', offset: [0,-6], className: 'maps-coverage-tooltip'});
       });
     }
@@ -377,11 +466,17 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
       const pin = pendingFocusRef.current;
       mapRef.current.setView([pin.lat,pin.lng],14);
       pendingFocusRef.current = null;
-    } else if (inspectable && !viewportBound && !preserveUserViewRef.current) {
-      fitMapsBounds(mapRef.current, visiblePins, {maxZoom: fitMaxZoom});
+    } else if (
+      inspectable
+      && !viewportBound
+      && !preserveUserViewRef.current
+      && fittedPinsRef.current !== visiblePins
+    ) {
+      fitMapsBounds(mapRef.current, displayPins, {maxZoom: fitMaxZoom});
     }
+    fittedPinsRef.current = visiblePins;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[visiblePins,inspectable,fitMaxZoom,viewportBound,view]);
+  },[displayPins,inspectable,fitMaxZoom,viewportBound,view,countryClusterByCountry,handleMapPinSelect]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -450,7 +545,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
           zoom: camera?.zoom ?? MAPS_DEFAULT_CAMERA.zoom,
           lat: camera?.lat ?? MAPS_DEFAULT_CAMERA.lat,
           lng: camera?.lng ?? MAPS_DEFAULT_CAMERA.lng,
-          basemapLabel: basemapLabel(basemap),
+          basemapLabel: basemapLabel(basemap, basemapDefs),
           radiusNm: viewRadiusNm ?? undefined,
         })
       : null;
@@ -468,6 +563,15 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
       </div>}
       {inspectable && (country || search) && <button type="button" className="maps-coverage-reset" aria-label="Clear map filters" onClick={()=>{setCountry('');setSearch('');deselectPin();}}>Show all{country ? ': '+country : ''}<X size={12}/></button>}
       {inspectable && <button ref={toggleRef} type="button" className="maps-record-toggle" aria-expanded={panelOpen} aria-controls={panelId} onClick={() => panelOpen ? closePanel() : setPanelOpen(true)}><List size={15}/>{view==='coverage'?'Cities':'Locations'}</button>}
+      <div className="maps-canvas__toolbar-actions">
+        <MapsCountryClusterControl
+          enabled={countryClusterByCountry}
+          visible={canCountryCluster && view === 'addresses'}
+          onToggle={() => setCountryClusterByCountry(!countryClusterByCountry)}
+          groupBy={countryClusterBy}
+          onGroupByChange={setCountryClusterBy}
+        />
+      </div>
     </div>
     <div className={`maps-canvas__workspace${inspectable?' maps-canvas__workspace--inspectable':''}`}>
       <div className="maps-canvas__stage">
@@ -492,7 +596,12 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
             onSelectPin={focusMapPin}
           />
         ) : null}
-        <MapsBasemapControl basemapId={basemap} onBasemapChange={setBasemap} />
+        <MapsBasemapControl
+          basemapId={basemap}
+          basemapDefs={pickerDefs}
+          workspaceId={workspaceId || mapLayers.workspaceId || ''}
+          onBasemapChange={setBasemap}
+        />
         <MapsLocateControl
           mapRef={mapRef}
           leafletRef={leafletRef}

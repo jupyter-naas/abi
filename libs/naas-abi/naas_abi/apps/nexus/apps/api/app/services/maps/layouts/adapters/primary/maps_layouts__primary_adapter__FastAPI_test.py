@@ -6,6 +6,12 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import Binding, IGraphQueryStore
+from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.adapters.secondary.memory import (
+    InMemoryMapsFeedLayerStore,
+)
+from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.service import (
+    MapsFeedLayerService,
+)
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.adapters.primary import (
     maps_layouts__primary_adapter__FastAPI as api,
 )
@@ -13,6 +19,9 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.adapters.secondary.m
     InMemoryMapsLayoutStore,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.service import MapsLayoutService
+from naas_abi.apps.nexus.apps.api.app.services.maps.settings.adapters.secondary.memory import (
+    InMemoryMapsSettingsStore,
+)
 
 QUERY = "SELECT ?uri ?label ?lat ?lng WHERE { ?uri <http://ex/name> ?label ; <http://ex/lat> ?lat ; <http://ex/lng> ?lng }"
 BODY = {"title": "Offices", "query": QUERY, "graphs": ["http://g/a"]}
@@ -38,7 +47,9 @@ class _Store(IGraphQueryStore):
 
 @pytest.fixture
 def client_for(monkeypatch):
-    service = MapsLayoutService(InMemoryMapsLayoutStore())
+    settings = InMemoryMapsSettingsStore()
+    service = MapsLayoutService(InMemoryMapsLayoutStore(), settings)
+    layers = MapsFeedLayerService(InMemoryMapsFeedLayerStore(), settings, service)
     scoped_calls: list[tuple] = []
 
     def make(role: str) -> TestClient:
@@ -61,6 +72,7 @@ def client_for(monkeypatch):
         app.include_router(api.router, prefix="/api/maps/layouts")
         app.dependency_overrides[api.get_current_user_required] = lambda: SimpleNamespace(id="u-1")
         app.dependency_overrides[api.get_maps_layout_service] = lambda: service
+        app.dependency_overrides[api.get_maps_feed_layer_service] = lambda: layers
         return TestClient(app)
 
     make.scoped_calls = scoped_calls  # type: ignore[attr-defined]
@@ -144,3 +156,35 @@ def test_preview_reports_errors_or_pins(client_for) -> None:
 
 def test_delete_unknown_layout_is_404(client_for) -> None:
     assert client_for("admin").delete("/api/maps/layouts/nope?workspace_id=ws-1").status_code == 404
+
+
+def test_feed_layer_record_and_colors(client_for) -> None:
+    admin = client_for("admin")
+    body = {
+        "title": "Acme",
+        "feed_type": "geojson_url",
+        "feed_url": "/api/maps/organization-facilities/acme",
+        "category": "organizations-facility",
+        "color": "#171c8f",
+    }
+    assert admin.put("/api/maps/layouts/acme?workspace_id=ws-1", json=body).status_code == 200
+
+    member = client_for("member")
+    record = member.get("/api/maps/layouts/acme?workspace_id=ws-1").json()
+    assert record["feed_url"] == "/api/maps/organization-facilities/acme"
+    assert member.get("/api/maps/layouts/nope?workspace_id=ws-1").status_code == 404
+    assert (
+        member.put(
+            "/api/maps/layouts/earthquakes/color?workspace_id=ws-1", json={"color": "#000000"}
+        ).status_code
+        == 403
+    )
+
+    admin = client_for("admin")
+    colored = admin.put(
+        "/api/maps/layouts/earthquakes/color?workspace_id=ws-1", json={"color": "#112233"}
+    )
+    assert colored.json() == {"colors": {"earthquakes": "#112233"}}
+    assert admin.get("/api/maps/layouts?workspace_id=ws-1").json()["colors"] == {
+        "earthquakes": "#112233"
+    }

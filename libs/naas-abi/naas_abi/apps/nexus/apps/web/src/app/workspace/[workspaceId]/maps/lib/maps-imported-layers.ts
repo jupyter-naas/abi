@@ -20,6 +20,8 @@ export type ImportedMapLayer = {
   order: number;
   groupId?: MapsLayerGroupId;
   featureCollection: MapsLayerFeatureCollection & Record<string, unknown>;
+  /** Default Nexus basemap when this layer is shown alone. */
+  defaultBasemapId?: string;
   createdAt: string;
 };
 

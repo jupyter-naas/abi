@@ -29,6 +29,8 @@ export interface MapsPinMarker {
   entityUri?: string;
   graphUri?: string;
   classLabel?: string;
+  /** Every feature type when the feature has several (e.g. Valeo activity poles). */
+  classLabels?: string[];
   country?: string;
   precision?: string;
   observedAt?: string;
@@ -43,6 +45,20 @@ export interface MapsPinMarker {
   imageSearchUrl?: string;
   websiteUrl?: string;
   phone?: string;
+  /** Layer the pin belongs to on the combined map (color / group-by-country). */
+  layerId?: string;
+  /** The layer's color (group-by-country by layer). */
+  layerColor?: string;
+  /** Feed of the layer and its color / title (group-by-country by feed). */
+  feedId?: string;
+  feedColor?: string;
+  feedTitle?: string;
+  /** The feature's id in its feed (the same site in several layers). */
+  featureId?: string;
+  /** Country aggregate marker (toolbar “group by country”). */
+  clusterCount?: number;
+  /** Country aggregate: one numbered badge per layer, in the layer's color. */
+  clusterLayers?: Array<{ layerId: string; title?: string; color: string; count: number }>;
 }
 
 /** Escape text for Leaflet popup HTML. */
@@ -71,6 +87,53 @@ export const MAPS_USER_LOCATION_COLOR = '#4285F4';
 
 export function mapsPinHtml(color: string, size: number): string {
   return `<span style="display:block;width:${size}px;height:${size}px;border:2px solid #fff;background:${color};box-shadow:0 1px 4px rgba(0,0,0,.35);border-radius:0"></span>`;
+}
+
+function clusterCountLabel(count: number): string {
+  return count > 99 ? '99+' : String(count);
+}
+
+const SAFE_COLOR = /^#[0-9a-f]{3,8}$/i;
+
+export function mapsCountryClusterPinHtml(color: string, count: number, size = 28): string {
+  const fill = SAFE_COLOR.test(color) ? color : '#2563eb';
+  return `<span class="maps-country-cluster-pin" style="--maps-cluster-color:${fill};width:${size}px;height:${size}px"><span class="maps-country-cluster-pin__count">${clusterCountLabel(count)}</span></span>`;
+}
+
+/** Country markers: badges per row, and badge size once a country has several. */
+export const MAPS_CLUSTER_BADGE_COLUMNS = 3;
+export const MAPS_CLUSTER_GRID_BADGE_PX = 24;
+const MAPS_CLUSTER_GAP_PX = 2;
+
+/** Pixel box of a country marker with `badges` badges, laid out in a centered grid. */
+export function mapsCountryClusterBox(badges: number, size = 28): { width: number; height: number } {
+  if (badges <= 1) return { width: size, height: size };
+  const cell = MAPS_CLUSTER_GRID_BADGE_PX;
+  const columns = Math.min(MAPS_CLUSTER_BADGE_COLUMNS, badges);
+  const rows = Math.ceil(badges / columns);
+  return {
+    width: columns * cell + (columns - 1) * MAPS_CLUSTER_GAP_PX,
+    height: rows * cell + (rows - 1) * MAPS_CLUSTER_GAP_PX,
+  };
+}
+
+/**
+ * Country marker: one numbered badge per layer (or feed), each in its color, in
+ * a compact grid centered on the country so several layers never stack.
+ */
+export function mapsCountryClusterLayersHtml(
+  layers: NonNullable<MapsPinMarker['clusterLayers']>,
+  size = 28,
+): string {
+  const badgeSize = layers.length > 1 ? MAPS_CLUSTER_GRID_BADGE_PX : size;
+  const columns = Math.min(MAPS_CLUSTER_BADGE_COLUMNS, Math.max(1, layers.length));
+  const badges = layers
+    .map((layer) => {
+      const title = layer.title ? ` title="${escapeMapsHtml(`${layer.count} ${layer.title}`)}"` : '';
+      return `<span${title}>${mapsCountryClusterPinHtml(layer.color, layer.count, badgeSize)}</span>`;
+    })
+    .join('');
+  return `<span class="maps-country-cluster-group" style="grid-template-columns:repeat(${columns},${badgeSize}px);gap:${MAPS_CLUSTER_GAP_PX}px">${badges}</span>`;
 }
 
 /** Google Maps–style blue dot for the device location. */
@@ -255,22 +318,32 @@ export function addMapsPinMarkers(
   for (const pin of pins) {
     const logoUrl = resolveMapsPinImageUrl(pin.markerLogoUrl);
     const layerBadge = pin.color && (logoUrl || pin.markerIcon);
-    const size = layerBadge ? MAPS_LAYER_MARKER_PX : (pin.size ?? 10);
+    // Country markers, including single-site countries (group by country).
+    const cluster = pin.clusterCount != null && pin.clusterCount >= 1 && Boolean(pin.memberIds?.length);
+    const size = cluster ? 28 : layerBadge ? MAPS_LAYER_MARKER_PX : (pin.size ?? 10);
     const color = pin.color ?? '#2563eb';
-    const badgeHtml = logoUrl
-      ? mapsLayerLogoPinHtml(logoUrl, color)
-      : pin.markerIcon
-        ? mapsLayerPinHtml(pin.markerIcon, color)
-        : mapsPinHtml(color, size);
+    const clusterLayers = cluster ? pin.clusterLayers ?? [] : [];
+    const box = cluster ? mapsCountryClusterBox(clusterLayers.length, size) : { width: size, height: size };
+    const badgeHtml = cluster
+      ? clusterLayers.length > 0
+        ? mapsCountryClusterLayersHtml(clusterLayers, size)
+        : mapsCountryClusterPinHtml(color, pin.clusterCount ?? 0, size)
+      : logoUrl
+        ? mapsLayerLogoPinHtml(logoUrl, color)
+        : pin.markerIcon
+          ? mapsLayerPinHtml(pin.markerIcon, color)
+          : mapsPinHtml(color, size);
     const icon = L.divIcon({
-      className: 'maps-pin-icon',
-      html: layerBadge ? badgeHtml : mapsPinHtml(color, size),
-      iconSize: [size, size],
-      iconAnchor: [size / 2, size / 2],
+      className: cluster ? 'maps-pin-icon maps-pin-icon--cluster' : 'maps-pin-icon',
+      html: cluster || layerBadge ? badgeHtml : mapsPinHtml(color, size),
+      iconSize: [box.width, box.height],
+      iconAnchor: [box.width / 2, box.height / 2],
     });
     const marker = L.marker([pin.lat, pin.lng], { icon, title: pin.label }).addTo(map);
+    const isCluster = cluster;
     if (onSelect) {
       marker.on('click', () => onSelect(pin));
+      if (!isCluster) marker.bindPopup(mapsPinPopupHtml(pin));
     } else {
       marker.bindPopup(mapsPinPopupHtml(pin));
     }

@@ -4,7 +4,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown, Map as MapIcon } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { groupLayerEntries } from '../lib/layouts';
+import { groupFeedLayers, groupLayerEntries } from '../lib/layouts';
 import { useMapLayers } from '../lib/use-map-layouts';
 import { MapsLayerBrandIcon } from './maps-layer-brand-icon';
 import { resolveMapsPinImageUrl } from '../lib/maps-pin-image-url';
@@ -13,7 +13,12 @@ import { layerPinColor } from '../lib/maps-layer-colors';
 import type { LayoutEntry } from '../lib/layouts';
 import { mapsLayerPath } from '../lib/maps-route';
 
-export type LayerLegendSublayer = { label: string; count: number };
+export type LayerLegendSublayer = {
+  label: string;
+  count: number;
+  color?: string;
+  icon?: string;
+};
 
 export type LayerLegendStatus =
   | { count: number; sublayers?: LayerLegendSublayer[] }
@@ -39,6 +44,7 @@ function LayerRow({
   collapsed,
   onToggle,
   feedDetail,
+  inFeed = false,
 }: {
   entry: LayoutEntry;
   status: LayerLegendStatus | undefined;
@@ -46,9 +52,11 @@ function LayerRow({
   collapsed: boolean;
   onToggle: () => void;
   feedDetail?: ReactNode;
+  /** Listed under its feed row: its own color and icon, not the feed logo. */
+  inFeed?: boolean;
 }) {
   const color = layerPinColor(entry);
-  const logoUrl = resolveMapsPinImageUrl(entry.layerLogoUrl);
+  const logoUrl = inFeed ? undefined : resolveMapsPinImageUrl(entry.layerLogoUrl);
   const Icon = mapsIconMap[entry.icon] ?? MapIcon;
   const sublayers =
     status && 'count' in status && status.sublayers && status.sublayers.length > 1
@@ -57,7 +65,7 @@ function LayerRow({
   const expandable = Boolean(sublayers || feedDetail);
 
   return (
-    <div className="maps-legend__layer">
+    <div className={cn('maps-legend__layer', inFeed && 'maps-legend__layer--in-feed')}>
       <div className="maps-legend__row">
         {logoUrl ? (
           <span className="maps-layer-marker maps-layer-marker--logo maps-legend__layer-swatch" aria-hidden>
@@ -98,17 +106,104 @@ function LayerRow({
         <>
           {sublayers ? (
             <ul className="maps-legend__sublayers">
-              {sublayers.map((sub) => (
-                <li key={sublayerKey(sub.label)} className="maps-legend__sublayer">
-                  <span className="maps-legend__sublayer-label">{sub.label}</span>
-                  <span className="tabular-nums text-muted-foreground">{sub.count}</span>
-                </li>
-              ))}
+              {sublayers.map((sub) => {
+                const SubIcon = mapsIconMap[sub.icon ?? ''] ?? MapIcon;
+                const swatchColor = sub.color ?? color;
+                return (
+                  <li key={sublayerKey(sub.label)} className="maps-legend__sublayer">
+                    <span className="maps-legend__sublayer-leading">
+                      <span
+                        className="maps-layer-marker maps-legend__layer-swatch maps-legend__sublayer-swatch"
+                        style={{ background: swatchColor }}
+                        aria-hidden
+                      >
+                        <SubIcon size={10} strokeWidth={2.25} />
+                      </span>
+                      <span className="maps-legend__sublayer-label">{sub.label}</span>
+                    </span>
+                    <span className="tabular-nums text-muted-foreground">{sub.count}</span>
+                  </li>
+                );
+              })}
             </ul>
           ) : null}
           {feedDetail ? <div className="maps-legend__layer-detail">{feedDetail}</div> : null}
         </>
       ) : null}
+    </div>
+  );
+}
+
+/** A layer feed with its active layers, collapsible like the sidebar. */
+function FeedRow({
+  title,
+  logoUrl,
+  layers,
+  statuses,
+  workspaceId,
+  collapsed,
+  onToggle,
+  isLayerCollapsed,
+  onToggleLayer,
+  feedLegendsByLayerId,
+}: {
+  title: string;
+  logoUrl?: string;
+  layers: LayoutEntry[];
+  statuses: Record<string, LayerLegendStatus>;
+  workspaceId: string | null;
+  collapsed: boolean;
+  onToggle: () => void;
+  isLayerCollapsed: (layerId: string) => boolean;
+  onToggleLayer: (layerId: string) => void;
+  feedLegendsByLayerId?: Record<string, ReactNode>;
+}) {
+  const logo = resolveMapsPinImageUrl(logoUrl);
+  const counts = layers.map((layer) => statuses[layer.id]);
+  const loading = counts.some((status) => !status);
+  const total = counts.reduce((sum, status) => sum + (status && 'count' in status ? status.count : 0), 0);
+  return (
+    <div className="maps-legend__layer">
+      <div className="maps-legend__row">
+        {logo ? (
+          <span className="maps-layer-marker maps-layer-marker--logo maps-legend__layer-swatch" aria-hidden>
+            <img src={logo} alt="" className="maps-layer-marker__logo" />
+          </span>
+        ) : (
+          <span className="maps-layer-marker maps-legend__layer-swatch" style={{ background: layerPinColor(layers[0]!) }} aria-hidden>
+            <MapIcon size={11} strokeWidth={2.25} />
+          </span>
+        )}
+        <button
+          type="button"
+          className="maps-legend__layer-title maps-legend__layer-title--expandable"
+          aria-expanded={!collapsed}
+          onClick={onToggle}
+          title={`${title}: ${layers.length} layer${layers.length === 1 ? '' : 's'} on`}
+        >
+          <span className="min-w-0 truncate text-left">{title}</span>
+          <ChevronDown
+            size={12}
+            className={cn('maps-legend__chevron', collapsed && 'maps-legend__chevron--collapsed')}
+            aria-hidden
+          />
+        </button>
+        <span className="tabular-nums text-muted-foreground">{loading ? '…' : total}</span>
+      </div>
+      {!collapsed
+        ? layers.map((layer) => (
+            <LayerRow
+              key={layer.id}
+              entry={layer}
+              inFeed
+              status={statuses[layer.id]}
+              workspaceId={workspaceId}
+              collapsed={isLayerCollapsed(layer.id)}
+              onToggle={() => onToggleLayer(layer.id)}
+              feedDetail={feedLegendsByLayerId?.[layer.id]}
+            />
+          ))
+        : null}
     </div>
   );
 }
@@ -133,6 +228,8 @@ export function MapsActiveLayersLegend({
   };
 
   const isLayerCollapsed = (layerId: string) => collapsedLayers[layerId] ?? true;
+  // Feeds start open (their layers are what is on the map).
+  const [collapsedFeeds, setCollapsedFeeds] = useState<Record<string, boolean>>({});
 
   return (
     <div className="maps-legend maps-legend--panel" aria-label="Map legend">
@@ -143,17 +240,35 @@ export function MapsActiveLayersLegend({
         <div key={group.id} className="maps-legend__group">
           <div className="maps-legend__group-label">{group.label}</div>
           <div className="maps-legend__group-items">
-            {group.entries.map((entry) => (
-              <LayerRow
-                key={entry.id}
-                entry={entry}
-                status={statuses[entry.id]}
-                workspaceId={workspaceId}
-                collapsed={isLayerCollapsed(entry.id)}
-                onToggle={() => toggleLayer(entry.id)}
-                feedDetail={feedLegendsByLayerId?.[entry.id]}
-              />
-            ))}
+            {groupFeedLayers(group.entries).map((item) =>
+              item.type === 'feed' ? (
+                <FeedRow
+                  key={`feed:${item.feedId}`}
+                  title={item.title}
+                  logoUrl={item.logoUrl}
+                  layers={item.layers}
+                  statuses={statuses}
+                  workspaceId={workspaceId}
+                  collapsed={collapsedFeeds[item.feedId] ?? false}
+                  onToggle={() =>
+                    setCollapsedFeeds((prev) => ({ ...prev, [item.feedId]: !(prev[item.feedId] ?? false) }))
+                  }
+                  isLayerCollapsed={isLayerCollapsed}
+                  onToggleLayer={toggleLayer}
+                  feedLegendsByLayerId={feedLegendsByLayerId}
+                />
+              ) : (
+                <LayerRow
+                  key={item.entry.id}
+                  entry={item.entry}
+                  status={statuses[item.entry.id]}
+                  workspaceId={workspaceId}
+                  collapsed={isLayerCollapsed(item.entry.id)}
+                  onToggle={() => toggleLayer(item.entry.id)}
+                  feedDetail={feedLegendsByLayerId?.[item.entry.id]}
+                />
+              ),
+            )}
           </div>
         </div>
       ))}

@@ -64,8 +64,13 @@ export function layoutPinSource(
       return normalizeFeedLoad(layer.featureCollection);
     };
   }
+  const feedId = entry.feedId ?? entry.id;
+  if (entry.kind === 'feed') {
+    // API feed: the authed proxy reads the feed's feed_url from the API.
+    return (signal) => fetchMapsFeedPins(mapsCustomFeedUrl(feedId, workspaceId), signal, authHeader());
+  }
   if (entry.kind === 'workspace') {
-    return (signal) => fetchMapsFeedPins(layoutsApi.feedUrl(workspaceId, entry.id), signal, authHeader());
+    return (signal) => fetchMapsFeedPins(layoutsApi.feedUrl(workspaceId, feedId), signal, authHeader());
   }
   if (entry.kind === 'graph') {
     const url = `${getApiUrl()}/api/maps/layers/${encodeURIComponent(entry.id)}?workspace_id=${encodeURIComponent(workspaceId)}`;
@@ -73,6 +78,5 @@ export function layoutPinSource(
   }
   const builtin = BUILTIN_FETCHERS[entry.id];
   if (builtin) return async (signal, view) => normalizeFeedLoad(await builtin(signal, view));
-  // Deployment Custom dataset: the authed proxy route.
-  return (signal) => fetchMapsFeedPins(mapsCustomFeedUrl(entry.id, workspaceId), signal, authHeader());
+  return null;
 }

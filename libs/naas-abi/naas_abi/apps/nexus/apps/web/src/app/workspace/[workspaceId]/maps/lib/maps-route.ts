@@ -94,12 +94,30 @@ export function mapsAllLayersPath(workspaceId: string | null): string {
 /** @deprecated use mapsAllLayersPath */
 export const mapsAllLayoutsPath = mapsAllLayersPath;
 
-/** Settings → Maps, optionally on one layout or on a new blank one. */
+/**
+ * Settings → Maps: the overview, one feed (`?feed=`), one layer (`?layer=`), or
+ * a new one (`new`; a new layer can start on a feed with `&for=`).
+ */
 export function mapsSettingsPath(
   workspaceId: string | null,
-  options: { layout?: string; create?: boolean } = {},
+  options: { layer?: string; feed?: string; create?: boolean; forFeed?: string } = {},
 ): string {
   const base = workspaceId ? `/workspace/${encodeURIComponent(workspaceId)}/settings/maps` : '/settings/maps';
-  if (options.create) return `${base}?layout=new`;
-  return options.layout ? `${base}?layout=${encodeURIComponent(options.layout)}` : base;
+  const params = new URLSearchParams();
+  if (options.feed) params.set('feed', options.feed);
+  else if (options.create) params.set('layer', 'new');
+  else if (options.layer) params.set('layer', options.layer);
+  if (options.forFeed) params.set('for', options.forFeed);
+  const query = params.toString();
+  return query ? `${base}?${query}` : base;
+}
+
+/** The feed selected in Settings → Maps (`?feed=`). */
+export function mapsSettingsSelectedFeed(params: { get(name: string): string | null } | null): string | null {
+  return params?.get('feed') ?? null;
+}
+
+/** The layer selected in Settings → Maps; `?layout=` is still read from older links. */
+export function mapsSettingsSelectedLayer(params: { get(name: string): string | null } | null): string | null {
+  return params?.get('layer') ?? params?.get('layout') ?? null;
 }

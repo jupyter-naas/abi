@@ -8,4 +8,16 @@ Each pin can carry `entityUri`, `graphUri`, `country`, `precision`, `observedAt`
 
 Optional `coverage: {pins: [...]}` provides city summaries from the same scoped projection. Each city pin has its own graph identity, coordinates and evidence, with `memberIds` linking address pins. The browser renders geographic country fills, never materializes countrywide operations as RDF facts, and validates member IDs against the returned address pins.
 
-Run `pytest service_test.py` and colocated API tests. Frontend contract tests live beside `maps/lib/maps-feed.ts`.
+# Maps catalog (layers, basemaps, access)
+
+ADR: `docs/adr/20261012_nexus-maps-catalog-and-access.md`.
+
+- `layouts/` — **feeds** (data sources): `feed_type` `sparql` (query on the workspace graphs) or `geojson_url` (a `/api/...` path the web proxy `/api/maps/custom/{feed}` calls with the member's token). `/api/maps/feeds` (= `/api/maps/layouts`: CRUD, `/visibility`, `/color`, `GET /{id}`). Deleting a feed goes through `feed_layers` (cascade).
+- `feed_layers/` — **layers**: views on one feed (title, color, icon, order, `class_labels` = feature types kept, empty = all). `/api/maps/feed-layers`. A feed always keeps one layer; new feeds get a default layer with the feed id. Hidden flags share `hidden_layouts`.
+- `basemaps/` — basemap records with a renderer config (`tile`, `countries` + palette, `geojson`) and preview bytes. `/api/maps/basemaps` (CRUD, `/visibility`, `GET|PUT /{id}/preview`). Core seeds and their previews: `basemaps/builtin.py`, `basemaps/assets/`.
+- `settings/` — per-workspace JSON in `maps_settings`: hidden layers/basemaps, colors of record-less layers, applied seeds. Always read-modify-write the whole document through the port.
+- `seeds.py` — `register_maps_seeds(app, layouts=..., feed_layers=..., basemaps=...)` from a module's API hook. Seeds are copied once per workspace and become `system` (edit/hide, never delete). Bump `revision=` to migrate seeded copies in every workspace (`settings.seed_revisions`).
+- `permissions/` — `maps_grants`: deployment items everywhere unless narrowed; custom items at home unless shared (read-only, `shared_from`). Deployment items and "all workspaces" need a superadmin. Services enforce it on list/get/preview; `/api/maps/permissions` manages it.
+- `catalog/` — `GET /api/maps/catalog`, the single read the web store loads.
+
+Run `pytest` on this directory (service and colocated API tests). Frontend contract tests live beside `maps/lib/maps-feed.ts`, `maps-basemaps.ts`, `maps-country-cluster.ts` and `permissions-api.ts`.

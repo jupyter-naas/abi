@@ -1,95 +1,117 @@
 import type { GeoJSON as GeoJSONLayer, Map as LeafletMap, TileLayer } from 'leaflet';
 
-import { isMapsDarkMode, MAPS_TILE_ATTR, MAPS_TILE_DARK, MAPS_TILE_LIGHT } from './leaflet-tiles';
+import type { BasemapCategory, BasemapPalette, BasemapRenderer, WorkspaceBasemap } from './basemaps-api';
+import { isMapsDarkMode } from './leaflet-tiles';
 import {
-  addNaturalEarthBasemapLayer,
+  addVectorCountriesBasemapLayer,
   fetchNaturalEarthCountries,
+  type NaturalEarthFeatureCollection,
 } from './maps-natural-earth-basemap';
 
-/** Default background under data layers. */
-export const DEFAULT_BASEMAP_ID = 'openstreetmap';
+/**
+ * Basemaps are data: the workspace catalog from `/api/maps/catalog` (seeded by
+ * Nexus and the deployment, managed in Settings → Maps). This module only knows
+ * how to draw a renderer config; it holds no basemap ids, labels or previews.
+ */
 
-/** Vector country polygons only (Natural Earth, no OSM tiles). */
-export const NATURAL_EARTH_BASEMAP_ID = 'natural-earth';
+/** Used until the catalog names its own default (the API sends `default_basemap_id`). */
+export const FALLBACK_BASEMAP_ID = 'openstreetmap';
 
 export interface MapsBasemapDef {
   id: string;
   /** Short label for the toolbar picker. */
   label: string;
+  category: BasemapCategory;
+  order: number;
+  renderer: BasemapRenderer;
+  system: boolean;
+  /** 0 when the basemap has no preview image. */
+  previewVersion: number;
 }
 
-/** Basemaps. One is active at a time. */
-export const MAPS_BASEMAPS: readonly MapsBasemapDef[] = [
-  { id: 'openstreetmap', label: 'Street' },
-  { id: NATURAL_EARTH_BASEMAP_ID, label: 'Countries' },
-  { id: 'esri-imagery', label: 'Satellite' },
-  { id: 'opentopomap', label: 'Topo' },
-] as const;
-
-export function isTileBasemap(basemapId: string): boolean {
-  return normalizeBasemapId(basemapId) !== NATURAL_EARTH_BASEMAP_ID;
+export function basemapDefFromApi(basemap: WorkspaceBasemap): MapsBasemapDef {
+  return {
+    id: basemap.id,
+    label: basemap.title,
+    category: basemap.category,
+    order: basemap.order,
+    renderer: basemap.renderer,
+    system: basemap.system,
+    previewVersion: basemap.preview_content_type ? basemap.preview_version : 0,
+  };
 }
 
-export function normalizeBasemapId(id: string | null | undefined): string {
-  if (!id) return DEFAULT_BASEMAP_ID;
-  return MAPS_BASEMAPS.some((b) => b.id === id) ? id : DEFAULT_BASEMAP_ID;
+export type BasemapPickerColumns = Record<BasemapCategory, MapsBasemapDef[]>;
+
+const CATEGORY_ORDER: readonly BasemapCategory[] = ['standard', 'organization', 'custom'];
+
+function byOrder(a: MapsBasemapDef, b: MapsBasemapDef): number {
+  return a.order - b.order || a.label.localeCompare(b.label);
 }
 
-export function basemapLabel(id: string): string {
-  return MAPS_BASEMAPS.find((b) => b.id === normalizeBasemapId(id))?.label ?? 'Basemap';
+/** Map type picker columns: standard | organization | custom. */
+export function splitBasemapPickerDefs(defs: readonly MapsBasemapDef[]): BasemapPickerColumns {
+  const columns: BasemapPickerColumns = { standard: [], organization: [], custom: [] };
+  for (const def of defs) (columns[def.category] ?? columns.custom).push(def);
+  for (const category of CATEGORY_ORDER) columns[category].sort(byOrder);
+  return columns;
 }
 
-/** Static preview for the map-type popover (`public/maps/basemaps/`). */
-export function basemapPreviewSrc(id: string): string {
-  const normalized = normalizeBasemapId(id);
-  if (normalized === NATURAL_EARTH_BASEMAP_ID) {
-    return '/maps/basemaps/natural-earth.svg';
-  }
-  return `/maps/basemaps/${normalized}.png`;
+/**
+ * A known id stays; an unknown one falls back to the catalog default, then the
+ * first basemap. While the catalog is still loading (no defs) the id is kept,
+ * so a stored choice is not lost before the catalog arrives.
+ */
+export function normalizeBasemapId(
+  id: string | null | undefined,
+  defs: readonly MapsBasemapDef[] = [],
+  defaultId: string = FALLBACK_BASEMAP_ID,
+): string {
+  if (defs.length === 0) return id || defaultId;
+  if (id && defs.some((def) => def.id === id)) return id;
+  if (defs.some((def) => def.id === defaultId)) return defaultId;
+  return defs[0]!.id;
+}
+
+export function basemapLabel(id: string, defs: readonly MapsBasemapDef[] = []): string {
+  return defs.find((def) => def.id === id)?.label ?? 'Basemap';
+}
+
+export interface MapsBasemapHandle {
+  /** Swap the basemap; pass the latest catalog when it changed since install. */
+  setBasemap: (id: string, defs?: readonly MapsBasemapDef[]) => void;
+  cleanup: () => void;
+}
+
+export interface InstallMapsBasemapOptions {
+  defs?: readonly MapsBasemapDef[];
+}
+
+function tileTemplate(renderer: Extract<BasemapRenderer, { kind: 'tile' }>): string {
+  return isMapsDarkMode() && renderer.dark_url ? renderer.dark_url : renderer.url;
 }
 
 export function createBasemapTileLayer(
   L: typeof import('leaflet'),
-  basemapId: string,
+  renderer: Extract<BasemapRenderer, { kind: 'tile' }>,
 ): TileLayer {
-  const id = normalizeBasemapId(basemapId);
-  if (!isTileBasemap(id)) {
-    throw new Error(`Basemap ${id} is not a tile layer`);
-  }
-  if (id === 'openstreetmap') {
-    return L.tileLayer(isMapsDarkMode() ? MAPS_TILE_DARK : MAPS_TILE_LIGHT, {
-      className: 'maps-basemap',
-      attribution: MAPS_TILE_ATTR,
-      maxZoom: 19,
-    });
-  }
-  if (id === 'esri-imagery') {
-    return L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      {
-        className: 'maps-basemap',
-        attribution:
-          'Tiles &copy; Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-        maxZoom: 19,
-      },
-    );
-  }
-  return L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+  return L.tileLayer(tileTemplate(renderer), {
     className: 'maps-basemap',
-    subdomains: ['a', 'b', 'c'],
-    attribution:
-      'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)',
-    maxZoom: 17,
+    attribution: renderer.attribution ?? '',
+    maxZoom: renderer.max_zoom ?? 19,
+    ...(renderer.subdomains?.length ? { subdomains: renderer.subdomains } : {}),
   });
 }
 
-export interface MapsBasemapHandle {
-  setBasemap: (id: string) => void;
-  cleanup: () => void;
+/** Fixed palettes apply in light mode; dark mode keeps the theme-aware look. */
+function lightPalette(palette: BasemapPalette | undefined): BasemapPalette | undefined {
+  return palette && !isMapsDarkMode() ? palette : undefined;
 }
 
-function setCountriesBasemapClass(map: LeafletMap, enabled: boolean): void {
-  map.getContainer().classList.toggle('maps-leaflet--countries-basemap', enabled);
+function setVectorBasemapBackground(map: LeafletMap, vector: boolean, background?: string): void {
+  const container = map.getContainer();
+  container.classList.toggle('maps-leaflet--countries-basemap', vector);
+  container.style.background = vector && background ? background : '';
 }
 
 /** Installs the initial basemap; use setBasemap to swap without remounting the map. */
@@ -98,53 +120,72 @@ export function installMapsBasemap(
   map: LeafletMap,
   initialBasemapId: string,
   onBasemapChange?: (id: string) => void,
+  options: InstallMapsBasemapOptions = {},
 ): MapsBasemapHandle {
-  let currentId = normalizeBasemapId(initialBasemapId);
+  let defs = options.defs ?? [];
+  let currentId = normalizeBasemapId(initialBasemapId, defs);
+  // What is drawn now; a catalog update re-draws the same id when its renderer changed.
+  let drawn: string | null = null;
   let currentTile: TileLayer | null = null;
-  let currentCountries: GeoJSONLayer | null = null;
-  let countriesGeneration = 0;
+  let currentVector: GeoJSONLayer | null = null;
+  let generation = 0;
 
   const removeLayers = () => {
     currentTile?.remove();
     currentTile = null;
-    currentCountries?.remove();
-    currentCountries = null;
-    setCountriesBasemapClass(map, false);
+    currentVector?.remove();
+    currentVector = null;
+    setVectorBasemapBackground(map, false);
   };
 
-  const applyBasemap = (nextId: string) => {
+  const applyBasemap = () => {
+    const def = defs.find((item) => item.id === currentId);
+    const signature = def ? `${def.id}:${JSON.stringify(def.renderer)}` : null;
+    if (signature === drawn) return;
     removeLayers();
-    currentId = nextId;
-    if (nextId === NATURAL_EARTH_BASEMAP_ID) {
-      setCountriesBasemapClass(map, true);
-      const generation = ++countriesGeneration;
-      void fetchNaturalEarthCountries()
-        .then((geojson) => {
-          if (generation !== countriesGeneration || currentId !== NATURAL_EARTH_BASEMAP_ID) {
-            return;
-          }
-          currentCountries = addNaturalEarthBasemapLayer(L, map, geojson);
-        })
-        .catch(() => {
-          /* keep muted background; pins remain usable */
-        });
+    drawn = signature;
+    const run = ++generation;
+    if (!def) return; // catalog not loaded yet: plain map background
+    const renderer = def.renderer;
+
+    if (renderer.kind === 'tile') {
+      currentTile = createBasemapTileLayer(L, renderer);
+      currentTile.addTo(map);
       return;
     }
-    currentTile = createBasemapTileLayer(L, nextId);
-    currentTile.addTo(map);
+
+    const palette = lightPalette(renderer.palette);
+    setVectorBasemapBackground(map, true, palette?.background);
+    const strokeWidth = renderer.kind === 'countries' ? renderer.stroke_width : undefined;
+    const draw = (geojson: NaturalEarthFeatureCollection) => {
+      if (run !== generation) return;
+      currentVector = addVectorCountriesBasemapLayer(L, map, geojson, { palette, strokeWidth });
+    };
+    if (renderer.kind === 'geojson') {
+      draw(renderer.feature_collection as NaturalEarthFeatureCollection);
+      return;
+    }
+    void fetchNaturalEarthCountries()
+      .then(draw)
+      .catch(() => {
+        /* muted background */
+      });
   };
 
-  applyBasemap(currentId);
+  applyBasemap();
 
   return {
-    setBasemap: (id: string) => {
-      const nextId = normalizeBasemapId(id);
-      if (nextId === currentId) return;
-      applyBasemap(nextId);
-      onBasemapChange?.(nextId);
+    setBasemap: (id: string, nextDefs?: readonly MapsBasemapDef[]) => {
+      if (nextDefs) defs = nextDefs;
+      const nextId = normalizeBasemapId(id, defs);
+      const changed = nextId !== currentId;
+      currentId = nextId;
+      applyBasemap();
+      if (changed) onBasemapChange?.(nextId);
     },
     cleanup: () => {
-      countriesGeneration += 1;
+      generation += 1;
+      drawn = null;
       removeLayers();
     },
   };

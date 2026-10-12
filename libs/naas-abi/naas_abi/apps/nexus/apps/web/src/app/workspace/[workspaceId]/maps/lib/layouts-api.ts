@@ -1,12 +1,13 @@
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
-import type { WorkspaceMapLayout } from './layouts';
+import type { WorkspaceFeedLayer, WorkspaceMapLayout } from './layouts';
 
 /** Settings → Maps API: workspace layouts and which layouts are hidden. */
 
 export interface WorkspaceLayoutsResponse {
   layouts: WorkspaceMapLayout[];
   hidden: string[];
+  colors: Record<string, string>;
   can_edit: boolean;
 }
 
@@ -79,12 +80,56 @@ export const layoutsApi = {
     request<WorkspaceMapLayout>(`${base()}/${encodeURIComponent(id)}?${ws(workspaceId)}`, json('PUT', draft)),
   remove: (workspaceId: string, id: string) =>
     request<{ message: string }>(`${base()}/${encodeURIComponent(id)}?${ws(workspaceId)}`, { method: 'DELETE' }),
+  get: (workspaceId: string, id: string) =>
+    request<WorkspaceMapLayout>(`${base()}/${encodeURIComponent(id)}?${ws(workspaceId)}`),
+  /** Default pin / group-by-country color; null resets a built-in or graph layer. */
+  setColor: (workspaceId: string, id: string, color: string | null) =>
+    request<{ colors: Record<string, string> }>(`${base()}/${encodeURIComponent(id)}/color?${ws(workspaceId)}`, json('PUT', { color })),
   setHidden: (workspaceId: string, id: string, hidden: boolean) =>
     request<{ hidden: string[] }>(`${base()}/${encodeURIComponent(id)}/visibility?${ws(workspaceId)}`, json('PUT', { hidden })),
   preview: (workspaceId: string, draft: LayoutDraft) =>
     request<LayoutPreview>(`${base()}/preview`, json('POST', { ...draft, workspace_id: workspaceId })),
   feedUrl: (workspaceId: string, id: string) => `${base()}/${encodeURIComponent(id)}/feed?${ws(workspaceId)}`,
 };
+
+export type FeedLayerDraft = Omit<WorkspaceFeedLayer, 'id' | 'system' | 'shared_from'>;
+
+/** Map layers: views on a feed (`/api/maps/feed-layers`). Hide them with layoutsApi.setHidden. */
+export const feedLayersApi = {
+  save: (workspaceId: string, id: string, draft: FeedLayerDraft) =>
+    request<WorkspaceFeedLayer>(
+      `${getApiUrl()}/api/maps/feed-layers/${encodeURIComponent(id)}?${ws(workspaceId)}`,
+      json('PUT', draft),
+    ),
+  remove: (workspaceId: string, id: string) =>
+    request<{ message: string }>(
+      `${getApiUrl()}/api/maps/feed-layers/${encodeURIComponent(id)}?${ws(workspaceId)}`,
+      { method: 'DELETE' },
+    ),
+};
+
+export function feedLayerDraft(layer: WorkspaceFeedLayer): FeedLayerDraft {
+  const { id: _id, system: _system, shared_from: _shared, ...draft } = layer;
+  return draft;
+}
+
+export function blankFeedLayout(): LayoutDraft {
+  return {
+    title: '',
+    description: '',
+    icon: 'MapPin',
+    color: '#2563eb',
+    graphs: [],
+    order: 100,
+    query: '',
+    feed_type: 'geojson_url',
+    feed_url: '/api/',
+    category: 'custom',
+    logo_url: '',
+    basemap_id: '',
+    meta_label: '',
+  };
+}
 
 export function blankLayout(): LayoutDraft {
   return {
