@@ -8,8 +8,9 @@ import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { useWorkspaceStore } from '@/stores/workspace';
 import {
+  isOrgAdminRole,
   orgSettingsIndexPath,
-  orgSettingsNav,
+  orgSettingsNavForRole,
   orgSettingsSectionPath,
   type OrgSettingsNavItem,
 } from './lib/nav';
@@ -59,13 +60,15 @@ export default function OrganizationSettingsLayout({
   const router = useRouter();
   const params = useParams();
   const orgId = params.orgId as string;
+  const [viewerRole, setViewerRole] = useState<string | null>(null);
+  const visibleNav = useMemo(() => orgSettingsNavForRole(viewerRole), [viewerRole]);
   const sectionHrefs = useMemo(
-    () => (orgId ? orgSettingsNav.map((item) => orgSettingsSectionPath(orgId, item.slug)) : []),
-    [orgId]
+    () => (orgId ? visibleNav.map((item) => orgSettingsSectionPath(orgId, item.slug)) : []),
+    [orgId, visibleNav]
   );
   useDevRouteWarmup(sectionHrefs);
   const isMobile = useIsMobile();
-  const { isDetail, sectionLabel } = parseOrgSettingsRoute(pathname);
+  const { isDetail, section, sectionLabel } = parseOrgSettingsRoute(pathname);
   const showMobileList = isMobile && !isDetail;
   const showMobileDetail = isMobile && isDetail;
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
@@ -84,6 +87,7 @@ export default function OrganizationSettingsLayout({
         if (response.ok) {
           const data = await response.json();
           setOrgName(data.name);
+          setViewerRole(data.current_user_role ?? null);
           const radius = data.loginBorderRadius ?? data.login_border_radius ?? '0';
           setBorderRadius(radius);
         }
@@ -110,6 +114,16 @@ export default function OrganizationSettingsLayout({
     window.addEventListener('org-branding-updated', handleBrandingUpdate);
     return () => window.removeEventListener('org-branding-updated', handleBrandingUpdate);
   }, [orgId]);
+
+  useEffect(() => {
+    if (!orgId || viewerRole === null || !section) return;
+    if (
+      !isOrgAdminRole(viewerRole) &&
+      !visibleNav.some((entry) => entry.slug === section)
+    ) {
+      router.replace(orgSettingsSectionPath(orgId, 'general'));
+    }
+  }, [orgId, viewerRole, section, visibleNav, router]);
 
   const themeStyles = {
     '--org-border-radius': `${borderRadius}px`,
@@ -182,7 +196,7 @@ export default function OrganizationSettingsLayout({
             <h2 className="org-settings-layout-nav-title">Organization Settings</h2>
             <div className="org-settings-layout-nav-divider" />
             <ul className="org-settings-layout-nav-list">
-              {orgSettingsNav.map((item) => (
+              {visibleNav.map((item) => (
                 <NavItem
                   key={item.slug}
                   item={item}
