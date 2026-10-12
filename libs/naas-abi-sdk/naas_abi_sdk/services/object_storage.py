@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterable
 from contextlib import AsyncExitStack, asynccontextmanager
 from io import BytesIO
 from queue import Queue
@@ -10,6 +11,7 @@ from naas_abi_proto.object_storage.v1 import object_storage_pb2 as pb
 from nats.errors import NoRespondersError
 
 from naas_abi_sdk.services._codec import ServiceProxy
+from naas_abi_sdk.services._streams import _chunks
 from naas_abi_sdk.services.errors import domain_error
 from naas_abi_sdk.services.models import ObjectMetaData
 from naas_abi_sdk.transfer import AsyncObjectReader, open_transfer, read_legacy_upload
@@ -79,7 +81,11 @@ class ObjectStorageService(ServiceProxy):
         except RPCError as exc:
             raise domain_error(exc) from exc
 
-    async def put_object_stream(self, prefix: str, key: str, stream: BinaryIO) -> None:
+    async def put_object_stream(
+        self, prefix: str, key: str, stream: BinaryIO | AsyncIterable[bytes]
+    ) -> None:
+        """Upload ``stream``: a binary file object, or an async stream of chunks
+        (an app's ``request.stream()``), read as the upload goes."""
         metadata = pb.GetObjectRequest(prefix=prefix, key=key).SerializeToString()
         try:
             async with AsyncExitStack() as stack:
@@ -95,20 +101,41 @@ class ObjectStorageService(ServiceProxy):
                 except NoRespondersError:
                     nc = await self._client._transport.connect()
                     limit = nc.max_payload
-                    content = await asyncio.to_thread(read_legacy_upload, stream, limit)
+                    if isinstance(stream, AsyncIterable):
+                        content = await _read_legacy_chunks(stream, limit)
+                    else:
+                        content = await asyncio.to_thread(
+                            read_legacy_upload, stream, limit
+                        )
                     await self._request(
                         "put_object", prefix=prefix, key=key, content=content
                     )
                     return
-                while chunk := await asyncio.to_thread(
-                    stream.read, transfer.chunk_bytes
-                ):
-                    await transfer.write(chunk)
+                if isinstance(stream, AsyncIterable):
+                    async for chunk in _chunks(stream, transfer.chunk_bytes):
+                        await transfer.write(chunk)
+                else:
+                    while chunk := await asyncio.to_thread(
+                        stream.read, transfer.chunk_bytes
+                    ):
+                        await transfer.write(chunk)
                 await transfer.start()
                 async for _ in transfer.fragments():
                     pass
         except RPCError as exc:
             raise domain_error(exc) from exc
+
+
+async def _read_legacy_chunks(stream: AsyncIterable[bytes], limit: int) -> bytes:
+    """``read_legacy_upload`` for an async stream: bounded by the unary limit."""
+    content = bytearray()
+    async for chunk in stream:
+        content.extend(chunk)
+        if len(content) > limit:
+            raise ValueError(
+                "Owner upgrade required for streamed uploads above the unary limit"
+            )
+    return bytes(content)
 
 
 class _LegacyReader:

@@ -45,6 +45,8 @@ message AppDescriptor {
   // The entry page below the app's root, default "index.html".
   string entry = 6;
   uint32 contract_major = 7;
+  // Largest request body Nexus forwards; zero: Nexus's default (1 GiB).
+  uint64 max_upload_bytes = 8;
 }
 message ModuleDescriptor {
   string module_id = 1;

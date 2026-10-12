@@ -519,9 +519,24 @@ class ABIModule(BaseModule):
 The app's page calls `fetch("api/report")`, relative to its folder. The ASGI
 app runs in the module's process with `root_path` set to the Nexus path, and its
 lifespan (startup and shutdown) runs with the module. Nexus checks the user's
-access, then forwards the request without the user's credential. Limits: 1 MiB
-per request body, 6 MiB per response, 60 s per request; no streaming responses
-or WebSockets yet. Declare `apps = (AppDescriptor(...),)` on the class instead
+access, then forwards the request without the user's credential.
+
+Bodies stream. A large upload reaches `request.stream()` chunk by chunk as the
+app reads it, never faster, so a module can pass it on without holding it:
+
+```python
+@api.put("/api/files/{name}")
+async def upload(name: str, request: Request):
+    await storage.put_object_stream("uploads", name, request.stream())
+    return {"stored": name}
+```
+
+A `StreamingResponse` (a download, server-sent events) leaves as the app sends
+it; when the browser leaves, the app is cancelled. Nexus refuses uploads above
+the app's `max_upload_bytes` (manifest; default 1 GiB). An app that neither
+reads nor answers for 60 s gets 504; there is no total limit. Multipart forms
+work, but FastAPI's `UploadFile` spools each file (to disk above 1 MB): send a
+very large file as the raw body instead. No WebSockets yet. Declare `apps = (AppDescriptor(...),)` on the class instead
 of the folder for an app without files.
 
 ## Object streams and transfer configuration
