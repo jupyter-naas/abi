@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from naas_abi_sdk import lifeline, telemetry
+from naas_abi_sdk.apps import AppDescriptor, discover_apps
 from naas_abi_sdk.catalog import OPERATIONS
 from naas_abi_sdk.client import ABIClient
 from naas_abi_sdk.discovery import (
@@ -168,6 +169,9 @@ class BaseModule(JobsMixin, Generic[Config]):
     contract_major: int = 1
     agents: tuple[AgentDescriptor, ...] = ()
     models: tuple[ModelDescriptor, ...] = ()
+    # Web apps it serves over NATS. None: one per apps/<name>/manifest.json
+    # next to the module's package (naas_abi_sdk.apps.discover_apps).
+    apps: tuple[AppDescriptor, ...] | None = None
 
     def __init__(self, engine: EngineProxy, configuration: Config):
         if not isinstance(configuration, self.Configuration):
@@ -179,6 +183,7 @@ class BaseModule(JobsMixin, Generic[Config]):
         self._discovery_session: DiscoverySession | None = None
         self._agent_handlers = {}
         self._model_handlers = {}
+        self._app_handlers: dict[str, Any] = {}
         self._health_port: int | None = None
 
     @property
@@ -218,6 +223,27 @@ class BaseModule(JobsMixin, Generic[Config]):
         if not inspect.iscoroutinefunction(handler.invoke):
             raise TypeError("Model handler.invoke must be async")
         self._model_handlers[name] = handler
+
+    @classmethod
+    def get_apps(cls) -> tuple[AppDescriptor, ...]:
+        """The declared apps, else those found under the package's apps/."""
+        if cls.apps is not None:
+            return tuple(cls.apps)
+        if "_discovered_apps" not in cls.__dict__:
+            cls._discovered_apps = discover_apps(cls)
+        return cls._discovered_apps
+
+    def expose_app(self, name: str, asgi_app) -> None:
+        """Bind an ASGI application (FastAPI, Starlette) to a declared app during
+        on_initialized. It answers the requests no file of the app's folder
+        does; ``request.scope["abi"]["user_id"]`` is the signed-in Nexus user."""
+        if name not in {app.name for app in self.get_apps()}:
+            raise ValueError(f"Declare the app first: apps/{name}/manifest.json")
+        if name in self._app_handlers:
+            raise ValueError(f"App handler already registered: {name}")
+        if not callable(asgi_app):
+            raise TypeError("expose_app needs an ASGI application")
+        self._app_handlers[name] = asgi_app
 
     @property
     def discovery_status(self) -> str:
@@ -279,10 +305,14 @@ async def _invoke(hook):
     return await result if inspect.isawaitable(result) else result
 
 
-async def _drain_hosts(agent_host, job_host, model_host, timeout: float) -> None:
+async def _drain_hosts(
+    agent_host, job_host, model_host, timeout: float, app_host=None
+) -> None:
     """Stop new work and wait for runs and jobs that already started."""
     if model_host is not None:
         model_host.closing = True
+    if app_host is not None:
+        app_host.closing = True
     waits = []
     if agent_host is not None:
         waits.append(asyncio.create_task(agent_host.drain(timeout)))
@@ -401,6 +431,7 @@ async def run_module(
         work = None
         agent_host = None
         model_host = None
+        app_host = None
         job_host = None
         jobs_after_cutover: asyncio.Task | None = None
         health_server = None
@@ -445,6 +476,17 @@ async def run_module(
 
                 model_host = ModelHost(registration, module._model_handlers)
                 await model_host.start()
+            apps = module_type.get_apps()
+            if apps:
+                if registration is None:
+                    raise ValueError("App hosting requires discovery")
+                from naas_abi_sdk.app_host import AppHost
+
+                app_host = AppHost(
+                    registration,
+                    {a.name: (a, module._app_handlers.get(a.name)) for a in apps},
+                )
+                await app_host.start()
             if module.missing_job_handlers():
                 raise ValueError(
                     "Every declared job must have a handler before module readiness"
@@ -543,6 +585,7 @@ async def run_module(
                         job_host,
                         model_host,
                         drain_timeout_seconds,
+                        app_host,
                     )
                     if not work.done():
                         work.cancel()
@@ -577,6 +620,8 @@ async def run_module(
                     await job_host.close()
                 if model_host:
                     await model_host.close()
+                if app_host:
+                    await app_host.close()
                 if agent_host:
                     await agent_host.close()
                 await _invoke(module.on_unloaded)

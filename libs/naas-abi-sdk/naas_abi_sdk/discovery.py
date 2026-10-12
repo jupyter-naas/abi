@@ -469,4 +469,10 @@ def module_descriptor(
             pb.ModelDescriptor(name=m.name, description=m.description, kind=m.kind)
             for m in getattr(module_type, "models", ())
         ],
+        apps=[
+            a.to_pb()
+            for a in (
+                module_type.get_apps() if hasattr(module_type, "get_apps") else ()
+            )
+        ],
     )
