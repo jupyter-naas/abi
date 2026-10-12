@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import random
 import weakref
 from collections.abc import AsyncIterator, Callable
@@ -26,6 +27,8 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
     RemoteApp,
     RemoteAppUnavailable,
 )
+
+_log = logging.getLogger(__name__)
 
 CONTRACT_MAJOR = 1
 # Discovery is read at most this often: the catalog and every request share it.
@@ -277,8 +280,9 @@ async def _upload(call: Any, source: Any) -> Any:
 
 
 async def _pulled(nc: Any, inbox: str) -> AsyncIterator[bytes]:
-    """The response body; an error after the response started ends it early
-    (the status line is already sent)."""
+    """The response body. An error after the response started (the app failed,
+    the module died) propagates: the status line is already sent, so the server
+    aborts the connection, and the browser does not keep a truncated file."""
     from naas_abi_sdk.app_streams import pull_body
     from naas_abi_sdk.transport import RPCError
 
@@ -286,8 +290,9 @@ async def _pulled(nc: Any, inbox: str) -> AsyncIterator[bytes]:
     try:
         async for chunk in stream:
             yield chunk
-    except RPCError:
-        return
+    except RPCError as exc:
+        _log.warning("Remote app response ended early: %s", exc)
+        raise
     finally:
         with contextlib.suppress(Exception):
             await stream.aclose()

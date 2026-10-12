@@ -167,3 +167,26 @@ def test_discovery_is_read_at_most_every_10_seconds():
 
     asyncio.run(scenario())
     assert discovery.reads == 2
+
+
+@pytest.mark.parametrize("code", ["APP_ERROR", "DEADLINE_EXCEEDED"])
+def test_a_response_that_fails_mid_stream_is_not_ended_cleanly(monkeypatch, code):
+    """The status line is out: only an error makes the server abort the
+    connection, so the browser does not save a truncated file as complete."""
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters import discovery
+    from naas_abi_sdk import app_streams
+
+    async def pull_body(nc, inbox):
+        yield b"first"
+        raise RPCError(code, "gone")
+
+    monkeypatch.setattr(app_streams, "pull_body", pull_body)
+
+    async def read():
+        received = []
+        async for chunk in discovery._pulled(object(), "_INBOX.x"):
+            received.append(chunk)
+        return received
+
+    with pytest.raises(RPCError):
+        asyncio.run(read())
