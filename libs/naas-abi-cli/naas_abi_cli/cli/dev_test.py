@@ -17,6 +17,8 @@ import pytest
 # `naas_abi_cli.cli` re-exports the click Group as `dev`, which shadows the
 # module of the same name — import the module explicitly.
 dev = importlib.import_module("naas_abi_cli.cli.dev")
+# The `stack` fixture replaces it; one test needs the real check.
+_nats_server_binary = dev._nats_server_binary
 
 if TYPE_CHECKING:
     # The importlib call above is opaque to mypy, so `dev.ServiceSpec` reads as
@@ -400,14 +402,14 @@ def test_custom_browser_host_is_allowed_by_cors(monkeypatch) -> None:
 
 
 # =============================================================================
-# nats — opt-in service (docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md)
+# nats — added by NATS mode, the default (docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md)
 #
 # Unlike oxigraph (embedded via pyoxigraph), nats-server is a real external
-# binary this shells out to, and it must never start unless explicitly
-# selected — config.yaml's bus_adapter still defaults to "python_queue".
+# binary this shells out to. It is not in ALL_SERVICES: NATS mode adds it
+# (_services_for), and `--without-nats` leaves it out.
 # =============================================================================
 
-def test_nats_is_available_but_not_default() -> None:
+def test_nats_is_added_by_the_mode_not_listed_by_default() -> None:
     assert "nats" not in dev.ALL_SERVICES
     assert "nats" in dev.OPTIONAL_SERVICES
     assert "nats" in dev.KNOWN_SERVICES
@@ -604,11 +606,17 @@ def test_with_nats_adds_nats_to_an_explicit_selection() -> None:
     assert dev._services_for(("api", "dagster"), with_nats=True) == ["nats", "api", "dagster"]
 
 
+def test_a_selection_without_an_engine_needs_no_broker() -> None:
+    assert dev._services_for(("nexus-web",), with_nats=True) == ["nexus-web"]
+    assert dev._services_for(("nats",), with_nats=False) == ["nats"]
+
+
 def test_the_nats_overlay_points_the_engine_at_the_dev_broker(monkeypatch, tmp_path) -> None:
     import yaml
 
     monkeypatch.setattr(dev, "_project_root", lambda: tmp_path / "my project.v2")
     monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path / "dev")
+    monkeypatch.setattr(dev, "_project_config", lambda: None)
 
     path = dev._write_dev_overlay(
         {"nats": 13042}, nats_secret="s" * 48, nats_password="nats-engine-pw"
@@ -849,6 +857,8 @@ def stack(monkeypatch, tmp_path):
     monkeypatch.setattr(dev, "_ensure_default_api_key_env", lambda: "key")
     monkeypatch.setattr(dev, "ensure_nats_secret", lambda path: "s" * 48)
     monkeypatch.setattr(dev, "_wait_until_ready", lambda *a, **k: True)
+    monkeypatch.setattr(dev, "_nats_server_binary", lambda: "/usr/local/bin/nats-server")
+    monkeypatch.setattr(dev, "_project_nats", lambda: None)
 
     def start_service(name, ports, log_level=None, selected=None, config_overlay=None):
         calls.append(("start", name))
@@ -881,9 +891,54 @@ def test_with_nats_starts_the_dev_modules_after_the_stack(stack) -> None:
     ]
 
 
-def test_dev_modules_need_nats(stack) -> None:
-    assert _abi("up", "-d").exit_code == 0
-    assert ("start", "researcher") not in stack
+def test_up_runs_on_nats_with_the_dev_modules_by_default(stack) -> None:
+    result = _abi("up", "-d")
+
+    assert result.exit_code == 0, result.output
+    assert [name for _, name in stack] == [
+        "oxigraph", "nats", "api", "nexus-web", "researcher", "orchestrator",
+    ]
+
+
+def test_without_nats_is_the_in_process_stack(stack, tmp_path) -> None:
+    result = _abi("up", "--without-nats", "-d")
+
+    assert result.exit_code == 0, result.output
+    assert [name for _, name in stack] == list(dev.ALL_SERVICES)
+    # Nothing for the engine to merge: the project config has no nats: block.
+    assert not (tmp_path / dev.DEV_OVERLAY_FILENAME).exists()
+
+
+def test_without_nats_turns_off_the_project_nats_block(
+    stack, monkeypatch, tmp_path
+) -> None:
+    """A NATS project's config enables NATS itself: the overlay switches it off."""
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        deep_merge,
+    )
+
+    monkeypatch.setattr(dev, "_project_nats", lambda: {"jwt_secret": ""})
+
+    result = _abi("up", "--without-nats", "-d")
+
+    assert result.exit_code == 0, result.output
+    overlay = dev.read_overlay(tmp_path / dev.DEV_OVERLAY_FILENAME)
+    assert overlay == {"nats": None}
+    assert deep_merge({"nats": {"jwt_secret": "x"}}, overlay)["nats"] is None
+    assert "--without-nats" in result.output
+
+
+def test_up_fails_before_starting_anything_without_nats_server(
+    stack, monkeypatch
+) -> None:
+    monkeypatch.setattr(dev, "_nats_server_binary", _nats_server_binary)
+    monkeypatch.setattr(dev.shutil, "which", lambda name: None)
+
+    result = _abi("up", "-d")
+
+    assert result.exit_code != 0
+    assert "nats-server" in result.output and "--without-nats" in result.output
+    assert stack == []
 
 
 def test_selecting_services_leaves_the_modules_alone(stack) -> None:
@@ -904,8 +959,18 @@ def test_a_module_without_the_nats_stack_is_refused(stack) -> None:
     result = _abi("up", "--service", "orchestrator", "-d")
 
     assert result.exit_code != 0
-    assert "--with-nats" in result.output
+    assert "abi dev up" in result.output
     assert stack == []
+
+
+def test_the_discovery_project_is_the_configured_one(monkeypatch, tmp_path) -> None:
+    """Remote modules default to the project config's discovery project."""
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path / "folder")
+    monkeypatch.setattr(dev, "_project_nats", lambda: {"discovery": {"project": "acme"}})
+    assert dev._discovery_project() == "acme"
+
+    monkeypatch.setattr(dev, "_project_nats", lambda: {"jwt_secret": ""})
+    assert dev._discovery_project() == "folder"
 
 
 def test_unknown_names_list_the_modules_too(stack) -> None:
