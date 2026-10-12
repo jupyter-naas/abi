@@ -33,7 +33,7 @@ the engine's.
 | `service_token.py` | `ABI_SERVICE_TOKEN`, or a token signed from `NATS_JWT_SECRET` |
 | `agents/` | SDK `IntentAgent`s on the engine's models, memory in the Document Service |
 | `jobs.py` | job bodies, testable without a broker |
-| `apps/` | app scaffold. Nexus does not serve apps of remote modules yet |
+| `apps/` | web apps, served through Nexus at `/app-html/remote/{{module_id}}/<app>/` |
 | `tests/` | offline tests (`uv run pytest`) |
 
 ## Run it
@@ -54,5 +54,11 @@ It is up when it logs `READY`. `ABI_HEALTH_PORT=8080` opens `/health` and
 - A service: add it to `dependencies`, call `self.engine.services.<name>`.
 - Another module's agent: add its id to `ModuleDependencies(modules=(...))`,
   then `await self.engine.modules["<id>"].get_agent("<Name>")`.
+- An app: `abi new app <name> apps` from this folder. Nexus lists it on its
+  Apps page while the module runs. For a backend, bind an ASGI app (FastAPI)
+  in `on_initialized`: `self.expose_app("<name>", api)`; the page calls it
+  with relative URLs (`fetch("api/...")`), and
+  `request.scope["abi"]["user_id"]` is the signed-in user. Limits: 1 MiB per
+  request, 6 MiB per response, 60 s.
 
 SDK reference: the ABI repository's `libs/naas-abi-sdk/README.md`.

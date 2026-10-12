@@ -334,6 +334,21 @@ def test_new_agent_in_a_remote_module_is_an_sdk_agent(tmp_path: Path) -> None:
     assert "expose_agent" in result.output
 
 
+def test_new_app_in_a_remote_module_says_how_nexus_serves_it(tmp_path: Path) -> None:
+    from naas_abi_cli.cli.new.app import _new_app
+
+    root = _project(tmp_path)
+    _invoke(_new_module, root, "research")
+    apps = root / "src" / "research" / "apps"
+
+    result = _invoke(_new_app, apps, "reports")
+
+    assert result.exit_code == 0, result.output
+    assert (apps / "reports" / "manifest.json").is_file()
+    assert "/app-html/remote/<module_id>/reports/" in result.output
+    assert 'expose_app("reports", app)' in result.output
+
+
 def test_new_agent_in_an_in_engine_module_is_a_core_agent(tmp_path: Path) -> None:
     root = _project(tmp_path)
     _invoke(_new_module, root, "legacy", "--in-engine")

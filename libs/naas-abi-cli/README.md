@@ -74,7 +74,8 @@ token signer, an app scaffold and offline tests.
   ontologies); add it under `modules:`.
 
 Inside a remote module, `abi new agent` writes an SDK agent and `abi new app`
-works (Nexus does not list remote modules' apps yet); `abi new workflow`,
+adds an app the module serves through Nexus, with an optional backend
+(`self.expose_app(name, asgi_app)`); `abi new workflow`,
 `pipeline`, `integration` and `orchestration` scaffold core code, so they
 refuse and say what to use instead.
 
