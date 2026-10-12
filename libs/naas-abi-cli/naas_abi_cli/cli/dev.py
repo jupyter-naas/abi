@@ -11,21 +11,23 @@ Managed services:
   - dagster     (Dagster dev UI)
   - nexus-web   (Next.js dev server)
 
-Optional (not started by default — pass `--service nats` to include):
-  - nats        (NATS/JetStream, for the Stage 1 NATS-distributed-modules
-                 work; requires the `nats-server` binary on PATH)
+Added by a mode or a flag:
+  - nats        (NATS/JetStream; requires the `nats-server` binary on PATH)
   - jaeger      (Jaeger v2, OpenTelemetry traces; requires the `jaeger` binary)
 
-`abi dev up --with-nats` starts nats and runs the engine in NATS mode;
-`--with-tracing` starts a native Jaeger and has the engine export spans to it.
-The project config is left untouched: a generated overlay
-(`.abi/dev/dev.overlay.yaml`, via ABI_CONFIG_OVERLAY) adds the `nats:` and
-`telemetry:` blocks.
+`abi dev up` runs the engine in NATS mode by default: it starts nats first and
+leaves dagster out (module jobs replace it, and a second engine would compete
+for the serving lease). `--without-nats` runs the engine in-process, with
+dagster and without the broker or the modules. `--with-tracing` starts a
+native Jaeger and has the engine export spans to it. The project config is
+left untouched: a generated overlay (`.abi/dev/dev.overlay.yaml`, via
+ABI_CONFIG_OVERLAY) adds the `nats:` and `telemetry:` blocks, or, with
+`--without-nats`, turns off the project's own `nats:` block.
 
-With `--with-nats`, the SDK modules listed under `dev.modules` in the project
-config start once the api is ready, each supervised (restarted when it exits
-on its own; see `dev_modules.py`). They are named like services:
-`--service <name>`, `abi dev logs <name>`, `abi dev down --service <name>`.
+In NATS mode, the SDK modules listed under `dev.modules` in the project config
+start once the api is ready, each supervised (restarted when it exits on its
+own; see `dev_modules.py`). They are named like services: `--service <name>`,
+`abi dev logs <name>`, `abi dev down --service <name>`.
 """
 
 from __future__ import annotations
@@ -66,6 +68,7 @@ from naas_abi_cli.cli.admin_credentials import (
     nats_login,
 )
 from naas_abi_cli.cli.dev_modules import (
+    configured_nats,
     load_dev_modules,
     module_command,
     module_environment,
@@ -140,10 +143,8 @@ ALT_NEXUS_WEB_DIR = ALT_NEXUS_ROOT / "apps" / "web"
 # the API URL is available when Next.js starts polling it.
 ALL_SERVICES = ("oxigraph", "api", "dagster", "nexus-web")
 
-# Selectable via `--service`, but not part of the default `abi dev up` set --
-# nothing reads these unless you ask for them (config.yaml's bus_adapter
-# still defaults to "python_queue", not "nats_jetstream"). Add explicitly:
-# `abi dev up --service api --service nats`.
+# Selectable via `--service`, and added by their mode: nats in NATS mode (the
+# default; `--without-nats` leaves it out), jaeger with `--with-tracing`.
 OPTIONAL_SERVICES = ("nats", "jaeger")
 
 # nats-server refuses any single message above `max_payload` (1 MB by default),
@@ -162,7 +163,7 @@ KNOWN_SERVICES = ALL_SERVICES + OPTIONAL_SERVICES
 # connects to it while booting. Stopping goes the other way round.
 START_ORDER = ("oxigraph", "nats", "jaeger", "api", "dagster", "nexus-web")
 
-# The overlay `--with-nats` hands the engine through this variable.
+# The overlay `abi dev up` hands the engine through this variable.
 CONFIG_OVERLAY_ENV = "ABI_CONFIG_OVERLAY"
 DEV_OVERLAY_FILENAME = "dev.overlay.yaml"
 
@@ -424,10 +425,47 @@ def _nats_url(ports: dict[str, int]) -> str:
     return f"nats://{PROBE_HOST}:{ports['nats']}"
 
 
+def _project_config() -> Path | None:
+    """The config the dev engine loads (EngineConfiguration.configuration_file)."""
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        EngineConfiguration,
+    )
+
+    try:
+        return Path(EngineConfiguration.configuration_file())
+    except FileNotFoundError:
+        return None
+
+
+def _project_nats() -> dict | None:
+    """The project config's own `nats:` block (secrets left empty); None
+    without one, or when the config cannot be read here (the engine reports
+    that itself when it loads)."""
+    import jinja2
+    import yaml
+
+    config = _project_config()
+    if config is None:
+        return None
+    try:
+        return configured_nats(config)
+    except (OSError, ValueError, jinja2.TemplateError, yaml.YAMLError):
+        return None
+
+
 def _discovery_project() -> str:
-    """Discovery project for the dev engine: the project folder name, sanitized."""
+    """Discovery project for the dev engine: the one the project config names
+    (its remote modules default to it), else the project folder name, sanitized."""
+    discovery = (_project_nats() or {}).get("discovery")
+    configured = discovery.get("project") if isinstance(discovery, dict) else None
+    if isinstance(configured, str) and configured:
+        return configured
     name = re.sub(r"[^A-Za-z0-9_-]+", "-", _project_root().name).strip("-")
     return (name or "dev")[:64]
+
+
+def _project_declares_nats() -> bool:
+    return _project_nats() is not None
 
 
 def _jaeger_ports(query_port: int) -> dict[str, int]:
@@ -444,15 +482,19 @@ def _write_dev_overlay(
     nats_secret: str | None,
     nats_password: str | None = None,
     tracing: bool = False,
+    nats_off: bool = False,
 ) -> Path:
     """The blocks the engine merges over the project config (ABI_CONFIG_OVERLAY).
 
     `nats:` (and the JetStream bus) when `nats_secret` is given, logged in as the
-    broker user `abi` with `nats_password`; `telemetry:` when `tracing`. JSON is
-    valid YAML, so no YAML writer is needed. Holds the JWT secret and the
-    password: owner-only.
+    broker user `abi` with `nats_password`; `nats: null` with `nats_off`, which
+    turns a project's own block off (`--without-nats`); `telemetry:` when
+    `tracing`. JSON is valid YAML, so no YAML writer is needed. Holds the JWT
+    secret and the password: owner-only.
     """
     overlay: dict = {}
+    if nats_off:
+        overlay["nats"] = None
     if nats_secret is not None:
         if not nats_password:
             raise ValueError("The dev broker needs the engine's password (NATS_ABI_PASSWORD)")
@@ -486,7 +528,7 @@ def _write_dev_overlay(
     path.touch(mode=0o600, exist_ok=True)
     path.chmod(0o600)
     path.write_text(
-        "# Generated by `abi dev up --with-nats/--with-tracing`; rewritten on every start.\n"
+        "# Generated by `abi dev up`; rewritten on every start.\n"
         + json.dumps(overlay, indent=2)
         + "\n",
         encoding="utf-8",
@@ -569,6 +611,24 @@ def _nats_server_config(passwords: dict[str, str]) -> str:
     )
 
 
+NATS_SERVER_MISSING = (
+    "`nats-server` is not on PATH, and `abi dev up` runs the engine on NATS. "
+    "Install it (`brew install nats-server` on macOS, `go install "
+    "github.com/nats-io/nats-server/v2@latest`, or a binary from "
+    "https://github.com/nats-io/nats-server/releases) and retry, or run the "
+    "engine in-process with `abi dev up --without-nats`."
+)
+
+
+def _nats_server_binary() -> str:
+    """The `nats-server` binary; fails with an install hint rather than
+    falling back to in-process mode."""
+    binary = shutil.which("nats-server")
+    if binary is None:
+        raise click.ClickException(NATS_SERVER_MISSING)
+    return binary
+
+
 def _launch_nats(spec: ServiceSpec) -> int:
     """Launch a native `nats-server` process with JetStream enabled.
 
@@ -578,14 +638,7 @@ def _launch_nats(spec: ServiceSpec) -> int:
     auto-installed; matches how nexus-web already requires `pnpm`/`npx` on
     PATH rather than vendoring Node.
     """
-    binary = shutil.which("nats-server")
-    if binary is None:
-        raise click.ClickException(
-            "`nats-server` is not on PATH. Install it (e.g. `brew install "
-            "nats-server` on macOS, or see https://github.com/nats-io/"
-            "nats-server/releases) and retry, or drop `--service nats` to "
-            "run without it."
-        )
+    binary = _nats_server_binary()
     store_path = _project_root() / "storage" / "nats"
     store_path.mkdir(parents=True, exist_ok=True)
     # Rewritten on every launch so a stale copy can never pin an old limit.
@@ -999,10 +1052,10 @@ def _module_overlay(config_overlay: Path | None) -> dict:
     """The NATS dev stack modules connect to: this run's overlay or the last one."""
     path = config_overlay or _dev_dir() / DEV_OVERLAY_FILENAME
     overlay = read_overlay(path) if path.exists() else {}
-    if "nats" not in overlay:
+    if not overlay.get("nats"):
         raise click.ClickException(
-            "dev.modules run against the NATS dev stack: "
-            "start it with `abi dev up --with-nats` first."
+            "dev.modules run against the NATS dev stack: start it with "
+            "`abi dev up` first (not `--without-nats`)."
         )
     return overlay
 
@@ -1772,9 +1825,14 @@ def _services_for(
     services: tuple[str, ...], *, with_nats: bool, with_tracing: bool = False
 ) -> list[str]:
     """Services `abi dev up` starts. With NATS, dagster is left out unless asked
-    for: a second engine on the bus would serve every kernel service twice, and
-    module jobs replace its schedules. With tracing, jaeger is added."""
-    extra = (("nats",) if with_nats else ()) + (("jaeger",) if with_tracing else ())
+    for: a second engine would compete for the serving lease and for discovery,
+    and module jobs replace its schedules. nats comes with an engine (api,
+    dagster): a selection without one, such as nexus-web, needs no broker.
+    With tracing, jaeger is added."""
+    engine = not services or any(s in ("api", "dagster") for s in services)
+    extra = (("nats",) if with_nats and engine else ()) + (
+        ("jaeger",) if with_tracing else ()
+    )
     if services:
         return _validate_services((*services, *extra))
     defaults = [s for s in ALL_SERVICES if not (with_nats and s == "dagster")]
@@ -1799,8 +1857,8 @@ def dev() -> None:
     multiple=True,
     help=(
         "Limit to the given service(s) or dev module(s). Repeat the flag. "
-        f"Default: start {', '.join(ALL_SERVICES)} ({', '.join(OPTIONAL_SERVICES)} "
-        "available but opt-in), plus every `dev.modules` entry with --with-nats."
+        "Default: oxigraph, nats, api, nexus-web, then every `dev.modules` "
+        "entry (--without-nats: oxigraph, api, dagster, nexus-web)."
     ),
 )
 @click.option(
@@ -1822,15 +1880,16 @@ def dev() -> None:
     ),
 )
 @click.option(
-    "--with-nats",
+    "--with-nats/--without-nats",
     "with_nats",
-    is_flag=True,
-    default=False,
+    default=True,
     help=(
-        "Run the engine in NATS mode: start nats first and give the api the "
-        "project config plus a generated `nats:` overlay (discovery, monitoring, "
-        "jobs), then the SDK modules of `dev.modules`. Dagster is left out "
-        "unless selected with --service."
+        "NATS mode (default): start nats first and give the api the project "
+        "config plus a generated `nats:` overlay (discovery, monitoring, jobs), "
+        "then the SDK modules of `dev.modules`; dagster is left out unless "
+        "selected with --service. Needs `nats-server` on PATH. "
+        "--without-nats runs the engine in-process, as before NATS, even when "
+        "the project config has a `nats:` block."
     ),
 )
 @click.option(
@@ -1862,20 +1921,21 @@ def dev_up(
     modules = _dev_modules()
     core, named_modules = _split_selection(services, modules)
     if services:
-        # Only what was named, plus nats/jaeger when their flag asks for them.
+        # Only what was named, plus nats/jaeger when the mode asks for them.
+        # Modules named alone join the running stack: no broker of their own.
         selected = (
             _services_for(core, with_nats=with_nats, with_tracing=with_tracing)
             if core
-            else [
-                s
-                for s in START_ORDER
-                if (s == "nats" and with_nats) or (s == "jaeger" and with_tracing)
-            ]
+            else (["jaeger"] if with_tracing else [])
         )
         to_run = named_modules
     else:
         selected = _services_for((), with_nats=with_nats, with_tracing=with_tracing)
         to_run = list(modules) if with_nats else []
+    if "nats" in selected:
+        _nats_server_binary()  # before anything starts
+    # --without-nats on a project whose config enables NATS: turn it off too.
+    nats_off = not with_nats and _project_declares_nats()
     instance = _load_or_create_instance()
     ports: dict[str, int] = instance["ports"]
     _ensure_storage_layout()
@@ -1889,7 +1949,7 @@ def dev_up(
     started: list[ServiceSpec] = []
     try:
         for name in selected:
-            if (with_nats or with_tracing) and name in ("api", "dagster") and config_overlay is None:
+            if (with_nats or with_tracing or nats_off) and name in ("api", "dagster") and config_overlay is None:
                 # Written once nats/jaeger are up, with the ports they actually bound.
                 env_path = _project_root() / ".env"
                 secret = ensure_nats_secret(env_path) if with_nats else None
@@ -1897,7 +1957,11 @@ def dev_up(
                     ensure_nats_passwords(env_path)["NATS_ABI_PASSWORD"] if with_nats else None
                 )
                 config_overlay = _write_dev_overlay(
-                    ports, nats_secret=secret, nats_password=password, tracing=with_tracing
+                    ports,
+                    nats_secret=secret,
+                    nats_password=password,
+                    tracing=with_tracing,
+                    nats_off=nats_off,
                 )
             spec = _start_service(name, ports, log_level, selected, config_overlay)
             started.append(spec)
@@ -1960,6 +2024,8 @@ def dev_up(
                 f"  NATS mode (discovery project {_discovery_project()!r}, "
                 f"monitoring http://{BROWSER_HOST}:{_nats_monitor_port(ports['nats'])})"
             )
+        if nats_off:
+            click.echo("  in-process: the config's `nats:` block is off (--without-nats)")
         if with_tracing:
             click.echo(f"  tracing to Jaeger: http://{BROWSER_HOST}:{ports['jaeger']}")
 

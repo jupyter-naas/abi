@@ -1,4 +1,4 @@
-"""The ``dev:`` block: SDK modules ``abi dev up --with-nats`` runs next to the engine.
+"""The ``dev:`` block: SDK modules ``abi dev up`` runs next to the engine (NATS mode).
 
 The engine validates the block (so a typo fails at load) and otherwise ignores
 it: it is for the dev CLI, which spawns each enabled module as
@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class DevModuleConfiguration(BaseModel):
-    """One SDK module (remote, NATS-only) run by ``abi dev up --with-nats``."""
+    """One SDK module (remote, NATS-only) run by ``abi dev up`` in NATS mode."""
 
     model_config = ConfigDict(extra="forbid")
 

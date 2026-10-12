@@ -571,7 +571,7 @@ class GlobalConfig(BaseModel):
 _cached_configuration: "EngineConfiguration | None" = None
 
 # Path to a plain YAML file deep-merged over the selected config after templating,
-# e.g. the `nats:` block `abi dev up --with-nats` adds to a project's config.yaml.
+# e.g. the `nats:` block `abi dev up` (NATS mode) adds to a project's config.yaml.
 CONFIG_OVERLAY_ENV = "ABI_CONFIG_OVERLAY"
 
 
@@ -647,7 +647,7 @@ class EngineConfiguration(BaseModel):
 
     opencode: OpencodeConfiguration = OpencodeConfiguration()
 
-    # Validated here, used only by `abi dev up --with-nats` (EngineConfiguration_Dev).
+    # Validated here, used only by `abi dev up` in NATS mode (EngineConfiguration_Dev).
     dev: DevConfiguration = Field(default_factory=DevConfiguration)
 
     def ensure_default_modules(self) -> None:

@@ -1,9 +1,9 @@
-"""SDK modules `abi dev up --with-nats` runs next to the engine.
+"""SDK modules `abi dev up` runs next to the engine in NATS mode (the default).
 
 Declared under `dev.modules` in the project config (EngineConfiguration_Dev).
 Each runs as `python -m <module> <args>` under `dev_supervisor`, which restarts
 it when it exits on its own. Its environment carries the dev broker from the
-overlay `abi dev up --with-nats` generates:
+overlay `abi dev up` generates:
 
 - ``ABI_NATS_URL``, logged in as the broker user ``module``,
   ``NATS_JWT_SECRET`` and ``ABI_DISCOVERY_PROJECT``;
