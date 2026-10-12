@@ -30,7 +30,7 @@ def test_new_module_prints_importable_namespace(
     """
     monkeypatch.chdir(tmp_path)
 
-    new_module("my-test-module", given_path)
+    new_module("my-test-module", given_path, kind="in-engine")
 
     stdout = capsys.readouterr().out
     assert f"  - module: {expected_namespace}" in stdout
@@ -41,6 +41,6 @@ def test_new_module_prints_importable_namespace(
 def test_new_module_quiet_prints_nothing(tmp_path, monkeypatch, capsys) -> None:
     monkeypatch.chdir(tmp_path)
 
-    new_module("my-test-module", ".", quiet=True)
+    new_module("my-test-module", ".", quiet=True, kind="in-engine")
 
     assert capsys.readouterr().out == ""

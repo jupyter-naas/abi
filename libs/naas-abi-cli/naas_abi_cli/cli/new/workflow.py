@@ -6,6 +6,7 @@ import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
 from .new import new
+from .remote_module import refuse_in_remote_module
 from .utils import to_pascal_case
 
 
@@ -13,6 +14,7 @@ from .utils import to_pascal_case
 @click.argument("workflow_name", required=True)
 @click.argument("workflow_path", required=False, default=".")
 def _new_workflow(workflow_name: str, workflow_path: str = "."):
+    refuse_in_remote_module("workflow", workflow_path)
     new_workflow(workflow_name, workflow_path)
 
 
