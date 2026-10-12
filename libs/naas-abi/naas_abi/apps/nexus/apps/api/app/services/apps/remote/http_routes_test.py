@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from naas_abi.apps.nexus.apps.api.app.services.apps.remote import http
+from naas_abi.apps.nexus.apps.api.app.services.apps.remote import http_routes as http
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters.in_memory import (
     InMemoryRemoteAppDirectory,
 )
@@ -94,13 +94,81 @@ def test_unknown_apps_are_404(forwarded):
     assert response.status_code == 404
 
 
-def test_request_bodies_above_1_mib_are_refused(forwarded):
-    response = _client().post(
-        "/app-html/remote/acme.research/console/upload", content=b"x" * (1024 * 1024 + 1)
+def test_an_upload_above_the_apps_limit_is_refused(monkeypatch):
+    small = RemoteApp("acme.research", "console", max_upload_bytes=1000)
+
+    async def never(request):
+        raise AssertionError("not forwarded")
+
+    monkeypatch.setattr(
+        http, "get_remote_app_directory", lambda: InMemoryRemoteAppDirectory({small: never})
     )
+    monkeypatch.setattr(http, "_user_id", lambda request: "")
+
+    response = _client().put("/app-html/remote/acme.research/console/f", content=b"x" * 1001)
 
     assert response.status_code == 413
-    assert forwarded == []
+
+
+def test_a_large_upload_streams_and_a_small_one_is_inline(monkeypatch):
+    received = []
+
+    async def handler(request: AppRequest) -> AppResponse:
+        if request.body_stream is None:
+            received.append(("inline", len(request.body)))
+        else:
+            size = sum([len(c) async for c in request.body_stream])
+            received.append(("stream", size, request.max_body_bytes))
+        return AppResponse(200, (), b"ok")
+
+    monkeypatch.setattr(
+        http, "get_remote_app_directory", lambda: InMemoryRemoteAppDirectory({CONSOLE: handler})
+    )
+    monkeypatch.setattr(http, "_user_id", lambda request: "")
+    client = _client()
+
+    assert (
+        client.put("/app-html/remote/acme.research/console/f", content=b"x" * 1000).status_code
+        == 200
+    )
+    big = b"y" * (3 * 1024 * 1024)
+    assert client.put("/app-html/remote/acme.research/console/f", content=big).status_code == 200
+
+    assert received == [("inline", 1000), ("stream", len(big), CONSOLE.upload_limit)]
+
+
+def test_a_streamed_answer_reaches_the_browser(monkeypatch):
+    async def handler(request: AppRequest) -> AppResponse:
+        async def events():
+            for index in range(3):
+                yield f"data: {index}\n\n".encode()
+
+        return AppResponse(200, (("content-type", "text/event-stream"),), body_stream=events())
+
+    monkeypatch.setattr(
+        http, "get_remote_app_directory", lambda: InMemoryRemoteAppDirectory({CONSOLE: handler})
+    )
+    monkeypatch.setattr(http, "_user_id", lambda request: "")
+
+    response = _client().get("/app-html/remote/acme.research/console/events")
+
+    assert response.headers["content-type"] == "text/event-stream"
+    assert response.text == "data: 0\n\ndata: 1\n\ndata: 2\n\n"
+
+
+def test_uploads_to_one_module_are_capped():
+    uploads = http._Uploads()
+    slots = [uploads.slot("m") for _ in range(http.MAX_UPLOADS_PER_MODULE)]
+    for slot in slots:
+        slot.__enter__()
+    with pytest.raises(http.HTTPException) as refused, uploads.slot("m"):
+        pass
+    assert refused.value.status_code == 503
+    with uploads.slot("other"):
+        pass
+    for slot in slots:
+        slot.__exit__(None, None, None)
+    assert uploads.active == {}
 
 
 def test_the_app_root_redirects_to_its_folder(forwarded):

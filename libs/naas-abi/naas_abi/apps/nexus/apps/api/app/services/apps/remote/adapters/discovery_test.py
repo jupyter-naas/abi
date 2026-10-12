@@ -46,7 +46,7 @@ def _directory(discovery, calls, answers, now=None):
 
     clock = now or [0.0]
     return DiscoveryRemoteAppDirectory(
-        lambda: (discovery, object(), "acme"),
+        lambda: (discovery, object(), object(), "acme"),
         clock=lambda: clock[0],
         call_app=call_app,
     )
