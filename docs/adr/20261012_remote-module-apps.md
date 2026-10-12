@@ -1,7 +1,7 @@
-# Apps published by remote modules
+# Apps served by remote modules over NATS
 
 ## Status
-Proposed. Not implemented: this note asks for a decision first.
+Accepted.
 
 ## Date
 2026-10-12
@@ -9,100 +9,135 @@ Proposed. Not implemented: this note asks for a decision first.
 ## Context
 Nexus builds its app catalog from the files of the modules the engine loads:
 `apps__primary_adapter__FastAPI` walks every loaded module's
-`apps/<app>/manifest.json`, caches the result for the life of the process, and
-serves `html:` entry points and their assets (`.html`, `.js`, `.css`, images,
-fonts, `.json`) under the authenticated `/app-html/<module path>/<app>/` route.
+`apps/<app>/manifest.json`, and `/app-html/<module path>/<app>/` serves the
+entry point and its assets from disk. Access needs a Nexus JWT, a scoped
+`app-html` JWT or `ABI_API_KEY`; a scoped token opened with `?token=` is kept in
+an HttpOnly cookie on `/app-html/`, so an app's later requests carry it too.
 
 Remote modules (`naas-abi-sdk`, created by `abi new module`) run in their own
 process or container. The engine never sees their files, so their `apps/`
-folder, which the scaffold creates, never reaches Nexus. Their agents and jobs
-already do: discovery carries `AgentDescriptor` and `JobDescriptor` in each
-`ModuleDescriptor`, and Nexus lists remote agents through
-`services/agents/remote` (a port, a discovery adapter, `provider = "remote"`).
+folder never reaches Nexus. Their agents and jobs do: discovery carries them
+in each `ModuleDescriptor`, and Nexus lists remote agents through
+`services/agents/remote`.
 
-Constraints:
+Requirements:
 
+- A module must not need a port, a hostname, a route or TLS to ship an app.
+  NATS is its only connection.
+- Apps must be able to have a backend (API routes next to the HTML), so that
+  complex apps can be built on Nexus by modules.
 - The discovery registry is one bounded snapshot: 256 live instances and
-  512 KiB per project (20260923_module-discovery-registry.md). Replicas repeat
-  their descriptor. App files cannot travel in it, and manifests only if small.
-- A remote module reaches the engine only through NATS. Nexus must not need a
-  network route to the module (no HTTP from Nexus to a module container).
-- One NATS message is at most 8 MB; larger payloads use the chunked transfers
-  (20260924_chunked-nats-transfers.md).
-- Replicas of one contract must declare identical descriptors.
+  512 KiB per project (20260923_module-discovery-registry.md). App files cannot
+  travel in it.
+- One NATS message is at most 8 MB.
 
-## Options
+## Decision
+**Nexus stays the only HTTP entry point and forwards app requests to the
+module over NATS. The module answers them like a web server.**
 
-**A. Descriptor lists the apps; the module serves the files over NATS.**
-`ModuleDescriptor.apps` (new field 8) holds an `AppDescriptor` per app. Nexus
-proxies `/app-html/remote/<module_id>/<app>/<path>` to the module with a new
-`app.assets.v1` request (an `AppHost` next to `AgentHost`, queue group per
-module, chunked transfer above 8 MB).
-Pro: always the running code's files; nothing to clean up.
-Con: every page load and asset is a NATS round trip to a module process; the
-app is down whenever the module is; new SDK host, new subject family, new
-Nexus proxy with streaming.
+### Discovery
+`ModuleDescriptor.apps = 8` lists the module's apps:
 
-**B. Descriptor lists the apps; the module publishes its files to the
-engine's object storage, and Nexus serves them from there.**
-Before it registers, the module uploads `apps/<app>/**` (browser asset suffixes
-only) to object storage under a content-addressed prefix,
-`apps/<module_id>/<digest>/<app>/<path>`, unless a marker object for that
-digest exists. The descriptor carries the digest. Nexus serves
-`/app-html/remote/<module_id>/<app>/<path>` by reading the digest of a READY
-instance and then the object.
-Pro: no new RPC: object storage over NATS exists, including chunked uploads;
-replicas with the same files share one copy; assets are cacheable (the digest
-is in the path); Nexus keeps a static-file shape.
-Con: an upload on the first start of each version; old digests need pruning;
-the module must declare `object_storage` when it has apps.
+```proto
+message AppDescriptor {
+  string name = 1;          // URL segment, ^[A-Za-z0-9_-]{1,64}$
+  string title = 2;
+  string description = 3;
+  string category = 4;
+  string icon_emoji = 5;
+  string entry = 6;         // path of the entry page, default "index.html"
+  uint32 contract_major = 7;
+}
+```
 
-**C. The module runs an HTTP server and Nexus reverse-proxies to it.**
-Rejected: it needs a network route from Nexus to each module and a second
-transport with its own authentication, against the NATS-only boundary.
+At most 16 apps per module and 4 KiB per descriptor, so apps stay a small part
+of the 512 KiB snapshot. Replicas of one contract must declare identical apps,
+as they do agents, jobs and models.
 
-## Proposed decision
-Option B.
+`authorize_app` (`AuthorizeAppRequest`/`Response`) works like
+`authorize_model`: the module asks discovery whether the caller's service token
+is valid and the app is declared on a READY instance holding its lease.
 
-- **SDK.** `AppDescriptor(name, title, description, category, icon_emoji,
-  entry, manifest_json)`, where `manifest_json` is the manifest minus the
-  fields Nexus already has, capped at 4 KiB per app and 8 apps per module so a
-  descriptor stays small in the 512 KiB snapshot. `BaseModule` finds `apps/`
-  next to the module's package (as core modules do) when `apps` is not
-  declared. `run_module` publishes the files after `on_initialized` and before
-  readiness, then registers with the digest. A module with apps but without
-  the `object_storage` dependency fails at startup with a clear message.
-- **Proto.** `ModuleDescriptor.apps = 8` (`repeated AppDescriptor`), and
-  `apps_digest = 9`. Older engines ignore unknown fields.
-- **Nexus.** An `apps/remote` port and discovery adapter, like
-  `agents/remote`. The catalog merges the static scan with a live discovery
-  read (cached briefly, not for the process lifetime). Remote apps carry
-  `provider: "remote"`, an id `remote/<module_id>/<app>`, and
-  `available = false` when no instance is READY. The `/app-html/` route
-  accepts `remote/<module_id>/<app>/<path>`, checks the same access token,
-  resolves the digest from a READY instance, and streams the object with the
-  existing suffix allow-list and a long `Cache-Control` (the path is
-  immutable).
-- **Clean-up.** A kernel job (`naas_abi_core.apps`, daily) deletes digests that
-  no registration has referenced for 7 days.
-- **CLI.** `abi new app` stops printing its "not listed yet" note, and the
-  remote module template declares `object_storage`.
+### Requests
+A new `abi.app.v1` package:
+
+```proto
+message Header { string name = 1; string value = 2; }
+message HttpRequest {
+  abi.common.v1.CallContext context = 1;
+  string app = 2;
+  string method = 3;
+  string path = 4;          // below the app's root, starting with "/"
+  string query = 5;
+  repeated Header headers = 6;
+  bytes body = 7;
+  string root_path = 8;     // where Nexus mounts the app
+  string user_id = 9;       // the signed-in Nexus user; empty with ABI_API_KEY
+}
+message HttpResponse {
+  abi.common.v1.CallError error = 1;
+  uint32 status = 2;
+  repeated Header headers = 3;
+  bytes body = 4;
+}
+```
+
+Requests go to `abi.mod.<project>.<instance_id>.app.<name>.http`, the
+instance-addressed shape model hosts use. A request body is at most 1 MiB and
+a response at most 6 MiB, below the 8 MB broker limit. Larger answers return
+502 with a clear message; streaming and WebSockets are later work.
+
+### SDK
+- `BaseModule` finds `apps/<name>/manifest.json` next to the module's package
+  and declares an `AppDescriptor` for each (title, description, category and
+  icon from the manifest).
+- An `AppHost`, started next to the agent and model hosts, answers each
+  request: it authorizes the caller (cached 5 s per token and app, as the agent
+  host does), serves a file from `apps/<name>/` when the path names one (the
+  same browser-asset suffixes Nexus allows), and otherwise passes the request
+  to the app's ASGI application when the module bound one with
+  `self.expose_app(name, asgi_app)` in `on_initialized`, else answers 404.
+- The ASGI app is called in process, without an HTTP server: FastAPI or
+  Starlette routes work as they are. `root_path` is set, so generated URLs
+  point back through Nexus. `request.scope["abi.user_id"]` holds the Nexus
+  user.
+
+### Nexus
+- The catalog adds the apps of READY remote instances, read from discovery and
+  cached for 10 seconds, not for the life of the process. Their id is
+  `remote/<module_id>/<app>` and their URL
+  `/app-html/remote/<module_id>/<app>/<entry>`.
+- `/app-html/remote/<module_id>/<app>/{path}` accepts every method, behind the
+  same `/app-html/` access check. It picks a READY instance, forwards the
+  request, and returns the response. It never forwards `Authorization` or the
+  access cookie: the module gets the user's id, not the user's credential.
+- The Next.js `/app-html/` proxy and Caddy already pass every method to the
+  API, so the web app needs no change.
+
+### CLI
+`abi new app` in a remote module no longer prints a "not listed yet" note. The
+remote module template shows how to bind a backend with `expose_app`.
+
+## Alternatives considered
+**Upload app files to the engine's object storage, served by Nexus.** No
+domain needed and apps survive module restarts, but only static files: no
+backend, so no complex apps. It also needs an upload step and a clean-up job.
+
+**The module serves HTTP itself and Nexus links or proxies to it.** Supports
+backends, but every module needs a network route, a hostname or path in Caddy,
+TLS, and its own check of Nexus tokens. Rejected: a module must only need NATS.
 
 ## Consequences
-- Remote modules ship apps the same way as in-engine ones: a folder with a
-  manifest. The catalog shows them while the module is registered.
-- An app keeps working while its module restarts or scales down, as long as a
-  registration still names its digest; it disappears when the module
-  unregisters for good.
-- Object storage holds one copy per app version until the clean-up job
-  removes it.
-- Apps whose manifest `url` is an absolute URL need no upload: only the
-  descriptor travels.
-- Not covered: apps with a backend of their own (FastAPI routes). A remote
-  module's backend logic is reached through its agents and jobs, or a later
-  `app.call.v1` request type.
-
-## Questions for approval
-1. Option B (object storage) rather than A (live NATS proxy)?
-2. Do the caps (4 KiB manifest, 8 apps per module) fit the apps you expect?
-3. Clean-up after 7 days unreferenced, by a kernel job on the engine?
+- A remote module ships an app the way an in-engine module does (a folder with
+  a manifest), and can add a backend in Python with no server of its own.
+- Each request is one NATS round trip to the module, about a millisecond on
+  the same network. Static files can be cached by browsers through the
+  module's `Cache-Control` headers.
+- An app is available while at least one instance of its module is READY, like
+  its agents.
+- All apps share the `/app-html/` origin and access cookie. A remote module's
+  app is trusted like an in-engine module's: modules hold a service token, and
+  only trusted modules should be run.
+- The user id a module receives is asserted by Nexus. It is as trustworthy as
+  the service-token boundary (Stage 1: a secret shared by the project).
+- Not covered yet: responses above 6 MiB, streaming responses, WebSockets.
