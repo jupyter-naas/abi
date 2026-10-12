@@ -535,3 +535,63 @@ def test_the_access_log_hides_the_grant():
 
     assert GRANT not in record.getMessage()
     assert "/app-remote/[grant]/acme.research/console/index.html?x=1" in record.getMessage()
+
+
+# -- what the app receives is what the browser sent ------------------------------
+
+
+def test_a_chunked_upload_above_the_apps_limit_is_refused(monkeypatch):
+    """No Content-Length to refuse it by, and small enough to travel inline."""
+    small = RemoteApp("acme.research", "console", max_upload_bytes=1000)
+
+    async def never(request):
+        raise AssertionError("not forwarded")
+
+    _directory(monkeypatch, never, small)
+
+    def chunks():
+        yield b"x" * 600
+        yield b"x" * 600
+
+    response = _client().put(f"{ROOT}/f", content=chunks())
+
+    assert response.status_code == 413
+    assert response.headers["content-security-policy"] == http.SANDBOX
+
+
+def test_only_the_nexus_token_leaves_the_query(forwarded):
+    response = _client().get(
+        f"{ROOT}/x?token=jwt&token=own&flag&q=a%2Bb+c",
+        headers={"Authorization": "Bearer jwt"},
+    )
+
+    assert response.status_code == 200
+    assert forwarded[0].query == "token=own&flag&q=a%2Bb+c"
+
+
+def test_a_nexus_token_leaves_the_query_whatever_authenticated_the_request(monkeypatch, forwarded):
+    from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
+
+    monkeypatch.setattr(auth_service.settings, "secret_key", SECRET)
+    session, _ = auth_service.create_access_token({"sub": "u-42"})
+
+    response = _client().get(
+        f"{ROOT}/x?token={session}&q=1", headers={"Authorization": "Bearer other"}
+    )
+
+    assert response.status_code == 200
+    assert forwarded[0].query == "q=1"
+
+
+def test_the_apps_cookies_pass_as_sent(forwarded):
+    prefix = http.APP_COOKIE_PREFIX
+    response = _client().get(
+        f"{ROOT}/x",
+        headers={
+            "Cookie": f'{prefix}theme="dark blue"; {APP_HTML_TOKEN_COOKIE}=jwt; '
+            f"nexus_session=s; {prefix}=x; {prefix}n=a%3Bb"
+        },
+    )
+
+    assert response.status_code == 200
+    assert dict(forwarded[0].headers)["cookie"] == 'theme="dark blue"; n=a%3Bb'

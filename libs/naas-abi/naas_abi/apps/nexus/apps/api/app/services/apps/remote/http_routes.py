@@ -19,7 +19,7 @@ import contextlib
 import logging
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime
-from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
+from urllib.parse import unquote_plus, urljoin, urlsplit
 
 from fastapi import HTTPException, Request
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
@@ -45,6 +45,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
 from naas_abi_core.apps.api.abi_api_key_auth import (
     APP_HTML_TOKEN_COOKIE,
     extract_abi_api_token,
+    is_abi_api_token_valid,
 )
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -114,23 +115,45 @@ def _forwarded_headers(request: Request) -> tuple[tuple[str, str], ...]:
     headers = [
         (name, value) for name, value in request.headers.items() if _is_forwarded(name.lower())
     ]
+    # Only the app's own cookies pass, under their own names and with their
+    # values as the browser sent them (quoted ones included).
     cookies = "; ".join(
-        f"{name[len(APP_COOKIE_PREFIX) :]}={value}"
-        for name, value in request.cookies.items()
-        if name.startswith(APP_COOKIE_PREFIX) and len(name) > len(APP_COOKIE_PREFIX)
+        pair[len(APP_COOKIE_PREFIX) :]
+        for header in request.headers.getlist("cookie")
+        for pair in (part.strip() for part in header.split(";"))
+        if pair.startswith(APP_COOKIE_PREFIX) and pair.split("=", 1)[0].strip() != APP_COOKIE_PREFIX
     )
     if cookies:
         headers.append(("cookie", cookies))
     return tuple(headers)
 
 
+def _is_nexus_credential(value: str, request: Request) -> bool:
+    """The credential this request presented, the ABI_API_KEY, or any token
+    Nexus signed: whatever else authenticated the request."""
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import decode_token
+
+    return (
+        value == extract_abi_api_token(request)
+        or is_abi_api_token_valid(value)
+        or decode_token(value) is not None
+    )
+
+
 def _query(request: Request) -> str:
-    return urlencode(
-        [
-            (key, value)
-            for key, value in parse_qsl(request.url.query, keep_blank_values=True)
-            if key != "token"
-        ]
+    """The query as the browser sent it, less any Nexus credential in
+    ``token``: an app's own ``token`` parameter, and the encoding of every
+    other one, are kept."""
+    query = request.url.query
+    if not query:
+        return query
+    return "&".join(
+        part
+        for part in query.split("&")
+        if not (
+            unquote_plus(part.split("=", 1)[0]) == "token"
+            and _is_nexus_credential(unquote_plus(part.partition("=")[2]), request)
+        )
     )
 
 
@@ -266,6 +289,10 @@ async def serve_remote_app(
             status_code=413, detail=f"Upload exceeds {limit} bytes", headers=SECURITY_HEADERS
         )
     body, rest = await _read_head(request)
+    if len(body) > limit:  # chunked, so no Content-Length to refuse it by
+        raise HTTPException(
+            status_code=413, detail=f"Upload exceeds {limit} bytes", headers=SECURITY_HEADERS
+        )
     forwarded = AppRequest(
         method=request.method,
         path="/" + path,
