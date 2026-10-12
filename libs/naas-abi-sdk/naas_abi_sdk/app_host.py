@@ -92,6 +92,10 @@ async def call_app(
     )
 
 
+class _AppFailed(Exception):
+    """The app's own code failed: answered as APP_ERROR, never retried."""
+
+
 @dataclass
 class _Answer:
     status: int
@@ -194,6 +198,8 @@ class AppHost:
             else:
                 response.body = answer.body
         except RPCError as exc:
+            # Raised by this host before the app ran (draining, unauthorized, a
+            # bad request): Nexus may retry the retryable ones elsewhere.
             response = pb.HttpResponse()
             response.error.code, response.error.message = exc.code, str(exc)
         except Exception:
@@ -325,6 +331,11 @@ class AppHost:
         self._keep(call.task)
         try:
             answer = await call.answer()
+        except RPCError as exc:
+            call.task.cancel()
+            # The app ran: an RPCError it raised (a call it made failed) is its
+            # own failure, never a host code Nexus would retry elsewhere.
+            raise _AppFailed(f"App raised {exc.code}") from exc
         except BaseException:
             call.task.cancel()
             raise

@@ -226,6 +226,23 @@ def test_a_failing_backend_is_an_app_error(tmp_path):
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("code", ["MODULE_UNAVAILABLE", "UNAVAILABLE", "LEASE_EXPIRED"])
+def test_an_rpc_error_raised_by_the_app_is_an_app_error(tmp_path, code):
+    """Nexus resends retryable codes elsewhere, assuming the app never ran: an
+    app whose own downstream call failed must not have its POST run twice."""
+
+    async def calls_downstream(scope, receive, send):
+        raise RPCError(code, "downstream module gone")
+
+    async def scenario():
+        response = await _send(
+            _host(tmp_path, calls_downstream), _request("/x", method="POST")
+        )
+        assert response.error.code == "APP_ERROR"
+
+    asyncio.run(scenario())
+
+
 def test_lifespan_runs_startup_and_shutdown(tmp_path):
     events = []
 
