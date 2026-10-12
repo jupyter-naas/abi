@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.42.1 (2026-10-12)
+
+### Bug Fixes
+
+- Qa for testing files
+  ([`6241eac`](https://github.com/jupyter-naas/abi/commit/6241eac59eafbfb08d7f742bf27f767bc1c7c7ee))
+
+
 ## v2.42.0 (2026-10-09)
 
 ### Bug Fixes
