@@ -10,18 +10,105 @@ from pathlib import Path
 import pytest
 import yaml
 
-from naas_abi_cli.cli.deploy.local import _build_nexus_api_url, setup_local_deploy
+from naas_abi_cli.cli.deploy.local import (
+    _build_nexus_api_url,
+    project_uses_nats,
+    setup_local_deploy,
+)
 
 
-def test_nats_is_opt_in_in_repository_and_generated_compose(tmp_path):
-    setup_local_deploy(str(tmp_path), base_domain="localhost")
+def _services(compose: Path) -> dict:
+    return yaml.safe_load(compose.read_text(encoding="utf-8"))["services"]
+
+
+def _assert_nats_is_opt_in(services: dict) -> None:
+    assert services["nats"]["profiles"] == ["nats"]
+    for name, service in services.items():
+        if name != "nats" and not service.get("profiles"):
+            assert "nats" not in service.get("depends_on", {})
+
+
+def test_nats_stays_opt_in_in_the_repository_compose() -> None:
+    """The ABI repository's own stack is not a generated project."""
     repo_root = Path(__file__).resolve().parents[5]
-    for path in (repo_root / "docker-compose.yml", tmp_path / "docker-compose.yml"):
-        services = yaml.safe_load(path.read_text())["services"]
-        assert services["nats"]["profiles"] == ["nats"]
-        for name, service in services.items():
-            if name != "nats" and not service.get("profiles"):
-                assert "nats" not in service.get("depends_on", {})
+    _assert_nats_is_opt_in(_services(repo_root / "docker-compose.yml"))
+
+
+def test_a_generated_stack_runs_on_nats_by_default(tmp_path: Path) -> None:
+    setup_local_deploy(str(tmp_path), base_domain="localhost", nats=True)
+    services = _services(tmp_path / "docker-compose.yml")
+
+    assert "profiles" not in services["nats"]
+    assert services["abi"]["depends_on"]["nats"] == {"condition": "service_healthy"}
+    assert "rabbitmq" not in services["abi"]["depends_on"]
+    # Nothing uses RabbitMQ in NATS mode; it stays available on request.
+    assert services["rabbitmq"]["profiles"] == ["rabbitmq"]
+    # One engine per project: Dagster would be a second one (and a second
+    # discovery owner); module jobs replace its schedules.
+    assert "dagster" not in services
+    assert (
+        "dagster_home"
+        not in (
+            yaml.safe_load((tmp_path / "docker-compose.yml").read_text())["volumes"]
+        )
+    )
+    for name, service in services.items():
+        if name != "nats" and not service.get("profiles"):
+            assert service.get("image") or service.get("build"), name
+    assert len(_env_values(tmp_path / ".env")["NATS_JWT_SECRET"]) >= 32
+
+
+def test_a_classic_stack_keeps_nats_opt_in(tmp_path: Path) -> None:
+    setup_local_deploy(str(tmp_path), base_domain="localhost", nats=False)
+    services = _services(tmp_path / "docker-compose.yml")
+
+    _assert_nats_is_opt_in(services)
+    assert "dagster" in services
+    assert "profiles" not in services["rabbitmq"]
+    assert services["abi"]["depends_on"]["rabbitmq"] == {"condition": "service_healthy"}
+    assert "NATS_JWT_SECRET" not in _env_values(tmp_path / ".env")
+
+
+def _write_config(project: Path, *, nats: bool) -> None:
+    block = 'nats:\n  nats_url: "nats://nats:4222"\n' if nats else ""
+    (project / "config.local.yaml").write_text(
+        "api:\n  title: demo\n" + block, encoding="utf-8"
+    )
+
+
+def test_regenerating_an_older_project_does_not_switch_it_to_nats(
+    tmp_path: Path, capsys
+) -> None:
+    _write_config(tmp_path, nats=False)
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+    capsys.readouterr()
+
+    setup_local_deploy(str(tmp_path), base_domain="localhost", regenerate=True)
+
+    _assert_nats_is_opt_in(_services(tmp_path / "docker-compose.yml"))
+    assert "docs/migrate-to-nats.md" in capsys.readouterr().out
+
+
+def test_regenerating_a_nats_project_keeps_it_on_nats(tmp_path: Path, capsys) -> None:
+    _write_config(tmp_path, nats=True)
+    setup_local_deploy(str(tmp_path), base_domain="localhost", regenerate=True)
+
+    assert "profiles" not in _services(tmp_path / "docker-compose.yml")["nats"]
+    assert "migrate-to-nats" not in capsys.readouterr().out
+
+
+def test_project_mode_is_read_from_the_compose_config_first(tmp_path: Path) -> None:
+    assert project_uses_nats(str(tmp_path)) is None
+    (tmp_path / "config.yaml").write_text("nats:\n  jwt_secret: x\n")
+    assert project_uses_nats(str(tmp_path)) is True
+    # docker-compose runs config.local.yaml, so it decides.
+    _write_config(tmp_path, nats=False)
+    assert project_uses_nats(str(tmp_path)) is False
+
+
+def test_a_commented_nats_block_is_not_nats_mode(tmp_path: Path) -> None:
+    (tmp_path / "config.local.yaml").write_text("# nats:\n#   nats_url: x\n")
+    assert project_uses_nats(str(tmp_path)) is False
 
 
 def test_build_nexus_api_url_uses_abi_port_for_localhost() -> None:

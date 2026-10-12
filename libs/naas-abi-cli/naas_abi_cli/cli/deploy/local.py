@@ -14,6 +14,7 @@ import naas_abi_cli
 from ..admin_credentials import (
     ensure_admin_credentials,
     ensure_nats_passwords,
+    ensure_nats_secret,
     generate_admin_password,
 )
 from ..utils.Copier import Copier
@@ -21,6 +22,12 @@ from ..utils.Copier import Copier
 LOCAL_ENV_MARKER = "# Added by abi deploy local command execution"
 HEADSCALE_SERVICE_MARKER = "  headscale:"
 BACKUP_DIRECTORY = os.path.join(".abi-backups", "deploy-local")
+MIGRATE_TO_NATS_DOC = (
+    "https://github.com/jupyter-naas/abi/blob/main/docs/migrate-to-nats.md"
+)
+# The configs a project's mode is read from, the one docker-compose runs first.
+_PROJECT_CONFIGS = ("config.local.yaml", "config.yaml")
+_NATS_BLOCK = re.compile(r"^nats\s*:", re.MULTILINE)
 
 DEFAULT_ENV_VALUES: dict[str, str] = {
     "BASE_DOMAIN": "localhost",
@@ -147,6 +154,27 @@ def _ensure_headscale_service(docker_compose_target_path: str) -> None:
 
     with open(docker_compose_target_path, "w", encoding="utf-8") as compose_file:
         compose_file.write(compose_with_service)
+
+
+def project_uses_nats(project_path: str) -> bool | None:
+    """Whether the project's config runs the engine on NATS: a top-level
+    ``nats:`` block in ``config.local.yaml`` (what docker-compose runs), else in
+    ``config.yaml``. None when the project has neither file yet."""
+    for name in _PROJECT_CONFIGS:
+        path = os.path.join(project_path, name)
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as config_file:
+                return _NATS_BLOCK.search(config_file.read()) is not None
+    return None
+
+
+def _print_classic_stack_notice() -> None:
+    print(
+        "This project runs without NATS (its config has no `nats:` block), so "
+        "the stack keeps RabbitMQ and Dagster, and the `nats` service stays "
+        "behind the `nats` profile.\n"
+        f"To move it to NATS, follow {MIGRATE_TO_NATS_DOC}\n"
+    )
 
 
 def _compose_project_network(project_path: str) -> str:
@@ -422,8 +450,21 @@ def setup_local_deploy(
     base_domain: str | None = None,
     regenerate: bool = False,
     backup: bool = True,
+    nats: bool | None = None,
 ) -> None:
+    """Render the docker-compose stack into ``project_path``.
+
+    ``nats`` picks the stack: True runs the engine on the `nats` service (no
+    RabbitMQ, no Dagster), False keeps the classic stack. None (``abi deploy
+    local``) follows the project's config, so regenerating an older project
+    never switches it to NATS; a directory without a config gets NATS.
+    """
     project_path = os.path.abspath(os.path.expanduser(project_path))
+    if nats is None:
+        detected = project_uses_nats(project_path)
+        nats = True if detected is None else detected
+        if not nats:
+            _print_classic_stack_notice()
 
     deploy_path = os.path.join(project_path, ".deploy")
     docker_compose_template_path = os.path.join(deploy_path, "docker-compose.yml")
@@ -464,6 +505,7 @@ def setup_local_deploy(
         "NEXUS_API_URL": nexus_api_url,
         "INCLUDE_HEADSCALE": include_headscale,
         "INCLUDE_CODING": include_coding,
+        "NATS": nats,
         "CODING_WORKSPACE_DOCKER_NETWORK": coding_network,
         "POSTGRES_PASSWORD": str(uuid4()),
         "MINIO_ROOT_PASSWORD": str(uuid4()),
@@ -549,6 +591,9 @@ def setup_local_deploy(
     ensure_admin_credentials(Path(local_env_target_path))
     # The NATS broker's users (nats.conf), also when the nats profile is off.
     ensure_nats_passwords(Path(local_env_target_path))
+    if nats:
+        # Signs the service tokens of the engine and of the modules joining it.
+        ensure_nats_secret(Path(local_env_target_path))
 
     persisted_public_api_host = (
         _get_env_var(local_env_target_path, "PUBLIC_API_HOST")

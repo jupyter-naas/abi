@@ -16,7 +16,21 @@ global_config:
   # remote host needs no inference hardware of its own.
   ai_mode: "cloud"
   public_api_host: "{{ secret.PUBLIC_API_HOST }}"
-
+{% endraw %}{% if nats %}
+# NATS mode. The broker runs next to the deployment; put its URL in
+# .env.remote as NATS_URL, logged in as the broker user `abi`:
+#   NATS_URL=nats://abi:<NATS_ABI_PASSWORD>@<host>:4222
+# Keep the broker on a private network: its traffic is not encrypted.
+nats:
+  nats_url: "{% raw %}{{ secret.NATS_URL }}{% endraw %}"
+  jwt_secret: "{% raw %}{{ secret.NATS_JWT_SECRET }}{% endraw %}"
+  # Exactly one engine per project hosts the module registry. Give any other
+  # engine a config without this block.
+  discovery:
+    project: "{{ project_name_snake }}"
+    lease_seconds: 180
+  # monitoring_url: "http://<host>:8222"  # the broker's monitoring port (no auth)
+{% endif %}{% raw %}
 opencode:
   auth_file_path: "~/.local/share/opencode/auth.json"
   # The coding agent reuses the same gateway key as the rest of the stack.
@@ -129,11 +143,13 @@ services:
       config:
         host: "{{ secret.QDRANT_HOST }}"
         port: "{{ secret.QDRANT_PORT }}"
+{% endraw %}{% if not nats %}{% raw %}
   bus:
     bus_adapter:
       adapter: "rabbitmq"
       config:
         rabbitmq_url: "amqp://{{ secret.RABBITMQ_USER }}:{{ secret.RABBITMQ_PASSWORD }}@{{ secret.RABBITMQ_HOST }}:{{ secret.RABBITMQ_PORT }}"
+{% endraw %}{% endif %}{% raw %}
   kv:
     kv_adapter:
       adapter: "redis"
