@@ -9,9 +9,11 @@ from click.testing import CliRunner
 
 from naas_abi_cli.cli.deploy.deploy import deploy
 from naas_abi_cli.cli.deploy.dokploy import (
+    CODING_SECRETS_FILE,
     COMPOSE_FILE,
     CONFIG_FILE,
     ENV_FILE,
+    SECRETS_FILE,
     DokployDeployError,
     setup_dokploy_deploy,
 )
@@ -51,11 +53,13 @@ nats:
 _DROPPED = ("caddy", "yasgui", "redis-commander", "service-portal", "graph-explorer")
 
 
-def _project(tmp_path: Path, *, nats: bool) -> Path:
-    project = tmp_path / "Demo Project"
+def _project(
+    tmp_path: Path, *, nats: bool, name: str = "Demo Project", config: str = _CONFIG
+) -> Path:
+    project = tmp_path / name
     project.mkdir()
     (project / "config.local.yaml").write_text(
-        _CONFIG.replace("{nats}", _NATS_BLOCK if nats else ""), encoding="utf-8"
+        config.replace("{nats}", _NATS_BLOCK if nats else ""), encoding="utf-8"
     )
     (project / "Dockerfile").write_text("FROM python:3.11\n", encoding="utf-8")
     return project
@@ -74,6 +78,12 @@ def _env(project: Path) -> dict[str, str]:
             key, value = line.split("=", 1)
             values[key.strip()] = value
     return values
+
+
+def _secret_adapters(project: Path) -> list:
+    text = (project / CONFIG_FILE).read_text(encoding="utf-8")
+    config = yaml.safe_load(re.sub(r"\{\{.*?\}\}", "x", text))
+    return config["services"]["secret"]["secret_adapters"]
 
 
 def _labels(service: dict) -> dict[str, str]:
@@ -149,14 +159,64 @@ def test_traefik_routes_each_host_to_its_service(
     if coding:
         assert targets["Host(`coder.${PUBLIC_WEB_HOST}`)"] == "coder"
         assert targets["Host(`git.${PUBLIC_WEB_HOST}`)"] == "forgejo"
+        apps = r"HostRegexp(`^[a-z0-9-]+\.coder\.${PUBLIC_WEB_HOST}$$`)"
         wildcard = [
             rule
             for service, rule in rules.values()
             if service == "coder" and rule.startswith("HostRegexp")
         ]
-        assert wildcard == [r"HostRegexp(`^[a-z0-9-]+\.coder\.${PUBLIC_WEB_HOST}$$`)"]
-        coder = _labels(services["coder"])
-        assert "*.coder.${PUBLIC_WEB_HOST}" in coder.values()
+        assert wildcard == [apps]
+        # Plain HTTP on a workspace app host is redirected too.
+        redirect = next(
+            value
+            for key, value in nexus.items()
+            if key.endswith(".rule")
+            and nexus[key.replace(".rule", ".entrypoints")] == "web"
+        )
+        assert apps in redirect
+        assert "Host(`git.${PUBLIC_WEB_HOST}`)" in redirect
+
+
+@pytest.mark.parametrize("nats", [True, False])
+def test_the_wildcard_certificate_is_requested_only_from_a_dns_resolver(
+    tmp_path: Path, nats: bool
+) -> None:
+    project = _project(tmp_path, nats=nats)
+    coder = _labels(_deploy(project, include_coding=True)["services"]["coder"])
+    # Let's Encrypt refuses a wildcard over HTTP-01: ask for none.
+    assert not any("tls.domains" in key for key in coder)
+    assert "*.coder.${PUBLIC_WEB_HOST}" not in coder.values()
+    apps = "traefik.http.routers.${ABI_STACK_NAME}-coder-apps"
+    assert coder[f"{apps}.tls"] == "true"
+    assert f"{apps}.tls.certresolver" not in coder
+    assert "CODER_WILDCARD_CERT_RESOLVER" not in _env(project)
+
+    coder = _labels(
+        _deploy(project, include_coding=True, wildcard_cert_resolver="cloudflare")[
+            "services"
+        ]["coder"]
+    )
+    assert coder[f"{apps}.tls.domains[0].sans"] == "*.coder.${PUBLIC_WEB_HOST}"
+    assert coder[f"{apps}.tls.certresolver"].startswith(
+        "${CODER_WILDCARD_CERT_RESOLVER:?"
+    )
+    assert _env(project)["CODER_WILDCARD_CERT_RESOLVER"] == "cloudflare"
+
+    # Kept on a rerun without the option, and on a regenerated env.
+    for kwargs in ({"domain": None}, {"regenerate": True}):
+        coder = _labels(
+            _deploy(project, include_coding=True, **kwargs)["services"]["coder"]
+        )
+        assert f"{apps}.tls.domains[0].sans" in coder, kwargs
+        assert _env(project)["CODER_WILDCARD_CERT_RESOLVER"] == "cloudflare"
+
+    _deploy(project, include_coding=True, wildcard_cert_resolver="route53")
+    assert _env(project)["CODER_WILDCARD_CERT_RESOLVER"] == "route53"
+
+
+def test_a_wildcard_resolver_without_coding_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(DokployDeployError, match="--coding"):
+        _deploy(_project(tmp_path, nats=True), wildcard_cert_resolver="cloudflare")
 
 
 @pytest.mark.parametrize("nats, coding", MODES)
@@ -283,37 +343,186 @@ def test_the_deploy_files_the_compose_mounts_are_rendered(
         assert 'ENV_FILE="${CODING_SECRETS_FILE:-/host/.env}"' in script
 
 
-@pytest.mark.parametrize("coding", [False, True])
-def test_the_dokploy_config_reads_the_coding_tokens_as_a_second_dotenv(
-    tmp_path: Path, coding: bool
+@pytest.mark.parametrize("nats, coding", MODES)
+def test_the_dokploy_config_keeps_secrets_on_volumes(
+    tmp_path: Path, nats: bool, coding: bool
 ) -> None:
-    project = _project(tmp_path, nats=True)
+    project = _project(tmp_path, nats=nats)
     compose = _deploy(project, include_coding=coding)
     text = (project / CONFIG_FILE).read_text(encoding="utf-8")
-    adapters = yaml.safe_load(re.sub(r"\{\{.*?\}\}", "x", text))["services"]["secret"][
-        "secret_adapters"
-    ]
+    services = compose["services"]
 
+    persistent = {"adapter": "dotenv", "config": {"path": SECRETS_FILE}}
+    minted = {
+        "adapter": "dotenv",
+        "config": {"path": CODING_SECRETS_FILE, "read_only": True},
+    }
+    assert _secret_adapters(project) == (
+        [persistent, minted] if coding else [persistent]
+    )
+    # Every service that reads the config has the writable secrets volume.
+    readers = ["abi"] + ([] if nats else ["dagster"])
+    for name in readers:
+        assert "abi_secrets:/var/lib/abi-secrets" in services[name]["volumes"], name
+        assert "touch /var/lib/abi-secrets/.env" in str(services[name]["command"])
+        if coding:
+            assert "coding_secrets:/run/abi-secrets:ro" in services[name]["volumes"]
+    assert "abi_secrets" in compose["volumes"]
     if coding:
-        assert adapters == [
-            {"adapter": "dotenv", "config": {}},
-            {"adapter": "dotenv", "config": {"path": "/run/abi-secrets/coding.env"}},
-        ]
-        mounts = compose["services"]["abi"]["volumes"]
-        assert "coding_secrets:/run/abi-secrets:ro" in mounts
-        init = compose["services"]["coding-init"]
+        init = services["coding-init"]
         assert "coding_secrets:/run/abi-secrets" in init["volumes"]
-        assert init["environment"]["CODING_SECRETS_FILE"] == (
-            "/run/abi-secrets/coding.env"
-        )
-        assert compose["services"]["abi"]["depends_on"]["coding-init"] == {
+        assert init["environment"]["CODING_SECRETS_FILE"] == CODING_SECRETS_FILE
+        assert init["environment"]["CODING_INIT_STRICT"] == "1"
+        assert services["abi"]["depends_on"]["coding-init"] == {
             "condition": "service_completed_successfully"
         }
-    else:
-        assert adapters == [{"adapter": "dotenv", "config": {}}]
-    # The rest of config.local.yaml is carried over as is.
+    # The rest of config.local.yaml is carried over as is, comments included.
     assert "openrouter_api_key" in text
     assert "kv_adapter" in text
+    assert "#     openai_api_key:" in text
+
+
+_OWN_ADAPTERS = """services:
+  secret:
+    secret_adapters:
+      - adapter: "dotenv"
+        config:
+          path: "config/extra.env"
+
+      # The Naas vault.
+      - adapter: "naas"
+        config:
+          naas_api_key: "{{ secret.NAAS_API_KEY }}"
+          naas_api_url: "https://api.naas.ai"
+      - adapter: "base64"
+        config:
+          base64_secret_key: "ABI_SECRETS"
+          secret_adapter:
+            adapter: "dotenv"
+            config: {}
+  kv:
+    kv_adapter:
+      adapter: redis"""
+
+
+@pytest.mark.parametrize("trailing_newline", [True, False])
+def test_the_projects_own_secret_adapters_are_kept(
+    tmp_path: Path, trailing_newline: bool
+) -> None:
+    config = _OWN_ADAPTERS + ("\n" if trailing_newline else "")
+    project = _project(tmp_path, nats=False, config=config)
+    _deploy(project, include_coding=True)
+
+    assert _secret_adapters(project) == [
+        {"adapter": "dotenv", "config": {"path": "config/extra.env"}},
+        {
+            "adapter": "naas",
+            "config": {"naas_api_key": "x", "naas_api_url": "https://api.naas.ai"},
+        },
+        {
+            "adapter": "base64",
+            "config": {
+                "base64_secret_key": "ABI_SECRETS",
+                "secret_adapter": {
+                    "adapter": "dotenv",
+                    "config": {"path": SECRETS_FILE},
+                },
+            },
+        },
+        {
+            "adapter": "dotenv",
+            "config": {"path": CODING_SECRETS_FILE, "read_only": True},
+        },
+    ]
+    text = (project / CONFIG_FILE).read_text(encoding="utf-8")
+    assert text.count("secret_adapters:") == 1
+    assert "naas_api_key: '{{ secret.NAAS_API_KEY }}'" in text
+    assert "NAAS_API_KEY" in _env(project)
+
+
+def test_secret_adapters_at_the_end_of_the_file_are_not_duplicated(
+    tmp_path: Path,
+) -> None:
+    config = _CONFIG.split("  kv:")[0].rstrip("\n")
+    assert config.endswith("config: {}")
+    project = _project(tmp_path, nats=True, config=config)
+    _deploy(project, include_coding=True)
+
+    text = (project / CONFIG_FILE).read_text(encoding="utf-8")
+    assert "config: {}" not in text
+    assert [a["config"]["path"] for a in _secret_adapters(project)] == [
+        SECRETS_FILE,
+        CODING_SECRETS_FILE,
+    ]
+
+
+def test_a_failed_render_writes_nothing(tmp_path: Path) -> None:
+    project = _project(tmp_path, nats=True, config="services:\n  kv: {}\n")
+
+    with pytest.raises(DokployDeployError, match="secret_adapters"):
+        setup_dokploy_deploy(str(project), domain="example.com")
+
+    assert sorted(path.name for path in project.iterdir()) == [
+        "Dockerfile",
+        "config.local.yaml",
+    ]
+
+
+def _internal_hosts(value: str) -> set[str]:
+    """Host names in the URLs of ``value``."""
+    return set(
+        re.findall(r"[a-z]+://(?:[^@/\s]*@)?([A-Za-z0-9_.${}-]+?)(?::\d+|/|$)", value)
+    )
+
+
+def test_two_stacks_on_one_server_never_call_each_other(tmp_path: Path) -> None:
+    """Internal calls never use a name another stack has on dokploy-network.
+
+    Service names are on dokploy-network for every stack (Compose adds them on
+    each network), so a container on both networks reaches this stack only
+    through aliases that exist on its own network alone.
+    """
+    stacks = {}
+    for name in ("one", "two"):
+        project = _project(tmp_path, nats=True, name=name)
+        _deploy(project, include_coding=True)
+        text = (project / COMPOSE_FILE).read_text(encoding="utf-8")
+        text = re.sub(r"\$\{ABI_STACK_NAME(:\?[^}]*)?\}", name, text)
+        stacks[name] = (yaml.safe_load(text), (project / CONFIG_FILE).read_text())
+
+    shared: set[str] = set()  # every name any stack has on dokploy-network
+    own: dict[str, set[str]] = {}
+    for name, (compose, _) in stacks.items():
+        own[name] = set()
+        for service_name, service in compose["services"].items():
+            networks = service.get("networks", [])
+            if "dokploy-network" in networks:
+                shared.add(service_name)
+                shared.update((networks["dokploy-network"] or {}).get("aliases", []))
+            if isinstance(networks, dict):
+                own[name].update((networks.get("abi-network") or {}).get("aliases", []))
+    assert own["one"].isdisjoint(own["two"])
+    assert own["one"].isdisjoint(shared)
+
+    for name, (compose, config) in stacks.items():
+        for service_name, service in compose["services"].items():
+            if "dokploy-network" not in service.get("networks", []):
+                continue
+            # The calls a container on both networks makes: its environment,
+            # and for abi and dagster the engine config.
+            values = list(service.get("environment") or [])
+            if isinstance(service.get("environment"), dict):
+                values = list(service["environment"].values())
+            if service_name == "abi":
+                values.append(re.sub(r"\{\{.*?\}\}", "x", config))
+            for value in values:
+                for host in _internal_hosts(str(value)):
+                    if "." in host or "$" in host:
+                        continue  # public hosts
+                    assert host not in shared, (name, service_name, host)
+    # nexus-web reaches this stack's abi.
+    nexus = stacks["one"][0]["services"]["nexus-web"]["environment"]
+    assert "NEXUS_INTERNAL_API_URL=http://one-abi:9879" in nexus
 
 
 def test_workspaces_and_ci_jobs_join_the_fixed_name_network(tmp_path: Path) -> None:
@@ -394,9 +603,10 @@ def test_docker_compose_accepts_the_rendered_file(
     assert result.returncode == 0, result.stderr
 
 
-def test_the_engine_reads_a_minted_token_from_the_coding_secrets_file(
+def test_the_engine_reads_minted_tokens_and_writes_to_its_volume(
     tmp_path: Path, monkeypatch
 ) -> None:
+    from dotenv import dotenv_values
     from naas_abi_core.engine.engine_configuration.EngineConfiguration_SecretService import (
         SecretServiceConfiguration,
     )
@@ -404,17 +614,42 @@ def test_the_engine_reads_a_minted_token_from_the_coding_secrets_file(
     project = _project(tmp_path, nats=True)
     _deploy(project, include_coding=True)
     text = (project / CONFIG_FILE).read_text(encoding="utf-8")
-    # Where the abi container runs: /app with the volume mounted.
-    app, volume = tmp_path / "app", tmp_path / "run-abi-secrets"
-    app.mkdir()
-    volume.mkdir()
-    (app / ".env").touch()  # the container command touches it
-    (volume / "coding.env").write_text("CODER_ADMIN_TOKEN=minted\n", encoding="utf-8")
-    text = text.replace("/run/abi-secrets", str(volume))
+    # The abi container: both volumes mounted, coding_secrets read-only.
+    secrets_volume, coding_volume = tmp_path / "abi-secrets", tmp_path / "coding"
+    secrets_volume.mkdir()
+    coding_volume.mkdir()
+    (secrets_volume / ".env").touch()  # the container command touches it
+    minted = coding_volume / "coding.env"
+    minted.write_text("CODER_ADMIN_TOKEN=minted\n", encoding="utf-8")
+    minted.chmod(0o444)
+    text = text.replace("/var/lib/abi-secrets", str(secrets_volume))
+    text = text.replace("/run/abi-secrets", str(coding_volume))
     block = yaml.safe_load(re.sub(r"\{\{.*?\}\}", "x", text))["services"]["secret"]
-    monkeypatch.chdir(app)
     monkeypatch.delenv("CODER_ADMIN_TOKEN", raising=False)
+    monkeypatch.delenv("NEXUS_USER_DEMO_PASSWORD", raising=False)
 
     secret = SecretServiceConfiguration(**block).load()
 
     assert secret.get("CODER_ADMIN_TOKEN") == "minted"
+    # A secret stored at runtime (a generated user password) lands on the
+    # writable volume; the read-only file is left alone.
+    secret.set("NEXUS_USER_DEMO_PASSWORD", "generated")
+    assert dotenv_values(secrets_volume / ".env")["NEXUS_USER_DEMO_PASSWORD"] == (
+        "generated"
+    )
+    secret.remove("NEXUS_USER_DEMO_PASSWORD")
+    assert minted.read_text(encoding="utf-8") == "CODER_ADMIN_TOKEN=minted\n"
+
+
+def test_coding_init_mints_under_fresh_names_and_fails_loudly_on_dokploy(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path, nats=True)
+    _deploy(project, include_coding=True)
+    script = (project / ".deploy/docker/bootstrap-coding.sh").read_text()
+
+    # A token name already taken (secrets volume lost) must not block a mint.
+    assert '"token_name":"nexus-admin-%s"' in script
+    assert '--token-name "nexus-$TOKEN_SUFFIX"' in script
+    assert '[ "${CODING_INIT_STRICT:-0}" = "1" ]' in script
+    assert "exit 1" in script

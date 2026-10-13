@@ -29,13 +29,18 @@ abi deploy dokploy --domain example.com            # Nexus + API
 abi deploy dokploy --domain example.com --coding   # + Coder, Forgejo, Actions CI
 ```
 
+With `--coding`, `--wildcard-cert-resolver <name>` also gets a certificate for
+the workspace apps once the server has a DNS-challenge resolver (see
+[The `*.coder` wildcard certificate](#the-coder-wildcard-certificate)).
+
 It writes:
 
 - `docker-compose.dokploy.yml`: the stack. NATS or classic follows the
   project's config, like `abi deploy local`.
-- `config.dokploy.yaml`: a copy of `config.local.yaml`. With `--coding`, its
-  secret adapters also read the coding tokens (see
-  [Coding workspaces](#coding-workspaces)).
+- `config.dokploy.yaml`: a copy of `config.local.yaml` with its secret
+  adapters set for Dokploy (see [Secrets](#secrets)). Only the
+  `secret_adapters` list is rewritten; the rest of the file, comments
+  included, is copied as is.
 - `.deploy/docker/`: the Postgres init scripts, `nats.conf`, `dagster.yaml`
   and, with `--coding`, the coding bootstrap script. The compose mounts them
   from the repository.
@@ -103,20 +108,44 @@ in it:
 
 - is interpolated into the compose file, and
 - reaches the `abi` engine as an environment variable (`env_file: .env`).
-  Environment variables win over the dotenv files in `config.dokploy.yaml`, so
-  every `{{ secret.X }}` in the config can be set here. Add the keys of the
-  modules you enable to this tab.
+  When the engine renders `config.dokploy.yaml`, environment variables come
+  before the dotenv files, so every `{{ secret.X }}` in the config can be set
+  here. Add the keys of the modules you enable to this tab.
 
 Variables specific to this stack:
 
 | Variable | Purpose |
 |---|---|
-| `ABI_STACK_NAME` | Prefix of the Traefik router names and name of the internal network (`<name>-abi-network`). Unique per stack on a server. |
+| `ABI_STACK_NAME` | Prefix of the Traefik router names, of the stack's DNS aliases (`<name>-abi`, ...) and name of the internal network (`<name>-abi-network`). Unique per stack on a server. |
 | `PUBLIC_WEB_HOST`, `PUBLIC_API_HOST`, `NEXUS_API_URL` | Public hosts and the API URL the browser calls. |
 | `TRAEFIK_CERT_RESOLVER` | Traefik certificate resolver; Dokploy's is `letsencrypt`. |
-| `CODER_WILDCARD_CERT_RESOLVER` | Resolver of the `*.coder` certificate (`--coding`). |
+| `CODER_WILDCARD_CERT_RESOLVER` | DNS-challenge resolver of the `*.coder` certificate. Written by `--wildcard-cert-resolver`; absent until then. |
 
 Changing a value takes effect on the next deploy.
+
+## Secrets
+
+The image has no `.env` of its own, and the container's files are replaced on
+every deploy. `config.dokploy.yaml` therefore keeps the project's secret
+adapters with two changes:
+
+- The dotenv adapter on `.env` (the default one `abi new project` writes)
+  reads `/var/lib/abi-secrets/.env` on the `abi_secrets` volume instead. What
+  the engine stores at runtime goes there and survives redeploys: passwords it
+  generates for users in `users:` with no password set, keys saved from the
+  Nexus admin console. The engine creates the file on start.
+- With `--coding`, a read-only dotenv adapter reads the minted Coder and
+  Forgejo tokens from the `coding_secrets` volume (see
+  [Coding workspaces](#coding-workspaces)). Writes skip it.
+
+Other adapters (`naas`, `base64`, a dotenv on another path) are kept as they
+are. A dotenv on another relative path reads a file in the image: the engine
+cannot keep what it writes there.
+
+Code that reads secrets at runtime asks the adapters in order, and a dotenv
+adapter answers from its file before the environment. A key saved from Nexus
+therefore wins over the same key in the Environment tab. To go back to the
+Environment tab's value, delete the key in Nexus.
 
 ## Another environment
 
@@ -129,6 +158,17 @@ An environment is another compose app with its own Environment tab:
   `ABI_STACK_NAME` and the hosts: two stacks on one server cannot share router
   or network names.
 
+The services Traefik reaches (`abi`, `nexus-web`, and with `--coding`
+`coder` and `forgejo`) join `dokploy-network` under their service names, and
+so do those of every other stack on the server. From one of these containers a
+bare name such as `abi` can resolve to another stack. The stack's own calls
+use aliases that exist only on its internal network: `<ABI_STACK_NAME>-abi`,
+`-nexus-web`, `-coder` and `-forgejo`. Follow the same rule in
+`config.local.yaml`: when `abi` calls Coder or Forgejo, use their public URLs
+or these aliases, never `http://coder:7080` or `http://forgejo:3000`. The other
+services (`postgres`, `nats`, `redis`, ...) are only on the internal network;
+keep services of other Dokploy apps with those names off `dokploy-network`.
+
 Generate a separate set of values for each environment. For example, run
 `abi deploy dokploy --domain staging.example.com --regenerate` in a scratch
 checkout, or copy `.env.dokploy` and replace each password.
@@ -137,7 +177,7 @@ checkout, or copy `.env.dokploy` and replace each password.
 
 - **Manual**: **Deploy** in the app rebuilds `abi` from the current commit and
   recreates what changed. Named volumes (Postgres, Fuseki, MinIO, NATS,
-  Qdrant, Coder and Forgejo data, the coding tokens) are kept.
+  Qdrant, Coder and Forgejo data, `abi_secrets`, the coding tokens) are kept.
 - **On push**: with a GitHub provider, turn on **Autodeploy**. With another
   provider, copy the webhook URL from the app's deployments view into a
   push webhook of the repository.
@@ -155,15 +195,19 @@ With `--coding`, the stack adds Coder, Forgejo, the Forgejo Actions runner and
   Environment tab, mints their API tokens, and writes them to
   `/run/abi-secrets/coding.env` on the `coding_secrets` volume. It keeps a
   token that is already there.
+- If a token is still missing at the end, `coding-init` exits with an error
+  and the deploy fails, rather than start `abi` without it. Its logs say which
+  step failed; a redeploy runs it again.
 - `abi` waits for `coding-init`, mounts the volume read-only, and reads the
-  file as a second dotenv secret adapter in `config.dokploy.yaml`, so
+  file through a read-only dotenv secret adapter in `config.dokploy.yaml`, so
   `{{ secret.CODER_ADMIN_TOKEN }}` and `{{ secret.FORGEJO_ADMIN_TOKEN }}`
   resolve after every redeploy with nothing to paste. Do not add these two
   variables to the Environment tab: an environment variable, even empty, wins
   over the file.
 - The internal network has the fixed name `<ABI_STACK_NAME>-abi-network`.
   Coder attaches workspaces to it (`CODING_WORKSPACE_DOCKER_NETWORK`), and the
-  runner starts CI job containers on it, so both reach `forgejo:3000`.
+  runner starts CI job containers on it. Only this stack's containers are on
+  it, so they reach `forgejo:3000` by its service name.
 - Coder's access URL is `https://coder.<web host>`: workspaces connect back
   through Traefik.
 
@@ -171,8 +215,12 @@ Coder, the runner and `coding-init` mount the Docker socket of the Dokploy
 server: anyone with a Coder workspace can start containers on it. Use a
 dedicated server for stacks with coding workspaces.
 
-To start the coding bootstrap over, for example after resetting Coder,
-delete the `coding_secrets` volume and redeploy.
+To mint new tokens, for example when one was revoked, delete the
+`coding_secrets` volume (`<compose project>_coding_secrets`, in the server's
+Docker volumes) and redeploy. `coding-init` logs in with the admin passwords
+from the Environment tab and mints tokens under new names
+(`nexus-admin-<time>` in Coder, `nexus-<time>` in Forgejo). The previous
+tokens stay valid until they expire: revoke them in Coder and Forgejo.
 
 ### The `*.coder` wildcard certificate
 
@@ -180,9 +228,11 @@ Coder serves workspace apps on subdomains of `coder.<web host>`, such as
 `8080--main--ws--admin.coder.nexus.example.com`. One certificate covers them
 all only as a wildcard, `*.coder.nexus.example.com`, and Let's Encrypt issues
 wildcards only through a DNS challenge. Dokploy's default `letsencrypt`
-resolver uses an HTTP challenge, so `coder.` and `git.` get their certificates,
-and workspace apps get Traefik's default certificate until a DNS resolver is
-set up:
+resolver uses an HTTP challenge, so `coder.` and `git.` get their certificates.
+Without `--wildcard-cert-resolver`, the stack asks for no wildcard
+certificate, which Let's Encrypt would refuse and count against the rate
+limit, and workspace apps get Traefik's default certificate. To serve them
+with a valid one:
 
 1. In Dokploy's Traefik settings, edit the main Traefik configuration
    (`traefik.yml`) and add a resolver with your DNS provider. With Cloudflare:
@@ -207,11 +257,18 @@ set up:
 2. Give the Traefik container the provider's credentials, for Cloudflare
    `CF_DNS_API_TOKEN` (a token with `Zone:DNS:Edit` on the zone), in
    Dokploy's Traefik environment settings, then reload Traefik.
-3. In the app's Environment tab, set
-   `CODER_WILDCARD_CERT_RESOLVER=letsencrypt-dns` and redeploy.
+3. Rerun the command with the resolver's name, commit and push the new
+   compose file:
 
-The `coder-apps` router then asks for one certificate for
-`coder.<web host>` and `*.coder.<web host>`.
+   ```bash
+   abi deploy dokploy --coding --wildcard-cert-resolver letsencrypt-dns
+   ```
+
+4. Add `CODER_WILDCARD_CERT_RESOLVER=letsencrypt-dns`, now in
+   `.env.dokploy`, to the app's Environment tab and redeploy.
+
+The `coder-apps` router then asks that resolver for one certificate for
+`coder.<web host>` and `*.coder.<web host>`. Later runs keep the resolver.
 
 ## Troubleshooting
 
@@ -228,3 +285,7 @@ The `coder-apps` router then asks for one certificate for
   changed after the first boot, the account keeps the first value.
 - **The engine stops with `Secret '...' not found`**: a key the config reads
   is missing from the Environment tab. Add it and redeploy.
+- **The deploy fails on `coding-init`** (`--coding`): a Coder or Forgejo
+  token could not be minted. Its logs name the step; the usual causes are
+  Coder or Forgejo still starting (redeploy), or admin passwords changed in
+  the Environment tab after the first deploy (set them back).

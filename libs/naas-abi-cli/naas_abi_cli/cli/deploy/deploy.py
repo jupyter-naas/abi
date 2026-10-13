@@ -121,7 +121,10 @@ class NaasDeployer:
         self.naas_api_client = NaasAPIClient(configuration.deploy.naas_api_key)
 
     def docker_build(self, image_name: str):
-        subprocess.run(["docker", "build", "-t", image_name, ".", "--platform", "linux/amd64"], check=False)
+        subprocess.run(
+            ["docker", "build", "-t", image_name, ".", "--platform", "linux/amd64"],
+            check=False,
+        )
 
     def deploy(self):
         assert self.configuration.deploy is not None
@@ -136,12 +139,18 @@ class NaasDeployer:
         credentials = self.naas_api_client.get_registry_credentials(
             self.configuration.deploy.space_name
         )
-        subprocess.run([
-            "docker", "login",
-            "-u", credentials["credentials"]["username"],
-            "-p", credentials["credentials"]["password"],
-            registry["registry"]["uri"],
-        ], check=False)
+        subprocess.run(
+            [
+                "docker",
+                "login",
+                "-u",
+                credentials["credentials"]["username"],
+                "-p",
+                credentials["credentials"]["password"],
+                registry["registry"]["uri"],
+            ],
+            check=False,
+        )
         subprocess.run(["docker", "push", image_name], check=False)
 
         # Shell pipe required to extract digest via cut; image_name is a
@@ -153,7 +162,8 @@ class NaasDeployer:
                 + " | cut -d'@' -f2",
                 shell=True,
                 capture_output=True,
-            check=False)
+                check=False,
+            )
             .stdout.strip()
             .decode("utf-8")
         )
@@ -291,12 +301,25 @@ def local_deploy(
     help="Generate new secrets in .env.dokploy (the previous file is backed up).",
 )
 @click.option(
+    "--wildcard-cert-resolver",
+    type=str,
+    default=None,
+    help="With --coding: the DNS-challenge resolver in Dokploy's Traefik that "
+    "issues the *.coder wildcard certificate. Kept on later runs.",
+)
+@click.option(
     "--headscale",
     is_flag=True,
     default=False,
     hidden=True,
 )
-def dokploy_deploy(domain: str | None, coding: bool, regenerate: bool, headscale: bool):
+def dokploy_deploy(
+    domain: str | None,
+    coding: bool,
+    regenerate: bool,
+    wildcard_cert_resolver: str | None,
+    headscale: bool,
+):
     """Render docker-compose.dokploy.yml and .env.dokploy for a Dokploy server."""
     if headscale:
         raise click.ClickException(
@@ -309,6 +332,7 @@ def dokploy_deploy(domain: str | None, coding: bool, regenerate: bool, headscale
             domain=domain,
             include_coding=coding,
             regenerate=regenerate,
+            wildcard_cert_resolver=wildcard_cert_resolver,
         )
     except DokployDeployError as error:
         raise click.ClickException(str(error)) from error
@@ -324,11 +348,15 @@ def _compose_command(*args: str) -> list[str]:
     if os.path.exists(COMPOSE_OVERRIDE):
         files += ["--file", COMPOSE_OVERRIDE]
     return [
-        "docker", "compose",
+        "docker",
+        "compose",
         *files,
-        "--env-file", ".env",
-        "--profile", "infrastructure",
-        "--profile", "container",
+        "--env-file",
+        ".env",
+        "--profile",
+        "infrastructure",
+        "--profile",
+        "container",
         *args,
     ]
 

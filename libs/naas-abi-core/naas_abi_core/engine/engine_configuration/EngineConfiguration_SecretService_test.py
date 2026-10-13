@@ -112,3 +112,21 @@ def test_secret_service_configuration_naas():
     assert secret_adapter is not None
     assert isinstance(secret_adapter, ISecretAdapter)
     assert isinstance(secret_adapter, NaasSecret)
+
+
+def test_secret_service_configuration_dotenv_read_only(tmp_path):
+    from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
+        DotenvSecretSecondaryAdaptor,
+    )
+
+    path = tmp_path / "coding.env"
+    path.write_text("CODER_ADMIN_TOKEN=minted\n")
+    configuration = SecretAdapterConfiguration(
+        adapter="dotenv", config={"path": str(path), "read_only": True}
+    )
+
+    adapter = configuration.load()
+
+    assert isinstance(adapter, DotenvSecretSecondaryAdaptor)
+    assert adapter.read_only is True
+    assert DotenvSecretConfiguration().read_only is False
