@@ -30,9 +30,8 @@ x-abi-template: &abi_template
     dockerfile: Dockerfile
   restart: unless-stopped
   # The whole Environment tab, so keys the config reads as `{{ '{{' }} secret.X {{ '}}' }}`
-  # (OPENROUTER_API_KEY, NEXUS_USER_*, ...) reach the engine. The config reads
-  # them before any dotenv file; code that reads the secret service at runtime
-  # sees a value saved in the abi_secrets file first.
+  # (OPENROUTER_API_KEY, NEXUS_USER_*, ...) reach the engine. They win over
+  # every secrets file in config.dokploy.yaml.
   env_file:
     - path: .env
       required: false
