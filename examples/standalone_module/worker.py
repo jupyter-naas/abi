@@ -90,6 +90,11 @@ class ABIModule(BaseModule):
         await call("set", value=b"updated", ttl=60)
         assert (await call("get")).value == b"updated"
         assert (await call("exists")).ok_value
+        assert 0 < (await call("get_ttl")).seconds <= 60
+        assert (
+            "demo"
+            in (await self.call("keyvalue", "list_keys", prefix="de", limit=10)).keys
+        )
         assert not (await call("delete_if_value_matches", value=b"wrong")).ok_value
         assert (await call("delete_if_value_matches", value=b"updated")).ok_value
         await call("set", value=b"delete-me")
@@ -115,6 +120,10 @@ class ABIModule(BaseModule):
         await call("set", value=value)
         assert (await call("get")).value.data == "updated"
         assert (await call("exists")).value
+        assert (
+            "demo"
+            in (await self.call("cache", "list_keys", prefix="de", limit=10)).keys
+        )
         await call("delete")
         assert not (await call("exists")).value
         from naas_abi_proto.cache.v1 import cache_pb2
@@ -156,6 +165,25 @@ class ABIModule(BaseModule):
             ],
         )
         # The parent verifies the persisted message without giving this worker filesystem access to it.
+        await self.call(
+            "email",
+            "send",
+            to_email="recipient@example.invalid",
+            from_email="demo@example.invalid",
+            subject="Delete me",
+            text_body="Read back, then deleted.",
+        )
+        sent = (await self.call("email", "list_sent", limit=10)).messages.messages
+        assert {m.subject for m in sent} >= {"Standalone module", "Delete me"}
+        doomed = next(m.message_id for m in sent if m.subject == "Delete me")
+        message = (await self.call("email", "get_sent", message_id=doomed)).message
+        assert message.summary.subject == "Delete me"
+        assert b"Read back, then deleted." in message.raw
+        await self.call("email", "delete_sent", message_id=doomed)
+        assert doomed not in {
+            m.message_id
+            for m in (await self.call("email", "list_sent", limit=10)).messages.messages
+        }
 
     async def activity_log(self):
         await self.call(
@@ -188,6 +216,10 @@ class ABIModule(BaseModule):
         ).event
         assert event.payload == b'{"value":1}'
         assert (await self.call("event", "max_seq", event_type="demo")).seq == event.seq
+        assert any(
+            t.event_type == "demo" and t.last_seq == event.seq
+            for t in (await self.call("event", "list_event_types")).types.types
+        )
         assert any(
             e.id == event.id
             for e in (
@@ -246,6 +278,10 @@ class ABIModule(BaseModule):
         await call("flush")
         await call("compact")
         assert (await self.call("dataset", "list_snapshots")).snapshots.items
+        version = await self.call("dataset", "namespace_version", namespace="default")
+        assert version.HasField("snapshot_id") and version.snapshot_id > 0
+        unused = await self.call("dataset", "namespace_version", namespace="unused")
+        assert not unused.HasField("snapshot_id")
         await call("drop")
         assert not any(
             i.name == "demo"
@@ -274,6 +310,10 @@ class ABIModule(BaseModule):
             ],
         )
         assert (await call("count_vectors")).count == 1
+        info = (await call("get_collection_info")).info
+        assert (info.name, info.dimension, info.size) == ("demo", 3, 1)
+        page = (await call("list_vectors", limit=10)).page
+        assert [d.id for d in page.documents] == [vid]
         assert (
             await call("get_vector", vector_id=vid, include_vector=True)
         ).found.document.id == vid
@@ -331,6 +371,12 @@ class ABIModule(BaseModule):
             await self.call(domain, "get_status", workspace_id=wid)
         ).status.id == wid
         await self.call(domain, "get_logs", workspace_id=wid)
+        assert any(
+            e.id == wid
+            for e in (
+                await self.call(domain, "list_all_environments")
+            ).environments.environments
+        )
         assert (
             await self.call(
                 domain, "get_access", workspace_id=wid, user_id=user, app_slug="code"
@@ -431,6 +477,11 @@ class ABIModule(BaseModule):
         )
         await call("list_workflow_runs", limit=10)
         assert (await self.call(domain, "mint_git_token", user_id=user)).token
+        await self.call(domain, "delete_repo", repo_id="demo/repo")
+        assert not any(
+            r.name == repo.name
+            for r in (await self.call(domain, "list_repos")).repos.repos
+        )
 
     async def triple_store(self):
         domain = "triple_store"
@@ -591,6 +642,17 @@ class ABIModule(BaseModule):
         )
         assert (await self.call("document", "count", collection="exercise")).count == 0
         await self.call("document", "drop_collection", collection="exercise")
+        # Listing namespaces is reserved to the platform identities: a module is
+        # refused, by its namespace-bound SDK client or else by the engine.
+        try:
+            await self.call("document", "namespaces")
+        except PermissionError:
+            self.seen.add(("document", "namespaces"))
+        except RPCError as exc:
+            assert exc.code == "PERMISSION_DENIED", exc.code
+            self.seen.add(("document", "namespaces"))
+        else:
+            raise AssertionError("document.namespaces answered a module identity")
 
     async def model_registry(self):
         from naas_abi_proto.model_registry.v1 import model_registry_pb2 as pb

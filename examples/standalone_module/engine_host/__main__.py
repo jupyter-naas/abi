@@ -140,7 +140,8 @@ try:
     engine.services.cache.delete("boundary")
     nats_runtime.run_coro(nc.flush())
     required = {
-        "abi.svc.object_storage.v1.transfer.write",
+        # A small cache entry is written in one request; reads always stream.
+        "abi.svc.object_storage.v1.put_object",
         "abi.svc.object_storage.v1.transfer.read",
         "abi.svc.keyvalue.v1.set",
         "abi.svc.keyvalue.v1.get",
