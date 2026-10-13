@@ -25,6 +25,7 @@ export default function HomePage() {
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
+  const setKeepPanelClosedOnNextRoute = useWorkspaceStore((s) => s.setKeepPanelClosedOnNextRoute);
   const workspace = workspaces.find((w) => w.id === currentWorkspaceId) || null;
   const theme = workspace?.theme;
   const applyWorkspaceTheme = useWorkspaceStore((s) => s.applyWorkspaceTheme);
@@ -138,7 +139,10 @@ export default function HomePage() {
                 // The dock stays — collapsing it only swaps one panel for a
                 // second identical PanelLeft button in the topnav. `null` keeps
                 // lastActivePanelSection, so reopening restores the section.
+                // The route sync would reopen the Apps column on /apps, so
+                // it is told to keep it closed for this navigation.
                 setActivePanelSection(null);
+                setKeepPanelClosedOnNextRoute(true);
                 router.push(appsPath(currentWorkspaceId, app.app_id));
               }}
               title={app.name}
