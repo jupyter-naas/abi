@@ -22,7 +22,7 @@ export function MapsMapView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [geoJsonLayersOpen, setGeoJsonLayersOpen] = useState(false);
-  const { layerIds, hasLayerChoice, defaultLayerIds, defaultsReady, workspaceId } = useMapsLayerParams();
+  const { layerIds, hasLayerChoice, defaultLayerIds, workspaceId } = useMapsLayerParams();
 
   useEffect(() => {
     if (isMapsGeoJsonDebugEnabled(searchParams)) setGeoJsonLayersOpen(true);
@@ -32,10 +32,10 @@ export function MapsMapView() {
   const [newBasemapOpen, setNewBasemapOpen] = useState(false);
 
   useEffect(() => {
-    if (isMobile || hasLayerChoice || loading || !defaultsReady) return;
+    if (isMobile || hasLayerChoice || loading) return;
     if (!defaultLayerIds.length) return;
     router.replace(mapsPath(workspaceId, defaultLayerIds));
-  }, [isMobile, hasLayerChoice, loading, defaultsReady, defaultLayerIds, router, workspaceId]);
+  }, [isMobile, hasLayerChoice, loading, defaultLayerIds, router, workspaceId]);
 
   const subtitle = useMemo(() => {
     if (layerIds.length === 0) return 'Basemap';

@@ -29,14 +29,6 @@ export interface WorkspaceLayouts {
 }
 
 export interface MapsState {
-  /** Which layers are on the All layers map (per browser, like Search). */
-  overrides: Record<string, boolean>;
-  setLayerOn: (layerId: string, on: boolean) => void;
-  setLayersOn: (layerIds: string[], on: boolean) => void;
-  /** @deprecated use setLayerOn */
-  setLayoutOn: (layerId: string, on: boolean) => void;
-  /** @deprecated use setLayersOn */
-  setLayoutsOn: (layerIds: string[], on: boolean) => void;
   /** Background tiles; switched from the map (Leaflet layers control). */
   basemapId: string;
   setBasemap: (basemapId: string) => void;
@@ -70,14 +62,6 @@ const EMPTY: WorkspaceLayouts = {
 export const useMapsStore = create<MapsState>()(
   persist(
     (set, get) => ({
-      overrides: {},
-      setLayerOn: (layerId, on) => set((state) => ({ overrides: { ...state.overrides, [layerId]: on } })),
-      setLayersOn: (layerIds, on) =>
-        set((state) => ({
-          overrides: { ...state.overrides, ...Object.fromEntries(layerIds.map((id) => [id, on])) },
-        })),
-      setLayoutOn: (layerId, on) => get().setLayerOn(layerId, on),
-      setLayoutsOn: (layerIds, on) => get().setLayersOn(layerIds, on),
       basemapId: FALLBACK_BASEMAP_ID,
       // Normalized against the workspace catalog where it is drawn.
       setBasemap: (basemapId) => set({ basemapId: basemapId || FALLBACK_BASEMAP_ID }),
@@ -131,7 +115,6 @@ export const useMapsStore = create<MapsState>()(
     {
       name: 'nexus-maps',
       partialize: (state) => ({
-        overrides: state.overrides,
         basemapId: state.basemapId,
         groupBy: state.groupBy,
       }),

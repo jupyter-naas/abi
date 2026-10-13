@@ -49,12 +49,8 @@ feed, not an entity.
    (`hidden_layouts`) or per feed (`hidden_feeds`, the Feed Layers table in
    Settings → Maps); built-in and graph layers are one-layer feeds sharing their
    id. Access follows the feed (`maps_grants`); a deployment feed may be
-   available in no workspace at all. A deployment switches feeds off by
-   default with `register_maps_seeds(hidden_feeds=[...])` (same once-per-revision
-   rule, `seed_revisions["hidden-feed:<id>"]`). A deployment
-   hides layers by default with `register_maps_seeds(hidden_layouts=[...])`:
-   the ids are added to each workspace's `hidden_layouts` once per seed
-   revision (`seed_revisions["hidden:<id>"]`), so an admin may show them again.
+   available in no workspace at all. Which feeds a workspace starts with
+   enabled is its config (`20261013_nexus-maps-workspace-config.md`).
 5. **Removed:** `MAPS_CATEGORIES_ALL`, the localStorage group store,
    `CATEGORY_PATTERN`, `NEXT_PUBLIC_MAPS_VISIBLE_CATEGORIES` and
    `isMapsOrganizationFacilityOnlyDeployment()`. On first load, a workspace
@@ -69,8 +65,7 @@ feed, not an entity.
   record holds the name.
 - A group has no order, icon or description. If one is ever needed, that is when
   groups become records, through a new ADR.
-- Deployments stop filtering at build time. A deployment that shows only its
-  own feeds hides the built-in layers through `hidden_layouts` seeds, or narrows
-  feeds with grants. Which feeds are on by default is decided separately.
+- Deployments stop filtering at build time. Which feeds a workspace starts
+  with is its config; grants narrow where a feed may be used at all.
 - Typos create separate groups (`Enviroment`). The group picker offers the
   existing values first to limit this.

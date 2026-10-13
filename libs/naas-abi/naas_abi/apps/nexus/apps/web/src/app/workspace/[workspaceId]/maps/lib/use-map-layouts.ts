@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMapsStore, workspaceLayoutsOf } from '@/stores/maps';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { MAPS_DATASETS } from './datasets';
-import { buildLayoutEntries, isLayerOn, visibleEntries, type LayoutEntry } from './layouts';
+import { buildLayoutEntries, visibleEntries, type LayoutEntry } from './layouts';
 import { layoutsApi } from './layouts-api';
 import {
   loadImportedMapLayers,
@@ -30,7 +30,6 @@ export function useMapLayers() {
   const graphLayers = useGraphMapLayers();
   const loadLayouts = useMapsStore((s) => s.loadLayouts);
   const workspace = useMapsStore((s) => workspaceLayoutsOf(s, workspaceId));
-  const overrides = useMapsStore((s) => s.overrides);
   const storedBasemap = useMapsStore((s) => s.basemapId);
   const storeLoading = useMapsStore((s) => s.loading);
   const storeError = useMapsStore((s) => s.error);
@@ -96,7 +95,6 @@ export function useMapLayers() {
   );
   // Every group label in use (hidden layers included), for the group pickers.
   const layerGroups = useMemo(() => layerGroupLabels(all.map((entry) => entry.group)), [all]);
-  const isOn = (entry: LayoutEntry) => isLayerOn(entry, overrides);
   const basemapId = storedBasemap;
 
   return {
@@ -111,11 +109,7 @@ export function useMapLayers() {
     canEdit: workspace.canEdit,
     workspaceLayouts: workspace.layouts,
     feedLayers: workspace.feedLayers,
-    isOn,
     loading: graphLayers.loading || storeLoading,
     error: graphLayers.error || storeError,
   };
 }
-
-/** @deprecated use useMapLayers */
-export const useMapLayouts = useMapLayers;

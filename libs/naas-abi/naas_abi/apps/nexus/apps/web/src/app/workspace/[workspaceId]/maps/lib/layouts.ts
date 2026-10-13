@@ -7,7 +7,6 @@
  * frontend layer list and visibility model.
  */
 import type { MapsDataset } from './datasets';
-import { mapsDefaultOnFeedIds } from './maps-deployment';
 import {
   DEFAULT_LAYER_GROUP,
   layerGroupKey,
@@ -127,14 +126,6 @@ export interface LayoutEntry extends MapsDataset {
   ownIcon?: boolean;
 }
 
-/** Built-in feeds on until a member toggles them off (layer records are always on). */
-const DEFAULT_ON_BUILTIN_IDS: ReadonlySet<string> = new Set([
-  'gdacs',
-  'volcanoes',
-  'tropical-storms',
-  'iss',
-]);
-
 export function buildLayoutEntries(
   builtins: MapsDataset[],
   graphLayers: (MapsDataset & { graphUri: string })[],
@@ -238,35 +229,13 @@ export function visibleEntries(
   return entries.filter((entry) => !set.has(entry.id) && !feeds.has(entry.feedId ?? entry.id));
 }
 
-/** Default on for a new session before the URL is seeded. */
-export function defaultLayerOn(
-  entry: LayoutEntry,
-  options?: { workspaceDefaultFeedIds?: ReadonlySet<string> | null },
-): boolean {
-  if (!entry.combinable) return false;
-  const workspaceFeeds = options?.workspaceDefaultFeedIds;
-  if (workspaceFeeds?.size) {
-    const feedId = entry.feedId ?? entry.id;
-    return workspaceFeeds.has(feedId);
-  }
-  const deploymentFeeds = mapsDefaultOnFeedIds();
-  if (deploymentFeeds.size) return deploymentFeeds.has(entry.feedId ?? entry.id);
-  return entry.kind !== 'builtin' || DEFAULT_ON_BUILTIN_IDS.has(entry.id);
+/**
+ * Default on for a new session before the URL is seeded: every enabled layer.
+ * Which feeds are enabled is the workspace's `maps` config, then Settings → Maps.
+ */
+export function defaultLayerOn(entry: LayoutEntry): boolean {
+  return entry.combinable;
 }
-
-/** Whether a layer is drawn on the map (URL is preferred; overrides are legacy). */
-export function isLayerOn(
-  entry: LayoutEntry,
-  overrides: Record<string, boolean>,
-  options?: { workspaceDefaultFeedIds?: ReadonlySet<string> | null },
-): boolean {
-  if (!entry.combinable) return false;
-  if (entry.id in overrides) return overrides[entry.id];
-  return defaultLayerOn(entry, options);
-}
-
-/** @deprecated use isLayerOn */
-export const isLayoutOn = isLayerOn;
 
 export interface LayoutGroup {
   id: string;

@@ -24,6 +24,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.basemaps.basemaps__schema im
     validate_basemap,
     validate_preview,
 )
+from naas_abi.apps.nexus.apps.api.app.services.maps.basemaps.builtin import CORE_BASEMAPS
 from naas_abi.apps.nexus.apps.api.app.services.maps.basemaps.port import MapsBasemapStorePort
 from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.adapters.secondary.memory import (
     InMemoryMapsGrantStore,
@@ -37,6 +38,10 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.service import (
     MapsPolicy,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.settings.port import MapsSettingsStorePort
+from naas_abi.apps.nexus.apps.api.app.services.maps.settings.settings__schema import BASEMAP_INIT
+
+# Built-in basemaps: always enabled at first, never decided by the workspace config.
+BUILTIN_BASEMAP_IDS = frozenset(basemap.id for basemap in CORE_BASEMAPS)
 
 # A seed as (definition, preview); see services/maps/seeds.py.
 SeedLike = tuple[MapsBasemap, MapsBasemapPreview | None]
@@ -105,12 +110,58 @@ class MapsBasemapService:
                     taken.add(basemap.id)
         return own + shared
 
-    async def list(self, workspace_id: str, *, seeds: Sequence[SeedLike] = ()) -> MapsBasemapList:
+    async def ensure_initial_basemaps(
+        self, workspace_id: str, basemap_ids: Sequence[str], enabled: frozenset[str]
+    ) -> None:
+        """Decide each custom basemap once per workspace: enabled when the config lists it.
+
+        Built-in basemaps are skipped (always enabled at first); after the first
+        decision only Settings → Maps shows or hides a basemap.
+        """
+        ids = set(basemap_ids) - BUILTIN_BASEMAP_IDS
+
+        def pending_of(settings) -> set[str]:
+            return {i for i in ids if f"{BASEMAP_INIT}:{i}" not in settings.seed_revisions}
+
+        if not pending_of(await self._settings.get(workspace_id)):
+            return
+        lock = self._seed_locks.setdefault(workspace_id, asyncio.Lock())
+        async with lock:
+            settings = await self._settings.get(workspace_id)
+            pending = pending_of(settings)
+            if not pending:
+                return
+            await self._settings.save(
+                workspace_id,
+                settings.with_(
+                    hidden_basemaps=(settings.hidden_basemaps | (pending - enabled))
+                    - (pending & enabled),
+                    seed_revisions={
+                        **settings.seed_revisions,
+                        **{f"{BASEMAP_INIT}:{i}": 1 for i in pending},
+                    },
+                ),
+                user_id=None,
+            )
+
+    async def list(
+        self,
+        workspace_id: str,
+        *,
+        seeds: Sequence[SeedLike] = (),
+        enabled_custom: frozenset[str] | None = None,
+    ) -> MapsBasemapList:
+        """The workspace's basemaps; ``enabled_custom`` is the config's custom list
+        (``None``: decide nothing)."""
         policy = await self._access.policy(KIND_BASEMAP)
         allowed = [(b, p) for b, p in seeds if policy.allows(b.id, DEPLOYMENT, workspace_id)]
         if allowed:
             await self.ensure_seeded(workspace_id, allowed)
         basemaps = sorted(await self._visible(workspace_id, policy), key=_order_key)
+        if enabled_custom is not None:
+            await self.ensure_initial_basemaps(
+                workspace_id, [basemap.id for basemap in basemaps], enabled_custom
+            )
         settings = await self._settings.get(workspace_id)
         return MapsBasemapList(basemaps=basemaps, hidden=set(settings.hidden_basemaps))
 
@@ -158,6 +209,17 @@ class MapsBasemapService:
         if errors:
             raise MapsBasemapValidationError(errors)
         await self._store.save(workspace_id, basemap, user_id=user_id)
+        if existing is None:
+            # Created here: enabled, never hidden by the workspace config.
+            settings = await self._settings.get(workspace_id)
+            await self._settings.save(
+                workspace_id,
+                settings.with_(
+                    hidden_basemaps=settings.hidden_basemaps - {basemap.id},
+                    seed_revisions={**settings.seed_revisions, f"{BASEMAP_INIT}:{basemap.id}": 1},
+                ),
+                user_id=user_id,
+            )
         return basemap
 
     async def delete(self, workspace_id: str, basemap_id: str) -> None:

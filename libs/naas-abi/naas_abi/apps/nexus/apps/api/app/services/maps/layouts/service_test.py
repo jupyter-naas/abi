@@ -307,31 +307,37 @@ def test_feed_layers_do_not_run_sparql(service) -> None:
         asyncio.run(service.feed(_feed(), _Store([])))
 
 
-def test_hidden_seeds_hide_once_per_revision(service) -> None:
-    listed = asyncio.run(service.list("ws-1", hidden_seeds={"earthquakes": 1, "news": 1}))
-    assert listed.hidden == {"earthquakes", "news"}
+def test_feeds_start_enabled_only_when_the_workspace_config_lists_them(service) -> None:
+    seed = _layout(id="acme", feed_type=FEED_GEOJSON_URL, feed_url="/api/acme", query="")
+    asyncio.run(service.save("ws-1", _layout(), user_id="u"))  # created by an admin
 
-    # An admin can show a layer again; the same revision does not hide it twice.
-    asyncio.run(service.set_hidden("ws-1", "news", False, user_id="u"))
-    again = asyncio.run(service.list("ws-1", hidden_seeds={"earthquakes": 1, "news": 1}))
-    assert again.hidden == {"earthquakes"}
+    listed = asyncio.run(
+        service.list(
+            "ws-1",
+            seeds=[seed],
+            enabled_feeds=frozenset({"acme", "earthquakes"}),
+            extra_feed_ids=["graph-offices"],
+        )
+    )
+    # Listed: enabled. Built-in and graph feeds not listed: disabled. The admin's own
+    # feed stays enabled.
+    assert "acme" not in listed.hidden_feeds
+    assert "earthquakes" not in listed.hidden_feeds
+    assert {"iss", "news", "graph-offices"} <= listed.hidden_feeds
+    assert "offices" not in listed.hidden_feeds
 
-    # A higher revision re-applies it (a deployment migration).
-    bumped = asyncio.run(service.list("ws-1", hidden_seeds={"earthquakes": 1, "news": 2}))
-    assert bumped.hidden == {"earthquakes", "news"}
-    assert asyncio.run(service.list("ws-2")).hidden == set()
-
-
-def test_hidden_feed_seeds_switch_feeds_off_once_per_revision(service) -> None:
-    seeds = {"earthquakes": 1, "iss": 1}
-    listed = asyncio.run(service.list("ws-1", hidden_feed_seeds=seeds))
-    assert listed.hidden_feeds == {"earthquakes", "iss"}
-    assert listed.hidden == set()
-
-    # An admin enables one again: the same revision leaves it on.
+    # Initial values only: Settings → Maps wins afterwards.
     asyncio.run(service.set_feed_hidden("ws-1", "iss", False, user_id="u"))
-    assert asyncio.run(service.list("ws-1", hidden_feed_seeds=seeds)).hidden_feeds == {
-        "earthquakes"
-    }
-    bumped = asyncio.run(service.list("ws-1", hidden_feed_seeds={"earthquakes": 1, "iss": 2}))
-    assert bumped.hidden_feeds == {"earthquakes", "iss"}
+    asyncio.run(service.set_feed_hidden("ws-1", "acme", True, user_id="u"))
+    again = asyncio.run(service.list("ws-1", enabled_feeds=frozenset({"acme", "earthquakes"})))
+    assert "iss" not in again.hidden_feeds
+    assert "acme" in again.hidden_feeds
+
+    # A feed the deployment adds later starts disabled unless listed.
+    later = _layout(id="later", feed_type=FEED_GEOJSON_URL, feed_url="/api/later", query="")
+    added = asyncio.run(service.list("ws-1", seeds=[later], enabled_feeds=frozenset()))
+    assert "later" in added.hidden_feeds
+
+
+def test_without_workspace_config_nothing_is_decided(service) -> None:
+    assert asyncio.run(service.list("ws-1")).hidden_feeds == set()

@@ -29,6 +29,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.scoped_s
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import GraphAccessError
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import IGraphQueryStore
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.layouts__schema import (
+    BUILTIN_LAYOUT_IDS,
     COLOR_PATTERN,
     FEED_GEOJSON_URL,
     FEED_SPARQL,
@@ -59,6 +60,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.service import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.settings.port import MapsSettingsStorePort
 from naas_abi.apps.nexus.apps.api.app.services.maps.settings.settings__schema import (
+    FEED_INIT,
     MapsWorkspaceSettings,
     applied_revision,
 )
@@ -266,49 +268,36 @@ class MapsLayoutService:
                 user_id=None,
             )
 
-    async def ensure_hidden_seeds(
-        self,
-        workspace_id: str,
-        hidden_seeds: Mapping[str, int],
-        hidden_feed_seeds: Mapping[str, int] | None = None,
+    async def ensure_initial_feeds(
+        self, workspace_id: str, feed_ids: Iterable[str], enabled: frozenset[str]
     ) -> None:
-        """Hide the layers and switch off the feeds a deployment disables by default,
-        once per seed revision.
+        """Decide each feed once per workspace: enabled when the workspace config lists it.
 
-        An admin may show them again; only a higher revision hides them anew.
+        A feed met for the first time starts disabled unless listed; after that
+        only Settings → Maps switches it (``feed-init:<id>`` marks it decided).
         """
-        feed_seeds = hidden_feed_seeds or {}
 
-        def pending_of(settings: MapsWorkspaceSettings, seeds: Mapping[str, int], prefix: str):
-            return {
-                item_id: revision
-                for item_id, revision in seeds.items()
-                if revision > settings.seed_revisions.get(f"{prefix}:{item_id}", 0)
-            }
+        ids = set(feed_ids)
 
-        def pending(settings: MapsWorkspaceSettings) -> tuple[dict[str, int], dict[str, int]]:
-            return (
-                pending_of(settings, hidden_seeds, "hidden"),
-                pending_of(settings, feed_seeds, "hidden-feed"),
-            )
+        def pending_of(settings: MapsWorkspaceSettings) -> set[str]:
+            return {i for i in ids if f"{FEED_INIT}:{i}" not in settings.seed_revisions}
 
-        if not any(pending(await self._settings.get(workspace_id))):
+        if not pending_of(await self._settings.get(workspace_id)):
             return
         lock = self._seed_locks.setdefault(workspace_id, asyncio.Lock())
         async with lock:
             settings = await self._settings.get(workspace_id)
-            layers, feeds = pending(settings)
-            if not layers and not feeds:
+            pending = pending_of(settings)
+            if not pending:
                 return
             await self._settings.save(
                 workspace_id,
                 settings.with_(
-                    hidden_layouts=settings.hidden_layouts | set(layers),
-                    hidden_feeds=settings.hidden_feeds | set(feeds),
+                    hidden_feeds=(settings.hidden_feeds | (pending - enabled))
+                    - (pending & enabled),
                     seed_revisions={
                         **settings.seed_revisions,
-                        **{f"hidden:{i}": rev for i, rev in layers.items()},
-                        **{f"hidden-feed:{i}": rev for i, rev in feeds.items()},
+                        **{f"{FEED_INIT}:{i}": 1 for i in pending},
                     },
                 ),
                 user_id=None,
@@ -344,15 +333,25 @@ class MapsLayoutService:
         *,
         seeds: Sequence[MapsLayout] = (),
         revisions: Mapping[str, int] | None = None,
-        hidden_seeds: Mapping[str, int] | None = None,
-        hidden_feed_seeds: Mapping[str, int] | None = None,
+        enabled_feeds: frozenset[str] | None = None,
+        extra_feed_ids: Iterable[str] = (),
     ) -> MapsLayoutList:
+        """The workspace's feeds, after applying pending seeds.
+
+        ``enabled_feeds`` is the workspace config's feed list (``None``: decide
+        nothing). Feeds without a record (built-in, and ``extra_feed_ids`` such
+        as graph layers) are decided with the records.
+        """
         policy = await self._access.policy(KIND_LAYOUT)
         allowed = [s for s in seeds if policy.allows(s.id, DEPLOYMENT, workspace_id)]
         if allowed:
             await self.ensure_seeded(workspace_id, allowed, revisions)
-        if hidden_seeds or hidden_feed_seeds:
-            await self.ensure_hidden_seeds(workspace_id, hidden_seeds or {}, hidden_feed_seeds)
+        visible = await self._visible(workspace_id, policy)
+        if enabled_feeds is not None:
+            feed_ids = {layout.id for layout in visible} | (BUILTIN_LAYOUT_IDS - {"all"})
+            await self.ensure_initial_feeds(
+                workspace_id, feed_ids | set(extra_feed_ids), enabled_feeds
+            )
         settings = await self._settings.get(workspace_id)
         colors = dict(settings.layer_colors)
         layouts = [
@@ -360,7 +359,7 @@ class MapsLayoutService:
             replace(layout, color=colors[layout.id])
             if layout.shared_from and layout.id in colors
             else layout
-            for layout in await self._visible(workspace_id, policy)
+            for layout in visible
         ]
         layouts.sort(key=lambda layout: (layout.order, layout.title.lower()))
         return MapsLayoutList(
@@ -417,6 +416,17 @@ class MapsLayoutService:
         if errors:
             raise MapsLayoutValidationError(errors)
         await self._store.save(workspace_id, layout, user_id=user_id)
+        if existing is None:
+            # Created here: enabled, never switched off by the workspace config.
+            settings = await self._settings.get(workspace_id)
+            await self._settings.save(
+                workspace_id,
+                settings.with_(
+                    hidden_feeds=settings.hidden_feeds - {layout.id},
+                    seed_revisions={**settings.seed_revisions, f"{FEED_INIT}:{layout.id}": 1},
+                ),
+                user_id=user_id,
+            )
         return layout
 
     async def delete(self, workspace_id: str, layout_id: str) -> None:

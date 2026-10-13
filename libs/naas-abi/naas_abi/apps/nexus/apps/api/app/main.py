@@ -350,6 +350,14 @@ async def _startup(app: FastAPI) -> None:
     finally:
         event_triggered_via.reset(via)
 
+    # Config Maps ids (workspaces[].maps) that no module provides: an error in the
+    # logs, never a failed start. Modules registered their seeds before startup.
+    from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.workspace_defaults import (  # noqa: E501
+        report_unknown_workspace_map_ids,
+    )
+
+    report_unknown_workspace_map_ids(app)
+
     # An ABI restart clears the settings pages' 24h API cache (after seeds, which
     # may have changed users, workspaces and organizations).
     await asyncio.to_thread(_invalidate_settings_cache)

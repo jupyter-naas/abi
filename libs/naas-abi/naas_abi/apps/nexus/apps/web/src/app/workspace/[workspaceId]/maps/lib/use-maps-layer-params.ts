@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { defaultLayerOn, type LayoutEntry } from './layouts';
 import { hasMapsLayerChoice, mapsPath, parseMapsLayerIds } from './maps-route';
-import { useWorkspaceMapDefaultFeeds } from './use-workspace-map-default-feeds';
 import { useMapLayers } from './use-map-layouts';
 
 export function useMapsLayerParams() {
@@ -13,15 +12,6 @@ export function useMapsLayerParams() {
   const searchParams = useSearchParams();
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const { entries } = useMapLayers();
-  const workspaceDefaultFeeds = useWorkspaceMapDefaultFeeds(workspaceId);
-  const workspaceDefaultFeedIds = useMemo(
-    () => (workspaceDefaultFeeds?.length ? new Set(workspaceDefaultFeeds) : null),
-    [workspaceDefaultFeeds],
-  );
-  const layerDefaultOptions = useMemo(
-    () => ({ workspaceDefaultFeedIds }),
-    [workspaceDefaultFeedIds],
-  );
 
   const rawLayerIds = useMemo(() => parseMapsLayerIds(searchParams), [searchParams]);
   const hasLayerChoice = useMemo(() => hasMapsLayerChoice(searchParams), [searchParams]);
@@ -76,8 +66,8 @@ export function useMapsLayerParams() {
   );
 
   const defaultLayerIds = useMemo(
-    () => entries.filter((e) => defaultLayerOn(e, layerDefaultOptions)).map((e) => e.id),
-    [entries, layerDefaultOptions],
+    () => entries.filter((e) => defaultLayerOn(e)).map((e) => e.id),
+    [entries],
   );
 
   return {
@@ -93,7 +83,5 @@ export function useMapsLayerParams() {
     selectLayerExclusive,
     replaceLayers,
     defaultLayerIds,
-    /** False until the workspace defaults have loaded; defaults may change until then. */
-    defaultsReady: workspaceDefaultFeeds !== undefined,
   };
 }

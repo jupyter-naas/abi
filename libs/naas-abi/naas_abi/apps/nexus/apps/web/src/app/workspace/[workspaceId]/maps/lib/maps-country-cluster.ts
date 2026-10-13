@@ -32,15 +32,6 @@ export function groupAreaAt(
   return area === 'continent' && zoom < CONTINENT_CLUSTER_EXPAND_ZOOM ? 'continent' : 'country';
 }
 
-/** @deprecated use groupAreaAt */
-export function shouldClusterPinsByCountry(
-  enabled: boolean,
-  zoom: number,
-  view: 'addresses' | 'coverage',
-): boolean {
-  return groupAreaAt(enabled ? 'feed' : 'off', 'country', zoom, view) !== null;
-}
-
 const DEFAULT_CLUSTER_COLOR = '#2563eb';
 
 /** What one badge of a country marker counts: each layer, or each layer feed. */

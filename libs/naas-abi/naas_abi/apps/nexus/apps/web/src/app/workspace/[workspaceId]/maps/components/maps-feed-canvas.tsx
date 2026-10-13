@@ -51,8 +51,8 @@ import {MapsRecordMedia} from './maps-record-media';
 import { MapsActiveLayersLegend, type LayerLegendStatus } from './maps-active-layers-legend';
 import { aggregateLayerLegendSublayers } from '../lib/maps-layer-legend-utils';
 import { layerPinColor } from '../lib/maps-layer-colors';
-import { isLayerOn } from '../lib/layouts';
 import { useMapLayers } from '../lib/use-map-layouts';
+import { useMapsLayerParams } from '../lib/use-maps-layer-params';
 import { MapsRegionLabels } from './maps-region-labels';
 import {
   distinctMapFeedIds,
@@ -141,7 +141,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   const workspaceBasemaps = useWorkspaceBasemaps(workspaceId || mapLayers.workspaceId);
   const basemapDefs = basemapDefsProp ?? workspaceBasemaps.allDefs;
   const pickerDefsBase = basemapPickerDefs ?? workspaceBasemaps.defs;
-  const layerOverrides = useMapsStore((s) => s.overrides);
+  const { layerIds: urlLayerIds } = useMapsLayerParams();
   const groupBy = useMapsStore((s) => s.groupBy);
   const setGroupBy = useMapsStore((s) => s.setGroupBy);
   const grouping = groupBy !== 'off';
@@ -152,8 +152,10 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
       const active = new Set(legendLayerIds);
       return mapLayers.entries.filter((entry) => active.has(entry.id));
     }
-    return mapLayers.entries.filter((entry) => isLayerOn(entry, layerOverrides));
-  }, [legendLayerIds, mapLayers.entries, layerOverrides]);
+    // Same layers as the map: the URL's choice.
+    const on = new Set(urlLayerIds);
+    return mapLayers.entries.filter((entry) => entry.combinable && on.has(entry.id));
+  }, [legendLayerIds, mapLayers.entries, urlLayerIds]);
   const legendLayerColor = useMemo(() => {
     if (!legendLayerId) return undefined;
     const entry = mapLayers.entries.find((e) => e.id === legendLayerId);

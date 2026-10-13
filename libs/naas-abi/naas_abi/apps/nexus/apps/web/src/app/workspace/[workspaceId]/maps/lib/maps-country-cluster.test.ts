@@ -6,7 +6,6 @@ import {
   COUNTRY_CLUSTER_EXPAND_ZOOM,
   groupAreaAt,
   resolveClusterMemberPins,
-  shouldClusterPinsByCountry,
 } from './maps-country-cluster';
 
 function pin(partial: Partial<MapsPinMarker> & Pick<MapsPinMarker, 'id' | 'lat' | 'lng' | 'label'>): MapsPinMarker {
@@ -34,13 +33,6 @@ describe('maps-country-cluster', () => {
   it('leaves pins without country unclustered', () => {
     const pins = [pin({ id: 'x', lat: 0, lng: 0, label: 'Unknown' })];
     expect(clusterPinsByCountry(pins)).toEqual(pins);
-  });
-
-  it('respects zoom and view for shouldClusterPinsByCountry', () => {
-    expect(shouldClusterPinsByCountry(true, COUNTRY_CLUSTER_EXPAND_ZOOM - 1, 'addresses')).toBe(true);
-    expect(shouldClusterPinsByCountry(true, COUNTRY_CLUSTER_EXPAND_ZOOM, 'addresses')).toBe(false);
-    expect(shouldClusterPinsByCountry(false, 2, 'addresses')).toBe(false);
-    expect(shouldClusterPinsByCountry(true, 2, 'coverage')).toBe(false);
   });
 
   it('resolveClusterMemberPins expands member ids', () => {

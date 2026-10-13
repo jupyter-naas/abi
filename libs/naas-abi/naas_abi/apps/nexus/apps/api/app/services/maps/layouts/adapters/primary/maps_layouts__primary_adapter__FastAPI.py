@@ -5,7 +5,8 @@ deleting, hiding, recoloring and previewing layouts needs a workspace owner or
 admin. Every SPARQL query runs through the workspace-scoped graph store,
 narrowed to the layout's graphs, so a layout only ever reads what the
 workspace may read. Feed layers (``feed_type=geojson_url``) are fetched by the
-web proxy at ``/api/maps/custom/{id}``, which reads the record from here.
+web proxy at ``/api/maps/custom/{id}``, which reads the record from here; the
+module route serving their data guards itself with ``require_feed_access``.
 """
 
 from __future__ import annotations
@@ -29,6 +30,10 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.secondary.gr
     GraphQueryTripleStoreAdapter,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import IGraphQueryStore
+from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.workspace_defaults import (
+    graph_feed_ids,
+    maps_workspace_defaults,
+)
 from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.dependencies import (
     get_maps_feed_layer_service,
 )
@@ -40,6 +45,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.adapters.secondary.p
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.layouts__schema import (
     BUILTIN_LAYOUT_IDS,
+    FEED_GEOJSON_URL,
     FEED_SPARQL,
     MapsLayout,
     MapsLayoutNotFoundError,
@@ -55,6 +61,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.seeds import maps_seed_regis
 from naas_abi.apps.nexus.apps.api.app.services.maps.settings.adapters.secondary.postgres import (
     PostgresMapsSettingsStore,
 )
+from naas_abi.apps.nexus.apps.api.app.services.maps.workspace_config import WorkspaceMapsDefaults
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -67,6 +74,26 @@ PREVIEW_PINS = 50
 
 def get_maps_layout_service() -> MapsLayoutService:
     return _service
+
+
+async def require_feed_access(
+    request: Request,
+    workspace_id: str = Query(..., min_length=1),
+    current_user=Depends(get_current_user_required),
+    service: MapsLayoutService = Depends(get_maps_layout_service),
+) -> MapsLayout:
+    """Guard for a module route serving feed data (``feed_type=geojson_url``).
+
+    The caller must be a member of the workspace, and the workspace must be able
+    to use (own, or be granted) a feed record whose ``feed_url`` is this route.
+    Otherwise the data is a 404, as if the route did not exist.
+    """
+    await require_workspace_access(current_user.id, workspace_id)
+    path = request.url.path
+    for layout in await service.visible(workspace_id):
+        if layout.feed_type == FEED_GEOJSON_URL and layout.feed_url.split("?", 1)[0] == path:
+            return layout
+    raise HTTPException(status_code=404, detail="Map feed not found")
 
 
 class LayoutIn(BaseModel):
@@ -107,14 +134,6 @@ class ColorIn(BaseModel):
 
 def layout_seed_revisions(request: Request) -> dict[str, int]:
     return maps_seed_registry(request.app).layout_revisions()
-
-
-def hidden_layout_seeds(request: Request) -> dict[str, int]:
-    return dict(maps_seed_registry(request.app).hidden_layouts)
-
-
-def hidden_feed_seeds(request: Request) -> dict[str, int]:
-    return dict(maps_seed_registry(request.app).hidden_feeds)
 
 
 def layout_seeds(request: Request) -> list[MapsLayout]:
@@ -195,6 +214,7 @@ async def list_layouts(
     workspace_id: str = Query(..., min_length=1),
     current_user=Depends(get_current_user_required),
     service: MapsLayoutService = Depends(get_maps_layout_service),
+    defaults: WorkspaceMapsDefaults = Depends(maps_workspace_defaults),
 ) -> dict[str, Any]:
     await require_workspace_access(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
@@ -202,8 +222,8 @@ async def list_layouts(
         workspace_id,
         seeds=layout_seeds(request),
         revisions=layout_seed_revisions(request),
-        hidden_seeds=hidden_layout_seeds(request),
-        hidden_feed_seeds=hidden_feed_seeds(request),
+        enabled_feeds=defaults.feeds,
+        extra_feed_ids=graph_feed_ids(request),
     )
     role = await get_workspace_role(current_user.id, workspace_id)
     return {

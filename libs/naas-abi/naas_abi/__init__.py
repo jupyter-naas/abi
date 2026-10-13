@@ -24,6 +24,7 @@ from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreSe
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
+from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
 
 
 def _initialize_nexus_service_registry() -> None:
@@ -352,6 +353,8 @@ class WorkspaceSeedConfig(BaseModel):
     ontologies: list[str] | None = Field(default_factory=list)
     # Exact data graph grants. Missing policy exposes owned graphs only.
     graphs: WorkspaceGraphPolicyConfig = Field(default_factory=WorkspaceGraphPolicyConfig)
+    # Initial Maps feeds and custom basemaps (see WorkspaceMapsSeedConfig).
+    maps: WorkspaceMapsSeedConfig | None = None
 
 
 class OrganizationSeedConfig(BaseModel):

@@ -15,10 +15,6 @@ export interface MapsRoute {
   layerIds: string[];
   /** Mobile map detail when at least one layer is selected. */
   isMapView: boolean;
-  /** @deprecated use isMapView */
-  isDataset: boolean;
-  /** @deprecated use layerIds[0] */
-  datasetId: string | null;
 }
 
 /** Query string or search params (Next's read-only params included). */
@@ -62,17 +58,10 @@ export function parseMapsRoute(
   search?: MapsSearch,
 ): MapsRoute {
   if (!pathname || !isWorkspaceMapsPath(pathname)) {
-    return { isMapsRoute: false, layerIds: [], isMapView: false, isDataset: false, datasetId: null };
+    return { isMapsRoute: false, layerIds: [], isMapView: false };
   }
   const layerIds = parseMapsLayerIds(search);
-  const isMapView = layerIds.length > 0;
-  return {
-    isMapsRoute: true,
-    layerIds,
-    isMapView,
-    isDataset: isMapView,
-    datasetId: layerIds[0] ?? null,
-  };
+  return { isMapsRoute: true, layerIds, isMapView: layerIds.length > 0 };
 }
 
 /** Path of the maps library / map shell for a workspace. */
@@ -100,19 +89,6 @@ export function mapsPath(
 export function mapsLayerPath(workspaceId: string | null, layerId: string): string {
   return mapsPath(workspaceId, [layerId]);
 }
-
-/** @deprecated use mapsLayerPath */
-export function mapsDatasetPath(workspaceId: string | null, datasetId: string): string {
-  return mapsLayerPath(workspaceId, datasetId);
-}
-
-/** @deprecated use mapsPath(workspaceId, layerIds) */
-export function mapsAllLayersPath(workspaceId: string | null): string {
-  return mapsLibraryPath(workspaceId);
-}
-
-/** @deprecated use mapsAllLayersPath */
-export const mapsAllLayoutsPath = mapsAllLayersPath;
 
 /**
  * Settings → Maps: the overview, one feed (`?feed=`), one layer (`?layer=`), or

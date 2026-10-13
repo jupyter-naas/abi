@@ -1,36 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import {
-  mapsDefaultOnFeedIds,
-  mapsDeploymentRestrictsLayerCatalog,
-  parseMapsDefaultOnFeedIds,
-} from './maps-deployment';
-
-describe('parseMapsDefaultOnFeedIds', () => {
-  it('parses comma-separated feed ids', () => {
-    expect(parseMapsDefaultOnFeedIds('alpha-facilities, beta-facilities')).toEqual(
-      new Set(['alpha-facilities', 'beta-facilities']),
-    );
-  });
-});
-
-describe('mapsDefaultOnFeedIds', () => {
-  it('returns env feeds when set', async () => {
-    vi.stubEnv('NEXT_PUBLIC_MAPS_DEFAULT_ON_FEED_IDS', 'alpha-facilities,beta-facilities');
-    vi.resetModules();
-    const { mapsDefaultOnFeedIds } = await import('./maps-deployment');
-    expect(mapsDefaultOnFeedIds()).toEqual(new Set(['alpha-facilities', 'beta-facilities']));
-    vi.unstubAllEnvs();
-  });
-
-  it('returns empty when env unset', async () => {
-    vi.stubEnv('NEXT_PUBLIC_MAPS_DEFAULT_ON_FEED_IDS', '');
-    vi.resetModules();
-    const { mapsDefaultOnFeedIds } = await import('./maps-deployment');
-    expect(mapsDefaultOnFeedIds()).toEqual(new Set());
-    vi.unstubAllEnvs();
-  });
-});
+import { mapsDeploymentRestrictsLayerCatalog } from './maps-deployment';
 
 describe('mapsDeploymentRestrictsLayerCatalog', () => {
   const key = 'NEXT_PUBLIC_MAPS_RESTRICT_LAYER_CATALOG';

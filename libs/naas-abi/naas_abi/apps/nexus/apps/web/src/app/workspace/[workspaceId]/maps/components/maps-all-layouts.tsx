@@ -191,6 +191,3 @@ export function MapsAllLayers({ layerIds }: { layerIds: string[] }) {
     />
   );
 }
-
-/** @deprecated use MapsAllLayers */
-export const MapsAllLayouts = MapsAllLayers;

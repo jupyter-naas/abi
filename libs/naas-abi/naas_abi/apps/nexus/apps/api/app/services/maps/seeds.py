@@ -8,13 +8,14 @@ basemaps in its FastAPI hook::
         layouts=[MapsLayout(...)],          # feeds
         feed_layers=[MapsFeedLayer(...)],   # layers on those feeds (else one "all" layer)
         basemaps=[MapsBasemapSeed(...)],
-        hidden_layouts=["earthquakes"],     # any layer id hidden by default
-        hidden_feeds=["iss"],               # any feed switched off by default
     )
 
 Seeds are copied into a workspace the first time its catalog is listed and are
 then managed from Settings → Maps (renamed, recolored, hidden; never deleted).
 A seed changed in code does not overwrite the workspace's copy.
+
+Which feeds and custom basemaps a workspace starts with is not a seed: it is
+the workspace's ``maps`` block in ``config.*.yaml`` (see workspace_config.py).
 """
 
 from __future__ import annotations
@@ -52,12 +53,6 @@ class MapsSeedRegistry:
     layouts: dict[str, MapsLayout] = field(default_factory=dict)
     basemaps: dict[str, MapsBasemapSeed] = field(default_factory=dict)
     feed_layers: dict[str, MapsFeedLayer] = field(default_factory=dict)
-    # Layer ids hidden by default in every workspace (built-in, feed or graph
-    # layers), with their revision: an admin may show them again.
-    hidden_layouts: dict[str, int] = field(default_factory=dict)
-    # Feed ids switched off by default in every workspace (records, built-in or
-    # graph feeds), with their revision: an admin may enable them again.
-    hidden_feeds: dict[str, int] = field(default_factory=dict)
     # Seed revision per "layout:<id>" / "layer:<id>" (default 1). Raising it
     # re-applies the seed to the workspaces' system copy: a data migration.
     revisions: dict[str, int] = field(default_factory=dict)
@@ -119,16 +114,10 @@ def register_maps_seeds(
     layouts: Iterable[MapsLayout] = (),
     feed_layers: Iterable[MapsFeedLayer] = (),
     basemaps: Iterable[MapsBasemapSeed] = (),
-    hidden_layouts: Iterable[str] = (),
-    hidden_feeds: Iterable[str] = (),
     revision: int = 1,
 ) -> None:
-    """``revision`` applies to the feeds, layers and hidden ids passed: bump it to migrate them."""
+    """``revision`` applies to the feeds and layers passed: bump it to migrate them."""
     registry = maps_seed_registry(app)
-    for layer_id in hidden_layouts:
-        registry.hidden_layouts[layer_id] = revision
-    for feed_id in hidden_feeds:
-        registry.hidden_feeds[feed_id] = revision
     for layout in layouts:
         registry.add_layout(layout)
         registry.revisions[f"layout:{layout.id}"] = revision

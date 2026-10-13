@@ -17,6 +17,10 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     get_workspace_role,
     require_workspace_access,
 )
+from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.workspace_defaults import (
+    graph_feed_ids,
+    maps_workspace_defaults,
+)
 from naas_abi.apps.nexus.apps.api.app.services.maps.basemaps.adapters.primary.maps_basemaps__primary_adapter__FastAPI import (  # noqa: E501
     basemap_seeds,
     get_maps_basemap_service,
@@ -35,12 +39,11 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.service import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.adapters.primary.maps_layouts__primary_adapter__FastAPI import (  # noqa: E501
     get_maps_layout_service,
-    hidden_feed_seeds,
-    hidden_layout_seeds,
     layout_seed_revisions,
     layout_seeds,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.service import MapsLayoutService
+from naas_abi.apps.nexus.apps.api.app.services.maps.workspace_config import WorkspaceMapsDefaults
 
 router = APIRouter()
 
@@ -54,6 +57,7 @@ async def get_catalog(
     layouts: MapsLayoutService = Depends(get_maps_layout_service),
     basemaps: MapsBasemapService = Depends(get_maps_basemap_service),
     feed_layers: MapsFeedLayerService = Depends(get_maps_feed_layer_service),
+    defaults: WorkspaceMapsDefaults = Depends(maps_workspace_defaults),
 ) -> dict[str, Any]:
     await require_workspace_access(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
@@ -61,15 +65,17 @@ async def get_catalog(
         workspace_id,
         seeds=layout_seeds(request),
         revisions=layout_seed_revisions(request),
-        hidden_seeds=hidden_layout_seeds(request),
-        hidden_feed_seeds=hidden_feed_seeds(request),
+        enabled_feeds=defaults.feeds,
+        extra_feed_ids=graph_feed_ids(request),
     )
     listed_layers = await feed_layers.list(
         workspace_id,
         seeds=feed_layer_seeds(request),
         revisions=feed_layer_seed_revisions(request),
     )
-    listed_basemaps = await basemaps.list(workspace_id, seeds=basemap_seeds(request))
+    listed_basemaps = await basemaps.list(
+        workspace_id, seeds=basemap_seeds(request), enabled_custom=defaults.custom_basemaps
+    )
     role = await get_workspace_role(current_user.id, workspace_id)
     return {
         # Feeds (data sources) and the layers drawn from them.

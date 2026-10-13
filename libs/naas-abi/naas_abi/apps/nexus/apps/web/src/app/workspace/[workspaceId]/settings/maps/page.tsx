@@ -43,7 +43,7 @@ import {
   mapsLayerPath, mapsPath, mapsSettingsPath, mapsSettingsSelectedFeed, mapsSettingsSelectedLayer,
 } from '@/app/workspace/[workspaceId]/maps/lib/maps-route';
 import { mapsDeploymentRestrictsLayerCatalog } from '@/app/workspace/[workspaceId]/maps/lib/maps-deployment';
-import { useMapLayouts } from '@/app/workspace/[workspaceId]/maps/lib/use-map-layouts';
+import { useMapLayers } from '@/app/workspace/[workspaceId]/maps/lib/use-map-layouts';
 import {
   feedVisibilityRows, filterFeedRows, type FeedSource, type FeedStatusFilter,
 } from '@/app/workspace/[workspaceId]/maps/lib/maps-feed-visibility';
@@ -85,7 +85,7 @@ function MapsSettings() {
   const forFeed = search?.get('for') ?? undefined;
   const {
     all, hidden, hiddenFeeds, canEdit, workspaceLayouts: feeds, feedLayers, loading, error, layerGroups,
-  } = useMapLayouts();
+  } = useMapLayers();
   const applyLayouts = useMapsStore((s) => s.applyLayouts);
   const loadLayouts = useMapsStore((s) => s.loadLayouts);
   const [busyId, setBusyId] = useState<string | null>(null);

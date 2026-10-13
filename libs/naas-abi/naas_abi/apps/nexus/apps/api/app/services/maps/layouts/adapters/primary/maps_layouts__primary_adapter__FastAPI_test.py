@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import Binding, IGraphQueryStore
 from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.adapters.secondary.memory import (
@@ -22,6 +22,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.service import MapsL
 from naas_abi.apps.nexus.apps.api.app.services.maps.settings.adapters.secondary.memory import (
     InMemoryMapsSettingsStore,
 )
+from naas_abi.apps.nexus.apps.api.app.services.maps.workspace_config import WorkspaceMapsDefaults
 
 QUERY = "SELECT ?uri ?label ?lat ?lng WHERE { ?uri <http://ex/name> ?label ; <http://ex/lat> ?lat ; <http://ex/lng> ?lng }"
 BODY = {"title": "Offices", "query": QUERY, "graphs": ["http://g/a"]}
@@ -73,6 +74,7 @@ def client_for(monkeypatch):
         app.dependency_overrides[api.get_current_user_required] = lambda: SimpleNamespace(id="u-1")
         app.dependency_overrides[api.get_maps_layout_service] = lambda: service
         app.dependency_overrides[api.get_maps_feed_layer_service] = lambda: layers
+        app.dependency_overrides[api.maps_workspace_defaults] = WorkspaceMapsDefaults
         return TestClient(app)
 
     make.scoped_calls = scoped_calls  # type: ignore[attr-defined]
@@ -221,3 +223,39 @@ def test_feed_layer_record_and_colors(client_for) -> None:
     assert admin.get("/api/maps/layouts?workspace_id=ws-1").json()["colors"] == {
         "earthquakes": "#112233"
     }
+
+
+def test_module_feed_routes_serve_only_granted_feed_records(client_for, monkeypatch) -> None:
+    admin = client_for("admin")
+    body = {
+        "title": "Acme",
+        "feed_type": "geojson_url",
+        "feed_url": "/api/maps/organization-facilities/acme",
+    }
+    assert admin.put("/api/maps/layouts/acme?workspace_id=ws-1", json=body).status_code == 200
+
+    member = client_for("member")
+    app = member.app
+    for layer_id in ("acme", "other"):
+
+        @app.get(f"/api/maps/organization-facilities/{layer_id}")
+        async def data(feed=Depends(api.require_feed_access)) -> dict:
+            return {"feed": feed.id}
+
+    # A member reads the data of a feed record that points at the route.
+    ok = member.get("/api/maps/organization-facilities/acme?workspace_id=ws-1")
+    assert ok.status_code == 200
+    assert ok.json() == {"feed": "acme"}
+    # No record points at this route, or the workspace has no such record: 404.
+    assert (
+        member.get("/api/maps/organization-facilities/other?workspace_id=ws-1").status_code == 404
+    )
+    assert member.get("/api/maps/organization-facilities/acme?workspace_id=ws-2").status_code == 404
+    assert member.get("/api/maps/organization-facilities/acme").status_code == 422
+
+    # Outsiders of the workspace are refused before any record is read.
+    async def outsider(user_id, workspace_id):
+        raise HTTPException(status_code=403, detail="no access")
+
+    monkeypatch.setattr(api, "require_workspace_access", outsider)
+    assert member.get("/api/maps/organization-facilities/acme?workspace_id=ws-1").status_code == 403

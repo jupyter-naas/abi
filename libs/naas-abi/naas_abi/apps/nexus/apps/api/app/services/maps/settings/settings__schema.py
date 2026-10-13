@@ -6,6 +6,12 @@ import json
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+# ``seed_revisions`` keys of feeds and custom basemaps already decided in the
+# workspace (see services/maps/workspace_config.py): decided once, then Settings
+# → Maps owns them.
+FEED_INIT = "feed-init"
+BASEMAP_INIT = "basemap-init"
+
 
 def _ids(value: Any) -> frozenset[str]:
     return frozenset(str(v) for v in value or [] if isinstance(v, str) and v)

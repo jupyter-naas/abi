@@ -152,3 +152,18 @@ def test_seed_with_preview_round_trips_through_memory_store() -> None:
     assert [(b.id, b.category, b.system) for b in listed.basemaps] == [
         ("group", "organization", True)
     ]
+
+
+def test_custom_basemaps_start_enabled_only_when_listed(service) -> None:
+    asyncio.run(service.save("ws-1", _custom(id="admin-made"), user_id="u"))
+    seeds = _seeds() + [(_custom(id="emea"), None), (_custom(id="apac"), None)]
+
+    listed = asyncio.run(service.list("ws-1", seeds=seeds, enabled_custom=frozenset({"emea"})))
+    # Built-in basemaps are always enabled; the admin's own basemap too.
+    assert listed.hidden == {"apac"}
+
+    # Initial values only: Settings → Maps wins afterwards.
+    asyncio.run(service.set_hidden("ws-1", "apac", False, user_id="u"))
+    asyncio.run(service.set_hidden("ws-1", "emea", True, user_id="u"))
+    again = asyncio.run(service.list("ws-1", seeds=seeds, enabled_custom=frozenset({"emea"})))
+    assert again.hidden == {"emea"}

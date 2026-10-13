@@ -23,6 +23,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.seeds import (
 from naas_abi.apps.nexus.apps.api.app.services.maps.settings.adapters.secondary.memory import (
     InMemoryMapsSettingsStore,
 )
+from naas_abi.apps.nexus.apps.api.app.services.maps.workspace_config import WorkspaceMapsDefaults
 
 SVG = b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"/>'
 BODY = {"title": "EMEA", "renderer": {"kind": "countries"}}
@@ -48,6 +49,7 @@ def client_for(monkeypatch):
     )
     app.include_router(api.router, prefix="/api/maps/basemaps")
     app.dependency_overrides[api.get_maps_basemap_service] = lambda: service
+    app.dependency_overrides[api.maps_workspace_defaults] = WorkspaceMapsDefaults
 
     def make(role: str) -> TestClient:
         async def access(user_id, workspace_id):

@@ -16,6 +16,9 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     require_workspace_access,
     require_workspace_admin,
 )
+from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.workspace_defaults import (
+    maps_workspace_defaults,
+)
 from naas_abi.apps.nexus.apps.api.app.services.maps.basemaps.adapters.secondary.postgres import (
     PostgresMapsBasemapStore,
 )
@@ -37,6 +40,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.seeds import maps_seed_regis
 from naas_abi.apps.nexus.apps.api.app.services.maps.settings.adapters.secondary.postgres import (
     PostgresMapsSettingsStore,
 )
+from naas_abi.apps.nexus.apps.api.app.services.maps.workspace_config import WorkspaceMapsDefaults
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -93,10 +97,13 @@ async def list_basemaps(
     workspace_id: str = Query(..., min_length=1),
     current_user=Depends(get_current_user_required),
     service: MapsBasemapService = Depends(get_maps_basemap_service),
+    defaults: WorkspaceMapsDefaults = Depends(maps_workspace_defaults),
 ) -> dict[str, Any]:
     await require_workspace_access(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
-    listed = await service.list(workspace_id, seeds=basemap_seeds(request))
+    listed = await service.list(
+        workspace_id, seeds=basemap_seeds(request), enabled_custom=defaults.custom_basemaps
+    )
     role = await get_workspace_role(current_user.id, workspace_id)
     return {
         "basemaps": [basemap.to_dict() for basemap in listed.basemaps],

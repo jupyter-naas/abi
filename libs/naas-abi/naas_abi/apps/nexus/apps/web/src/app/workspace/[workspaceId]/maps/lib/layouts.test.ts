@@ -7,7 +7,7 @@ import {
   groupFeedLayers,
   compareLayerEntriesAsc,
   groupLayerEntries,
-  isLayerOn,
+  defaultLayerOn,
   visibleEntries,
   type WorkspaceMapLayout,
 } from './layouts';
@@ -44,25 +44,18 @@ describe('buildLayoutEntries', () => {
   });
 });
 
-describe('isLayerOn', () => {
-  const [gdacs, earthquakes, news] = buildLayoutEntries(
-    [ds('gdacs', 'Environment'), ds('earthquakes', 'Environment'), ds('news', 'Situation')],
+describe('defaultLayerOn', () => {
+  const [gdacs, news] = buildLayoutEntries(
+    [ds('gdacs', 'Environment'), ds('news', 'Situation')],
     [],
     [],
   );
   const [offices] = buildLayoutEntries([], [], [workspaceLayer('offices')]);
 
-  it('defaults light built-ins and every workspace layer on', () => {
-    expect(isLayerOn(gdacs, {})).toBe(true);
-    expect(isLayerOn(news, {})).toBe(false);
-    expect(isLayerOn(earthquakes, {})).toBe(false);
-    expect(isLayerOn(offices, {})).toBe(true);
-  });
-
-  it('follows the member override', () => {
-    expect(isLayerOn(gdacs, { gdacs: false })).toBe(false);
-    expect(isLayerOn(news, { news: true })).toBe(true);
-    expect(isLayerOn(earthquakes, { earthquakes: true })).toBe(true);
+  it('defaults every enabled layer on (the workspace config decides which are enabled)', () => {
+    expect(defaultLayerOn(gdacs)).toBe(true);
+    expect(defaultLayerOn(news)).toBe(true);
+    expect(defaultLayerOn(offices)).toBe(true);
   });
 });
 

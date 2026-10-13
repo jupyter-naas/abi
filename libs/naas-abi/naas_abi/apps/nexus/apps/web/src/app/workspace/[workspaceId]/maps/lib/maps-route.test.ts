@@ -34,8 +34,6 @@ describe('parseMapsRoute', () => {
       isMapsRoute: true,
       layerIds: [],
       isMapView: false,
-      isDataset: false,
-      datasetId: null,
     });
   });
 
@@ -44,8 +42,6 @@ describe('parseMapsRoute', () => {
       isMapsRoute: true,
       layerIds: ['iss'],
       isMapView: true,
-      isDataset: true,
-      datasetId: 'iss',
     });
   });
 
