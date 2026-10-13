@@ -29,7 +29,7 @@ function NavItem({
   mobileList?: boolean;
 }) {
   const fullHref = orgSettingsSectionPath(orgId, item.slug);
-  const isActive = pathname === fullHref;
+  const isActive = pathname === fullHref || pathname.startsWith(`${fullHref}/`);
   const Icon = item.icon;
   return (
     <li>

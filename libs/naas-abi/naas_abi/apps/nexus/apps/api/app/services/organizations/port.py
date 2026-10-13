@@ -118,6 +118,10 @@ class OrganizationMemberRecord:
     email: str | None = None
     name: str | None = None
     created_at: datetime | None = None
+    avatar: str | None = None
+    company: str | None = None
+    job_title: str | None = None
+    bio: str | None = None
 
 
 @dataclass

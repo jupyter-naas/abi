@@ -33,6 +33,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 AsyncSessionGetter = Callable[[], AsyncSession | None]
 
 
+def _member_record(
+    member: OrganizationMemberModel, user: UserModel | None
+) -> OrganizationMemberRecord:
+    return OrganizationMemberRecord(
+        id=member.id,
+        organization_id=member.organization_id,
+        user_id=member.user_id,
+        role=member.role,
+        email=user.email if user else None,
+        name=user.name if user else None,
+        created_at=member.created_at,
+        avatar=user.avatar if user else None,
+        company=user.company if user else None,
+        job_title=user.role if user else None,
+        bio=user.bio if user else None,
+    )
+
+
 class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
     def __init__(self, db: AsyncSession | None = None, db_getter: AsyncSessionGetter | None = None):
         self._db = db
@@ -261,18 +279,7 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             .where(OrganizationMemberModel.organization_id == org_id)
             .order_by(OrganizationMemberModel.created_at)
         )
-        return [
-            OrganizationMemberRecord(
-                id=member.id,
-                organization_id=member.organization_id,
-                user_id=member.user_id,
-                role=member.role,
-                email=user.email,
-                name=user.name,
-                created_at=member.created_at,
-            )
-            for member, user in result.all()
-        ]
+        return [_member_record(member, user) for member, user in result.all()]
 
     async def get_user_by_email(self, email: str) -> UserRecord | None:
         normalized = email.lower().strip()
@@ -304,15 +311,7 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         await self.db.flush()
         user_result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
         user = user_result.scalar_one_or_none()
-        return OrganizationMemberRecord(
-            id=row.id,
-            organization_id=row.organization_id,
-            user_id=row.user_id,
-            role=row.role,
-            email=user.email if user else None,
-            name=user.name if user else None,
-            created_at=row.created_at,
-        )
+        return _member_record(row, user)
 
     async def get_organization_member(
         self, org_id: str, user_id: str
@@ -328,15 +327,7 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             return None
         user_result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
         user = user_result.scalar_one_or_none()
-        return OrganizationMemberRecord(
-            id=row.id,
-            organization_id=row.organization_id,
-            user_id=row.user_id,
-            role=row.role,
-            email=user.email if user else None,
-            name=user.name if user else None,
-            created_at=row.created_at,
-        )
+        return _member_record(row, user)
 
     async def update_organization_member_role(
         self, org_id: str, user_id: str, role: str

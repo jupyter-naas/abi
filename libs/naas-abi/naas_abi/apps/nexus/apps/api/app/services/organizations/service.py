@@ -190,6 +190,13 @@ class OrganizationService:
             created_at=now,
         )
 
+    async def get_organization_member(
+        self,
+        org_id: str,
+        user_id: str,
+    ) -> OrganizationMemberRecord | None:
+        return await self.adapter.get_organization_member(org_id=org_id, user_id=user_id)
+
     async def update_member_role(
         self,
         org_id: str,

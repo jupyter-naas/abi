@@ -76,6 +76,53 @@ export interface OrganizationMember {
   email?: string;
   name?: string;
   createdAt?: string;
+  avatar?: string;
+  company?: string;
+  jobTitle?: string;
+  bio?: string;
+}
+
+export type OrganizationMemberProfileUpdate = {
+  role?: 'admin' | 'member';
+  name?: string;
+  company?: string;
+  job_title?: string;
+  bio?: string;
+};
+
+function mapMember(m: any): OrganizationMember {
+  return {
+    id: m.id,
+    organizationId: m.organization_id,
+    userId: m.user_id,
+    role: m.role,
+    email: m.email,
+    name: m.name,
+    createdAt: m.created_at,
+    avatar: m.avatar,
+    company: m.company,
+    jobTitle: m.job_title,
+    bio: m.bio,
+  };
+}
+
+function cacheMember(
+  set: (fn: (state: OrganizationState) => Partial<OrganizationState>) => void,
+  orgId: string,
+  userId: string,
+  member: OrganizationMember
+) {
+  set((state) => {
+    const currentMembers = state.membersCache[orgId] || [];
+    return {
+      membersCache: {
+        ...state.membersCache,
+        [orgId]: currentMembers.map((row) =>
+          row.userId === userId ? member : row
+        ),
+      },
+    };
+  });
 }
 
 interface OrganizationState {
@@ -103,6 +150,17 @@ interface OrganizationState {
   fetchMembers: (orgId: string) => Promise<OrganizationMember[]>;
   inviteMember: (orgId: string, email: string, role: 'admin' | 'member') => Promise<OrganizationMember | null>;
   updateMemberRole: (orgId: string, userId: string, role: 'owner' | 'admin' | 'member') => Promise<OrganizationMember | null>;
+  updateMemberProfile: (
+    orgId: string,
+    userId: string,
+    updates: OrganizationMemberProfileUpdate
+  ) => Promise<OrganizationMember | null>;
+  uploadMemberAvatar: (
+    orgId: string,
+    userId: string,
+    file: File
+  ) => Promise<OrganizationMember | null>;
+  removeMemberAvatar: (orgId: string, userId: string) => Promise<OrganizationMember | null>;
   removeMember: (orgId: string, userId: string) => Promise<boolean>;
 }
 
@@ -310,15 +368,7 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
       }
       const data = await response.json();
 
-      const members: OrganizationMember[] = data.map((m: any) => ({
-        id: m.id,
-        organizationId: m.organization_id,
-        userId: m.user_id,
-        role: m.role,
-        email: m.email,
-        name: m.name,
-        createdAt: m.created_at,
-      }));
+      const members: OrganizationMember[] = data.map(mapMember);
 
       set((state) => ({
         membersCache: { ...state.membersCache, [orgId]: members },
@@ -353,15 +403,7 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
       }
       const data = await response.json();
 
-      const member: OrganizationMember = {
-        id: data.id,
-        organizationId: data.organization_id,
-        userId: data.user_id,
-        role: data.role,
-        email: data.email,
-        name: data.name,
-        createdAt: data.created_at,
-      };
+      const member = mapMember(data);
 
       // Update cache. Inviting an existing member resends their sign-in email
       // and returns that same membership, so replace rather than append.
@@ -402,34 +444,74 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
       }
       const data = await response.json();
 
-      const member: OrganizationMember = {
-        id: data.id,
-        organizationId: data.organization_id,
-        userId: data.user_id,
-        role: data.role,
-        email: data.email,
-        name: data.name,
-        createdAt: data.created_at,
-      };
-
-      // Update cache
-      set((state) => {
-        const currentMembers = state.membersCache[orgId] || [];
-        return {
-          membersCache: {
-            ...state.membersCache,
-            [orgId]: currentMembers.map((m) =>
-              m.userId === userId ? member : m
-            ),
-          },
-        };
-      });
-
+      const member = mapMember(data);
+      cacheMember(set, orgId, userId, member);
       return member;
     } catch (error) {
       console.error('Failed to update member role:', error);
       throw error;
     }
+  },
+
+  updateMemberProfile: async (
+    orgId: string,
+    userId: string,
+    updates: OrganizationMemberProfileUpdate
+  ): Promise<OrganizationMember | null> => {
+    try {
+      const response = await authFetch(`/api/organizations/${orgId}/members/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || 'Failed to update member');
+      }
+      const member = mapMember(await response.json());
+      cacheMember(set, orgId, userId, member);
+      return member;
+    } catch (error) {
+      console.error('Failed to update member profile:', error);
+      throw error;
+    }
+  },
+
+  uploadMemberAvatar: async (
+    orgId: string,
+    userId: string,
+    file: File
+  ): Promise<OrganizationMember | null> => {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await authFetch(
+      `/api/organizations/${orgId}/members/${userId}/avatar`,
+      { method: 'POST', body: form }
+    );
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.detail || 'Failed to upload photo');
+    }
+    const member = mapMember(await response.json());
+    cacheMember(set, orgId, userId, member);
+    return member;
+  },
+
+  removeMemberAvatar: async (
+    orgId: string,
+    userId: string
+  ): Promise<OrganizationMember | null> => {
+    const response = await authFetch(
+      `/api/organizations/${orgId}/members/${userId}/avatar`,
+      { method: 'DELETE' }
+    );
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.detail || 'Failed to remove photo');
+    }
+    const member = mapMember(await response.json());
+    cacheMember(set, orgId, userId, member);
+    return member;
   },
 
   removeMember: async (orgId: string, userId: string): Promise<boolean> => {

@@ -160,7 +160,8 @@
   min-width: 0;
 }
 
-.org-settings-users-avatar {
+.org-settings-users-avatar,
+.org-settings-users-avatar-image {
   display: flex;
   flex-shrink: 0;
   align-items: center;
@@ -169,9 +170,18 @@
   height: 36px;
   background-color: var(--color-primary-subtle);
   color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.org-settings-users-avatar-image {
+  object-fit: cover;
 }
 
 .org-settings-users-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
@@ -255,6 +265,12 @@
   gap: var(--space-2);
 }
 
+.org-settings-users-row-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
 .org-settings-users-remove-slot {
   display: inline-flex;
   align-items: center;
@@ -264,6 +280,7 @@
   flex-shrink: 0;
 }
 
+.org-settings-users-edit,
 .org-settings-users-remove {
   display: inline-flex;
   align-items: center;
@@ -275,6 +292,10 @@
   background: transparent;
   color: var(--muted-foreground-hex);
   cursor: pointer;
+}
+
+.org-settings-users-edit:hover {
+  color: var(--color-primary);
 }
 
 .org-settings-users-remove:hover {

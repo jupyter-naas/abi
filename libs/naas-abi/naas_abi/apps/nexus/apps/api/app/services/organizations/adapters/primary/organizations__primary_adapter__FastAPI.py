@@ -17,7 +17,18 @@ from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_auth_service,
 )
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
+from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__FastAPI import (
+    ALLOWED_AVATAR_EXTENSIONS,
+    AVATAR_STORAGE_PREFIX,
+    MAX_AVATAR_SIZE,
+    _delete_old_avatar,
+    _get_object_storage,
+)
+from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
+    AuthService,
+    UserNotFoundError,
+)
+from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
     issue_and_send_invite_sign_in,
 )
@@ -198,6 +209,10 @@ class OrganizationMember(BaseModel):
     email: str | None = None
     name: str | None = None
     created_at: datetime | None = None
+    avatar: str | None = None
+    company: str | None = None
+    job_title: str | None = None
+    bio: str | None = None
     user_created: bool = False
     sign_in_email_sent: bool = False
     workspace_member_id: str | None = None
@@ -212,7 +227,11 @@ class OrganizationMemberInvite(BaseModel):
 
 
 class OrganizationMemberUpdate(BaseModel):
-    role: str = Field(..., pattern=r"^(owner|admin|member)$")
+    role: str | None = Field(default=None, pattern=r"^(admin|member)$")
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    company: str | None = Field(default=None, max_length=200)
+    job_title: str | None = Field(default=None, max_length=100)
+    bio: str | None = Field(default=None, max_length=2000)
 
 
 class OrganizationMemberWorkspacesUpdate(BaseModel):
@@ -849,14 +868,126 @@ async def update_org_member(
     updates: OrganizationMemberUpdate,
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
+    auth_service: AuthService = Depends(get_auth_service),
 ) -> OrganizationMember:
     role = await require_org_access(current_user.id, org_id, service)
     if role not in ("owner", "admin"):
-        raise HTTPException(status_code=403, detail="Only admins can update member roles")
-    if user_id == current_user.id:
-        raise HTTPException(status_code=400, detail="Cannot change your own role")
+        raise HTTPException(status_code=403, detail="Only admins can update members")
 
-    member = await service.update_member_role(org_id=org_id, user_id=user_id, role=updates.role)
+    member = await service.get_organization_member(org_id=org_id, user_id=user_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    if updates.role is not None:
+        if user_id == current_user.id:
+            raise HTTPException(status_code=400, detail="Cannot change your own role")
+        if member.role == "owner":
+            raise HTTPException(status_code=400, detail="Cannot change the organization owner role")
+        member = await service.update_member_role(
+            org_id=org_id, user_id=user_id, role=updates.role
+        )
+        if member is None:
+            raise HTTPException(status_code=404, detail="Member not found")
+
+    profile_touched = any(
+        field is not None
+        for field in (updates.name, updates.company, updates.job_title, updates.bio)
+    )
+    if profile_touched:
+        try:
+            await auth_service.update_profile(
+                user_id=user_id,
+                name=updates.name,
+                email=None,
+                company=updates.company,
+                role=updates.job_title,
+                bio=updates.bio,
+            )
+        except UserNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="User not found") from exc
+        member = await service.get_organization_member(org_id=org_id, user_id=user_id)
+        if member is None:
+            raise HTTPException(status_code=404, detail="Member not found")
+
+    return OrganizationMember(**member.__dict__)
+
+
+@router.post("/{org_id}/members/{user_id}/avatar")
+async def upload_org_member_avatar(
+    org_id: str,
+    user_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+    auth_service: AuthService = Depends(get_auth_service),
+    object_storage: ObjectStorageService = Depends(_get_object_storage),
+) -> OrganizationMember:
+    role = await require_org_access(current_user.id, org_id, service)
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only admins can update members")
+
+    member = await service.get_organization_member(org_id=org_id, user_id=user_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_AVATAR_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {', '.join(sorted(ALLOWED_AVATAR_EXTENSIONS))}",
+        )
+
+    content = await file.read()
+    if len(content) > MAX_AVATAR_SIZE:
+        raise HTTPException(status_code=400, detail="File too large (max 2MB)")
+
+    unique_filename = f"{user_id}-{os.urandom(4).hex()}{ext}"
+    object_storage.put_object(AVATAR_STORAGE_PREFIX, unique_filename, content)
+    avatar_url = f"/api/auth/avatar/{unique_filename}"
+    previous_avatar = member.avatar
+    try:
+        await auth_service.update_avatar(user_id=user_id, avatar_url=avatar_url)
+    except UserNotFoundError as exc:
+        try:
+            object_storage.delete_object(AVATAR_STORAGE_PREFIX, unique_filename)
+        except Exception:
+            pass
+        raise HTTPException(status_code=404, detail="User not found") from exc
+
+    _delete_old_avatar(object_storage, previous_avatar, unique_filename)
+    member = await service.get_organization_member(org_id=org_id, user_id=user_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    return OrganizationMember(**member.__dict__)
+
+
+@router.delete("/{org_id}/members/{user_id}/avatar")
+async def remove_org_member_avatar(
+    org_id: str,
+    user_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+    auth_service: AuthService = Depends(get_auth_service),
+    object_storage: ObjectStorageService = Depends(_get_object_storage),
+) -> OrganizationMember:
+    role = await require_org_access(current_user.id, org_id, service)
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only admins can update members")
+
+    member = await service.get_organization_member(org_id=org_id, user_id=user_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    previous_avatar = member.avatar
+    try:
+        await auth_service.update_avatar(user_id=user_id, avatar_url=None)
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="User not found") from exc
+
+    _delete_old_avatar(object_storage, previous_avatar)
+    member = await service.get_organization_member(org_id=org_id, user_id=user_id)
     if member is None:
         raise HTTPException(status_code=404, detail="Member not found")
     return OrganizationMember(**member.__dict__)

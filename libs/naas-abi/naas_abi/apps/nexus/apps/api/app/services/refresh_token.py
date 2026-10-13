@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import secrets
 from datetime import datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException, status
@@ -15,6 +16,21 @@ from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key, set
 from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from sqlalchemy import text
+
+
+def _as_naive_datetime(value: Any) -> datetime | None:
+    """SQLite returns TIMESTAMP columns as strings on raw SQL rows."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None) if value.tzinfo else value
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(text)
+    return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
 
 
 def generate_refresh_token() -> str:
@@ -122,7 +138,8 @@ async def validate_refresh_token(token: str) -> str:
                 detail="Refresh token has been revoked",
             )
 
-        if row.expires_at < now:
+        expires_at = _as_naive_datetime(row.expires_at)
+        if expires_at is not None and expires_at < now:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Refresh token has expired",

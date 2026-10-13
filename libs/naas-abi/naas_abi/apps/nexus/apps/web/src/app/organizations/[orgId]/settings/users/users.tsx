@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   Plus,
   Shield,
@@ -17,7 +17,9 @@ import {
   ChevronDown,
   Search,
   Download,
+  Pencil,
 } from 'lucide-react';
+import { getApiUrl } from '@/lib/config';
 import { useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
@@ -102,6 +104,11 @@ function roleBadge(role: 'owner' | 'admin' | 'member') {
   );
 }
 
+function memberPhotoUrl(avatar?: string) {
+  if (!avatar) return '';
+  return avatar.startsWith('/') ? `${getApiUrl()}${avatar}` : avatar;
+}
+
 function countFacets(values: string[]): FacetBucket[] {
   const counts = new Map<string, number>();
   for (const value of values) {
@@ -114,6 +121,7 @@ function countFacets(values: string[]): FacetBucket[] {
 
 export default function OrgUsersPage() {
   const params = useParams();
+  const router = useRouter();
   const orgId = params.orgId as string;
   const authUser = useAuthStore((s) => s.user);
   const {
@@ -722,9 +730,20 @@ export default function OrgUsersPage() {
                     <tr key={user.id}>
                       <td>
                         <div className="org-settings-users-row-start">
-                          <div className="org-settings-users-avatar">
-                            <UserCircle size={20} />
-                          </div>
+                          {memberPhotoUrl(user.avatar) ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={memberPhotoUrl(user.avatar)}
+                              alt=""
+                              className="org-settings-users-avatar-image"
+                            />
+                          ) : (
+                            <div className="org-settings-users-avatar">
+                              {(user.name || user.email || '?')
+                                .charAt(0)
+                                .toUpperCase()}
+                            </div>
+                          )}
                           <div className="org-settings-users-identity">
                             <p className="org-settings-users-name">
                               {user.name || 'Unknown'}
@@ -774,18 +793,35 @@ export default function OrgUsersPage() {
                       <td>
                         <div className="org-settings-users-row-end">
                           {roleBadge(user.role)}
-                          <span className="org-settings-users-remove-slot">
-                            {canRemove ? (
+                          {canManage ? (
+                            <span className="org-settings-users-row-actions">
                               <button
                                 type="button"
-                                className="org-settings-users-remove"
-                                onClick={() => void handleRemove(user.userId)}
-                                title="Remove user"
+                                className="org-settings-users-edit"
+                                title="Edit profile"
+                                aria-label={`Edit ${user.name || user.email || 'user'}`}
+                                onClick={() =>
+                                  router.push(
+                                    `/organizations/${orgId}/settings/users/${user.userId}`
+                                  )
+                                }
                               >
-                                <Trash2 size={16} />
+                                <Pencil size={16} />
                               </button>
-                            ) : null}
-                          </span>
+                              <span className="org-settings-users-remove-slot">
+                                {canRemove ? (
+                                  <button
+                                    type="button"
+                                    className="org-settings-users-remove"
+                                    onClick={() => void handleRemove(user.userId)}
+                                    title="Remove user"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                ) : null}
+                              </span>
+                            </span>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -797,8 +833,9 @@ export default function OrgUsersPage() {
         </div>
 
         <p className="org-settings-footnote">
-          Add User creates the account if needed, emails a sign-in code, and
-          assigns the workspaces you pick. Filter from the column headers.
+          Use the edit icon to open the same profile page as Account. Chat
+          uses name, company, job title, and bio. Add User creates the
+          account if needed and emails a sign-in code.
         </p>
       </div>
 

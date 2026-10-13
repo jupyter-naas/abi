@@ -43,6 +43,18 @@ describe('parseOrgSettingsRoute', () => {
     });
   });
 
+  it('keeps the users section on a member profile page', () => {
+    expect(
+      parseOrgSettingsRoute('/organizations/org-1/settings/users/user-abc')
+    ).toMatchObject({
+      isOrgSettingsRoute: true,
+      orgId: 'org-1',
+      isDetail: true,
+      section: 'users',
+      sectionLabel: 'Users',
+    });
+  });
+
   it('labels the roles section', () => {
     expect(parseOrgSettingsRoute('/organizations/org-1/settings/roles')).toEqual({
       isOrgSettingsRoute: true,
