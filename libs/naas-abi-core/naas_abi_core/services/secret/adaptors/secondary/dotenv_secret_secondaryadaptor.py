@@ -16,7 +16,8 @@ class DotenvSecretSecondaryAdaptor(ISecretAdapter):
 
     Reads take the file first, then the process environment.
     ``environment_first`` reverses that, so a variable the deployment sets wins
-    over a value saved in the file earlier, as when the config is rendered.
+    over a value saved in the file earlier, as when the config is rendered;
+    ``list`` shows the same values for the file's keys.
     """
 
     def __init__(
@@ -88,5 +89,8 @@ class DotenvSecretSecondaryAdaptor(ISecretAdapter):
         with self._lock:
             secrets: dict[str, str | None] = {}
             for key in self.secrets:
-                secrets[str(key)] = str(self.secrets.get(key))
+                value = self.secrets.get(key)
+                if self.environment_first and key in os.environ:
+                    value = os.environ[key]
+                secrets[str(key)] = str(value)
             return secrets

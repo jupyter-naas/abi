@@ -136,7 +136,12 @@ services:
   # -----------------------------------------------------------------------------
   abi:
     <<: *abi_template
-    command: ["sh", "-c", "touch {{ SECRETS_DIR }}/.env .env && exec uv run --no-dev python -m naas_abi_core.apps.api.api"]
+    # Creates the secrets files and adds the config's secrets that have no
+    # value yet to the abi_secrets file, empty, so a first boot starts.
+    command:
+      - sh
+      - -c
+      - '{{ SECRETS_SETUP }} && exec uv run --no-dev python -m naas_abi_core.apps.api.api'
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
@@ -308,7 +313,7 @@ services:
     command:
       - /bin/bash
       - -c
-      - 'touch {{ SECRETS_DIR }}/.env .env && exec uv run --no-dev dagster dev --host 0.0.0.0 --port 3001 -m naas_abi_core.apps.dagster.dagster'
+      - '{{ SECRETS_SETUP }} && exec uv run --no-dev dagster dev --host 0.0.0.0 --port 3001 -m naas_abi_core.apps.dagster.dagster'
 {% if INCLUDE_CODING %}
     depends_on:
       coding-init:

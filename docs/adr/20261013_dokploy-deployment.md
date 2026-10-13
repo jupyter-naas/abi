@@ -71,26 +71,39 @@ on it:
   its values and `--regenerate` replaces them.
 - **`config.dokploy.yaml`.** The stack sets `ENV=dokploy`. The command derives
   the file from `config.local.yaml` on every run, so the two do not drift. It
-  only inserts lines: a dotenv adapter at the head of
-  `services.secret.secret_adapters` (found by indentation, not by the first
-  key of that name) and, with coding, one at its end. The project's adapter
-  lines, comments, quoting and Jinja are copied unchanged. The list is read
+  only inserts lines into `services.secret.secret_adapters` (found by
+  indentation, not by the first key of that name): the volume dotenv where the
+  project's `.env` dotenv is, or after the project's first adapter, and with
+  coding the read-only tokens at the end. The project's adapter lines,
+  comments, quoting and line endings are copied unchanged. The config is read
   with the engine's own renderer (`render_without_secrets`, which resolves
   `{% if %}` and `{% include %}`) before and after, and the command refuses a
-  result that does not read back as the project's list plus the two adapters.
-- **The abi_secrets volume.** The added head adapter reads
+  result that does not read back as the project's list plus the added
+  adapters. Jinja tags inside the list are refused: its lines would no longer
+  map to its adapters. They stay allowed everywhere else.
+- **The abi_secrets volume.** The added dotenv reads
   `/var/lib/abi-secrets/.env` on the `abi_secrets` named volume, so secrets
-  the engine writes at runtime survive redeploys. The project's own `.env`
-  dotenv stays behind it and reads an empty file. A dotenv on `.env.*`
-  (excluded from the image) or on a file missing from the project is refused,
-  since the engine would stop at boot on it.
-- **The Environment tab wins over every secrets file.** Config rendering
+  the engine writes at runtime survive redeploys. It takes the place of the
+  project's `.env` dotenv, which stays right behind it and reads an empty
+  file, and never goes ahead of the project's first adapter: with
+  `[naas, dotenv]` or `[nats_rpc, ...]` the project's first source still
+  answers first. A dotenv on any other file is refused: the image Dokploy
+  builds from git does not have it, and the engine would stop at boot.
+- **First boot.** The secrets the config reads that the stack does not set
+  (`OPENROUTER_API_KEY` in a new project) are commented out in
+  `.env.dokploy`. The container start command adds each of them, empty, to
+  the abi_secrets file unless it is already there, so a first deploy starts
+  with empty values, as `abi deploy local` does, and a value saved later is
+  never overwritten.
+- **The Environment tab wins over the secrets file.** Config rendering
   already reads the environment first. The dotenv adapter takes
-  `environment_first: true`, set on the head adapter, so runtime reads agree:
-  environment, then the secrets file, then the project's adapters.
-  `.env.dokploy` comments out the keys it has no value for, since an empty
-  variable would hide a value in the file. A key saved from Nexus that is also
-  in the Environment tab is replaced by the tab's value on the next deploy.
+  `environment_first: true`, set on the volume adapter, so its `get` and
+  `list` (what the Nexus admin console shows) agree: for a key in the tab, the
+  tab's value. `.env.dokploy` comments out every key it has no value for,
+  your own ones included, since an empty variable would hide a value in the
+  file. A single environment adapter at the head of the list would put the
+  rule in one place, but it would also go ahead of the project's first
+  adapter; the flag keeps the project's order.
 - **The coding-secrets volume.** `coding-init` writes the tokens to
   `CODING_SECRETS_FILE`, a dotenv file on the `coding_secrets` named volume.
   `abi` waits for it, mounts the volume read-only, and `config.dokploy.yaml`
@@ -141,12 +154,12 @@ on it:
   server and a rerun with `--wildcard-cert-resolver`; until then they get
   Traefik's default certificate.
 - A key is managed either in the Environment tab or from Nexus, not both:
-  the tab's value replaces a Nexus save on the next deploy.
+  a key set in the tab cannot be changed from Nexus, since the tab's value
+  comes back on the next restart.
 - Deleting a coding token in Nexus does not remove it: it is still served
   from the read-only file until the `coding_secrets` volume is deleted.
-- A secret the config reads that is in neither the Environment tab nor the
-  secrets file stops the engine at boot, where an empty value used to let it
-  start.
+- A config with Jinja tags inside `secret_adapters`, or a dotenv on a file
+  other than `.env`, has to be changed before it deploys on Dokploy.
 - A project config that calls Coder or Forgejo from `abi` must use their
   public URLs or the stack aliases, not the bare service names. Another
   Dokploy app that puts a service named like an internal one (`postgres`,

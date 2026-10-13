@@ -40,7 +40,9 @@ It writes:
 - `config.dokploy.yaml`: a copy of `config.local.yaml` with Dokploy's secret
   adapters added to `services.secret.secret_adapters` (see
   [Secrets](#secrets)). Nothing else changes: the project's adapters,
-  comments and Jinja (`{% if %}`, `{% include %}`) are copied line for line.
+  comments, line endings and Jinja (`{% if %}`, `{% include %}`) are copied
+  line for line. Jinja tags inside the `secret_adapters` list itself are
+  refused: put the condition around the whole `services.secret` section.
 - `.deploy/docker/`: the Postgres init scripts, `nats.conf`, `dagster.yaml`
   and, with `--coding`, the coding bootstrap script. The compose mounts them
   from the repository.
@@ -91,10 +93,9 @@ settings if it is not set yet.
    `./docker-compose.dokploy.yml`.
 4. **Environment**: paste the content of `.env.dokploy`, then uncomment and
    fill in the keys it lists commented out at the end, such as
-   `OPENROUTER_API_KEY`. Leave a key commented out only if the engine's
-   secrets file already holds it (see [Secrets](#secrets)): the engine stops
-   at boot on a secret it finds nowhere. Dokploy writes the tab to `.env` next
-   to the compose file on every deploy.
+   `OPENROUTER_API_KEY`. A key left commented out starts empty and can be set
+   later from the Nexus admin console (see [Secrets](#secrets)). Dokploy
+   writes the tab to `.env` next to the compose file on every deploy.
 5. Leave the **Domains** tab empty: routing is in the compose labels. Leave
    **Isolated Deployment** and **Randomize Compose** off, since the stack joins
    `dokploy-network` itself and its router names come from `ABI_STACK_NAME`.
@@ -133,30 +134,36 @@ Changing a value takes effect on the next deploy.
 The container's files are replaced on every deploy, so `config.dokploy.yaml`
 adds two dotenv adapters on named volumes to the project's own:
 
-- **First, the engine's secrets file**: `/var/lib/abi-secrets/.env` on the
-  `abi_secrets` volume, which the container creates on start. Every secret the
-  engine writes lands there and survives redeploys: passwords it generates for
-  users in `users:` that have none, keys saved from the Nexus admin console.
-- **Last, with `--coding`, the coding tokens**: a read-only adapter on the
+- **The engine's secrets file**: `/var/lib/abi-secrets/.env` on the
+  `abi_secrets` volume. Every secret the engine writes lands there and
+  survives redeploys: passwords it generates for users in `users:` that have
+  none, keys saved from the Nexus admin console. It takes the place of the
+  project's `.env` dotenv, which stays right behind it and reads an empty
+  file (`.env` is kept out of the image). It never goes ahead of the
+  project's first adapter: with a `naas` or `nats_rpc` adapter first, that
+  one still answers first.
+- **With `--coding`, the coding tokens**, last: a read-only adapter on the
   `coding_secrets` volume (see [Coding workspaces](#coding-workspaces)).
   Writes skip it, so deleting `CODER_ADMIN_TOKEN` or `FORGEJO_ADMIN_TOKEN` in
   Nexus reports success but the token is still served from that file. Delete
   the volume to replace them.
 
-The project's adapters stay between the two, unchanged. Its default dotenv on
-`.env` reads an empty file: `.env` is kept out of the image. A dotenv on
-`.env.*`, also kept out of the image, or on a file that is not in the project
-cannot work on Dokploy, and the command refuses it: move its values to the
-Environment tab.
+On every start, the container adds the secrets the config reads that
+`.env.dokploy` leaves commented out to the secrets file, empty, unless the
+file has them. A first deploy therefore starts with those values empty, and
+one saved from Nexus is kept.
 
-**The Environment tab wins.** A key set there is the value the engine sees,
-both when it renders `config.dokploy.yaml` and when code reads the secret
-service at runtime: the secrets file comes after the environment. The file
-serves the keys the tab does not set. A key saved from Nexus that is also in
-the tab takes effect at once and is replaced by the tab's value on the next
-deploy; to manage a key from Nexus, leave it out of the tab. This is why
-`.env.dokploy` comments out the keys it has no value for: an empty variable
-would still win over the file.
+A dotenv adapter on any file other than `.env` is refused: the image
+Dokploy builds from git does not have it. Move its values to the Environment
+tab.
+
+**The Environment tab wins.** For a key set there, the engine sees the tab's
+value when it renders `config.dokploy.yaml`, when code reads the secret
+service, and in the Nexus admin console. A key set in the tab cannot be
+changed from Nexus: an edit there lasts until the next restart. To manage a
+key from Nexus, leave it out of the tab. The secrets file serves the keys the
+tab does not set. This is why `.env.dokploy` comments out every key it has no
+value for: an empty variable would still win over the file.
 
 ## Another environment
 

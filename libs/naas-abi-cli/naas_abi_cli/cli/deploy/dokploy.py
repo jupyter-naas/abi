@@ -7,7 +7,6 @@ Its values live in Dokploy's Environment tab; this command writes a starting
 set to the gitignored ``.env.dokploy``. See docs/deploy-dokploy.md.
 """
 
-import fnmatch
 import os
 import re
 import secrets
@@ -96,7 +95,9 @@ def _stack_name(project_path: str) -> str:
     return compose_project_name(project_path).replace("_", "-").strip("-") or "abi"
 
 
-def _render_compose(nats: bool, include_coding: bool, wildcard_cert: bool) -> str:
+def _render_compose(
+    nats: bool, include_coding: bool, wildcard_cert: bool, seed_keys: list[str]
+) -> str:
     with open(
         os.path.join(_templates("dokploy"), COMPOSE_FILE), "r", encoding="utf-8"
     ) as template:
@@ -111,6 +112,7 @@ def _render_compose(nats: bool, include_coding: bool, wildcard_cert: bool) -> st
         INCLUDE_CODING=include_coding,
         CODER_WILDCARD_CERT=wildcard_cert,
         SECRETS_DIR=SECRETS_DIR,
+        SECRETS_SETUP=_secrets_setup(seed_keys),
         CODING_SECRETS_DIR=CODING_SECRETS_DIR,
         CODING_SECRETS_FILE=CODING_SECRETS_FILE,
     )
@@ -141,14 +143,15 @@ def _render_deploy_files(
 
 # Lines that carry no YAML structure: blank, comments, Jinja tags.
 _NOISE = re.compile(r"[ \t]*(#.*|\{%.*%\}|\{#.*#\})?[ \t]*")
+_JINJA_TAG = re.compile(r"\{%|\{#")
 _MAPPING_KEY = re.compile(
     r"(?P<indent> *)(?P<key>[A-Za-z_][A-Za-z0-9_-]*):(?P<rest>.*)"
 )
 _SECRET_ADAPTERS_PATH = ["services", "secret", "secret_adapters"]
 
-# Prepended: secrets the engine writes at runtime, kept on the abi_secrets
-# volume. The environment comes first, as when the config is rendered, so the
-# Environment tab wins over a value saved earlier.
+# Takes the place of the project's `.env` dotenv: secrets the engine writes at
+# runtime, kept on the abi_secrets volume. The environment comes first, as
+# when the config is rendered, so the Environment tab wins over the file.
 _PERSISTENT_ADAPTER = {
     "adapter": "dotenv",
     "config": {"path": SECRETS_FILE, "environment_first": True},
@@ -170,9 +173,26 @@ def _adapter_lines(indent: str, comment: list[str], adapter: dict) -> list[str]:
     return lines
 
 
-def _secret_adapters_block(lines: list[str]) -> tuple[int, int, str]:
-    """(key line, line after its last item, item indent) of the
-    services.secret.secret_adapters list, found by indentation."""
+class _AdaptersBlock:
+    """Where services.secret.secret_adapters sits in the config's lines."""
+
+    def __init__(self, key: int, end: int, items: list[int], indent: str):
+        self.key = key  # the `secret_adapters:` line
+        self.end = end  # the line after its last item
+        self.items = items  # the `- ` line of each item
+        self.indent = indent  # the items' indentation
+
+    def before_item(self, lines: list[str], index: int) -> int:
+        """The line to insert at to come before item ``index``, ahead of the
+        comment lines just above it."""
+        at = self.items[index]
+        while at - 1 > self.key and lines[at - 1].lstrip().startswith("#"):
+            at -= 1
+        return at
+
+
+def _secret_adapters_block(lines: list[str]) -> _AdaptersBlock:
+    """The services.secret.secret_adapters list, found by indentation."""
     path: list[tuple[int, str]] = []
     for start, line in enumerate(lines):
         if _NOISE.fullmatch(line.rstrip("\n")):
@@ -199,20 +219,34 @@ def _secret_adapters_block(lines: list[str]) -> tuple[int, int, str]:
             f"block list, one `- adapter:` per item, not `{rest}`."
         )
 
-    end, item_indent = start + 1, None
+    end, items, item_depth, tags = start + 1, [], None, []
     for index in range(start + 1, len(lines)):
         line = lines[index].rstrip("\n")
+        if not line.lstrip().startswith("#") and _JINJA_TAG.search(line):
+            tags.append(index)
         if _NOISE.fullmatch(line):
             continue
         stripped = line.lstrip(" ")
         indent = len(line) - len(stripped)
         if indent > depth or (indent == depth and stripped.startswith("-")):
-            if item_indent is None and stripped.startswith("-"):
-                item_indent = line[:indent]
+            if stripped == "-" or stripped.startswith("- "):
+                item_depth = indent if item_depth is None else item_depth
+                if indent == item_depth:
+                    items.append(index)
             end = index + 1
             continue
         break
-    return start, end, item_indent or " " * (depth + 2)
+    # A tag inside the list, or one supplying all of it (an include): the
+    # lines no longer map to the adapters. A tag after the last item closes
+    # one opened outside the list, around it, so the added adapters follow it.
+    if any(index < end for index in tags) or (tags and not items):
+        raise DokployDeployError(
+            "services.secret.secret_adapters in config.local.yaml holds Jinja "
+            "tags ({% ... %}). Move the condition or include outside the list, "
+            "for example around the whole services.secret section."
+        )
+    item_indent = " " * (depth + 2 if item_depth is None else item_depth)
+    return _AdaptersBlock(start, end, items, item_indent)
 
 
 def _rendered_adapters(config: str, project_path: str) -> list:
@@ -224,12 +258,16 @@ def _rendered_adapters(config: str, project_path: str) -> list:
 
     try:
         data = EngineConfiguration.render_without_secrets(config, base_dir=project_path)
-        adapters = data["services"]["secret"]["secret_adapters"]
-    except (jinja2.TemplateError, yaml.YAMLError, KeyError, TypeError) as error:
+    except (jinja2.TemplateError, yaml.YAMLError) as error:
+        raise DokployDeployError(f"Cannot read config.local.yaml: {error!r}") from error
+    services = data.get("services") if isinstance(data, dict) else None
+    secret = services.get("secret") if isinstance(services, dict) else None
+    if not isinstance(secret, dict) or "secret_adapters" not in secret:
         raise DokployDeployError(
-            f"Cannot read services.secret.secret_adapters in config.local.yaml: "
-            f"{error!r}"
-        ) from error
+            "config.local.yaml has no services.secret.secret_adapters section. "
+            "Add one (see the `abi new project` template) and rerun."
+        )
+    adapters = secret["secret_adapters"]
     if not isinstance(adapters, list):
         raise DokployDeployError(
             "services.secret.secret_adapters in config.local.yaml is not a list."
@@ -251,62 +289,83 @@ def _dotenv_paths(adapter: object) -> list[str]:
     return []
 
 
-def _check_dotenv_paths(adapters: list, project_path: str) -> None:
-    """Refuse a dotenv file the image will not have.
+def _is_project_dotenv(adapter: object) -> bool:
+    paths = _dotenv_paths(adapter)
+    return (
+        isinstance(adapter, dict)
+        and adapter.get("adapter") == "dotenv"
+        and os.path.normpath(paths[0]) == ".env"
+    )
 
-    `.env` is created empty by the container command. `.env.*` is in
-    .dockerignore, and a file missing from the project is missing from the
-    image: the engine would stop at boot on either.
+
+def _check_dotenv_paths(adapters: list) -> None:
+    """Refuse a dotenv file other than `.env`.
+
+    The container creates `.env` empty. Any other file would have to be in
+    the image Dokploy builds from git: secrets files are kept out of git, and
+    `.env.*` out of the image, so the engine would stop at boot.
     """
     for adapter in adapters:
         for path in _dotenv_paths(adapter):
-            relative = os.path.normpath(path)
-            if os.path.isabs(path) or relative == ".env":
-                continue
-            if fnmatch.fnmatch(relative, ".env.*"):
-                reason = "`.env.*` is kept out of the image (.dockerignore)"
-            elif not os.path.exists(os.path.join(project_path, relative)):
-                reason = "the file is not in the project, so not in the image"
-            else:
-                continue
-            raise DokployDeployError(
-                f"The dotenv secret adapter on `{path}` cannot work on Dokploy: "
-                f"{reason}. Put its values in the Environment tab and remove the "
-                "adapter, or point it at a file committed to the repository."
-            )
+            if os.path.normpath(path) != ".env":
+                raise DokployDeployError(
+                    f"The dotenv secret adapter on `{path}` cannot work on "
+                    "Dokploy: the image Dokploy builds from git does not have "
+                    "that file. Put its values in the Environment tab and remove "
+                    "the adapter."
+                )
 
 
 def _dokploy_config(local_config: str, include_coding: bool, project_path: str) -> str:
     """config.dokploy.yaml: config.local.yaml with Dokploy's secret adapters.
 
     The project's adapters are kept line for line. A dotenv on the abi_secrets
-    volume is added before them and, with coding, the read-only coding tokens
-    after them. The rest of the file, comments and Jinja included, is copied as
-    is.
+    volume goes where the project's `.env` dotenv is (or after its first
+    adapter) and, with coding, the read-only coding tokens at the end. The
+    rest of the file, comments and Jinja included, is copied as is.
     """
     header = (
         "# Generated by `abi deploy dokploy` from config.local.yaml; rerunning\n"
         "# the command rewrites it. Edit config.local.yaml instead. The Dokploy\n"
         "# stack sets ENV=dokploy, so the engine reads this file.\n"
     )
+    crlf = "\r\n" in local_config
+    local_config = local_config.replace("\r\n", "\n")
     if not local_config.endswith("\n"):
         local_config += "\n"
     adapters = _rendered_adapters(local_config, project_path)
-    _check_dotenv_paths(adapters, project_path)
+    _check_dotenv_paths(adapters)
 
     lines = local_config.splitlines(keepends=True)
-    start, end, indent = _secret_adapters_block(lines)
-    first = _adapter_lines(
-        indent,
+    block = _secret_adapters_block(lines)
+    if len(block.items) != len(adapters):
+        raise DokployDeployError(
+            "Cannot match the items of services.secret.secret_adapters in "
+            "config.local.yaml with the adapters they define. Keep it a plain "
+            "block list, one `- adapter:` per item."
+        )
+    position = next(
+        (
+            index
+            for index, adapter in enumerate(adapters)
+            if _is_project_dotenv(adapter)
+        ),
+        min(1, len(adapters)),
+    )
+    at = (
+        block.before_item(lines, position) if position < len(block.items) else block.end
+    )
+    persistent = _adapter_lines(
+        block.indent,
         [
             "Added by `abi deploy dokploy`: secrets the engine writes, kept on",
             "the abi_secrets volume. The Environment tab wins over this file.",
         ],
         _PERSISTENT_ADAPTER,
     )
-    last = (
+    coding = (
         _adapter_lines(
-            indent,
+            block.indent,
             ["Added by `abi deploy dokploy`: the coding tokens, read-only."],
             _CODING_ADAPTER,
         )
@@ -314,19 +373,20 @@ def _dokploy_config(local_config: str, include_coding: bool, project_path: str) 
         else []
     )
     config = "".join(
-        lines[: start + 1] + first + lines[start + 1 : end] + last + lines[end:]
+        lines[:at] + persistent + lines[at : block.end] + coding + lines[block.end :]
     )
 
-    expected = [_PERSISTENT_ADAPTER, *adapters] + (
-        [_CODING_ADAPTER] if include_coding else []
-    )
+    expected = [*adapters[:position], _PERSISTENT_ADAPTER, *adapters[position:]]
+    if include_coding:
+        expected.append(_CODING_ADAPTER)
     if _rendered_adapters(config, project_path) != expected:
         raise DokployDeployError(
             "Cannot add Dokploy's secret adapters to services.secret.secret_adapters "
-            "in config.local.yaml: the result does not read back as written (a "
-            "Jinja block around the list?). Keep the list a plain block list."
+            "in config.local.yaml: the result does not read back as written. Keep "
+            "the list a plain block list."
         )
-    return header + config
+    config = header + config
+    return config.replace("\n", "\r\n") if crlf else config
 
 
 def _config_secret_names(config: str) -> list[str]:
@@ -360,9 +420,9 @@ def _env_layout(
     nats: bool,
     include_coding: bool,
     wildcard_resolver: str | None,
-    config_secrets: list[str],
 ) -> list[tuple[str, list[tuple[str, Callable[[], str]]]]]:
-    """Sections of .env.dokploy: (title, [(key, value factory)])."""
+    """Sections of .env.dokploy for the values the stack itself needs:
+    (title, [(key, value factory)])."""
 
     def fixed(value: str) -> Callable[[], str]:
         return lambda: value
@@ -455,23 +515,39 @@ def _env_layout(
             )
         )
 
+    return sections
+
+
+def _config_only_secrets(
+    sections: list[tuple[str, list[tuple[str, Callable[[], str]]]]],
+    config_secrets: list[str],
+) -> list[str]:
+    """The secrets the config reads that the stack does not set, minted tokens
+    aside (an empty value would hide the coding_secrets file)."""
     listed = {key for _, entries in sections for key, _ in entries}
-    from_config = [
-        (name, fixed(""))
+    return [
+        name
         for name in config_secrets
         if name not in listed and name not in _MINTED_TOKENS
     ]
-    if from_config:
-        sections.append(
-            (
-                (
-                    "Read by config.dokploy.yaml: uncomment and fill in. Left "
-                    "unset, the engine reads them from its secrets file."
-                ),
-                from_config,
-            )
+
+
+def _secrets_setup(seed_keys: list[str]) -> str:
+    """Shell run before the engine starts.
+
+    Creates the dotenv files the config reads, and adds each of
+    ``seed_keys`` with no value to the abi_secrets file unless it is there: a
+    first boot then renders it empty instead of stopping on a missing secret,
+    and a value saved later is never overwritten.
+    """
+    setup = f"touch {SECRETS_FILE} .env"
+    if seed_keys:
+        setup += (
+            f" && for k in {' '.join(seed_keys)}; do "
+            f'grep -q "^$${{k}}=" {SECRETS_FILE} || echo "$${{k}}=" >> {SECRETS_FILE}; '
+            "done"
         )
-    return sections
+    return setup
 
 
 def _render_env(
@@ -513,7 +589,11 @@ def _render_env(
     ]
     if custom:
         lines += ["", "# Your own values"]
-        lines += [f"{key}={existing[key]}" for key in custom]
+        # Empty ones commented out: an empty variable still wins over the
+        # engine's secrets file.
+        lines += [
+            f"{key}={existing[key]}" if existing[key] else f"# {key}=" for key in custom
+        ]
 
     return "\n".join(lines) + "\n", empty
 
@@ -628,13 +708,37 @@ def setup_dokploy_deploy(
 
     # Render everything before writing anything: a failure leaves the
     # project's files as they were.
-    with open(local_config_path, "r", encoding="utf-8") as config_file:
+    with open(local_config_path, "r", encoding="utf-8", newline="") as config_file:
         dokploy_config = _dokploy_config(
             config_file.read(), include_coding, project_path
         )
+    sections = _env_layout(
+        stack_name=_stack_name(project_path),
+        hosts=hosts,
+        nats=nats,
+        include_coding=include_coding,
+        wildcard_resolver=wildcard_cert_resolver,
+    )
+    # Listed commented out in .env.dokploy, and added empty to the abi_secrets
+    # file by the container, so a first boot starts without them.
+    seed_keys = _config_only_secrets(sections, _config_secret_names(dokploy_config))
+    if seed_keys:
+        sections.append(
+            (
+                (
+                    "Read by config.dokploy.yaml: uncomment and fill in. Left "
+                    "commented out, the engine reads them from its secrets file "
+                    "(empty until saved from Nexus)."
+                ),
+                [(name, lambda: "") for name in seed_keys],
+            )
+        )
     files = {
         COMPOSE_FILE: _render_compose(
-            nats=nats, include_coding=include_coding, wildcard_cert=wildcard_cert
+            nats=nats,
+            include_coding=include_coding,
+            wildcard_cert=wildcard_cert,
+            seed_keys=seed_keys,
         ),
         CONFIG_FILE: dokploy_config,
         **_render_deploy_files(
@@ -647,14 +751,6 @@ def setup_dokploy_deploy(
             },
         ),
     }
-    sections = _env_layout(
-        stack_name=_stack_name(project_path),
-        hosts=hosts,
-        nats=nats,
-        include_coding=include_coding,
-        wildcard_resolver=wildcard_cert_resolver,
-        config_secrets=_config_secret_names(dokploy_config),
-    )
     files[ENV_FILE], empty = _render_env(sections, existing, overrides)
     # Dokploy writes the Environment tab to .env in the build context: keep it
     # out of the image.
@@ -673,7 +769,7 @@ def setup_dokploy_deploy(
     for name, content in files.items():
         target = os.path.join(project_path, name)
         os.makedirs(os.path.dirname(target), exist_ok=True)
-        with open(target, "w", encoding="utf-8") as out:
+        with open(target, "w", encoding="utf-8", newline="") as out:
             out.write(content)
 
     # Validators: they keep valid values and replace a shipped default or a
