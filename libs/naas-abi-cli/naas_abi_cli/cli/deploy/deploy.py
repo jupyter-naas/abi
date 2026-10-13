@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from rich.console import Console
 from rich.markdown import Markdown
 
+from .dokploy import DokployDeployError, setup_dokploy_deploy
 from .local import setup_local_deploy
 
 
@@ -267,6 +268,50 @@ def local_deploy(
         regenerate=regenerate,
         backup=not no_backup,
     )
+
+
+@deploy.command("dokploy")
+@click.option(
+    "--domain",
+    type=str,
+    default=None,
+    help="Base domain: Nexus at nexus.<domain>, the API at api.<domain>. "
+    "Prompted on the first run; later runs keep the hosts in .env.dokploy.",
+)
+@click.option(
+    "--coding",
+    is_flag=True,
+    default=False,
+    help="Include coding workspaces (Coder + Forgejo + Actions CI).",
+)
+@click.option(
+    "--regenerate",
+    is_flag=True,
+    default=False,
+    help="Generate new secrets in .env.dokploy (the previous file is backed up).",
+)
+@click.option(
+    "--headscale",
+    is_flag=True,
+    default=False,
+    hidden=True,
+)
+def dokploy_deploy(domain: str | None, coding: bool, regenerate: bool, headscale: bool):
+    """Render docker-compose.dokploy.yml and .env.dokploy for a Dokploy server."""
+    if headscale:
+        raise click.ClickException(
+            "--headscale is not supported on Dokploy yet: deploy Headscale "
+            "separately, or use `abi deploy local --headscale`."
+        )
+    try:
+        setup_dokploy_deploy(
+            os.getcwd(),
+            domain=domain,
+            include_coding=coding,
+            regenerate=regenerate,
+        )
+    except DokployDeployError as error:
+        raise click.ClickException(str(error)) from error
 
 
 # `abi new module` declares remote modules in the override file, which
