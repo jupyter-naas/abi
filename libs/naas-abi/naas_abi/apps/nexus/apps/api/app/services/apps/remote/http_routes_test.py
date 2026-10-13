@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -7,14 +9,17 @@ import pytest
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
+from jose import jwt
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote import http_routes as http
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters.in_memory import (
     InMemoryRemoteAppDirectory,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
     RemoteAppGrant,
+    _key,
     mint_remote_app_grant,
     read_remote_app_grant,
+    redact_grant_path,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
     AppRequest,
@@ -140,19 +145,83 @@ def test_a_grant_is_never_a_session_token(monkeypatch):
     assert read_remote_app_grant(session, secret=SECRET) is None
 
 
+def _presenting(monkeypatch, user_id: str, minutes_left: float | None = 60) -> None:
+    expires = None if minutes_left is None else datetime.now(UTC) + timedelta(minutes=minutes_left)
+    monkeypatch.setattr(http, "_presented_user", lambda request: (user_id, expires))
+
+
+def _grant_of(response) -> tuple[str, str, dict]:
+    _, prefix, grant, rest = response.headers["location"].split("/", 3)
+    claims = jwt.get_unverified_claims(grant)
+    return prefix, rest, {"grant": grant, **claims}
+
+
 def test_the_catalog_url_redirects_to_a_fresh_grant(monkeypatch, forwarded):
-    monkeypatch.setattr(http, "_user_id", lambda request: "u-7")
+    _presenting(monkeypatch, "u-7")
 
     response = _client().get(
         "/app-html/remote/acme.research/console/index.html?token=jwt&q=1", follow_redirects=False
     )
 
     assert response.status_code == 307
-    _, prefix, grant, rest = response.headers["location"].split("/", 3)
+    prefix, rest, claims = _grant_of(response)
     assert (prefix, rest) == ("app-remote", "acme.research/console/index.html?q=1")
-    assert read_remote_app_grant(grant, secret=SECRET) == RemoteAppGrant(
+    assert read_remote_app_grant(claims["grant"], secret=SECRET) == RemoteAppGrant(
         "u-7", "acme.research", "console"
     )
+
+
+def test_a_grant_never_outlives_the_credential_it_was_exchanged_for(monkeypatch, forwarded):
+    _presenting(monkeypatch, "u-7", minutes_left=1)  # a share link opened at its last minute
+
+    response = _client().get("/app-html/remote/acme.research/console/", follow_redirects=False)
+
+    _, _, claims = _grant_of(response)
+    assert claims["exp"] <= (datetime.now(UTC) + timedelta(minutes=1)).timestamp() + 1
+
+
+def test_the_catalog_url_needs_a_user(monkeypatch, forwarded):
+    _presenting(monkeypatch, "", minutes_left=None)  # ABI_API_KEY
+
+    response = _client().get("/app-html/remote/acme.research/console/", follow_redirects=False)
+
+    assert response.status_code == 403
+    assert "location" not in response.headers
+
+
+def test_a_grant_is_minted_and_read_for_a_user_only():
+    with pytest.raises(ValueError):
+        mint_remote_app_grant(secret=SECRET, user_id="", module_id="acme.research", app="console")
+    anonymous = jwt.encode(
+        {
+            "scope": "app-remote",
+            "uid": "",
+            "mod": "acme.research",
+            "app": "console",
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
+        },
+        _key(SECRET),
+        algorithm="HS256",
+    )
+    assert read_remote_app_grant(anonymous, secret=SECRET) is None
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/app-html/remote/acme%3Fx/console/",
+        "/app-html/remote/acme.research/con%3Fsole/",
+        "/app-html/remote/acme.research/con%23sole/",
+        "/app-html/remote/acme.research/con.sole/",
+    ],
+)
+def test_the_catalog_url_names_one_module_and_one_app(monkeypatch, forwarded, path):
+    _presenting(monkeypatch, "u-7")
+
+    response = _client().get(path, follow_redirects=False)
+
+    assert response.status_code == 404
+    assert "location" not in response.headers
 
 
 def test_the_app_root_redirects_to_its_folder(forwarded):
@@ -194,12 +263,17 @@ def test_the_api_middleware_keeps_the_sandbox_and_no_referrer(monkeypatch, forwa
     app.add_middleware(main.SecurityHeadersMiddleware)
     monkeypatch.setattr(main.settings, "enable_security_headers", True)
 
-    response = TestClient(app).get(f"{ROOT}/", headers={"Origin": "https://nexus.example"})
+    monkeypatch.setattr(main.settings, "frontend_url", "https://nexus.example")
+    framer = {"Origin": "https://evil.example", "Referer": "https://other.example/page"}
+
+    response = TestClient(app).get(f"{ROOT}/", headers=framer)
 
     assert response.headers["referrer-policy"] == "no-referrer"
     csp = response.headers["content-security-policy"]
     assert csp.startswith(f"{http.SANDBOX}; frame-ancestors ")
     assert "https://nexus.example" in csp
+    # Only Nexus frames a remote app, whoever asks.
+    assert "evil.example" not in csp and "other.example" not in csp
     assert "x-frame-options" not in response.headers
     # A sandboxed page's fetch() sends "Origin: null": no bogus ancestor.
     from_sandbox = TestClient(app).get(f"{ROOT}/api/report", headers={"Origin": "null"})
@@ -253,6 +327,11 @@ def test_only_allowed_response_headers_reach_the_browser(monkeypatch):
         ("//evil.example/", None),
         ("/api/auth/logout", None),
         ("../../../other/console/", None),
+        ("%2e%2e/%2e%2e/%2e%2e/%2e%2e/api/auth/me", None),
+        ("%2E%2E/%2E%2E/%2E%2E/%2E%2E/api/auth/me", None),
+        ("..\\..\\..\\..\\api\\auth\\me", None),
+        ("/\\evil.example/", None),
+        ("%5c%5cevil.example/", None),
         (f"/app-remote/{_grant(app='other')}/acme.research/other/", None),
     ],
 )
@@ -275,6 +354,8 @@ def test_only_the_apps_own_cookies_are_set(monkeypatch):
             ("Set-Cookie", "sibling=1; Path=/app-remote/x/acme.research/console-2/"),
             ("Set-Cookie", f"sid=abc; Path={ROOT}/; HttpOnly; SameSite=None; Secure"),
             ("Set-Cookie", f"pref=dark; path={ROOT}"),
+            ("Set-Cookie", f"dots=1; Path={ROOT}/%2e%2e/%2e%2e/%2e%2e/%2e%2e/"),
+            ("Set-Cookie", f"slash=1; Path={ROOT}/..\\..\\..\\..\\"),
         ),
     )
 
@@ -414,15 +495,43 @@ def test_uploads_to_one_module_are_capped():
     assert uploads.active == {}
 
 
-def test_the_user_comes_from_the_nexus_token(monkeypatch):
+def test_the_user_and_expiry_come_from_the_nexus_token(monkeypatch):
     from naas_abi.apps.nexus.apps.api.app.services.auth import service
 
     monkeypatch.setattr(
-        service, "decode_token", lambda token: {"sub": "u-7"} if token == "jwt" else None
+        service,
+        "decode_token",
+        lambda token: {"sub": "u-7", "exp": 1_900_000_000} if token == "jwt" else None,
     )
     request = type("R", (), {})()
 
     monkeypatch.setattr(http, "extract_abi_api_token", lambda r: "jwt")
-    assert http._user_id(request) == "u-7"
+    assert http._presented_user(request) == ("u-7", datetime.fromtimestamp(1_900_000_000, UTC))
     monkeypatch.setattr(http, "extract_abi_api_token", lambda r: "abi-api-key")
-    assert http._user_id(request) == ""
+    assert http._presented_user(request) == ("", None)
+
+
+# -- the grant is a credential: never in logs or traces ------------------------
+
+
+def test_the_grant_is_redacted_from_paths():
+    assert redact_grant_path(f"{ROOT}/api/x") == "/app-remote/[grant]/acme.research/console/api/x"
+    assert redact_grant_path("/api/apps") == "/api/apps"
+    assert redact_grant_path("/app-html/remote/acme/console/") == "/app-html/remote/acme/console/"
+
+
+def test_the_access_log_hides_the_grant():
+    record = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        __file__,
+        1,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1:1", "GET", f"{ROOT}/index.html?x=1", "1.1", 200),
+        None,
+    )
+
+    assert http.RedactGrantFilter().filter(record)
+
+    assert GRANT not in record.getMessage()
+    assert "/app-remote/[grant]/acme.research/console/index.html?x=1" in record.getMessage()

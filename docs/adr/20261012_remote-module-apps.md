@@ -183,11 +183,14 @@ cookie" for remote modules.
   it no `SameSite=Lax` cookie.
 - **The grant** is the only credential, so relative URLs carry it. It is signed
   with a key derived from the API secret and carries no `sub`, so it is never a
-  session token. It opens one app as one user for 8 hours
+  session token. It opens one app as one user, never anonymously, for 8 hours
   (`remote_app_grant_expire_minutes`). The Apps page mints it
   (`POST /api/apps/remote-grant`). The catalog URL
   `/app-html/remote/<module_id>/<app>/<path>` runs the usual access check and
-  redirects to a fresh grant. nexus-web does not proxy `/app-html/remote/`.
+  redirects to a fresh grant that expires no later than the credential
+  presented (a share link stays as short as it was). nexus-web does not proxy
+  `/app-html/remote/`. Logs, activity events and traces show
+  `/app-remote/[grant]/...`. Only the Nexus origins may frame the page.
 - **The app** gets the grant URL as `root_path`, so URLs it builds keep the
   grant. Its page's `fetch()` calls are cross-origin: Nexus answers them, and
   their preflights, with `Access-Control-Allow-Origin: *`.
@@ -200,8 +203,10 @@ cookie" for remote modules.
   cookies.
 - **Cookies.** A module's `Set-Cookie` is kept only with a `Path` under the
   app's root and no `Domain`. It is renamed `abi_app.<name>` in the browser,
-  and only those cookies come back to the module, under their own names. From
-  the sandbox the browser sends only `SameSite=None; Secure` cookies, and they
-  last as long as the grant URL.
+  and only those cookies come back to the module, under their own names. A
+  `Location` or cookie `Path` that a browser could read as a dot segment
+  (`%2e`, `\`) is dropped. From the sandbox, `fetch()` sends no cookie at all;
+  navigations and forms in the frame send only `SameSite=None; Secure` ones,
+  for as long as the grant URL lasts. Apps keep no session in cookies.
 - **Scoped JWTs** (`scope`, as `app-html` link tokens have) no longer
   authenticate `/api/*` or the WebSocket.
