@@ -1,12 +1,13 @@
 """Which responses Nexus pages may frame, and the CSP they get.
 
-``/app-html/`` (bundled module apps) and ``/app-preview/`` (app projects in
-the editor) render inside Nexus iframes; everything else is ``DENY``.
+``/app-html/`` (bundled module apps), ``/app-preview/`` (app projects in the
+editor) and ``/app-remote/`` (apps of remote modules) render inside Nexus
+iframes; everything else is ``DENY``.
 """
 
 from __future__ import annotations
 
-EMBEDDABLE_PREFIXES = ("/app-html/", "/app-preview/")
+EMBEDDABLE_PREFIXES = ("/app-html/", "/app-preview/", "/app-remote/")
 
 
 def is_embeddable(path: str) -> bool:

@@ -58,7 +58,9 @@ It is up when it logs `READY`. `ABI_HEALTH_PORT=8080` opens `/health` and
   Apps page while the module runs. For a backend, bind an ASGI app (FastAPI)
   in `on_initialized`: `self.expose_app("<name>", api)`; the page calls it
   with relative URLs (`fetch("api/...")`), and
-  `request.scope["abi"]["user_id"]` is the signed-in user. Bodies stream: read
+  `request.scope["abi"]["user_id"]` is the signed-in user. The page runs
+  sandboxed: no `localStorage` or `document.cookie`, and absolute URLs start
+  with `root_path`. Bodies stream: read
   an upload with `request.stream()` (pass it to
   `put_object_stream(prefix, key, request.stream())`), answer with a
   `StreamingResponse`. Uploads up to `max_upload_bytes` in the manifest

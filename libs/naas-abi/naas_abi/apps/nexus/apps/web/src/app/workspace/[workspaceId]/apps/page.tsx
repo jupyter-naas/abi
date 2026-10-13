@@ -10,7 +10,7 @@ import {
   AppWindow, ExternalLink, RefreshCw, AlertTriangle, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { isBundledAppHtmlUrl, resolveAppEmbedUrl, resolveAppExternalUrl, appHtmlPathPrefix, pagesSsoAudience, withAppHtmlAccessToken, withPagesSsoToken } from '@/lib/app-html';
+import { appIframeSandbox, isBundledAppHtmlUrl, remoteAppGrantUrl, remoteAppParts, resolveAppEmbedUrl, resolveAppExternalUrl, appHtmlPathPrefix, pagesSsoAudience, withAppHtmlAccessToken, withPagesSsoToken } from '@/lib/app-html';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
@@ -107,6 +107,38 @@ function EmbedView({
     }
 
     setEmbedUrl(null);
+    const remote = remoteAppParts(url);
+    if (remote) {
+      // A remote module's app runs from the API origin under a grant, sandboxed.
+      (async () => {
+        try {
+          const res = await authFetch('/api/apps/remote-grant', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ module_id: remote.moduleId, app: remote.app }),
+          });
+          if (!res.ok) {
+            throw new Error(`remote-grant HTTP ${res.status}`);
+          }
+          const data = (await res.json()) as { path?: string };
+          const path = String(data.path || '').trim();
+          if (!path) {
+            throw new Error('remote-grant response missing path');
+          }
+          if (!cancelled) {
+            setEmbedUrl(remoteAppGrantUrl(getApiUrl(), path, remote.rest));
+          }
+        } catch (err) {
+          if (!cancelled) {
+            setEmbedError(err instanceof Error ? err.message : 'Failed to open the app');
+          }
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const prefix = appHtmlPathPrefix(url);
     (async () => {
       try {
@@ -315,7 +347,7 @@ function EmbedView({
             title={record.name}
             onLoad={handleLoad}
             className="h-full w-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads"
+            sandbox={appIframeSandbox(url)}
             allow="fullscreen"
           />
         )}

@@ -167,3 +167,41 @@ TLS, and its own check of Nexus tokens. Rejected: a module must only need NATS.
   the service-token boundary (Stage 1: a secret shared by the project).
 - Not covered yet: WebSockets. Uploads and downloads are bounded by round
   trips per chunk; prefetching chunks would raise throughput.
+
+## Amendment (2026-10-13): apps run sandboxed, under a grant
+Served from the Nexus origin with `allow-same-origin`, a module's page could
+read the Nexus session from `localStorage`, and its `?token=` opened the whole
+API. Remote apps no longer share the Nexus origin or the `/app-html/` cookie.
+This replaces the consequence "All apps share the `/app-html/` origin and access
+cookie" for remote modules.
+
+- **Where.** Pages are served at `/app-remote/<grant>/<module_id>/<app>/<path>`,
+  from the API origin, with `Content-Security-Policy: sandbox allow-scripts
+  allow-forms allow-popups allow-downloads` and `Referrer-Policy: no-referrer`.
+  The iframe sandbox has no `allow-same-origin` either. The page has an opaque
+  origin: no `localStorage`, no access to the Nexus page, and the browser sends
+  it no `SameSite=Lax` cookie.
+- **The grant** is the only credential, so relative URLs carry it. It is signed
+  with a key derived from the API secret and carries no `sub`, so it is never a
+  session token. It opens one app as one user for 8 hours
+  (`remote_app_grant_expire_minutes`). The Apps page mints it
+  (`POST /api/apps/remote-grant`). The catalog URL
+  `/app-html/remote/<module_id>/<app>/<path>` runs the usual access check and
+  redirects to a fresh grant. nexus-web does not proxy `/app-html/remote/`.
+- **The app** gets the grant URL as `root_path`, so URLs it builds keep the
+  grant. Its page's `fetch()` calls are cross-origin: Nexus answers them, and
+  their preflights, with `Access-Control-Allow-Origin: *`.
+- **Headers pass on allow-lists.** Requests: `accept*`, `content-type`,
+  `content-disposition`, `range`, `if-*`, `user-agent` and the app's `x-`
+  headers (not `x-forwarded-*`, `x-real-ip` or `x-api-key`). Referer is not
+  forwarded. Responses: `content-type`, `content-disposition`, `cache-control`,
+  `etag`, `last-modified`, `vary`, `content-encoding`, `content-language`,
+  `content-range`, `accept-ranges`, a `Location` inside the app, and the app's
+  cookies.
+- **Cookies.** A module's `Set-Cookie` is kept only with a `Path` under the
+  app's root and no `Domain`. It is renamed `abi_app.<name>` in the browser,
+  and only those cookies come back to the module, under their own names. From
+  the sandbox the browser sends only `SameSite=None; Secure` cookies, and they
+  last as long as the grant URL.
+- **Scoped JWTs** (`scope`, as `app-html` link tokens have) no longer
+  authenticate `/api/*` or the WebSocket.

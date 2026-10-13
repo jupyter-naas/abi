@@ -492,7 +492,7 @@ no ABI core installed. The base worker still verifies its four-package install.
 A module serves web apps through Nexus without a port, hostname or route of its
 own (docs/adr/20261012_remote-module-apps.md). Each `apps/<name>/manifest.json`
 next to the module's package is an app: discovery announces it, Nexus lists it
-and forwards its requests under `/app-html/remote/<module_id>/<name>/` over
+and forwards its requests under `/app-remote/<grant>/<module_id>/<name>/` over
 NATS, and the module answers. Files of the folder (HTML, scripts, styles,
 images, fonts, JSON) are served as they are. Any other request goes to the ASGI
 application bound to the app, so an app can have a backend:
@@ -520,6 +520,16 @@ The app's page calls `fetch("api/report")`, relative to its folder. The ASGI
 app runs in the module's process with `root_path` set to the Nexus path, and its
 lifespan (startup and shutdown) runs with the module. Nexus checks the user's
 access, then forwards the request without the user's credential.
+
+The page runs sandboxed, in an opaque origin, apart from the Nexus session. The
+grant in its URL is its only credential:
+
+- Use URLs relative to the page, or built from `root_path`: both keep the grant.
+- `localStorage`, `sessionStorage` and `document.cookie` throw. Keep state in
+  memory or in the backend.
+- Nexus passes on an allow-list of headers each way. A cookie needs a `Path`
+  under `root_path`, no `Domain`, and `SameSite=None; Secure`. It lasts while
+  the page keeps its grant URL.
 
 Bodies stream. A large upload reaches `request.stream()` chunk by chunk as the
 app reads it, never faster, so a module can pass it on without holding it:

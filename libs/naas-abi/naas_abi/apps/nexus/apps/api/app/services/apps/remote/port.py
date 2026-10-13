@@ -75,6 +75,8 @@ class AppRequest:
     # A large body, read as the module pulls it (after ``body``).
     body_stream: AsyncIterator[bytes] | None = None
     max_body_bytes: int = 0
+    # Where the browser sees the app (its grant URL); the app's own root if empty.
+    root_path: str = ""
 
 
 @dataclass(frozen=True)

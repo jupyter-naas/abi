@@ -45,6 +45,37 @@ export function appHtmlPathPrefix(url: string): string | null {
   return `/${parts[0]}/${parts[1]}/${parts[2]}/`;
 }
 
+/**
+ * A remote module's app (``/app-html/remote/<module>/<app>/<rest>``). It never
+ * loads from this origin: the page asks the API for a grant
+ * (POST /apps/remote-grant) and frames ``<apiBase>/app-remote/<grant>/…``,
+ * sandboxed, as the app-project preview does.
+ */
+export type RemoteAppParts = { moduleId: string; app: string; rest: string };
+
+export function remoteAppParts(url: string): RemoteAppParts | null {
+  const path = toAppHtmlPath(url);
+  if (!path) return null;
+  const match = /^\/app-html\/remote\/([^/?#]+)\/([^/?#]+)(?:\/(.*))?$/.exec(path);
+  if (!match) return null;
+  return { moduleId: match[1], app: match[2], rest: match[3] ?? '' };
+}
+
+/** ``<apiBase><grant path><rest>``: the grant path ends with ``/``. */
+export function remoteAppGrantUrl(apiBase: string, grantPath: string, rest: string): string {
+  return `${apiBase.replace(/\/+$/, '')}${grantPath}${rest.replace(/^\/+/, '')}`;
+}
+
+/** Same flags as the API's CSP sandbox: no allow-same-origin for module code. */
+export const REMOTE_APP_SANDBOX = 'allow-scripts allow-forms allow-popups allow-downloads';
+const APP_HTML_SANDBOX =
+  'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads';
+
+/** The iframe sandbox for an app: remote module apps never share this origin. */
+export function appIframeSandbox(url: string): string {
+  return remoteAppParts(url) ? REMOTE_APP_SANDBOX : APP_HTML_SANDBOX;
+}
+
 /** Attach ``?token=`` (preserving existing query) for same-origin app HTML. */
 export function withAppHtmlAccessToken(url: string, token: string): string {
   if (!url || !token) return url;
