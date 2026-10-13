@@ -67,7 +67,9 @@ It defined no format.
   - Patterns use `*` (across segments) and `?`, never regular expressions.
 - **Placement.** The org and workspace of a kernel resource come from a placement registry in IAM.
   - A placement is recorded when a resource is created in a workspace that no existing placement covers.
-    A container's placement also covers its children.
+    A container's placement, platform included, also covers its children.
+  - Every existing container is placed, module namespaces on the platform, so a workspace cannot claim a
+    name inside one.
   - A create can never override an existing placement.
   - The org and workspace never come from a request field, which any caller could set.
 - **Catalogs.** Every service registers its action catalog at load time. Policies are validated against the
@@ -76,6 +78,10 @@ It defined no format.
   `self` for every user.
   - Policy variables resolve against the principal being evaluated, so a user's `self` policy names the user
     even when Nexus calls on their behalf.
+  - The roles are cumulative (viewer ⊆ member ⊆ admin ⊆ owner).
+  - Nexus features and platform-level resources (models, agents, apps, views, templates) come from
+    companion managed policies that IAM attaches with workspace roles. Org-level roles bring neither, and
+    no role reaches a feature the deployment has not enabled.
   - They are generated from the catalogs by access level.
   - Only owners can grant, demote or remove owners.
 - **Sealed resources.** A few resources are sealed in code to a single principal (the built-in IdP's data, the

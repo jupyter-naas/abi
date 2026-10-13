@@ -286,6 +286,8 @@ ids rarely encode a workspace either: Nexus graph IRIs are `…/graph/<slug>-<uu
 **placements**.
 
 - **A placement is `(service, id-key) → (org, workspace)`.**
+  - Both may be `-`. A platform placement (`-`, `-`) is recorded like any other. It is how a platform
+    container keeps workspaces from claiming names inside it.
   - `id-key` is an exact canonical id, or a prefix ending in `*`.
   - The prefix is plain string prefix matching on the canonical id.
   - It covers every type of that service whose id starts that way. A document placement on `nexus-ws-1`
@@ -303,22 +305,39 @@ ids rarely encode a workspace either: Nexus graph IRIs are `…/graph/<slug>-<uu
   - dataset `namespace`.
 
   A placement on a container is always written as a pair: the exact id and the prefix `<id>/*`. Its
-  children therefore resolve to the container's workspace.
+  children therefore resolve to the container's placement, platform included.
+- **Every existing container has a placement.**
+  - A container created through a service records one when it is created (below).
+  - The migration (§13) places every container that exists before IAM: Nexus workspace data in its
+    workspace, everything else on the platform.
+  - Approving a module's manifest (§8.3) records platform placements for the module's own namespaces, the
+    `<module_id>` namespace of document and dataset, unless they are already placed.
+
+  So "no placement covers this name" means the name is a new top-level resource or a new container.
 - **Writing placements.**
   1. **On creation.** A create operation is marked `creates: true` in the catalog. Before it runs, the
-     service resolves the placement of the would-be name, then:
-     - **If an existing placement already covers the name** (exact or prefix), the create is authorized
-       against that placement. `CallContext.workspace_id` must be empty or equal to that placement's
-       workspace. On a mismatch the call is denied with the §5.4 outcome computed on the covered name:
-       `PERMISSION_DENIED` if the caller can see it, not found otherwise. Nothing new is recorded: the
-       existing placement already covers the new resource and, through its prefix, the resource's children.
-       So a member of ws-A cannot claim a name inside ws-B's namespace by passing `workspace_id=ws-A`.
-     - **If no placement covers the name and `CallContext.workspace_id` is set**, the create is authorized
-       against the name placed in that workspace. On success the service records an exact placement, plus
-       the `<id>/*` prefix when the type is a container. A caller cannot create in a workspace they hold no
-       create right in.
-     - **If no placement covers the name and `workspace_id` is empty**, the resource is platform-level. The
-       create is authorized against `abi:-:-:…` and nothing is recorded.
+     service resolves the placement of the would-be name. The create always needs its action allowed on
+     the name *as placed*.
+     - **A child of an existing container takes the container's placement**, platform included.
+       - Any name covered by an existing placement, exact or prefix, is treated this way.
+       - `CallContext.workspace_id` must be empty or equal to that placement's workspace. For a platform
+         container it must be empty.
+       - On a mismatch the call is denied with the §5.4 outcome computed on the name as placed:
+         `PERMISSION_DENIED` if the caller can see it, not found otherwise.
+       - Nothing new is recorded: the container's prefix already covers the new resource.
+       - So a member of ws-A can claim a name neither inside ws-B's namespace nor inside a module's
+         platform namespace by passing `workspace_id=ws-A`.
+     - **`workspace_id` decides only for a name no placement covers**: a new top-level resource or a new
+       container.
+       - With `workspace_id` set, the name is placed in that workspace. A caller cannot create in a
+         workspace they hold no create right in.
+       - With it empty, the name is platform-level.
+       - On success the service records the placement: exact for a top-level resource (none when
+         platform-level, since nothing can be created inside it), exact plus `<id>/*` for a container,
+         platform included.
+     - **Implicit containers.** A create whose name sits in a container that does not exist yet (the first
+       `dataset:Create` in a new namespace, the first `document:EnsureCollection` in a new namespace) first
+       places that container by the rule above. It then creates the child inside it.
      - IAM maps the workspace to its org with its scope registry. Nexus registers each org and workspace with
        `iam:PutScope`.
   2. **Explicitly**, with `iam:PutPlacement`, mainly for prefixes. Nexus places its per-workspace prefixes
@@ -1016,9 +1035,9 @@ Nexus registers the catalog below. Resources are under `abi:<org>:<ws>:nexus:` u
   translate to IAM `AttachPolicy` and `DetachPolicy` on `builtin.<role>`. IAM checks those too, so the owner
   protections of §7 hold whichever API is used.
 - **Bug (d).** `CreateWorkspace` is checked on the target organization, not on a request field.
-- **Org feature overlay.** `organization_role_features` becomes one managed policy per org and role,
-  `builtin.features.<org>.<role>`, attached together with the role. It allows `UseFeature` on the enabled
-  features only.
+- **Features.** `UseFeature` is granted only by feature policies (§7): `builtin.features.<role>` from the
+  deployment's `role_baseline`, or `builtin.features.<org>.<role>` where `organization_role_features`
+  overlays it for an org. Either way they are restricted to `enabled_features`.
 
 ### 7. Built-in roles as policies
 
@@ -1037,32 +1056,46 @@ covers `${scope}:<service>:<type>/*`. A personal type covers `${scope}:<service>
 and `${scope}:<service>:<type>/${principal.id}/*` instead. `${principal.id}` is the member being evaluated
 (§3.4), so on a Nexus call it is the user, not `api`.
 
-A workspace-scoped role never reaches a platform-level resource (`abi:-:-:…`). Platform types are covered
-by name, in the table "Platform types" below.
+**The roles are cumulative:** `viewer` ⊆ `member` ⊆ `admin` ⊆ `owner`.
 
-**Baseline features.** `UseFeature` statements come from Nexus's feature configuration
-(`feature_flags.role_baseline` in `core/config.py`), restricted to `feature_flags.enabled_features`:
+- Each role holds every statement of the role below it, generated into its own document. A principal
+  therefore needs only one role attachment per scope, which is what the migration creates (§13).
+- Each role's scope-type statements leave out the `nexus` `feature` type, so no role reaches `UseFeature`
+  through its scope pattern. Features come only from the feature policies below.
 
-- `owner` and `admin`: every enabled feature;
-- `member` and `viewer`: `maps`, `chat`, `files`, `datasets`, `skills`, `slides`, `documents`, `sheets`,
-  by default.
-
-A deployment that changes `role_baseline` regenerates the role policies. An org overlay
-(`organization_role_features`) replaces them for that org (§6.5).
-
-| Policy | Allows | Excludes |
+| Policy | Allows on the scope's types | Excludes |
 |---|---|---|
-| `builtin.viewer` | every `list` and `read` action on the scope's types; `UseFeature` on the viewer's baseline features; the viewer column of "Platform types" | — |
-| `builtin.member` | viewer, plus every `write` action on the scope's types; the member's baseline features; the member column of "Platform types" | — |
-| `builtin.admin` | every action on the scope's types except the `iam` `attachment` type; `iam:ListAttachments` on `${scope}:iam:attachment/*`; `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}:iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` | anything on `attachment/builtin.owner/*`; `nexus:DeleteWorkspace`; `nexus:DeleteOrganization` |
-| `builtin.owner` | `*` on `${scope}:*`, including every `attachment/…` | — |
+| `builtin.viewer` | every `list` and `read` action | the `feature` type |
+| `builtin.member` | viewer, plus every `write` action | the `feature` type |
+| `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; plus `iam:ListAttachments` on `${scope}:iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}:iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` | the `feature` type; anything on `attachment/builtin.owner/*`; `nexus:DeleteWorkspace`; `nexus:DeleteOrganization` |
+| `builtin.owner` | admin, plus every action on every `attachment/…` (owner included), `nexus:DeleteWorkspace` and `nexus:DeleteOrganization`: every action of every catalog on the scope's types | the `feature` type |
 | `builtin.platform_admin` | `*` on `*` (attached without scope) | sealed resources (§11.3), which no policy can unlock |
-| `builtin.self` | auto-attached to every user, no scope; the "self" column of "Platform types" | — |
+| `builtin.self` | auto-attached to every user, no scope: the "self" column of "Platform types" | — |
 
-**Platform types.** Every platform-level type of every catalog is listed here with who reaches it.
+**Features.** `UseFeature` comes only from feature policies. IAM attaches the matching feature policy at
+the same scope whenever it attaches a role, and detaches it with the role.
 
-- **Viewer and member** are statements of `builtin.viewer` and `builtin.member` with absolute patterns, so
-  they apply whatever the attachment's scope.
+- `builtin.features.<role>` is generated from Nexus's `feature_flags.role_baseline` (`core/config.py`).
+  `builtin.features.<org>.<role>` is used where `organization_role_features` overlays it for an org.
+- Both allow `nexus:UseFeature` on `${scope}:nexus:feature/<key>` for the role's features that are also
+  in `feature_flags.enabled_features`. A feature outside `enabled_features` is reachable by no role, owner
+  and admin included. Only the platform admin's `*` can reach it.
+- Defaults: `owner` and `admin` get every enabled feature. `member` and `viewer` get `maps`, `chat`,
+  `files`, `datasets`, `skills`, `slides`, `documents` and `sheets`.
+- Changing `role_baseline`, `enabled_features` or an org overlay regenerates the feature policies.
+
+**Platform types.** A workspace-scoped role never reaches a platform-level resource (`abi:-:-:…`). Every
+platform-level type of every catalog is listed below with who reaches it, through two more managed
+policies that IAM keeps in step with role attachments.
+
+- **`builtin.platform.viewer`** holds the "Viewer" column. **`builtin.platform.member`** holds the "Viewer"
+  and "Member adds" columns.
+- Both are attached without scope, by IAM:
+  - a principal holds `builtin.platform.member` while it has a `member`, `admin` or `owner` attachment at a
+    workspace scope (`abi:<org>:<ws>`) or an org-wide scope (`abi:<org>:*`);
+  - it holds `builtin.platform.viewer` while it has only `viewer` attachments there.
+- Org-level attachments (`abi:<org>:-`) bring neither. An org member who belongs to no workspace cannot
+  chat with models, invoke agents or open apps. That matches today: those surfaces live in workspaces.
 - **Self** is `builtin.self`, held by every user.
 - **None** means only the platform admin, the built-in service accounts and explicit policies.
 
@@ -1193,6 +1226,9 @@ The flow:
      `RejectManifest` on `manifest/<sa>`, from the CLI (`abi iam module approve|reject`) or the IAM UI.
    - The approved document becomes the managed policy `module.<project>.<module_id>`, attached to the
      account.
+   - On approval IAM also records platform placements for the module's own `<module_id>` namespaces in
+     document and dataset (§4.4), unless they are already placed. No workspace can then claim a name inside
+     them.
 5. **Before approval** the module registers and serves health, but every other call fails with
    `PERMISSION_DENIED`. Discovery shows the module as awaiting approval.
 6. **A changed manifest** is a new pending version. The previous approved policy stays in force until the
@@ -1619,7 +1655,8 @@ first login by a matching *verified* email, on that provider only.
 | `users.is_superadmin` and `users[].is_superadmin` | `builtin.platform_admin` |
 | `organization_role_features` | `builtin.features.<org>.<role>` (§6.5) |
 | `workspace_resource_policies`, the `graphWorkspaceId` triples, `WorkspaceGraphPolicyConfig` | graph placements, plus Allow statements in a workspace policy for shared graphs |
-| Nexus per-workspace prefixes and namespaces (object storage, documents, vectors, datasets) | placements (`iam:PutPlacement`) |
+| Nexus per-workspace prefixes and namespaces (object storage, documents, vectors, datasets) | workspace placements (`iam:PutPlacement`) |
+| Every other existing container (module and engine namespaces, collections, repos, graphs) | platform placements, so no workspace can claim a name inside them (§4.4) |
 | Remote modules with `NATS_JWT_SECRET` | service accounts, keys and approved manifests. `abi dev up` regenerates them; deployed systems run `abi iam module approve`. |
 | Sessions, refresh tokens, app grants and preview tokens signed with `secret_key` | invalidated: users sign in again. `secret_key` keeps only the workspace-secret encryption until subtask 13 gives that its own key. |
 
