@@ -21,6 +21,7 @@ from collections.abc import Iterable
 from typing import Any
 from urllib.parse import parse_qsl
 
+from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import redact_grant_path
 from naas_abi_core.services.activity_log.ActivityLogPort import ActivityEvent
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from starlette.datastructures import Headers
@@ -276,7 +277,8 @@ class HttpActivityLogMiddleware:
 
         attrs: dict[str, Any] = {
             "method": scope.get("method"),
-            "path": scope.get("path"),
+            # A remote app's path holds its grant, a bearer credential.
+            "path": redact_grant_path(scope.get("path") or ""),
             "status_code": status_code,
             "duration_ms": duration_ms,
             "ip": client_ip,

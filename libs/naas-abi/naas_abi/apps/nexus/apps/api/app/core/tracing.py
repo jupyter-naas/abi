@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import redact_grant_path
+
 UNTRACED_PATHS = frozenset({"/health"})
 
 
@@ -39,11 +41,13 @@ class TracingMiddleware:
             for key, value in scope.get("headers") or ()
         }
         method = scope.get("method", "GET")
+        # A remote app's path holds its grant, a bearer credential.
+        path = redact_grant_path(scope.get("path", ""))
         with _tracer().start_as_current_span(
-            f"{method} {scope.get('path', '')}",
+            f"{method} {path}",
             context=propagate.extract(headers),
             kind=SpanKind.SERVER,
-            attributes={"http.request.method": method, "url.path": scope.get("path", "")},
+            attributes={"http.request.method": method, "url.path": path},
             # Recorded below, with credentials scrubbed from the text.
             record_exception=False,
             set_status_on_exception=False,

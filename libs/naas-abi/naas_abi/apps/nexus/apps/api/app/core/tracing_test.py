@@ -85,3 +85,14 @@ def test_failures_are_recorded_without_secrets(spans):
     for text in (event.attributes["exception.message"], event.attributes["exception.stacktrace"]):
         assert "sk-or-v1-0123456789abcdef0123456789" not in text
         assert "[REDACTED]" in text
+
+
+def test_a_remote_app_grant_never_reaches_the_trace(spans):
+    """The grant in an /app-remote/ path is a bearer credential; unrouted
+    requests keep the path as their span name."""
+    _client().get("/app-remote/GRANT-SECRET/acme.research/console/index.html")
+
+    (span,) = spans.get_finished_spans()
+    assert span.name == "GET /app-remote/[grant]/acme.research/console/index.html"
+    assert span.attributes["url.path"] == "/app-remote/[grant]/acme.research/console/index.html"
+    assert "GRANT-SECRET" not in str(dict(span.attributes))

@@ -61,6 +61,10 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.port import (
     AppPricing,
     AppsResponse,
 )
+from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
+    APP_NAME_PATTERN,
+    MODULE_ID_PATTERN,
+)
 from naas_abi.apps.nexus.apps.api.app.services.apps.service import (
     AppAlreadyConfiguredError,
     AppsService,
@@ -455,8 +459,8 @@ async def create_app_html_access_token(
 class RemoteAppGrantRequest(BaseModel):
     """Open one app of a remote module (``/app-remote/``)."""
 
-    module_id: str = Field(..., pattern=r"^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,127}$")
-    app: str = Field(..., pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    module_id: str = Field(..., pattern=MODULE_ID_PATTERN)
+    app: str = Field(..., pattern=APP_NAME_PATTERN)
 
 
 class RemoteAppGrantResponse(BaseModel):

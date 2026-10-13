@@ -56,9 +56,9 @@ export type RemoteAppParts = { moduleId: string; app: string; rest: string };
 export function remoteAppParts(url: string): RemoteAppParts | null {
   const path = toAppHtmlPath(url);
   if (!path) return null;
-  const match = /^\/app-html\/remote\/([^/?#]+)\/([^/?#]+)(?:\/(.*))?$/.exec(path);
+  const match = /^\/app-html\/remote\/([^/?#]+)\/([^/?#]+)(?:\/(.*)|([?#].*))?$/.exec(path);
   if (!match) return null;
-  return { moduleId: match[1], app: match[2], rest: match[3] ?? '' };
+  return { moduleId: match[1], app: match[2], rest: match[3] ?? match[4] ?? '' };
 }
 
 /** ``<apiBase><grant path><rest>``: the grant path ends with ``/``. */

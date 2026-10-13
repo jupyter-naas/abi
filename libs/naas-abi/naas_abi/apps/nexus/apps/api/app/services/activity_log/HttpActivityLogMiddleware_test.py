@@ -303,3 +303,14 @@ def test_authorization_header_value_is_never_stored(app_with_middleware):
 
     flat = repr(service.query("anonymous")[0].attributes)
     assert "supersecret" not in flat
+
+
+def test_a_remote_app_grant_never_reaches_the_log(app_with_middleware):
+    """The grant in an /app-remote/ path is a bearer credential."""
+    app, service = app_with_middleware
+
+    TestClient(app).get("/app-remote/GRANT-SECRET/acme.research/console/index.html")
+
+    (event,) = service.query("anonymous")
+    assert event.attributes["path"] == "/app-remote/[grant]/acme.research/console/index.html"
+    assert "GRANT-SECRET" not in str(event.attributes)
