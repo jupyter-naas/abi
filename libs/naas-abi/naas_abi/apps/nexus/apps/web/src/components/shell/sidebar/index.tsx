@@ -778,7 +778,7 @@ export function Sidebar() {
               key={item.key}
               onClick={() => { showPanel(item.section); router.push(base); }}
               onPointerEnter={(e) => {
-                prefetchSectionPanel(item.section);
+                if (item.section) prefetchSectionPanel(item.section);
                 router.prefetch(base);
                 showHoverTip({ id: item.key, ...item }, e.currentTarget);
               }}
