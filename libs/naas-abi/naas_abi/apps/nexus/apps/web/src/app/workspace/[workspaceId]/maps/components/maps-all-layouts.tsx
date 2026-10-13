@@ -4,9 +4,11 @@ import { useMemo, useRef, useState } from 'react';
 import type { MapsPinMarker } from '../lib/leaflet-map';
 import { layerPinColor } from '../lib/maps-layer-colors';
 import { layerFeedPins, styleLayerPin } from '../lib/maps-layer-class-styles';
+import { layerCountsForFeedLoad } from '../lib/maps-layer-counts';
 import { layoutPinSource } from '../lib/layout-sources';
 import type { LayoutEntry } from '../lib/layouts';
 import type { MapsFeedResult } from '../lib/maps-feed';
+import type { MapRegionOverlay } from '../lib/maps-map-regions';
 import type { MapsFeedView } from '../lib/maps-view';
 import { useMapLayers } from '../lib/use-map-layouts';
 import type { LayerLegendStatus } from './maps-active-layers-legend';
@@ -85,11 +87,15 @@ export function MapsAllLayers({ layerIds }: { layerIds: string[] }) {
       }),
     );
     const pins: MapsPinMarker[] = [];
+    let mapRegions: MapRegionOverlay | undefined;
     const next: Record<string, LayerLegendStatus> = {};
     results.forEach((result, index) => {
       const entry = layers[index];
       const color = layerPinColor(entry);
       if (result.status === 'fulfilled') {
+        if (!mapRegions && result.value.mapRegions) {
+          mapRegions = result.value.mapRegions;
+        }
         const layerPins = layerFeedPins(result.value.pins, entry.classLabels);
         const fetchedAt = new Date().toISOString();
         const layerStyle = {
@@ -126,21 +132,15 @@ export function MapsAllLayers({ layerIds }: { layerIds: string[] }) {
       }
     });
     setStatuses(next);
-    // Sidebar counts: every layer of a loaded feed, switched on or not.
     const counts: Record<string, number> = {};
     for (const [key, load] of loads) {
       const loaded = await load.catch(() => null);
       if (!loaded) continue;
-      counts[`feed:${key}`] = loaded.pins.length;
-      for (const entry of allEntriesRef.current) {
-        if ((entry.feedId ?? entry.id) === key) {
-          counts[entry.id] = layerFeedPins(loaded.pins, entry.classLabels).length;
-        }
-      }
+      Object.assign(counts, layerCountsForFeedLoad(allEntriesRef.current, key, loaded.pins));
     }
     setLayerCounts(counts);
     signal.throwIfAborted();
-    return { pins, empty: pins.length === 0 };
+    return { pins, empty: pins.length === 0, mapRegions };
   };
 
   const noLayers = onEntries.length === 0;

@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { FALLBACK_BASEMAP_ID } from '@/app/workspace/[workspaceId]/maps/lib/maps-basemaps';
-import type { MapsGroupArea, MapsGroupBy } from '@/app/workspace/[workspaceId]/maps/lib/maps-country-cluster';
+import type { MapsGroupBy } from '@/app/workspace/[workspaceId]/maps/lib/maps-country-cluster';
 import type { WorkspaceFeedLayer, WorkspaceMapLayout } from '@/app/workspace/[workspaceId]/maps/lib/layouts';
 import { mapsCatalogApi, type WorkspaceBasemap } from '@/app/workspace/[workspaceId]/maps/lib/basemaps-api';
 
@@ -44,10 +44,6 @@ export interface MapsState {
   /** Map grouping when zoomed out: badges per layer feed (default), per layer, or off. */
   groupBy: MapsGroupBy;
   setGroupBy: (by: MapsGroupBy) => void;
-  /** Group by country (default) or by continent. */
-  groupArea: MapsGroupArea;
-  setGroupArea: (area: MapsGroupArea) => void;
-
   /** Settings → Maps: layer records, basemaps, hidden ids and layer colors. */
   byWorkspace: Record<string, WorkspaceLayouts>;
   loading: boolean;
@@ -90,8 +86,6 @@ export const useMapsStore = create<MapsState>()(
       },
       groupBy: 'feed',
       setGroupBy: (groupBy) => set({ groupBy }),
-      groupArea: 'country',
-      setGroupArea: (groupArea) => set({ groupArea }),
 
       byWorkspace: {},
       loading: false,
@@ -136,7 +130,6 @@ export const useMapsStore = create<MapsState>()(
         overrides: state.overrides,
         basemapId: state.basemapId,
         groupBy: state.groupBy,
-        groupArea: state.groupArea,
       }),
     },
   ),

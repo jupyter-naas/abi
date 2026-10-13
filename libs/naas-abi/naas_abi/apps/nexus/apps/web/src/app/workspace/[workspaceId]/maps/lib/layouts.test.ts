@@ -7,7 +7,6 @@ import {
   groupFeedLayers,
   compareLayerEntriesAsc,
   groupLayerEntries,
-  isForvisMazarsFacilityLayer,
   isLayerOn,
   visibleEntries,
   type WorkspaceMapLayout,
@@ -42,15 +41,6 @@ describe('buildLayoutEntries', () => {
   it('treats deployment Custom datasets as pin feeds', () => {
     const [entry] = buildLayoutEntries([ds('fleet', 'custom')], [], [], { customIds: new Set(['fleet']) });
     expect(entry.combinable).toBe(true);
-  });
-});
-
-describe('isForvisMazarsFacilityLayer', () => {
-  it('matches the Forvis Mazars feed layer id', () => {
-    expect(isForvisMazarsFacilityLayer({ id: 'forvis-mazars-facilities', feedId: 'forvis-mazars-facilities' })).toBe(
-      true,
-    );
-    expect(isForvisMazarsFacilityLayer({ id: 'valeo-facilities', feedId: 'valeo-facilities' })).toBe(false);
   });
 });
 
@@ -108,9 +98,9 @@ describe('visibleEntries / groupLayerEntries', () => {
 });
 
 describe('feed layers', () => {
-  const edf = {
-    id: 'edf',
-    title: 'EDF',
+  const energy = {
+    id: 'energy',
+    title: 'Energy Org',
     description: '',
     icon: 'Zap',
     color: '#001a70',
@@ -118,13 +108,13 @@ describe('feed layers', () => {
     graphs: [],
     order: 3,
     feed_type: 'geojson_url' as const,
-    feed_url: '/api/maps/organization-facilities/edf',
+    feed_url: '/api/maps/feeds/energy.geojson',
     category: 'custom',
-    logo_url: '/api/organizations/logos/EDF/EDF.ico',
+    logo_url: '/api/organizations/logos/Energy/Energy.ico',
   };
   const layer = (id: string, title: string, order: number, icon = '', class_labels: string[] = []) => ({
     id,
-    feed_id: 'edf',
+    feed_id: 'energy',
     title,
     description: '',
     color: '#e85130',
@@ -135,37 +125,37 @@ describe('feed layers', () => {
   });
 
   it('lists one entry per layer, carrying its feed', () => {
-    const entries = buildLayoutEntries([], [], [edf], {
-      feedLayers: [layer('edf-solar', 'Solar', 2, 'Sun', ['Solar']), layer('edf-all', 'All sites', 1)],
+    const entries = buildLayoutEntries([], [], [energy], {
+      feedLayers: [layer('energy-solar', 'Solar', 2, 'Sun', ['Solar']), layer('energy-all', 'All sites', 1)],
     });
-    const solar = entries.find((e) => e.id === 'edf-solar')!;
+    const solar = entries.find((e) => e.id === 'energy-solar')!;
     expect(solar).toMatchObject({
       kind: 'feed',
-      feedId: 'edf',
-      feedTitle: 'EDF',
+      feedId: 'energy',
+      feedTitle: 'Energy Org',
       icon: 'Sun',
       ownIcon: true,
       classLabels: ['Solar'],
       layerLogoUrl: undefined,
     });
     // No own icon: the feed's logo.
-    expect(entries.find((e) => e.id === 'edf-all')!.layerLogoUrl).toBe('/api/organizations/logos/EDF/EDF.ico');
+    expect(entries.find((e) => e.id === 'energy-all')!.layerLogoUrl).toBe('/api/organizations/logos/Energy/Energy.ico');
   });
 
   it('falls back to one layer per feed with the feed id', () => {
-    expect(buildLayoutEntries([], [], [edf]).map((e) => [e.id, e.feedId])).toEqual([['edf', 'edf']]);
+    expect(buildLayoutEntries([], [], [energy]).map((e) => [e.id, e.feedId])).toEqual([['energy', 'energy']]);
   });
 
   it('groups a feed with several layers into one sidebar row', () => {
-    const entries = buildLayoutEntries([], [], [edf], {
-      feedLayers: [layer('edf-solar', 'Solar', 2), layer('edf-wind', 'Wind', 1)],
+    const entries = buildLayoutEntries([], [], [energy], {
+      feedLayers: [layer('energy-solar', 'Solar', 2), layer('energy-wind', 'Wind', 1)],
     });
     const items = groupFeedLayers(entries);
     expect(items).toHaveLength(1);
     const [feed] = items;
     expect(feed?.type).toBe('feed');
-    if (feed?.type === 'feed') expect(feed.layers.map((l) => l.id)).toEqual(['edf-wind', 'edf-solar']);
+    if (feed?.type === 'feed') expect(feed.layers.map((l) => l.id)).toEqual(['energy-wind', 'energy-solar']);
     // One layer: a plain row.
-    expect(groupFeedLayers(buildLayoutEntries([], [], [edf]))[0]?.type).toBe('layer');
+    expect(groupFeedLayers(buildLayoutEntries([], [], [energy]))[0]?.type).toBe('layer');
   });
 });

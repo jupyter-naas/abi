@@ -728,6 +728,43 @@
   stroke: hsl(var(--border));
 }
 
+/* Region KPI labels from a feed's `mapRegions` overlay. */
+.maps-region-labels {
+  position: absolute;
+  inset: 0;
+  z-index: 420;
+  pointer-events: none;
+}
+
+.maps-region-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: center;
+  line-height: 1.3;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.maps-region-label__name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--maps-region-color, #171c8f);
+  letter-spacing: 0.01em;
+}
+
+.maps-region-label__stats {
+  font-size: 11px;
+  color: #475569;
+}
+
+.dark .maps-region-label__stats {
+  color: hsl(var(--muted-foreground));
+}
+
 .dark .maps-leaflet .leaflet-control-zoom.leaflet-bar {
   border-color: hsl(var(--border));
 }
@@ -964,34 +1001,69 @@
 
 .maps-point-search {
   position: absolute;
-  z-index: 450;
+  z-index: 560;
   top: 0.75rem;
   left: 0.75rem;
   display: flex;
   flex-direction: column;
-  width: min(22rem, calc(100% - 1.5rem));
+  width: min(30rem, calc(100% - 1.5rem));
   --maps-search-bar-height: 2rem;
   /* Leave the basemap button (bottom-left) clear. */
   max-height: calc(100% - 4.5rem);
+  overflow: visible;
+  pointer-events: none;
+}
+
+.maps-point-search__bar,
+.maps-point-search__bar * {
+  pointer-events: auto;
 }
 
 .maps-point-search__bar {
   display: flex;
   align-items: flex-start;
   gap: 0.35rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow: visible;
+}
+
+.maps-point-search__filters {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
+  gap: 0.35rem;
+  position: relative;
+}
+
+/* Anchor dropdowns to the right of the filter group (map is left-aligned). */
+.maps-point-search__filters .maps-country-filter,
+.maps-point-search__filters .maps-region-filter {
+  position: static;
+}
+
+.maps-point-search__filters .maps-country-filter__panel,
+.maps-point-search__filters .maps-region-filter__panel {
+  top: calc(var(--maps-search-bar-height) + 2px);
+  right: 0;
+  left: auto;
 }
 
 .maps-point-search__main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  overflow: hidden;
 }
 
 /* Locations button, right of the search field. */
 .maps-point-search .maps-record-toggle,
-.maps-point-search .maps-country-filter__toggle {
+.maps-point-search .maps-country-filter__toggle,
+.maps-point-search .maps-region-filter__toggle {
   flex-shrink: 0;
   align-self: flex-start;
   box-sizing: border-box;
@@ -1001,8 +1073,15 @@
 }
 
 .maps-point-search .maps-record-toggle[aria-expanded="true"],
-.maps-point-search .maps-country-filter__toggle[aria-expanded="true"] {
+.maps-point-search .maps-country-filter__toggle[aria-expanded="true"],
+.maps-point-search .maps-region-filter__toggle[aria-expanded="true"] {
   background: hsl(var(--muted));
+}
+
+.maps-country-filter,
+.maps-region-filter {
+  position: relative;
+  flex-shrink: 0;
 }
 
 .maps-record-header__spacer {
@@ -1010,14 +1089,10 @@
   min-width: 0;
 }
 
-.maps-country-filter {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.maps-country-filter__panel {
+.maps-country-filter__panel,
+.maps-region-filter__panel {
   position: absolute;
-  z-index: 460;
+  z-index: 570;
   top: calc(100% + 2px);
   right: 0;
   display: flex;
@@ -1031,7 +1106,8 @@
   font-size: 0.8125rem;
 }
 
-.maps-country-filter__search {
+.maps-country-filter__search,
+.maps-region-filter__search {
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -1041,7 +1117,8 @@
   border: 1px solid hsl(var(--border));
 }
 
-.maps-country-filter__search input {
+.maps-country-filter__search input,
+.maps-region-filter__search input {
   flex: 1;
   min-width: 0;
   border: 0;
@@ -1051,14 +1128,16 @@
   outline: none;
 }
 
-.maps-country-filter__actions {
+.maps-country-filter__actions,
+.maps-region-filter__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem 0.65rem;
   margin: 0 0.5rem 0.35rem;
 }
 
-.maps-country-filter__reset {
+.maps-country-filter__reset,
+.maps-region-filter__reset {
   flex-shrink: 0;
   padding: 0.25rem 0.35rem;
   border: 0;
@@ -1070,7 +1149,8 @@
   cursor: pointer;
 }
 
-.maps-country-filter__list {
+.maps-country-filter__list,
+.maps-region-filter__list {
   flex: 1;
   min-height: 0;
   margin: 0;
@@ -1079,7 +1159,8 @@
   list-style: none;
 }
 
-.maps-country-filter__option {
+.maps-country-filter__option,
+.maps-region-filter__option {
   display: flex;
   align-items: flex-start;
   gap: 0.45rem;
@@ -1087,13 +1168,29 @@
   cursor: pointer;
 }
 
-.maps-country-filter__option span {
+.maps-country-filter__option span,
+.maps-region-filter__option span {
   line-height: 1.35;
 }
 
-.maps-country-filter__empty {
+.maps-country-filter__empty,
+.maps-region-filter__empty {
   padding: 0.35rem 0.5rem;
   color: hsl(var(--muted-foreground));
+}
+
+.maps-point-search__panel-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 0.5rem;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.maps-point-search__panel-scroll > .maps-record-panel {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* Locations, a pin or a group: under the search field, like its results. */
@@ -1103,15 +1200,17 @@
   max-width: none;
   max-height: none;
   min-height: 0;
-  margin-top: 2px;
+  margin-top: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid hsl(var(--border));
   background: hsl(var(--card) / 0.98);
-  box-shadow: 0 4px 16px hsl(0 0% 0% / 0.14);
+  box-shadow: 0 6px 24px hsl(0 0% 0% / 0.18);
 }
 
 .maps-point-search .maps-record-panel--list {
   padding: 0;
-  margin-top: 2px;
 }
 
 .maps-point-search .maps-record-panel--list .maps-record-list button:first-child {
@@ -1197,19 +1296,23 @@
 }
 
 .maps-point-search__main > .maps-point-search__results,
-.maps-point-search__main > .maps-record-panel {
+.maps-point-search__main > .maps-point-search__panel-scroll {
   width: 100%;
   box-sizing: border-box;
 }
 
 .maps-point-search__results {
-  margin-top: 2px;
-  max-height: min(16rem, 40vh);
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 0.5rem;
+  max-height: min(20rem, 52vh);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid hsl(var(--border));
   border-radius: 0;
   background: hsl(var(--card) / 0.98);
-  box-shadow: 0 4px 16px hsl(0 0% 0% / 0.14);
+  box-shadow: 0 6px 24px hsl(0 0% 0% / 0.18);
 }
 
 .maps-point-search__result {
@@ -1734,6 +1837,9 @@
   border-radius: var(--org-border-radius, 0px);
 }
 .maps-record-list { display: flex; flex-direction: column; }
+.maps-point-search .maps-record-list button {
+  padding: 0.55rem 0.75rem;
+}
 .maps-record-list button { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 2px; border: 0; border-bottom: 1px solid hsl(var(--border)); background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .maps-record-list button:hover { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
 .maps-record-list button span { font-size: 11px; text-align: right; }

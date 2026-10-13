@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
+  mapsDefaultOnFeedIds,
   mapsDeploymentRestrictsLayerCatalog,
+  parseMapsDefaultOnFeedIds,
   parseMapsVisibleCategories,
 } from './maps-deployment';
 
@@ -19,6 +21,32 @@ describe('parseMapsVisibleCategories', () => {
 
   it('drops unknown groups', () => {
     expect(parseMapsVisibleCategories('environment,not-a-group')).toEqual(['environment']);
+  });
+});
+
+describe('parseMapsDefaultOnFeedIds', () => {
+  it('parses comma-separated feed ids', () => {
+    expect(parseMapsDefaultOnFeedIds('alpha-facilities, beta-facilities')).toEqual(
+      new Set(['alpha-facilities', 'beta-facilities']),
+    );
+  });
+});
+
+describe('mapsDefaultOnFeedIds', () => {
+  it('returns env feeds when set', async () => {
+    vi.stubEnv('NEXT_PUBLIC_MAPS_DEFAULT_ON_FEED_IDS', 'alpha-facilities,beta-facilities');
+    vi.resetModules();
+    const { mapsDefaultOnFeedIds } = await import('./maps-deployment');
+    expect(mapsDefaultOnFeedIds()).toEqual(new Set(['alpha-facilities', 'beta-facilities']));
+    vi.unstubAllEnvs();
+  });
+
+  it('returns empty when env unset', async () => {
+    vi.stubEnv('NEXT_PUBLIC_MAPS_DEFAULT_ON_FEED_IDS', '');
+    vi.resetModules();
+    const { mapsDefaultOnFeedIds } = await import('./maps-deployment');
+    expect(mapsDefaultOnFeedIds()).toEqual(new Set());
+    vi.unstubAllEnvs();
   });
 });
 

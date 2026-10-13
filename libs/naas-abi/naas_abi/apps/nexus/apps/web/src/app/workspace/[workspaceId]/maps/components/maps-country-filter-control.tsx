@@ -91,8 +91,7 @@ export function MapsCountryFilterControl({
   function toggleCountry(country: string) {
     const all = new Set(countries);
     if (selected.mode === 'all') {
-      all.delete(country);
-      onChange(all.size === 0 ? { mode: 'none' } : { mode: 'some', countries: all });
+      onChange({ mode: 'some', countries: new Set([country]) });
       return;
     }
     if (selected.mode === 'none') {
@@ -127,6 +126,7 @@ export function MapsCountryFilterControl({
           className="maps-country-filter__panel"
           role="dialog"
           aria-label="Filter by country"
+          onMouseDown={(event) => event.stopPropagation()}
         >
           <label className="maps-country-filter__search">
             <Search size={14} aria-hidden />

@@ -44,6 +44,42 @@ const ALIASES: Record<string, string> = {
   'royaume uni': 'United Kingdom',
   russie: 'Russia',
   'emirats arabes unis': 'United Arab Emirates',
+  // French country labels common in EU facility feeds (→ Natural Earth NAME).
+  allemagne: 'Germany',
+  belgique: 'Belgium',
+  bresil: 'Brazil',
+  egypte: 'Egypt',
+  espagne: 'Spain',
+  hongrie: 'Hungary',
+  inde: 'India',
+  indonesie: 'Indonesia',
+  irlande: 'Ireland',
+  italie: 'Italy',
+  japon: 'Japan',
+  malaisie: 'Malaysia',
+  maroc: 'Morocco',
+  mexique: 'Mexico',
+  'pays bas': 'Netherlands',
+  pologne: 'Poland',
+  roumanie: 'Romania',
+  slovaquie: 'Slovakia',
+  thailande: 'Thailand',
+  tunisie: 'Tunisia',
+  turquie: 'Turkey',
+  brasil: 'Brazil',
+};
+
+/** Natural Earth leaves continent empty for some territories; use for group-by-continent. */
+export const CONTINENT_BY_COUNTRY_NAME: Readonly<Record<string, string>> = {
+  Mauritius: 'Africa',
+  Madagascar: 'Africa',
+  Réunion: 'Africa',
+  Reunion: 'Africa',
+  Mayotte: 'Africa',
+  Seychelles: 'Africa',
+  Maldives: 'Asia',
+  Bermuda: 'North America',
+  Greenland: 'North America',
 };
 
 /** Where a continent marker sits (visual centers, not centroids). */
@@ -87,4 +123,11 @@ export function findCountryCenter(
 ): CountryCenter | undefined {
   if (!index || !country?.trim()) return undefined;
   return index.get(normalizeCountryName(country));
+}
+
+/** Continent bucket for cluster markers (null → country-level fallback). */
+export function continentForGrouping(center: CountryCenter | undefined): string | null {
+  if (!center) return null;
+  if (center.continent) return center.continent;
+  return CONTINENT_BY_COUNTRY_NAME[center.name] ?? null;
 }

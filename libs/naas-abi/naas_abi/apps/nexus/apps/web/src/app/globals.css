@@ -385,7 +385,10 @@ aside.glass :focus-visible {
 
 .maps-country-filter__panel,
 .maps-country-filter__panel :focus,
-.maps-country-filter__panel :focus-visible {
+.maps-country-filter__panel :focus-visible,
+.maps-region-filter__panel,
+.maps-region-filter__panel :focus,
+.maps-region-filter__panel :focus-visible {
   outline: none !important;
   --tw-ring-width: 0px !important;
   --tw-ring-offset-shadow: 0 0 #0000 !important;
@@ -393,7 +396,8 @@ aside.glass :focus-visible {
   box-shadow: none !important;
 }
 
-.maps-country-filter__search:focus-within {
+.maps-country-filter__search:focus-within,
+.maps-region-filter__search:focus-within {
   border-color: var(--border-hex, hsl(var(--border)));
   box-shadow: none;
 }

@@ -10,10 +10,10 @@ import type { CustomLayerGroup } from './maps-layer-groups';
 import { layerGroupDefinitions } from './maps-layer-groups';
 import type { MapsDataset, MapsLayerGroupId } from './datasets';
 import {
-  FORVIS_MAZARS_FACILITIES_FEED_ID,
   isMapsCategoryVisible,
   isMapsLayerGroupIdVisible,
   isMapsOrganizationFacilityOnlyDeployment,
+  mapsDefaultOnFeedIds,
 } from './maps-deployment';
 import { mapsPinImageUrl } from './maps-pin-image-url';
 
@@ -224,27 +224,39 @@ export function visibleEntries(entries: LayoutEntry[], hidden: ReadonlySet<strin
   return entries.filter((entry) => !set.has(entry.id));
 }
 
-export function isForvisMazarsFacilityLayer(entry: Pick<LayoutEntry, 'id' | 'feedId'>): boolean {
-  return (
-    entry.feedId === FORVIS_MAZARS_FACILITIES_FEED_ID
-    || entry.id === FORVIS_MAZARS_FACILITIES_FEED_ID
-  );
+export function isDefaultOnOrganizationFacilityFeed(
+  entry: Pick<LayoutEntry, 'id' | 'feedId'>,
+): boolean {
+  const feedId = entry.feedId ?? entry.id;
+  return mapsDefaultOnFeedIds().has(feedId);
 }
 
 /** Default on for a new session before the URL is seeded. */
-export function defaultLayerOn(entry: LayoutEntry): boolean {
+export function defaultLayerOn(
+  entry: LayoutEntry,
+  options?: { workspaceDefaultFeedIds?: ReadonlySet<string> | null },
+): boolean {
   if (!entry.combinable) return false;
+  const workspaceFeeds = options?.workspaceDefaultFeedIds;
+  if (workspaceFeeds?.size) {
+    const feedId = entry.feedId ?? entry.id;
+    return workspaceFeeds.has(feedId);
+  }
   if (isMapsOrganizationFacilityOnlyDeployment()) {
-    return isForvisMazarsFacilityLayer(entry);
+    return isDefaultOnOrganizationFacilityFeed(entry);
   }
   return entry.kind !== 'builtin' || DEFAULT_ON_BUILTIN_IDS.has(entry.id);
 }
 
 /** Whether a layer is drawn on the map (URL is preferred; overrides are legacy). */
-export function isLayerOn(entry: LayoutEntry, overrides: Record<string, boolean>): boolean {
+export function isLayerOn(
+  entry: LayoutEntry,
+  overrides: Record<string, boolean>,
+  options?: { workspaceDefaultFeedIds?: ReadonlySet<string> | null },
+): boolean {
   if (!entry.combinable) return false;
   if (entry.id in overrides) return overrides[entry.id];
-  return defaultLayerOn(entry);
+  return defaultLayerOn(entry, options);
 }
 
 /** @deprecated use isLayerOn */
@@ -270,7 +282,7 @@ export type LayerGroupItem =
 /**
  * A sidebar group's rows: a feed becomes one feed row holding its layers (by
  * order, then title) when it has several, or one layer named differently from
- * the feed (Forvis Mazars › Offices). Other layers stay plain rows. Rows sort by title.
+ * the feed (org › Offices). Other layers stay plain rows. Rows sort by title.
  */
 export function groupFeedLayers(entries: readonly LayoutEntry[]): LayerGroupItem[] {
   const byFeed = new Map<string, LayoutEntry[]>();

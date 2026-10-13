@@ -2,17 +2,11 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { Globe2 } from 'lucide-react';
-import {
-  COUNTRY_CLUSTER_EXPAND_ZOOM,
-  type MapsGroupArea,
-  type MapsGroupBy,
-} from '../lib/maps-country-cluster';
+import type { MapsGroupBy } from '../lib/maps-country-cluster';
 
 export interface MapsCountryClusterControlProps {
   groupBy: MapsGroupBy;
-  area: MapsGroupArea;
   onGroupByChange: (by: MapsGroupBy) => void;
-  onAreaChange: (area: MapsGroupArea) => void;
   /** Hide when there is nothing to group (no country on pins). */
   visible?: boolean;
 }
@@ -23,17 +17,10 @@ const GROUP_BY: { value: MapsGroupBy; label: string; hint: string }[] = [
   { value: 'off', label: 'Off', hint: 'Every location, no grouping' },
 ];
 
-const AREAS: { value: MapsGroupArea; label: string; hint: string }[] = [
-  { value: 'country', label: 'By country', hint: `Ungroups from zoom ${COUNTRY_CLUSTER_EXPAND_ZOOM}` },
-  { value: 'continent', label: 'By continent', hint: 'Then by country, then every location' },
-];
-
-/** Toolbar "Group" button; its panel picks what to count and the area. */
+/** Toolbar "Group" button; its panel picks what to count (by country at low zoom). */
 export function MapsCountryClusterControl({
   groupBy,
-  area,
   onGroupByChange,
-  onAreaChange,
   visible = true,
 }: MapsCountryClusterControlProps) {
   const [open, setOpen] = useState(false);
@@ -67,7 +54,7 @@ export function MapsCountryClusterControl({
         aria-pressed={on}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        aria-label={`Group: ${GROUP_BY.find((o) => o.value === groupBy)?.label ?? 'Off'}${on ? `, ${area === 'country' ? 'by country' : 'by continent'}` : ''}`}
+        aria-label={`Group: ${GROUP_BY.find((o) => o.value === groupBy)?.label ?? 'Off'}`}
         title="Group"
         onClick={() => setOpen((value) => !value)}
         data-testid="maps-toolbar-country-cluster"
@@ -88,21 +75,6 @@ export function MapsCountryClusterControl({
                 />
                 <span>{option.label}</span>
                 {option.value === 'feed' ? <span className="maps-group-panel__default">default</span> : null}
-              </label>
-            ))}
-          </fieldset>
-          <fieldset className="maps-group-panel__section" disabled={!on}>
-            <legend className="maps-group-panel__title">Type</legend>
-            {AREAS.map((option) => (
-              <label key={option.value} className="maps-group-panel__option" title={option.hint}>
-                <input
-                  type="radio"
-                  name={`${panelId}-area`}
-                  checked={area === option.value}
-                  onChange={() => onAreaChange(option.value)}
-                />
-                <span>{option.label}</span>
-                <span className="maps-group-panel__hint">{option.hint}</span>
               </label>
             ))}
           </fieldset>

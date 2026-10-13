@@ -1,4 +1,5 @@
 import type { MapsPinMarker } from './leaflet-map';
+import { parseMapRegionOverlay, type MapRegionOverlay } from './maps-map-regions';
 import { resolveMapsPinImageUrl } from './maps-pin-image-url';
 import { featureToPinPartial, isMapsFeatureCollection } from './maps-pin-geojson';
 import type { MapsFeedMeta } from './maps-view';
@@ -61,6 +62,8 @@ export interface MapsFeedResult extends MapsFeedMeta {
   coveragePins?: MapsPinMarker[];
   reason?: string;
   empty?: boolean;
+  /** Optional region KPI overlay bundled with a facility GeoJSON feed. */
+  mapRegions?: MapRegionOverlay;
 }
 
 function asPinRecords(value: unknown): Array<Partial<MapsPinMarker>> | undefined {
@@ -126,6 +129,9 @@ export function normalizeFeedLoad(loaded: unknown): MapsFeedResult {
       : typeof data.coverage === 'string'
         ? data.coverage
         : undefined;
+  const mapRegions = parseMapRegionOverlay(
+    (data as Record<string, unknown>).mapRegions,
+  );
   return {
     pins,
     coveragePins,
@@ -138,6 +144,7 @@ export function normalizeFeedLoad(loaded: unknown): MapsFeedResult {
     needsKey: data.needsKey === true,
     status: typeof data.status === 'string' ? data.status : undefined,
     coverage: coverageLabel,
+    mapRegions,
   };
 }
 

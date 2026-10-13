@@ -21,6 +21,7 @@ import {
   clusterPinsByCountry,
   COUNTRY_CLUSTER_EXPAND_ZOOM,
   resolveClusterMemberPins,
+  DEFAULT_MAPS_GROUP_AREA,
   groupAreaAt,
 } from '../lib/maps-country-cluster';
 import {addMapsPinMarkers, captureMapsCamera, clearMapsMarkers, createMapsLeaflet, destroyMapsLeaflet, fitMapsBounds, MAPS_DEFAULT_CAMERA, restoreMapsCamera, type MapsCamera, type MapsPinMarker} from '../lib/leaflet-map';
@@ -36,12 +37,30 @@ import {
   pinMatchesCountryFilter,
   type MapsCountryFilter,
 } from './maps-country-filter-control';
+import {
+  MapsRegionFilterControl,
+  isRegionFilterActive,
+  mapsRegionFilterAll,
+  type MapsRegionFilter,
+} from './maps-region-filter-control';
+import {
+  continentsOnPins,
+  pinMatchesRegionFilter,
+} from '../lib/maps-pin-region';
 import {MapsRecordMedia} from './maps-record-media';
 import { MapsActiveLayersLegend, type LayerLegendStatus } from './maps-active-layers-legend';
 import { aggregateLayerLegendSublayers } from '../lib/maps-layer-legend-utils';
 import { layerPinColor } from '../lib/maps-layer-colors';
 import { isLayerOn } from '../lib/layouts';
 import { useMapLayers } from '../lib/use-map-layouts';
+import { MapsRegionLabels } from './maps-region-labels';
+import {
+  distinctMapFeedIds,
+  facilityCountsByRegionAndFeed,
+  pinCountriesInMapRegion,
+  showMapRegionLabelsAtZoom,
+  type MapRegionOverlay,
+} from '../lib/maps-map-regions';
 import './maps-components.css';
 
 export type MapsFeedStatus = 'loading' | 'ready' | 'error' | 'empty';
@@ -125,10 +144,8 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   const layerOverrides = useMapsStore((s) => s.overrides);
   const groupBy = useMapsStore((s) => s.groupBy);
   const setGroupBy = useMapsStore((s) => s.setGroupBy);
-  const groupArea = useMapsStore((s) => s.groupArea);
-  const setGroupArea = useMapsStore((s) => s.setGroupArea);
   const grouping = groupBy !== 'off';
-  const countryCenters = useCountryCenters(grouping);
+  const countryCenters = useCountryCenters(grouping || inspectable);
   const legendWorkspaceId = workspaceId || mapLayers.workspaceId;
   const legendEntries = useMemo(() => {
     if (legendLayerIds) {
@@ -169,6 +186,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   const panelId = useId();
   const [panelOpen, setPanelOpen] = useState(false);
   const [countryPickerOpen, setCountryPickerOpen] = useState(false);
+  const [regionPickerOpen, setRegionPickerOpen] = useState(false);
   const mapRef = useRef<LeafletMap|null>(null);
   const leafletRef = useRef<typeof import('leaflet')|null>(null);
   const preserveUserViewRef = useRef(false);
@@ -191,6 +209,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   const pendingFocusRef = useRef<MapsPinMarker|null>(null);
   const returnViewRef = useRef<MapsCamera|null>(null);
   const [feedMeta,setFeedMeta] = useState<MapsFeedMeta|null>(null);
+  const [mapRegionOverlay, setMapRegionOverlay] = useState<MapRegionOverlay | null>(null);
   const [emptyDetail,setEmptyDetail] = useState<string|null>(null);
   const [selected,setSelected] = useState<MapsPinMarker|null>(null);
   // Country / continent marker whose locations the panel lists.
@@ -199,6 +218,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   const [panelKey,setPanelKey] = useState(0);
   const [search,setSearch] = useState('');
   const [countryFilter,setCountryFilter] = useState<MapsCountryFilter>(mapsCountryFilterAll);
+  const [regionFilter, setRegionFilter] = useState<MapsRegionFilter>(mapsRegionFilterAll);
   const [coverageCountry,setCoverageCountry] = useState('');
   const activePins = view === 'coverage' ? coveragePins : pins;
   const pointSearchPins = activePins;
@@ -208,17 +228,18 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     const applyText = locationsListMode;
     return activePins.filter((p) => {
       if (!pinMatchesCountryFilter(p.country, countryFilter)) return false;
+      if (!pinMatchesRegionFilter(p, regionFilter, countryCenters)) return false;
       if (applyText && q && !pinSearchHaystack(p).includes(q)) return false;
       return true;
     });
-  }, [activePins, countryFilter, search, locationsListMode]);
+  }, [activePins, countryFilter, regionFilter, countryCenters, search, locationsListMode]);
   const canCountryCluster = useMemo(
     () => visiblePins.some((p) => p.country?.trim()),
     [visiblePins],
   );
   const mapZoom = camera?.zoom ?? MAPS_DEFAULT_CAMERA.zoom;
   const displayPins = useMemo(() => {
-    const area = groupAreaAt(groupBy, groupArea, mapZoom, view);
+    const area = groupAreaAt(groupBy, DEFAULT_MAPS_GROUP_AREA, mapZoom, view);
     if (!area || groupBy === 'off') return visiblePins;
     return clusterPinsByCountry(visiblePins, {
       layerTitle: layerTitleForPin,
@@ -228,7 +249,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     });
     // layerTitleForPin is a render-time callback; titles only label the badges.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visiblePins, groupBy, groupArea, countryCenters, mapZoom, view]);
+  }, [visiblePins, groupBy, countryCenters, mapZoom, view]);
   const groupMembers = useMemo(() => {
     if (!group) return [];
     const members = resolveClusterMemberPins(group, visiblePins);
@@ -243,6 +264,48 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     });
   }, [group, visiblePins, groupBy]);
   const countries = useMemo(() => Array.from(new Set(activePins.map(p=>p.country).filter((v):v is string=>!!v))).sort(),[activePins]);
+  const continents = useMemo(
+    () => continentsOnPins(activePins, countryCenters),
+    [activePins, countryCenters],
+  );
+  const canRegionFilter = continents.length > 0;
+  const activeRegionOverlay = useMemo(() => {
+    if (!mapRegionOverlay || view !== 'addresses') return null;
+    if (mapRegionOverlay.basemapId && mapRegionOverlay.basemapId !== basemap) return null;
+    return mapRegionOverlay;
+  }, [mapRegionOverlay, basemap, view]);
+  const regionFacilityCountsByFeed = useMemo(() => {
+    if (!activeRegionOverlay) return new Map();
+    return facilityCountsByRegionAndFeed(
+      pins,
+      activeRegionOverlay.countryToRegion,
+      countryCenters,
+    );
+  }, [activeRegionOverlay, pins, countryCenters]);
+  const regionLabelsMultiFeed = useMemo(
+    () => distinctMapFeedIds(pins) > 1,
+    [pins],
+  );
+  const selectMapRegion = useCallback(
+    (regionId: string) => {
+      if (!activeRegionOverlay) return;
+      const inRegion = pinCountriesInMapRegion(
+        regionId,
+        pins,
+        activeRegionOverlay.countryToRegion,
+        countryCenters,
+      );
+      setCountryFilter(
+        inRegion.length === 0
+          ? mapsCountryFilterAll()
+          : { mode: 'some', countries: new Set(inRegion) },
+      );
+      setSearch('');
+      setSelected(null);
+      setGroup(null);
+    },
+    [activeRegionOverlay, pins, countryCenters],
+  );
   const freshness = metaLine(feedMeta, Date.now());
 
   function rememberView() {
@@ -413,6 +476,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
         // A rebuilt map must redraw even when a static feed reuses its array.
         setPins([...loaded.pins]);
         setCoveragePins([...cities]);
+        setMapRegionOverlay(loaded.mapRegions ?? null);
         if (!cities.length) setView('addresses');
         setFeedMeta({
           source: loaded.source,
@@ -442,6 +506,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
         if (cancelled || active !== controller) return;
         setPins([]);
         setCoveragePins([]);
+        setMapRegionOverlay(null);
         setView('addresses');
         setSelected(null);
         setFeedMeta(null);
@@ -660,13 +725,11 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
         <button type="button" aria-pressed={view==='addresses'} onClick={()=>switchView('addresses')}>Addresses</button>
         <button type="button" aria-pressed={view==='coverage'} onClick={()=>switchView('coverage')}>City coverage</button>
       </div>}
-      {inspectable && (isCountryFilterActive(countryFilter) || search) && <button type="button" className="maps-coverage-reset" aria-label="Clear map filters" onClick={()=>{setCountryFilter(mapsCountryFilterAll());setCoverageCountry('');setSearch('');deselectPin();}}>Show all<X size={12}/></button>}
+      {inspectable && (isCountryFilterActive(countryFilter) || isRegionFilterActive(regionFilter) || search) && <button type="button" className="maps-coverage-reset" aria-label="Clear map filters" onClick={()=>{setCountryFilter(mapsCountryFilterAll());setRegionFilter(mapsRegionFilterAll());setCoverageCountry('');setSearch('');deselectPin();}}>Show all<X size={12}/></button>}
       <div className="maps-canvas__toolbar-actions">
         <MapsCountryClusterControl
           groupBy={groupBy}
-          area={groupArea}
           onGroupByChange={setGroupBy}
-          onAreaChange={setGroupArea}
           visible={canCountryCluster && view === 'addresses'}
         />
       </div>
@@ -687,6 +750,17 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
           </div>
         ) : null}
         {view==='coverage' && status==='ready' && mapRef.current && leafletRef.current && <MapsCoverageLayer map={mapRef.current} leaflet={leafletRef.current} pins={coveragePins} selectedCountry={coverageCountry} onSelectCountry={selectCountry}/>}
+        {activeRegionOverlay
+        && showMapRegionLabelsAtZoom(mapZoom)
+        && (status === 'ready' || status === 'empty') ? (
+          <MapsRegionLabels
+            regions={activeRegionOverlay.regions}
+            countsByFeed={regionFacilityCountsByFeed}
+            multiFeed={regionLabelsMultiFeed}
+            countLabel={activeRegionOverlay.countLabel ?? 'facility'}
+            onSelectRegion={selectMapRegion}
+          />
+        ) : null}
         {status === 'ready' || status === 'empty' || panelOpen ? (
           <MapsPointSearch
             pins={pointSearchPins}
@@ -710,13 +784,30 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
               setGroup(null);
             }}
             actions={inspectable ? (
-              <MapsCountryFilterControl
-                countries={countries}
-                selected={countryFilter}
-                onChange={setCountryFilter}
-                open={countryPickerOpen}
-                onOpenChange={setCountryPickerOpen}
-              />
+              <span className="maps-point-search__filters">
+                {canRegionFilter ? (
+                  <MapsRegionFilterControl
+                    regions={continents}
+                    selected={regionFilter}
+                    onChange={setRegionFilter}
+                    open={regionPickerOpen}
+                    onOpenChange={(open) => {
+                      setRegionPickerOpen(open);
+                      if (open) setCountryPickerOpen(false);
+                    }}
+                  />
+                ) : null}
+                <MapsCountryFilterControl
+                  countries={countries}
+                  selected={countryFilter}
+                  onChange={setCountryFilter}
+                  open={countryPickerOpen}
+                  onOpenChange={(open) => {
+                    setCountryPickerOpen(open);
+                    if (open) setRegionPickerOpen(false);
+                  }}
+                />
+              </span>
             ) : null}
           >
             {panelOpen ? recordPanel : null}

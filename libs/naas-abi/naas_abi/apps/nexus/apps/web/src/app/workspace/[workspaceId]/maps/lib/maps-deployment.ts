@@ -36,7 +36,7 @@ export function isMapsLayerGroupIdVisible(groupId: string): boolean {
   return isMapsCategoryVisible(groupId as MapsDatasetCategory);
 }
 
-/** BOB-style deployment: only organization facility custom layers in Maps. */
+/** Deployment shows only organization-facility layers in the Maps sidebar. */
 export function isMapsOrganizationFacilityOnlyDeployment(): boolean {
   return (
     MAPS_VISIBLE_CATEGORIES != null
@@ -45,13 +45,35 @@ export function isMapsOrganizationFacilityOnlyDeployment(): boolean {
   );
 }
 
-/** Default GeoJSON feed when {@link isMapsOrganizationFacilityOnlyDeployment} is true. */
-export const FORVIS_MAZARS_FACILITIES_FEED_ID = 'forvis-mazars-facilities';
+/** Comma-separated feed ids from NEXT_PUBLIC_MAPS_DEFAULT_ON_FEED_IDS. */
+export function parseMapsDefaultOnFeedIds(
+  raw: string | null | undefined,
+): ReadonlySet<string> | null {
+  const text = (raw ?? '').trim();
+  if (!text) return null;
+  const ids = text
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return ids.length ? new Set(ids) : null;
+}
+
+export const MAPS_DEFAULT_ON_FEED_IDS = parseMapsDefaultOnFeedIds(
+  process.env.NEXT_PUBLIC_MAPS_DEFAULT_ON_FEED_IDS,
+);
+
+/**
+ * Static default feeds from env (before URL / workspace API overrides).
+ * Organization-facility-only deployments usually rely on workspace-defaults instead.
+ */
+export function mapsDefaultOnFeedIds(): ReadonlySet<string> {
+  return MAPS_DEFAULT_ON_FEED_IDS ?? new Set();
+}
 
 /**
  * Hide File → New layer / New basemap / GeoJSON layers and Settings → New layer.
  * Sidebar filtering uses {@link MAPS_VISIBLE_CATEGORIES} alone — that must not
- * disable these tools (BOB sets visible categories without locking the catalog).
+ * disable these tools when only visible categories are restricted.
  */
 export function mapsDeploymentRestrictsLayerCatalog(): boolean {
   return process.env.NEXT_PUBLIC_MAPS_RESTRICT_LAYER_CATALOG === 'true';

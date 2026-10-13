@@ -17,6 +17,7 @@ import { layerPinColor } from '../lib/maps-layer-colors';
 import { resolveMapsPinImageUrl } from '../lib/maps-pin-image-url';
 import { useMapsLayerParams } from '../lib/use-maps-layer-params';
 import { useMapLayers } from '../lib/use-map-layouts';
+import { useMapsSidebarLayerCounts } from '../lib/use-maps-sidebar-layer-counts';
 import { useMapsStore } from '@/stores/maps';
 import './maps-components.css';
 
@@ -133,7 +134,8 @@ export function MapsDatasetGroups({
 }) {
   const { workspaceId, layerIds, isOn, setLayerOn, setLayersOn, selectLayerExclusive } =
     useMapsLayerParams();
-  const { entries, error, customLayerGroups } = useMapLayers();
+  const { entries, error, customLayerGroups, loading } = useMapLayers();
+  useMapsSidebarLayerCounts(workspaceId, entries, loading);
   const layerCounts = useMapsStore((s) => s.layerCounts);
   // Feeds start expanded while one of their layers is on; a click overrides.
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});

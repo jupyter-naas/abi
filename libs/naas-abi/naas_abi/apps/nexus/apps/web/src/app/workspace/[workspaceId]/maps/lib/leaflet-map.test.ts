@@ -189,7 +189,7 @@ describe('mapsCountryClusterLayersHtml', () => {
   it('renders one numbered badge per layer in its color', async () => {
     const { mapsCountryClusterLayersHtml, mapsCountryClusterBox } = await import('./leaflet-map');
     const html = mapsCountryClusterLayersHtml([
-      { layerId: 'fm', title: 'Forvis <b>', color: '#171c8f', count: 2 },
+      { layerId: 'fm', title: 'Acme <b>', color: '#171c8f', count: 2 },
       { layerId: 'va', color: '#00a651', count: 120 },
     ]);
     expect(html).toContain('--maps-cluster-color:#171c8f');
@@ -197,7 +197,7 @@ describe('mapsCountryClusterLayersHtml', () => {
     expect(html).toContain('>2<');
     expect(html).toContain('>120<');
     expect(html).toContain('font-size:9px');
-    expect(html).toContain('title="2 Forvis &lt;b&gt;"');
+    expect(html).toContain('title="2 Acme &lt;b&gt;"');
     expect(html).toContain('grid-template-columns:repeat(2,24px)');
     // One badge: its own size; several: a grid of at most 3 columns.
     expect(mapsCountryClusterBox(1)).toEqual({ width: 28, height: 28 });

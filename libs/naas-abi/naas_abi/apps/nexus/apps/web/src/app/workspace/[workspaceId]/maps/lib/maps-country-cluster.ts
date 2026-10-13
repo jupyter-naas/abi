@@ -1,6 +1,7 @@
 import type { MapsPinMarker } from './leaflet-map';
 import {
   CONTINENT_CENTERS,
+  continentForGrouping,
   findCountryCenter,
   normalizeCountryName,
   type CountryCenter,
@@ -16,6 +17,9 @@ export const CONTINENT_CLUSTER_EXPAND_ZOOM = 3;
 export type MapsGroupBy = 'feed' | 'layer' | 'off';
 /** Map grouping area. */
 export type MapsGroupArea = 'country' | 'continent';
+
+/** Default grouping ladder: continent (zoom below 3) → country → pins at zoom 5+. */
+export const DEFAULT_MAPS_GROUP_AREA: MapsGroupArea = 'continent';
 
 /** The area pins are grouped into at this zoom, or null to show every pin. */
 export function groupAreaAt(
@@ -110,7 +114,8 @@ export function clusterPinsByCountry(
     }
     // Feeds spell countries differently ("Brasil", "Brazil"): group on the matched country.
     const match = findCountryCenter(opts.centers, country);
-    const continent = opts.area === 'continent' && match?.continent ? match.continent : null;
+    const continent =
+      opts.area === 'continent' && match ? continentForGrouping(match) : null;
     const continentCenter = continent ? CONTINENT_CENTERS[continent] : undefined;
     const center: CountryCenter | undefined =
       continent && continentCenter ? { name: continent, ...continentCenter } : match;

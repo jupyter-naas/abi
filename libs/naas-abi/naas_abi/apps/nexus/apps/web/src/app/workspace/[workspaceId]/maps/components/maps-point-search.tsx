@@ -1,6 +1,13 @@
 'use client';
 
-import { useEffect, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+  type WheelEvent,
+} from 'react';
 import { Search, X } from 'lucide-react';
 
 import type { MapsPinMarker } from '../lib/leaflet-map';
@@ -102,8 +109,18 @@ export function MapsPointSearch({
 
   if (!searchable && !actions && !children) return null;
 
+  /** Leaflet zooms the map on wheel unless the panel keeps the event. */
+  function stopMapWheel(event: WheelEvent<HTMLElement>) {
+    event.stopPropagation();
+  }
+
   const resultsList = showDropdown ? (
-    <div className="maps-point-search__results" role="listbox" aria-label="Search results">
+    <div
+      className="maps-point-search__results"
+      role="listbox"
+      aria-label="Search results"
+      onWheel={stopMapWheel}
+    >
       {results.length ? (
         results.map((pin) => {
           const layer = layerTitleForPin?.(pin);
@@ -128,9 +145,11 @@ export function MapsPointSearch({
         <p className="maps-point-search__empty">No points match &ldquo;{submittedQuery}&rdquo;</p>
       )}
     </div>
-  ) : (
-    children
-  );
+  ) : children ? (
+    <div className="maps-point-search__panel-scroll" onWheel={stopMapWheel}>
+      {children}
+    </div>
+  ) : null;
 
   return (
     <div className="maps-point-search">

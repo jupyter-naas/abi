@@ -228,7 +228,6 @@ export function MapsActiveLayersLegend({
   };
 
   const isLayerCollapsed = (layerId: string) => collapsedLayers[layerId] ?? true;
-  // Feeds start open (their layers are what is on the map).
   const [collapsedFeeds, setCollapsedFeeds] = useState<Record<string, boolean>>({});
 
   return (
@@ -249,9 +248,9 @@ export function MapsActiveLayersLegend({
                   layers={item.layers}
                   statuses={statuses}
                   workspaceId={workspaceId}
-                  collapsed={collapsedFeeds[item.feedId] ?? false}
+                  collapsed={collapsedFeeds[item.feedId] ?? true}
                   onToggle={() =>
-                    setCollapsedFeeds((prev) => ({ ...prev, [item.feedId]: !(prev[item.feedId] ?? false) }))
+                    setCollapsedFeeds((prev) => ({ ...prev, [item.feedId]: !(prev[item.feedId] ?? true) }))
                   }
                   isLayerCollapsed={isLayerCollapsed}
                   onToggleLayer={toggleLayer}
