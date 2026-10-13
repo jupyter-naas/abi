@@ -218,6 +218,13 @@ export function Sidebar() {
   useEffect(() => {
     if (lastReconciledPathRef.current === pathname) return;
     lastReconciledPathRef.current = pathname;
+    // Home launching an app hands it the full width; later routes resume.
+    const ws = useWorkspaceStore.getState();
+    if (ws.keepPanelClosedOnNextRoute) {
+      ws.setKeepPanelClosedOnNextRoute(false);
+      applyPanelFromRoute(null);
+      return;
+    }
     if (pathname.endsWith('/settings/infrastructure')) {
       applyPanelFromRoute('infrastructure');
       return;

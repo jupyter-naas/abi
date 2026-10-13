@@ -585,7 +585,7 @@ class DocumentSecondaryAdapterContract(ABC):
         )
 
     def test_naive_datetime_is_rejected_recursively(self, docs):
-        naive = datetime(2026, 1, 1)
+        naive = datetime(2026, 1, 1)  # exercise naive-date rejection
         with pytest.raises(ValueError, match="timezone"):
             docs.put(
                 "module",
