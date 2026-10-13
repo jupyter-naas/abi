@@ -497,6 +497,7 @@ def test_the_broker_does_not_start_without_a_password(tmp_path: Path, missing) -
         capture_output=True,
         text=True,
         timeout=10,
+        check=False,
     )
 
     assert result.returncode == 1

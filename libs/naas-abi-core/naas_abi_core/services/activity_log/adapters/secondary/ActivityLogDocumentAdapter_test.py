@@ -110,7 +110,7 @@ def test_naive_timestamps_are_read_as_utc(root):
         ActivityEvent(
             actor_id=actor,
             event_type="x",
-            timestamp=datetime(2026, 1, 2, 3, 4, 5),  # noqa: DTZ001 - naive on purpose
+            timestamp=datetime(2026, 1, 2, 3, 4, 5),  # naive on purpose
         )
     )
 

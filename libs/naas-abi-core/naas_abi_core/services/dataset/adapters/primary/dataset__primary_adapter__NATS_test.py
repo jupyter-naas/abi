@@ -447,9 +447,7 @@ def test_query_answers_json_rows_with_exact_integers():
 
 
 @pytest.mark.parametrize(("datasets", "expected"), [((), None), (("a",), 1)])
-def test_namespace_version_tells_a_namespace_without_datasets_apart(
-    datasets: tuple[str, ...], expected: int | None
-):
+def test_namespace_version_tells_a_namespace_without_datasets_apart(datasets, expected):
     stub = _StubAdapter()
     for name in datasets:
         stub.create(DatasetSpec(name=name, namespace="acme", columns=()))

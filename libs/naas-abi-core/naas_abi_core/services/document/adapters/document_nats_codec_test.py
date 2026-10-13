@@ -73,7 +73,7 @@ def test_values_the_wire_cannot_hold_exactly_are_refused():
     with pytest.raises(ValueError):  # beyond sint64: refused, never truncated
         encode_document(_document({"n": 2**63}))
     with pytest.raises(ValueError, match="timezone-aware"):
-        encode_document(_document({"at": datetime(2026, 1, 1)}))  # noqa: DTZ001
+        encode_document(_document({"at": datetime(2026, 1, 1)}))
     with pytest.raises(ValueError):
         encode_document(_document({"x": float("nan")}))
 
