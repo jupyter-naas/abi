@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useParams } from 'next/navigation';
@@ -244,7 +244,7 @@ export default function OrgUsersPage() {
   }, [orgId, fetchMembers, loadMemberWorkspaces]);
 
   useEffect(() => {
-    setPaneHost(document.querySelector('[data-org-settings-root]'));
+    setPaneHost(document.querySelector<HTMLElement>('[data-org-settings-root]'));
   }, []);
 
   useEffect(() => {
@@ -276,7 +276,7 @@ export default function OrgUsersPage() {
   }, []);
 
   const handlePaneDragStart = useCallback(
-    (event: MouseEvent<HTMLDivElement>) => {
+    (event: React.MouseEvent) => {
       event.preventDefault();
       isDraggingRef.current = true;
       setIsDragging(true);

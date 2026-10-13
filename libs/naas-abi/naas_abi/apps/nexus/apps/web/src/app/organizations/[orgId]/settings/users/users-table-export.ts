@@ -249,9 +249,14 @@ export function downloadUsersExport(
     );
     return;
   }
+  const xlsx = usersToXlsx(rows);
+  const xlsxBuffer = xlsx.buffer.slice(
+    xlsx.byteOffset,
+    xlsx.byteOffset + xlsx.byteLength
+  ) as ArrayBuffer;
   triggerDownload(
     `${basename}.xlsx`,
-    new Blob([usersToXlsx(rows)], {
+    new Blob([xlsxBuffer], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
   );
