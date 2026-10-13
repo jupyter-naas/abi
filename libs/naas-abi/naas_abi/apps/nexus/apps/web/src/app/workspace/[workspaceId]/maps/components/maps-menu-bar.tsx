@@ -8,8 +8,7 @@ import { mapsSettingsPath } from '../lib/maps-route';
 
 /**
  * The Maps section's app menu bar, sitting in the topnav through
- * `Header nav=`. Layouts are created in Settings → Maps, so New Layout opens
- * it on a blank layout.
+ * `Header nav=`. Workspace layers are created in Settings → Maps.
  */
 export function MapsMenuBar({ workspaceId, canEdit }: { workspaceId: string | null; canEdit: boolean }) {
   const router = useRouter();
@@ -25,11 +24,11 @@ export function MapsMenuBar({ workspaceId, canEdit }: { workspaceId: string | nu
             <DropdownMenu.Item
               className={APP_MENU_ROW}
               disabled={!canEdit || !workspaceId}
-              title={canEdit ? undefined : 'Only workspace admins can create layouts'}
+              title={canEdit ? undefined : 'Only workspace admins can create layers'}
               onSelect={() => router.push(mapsSettingsPath(workspaceId, { create: true }))}
-              data-testid="maps-menuitem-new-layout"
+              data-testid="maps-menuitem-new-layer"
             >
-              New Layout
+              New layer
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu.Portal>

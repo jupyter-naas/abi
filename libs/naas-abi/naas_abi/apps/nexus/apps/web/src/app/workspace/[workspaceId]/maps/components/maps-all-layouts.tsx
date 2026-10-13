@@ -8,22 +8,20 @@ import type { LayoutEntry } from '../lib/layouts';
 import type { MapsFeedResult } from '../lib/maps-feed';
 import { mapsDatasetPath } from '../lib/maps-route';
 import type { MapsFeedView } from '../lib/maps-view';
-import { useMapLayouts } from '../lib/use-map-layouts';
+import { useMapLayers } from '../lib/use-map-layouts';
 import { MapsFeedCanvas } from './maps-feed-canvas';
 
-/** Layouts whose feed depends on the map bounds (live traffic). */
+/** Layers whose feed depends on the map bounds (live traffic). */
 const VIEWPORT_BOUND_IDS = new Set(['flights', 'ais']);
 
 type LayerStatus = { count: number } | { error: string };
 
 /**
- * The All layouts map: every layout switched on in the sidebar, overlaid on
- * one canvas. Each layout loads on its own (a slow or failing one does not
- * blank the others) and pins keep their layout's colour; the legend shows
- * what each contributed.
+ * All layers on one map: every layer switched on in the sidebar, overlaid on
+ * the basemap chosen from the map control.
  */
-export function MapsAllLayouts() {
-  const { workspaceId, entries, isOn, loading, basemapId } = useMapLayouts();
+export function MapsAllLayers() {
+  const { workspaceId, entries, isOn, loading } = useMapLayers();
   const onEntries = useMemo(() => entries.filter(isOn), [entries, isOn]);
   const [statuses, setStatuses] = useState<Record<string, LayerStatus>>({});
   const onKey = onEntries.map((e) => e.id).join(',');
@@ -47,7 +45,6 @@ export function MapsAllLayouts() {
     results.forEach((result, index) => {
       const entry = layers[index];
       if (result.status === 'fulfilled') {
-        // Ids are only unique within a feed: prefix them with the layout.
         for (const pin of result.value.pins) pins.push({ ...pin, id: `${entry.id}:${pin.id}` });
         next[entry.id] = { count: result.value.pins.length };
       } else {
@@ -59,32 +56,31 @@ export function MapsAllLayouts() {
     return { pins, empty: pins.length === 0 };
   };
 
-  if (loading && !onEntries.length) return <div className="maps-empty">Loading map layouts…</div>;
+  if (loading && !onEntries.length) return <div className="maps-empty">Loading map layers…</div>;
   if (!onEntries.length) {
     return (
       <div className="maps-empty">
-        <h3>No layout switched on</h3>
-        <p>Switch layouts on in the sidebar to overlay them here.</p>
+        <h3>No layer switched on</h3>
+        <p>Switch layers on in the sidebar to overlay them here.</p>
       </div>
     );
   }
 
   return (
     <MapsFeedCanvas
-      key={`${workspaceId}:${basemapId}:${onKey}`}
-      basemapId={basemapId}
-      title="All layouts"
-      loadingLabel={`Loading ${onEntries.length} layout${onEntries.length === 1 ? '' : 's'}…`}
-      readyMeta={(n) => `${n} points from ${onEntries.length} layout${onEntries.length === 1 ? '' : 's'}`}
+      key={`${workspaceId}:${onKey}`}
+      title="All layers"
+      loadingLabel={`Loading ${onEntries.length} layer${onEntries.length === 1 ? '' : 's'}…`}
+      readyMeta={(n) => `${n} points from ${onEntries.length} layer${onEntries.length === 1 ? '' : 's'}`}
       emptyTitle="No points right now"
-      emptyBody="The layouts switched on returned no mappable points."
+      emptyBody="The layers switched on returned no mappable points."
       fetchPins={fetchPins}
       viewportBound={viewportBound}
       inspectable={inspectable && Boolean(workspaceId)}
       workspaceId={workspaceId ?? ''}
       legend={
         <div className="maps-legend">
-          <span className="maps-legend__title">Layouts</span>
+          <span className="maps-legend__title">Layers</span>
           {onEntries.map((entry) => {
             const status = statuses[entry.id];
             return (
@@ -103,3 +99,6 @@ export function MapsAllLayouts() {
     />
   );
 }
+
+/** @deprecated use MapsAllLayers */
+export const MapsAllLayouts = MapsAllLayers;

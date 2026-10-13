@@ -5,12 +5,12 @@ import { Header } from '@/components/shell/header';
 import { getMapsCustomDataset } from '@/lib/maps-custom-datasets';
 import { useGraphMapLayers } from '../lib/use-graph-map-layers';
 import { MapsGraphFeed } from '../components/maps-graph-feed';
-import { MapsAllLayouts } from '../components/maps-all-layouts';
+import { MapsAllLayers } from '../components/maps-all-layouts';
 import { MapsLayoutFeed } from '../components/maps-layout-feed';
 import { MapsMenuBar } from '../components/maps-menu-bar';
-import { ALL_LAYOUTS_ID } from '../lib/layouts';
+import { ALL_LAYERS_ID } from '../lib/layouts';
 import { mapsSettingsPath } from '../lib/maps-route';
-import { useMapLayouts } from '../lib/use-map-layouts';
+import { useMapLayers } from '../lib/use-map-layouts';
 import { getMapsDataset } from '../lib/datasets';
 import { MapsAis } from '../components/maps-ais';
 import { MapsConflict } from '../components/maps-conflict';
@@ -21,11 +21,9 @@ import { MapsFlights } from '../components/maps-flights';
 import { MapsGdacs } from '../components/maps-gdacs';
 import { MapsGulfStrikes } from '../components/maps-gulf-strikes';
 import { MapsIss } from '../components/maps-iss';
-import { MapsNaturalEarth } from '../components/maps-natural-earth';
 import { MapsNews } from '../components/maps-news';
 import { MapsNwsAlerts } from '../components/maps-nws-alerts';
 import { MapsOpenaq } from '../components/maps-openaq';
-import { MapsOpenStreetMap } from '../components/maps-openstreetmap';
 import { MapsPresence } from '../components/maps-presence';
 import { MapsTemperature } from '../components/maps-temperature';
 import { MapsTropicalStorms } from '../components/maps-tropical-storms';
@@ -40,38 +38,38 @@ export default function MapsDatasetPage() {
   const graphDataset = graphLayers.layers.find(d => d.id === rawId);
   const dataset = getMapsDataset(rawId) ?? graphDataset;
   const customDataset = getMapsCustomDataset(rawId);
-  const layouts = useMapLayouts();
-  const workspaceLayout = layouts.entries.find((e) => e.id === rawId && e.kind === 'workspace');
-  const hidden = layouts.hidden.includes(rawId);
-  const menu = <MapsMenuBar workspaceId={layouts.workspaceId} canEdit={layouts.canEdit} />;
+  const layers = useMapLayers();
+  const workspaceLayer = layers.entries.find((e) => e.id === rawId && e.kind === 'workspace');
+  const hidden = layers.hidden.includes(rawId);
+  const menu = <MapsMenuBar workspaceId={layers.workspaceId} canEdit={layers.canEdit} />;
 
-  if (rawId === ALL_LAYOUTS_ID) {
+  if (rawId === ALL_LAYERS_ID) {
     return (
       <div className="maps-root">
         <div className="maps-header-gap">
-          <Header title="Maps" subtitle="All layouts" nav={menu} />
+          <Header title="Maps" subtitle="All layers" nav={menu} />
         </div>
         <div className="maps-body">
-          <MapsAllLayouts />
+          <MapsAllLayers />
         </div>
       </div>
     );
   }
 
-  if (hidden || (!dataset && !workspaceLayout)) {
-    if (!hidden && (graphLayers.loading || layouts.loading)) return <div className="maps-empty">Loading map layers…</div>;
+  if (hidden || (!dataset && !workspaceLayer)) {
+    if (!hidden && (graphLayers.loading || layers.loading)) return <div className="maps-empty">Loading map layers…</div>;
     return (
       <div className="maps-root">
         <div className="maps-header-gap">
-          <Header title="Maps" subtitle={hidden ? 'Hidden layout' : 'Unknown layout'} nav={menu} />
+          <Header title="Maps" subtitle={hidden ? 'Hidden layer' : 'Unknown layer'} nav={menu} />
         </div>
         <div className="maps-empty">
-          <h3>{hidden ? 'This layout is hidden in this workspace' : 'Layout not found'}</h3>
+          <h3>{hidden ? 'This layer is hidden in this workspace' : 'Layer not found'}</h3>
           <p>
             {hidden ? (
-              <>A workspace admin hid it in <a className="underline" href={mapsSettingsPath(layouts.workspaceId)}>Settings → Maps</a>.</>
+              <>A workspace admin hid it in <a className="underline" href={mapsSettingsPath(layers.workspaceId)}>Settings → Maps</a>.</>
             ) : (
-              'Pick a layout in the Maps sidebar, or open All layouts.'
+              'Pick a layer in the Maps sidebar, or open All layers.'
             )}
           </p>
         </div>
@@ -82,15 +80,13 @@ export default function MapsDatasetPage() {
   return (
     <div className="maps-root">
       <div className="maps-header-gap">
-        <Header title="Maps" subtitle={(dataset ?? workspaceLayout)?.title} nav={menu} />
+        <Header title="Maps" subtitle={(dataset ?? workspaceLayer)?.title} nav={menu} />
       </div>
       <div className="maps-body">
-        {!dataset && workspaceLayout ? <MapsLayoutFeed layout={workspaceLayout} /> : null}
-        {dataset?.id === 'openstreetmap' ? <MapsOpenStreetMap /> : null}
+        {!dataset && workspaceLayer ? <MapsLayoutFeed layout={workspaceLayer} /> : null}
         {dataset?.id === 'earthquakes' ? <MapsEarthquakes /> : null}
         {dataset?.id === 'wildfires' ? <MapsWildfires /> : null}
         {dataset?.id === 'temperature' ? <MapsTemperature /> : null}
-        {dataset?.id === 'natural-earth' ? <MapsNaturalEarth /> : null}
         {dataset?.id === 'gdacs' ? <MapsGdacs /> : null}
         {dataset?.id === 'eonet-all' ? <MapsEonetAll /> : null}
         {dataset?.id === 'openaq' ? <MapsOpenaq /> : null}

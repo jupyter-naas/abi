@@ -2,7 +2,8 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { DEFAULT_BASEMAP_ID, type WorkspaceMapLayout } from '@/app/workspace/[workspaceId]/maps/lib/layouts';
+import { DEFAULT_BASEMAP_ID, normalizeBasemapId } from '@/app/workspace/[workspaceId]/maps/lib/maps-basemaps';
+import type { WorkspaceMapLayout } from '@/app/workspace/[workspaceId]/maps/lib/layouts';
 import { layoutsApi } from '@/app/workspace/[workspaceId]/maps/lib/layouts-api';
 
 interface WorkspaceLayouts {
@@ -12,18 +13,19 @@ interface WorkspaceLayouts {
 }
 
 export interface MapsState {
-  /**
-   * Which layouts are on the All layouts map (the sidebar switches, kept per
-   * browser like Search). Only what differs from each layout's default.
-   */
+  /** Which layers are on the All layers map (per browser, like Search). */
   overrides: Record<string, boolean>;
-  setLayoutOn: (layoutId: string, on: boolean) => void;
-  setLayoutsOn: (layoutIds: string[], on: boolean) => void;
-  /** The one basemap under the combined map. Layouts stack on top of it. */
+  setLayerOn: (layerId: string, on: boolean) => void;
+  setLayersOn: (layerIds: string[], on: boolean) => void;
+  /** @deprecated use setLayerOn */
+  setLayoutOn: (layerId: string, on: boolean) => void;
+  /** @deprecated use setLayersOn */
+  setLayoutsOn: (layerIds: string[], on: boolean) => void;
+  /** Background tiles; switched from the map (Leaflet layers control). */
   basemapId: string;
   setBasemap: (basemapId: string) => void;
 
-  /** Settings → Maps: the workspace's own layouts and hidden layouts. */
+  /** Settings → Maps: workspace SPARQL layers and hidden ids. */
   byWorkspace: Record<string, WorkspaceLayouts>;
   loading: boolean;
   error: string | null;
@@ -37,13 +39,15 @@ export const useMapsStore = create<MapsState>()(
   persist(
     (set, get) => ({
       overrides: {},
-      setLayoutOn: (layoutId, on) => set((state) => ({ overrides: { ...state.overrides, [layoutId]: on } })),
-      setLayoutsOn: (layoutIds, on) =>
+      setLayerOn: (layerId, on) => set((state) => ({ overrides: { ...state.overrides, [layerId]: on } })),
+      setLayersOn: (layerIds, on) =>
         set((state) => ({
-          overrides: { ...state.overrides, ...Object.fromEntries(layoutIds.map((id) => [id, on])) },
+          overrides: { ...state.overrides, ...Object.fromEntries(layerIds.map((id) => [id, on])) },
         })),
+      setLayoutOn: (layerId, on) => get().setLayerOn(layerId, on),
+      setLayoutsOn: (layerIds, on) => get().setLayersOn(layerIds, on),
       basemapId: DEFAULT_BASEMAP_ID,
-      setBasemap: (basemapId) => set({ basemapId }),
+      setBasemap: (basemapId) => set({ basemapId: normalizeBasemapId(basemapId) }),
 
       byWorkspace: {},
       loading: false,
@@ -61,7 +65,7 @@ export const useMapsStore = create<MapsState>()(
             loading: false,
           }));
         } catch (error) {
-          set({ loading: false, error: error instanceof Error ? error.message : 'Could not load map layouts' });
+          set({ loading: false, error: error instanceof Error ? error.message : 'Could not load map layers' });
         }
       },
       applyLayouts: (workspaceId, update) =>

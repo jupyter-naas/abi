@@ -29,14 +29,23 @@ export function apiUrl(url) {
     : url;
 }
 
-let cached = null;
+import { isBundledInNexus, nexusAuthHeaders, nexusWorkspaceId } from "./nexus.js";
+
+const cachedByWorkspace = new Map();
 
 export async function loadAppConfig() {
-  if (cached) return cached;
-  const response = await fetch(`${API_BASE}/config`);
+  const workspaceId = isBundledInNexus() ? nexusWorkspaceId() : "";
+  const cacheKey = workspaceId || "__standalone__";
+  if (cachedByWorkspace.has(cacheKey)) return cachedByWorkspace.get(cacheKey);
+  let url = `${API_BASE}/config`;
+  if (workspaceId) {
+    url += `?workspace_id=${encodeURIComponent(workspaceId)}`;
+  }
+  const response = await fetch(url, { headers: nexusAuthHeaders() });
   if (!response.ok) throw new Error(`config → ${response.status}`);
-  cached = await response.json();
-  return cached;
+  const config = await response.json();
+  cachedByWorkspace.set(cacheKey, config);
+  return config;
 }
 
 export function applyTheme(config) {

@@ -1,23 +1,17 @@
 /**
- * Maps layouts: every layer the Maps section offers, whatever it comes from.
+ * Maps data layers (UI: "layers"). Built-in feeds, module graph layers, and
+ * workspace SPARQL layers from Settings → Maps.
  *
- * - builtin: drawn by the web app (MAPS_DATASETS, incl. deployment Custom ones)
- * - graph:   registered by a module (GET /api/maps/layers)
- * - workspace: a SPARQL layout created in Settings → Maps
- *
- * A workspace admin can hide any layout (Settings → Maps). Each member then
- * switches layouts on or off for the "All layouts" map (per browser, like the
- * Search sidebar). Layouts stack on the one selected basemap. A basemap is the
- * background (OpenStreetMap or Natural Earth) and is never itself a layout.
+ * The API still calls workspace definitions "layouts"; this module is the
+ * frontend layer list and visibility model.
  */
 import type { MapsDataset, MapsDatasetCategory } from './datasets';
 import { MAPS_CATEGORIES } from './datasets';
 
-/** Reserved route segment for the combined map: no layout can use it. */
-export const ALL_LAYOUTS_ID = 'all';
-
-/** Background used until a member picks another basemap. */
-export const DEFAULT_BASEMAP_ID = 'openstreetmap';
+/** Reserved route for the combined map (`/maps/all`). */
+export const ALL_LAYERS_ID = 'all';
+/** @deprecated use ALL_LAYERS_ID */
+export const ALL_LAYOUTS_ID = ALL_LAYERS_ID;
 
 export type LayoutKind = 'builtin' | 'graph' | 'workspace';
 
@@ -35,13 +29,13 @@ export interface WorkspaceMapLayout {
 
 export interface LayoutEntry extends MapsDataset {
   kind: LayoutKind;
-  /** A data layout (pins). Basemaps are the background and do not stack. */
+  /** Pin layer that can stack on the All layers map. */
   combinable: boolean;
   /** Graph layers: the graph the module projects. */
   graphUri?: string;
 }
 
-/** On in All layouts until a member says otherwise: light, global feeds. */
+/** On on All layers until a member toggles them off. */
 const DEFAULT_ON_BUILTIN_IDS: ReadonlySet<string> = new Set(['gdacs', 'volcanoes', 'tropical-storms', 'iss']);
 
 export function buildLayoutEntries(
@@ -50,7 +44,7 @@ export function buildLayoutEntries(
   workspaceLayouts: WorkspaceMapLayout[],
   _options: { customIds?: ReadonlySet<string> } = {},
 ): LayoutEntry[] {
-  const taken = new Set<string>([ALL_LAYOUTS_ID]);
+  const taken = new Set<string>([ALL_LAYERS_ID]);
   const entries: LayoutEntry[] = [];
   const add = (entry: LayoutEntry) => {
     if (taken.has(entry.id)) return;
@@ -58,16 +52,14 @@ export function buildLayoutEntries(
     entries.push(entry);
   };
   for (const dataset of builtins) {
-    // Basemaps are the background. Every other built-in, including deployment
-    // Custom datasets, is a pin layout and can join the combined map.
-    add({ ...dataset, kind: 'builtin', combinable: dataset.category !== 'basemap' });
+    add({ ...dataset, kind: 'builtin', combinable: true });
   }
   for (const layer of graphLayers) add({ ...layer, category: 'custom', kind: 'graph', combinable: true });
   for (const layout of workspaceLayouts) {
     add({
       id: layout.id,
       title: layout.title,
-      description: layout.description || 'Workspace layout (SPARQL)',
+      description: layout.description || 'Workspace layer (SPARQL)',
       icon: layout.icon || 'MapPin',
       category: 'custom',
       order: layout.order,
@@ -83,12 +75,15 @@ export function visibleEntries(entries: LayoutEntry[], hidden: ReadonlySet<strin
   return entries.filter((entry) => !set.has(entry.id));
 }
 
-/** Whether a layout is drawn on the combined map. Basemaps never are. */
-export function isLayoutOn(entry: LayoutEntry, overrides: Record<string, boolean>): boolean {
+/** Whether a layer is drawn on the All layers map. */
+export function isLayerOn(entry: LayoutEntry, overrides: Record<string, boolean>): boolean {
   if (!entry.combinable) return false;
   if (entry.id in overrides) return overrides[entry.id];
   return entry.kind !== 'builtin' || DEFAULT_ON_BUILTIN_IDS.has(entry.id);
 }
+
+/** @deprecated use isLayerOn */
+export const isLayoutOn = isLayerOn;
 
 export interface LayoutGroup {
   id: MapsDatasetCategory;
@@ -96,18 +91,8 @@ export interface LayoutGroup {
   entries: LayoutEntry[];
 }
 
-/**
- * The basemap currently under the combined map. A hidden or unknown id falls
- * back to the first visible basemap, then OpenStreetMap.
- */
-export function resolveBasemapId(entries: LayoutEntry[], stored: string): string {
-  const basemaps = entries.filter((entry) => entry.category === 'basemap');
-  if (basemaps.some((entry) => entry.id === stored)) return stored;
-  return basemaps[0]?.id ?? DEFAULT_BASEMAP_ID;
-}
-
-/** Basemap / Public / Custom, each sorted; empty groups left out. */
-export function groupLayoutEntries(entries: LayoutEntry[]): LayoutGroup[] {
+/** Public then Custom; empty groups omitted. */
+export function groupLayerEntries(entries: LayoutEntry[]): LayoutGroup[] {
   return MAPS_CATEGORIES.map(({ id, label }) => ({
     id,
     label,
@@ -116,3 +101,6 @@ export function groupLayoutEntries(entries: LayoutEntry[]): LayoutGroup[] {
       .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title)),
   })).filter((group) => group.entries.length > 0);
 }
+
+/** @deprecated use groupLayerEntries */
+export const groupLayoutEntries = groupLayerEntries;

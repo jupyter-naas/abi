@@ -12,8 +12,8 @@ export function MapsLibrary() {
       <div className="maps-library-intro">
         <h2>Maps</h2>
         <p>
-          Pick one basemap, then switch on the layouts to draw on it. Custom
-          stays empty upstream so a deployment can add its own pin layouts.
+          Switch data layers on in Public (and Custom when configured). Choose
+          the basemap from the control on the map (top-right).
         </p>
       </div>
 

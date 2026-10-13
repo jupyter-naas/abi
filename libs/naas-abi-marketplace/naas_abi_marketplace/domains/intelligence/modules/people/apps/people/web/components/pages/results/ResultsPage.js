@@ -247,7 +247,11 @@ async function mountNetwork(host, { config, query, facet }) {
 export async function mountResults(host, { config, params }) {
   const query = params.get("q") || "";
   const facet = params.get("facet") || "";
-  const view = viewOf(params.get("view") || "");
+  const rawView = params.get("view");
+  const view =
+    rawView === null
+      ? viewOf(config.app?.default_results_view ?? "")
+      : viewOf(rawView);
   const requestedPage = Math.max(1, parseInt(params.get("page") || "1", 10) || 1);
 
   if (view === "network") {

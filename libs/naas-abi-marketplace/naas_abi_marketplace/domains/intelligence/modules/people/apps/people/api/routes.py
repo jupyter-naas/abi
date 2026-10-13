@@ -158,8 +158,10 @@ def build_router(config_path: Path | None = None) -> APIRouter:
         return PeopleRequestContext(store=snapshot.store, live_graph=snapshot.graph)
 
     @router.get("/config")
-    def get_config() -> dict:
-        return public_config(config_path)
+    def get_config(
+        workspace_id: str | None = Query(None, max_length=100),
+    ) -> dict:
+        return public_config(config_path, workspace_id=workspace_id)
 
     @router.get("/search")
     async def get_search(
