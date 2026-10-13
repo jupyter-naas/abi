@@ -74,3 +74,40 @@ describe('app-html proxy', () => {
     expect(new Headers(init.headers).has('content-type')).toBe(false);
   });
 });
+
+describe('app-html proxy and remote module apps', () => {
+  it('never serves a remote module app from this origin', async () => {
+    const fetchMock = stubFetch();
+    const request = new NextRequest(
+      'https://nexus.example/app-html/remote/acme.research/console/index.html?token=jwt',
+    );
+
+    const res = await GET(request, { params: { path: ['remote', 'acme.research', 'console', 'index.html'] } });
+
+    expect(res.status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the upstream sandbox and referrer policy', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response('<html></html>', {
+          status: 200,
+          headers: {
+            'content-type': 'text/html',
+            'content-security-policy': 'sandbox allow-scripts',
+            'referrer-policy': 'no-referrer',
+            'clear-site-data': '"storage"',
+          },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const request = new NextRequest('https://nexus.example/app-html/some/module/console/index.html?token=jwt');
+
+    const res = await GET(request, params);
+
+    expect(res.headers.get('content-security-policy')).toBe('sandbox allow-scripts');
+    expect(res.headers.get('referrer-policy')).toBe('no-referrer');
+    expect(res.headers.get('clear-site-data')).toBeNull();
+  });
+});

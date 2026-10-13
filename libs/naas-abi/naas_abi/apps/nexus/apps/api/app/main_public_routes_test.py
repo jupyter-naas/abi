@@ -32,6 +32,14 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/api/auth/avatar/{filename}"): "avatar images used in <img> tags",
     ("GET", "/app-preview/{token}"): "capability URL (signed preview token)",
     ("GET", "/app-preview/{token}/{path:path}"): "capability URL (signed preview token)",
+    **{
+        (method, "/app-remote/{grant}/{module_id}/{app}/{path:path}"): (
+            "capability URL (signed remote app grant)"
+        )
+        for method in ("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+    },
+    ("GET", "/app-remote/{grant}/{module_id}/{app}"): "capability URL (signed remote app grant)",
+    ("HEAD", "/app-remote/{grant}/{module_id}/{app}"): "capability URL (signed remote app grant)",
     ("GET", "/provider-logos/{provider_id}"): "static provider logos",
 }
 

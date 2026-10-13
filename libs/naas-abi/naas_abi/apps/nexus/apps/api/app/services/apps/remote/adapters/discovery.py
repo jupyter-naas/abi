@@ -164,7 +164,7 @@ class DiscoveryRemoteAppDirectory:
             path=request.path,
             query=request.query,
             body=request.body,
-            root_path=RemoteApp(module_id, app).root_path,
+            root_path=request.root_path or RemoteApp(module_id, app).root_path,
             user_id=request.user_id,
         )
         for name, value in request.headers:

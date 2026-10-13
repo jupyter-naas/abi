@@ -74,3 +74,36 @@ def test_a_discovery_outage_still_lists_the_local_apps(monkeypatch: pytest.Monke
     monkeypatch.setattr(factory, "get_remote_app_directory", lambda: Down())
 
     assert asyncio.run(adapter._remote_apps_catalog()) == ()
+
+
+def test_a_remote_app_opens_under_a_grant_for_the_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+    from types import SimpleNamespace
+
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import http_routes
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
+        RemoteAppGrant,
+        read_remote_app_grant,
+    )
+
+    monkeypatch.setattr(http_routes, "current_secret_key", lambda: "s3cret")
+    body = adapter.RemoteAppGrantRequest(module_id="acme.research", app="console")
+
+    answer = asyncio.run(adapter.create_remote_app_grant(body, SimpleNamespace(id="u-1")))
+
+    _, prefix, grant, rest = answer.path.split("/", 3)
+    assert (prefix, rest) == ("app-remote", "acme.research/console/")
+    assert read_remote_app_grant(grant, secret="s3cret") == RemoteAppGrant(
+        "u-1", "acme.research", "console"
+    )
+    assert answer.expires_in == adapter.nexus_config.settings.remote_app_grant_expire_minutes * 60
+
+
+@pytest.mark.parametrize(
+    ("module_id", "app"), [("..", "console"), ("acme/x", "console"), ("acme", "a.b"), ("acme", "")]
+)
+def test_a_grant_names_one_path_segment_each(module_id: str, app: str) -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        adapter.RemoteAppGrantRequest(module_id=module_id, app=app)
