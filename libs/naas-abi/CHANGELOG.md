@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.85.0 (2026-10-13)
+
+### Features
+
+- **workspace**: Add keepPanelClosedOnNextRoute to control panel state on route changes
+  ([`a3a1ec6`](https://github.com/jupyter-naas/abi/commit/a3a1ec63c1ceb1ec0bffa28fa1428118f427b221))
+
+
 ## v2.84.0 (2026-10-13)
 
 ### Bug Fixes
