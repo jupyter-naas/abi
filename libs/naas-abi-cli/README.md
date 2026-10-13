@@ -218,9 +218,10 @@ replaces the local Caddy edge.
   project `Dockerfile` on each deploy, with no source mount
 - Writes `config.dokploy.yaml` (from `config.local.yaml`, read with
   `ENV=dokploy`) and the `.deploy/docker` files the compose mounts. A dotenv
-  secret adapter on the `abi_secrets` volume is added ahead of the project's
-  own, which are kept line for line, so secrets the engine writes survive
-  redeploys. The Environment tab wins over that file
+  secret adapter on the `abi_secrets` volume takes the place of the project's
+  `.env` one, and the project's adapters are kept line for line, so secrets
+  the engine writes survive redeploys. The Environment tab wins over that
+  file
 - Writes the gitignored `.env.dokploy` with generated passwords and keys, to
   paste into Dokploy's Environment tab; the config secrets it has no value for
   are commented out. Reruns keep its values; `--regenerate` replaces them and

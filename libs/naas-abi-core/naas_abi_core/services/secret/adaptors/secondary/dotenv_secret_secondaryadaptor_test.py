@@ -77,6 +77,8 @@ def test_environment_first_lets_the_environment_win_over_the_file(
     adapter = DotenvSecretSecondaryAdaptor(str(path), environment_first=True)
     assert adapter.get(key) == "deployed"
     assert adapter.get(only_in_file) == "saved"
+    # The listing (what the admin console shows) agrees with get().
+    assert adapter.list() == {key: "deployed", only_in_file: "saved"}
     # A value saved in this process is seen at once.
     adapter.set(key, "changed")
     assert adapter.get(key) == "changed"

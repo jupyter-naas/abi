@@ -1,8 +1,10 @@
+import os
 import re
 import shutil
 import subprocess
 from pathlib import Path
 
+import jinja2
 import pytest
 import yaml
 from click.testing import CliRunner
@@ -295,7 +297,7 @@ def test_the_env_is_stable_across_reruns_unless_regenerated(tmp_path: Path) -> N
     _deploy(project, include_coding=True)
     first = _env(project)
     (project / ENV_FILE).write_text(
-        (project / ENV_FILE).read_text(encoding="utf-8") + "MY_KEY=kept\n",
+        (project / ENV_FILE).read_text(encoding="utf-8") + "MY_KEY=kept\nMY_EMPTY=\n",
         encoding="utf-8",
     )
 
@@ -303,6 +305,10 @@ def test_the_env_is_stable_across_reruns_unless_regenerated(tmp_path: Path) -> N
     second = _env(project)
     assert {k: v for k, v in second.items() if k != "MY_KEY"} == first
     assert second["MY_KEY"] == "kept"
+    # An empty value would win over the engine's secrets file: commented out.
+    assert (
+        "# MY_EMPTY=" in (project / ENV_FILE).read_text(encoding="utf-8").splitlines()
+    )
 
     _deploy(project, include_coding=True, regenerate=True)
     third = _env(project)
@@ -388,7 +394,11 @@ def test_the_dokploy_config_keeps_secrets_on_volumes(
     readers = ["abi"] + ([] if nats else ["dagster"])
     for name in readers:
         assert "abi_secrets:/var/lib/abi-secrets" in services[name]["volumes"], name
-        assert "touch /var/lib/abi-secrets/.env .env" in str(services[name]["command"])
+        command = services[name]["command"][-1]
+        assert command.startswith("touch /var/lib/abi-secrets/.env .env && ")
+        # The config's own secrets are added empty to the volume file; never
+        # the stack's (set in the Environment tab) or the minted tokens.
+        assert "for k in OPENROUTER_API_KEY; do" in command
         if coding:
             assert "coding_secrets:/run/abi-secrets:ro" in services[name]["volumes"]
     assert "abi_secrets" in compose["volumes"]
@@ -416,15 +426,14 @@ modules:
 services:
   secret:
     secret_adapters:
-      - adapter: "dotenv"
-        config:
-          path: "config/extra.env"
-
-      # The Naas vault.
+      # The Naas vault comes first.
       - adapter: "naas"
         config:
           naas_api_key: "{{ secret.NAAS_API_KEY }}"
           naas_api_url: 'https://api.naas.ai'
+      # Local overrides.
+      - adapter: "dotenv"
+        config: {}
       # - adapter: "dotenv"
       #   config: {path: "spare.env"}
       - adapter: "base64"
@@ -437,6 +446,15 @@ services:
     kv_adapter:
       adapter: redis"""
 
+_NAAS = {
+    "adapter": "naas",
+    "config": {"naas_api_key": "", "naas_api_url": "https://api.naas.ai"},
+}
+_BASE64 = {
+    "adapter": "base64",
+    "config": {"base64_secret_key": "", "secret_adapter": _PROJECT_DOTENV},
+}
+
 
 @pytest.mark.parametrize("trailing_newline", [True, False])
 def test_the_projects_own_secret_adapters_are_kept_line_for_line(
@@ -444,78 +462,128 @@ def test_the_projects_own_secret_adapters_are_kept_line_for_line(
 ) -> None:
     config = _OWN_ADAPTERS + ("\n" if trailing_newline else "")
     project = _project(tmp_path, nats=False, config=config)
-    (project / "config").mkdir()
-    (project / "config/extra.env").touch()
     _deploy(project, include_coding=True)
 
+    # The volume dotenv takes the place of the project's `.env` one: the
+    # project's first adapter stays first.
     assert _secret_adapters(project) == [
+        _NAAS,
         _PERSISTENT,
-        {"adapter": "dotenv", "config": {"path": "config/extra.env"}},
-        {
-            "adapter": "naas",
-            "config": {"naas_api_key": "", "naas_api_url": "https://api.naas.ai"},
-        },
-        {
-            "adapter": "base64",
-            "config": {"base64_secret_key": "", "secret_adapter": _PROJECT_DOTENV},
-        },
+        _PROJECT_DOTENV,
+        _BASE64,
         _MINTED,
     ]
     text = (project / CONFIG_FILE).read_text(encoding="utf-8")
     # The project's lines, quoting and comments are unchanged.
-    original = config.split("\n    secret_adapters:\n", 1)[1].split("  kv:", 1)[0]
-    assert original in text
-    assert text.count("secret_adapters:") == 2
+    for part in (
+        config.split("\n    secret_adapters:\n", 1)[1]
+        .split("  kv:")[0]
+        .split("      # Local overrides.\n")
+    ):
+        assert part in text
+    assert text.index("Added by `abi deploy dokploy`: secrets") < text.index(
+        "# Local overrides."
+    )
     assert '      secret_adapters:\n        - adapter: "dotenv"\nservices:' in text
     assert "NAAS_API_KEY" in (project / ENV_FILE).read_text(encoding="utf-8")
 
 
-def test_secret_adapters_at_the_end_of_the_file_are_not_duplicated(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    "items, expected",
+    [
+        # No `.env` dotenv: after the project's first adapter.
+        ([_NAAS, _BASE64], [_NAAS, _PERSISTENT, _BASE64]),
+        ([_NAAS], [_NAAS, _PERSISTENT]),
+        ([_PROJECT_DOTENV, _NAAS], [_PERSISTENT, _PROJECT_DOTENV, _NAAS]),
+    ],
+)
+def test_the_volume_dotenv_never_goes_ahead_of_the_projects_first_adapter(
+    tmp_path: Path, items: list, expected: list
 ) -> None:
-    config = _CONFIG.split("  kv:")[0].rstrip("\n")
-    assert config.endswith("config: {}")
-    project = _project(tmp_path, nats=True, config=config)
-    _deploy(project, include_coding=True)
+    lines = ["services:", "  secret:", "    secret_adapters:"]
+    for item in items:
+        dumped = yaml.safe_dump([item], sort_keys=False).splitlines()
+        lines += [f"      {line}" for line in dumped]
+    project = _project(tmp_path, nats=True, config="\n".join(lines) + "\n")
+    _deploy(project)
 
-    assert _secret_adapters(project) == [_PERSISTENT, _PROJECT_DOTENV, _MINTED]
+    assert _secret_adapters(project) == expected
 
 
-@pytest.mark.parametrize("coding", [False, True])
-def test_jinja_control_flow_and_includes_are_kept(tmp_path: Path, coding: bool) -> None:
+def test_jinja_outside_the_list_is_kept(tmp_path: Path) -> None:
     config = _CONFIG.replace(
         "api:\n  title: demo\n",
         "api:\n  title: demo\n{% if true %}\n  extra: 1\n{% endif %}\n"
         "{% include 'api.yaml' %}\n",
-    ).replace(
-        '      - adapter: "dotenv"\n        config: {}\n',
-        '{% for name in ["dotenv"] %}\n'
-        '      - adapter: "{{ name }}"\n        config: {}\n{% endfor %}\n',
     )
     project = _project(tmp_path, nats=True, config=config)
     (project / "api.yaml").write_text("  version: 2\n", encoding="utf-8")
-    _deploy(project, include_coding=coding)
+    _deploy(project, include_coding=True)
 
     text = (project / CONFIG_FILE).read_text(encoding="utf-8")
     assert "{% if true %}\n  extra: 1\n{% endif %}\n{% include 'api.yaml' %}" in text
-    assert _secret_adapters(project) == (
-        [_PERSISTENT, _PROJECT_DOTENV] + ([_MINTED] if coding else [])
-    )
+    assert _secret_adapters(project) == [_PERSISTENT, _PROJECT_DOTENV, _MINTED]
 
 
 @pytest.mark.parametrize(
-    "path, reason",
-    [(".env.prod", ".dockerignore"), ("secrets/missing.env", "not in the project")],
+    "items",
+    [
+        '{% if true %}\n      - adapter: "dotenv"\n        config: {}\n{% endif %}\n',
+        (
+            '{% for name in ["dotenv"] %}\n      - adapter: "{{ name }}"\n'
+            "        config: {}\n{% endfor %}\n"
+        ),
+        "{% include 'adapters.yaml' %}\n",
+        (
+            '      - adapter: "dotenv"\n        config: {}\n'
+            "{% if secret.EXTRA %}\n      - adapter: naas\n{% endif %}\n"
+        ),
+    ],
 )
-def test_a_dotenv_the_image_will_not_have_is_refused(
-    tmp_path: Path, path: str, reason: str
-) -> None:
+def test_jinja_inside_the_list_is_refused(tmp_path: Path, items: str) -> None:
+    config = _CONFIG.replace('      - adapter: "dotenv"\n        config: {}\n', items)
+    project = _project(tmp_path, nats=True, config=config)
+    (project / "adapters.yaml").write_text(
+        '      - adapter: "dotenv"\n        config: {}\n', encoding="utf-8"
+    )
+
+    with pytest.raises(DokployDeployError, match="outside the list"):
+        _deploy(project, include_coding=True)
+
+
+def test_crlf_line_endings_are_read_and_kept(tmp_path: Path) -> None:
+    config = (
+        _CONFIG.replace("{nats}", "")
+        .replace("\n", "\r\n")
+        .replace("  secret:\r\n", "  secret:\r\n\r\n")
+        .replace("    secret_adapters:\r\n", "    secret_adapters:\r\n\r\n")
+    )
+    project = _project(tmp_path, nats=True)
+    (project / "config.local.yaml").write_bytes(config.encode("utf-8"))
+    _deploy(project, include_coding=True)
+
+    raw = (project / CONFIG_FILE).read_bytes().decode("utf-8")
+    assert raw.count("\n") == raw.count("\r\n")
+    assert _secret_adapters(project) == [_PERSISTENT, _PROJECT_DOTENV, _MINTED]
+
+
+@pytest.mark.parametrize("path", [".env.prod", "config/.env", "/run/secrets/abi.env"])
+def test_a_dotenv_other_than_dot_env_is_refused(tmp_path: Path, path: str) -> None:
     config = _CONFIG.replace("config: {}", f'config:\n          path: "{path}"')
     project = _project(tmp_path, nats=True, config=config)
-    if path.startswith(".env"):
-        (project / path).touch()  # present locally, excluded from the image
+    if not path.startswith("/"):
+        # Present locally, as a gitignored file would be: still refused.
+        (project / path).parent.mkdir(parents=True, exist_ok=True)
+        (project / path).touch()
 
-    with pytest.raises(DokployDeployError, match=reason):
+    with pytest.raises(DokployDeployError, match="Environment tab"):
+        _deploy(project)
+
+
+def test_a_config_without_a_secret_section_says_so(tmp_path: Path) -> None:
+    project = _project(tmp_path, nats=True, config="services:\n  kv: {}\n")
+
+    with pytest.raises(DokployDeployError, match="no services.secret.secret_adapters"):
         _deploy(project)
 
 
@@ -726,3 +794,70 @@ def test_coding_init_mints_under_fresh_names_and_fails_loudly_on_dokploy(
     assert '--token-name "nexus-$TOKEN_SUFFIX"' in script
     assert '[ "${CODING_INIT_STRICT:-0}" = "1" ]' in script
     assert "exit 1" in script
+
+
+@pytest.mark.parametrize("nats", [True, False])
+def test_a_fresh_project_boots_with_an_empty_secrets_volume(
+    tmp_path: Path, monkeypatch, nats: bool
+) -> None:
+    """The generated config, .env.dokploy and container command, on a first
+    deploy: nothing saved yet, OPENROUTER_API_KEY not filled in."""
+    import naas_abi_cli
+
+    template = (
+        Path(naas_abi_cli.__file__).parent
+        / "cli/new/templates/project/config.local.yaml"
+    )
+    config = jinja2.Template(
+        template.read_text(encoding="utf-8"), keep_trailing_newline=True
+    ).render(
+        nats=nats,
+        include_coding=True,
+        project_name_snake="demo",
+        project_name_pascal="Demo",
+    )
+    project = _project(tmp_path, nats=nats, config=config)
+    compose = _deploy(project, include_coding=True)
+    text = (project / CONFIG_FILE).read_text(encoding="utf-8")
+
+    # The container: the Environment tab as its environment, an empty /app,
+    # empty volumes.
+    for key in list(os.environ):
+        if key.startswith(("NEXUS_", "POSTGRES_", "OPENROUTER", "NATS_", "CODER_")):
+            monkeypatch.delenv(key)
+    for key, value in _env(project).items():
+        monkeypatch.setenv(key, value)
+    assert "OPENROUTER_API_KEY" not in os.environ
+    app, volume, coding = tmp_path / "app", tmp_path / "secrets", tmp_path / "coding"
+    for directory in (app, volume, coding):
+        directory.mkdir()
+    (coding / "coding.env").touch()
+    text = text.replace("/var/lib/abi-secrets", str(volume))
+    text = text.replace("/run/abi-secrets", str(coding))
+    monkeypatch.chdir(app)
+
+    # Without the setup step, the first boot stops on the missing key.
+    (volume / ".env").touch()
+    (app / ".env").touch()
+    with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
+        EngineConfiguration.from_yaml_content(text, base_dir=str(app))
+
+    command = compose["services"]["abi"]["command"][-1]
+    setup = command.split(" && exec ")[0].replace("$$", "$")
+    setup = setup.replace("/var/lib/abi-secrets", str(volume))
+    subprocess.run(["sh", "-c", setup], cwd=app, check=True)
+    subprocess.run(["sh", "-c", setup], cwd=app, check=True)  # every restart
+
+    configuration = EngineConfiguration.from_yaml_content(text, base_dir=str(app))
+
+    assert configuration is not None
+    assert (volume / ".env").read_text(encoding="utf-8").count(
+        "OPENROUTER_API_KEY="
+    ) == 1
+    # A value saved later is kept by the next restart.
+    (volume / ".env").write_text("OPENROUTER_API_KEY=saved\n", encoding="utf-8")
+    subprocess.run(["sh", "-c", setup], cwd=app, check=True)
+    assert (
+        "OPENROUTER_API_KEY=saved\n"
+        == (volume / ".env").read_text(encoding="utf-8").split("\n", 1)[0] + "\n"
+    )
