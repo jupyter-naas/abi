@@ -18,6 +18,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from collections.abc import AsyncIterator, Iterator
+from datetime import UTC, datetime
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 from fastapi import HTTPException, Request
@@ -30,8 +31,10 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.factory import (
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
     GRANT_ROUTE_PREFIX,
     grant_root,
+    is_segment,
     mint_remote_app_grant,
     read_remote_app_grant,
+    redact_grant_path,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
     INLINE_BYTES,
@@ -87,14 +90,18 @@ _RETURNED = frozenset(
 APP_COOKIE_PREFIX = "abi_app."
 
 
-def _user_id(request: Request) -> str:
-    """The signed-in user behind the request; empty for an ABI_API_KEY caller."""
+def _presented_user(request: Request) -> tuple[str, datetime | None]:
+    """The signed-in user behind the request and when their credential
+    expires; no user for an ABI_API_KEY caller."""
     from naas_abi.apps.nexus.apps.api.app.services.auth.service import decode_token
 
     token = extract_abi_api_token(request)
     payload = decode_token(token) if token else None
-    subject = payload.get("sub") if isinstance(payload, dict) else None
-    return subject if isinstance(subject, str) else ""
+    if not isinstance(payload, dict):
+        return "", None
+    subject, exp = payload.get("sub"), payload.get("exp")
+    expires = datetime.fromtimestamp(exp, UTC) if isinstance(exp, int | float) else None
+    return (subject if isinstance(subject, str) else ""), expires
 
 
 def _is_forwarded(name: str) -> bool:
@@ -131,10 +138,17 @@ def _within(path: str, root: str) -> bool:
     return path == root or path.startswith(root + "/")
 
 
+def _reinterpreted(path: str) -> bool:
+    """Browsers read "%2e" as "." and "\\" as "/" when they resolve a path:
+    a dot segment the check below cannot see. Such paths are refused."""
+    lowered = path.lower()
+    return "%2e" in lowered or "%5c" in lowered or "\\" in path
+
+
 def _same_app_location(value: str, root: str, path: str) -> str | None:
     """A redirect that stays in the app, as an absolute path; else None."""
     target = urlsplit(value.strip())
-    if target.scheme or target.netloc:
+    if target.scheme or target.netloc or _reinterpreted(target.path):
         return None
     resolved = urlsplit(urljoin(f"http://nexus{root}{path}", value.strip()))
     if resolved.netloc != "nexus" or not _within(resolved.path, root):
@@ -161,7 +175,7 @@ def _app_cookie(value: str, root: str) -> str | None:
             return None
         if key == "path":
             path = attribute_value.strip()
-    if path is None or not _within(path.rstrip("/") or "/", root):
+    if path is None or _reinterpreted(path) or not _within(path.rstrip("/") or "/", root):
         return None
     return f"{APP_COOKIE_PREFIX}{name}={rest}"
 
@@ -296,7 +310,9 @@ async def redirect_remote_app_root(
     )
 
 
-def remote_app_grant_url(user_id: str, module_id: str, app: str) -> str:
+def remote_app_grant_url(
+    user_id: str, module_id: str, app: str, not_after: datetime | None = None
+) -> str:
     """The app's root under a fresh grant, ending with ``/``."""
     grant = mint_remote_app_grant(
         secret=current_secret_key(),
@@ -304,16 +320,39 @@ def remote_app_grant_url(user_id: str, module_id: str, app: str) -> str:
         module_id=module_id,
         app=app,
         minutes=nexus_config.settings.remote_app_grant_expire_minutes,
+        not_after=not_after,
     )
     return grant_root(grant, module_id, app) + "/"
 
 
 async def open_remote_app(module_id: str, app: str, request: Request, path: str = "") -> Response:
     """The catalog URL, after the ``/app-html/`` access check: the same page
-    under a fresh grant."""
+    under a fresh grant, for the same user and no longer than the credential
+    that was presented (a share link stays a share link)."""
+    if not is_segment(module_id, app):
+        raise HTTPException(status_code=404, detail="Not Found")
+    user_id, expires = _presented_user(request)
+    if not user_id:
+        raise HTTPException(status_code=403, detail="A remote app opens for a signed-in user")
     query = _query(request)
-    target = remote_app_grant_url(_user_id(request), module_id, app) + path
+    target = remote_app_grant_url(user_id, module_id, app, not_after=expires) + path
     return RedirectResponse(f"{target}?{query}" if query else target, status_code=307)
+
+
+class RedactGrantFilter(logging.Filter):
+    """Hides the grant in uvicorn's access log (its third argument is the path)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str):
+            record.args = (*args[:2], redact_grant_path(args[2]), *args[3:])
+        return True
+
+
+def redact_grants_in_access_log() -> None:
+    access = logging.getLogger("uvicorn.access")
+    if not any(isinstance(f, RedactGrantFilter) for f in access.filters):
+        access.addFilter(RedactGrantFilter())
 
 
 class RemoteAppPreflight:

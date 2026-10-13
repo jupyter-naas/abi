@@ -75,6 +75,16 @@ describe('app-html helpers', () => {
       app: 'console',
       rest: '',
     });
+    expect(remoteAppParts('/app-html/remote/acme/console?x=1')).toEqual({
+      moduleId: 'acme',
+      app: 'console',
+      rest: '?x=1',
+    });
+    expect(remoteAppParts('/app-html/remote/acme/console#top')).toEqual({
+      moduleId: 'acme',
+      app: 'console',
+      rest: '#top',
+    });
     expect(remoteAppParts('/app-html/report/counter_uas/dashboard/')).toBe(null);
     expect(remoteAppParts('https://portal.example.com/app')).toBe(null);
   });
@@ -83,6 +93,9 @@ describe('app-html helpers', () => {
     expect(
       remoteAppGrantUrl('https://api.example.com/', '/app-remote/g/acme/console/', 'index.html'),
     ).toBe('https://api.example.com/app-remote/g/acme/console/index.html');
+    expect(remoteAppGrantUrl('https://api.example.com', '/app-remote/g/acme/console/', '?x=1')).toBe(
+      'https://api.example.com/app-remote/g/acme/console/?x=1',
+    );
   });
 
   it('never frames a remote module app with allow-same-origin', () => {

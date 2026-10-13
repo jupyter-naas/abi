@@ -527,9 +527,11 @@ grant in its URL is its only credential:
 - Use URLs relative to the page, or built from `root_path`: both keep the grant.
 - `localStorage`, `sessionStorage` and `document.cookie` throw. Keep state in
   memory or in the backend.
-- Nexus passes on an allow-list of headers each way. A cookie needs a `Path`
-  under `root_path`, no `Domain`, and `SameSite=None; Secure`. It lasts while
-  the page keeps its grant URL.
+- Nexus passes on an allow-list of headers each way.
+- Do not keep a session in a cookie. The page's `fetch()` calls are
+  cross-origin and carry no cookie. Only navigations and form posts inside the
+  frame send one, and only with a `Path` under `root_path`, no `Domain` and
+  `SameSite=None; Secure`. The user is already known: `request.scope["abi"]["user_id"]`.
 
 Bodies stream. A large upload reaches `request.stream()` chunk by chunk as the
 app reads it, never faster, so a module can pass it on without holding it:

@@ -434,8 +434,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                     if origin and origin not in ancestors:
                         ancestors.append(origin)
                 # Allow the embedding page even when it is not listed in config
-                # (e.g. http://localhost:3042 during local dev).
-                for header in (request.headers.get("origin"), request.headers.get("referer")):
+                # (e.g. http://localhost:3042 during local dev). Never for a
+                # remote module's app: only Nexus may frame it.
+                presented = (
+                    ()
+                    if request.url.path.startswith("/app-remote/")
+                    else (request.headers.get("origin"), request.headers.get("referer"))
+                )
+                for header in presented:
                     if not header:
                         continue
                     try:
@@ -590,9 +596,12 @@ def _configure_middleware(app: FastAPI) -> None:
     # middleware refuses: answered outside it.
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
         RemoteAppPreflight,
+        redact_grants_in_access_log,
     )
 
     app.add_middleware(RemoteAppPreflight)
+    # A remote app's path holds its grant: never print it in the access log.
+    redact_grants_in_access_log()
 
     # Outermost: one span per request, around everything else (no-op unless the
     # engine config enables telemetry).
