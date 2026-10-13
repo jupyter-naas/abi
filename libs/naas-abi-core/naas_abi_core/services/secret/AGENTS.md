@@ -87,3 +87,30 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/secret/adaptors/secondar
 2. `remove` **must be idempotent** — never raise on missing keys.
 3. Raise `SecretAuthenticationError` for auth-related failures so callers can differentiate.
 4. Add `<Name>_test.py` and verify `list()` round-trips against `set()` / `remove()`.
+
+## NATS RPC adapters
+
+`adaptors/primary/secret__primary_adapter__NATS.py` exposes the service's
+protobuf endpoints. `adaptors/secondary/SecretSecondaryAdapterNATSClient.py` implements the outbound
+port. Wire contracts live under `naas_abi_core/proto/secret/v1/`.
+
+Clients inherit connection, JWT renewal, deadlines, and error handling from
+`naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
+mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
+Requests and replies above the broker limit (8 MiB, or lower) overflow as
+transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+that, at the overflow host's capacity, or with an older peer, the call fails
+with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
+instead of becoming an empty success. Overflowed values are held whole in
+memory; results that should not be require streaming or a storage reference. No RPC is automatically replayed after transport failure:
+a timeout can hide a completed operation. Reconcile its outcome before retrying.
+`close()` releases only the client's transport, including for vector storage.
+
+In NATS mode a fanout may mix local adapters and `nats_rpc` ones
+(`[dotenv, nats_rpc]`): the engine serves only the local adapters, and its
+modules read them through the engine's endpoint before the `nats_rpc` upstream,
+in the configured order (`engine/engine_loaders/AGENTS.md`).
+
+Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
+are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
+The latter uses a local `nats-server` executable without Docker.

@@ -76,3 +76,15 @@ async def test_typing_start_rejects_unjoined_workspace(monkeypatch) -> None:
 
     assert result == {"error": "workspace not joined"}
     emit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connect_refuses_a_scoped_token() -> None:
+    """An app-html link token sits in a page URL: it must not open the socket."""
+    from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
+        mint_app_html_access_token,
+    )
+
+    token, _ = mint_app_html_access_token(user_id="user-1")
+
+    assert await runtime.connect("sid-1", {}, {"token": token}) is False

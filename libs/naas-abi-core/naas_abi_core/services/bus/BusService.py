@@ -32,6 +32,15 @@ class BusService(ServiceBase):
         self.__adapter = adapter
         self._emit_message_events = emit_message_events
 
+    @property
+    def emit_message_events(self) -> bool:
+        return self._emit_message_events
+
+    @property
+    def adapter(self) -> IBusAdapter:
+        """Transport owned by this service, for composition and shutdown."""
+        return self.__adapter
+
     def __publish_event(self, event: object) -> None:
         if not self.services_wired:
             return
@@ -72,9 +81,7 @@ class BusService(ServiceBase):
             )
         return result
 
-    def publish_many(
-        self, topic: str, messages: Sequence[tuple[str, bytes]]
-    ) -> None:
+    def publish_many(self, topic: str, messages: Sequence[tuple[str, bytes]]) -> None:
         """Publish a batch of ``(routing_key, payload)`` pairs on ``topic``.
 
         Delivery is identical to calling :meth:`publish` per message; the

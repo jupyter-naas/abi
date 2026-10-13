@@ -15,7 +15,9 @@ class IdentityGraphStoreSecondaryAdapterTripleStore(IdentityGraphStorePort):
     Dropping first is what drops users and memberships deleted in Postgres
     since the last boot. ``DROP SILENT`` is a no-op if the graph is missing,
     and avoids ``list_graphs()`` + ``CLEAR GRAPH``: Fuseki's catalog can list a
-    named graph that ``CLEAR GRAPH`` then rejects with HTTP 400.
+    named graph that ``CLEAR GRAPH`` then rejects with HTTP 400, and Oxigraph
+    lists graphs from their triples, so an empty graph is unlisted yet refuses
+    ``CREATE GRAPH``.
     """
 
     def __init__(self, triple_store_getter: Callable[[], TripleStoreService]):

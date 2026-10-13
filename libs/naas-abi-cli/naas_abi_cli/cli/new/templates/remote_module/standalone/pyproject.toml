@@ -1,0 +1,31 @@
+[project]
+name = "{{module_name}}"
+version = "0.1.0"
+description = "A remote ABI module: runs in its own process, reaches the engine over NATS."
+readme = "README.md"
+requires-python = ">=3.12"
+# naas-abi-proto and naas-abi-sdk are not on PyPI yet: both come from the ABI
+# repository, at the same ref. Bump the ref to upgrade, and move to plain
+# version pins once they are published.
+dependencies = [
+    "naas-abi-proto @ git+{{abi_git_url}}@{{abi_git_ref}}#subdirectory=libs/naas-abi-proto",
+    "naas-abi-sdk[agent,otel] @ git+{{abi_git_url}}@{{abi_git_ref}}#subdirectory=libs/naas-abi-sdk",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+# The git dependencies above are direct references.
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/{{module_name_snake}}"]
+
+[tool.pytest.ini_options]
+testpaths = ["src"]
+python_files = ["*_test.py", "test_*.py"]

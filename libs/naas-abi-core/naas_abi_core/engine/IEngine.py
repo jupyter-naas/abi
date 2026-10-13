@@ -92,12 +92,18 @@ class IEngine:
             assert self.__kv is not None, "KV service is not initialized"
             return self.__kv
 
+        def kv_available(self) -> bool:
+            return self.__kv is not None
+
         @property
         def object_storage(self) -> ObjectStorageService:
             assert self.__object_storage is not None, (
                 "Object storage service is not initialized"
             )
             return self.__object_storage
+
+        def object_storage_available(self) -> bool:
+            return self.__object_storage is not None
 
         @property
         def dataset(self) -> DatasetService:
@@ -132,10 +138,19 @@ class IEngine:
             )
             return self.__vector_store
 
+        def vector_store_available(self) -> bool:
+            return self.__vector_store is not None
+
         @property
         def secret(self) -> Secret:
             assert self.__secret is not None, "Secret service is not initialized"
             return self.__secret
+
+        def secret_available(self) -> bool:
+            return self.__secret is not None
+
+        def bus_available(self) -> bool:
+            return self.__bus is not None
 
         @property
         def bus(self) -> BusService:
@@ -146,6 +161,9 @@ class IEngine:
         def email(self) -> EmailService:
             assert self.__email is not None, "Email service is not initialized"
             return self.__email
+
+        def email_available(self) -> bool:
+            return self.__email is not None
 
         @property
         def cache(self) -> CacheService:
@@ -190,12 +208,18 @@ class IEngine:
             )
             return self.__coding_environment
 
+        def coding_environment_available(self) -> bool:
+            return self.__coding_environment is not None
+
         @property
         def source_control(self) -> SourceControlService:
             assert self.__source_control is not None, (
                 "Source control service is not initialized"
             )
             return self.__source_control
+
+        def source_control_available(self) -> bool:
+            return self.__source_control is not None
 
         @property
         def all(
@@ -221,7 +245,7 @@ class IEngine:
                 self.__source_control,
             ]
 
-        def wire_services(self) -> None:
+        def wire_services(self, dependencies: IEngine.Services | None = None) -> None:
             """
             Wire the loaded services with references to the full set of engine services.
 
@@ -234,7 +258,7 @@ class IEngine:
                 if service is None:
                     continue
                 if isinstance(service, ServicesAware):
-                    service.set_services(self)
+                    service.set_services(dependencies if dependencies is not None else self)
 
     __services: Services
     __modules: dict[str, BaseModule]
@@ -246,3 +270,8 @@ class IEngine:
     @property
     def modules(self) -> dict[str, BaseModule]:
         return self.__modules
+
+    def job_owners(self) -> dict[str, object]:
+        """What this engine hosts jobs for, keyed by owner id: its modules here;
+        ``Engine`` adds the kernel owners."""
+        return dict(self.modules)

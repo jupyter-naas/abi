@@ -174,6 +174,12 @@ def decode_token(token: str) -> dict | None:
         return None
 
 
+def is_session_token(payload: dict) -> bool:
+    """A user's session token. A scoped one (an ``app-html`` link token) opens
+    only what its scope names, never the API or the WebSocket."""
+    return "scope" not in payload
+
+
 def now_utc_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
@@ -280,7 +286,7 @@ class AuthService:
         if not token:
             return None
         payload = decode_token(token)
-        if not payload:
+        if not payload or not is_session_token(payload):
             return None
 
         user_id = payload.get("sub")

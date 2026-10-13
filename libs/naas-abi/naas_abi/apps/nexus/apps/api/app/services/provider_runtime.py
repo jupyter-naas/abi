@@ -761,9 +761,7 @@ async def complete_with_abi(
         )
         import asyncio
 
-        agent = await asyncio.to_thread(
-            _duplicate_inprocess_agent, template_agent, thread_id
-        )
+        agent = await asyncio.to_thread(_duplicate_inprocess_agent, template_agent, thread_id)
         if llm_model:
             _retarget_inprocess_chat_model(agent, llm_model)
 
@@ -1338,9 +1336,7 @@ def _normalize_inprocess_llm_model(model_id: str | None) -> str | None:
     return _INPROCESS_LLM_MODEL_ALIASES.get(mid, mid)
 
 
-_INPROCESS_LLM_MODEL_RESOLVERS: list[
-    Callable[[str, str | None], str | None]
-] = []
+_INPROCESS_LLM_MODEL_RESOLVERS: list[Callable[[str, str | None], str | None]] = []
 
 
 def register_inprocess_llm_model_resolver(
@@ -1362,9 +1358,7 @@ def _ensure_inprocess_llm_resolvers_loaded() -> None:
         pass
 
 
-def resolve_inprocess_llm_model_for_turn(
-    agent_name: str, config_llm: str | None
-) -> str | None:
+def resolve_inprocess_llm_model_for_turn(agent_name: str, config_llm: str | None) -> str | None:
     """Resolve the chat model id for an in-process ABI agent turn."""
     _ensure_inprocess_llm_resolvers_loaded()
     normalized = _normalize_inprocess_llm_model(config_llm)
@@ -1511,6 +1505,41 @@ def _extract_opencode_ui_event(event: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+# Agent.stream_invoke event -> key of the Nexus stream event carrying its data.
+_AGENT_STEP_EVENTS = {
+    "tool_usage": "tool",
+    "tool_response": "output",
+    "call_model": "agent",
+    "agent_routing": "agent",
+}
+
+
+def agent_event_chunk(
+    event_name: str, text: str, *, chat_source: Any = None
+) -> str | dict[str, Any] | None:
+    """Map one core ``Agent.stream_invoke`` event to a Nexus stream chunk.
+
+    ``ai_message`` deltas become text; tool and routing steps become step events.
+    ``message`` (the closing replay), ``done`` and empty events map to None: the
+    caller decides whether the replay is needed. Shared by in-process and remote
+    agents, which emit the same vocabulary.
+
+    ``chat_source`` is the event's own flag: a ``tool_response`` whose tool opted
+    out of chat sources (``chat_source`` False) keeps that flag on its chunk.
+    """
+    if not text.strip():
+        return None
+    if event_name == "ai_message":
+        return text
+    key = _AGENT_STEP_EVENTS.get(event_name)
+    if not key:
+        return None
+    chunk: dict[str, Any] = {"event": event_name, key: text}
+    if event_name == "tool_response" and chat_source is False:
+        chunk["chat_source"] = False
+    return chunk
+
+
 async def stream_with_abi_inprocess(
     messages: list[Message],
     config: ProviderConfig,
@@ -1581,9 +1610,7 @@ async def stream_with_abi_inprocess(
     # (the previous behaviour) caused cross-conversation response leakage when
     # two requests overlapped — see jupyter-naas/abi#991.
     assert thread_id is not None, "thread_id is required"
-    agent = await asyncio.to_thread(
-        _duplicate_inprocess_agent, template_agent, thread_id
-    )
+    agent = await asyncio.to_thread(_duplicate_inprocess_agent, template_agent, thread_id)
     if llm_model:
         try:
             _retarget_inprocess_chat_model(agent, llm_model)
@@ -1665,22 +1692,13 @@ async def stream_with_abi_inprocess(
             # Prefer live ai_message deltas. The closing "message" replay is the
             # only text when the graph errors before an assistant token (for
             # example a recursion-limit stop).
-            if event_name == "ai_message" and text.strip():
-                emitted = True
-                yield text
-            elif event_name == "message" and text.strip():
+            if event_name == "message" and text.strip():
                 final_replay.append(text.strip())
-            elif event_name == "tool_usage" and text.strip():
-                yield {"event": "tool_usage", "tool": text}
-            elif event_name == "tool_response" and text.strip():
-                tool_response = {"event": "tool_response", "output": text}
-                if event.get("chat_source") is False:
-                    tool_response["chat_source"] = False
-                yield tool_response
-            elif event_name == "call_model" and text.strip():
-                yield {"event": "call_model", "agent": text}
-            elif event_name == "agent_routing" and text.strip():
-                yield {"event": "agent_routing", "agent": text}
+                continue
+            chunk = agent_event_chunk(event_name, text, chat_source=event.get("chat_source"))
+            if chunk is not None:
+                emitted = emitted or isinstance(chunk, str)
+                yield chunk
         elif isinstance(event, str) and event.strip():
             emitted = True
             yield event

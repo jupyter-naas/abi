@@ -128,3 +128,29 @@ class TestRedisAdapter(GenericKVSecondaryAdapterTest):
                     adapter.delete(key)
             except KVNotFoundError:
                 pass
+
+
+class TestRedisAdapterOnFakeRedis(GenericKVSecondaryAdapterTest):
+    """The generic contract (incl. SCAN-based list_keys and TTL) without a server."""
+
+    @pytest.fixture
+    def adapter_class(self):
+        return RedisAdapter
+
+    @pytest.fixture
+    def adapter(self):
+        fakeredis = pytest.importorskip("fakeredis")
+        adapter = RedisAdapter(redis_url="redis://localhost:6379/0")
+        adapter._client = fakeredis.FakeRedis(
+            server=fakeredis.FakeServer(), decode_responses=False
+        )
+        return adapter
+
+    def test_list_keys_matches_glob_characters_literally(self, adapter):
+        for key in ("odd*[key]?", "odd*[key]?x", "oddXkey"):
+            adapter.set(key, b"v")
+
+        assert adapter.list_keys("odd*[key]?", limit=10).keys == (
+            "odd*[key]?",
+            "odd*[key]?x",
+        )

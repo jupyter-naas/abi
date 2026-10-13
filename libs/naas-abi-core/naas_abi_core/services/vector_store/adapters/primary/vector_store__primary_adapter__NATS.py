@@ -1,0 +1,629 @@
+"""NATS RPC primary adapter for the vector_store kernel domain.
+
+Exposes a real ``IVectorStorePort`` as a NATS micro-service (see
+``naas_abi_core/proto/vector_store/v1/vector_store.proto`` for the wire
+contract and ``naas_abi_core/proto/README.md`` for why it lives there). This
+is the server side; the matching client is
+``VectorStoreSecondaryAdapterNATSClient``.
+
+Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): one shared
+secret, one claim -- which known first-party process holds the token. Every
+incoming request must carry a valid token in the ``Nats-Auth-Token`` header
+(``AUTH_HEADER``, imported from ``vector_store_nats_contract`` below -- that's
+a neutral module neither adapter owns, so this file and the client's don't
+depend on each other; see that module's docstring for why).
+
+Unlike ``ObjectStoragePrimaryAdapterNATS``, this adapter wraps a raw
+``IVectorStorePort`` implementation directly, not the ``VectorStoreService``
+domain wrapper: ``VectorStoreService`` composes an ``IVectorStorePort``
+adapter (it does not subclass the port) and layers on richer, event-publishing
+methods (``ensure_collection``, ``add_documents``, ``search_similar``, ...)
+that are NOT part of ``IVectorStorePort`` and so have no endpoint here at all.
+Those richer methods stay entirely local to whichever process holds the
+domain service, composed from calls to the (possibly now-remote) port
+methods below -- exactly like every other concrete ``IVectorStorePort``
+adapter (Qdrant, QdrantInMemory, SqliteVec) is wrapped by
+``VectorStoreService(adapter=...)`` today.
+
+``create_collection``'s ``**kwargs`` is deliberately not part of this
+contract -- see the ``.proto`` file's header comment -- so the endpoint below
+never passes any.
+"""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator, Callable
+from functools import partial
+from typing import Any, TypeVar
+
+import nats
+import nats.micro
+import numpy as np
+from google.protobuf.message import DecodeError, Message
+from naas_abi_core import logger
+from naas_abi_core.engine.nats_auth import (
+    InvalidServiceTokenError,
+    verify_service_token,
+)
+from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
+from naas_abi_core.engine.nats_rpc import (
+    RequestPayloadError,
+    request_payload,
+    respond_protobuf,
+)
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
+from naas_abi_core.engine.nats_transfer import (
+    ServiceWithTransfers,
+    TransferHost,
+    thread_frames,
+)
+from naas_abi_core.proto.common.v1 import common_pb2
+from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
+from naas_abi_core.services.vector_store.adapters.vector_store_nats_codec import (
+    document_to_pb,
+    pb_to_object,
+    pb_to_vector,
+    search_result_to_pb,
+)
+from naas_abi_core.services.vector_store.adapters.vector_store_nats_contract import (
+    AUTH_HEADER,
+    SERVICE_NAME,
+    SERVICE_VERSION,
+    SUBJECT_PREFIX,
+    TRANSFER_PREFIX,
+)
+from naas_abi_core.services.vector_store.adapters.vector_store_stream_codec import (
+    document_frames,
+)
+from naas_abi_core.services.vector_store.IVectorStorePort import (
+    IVectorStorePort,
+    VectorDocument,
+)
+from naas_abi_core.services.vector_store.ontologies.modules.VectorStoreEventOntology import (
+    CollectionDeleted,
+    CollectionEnsured,
+    DocumentsAdded,
+    DocumentsDeleted,
+    DocumentUpdated,
+    VectorStoreError,
+)
+from naas_abi_proto.vector_store.values import decode_object
+from nats.micro.request import Request
+
+__all__ = [
+    "AUTH_HEADER",
+    "SERVICE_NAME",
+    "SERVICE_VERSION",
+    "SUBJECT_PREFIX",
+    "VectorStorePrimaryAdapterNATS",
+]
+
+_RequestT = TypeVar("_RequestT", bound=Message)
+_ResponseT = TypeVar("_ResponseT", bound=Message)
+
+
+class VectorStorePrimaryAdapterNATS(ServiceWithTransfers):
+    """Serves a raw ``IVectorStorePort`` over NATS RPC (request/reply).
+
+    Registers one NATS micro-service endpoint per ``IVectorStorePort``
+    method. Each endpoint authenticates the caller via ``Nats-Auth-Token``
+    before doing anything else, then decodes the Protobuf request, calls
+    straight through to the wrapped adapter, and encodes a Protobuf
+    response. Errors -- auth failures, anything unexpected -- are always
+    reported as a normal response carrying a populated ``CallError``, never
+    as a crashed handler or a raw NATS-level error.
+
+    ``IVectorStorePort`` declares no typed exceptions of its own (see
+    ``VectorStoreService`` -- every adapter call it makes is wrapped in a
+    bare ``except Exception`` that republishes a ``VectorStoreError`` event
+    and reraises), so unlike ``ObjectStoragePrimaryAdapterNATS`` there is no
+    known-exception branch to map here: every failure maps to ``INTERNAL``.
+    """
+
+    def __init__(
+        self,
+        adapter: IVectorStorePort,
+        jwt_secret: str,
+        *,
+        event_publisher: Callable[[object], None] | None = None,
+        prepare: Callable[[], None] | None = None,
+    ) -> None:
+        self._event_publisher = event_publisher
+        # Run before each call: an engine's adapter may need initialize(),
+        # which in-process callers trigger lazily through the service.
+        self._prepare = prepare
+        self._adapter = adapter
+        self._jwt_secret = jwt_secret
+        self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
+        self._service: TracedService | None = None
+        self._transfer = TransferHost(
+            TRANSFER_PREFIX,
+            jwt_secret,
+            self._transfer_frames,
+            operations=("list_vectors",),
+            chunk_bytes=1024 * 1024,
+        )
+
+    def _invoke(self, call, request):
+        try:
+            if self._prepare is not None:
+                self._prepare()
+            return call(request)
+        except Exception as exc:
+            operation = {
+                "_call_create_collection": "ensure_collection",
+                "_call_store_vectors": "add_documents",
+                "_call_update_vector": "update_document",
+                "_call_delete_vectors": "delete_documents",
+                "_call_delete_collection": "delete_collection",
+            }.get(call.__name__)
+            if operation:
+                self._emit(
+                    VectorStoreError(
+                        collection_name=request.collection_name,
+                        operation=operation,
+                        message=str(exc),
+                    )
+                )
+            raise
+
+    def _emit(self, event: object) -> None:
+        if self._event_publisher is not None:
+            try:
+                self._event_publisher(event)
+            except Exception as exc:  # noqa: BLE001 - audit is fail-open
+                logger.warning("NATS mutation audit failed: {}", type(exc).__name__)
+
+    async def start(self, nc: nats.NATS) -> None:
+        """Register the ``vector_store`` NATS service on ``nc``.
+
+        ``nc`` must already be connected -- this adapter never manages the
+        connection lifecycle itself, only the service/endpoints layered on
+        top of it. Calling this more than once is a no-op.
+        """
+        if self._service is not None:
+            return
+
+        service = await add_traced_service(
+            nc,
+            name=SERVICE_NAME,
+            version=SERVICE_VERSION,
+            description="ABI kernel vector_store domain, exposed over NATS RPC (v1).",
+        )
+        await service.add_endpoint(
+            name="initialize",
+            subject=f"{SUBJECT_PREFIX}.initialize",
+            handler=self._handle_initialize,
+        )
+        await service.add_endpoint(
+            name="create_collection",
+            subject=f"{SUBJECT_PREFIX}.create_collection",
+            handler=self._handle_create_collection,
+        )
+        await service.add_endpoint(
+            name="delete_collection",
+            subject=f"{SUBJECT_PREFIX}.delete_collection",
+            handler=self._handle_delete_collection,
+        )
+        await service.add_endpoint(
+            name="list_collections",
+            subject=f"{SUBJECT_PREFIX}.list_collections",
+            handler=self._handle_list_collections,
+        )
+        await service.add_endpoint(
+            name="store_vectors",
+            subject=f"{SUBJECT_PREFIX}.store_vectors",
+            handler=self._handle_store_vectors,
+        )
+        await service.add_endpoint(
+            name="search",
+            subject=f"{SUBJECT_PREFIX}.search",
+            handler=self._handle_search,
+        )
+        await service.add_endpoint(
+            name="get_vector",
+            subject=f"{SUBJECT_PREFIX}.get_vector",
+            handler=self._handle_get_vector,
+        )
+        await service.add_endpoint(
+            name="update_vector",
+            subject=f"{SUBJECT_PREFIX}.update_vector",
+            handler=self._handle_update_vector,
+        )
+        await service.add_endpoint(
+            name="delete_vectors",
+            subject=f"{SUBJECT_PREFIX}.delete_vectors",
+            handler=self._handle_delete_vectors,
+        )
+        await service.add_endpoint(
+            name="count_vectors",
+            subject=f"{SUBJECT_PREFIX}.count_vectors",
+            handler=self._handle_count_vectors,
+        )
+        await service.add_endpoint(
+            name="list_vectors",
+            subject=f"{SUBJECT_PREFIX}.list_vectors",
+            handler=self._handle_list_vectors,
+        )
+        await service.add_endpoint(
+            name="get_collection_info",
+            subject=f"{SUBJECT_PREFIX}.get_collection_info",
+            handler=self._handle_get_collection_info,
+        )
+        await service.add_endpoint(
+            name="close",
+            subject=f"{SUBJECT_PREFIX}.close",
+            handler=self._handle_close,
+        )
+        self._service = service
+        await self._transfer.start(nc)
+
+    # ------------------------------------------------------------------
+    # Streamed listing: one transfer session per stream, produced on its own
+    # thread one frame at a time (vector_store_stream_codec.py).
+    # ------------------------------------------------------------------
+
+    def _transfer_frames(
+        self, operation: str, metadata: bytes, source: Any
+    ) -> AsyncIterator[bytes]:
+        request = vector_store_pb2.ListVectorsRequest.FromString(metadata)
+        return thread_frames(partial(self._produce_listing, request))
+
+    def _produce_listing(
+        self,
+        request: vector_store_pb2.ListVectorsRequest,
+        emit: Callable[[bytes], bool],
+    ) -> None:
+        if self._prepare is not None:
+            self._prepare()
+        with self._adapter.list_vectors_stream(
+            request.collection_name, include_vectors=request.include_vectors
+        ) as documents:
+            for frame in document_frames(
+                document_to_pb(document) for document in documents
+            ):
+                if not emit(frame):
+                    return
+
+    # ------------------------------------------------------------------
+    # Shared request handling: auth, decode, dispatch, encode.
+    # ------------------------------------------------------------------
+
+    async def _handle(
+        self,
+        request: Request,
+        request_cls: type[_RequestT],
+        response_cls: Callable[..., _ResponseT],
+        call: Callable[[_RequestT], _ResponseT],
+    ) -> None:
+        if not self._is_authenticated(request):
+            await self._respond_error(
+                request,
+                response_cls,
+                "UNAUTHENTICATED",
+                "missing or invalid auth token",
+                retryable=False,
+            )
+            return
+
+        parsed_request = request_cls()
+        try:
+            parsed_request.ParseFromString(await request_payload(request))
+        except RequestPayloadError as exc:
+            await self._respond_error(
+                request, response_cls, exc.code, exc.message, retryable=False
+            )
+            return
+        except DecodeError:
+            await self._respond_error(
+                request,
+                response_cls,
+                "INVALID_ARGUMENT",
+                "invalid protobuf request",
+                retryable=False,
+            )
+            return
+
+        try:
+            # The adapter port is synchronous and may block for seconds (network
+            # round trips, slow backends). Every primary shares ONE event loop and
+            # ONE connection (nats_runtime), so run the call on a worker thread:
+            # inline it would stall every other endpoint of every service in the
+            # process, plus nats-py's own PING/PONG handling.
+            response = await self._dispatch.call(
+                lambda req: self._invoke(call, req), parsed_request
+            )
+        except Exception:  # noqa: BLE001 - a handler must never crash the service
+            logger.opt(exception=True).error(
+                f"VectorStorePrimaryAdapterNATS: unexpected error handling {request.subject!r}"
+            )
+            await self._respond_error(
+                request, response_cls, "INTERNAL", "internal error", retryable=True
+            )
+            return
+
+        await respond_protobuf(request, response, response_cls)
+
+    def _is_authenticated(self, request: Request) -> bool:
+        headers = request.headers or {}
+        token = headers.get(AUTH_HEADER)
+        if not token:
+            return False
+        try:
+            verify_service_token(token, self._jwt_secret)
+        except InvalidServiceTokenError:
+            return False
+        return True
+
+    @staticmethod
+    async def _respond_error(
+        request: Request,
+        response_cls: Callable[..., Message],
+        code: str,
+        message: str,
+        *,
+        retryable: bool,
+    ) -> None:
+        response = response_cls(
+            error=common_pb2.CallError(code=code, message=message, retryable=retryable)
+        )
+        await respond_protobuf(request, response, response_cls)
+
+    # ------------------------------------------------------------------
+    # Endpoint handlers -- one per IVectorStorePort method.
+    # ------------------------------------------------------------------
+
+    async def _handle_initialize(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.InitializeRequest,
+            vector_store_pb2.InitializeResponse,
+            self._call_initialize,
+        )
+
+    def _call_initialize(
+        self, req: vector_store_pb2.InitializeRequest
+    ) -> vector_store_pb2.InitializeResponse:
+        self._adapter.initialize()
+        return vector_store_pb2.InitializeResponse()
+
+    async def _handle_create_collection(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.CreateCollectionRequest,
+            vector_store_pb2.CreateCollectionResponse,
+            self._call_create_collection,
+        )
+
+    def _call_create_collection(
+        self, req: vector_store_pb2.CreateCollectionRequest
+    ) -> vector_store_pb2.CreateCollectionResponse:
+        self._adapter.create_collection(
+            req.collection_name, req.dimension, req.distance_metric
+        )
+        self._emit(CollectionEnsured(collection_name=req.collection_name))
+        return vector_store_pb2.CreateCollectionResponse()
+
+    async def _handle_delete_collection(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.DeleteCollectionRequest,
+            vector_store_pb2.DeleteCollectionResponse,
+            self._call_delete_collection,
+        )
+
+    def _call_delete_collection(
+        self, req: vector_store_pb2.DeleteCollectionRequest
+    ) -> vector_store_pb2.DeleteCollectionResponse:
+        self._adapter.delete_collection(req.collection_name)
+        self._emit(CollectionDeleted(collection_name=req.collection_name))
+        return vector_store_pb2.DeleteCollectionResponse()
+
+    async def _handle_list_collections(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.ListCollectionsRequest,
+            vector_store_pb2.ListCollectionsResponse,
+            self._call_list_collections,
+        )
+
+    def _call_list_collections(
+        self, req: vector_store_pb2.ListCollectionsRequest
+    ) -> vector_store_pb2.ListCollectionsResponse:
+        names = self._adapter.list_collections()
+        return vector_store_pb2.ListCollectionsResponse(
+            collections=vector_store_pb2.CollectionNames(names=names)
+        )
+
+    async def _handle_store_vectors(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.StoreVectorsRequest,
+            vector_store_pb2.StoreVectorsResponse,
+            self._call_store_vectors,
+        )
+
+    def _call_store_vectors(
+        self, req: vector_store_pb2.StoreVectorsRequest
+    ) -> vector_store_pb2.StoreVectorsResponse:
+        documents = [
+            VectorDocument(
+                id=doc.id,
+                vector=pb_to_vector(doc.vector)
+                if doc.HasField("vector")
+                else np.array([]),
+                metadata=decode_object(doc.metadata),
+                payload=pb_to_object(doc, "payload"),
+            )
+            for doc in req.documents
+        ]
+        self._adapter.store_vectors(req.collection_name, documents)
+        self._emit(
+            DocumentsAdded(
+                collection_name=req.collection_name, document_count=len(documents)
+            )
+        )
+        return vector_store_pb2.StoreVectorsResponse()
+
+    async def _handle_search(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.SearchRequest,
+            vector_store_pb2.SearchResponse,
+            self._call_search,
+        )
+
+    def _call_search(
+        self, req: vector_store_pb2.SearchRequest
+    ) -> vector_store_pb2.SearchResponse:
+        query_vector = np.array(list(req.query_vector), dtype=np.float32)
+        results = self._adapter.search(
+            req.collection_name,
+            query_vector,
+            k=req.k,
+            filter=pb_to_object(req, "filter"),
+            include_vectors=req.include_vectors,
+            include_metadata=req.include_metadata,
+        )
+        return vector_store_pb2.SearchResponse(
+            results=vector_store_pb2.SearchResultList(
+                results=[search_result_to_pb(result) for result in results]
+            )
+        )
+
+    async def _handle_get_vector(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.GetVectorRequest,
+            vector_store_pb2.GetVectorResponse,
+            self._call_get_vector,
+        )
+
+    def _call_get_vector(
+        self, req: vector_store_pb2.GetVectorRequest
+    ) -> vector_store_pb2.GetVectorResponse:
+        document = self._adapter.get_vector(
+            req.collection_name, req.vector_id, req.include_vector
+        )
+        return vector_store_pb2.GetVectorResponse(
+            found=vector_store_pb2.VectorDocumentOrNone(
+                document=document_to_pb(document) if document is not None else None
+            )
+        )
+
+    async def _handle_update_vector(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.UpdateVectorRequest,
+            vector_store_pb2.UpdateVectorResponse,
+            self._call_update_vector,
+        )
+
+    def _call_update_vector(
+        self, req: vector_store_pb2.UpdateVectorRequest
+    ) -> vector_store_pb2.UpdateVectorResponse:
+        self._adapter.update_vector(
+            req.collection_name,
+            req.vector_id,
+            vector=pb_to_vector(req.vector) if req.HasField("vector") else None,
+            metadata=pb_to_object(req, "metadata"),
+            payload=pb_to_object(req, "payload"),
+        )
+        self._emit(
+            DocumentUpdated(
+                collection_name=req.collection_name, document_id=req.vector_id
+            )
+        )
+        return vector_store_pb2.UpdateVectorResponse()
+
+    async def _handle_delete_vectors(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.DeleteVectorsRequest,
+            vector_store_pb2.DeleteVectorsResponse,
+            self._call_delete_vectors,
+        )
+
+    def _call_delete_vectors(
+        self, req: vector_store_pb2.DeleteVectorsRequest
+    ) -> vector_store_pb2.DeleteVectorsResponse:
+        self._adapter.delete_vectors(req.collection_name, list(req.vector_ids))
+        self._emit(
+            DocumentsDeleted(
+                collection_name=req.collection_name, document_count=len(req.vector_ids)
+            )
+        )
+        return vector_store_pb2.DeleteVectorsResponse()
+
+    async def _handle_count_vectors(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.CountVectorsRequest,
+            vector_store_pb2.CountVectorsResponse,
+            self._call_count_vectors,
+        )
+
+    def _call_count_vectors(
+        self, req: vector_store_pb2.CountVectorsRequest
+    ) -> vector_store_pb2.CountVectorsResponse:
+        count = self._adapter.count_vectors(req.collection_name)
+        return vector_store_pb2.CountVectorsResponse(count=count)
+
+    async def _handle_list_vectors(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.ListVectorsRequest,
+            vector_store_pb2.ListVectorsResponse,
+            self._call_list_vectors,
+        )
+
+    def _call_list_vectors(
+        self, req: vector_store_pb2.ListVectorsRequest
+    ) -> vector_store_pb2.ListVectorsResponse:
+        page = self._adapter.list_vectors(
+            req.collection_name,
+            limit=req.limit or 100,
+            cursor=req.cursor if req.HasField("cursor") else None,
+            include_vectors=req.include_vectors,
+        )
+        return vector_store_pb2.ListVectorsResponse(
+            page=vector_store_pb2.VectorPage(
+                documents=[document_to_pb(document) for document in page.documents],
+                next_cursor=page.next_cursor,
+            )
+        )
+
+    async def _handle_get_collection_info(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.GetCollectionInfoRequest,
+            vector_store_pb2.GetCollectionInfoResponse,
+            self._call_get_collection_info,
+        )
+
+    def _call_get_collection_info(
+        self, req: vector_store_pb2.GetCollectionInfoRequest
+    ) -> vector_store_pb2.GetCollectionInfoResponse:
+        info = self._adapter.get_collection_info(req.collection_name)
+        return vector_store_pb2.GetCollectionInfoResponse(
+            info=vector_store_pb2.CollectionInfo(
+                name=info.name,
+                dimension=info.dimension,
+                distance_metric=info.distance_metric,
+                size=info.size,
+            )
+        )
+
+    async def _handle_close(self, request: Request) -> None:
+        await self._handle(
+            request,
+            vector_store_pb2.CloseRequest,
+            vector_store_pb2.CloseResponse,
+            self._call_close,
+        )
+
+    def _call_close(
+        self, req: vector_store_pb2.CloseRequest
+    ) -> vector_store_pb2.CloseResponse:
+        self._adapter.close()
+        return vector_store_pb2.CloseResponse()

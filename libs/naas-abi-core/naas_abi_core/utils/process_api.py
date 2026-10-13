@@ -290,11 +290,7 @@ def mount_expose_process(
                 tags=tags,
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "as_api failed for %s: %s",
-                instance.__class__.__name__,
-                exc,
-            )
+            logger.warning(f"as_api failed for {instance.__class__.__name__}: {exc!r}")
     if len(router.routes) > before:
         return True
     return register_run_route(

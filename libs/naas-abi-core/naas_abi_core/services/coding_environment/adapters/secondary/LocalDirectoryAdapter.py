@@ -11,6 +11,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -332,6 +333,7 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
             "id": workspace_id,
             "name": name,
             "user_id": user_id,
+            "created_at": datetime.now(UTC).isoformat(),
             "checkout": str(checkout),
             "port": port,
             "sidecar_base": sidecar_base,
@@ -372,6 +374,9 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
             name=record["name"],
             phase=record.get("phase", PHASE_RUNNING),
             agent_ready=bool(record.get("agent_ready")),
+            owner=str(record.get("user_id") or ""),
+            template=self.TEMPLATE_ID,
+            created_at=record.get("created_at"),
         )
 
     def list_environments(self, *, user_id: str) -> list[WorkspaceStatus]:
@@ -380,6 +385,9 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
             for workspace_id, record in self._workspaces.items()
             if record.get("user_id") == user_id
         ]
+
+    def list_all_environments(self) -> list[WorkspaceStatus]:
+        return [self._status(workspace_id) for workspace_id in self._workspaces]
 
     def get_logs(self, *, workspace_id: str) -> list[str]:
         record = self._record(workspace_id)

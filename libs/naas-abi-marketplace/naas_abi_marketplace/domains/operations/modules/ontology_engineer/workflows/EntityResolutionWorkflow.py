@@ -137,10 +137,10 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
         """
         schema_graph = Graph()
         try:
-            results = self.__triple_store_service.query(query)
-            for triple in results:
-                # CONSTRUCT queries return triples directly
-                schema_graph.add(triple)  # type: ignore
+            # A stream: no RPC size cap, no query result held next to the graph.
+            with self.__triple_store_service.query_stream(query) as result:
+                for triple in result.triples:
+                    schema_graph.add(triple)
             logger.info(f"Loaded schema from triplestore: {len(schema_graph)} triples")
         except Exception as e:
             logger.error(f"Error loading schema from triplestore: {e}")
@@ -196,10 +196,9 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
         """
         individual_graph = Graph()
         try:
-            results = self.__triple_store_service.query(query)
-            for triple in results:
-                # CONSTRUCT queries return triples directly
-                individual_graph.add(triple)  # type: ignore
+            with self.__triple_store_service.query_stream(query) as result:
+                for triple in result.triples:
+                    individual_graph.add(triple)
             logger.info(
                 f"Loaded individuals from triplestore: {len(individual_graph)} triples"
             )

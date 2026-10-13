@@ -1,0 +1,46 @@
+// Shared envelope types for NATS-RPC-exposed kernel domain services.
+// See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
+// ("Protobuf contract shapes", "Decisions locked in").
+//
+// Every kernel-domain RPC (object_storage, and whatever follows it) embeds a
+// CallContext in its request and reports errors via CallError, so callers
+// get one consistent shape across every domain instead of inventing this
+// per service.
+syntax = "proto3";
+
+package abi.common.v1;
+
+// Carried on every kernel-domain RPC call.
+//
+// principal_id/workspace_id/tenant_id are carried starting now, in Stage 1,
+// even though nothing enforces them yet — see the RFC's "Decisions locked
+// in": this is a wire-format decision that's expensive to retrofit later,
+// cheap to add now while the envelope is being designed. Real per-user
+// authorization is deliberately Stage 2 work, checked in the domain via a
+// shared context variable, never in the primary adapter — don't add
+// enforcement logic here.
+message CallContext {
+  string trace_id = 1;
+  int32 timeout_ms = 2;
+  string principal_id = 3;  // end-user identity — carried, not yet enforced
+  string workspace_id = 4;
+  string tenant_id = 5;
+}
+
+// A structured, machine-readable error for a failed RPC call.
+message CallError {
+  // Stable, service-specific code (e.g. "OBJECT_NOT_FOUND",
+  // "OBJECT_ALREADY_EXISTS") — never a raw Python exception class name or
+  // free-text message; callers match on this, not on `message`.
+  string code = 1;
+  // Human-readable detail — for logs/debugging, never machine-matched.
+  string message = 2;
+  // Whether the caller may safely retry this exact call. At-least-once NATS
+  // delivery means every RPC needs this signal rather than callers guessing.
+  bool retryable = 3;
+  // Optional numeric status carried by domain exceptions that have one (e.g.
+  // an upstream HTTP status code on a *Error(message, *, status=None)
+  // exception -- coding_environment, source_control). Unset when the
+  // originating exception has no such attribute; never defaulted to 0.
+  optional int32 status = 4;
+}

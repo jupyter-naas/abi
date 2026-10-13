@@ -1,0 +1,31 @@
+/* data/services — cache view */
+
+.data-cache-tiers {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.data-cache-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.data-cache-preview > .data-notice {
+  margin: 0;
+}
+
+.data-cache-origin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}
+
+.data-cache-origin svg {
+  color: var(--color-primary);
+}

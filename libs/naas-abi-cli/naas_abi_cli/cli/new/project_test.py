@@ -19,6 +19,8 @@ _FRAMEWORK_PACKAGES = {
     "naas-abi-core",
     "naas-abi-marketplace",
     "naas-abi-cli",
+    "naas-abi-proto",
+    "naas-abi-sdk",
 }
 
 
@@ -124,24 +126,30 @@ def _run_new_project(tmp_path, monkeypatch, *extra_args, submodule_ok: bool):
     return tomllib.loads(generated), generated
 
 
-def _invoke_new_project(tmp_path, monkeypatch, *extra_args):
-    """Drive the command as above, but return the CLI result, not the manifest."""
+def _invoke_new_project(tmp_path, monkeypatch, *extra_args, commands=None):
+    """Drive the command as above, but return the CLI result, not the manifest.
+
+    The submodule clone succeeds; ``commands`` collects every command run.
+    """
     from click.testing import CliRunner
 
-    monkeypatch.setattr(
-        project.subprocess,
-        "run",
-        lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
-    )
+    def fake_run(cmd, **_kwargs):
+        if commands is not None:
+            commands.append(cmd)
+        if "submodule" in cmd:
+            (tmp_path / "demo" / project.ABI_SUBMODULE_PATH / "libs").mkdir(
+                parents=True, exist_ok=True
+            )
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(project.subprocess, "run", fake_run)
     monkeypatch.setattr(project.shutil, "which", lambda _cmd: "/usr/bin/git")
 
-    result = CliRunner().invoke(
+    return CliRunner().invoke(
         project.new_project,
         ["demo", str(tmp_path), "--domain", "localhost", "--without-local-deploy",
-         "--without-abi-submodule", *extra_args],
+         *extra_args],
     )
-    assert result.exit_code == 0, result.output
-    return result
 
 
 def test_new_project_emits_live_sources(tmp_path, monkeypatch) -> None:
@@ -158,7 +166,9 @@ def test_new_project_emits_live_sources(tmp_path, monkeypatch) -> None:
 def test_new_project_falls_back_to_pypi_when_the_clone_fails(
     tmp_path, monkeypatch
 ) -> None:
-    doc, rendered = _run_new_project(tmp_path, monkeypatch, submodule_ok=False)
+    doc, rendered = _run_new_project(
+        tmp_path, monkeypatch, "--without-nats", submodule_ok=False
+    )
 
     assert "sources" not in doc["tool"]["uv"]
     assert "# [tool.uv.sources]" in rendered
@@ -168,7 +178,11 @@ def test_new_project_without_the_submodule_flag_uses_pypi(
     tmp_path, monkeypatch
 ) -> None:
     doc, _ = _run_new_project(
-        tmp_path, monkeypatch, "--without-abi-submodule", submodule_ok=True
+        tmp_path,
+        monkeypatch,
+        "--without-abi-submodule",
+        "--without-nats",
+        submodule_ok=True,
     )
 
     assert "sources" not in doc["tool"]["uv"]
@@ -187,6 +201,7 @@ def test_next_steps_report_the_project_path_and_how_to_start(
     tmp_path, monkeypatch
 ) -> None:
     result = _invoke_new_project(tmp_path, monkeypatch)
+    assert result.exit_code == 0, result.output
 
     assert str(tmp_path / "demo") in result.output
     assert "cd " in result.output
@@ -224,6 +239,7 @@ def test_cd_target_is_quoted_when_the_path_has_spaces(tmp_path, monkeypatch) -> 
 
 def test_new_project_generates_the_admin_password_in_env(tmp_path, monkeypatch) -> None:
     result = _invoke_new_project(tmp_path, monkeypatch)
+    assert result.exit_code == 0, result.output
 
     env = (tmp_path / "demo" / ".env").read_text(encoding="utf-8")
     password = next(
@@ -235,3 +251,85 @@ def test_new_project_generates_the_admin_password_in_env(tmp_path, monkeypatch) 
     assert password not in ("admin", "Admin1234!")
     assert "admin@example.com" in result.output
     assert "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD" in result.output
+
+
+# =============================================================================
+# NATS is the default; --without-nats keeps the classic in-process project.
+# =============================================================================
+
+def _env(tmp_path) -> dict[str, str]:
+    lines = (tmp_path / "demo" / ".env").read_text(encoding="utf-8").splitlines()
+    return dict(line.split("=", 1) for line in lines if "=" in line and not line.startswith("#"))
+
+
+def _config(tmp_path, name: str = "config.yaml") -> str:
+    return (tmp_path / "demo" / name).read_text(encoding="utf-8")
+
+
+def _uv_add(commands) -> list[str]:
+    return next(cmd for cmd in commands if cmd[:2] == ["uv", "add"])
+
+
+def test_new_project_runs_on_nats_by_default(tmp_path, monkeypatch) -> None:
+    commands: list = []
+    result = _invoke_new_project(tmp_path, monkeypatch, commands=commands)
+    assert result.exit_code == 0, result.output
+
+    for name in ("config.yaml", "config.local.yaml", "config.remote.yaml"):
+        assert "\nnats:\n" in _config(tmp_path, name), name
+    env = _env(tmp_path)
+    assert len(env["NATS_JWT_SECRET"]) >= 32
+    assert env["NATS_ABI_PASSWORD"] and env["NATS_MODULE_PASSWORD"]
+    assert "naas-abi-sdk[agent]" in _uv_add(commands)
+    assert "nats-server" in result.output
+    # The project's own module holds the default agent the engine loads.
+    module = (tmp_path / "demo" / "src" / "demo" / "__init__.py").read_text()
+    assert "naas_abi_core" in module
+    assert not (tmp_path / "demo" / "docker-compose.override.yml").exists()
+
+
+def test_new_project_without_nats_is_the_classic_project(tmp_path, monkeypatch) -> None:
+    commands: list = []
+    result = _invoke_new_project(
+        tmp_path, monkeypatch, "--without-nats", commands=commands
+    )
+    assert result.exit_code == 0, result.output
+
+    for name in ("config.yaml", "config.local.yaml", "config.remote.yaml"):
+        assert "\nnats:" not in _config(tmp_path, name), name
+    assert 'adapter: "python_queue"' in _config(tmp_path)
+    assert "NATS_JWT_SECRET" not in _env(tmp_path)
+    assert not any("naas-abi-sdk" in arg for arg in _uv_add(commands))
+    assert "nats-server" not in result.output
+
+
+def test_a_nats_project_refuses_to_skip_the_submodule(tmp_path, monkeypatch) -> None:
+    """naas-abi-proto and naas-abi-sdk are not on PyPI: without the submodule
+    the project could not install, so it fails before writing anything."""
+    result = _invoke_new_project(tmp_path, monkeypatch, "--without-abi-submodule")
+
+    assert result.exit_code != 0
+    assert "--without-nats" in result.output
+    assert not (tmp_path / "demo").exists()
+
+
+def test_a_nats_project_stops_when_the_clone_fails(tmp_path, monkeypatch) -> None:
+    from click.testing import CliRunner
+
+    def fake_run(cmd, **_kwargs):
+        if "submodule" in cmd:
+            raise subprocess.CalledProcessError(1, cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(project.subprocess, "run", fake_run)
+    monkeypatch.setattr(project.shutil, "which", lambda _cmd: "/usr/bin/git")
+
+    result = CliRunner().invoke(
+        project.new_project,
+        ["demo", str(tmp_path), "--domain", "localhost", "--without-local-deploy"],
+    )
+
+    assert result.exit_code != 0
+    assert "naas-abi-sdk" in result.output
+    # The half-made project is removed, so the same command can run again.
+    assert not (tmp_path / "demo").exists()

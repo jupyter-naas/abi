@@ -1,7 +1,18 @@
 import importlib
-from typing import Any
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
+
+ConfigModel = TypeVar("ConfigModel", bound=BaseModel)
+
+
+def config_model(model: type[ConfigModel], config: Any) -> ConfigModel:
+    """An adapter's ``config`` as ``model``: configs are typed models or plain dicts."""
+    if isinstance(config, model):
+        return config
+    if isinstance(config, BaseModel):
+        config = config.model_dump()
+    return model.model_validate(config or {})
 
 
 class GenericLoader(BaseModel):
@@ -38,6 +49,22 @@ class GenericLoader(BaseModel):
     python_module: str | None = None
     module_callable: str | None = None
     custom_config: dict[str, Any] | None = None
+    # Custom adapters only: true when the adapter keeps its data in a backend every
+    # engine reaches (a database or store server), so deploys may hand over without
+    # downtime (docs/adr/20261006_single-serving-engine.md).
+    shared_storage: bool = False
+
+    def local_storage(self) -> str | None:
+        """Why this adapter's data stays on this host, or None when every engine
+        reaches it. Each adapter configuration declares its own."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not declare where its data lives"
+        )
+
+    def custom_local_storage(self) -> str | None:
+        if self.shared_storage:
+            return None
+        return "a custom adapter that does not declare shared_storage: true"
 
     def load(self) -> Any:
         assert self.python_module is not None, "python_module is required"

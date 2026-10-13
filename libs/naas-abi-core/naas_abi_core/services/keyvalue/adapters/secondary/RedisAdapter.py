@@ -1,10 +1,21 @@
+import re
 from typing import cast
 
 import redis
 from naas_abi_core.services.keyvalue.KeyValuePorts import (
     IKeyValueAdapter,
+    KVKeyPage,
     KVNotFoundError,
+    check_page_limit,
+    paginate_keys,
 )
+
+# Redis MATCH is a glob: escape its metacharacters so a prefix matches literally.
+_GLOB_SPECIAL = re.compile(r"([\\*?\[\]])")
+
+
+def glob_escape(text: str) -> str:
+    return _GLOB_SPECIAL.sub(r"\\\1", text)
 
 
 class RedisAdapter(IKeyValueAdapter):
@@ -78,3 +89,28 @@ class RedisAdapter(IKeyValueAdapter):
 
     def exists(self, key: str) -> bool:
         return bool(self._client.exists(key))
+
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> KVKeyPage:
+        """SCAN the whole prefix (Redis has no ordered key index), then page.
+
+        O(keys under the prefix) per call: meant for administration, not hot paths.
+        Redis drops expired keys itself, so SCAN never returns them.
+        """
+        check_page_limit(limit)
+        keys = (
+            self._normalize_value(raw).decode("utf-8", "surrogateescape")
+            for raw in self._client.scan_iter(
+                match=f"{glob_escape(prefix)}*", count=1000
+            )
+        )
+        return paginate_keys(keys, prefix, limit, after)
+
+    def get_ttl(self, key: str) -> int | None:
+        remaining = cast(int, self._client.ttl(key))
+        if remaining == -2:
+            raise KVNotFoundError(f"Key not found: {key}")
+        if remaining < 0:
+            return None
+        return remaining

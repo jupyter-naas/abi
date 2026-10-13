@@ -124,6 +124,8 @@ help:
 	@echo "  test-local-embedded-core Run no-docker local embedded core e2e test"
 	@echo "  test-integration-core    Run core integration tests (testcontainers)"
 	@echo "  test-document-core       Run document tests (set DOCUMENT_TEST_POSTGRES_DSN for PostgreSQL)"
+	@echo "  test-event-core          Run event and activity log tests (set EVENT_TEST_POSTGRES_DSN, DOCUMENT_TEST_POSTGRES_DSN)"
+	@echo "  test-agent-memory-core   Run agent memory migration tests (set DOCUMENT_TEST_POSTGRES_DSN for PostgreSQL)"
 	@echo "  test-api-init            Test API initialization with production secrets"
 	@echo "  test-api-init-container  Test API initialization in containerized environment"
 	@echo "  ftest                    Interactive test selector using fzf (fuzzy finder)"
@@ -567,6 +569,18 @@ test-document-core:
 	@ uv run --project libs/naas-abi-core --all-extras python -m pytest -c libs/naas-abi-core/pyproject.toml libs/naas-abi-core/naas_abi_core/services/document libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_DocumentService_test.py libs/naas-abi-core/naas_abi_core/engine/EngineProxy_test.py -q
 
 .PHONY: test-document-core
+
+# Event log and activity log adapters, on PostgreSQL when the DSNs are set
+test-event-core:
+	@ uv run --project libs/naas-abi-core --all-extras python -m pytest -c libs/naas-abi-core/pyproject.toml --import-mode=importlib libs/naas-abi-core/naas_abi_core/services/event libs/naas-abi-core/naas_abi_core/services/activity_log libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_EventService_test.py libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_ActivityLogService_test.py -q
+
+.PHONY: test-event-core
+
+# Agent memory jobs and checkpoint migration, from PostgreSQL when the DSN is set
+test-agent-memory-core:
+	@ uv run --project libs/naas-abi-core --all-extras python -m pytest -c libs/naas-abi-core/pyproject.toml --import-mode=importlib libs/naas-abi-core/naas_abi_core/services/agent/AgentMemoryJobs_test.py libs/naas-abi-core/naas_abi_core/services/agent/CheckpointMigration_test.py -q
+
+.PHONY: test-agent-memory-core
 
 # Test API initialization with production secrets
 test-api-init: deps
@@ -1046,3 +1060,11 @@ clean:
 # Declare all targets as phony to avoid conflicts with files of the same name
 
 .PHONY: ollama-models test test-local-embedded-core test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology docs docs-clean
+
+.PHONY: test-sdk demo-sdk
+test-sdk:
+	$(MAKE) -C libs/naas-abi-proto test
+	$(MAKE) -C libs/naas-abi-sdk test
+
+demo-sdk:
+	$(MAKE) -C examples/standalone_module demo

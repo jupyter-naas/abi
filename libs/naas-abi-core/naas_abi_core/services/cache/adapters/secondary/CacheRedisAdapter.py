@@ -4,13 +4,22 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+from typing import cast
 
 import redis as redis_lib
 from naas_abi_core.services.cache.CachePort import (
     CachedData,
+    CacheKeyPage,
     CacheNotFoundError,
     ICacheAdapter,
+    check_page_limit,
+    paginate_keys,
 )
+
+_GLOB_SPECIAL = re.compile(r"([\\*?\[\]])")
+_DIGEST = re.compile(r"[0-9a-f]{64}")
+_MGET_BATCH = 500
 
 
 class CacheRedisAdapter(ICacheAdapter):
@@ -80,3 +89,28 @@ class CacheRedisAdapter(ICacheAdapter):
 
     def exists(self, key: str) -> bool:
         return bool(self._client.exists(self._redis_key(key)))
+
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> CacheKeyPage:
+        """SCANs ``{prefix}:*`` and reads each entry's key (MGET batches): O(entries)."""
+        check_page_limit(limit)
+        namespace = f"{self._prefix}:"
+        match = _GLOB_SPECIAL.sub(r"\\\1", namespace) + "*"
+        stored = [
+            str(k)
+            for k in self._client.scan_iter(match=match, count=1000)
+            if _DIGEST.fullmatch(str(k)[len(namespace) :])
+        ]
+        keys: list[str] = []
+        for start in range(0, len(stored), _MGET_BATCH):
+            batch = cast(
+                list[str | None], self._client.mget(stored[start : start + _MGET_BATCH])
+            )
+            for raw in batch:
+                if raw is None:
+                    continue  # deleted while listing
+                key = json.loads(raw).get("key")
+                if isinstance(key, str):
+                    keys.append(key)
+        return paginate_keys(keys, prefix, limit, after)

@@ -2,6 +2,7 @@ from typing import Literal
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
+    config_model,
 )
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
@@ -34,8 +35,29 @@ class SourceControlAdapterLocalGitConfiguration(BaseModel):
     repos_root: str
 
 
+class SourceControlAdapterNATSConfiguration(BaseModel):
+    """Source control adapter NATS RPC client configuration.
+
+    Talks to a remote ``SourceControlPrimaryAdapterNATS`` over NATS
+    request/reply -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
+    (Stage 1) and naas_abi_core/proto/source_control/v1/source_control.proto.
+
+    source_control_adapter:
+      adapter: "nats_rpc"
+      config:
+        nats_url: "nats://127.0.0.1:4222"
+        jwt_secret: "{{ secret.NATS_SERVICE_JWT_SECRET }}"
+        service_identity: "api"
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    nats_url: str = "nats://127.0.0.1:4222"
+    jwt_secret: str
+    service_identity: str = "api"
+
+
 class SourceControlAdapterConfiguration(GenericLoader):
-    adapter: Literal["forgejo", "in_memory", "local_git", "custom"]
+    adapter: Literal["forgejo", "in_memory", "local_git", "nats_rpc", "custom"]
     config: dict | None = None
 
     @model_validator(mode="after")
@@ -66,6 +88,13 @@ class SourceControlAdapterConfiguration(GenericLoader):
                 "Invalid configuration for services.source_control."
                 "source_control_adapter 'local_git' adapter",
             )
+        elif self.adapter == "nats_rpc":
+            pydantic_model_validator(
+                SourceControlAdapterNATSConfiguration,
+                self.config,
+                "Invalid configuration for services.source_control."
+                "source_control_adapter 'nats_rpc' adapter",
+            )
 
         return self
 
@@ -90,10 +119,30 @@ class SourceControlAdapterConfiguration(GenericLoader):
             )
 
             return LocalGitAdapter(**self.config)
+        elif self.adapter == "nats_rpc":
+            assert self.config is not None, "config is required for nats_rpc adapter"
+            from naas_abi_core.services.source_control.adapters.secondary.SourceControlSecondaryAdapterNATSClient import (
+                SourceControlSecondaryAdapterNATSClient,
+            )
+
+            return SourceControlSecondaryAdapterNATSClient(**self.config)
         elif self.adapter == "custom":
             return super().load()
         else:
             raise ValueError(f"Unknown adapter: {self.adapter}")
+
+    def local_storage(self) -> str | None:
+        """Where the repositories live (single-serving-engine ADR)."""
+        if self.adapter == "in_memory":
+            return "this process"
+        if self.adapter == "local_git":
+            root = config_model(
+                SourceControlAdapterLocalGitConfiguration, self.config
+            ).repos_root
+            return f"repositories under {root}"
+        if self.adapter == "custom":
+            return self.custom_local_storage()
+        return None  # forgejo; nats_rpc is another engine's
 
 
 class SourceControlServiceConfiguration(BaseModel):

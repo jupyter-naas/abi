@@ -32,6 +32,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.core.content_disposition import content_disposition
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -157,7 +158,7 @@ async def storage_download(
     return StreamingResponse(
         _iter(),
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": content_disposition("attachment", filename)},
     )
 
 
