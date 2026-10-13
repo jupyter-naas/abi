@@ -65,13 +65,17 @@ It defined no format.
     distinct actions. Each action has an access level: list, read, write or admin.
   - Resources are `abi:<org>:<workspace>:<service>:<type>/<id>`, with `-` for "none" and percent-encoded ids.
   - Patterns use `*` (across segments) and `?`, never regular expressions.
-- **Placement.** The org and workspace of a kernel resource come from a placement registry in IAM, recorded
-  when the resource is created in a workspace. They never come from a request field, which any caller could
-  set.
+- **Placement.** The org and workspace of a kernel resource come from a placement registry in IAM.
+  - A placement is recorded when a resource is created in a workspace that no existing placement covers.
+    A container's placement also covers its children.
+  - A create can never override an existing placement.
+  - The org and workspace never come from a request field, which any caller could set.
 - **Catalogs.** Every service registers its action catalog at load time. Policies are validated against the
   catalogs.
 - **Roles are managed policies attached at a scope:** owner, admin, member, viewer and platform admin, plus
   `self` for every user.
+  - Policy variables resolve against the principal being evaluated, so a user's `self` policy names the user
+    even when Nexus calls on their behalf.
   - They are generated from the catalogs by access level.
   - Only owners can grant, demote or remove owners.
 - **Sealed resources.** A few resources are sealed in code to a single principal (the built-in IdP's data, the

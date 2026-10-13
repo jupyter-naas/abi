@@ -211,16 +211,21 @@ An attachment binds a policy to a principal (user, group or service account), wi
 | `abi:-:-` | Platform resources | `abi:-:-` |
 | none | The policy uses no `${scope}` | — |
 
-Variables are substituted into resource patterns before matching:
+Variables are substituted into resource patterns before matching. They resolve against the principal
+whose policies are being evaluated, `X` in `principal_decision(X)` (§5.3): the actor `P` when computing
+`d_P`, the OBO user `U` when computing `d_U`.
 
 | Variable | Value |
 |---|---|
 | `${scope}` | The attachment's scope. Invalid in a policy attached without one. |
-| `${principal.id}` | The actor's principal id. |
-| `${user.id}` | The OBO user if there is one, else the actor if it is a user. Otherwise unresolved. |
+| `${principal.id}` | `X`'s principal id. A policy reached through a group resolves to the member being evaluated, never to the group. |
+| `${user.id}` | The call's user (§10.1): `U` if the call is on behalf of a user, else `P` if `P` is a user. Otherwise unresolved. It is the same in `d_P` and `d_U`, so an actor's policy can name the user it serves. |
 
 - A statement with an unresolved variable matches nothing.
 - Variables are not allowed in actions.
+- Example: on a Nexus call, `P` is `api` and `U` is the signed-in user. `builtin.self` is attached to `U`, so
+  in `d_U` its `${principal.id}` is `U`. `api`'s policies, evaluated in `d_P`, never see `U` as
+  `${principal.id}`.
 
 ### 4. Resource names
 
@@ -290,18 +295,38 @@ ids rarely encode a workspace either: Nexus graph IRIs are `…/graph/<slug>-<uu
   - With no match, the resource is platform-level, `abi:-:-:…`.
   - For a resource type a catalog declares `placement: platform` (model_registry models, discovery
     modules), resolution always gives platform.
+- **Containers.** A resource type marked `container: true` in its catalog holds children whose ids extend its
+  own: `<container id>/<rest>`. Containers:
+  - document `namespace` and `collection`;
+  - vector_store `collection`;
+  - source_control `repo` (children `branch/<repo>/…` and `proposal/<repo>/…`);
+  - dataset `namespace`.
+
+  A placement on a container is always written as a pair: the exact id and the prefix `<id>/*`. Its
+  children therefore resolve to the container's workspace.
 - **Writing placements.**
-  1. **On creation.** When a create operation (marked `creates: true` in the catalog) succeeds and its
-     `CallContext.workspace_id` is set, the service records an exact placement for the new resource.
-     - IAM maps the workspace to its org with its scope registry. Nexus registers each org and workspace
-       with `iam:PutScope`.
-     - The create is authorized against the name *with* that placement. A caller cannot create in a
-       workspace they hold no create right in.
+  1. **On creation.** A create operation is marked `creates: true` in the catalog. Before it runs, the
+     service resolves the placement of the would-be name, then:
+     - **If an existing placement already covers the name** (exact or prefix), the create is authorized
+       against that placement. `CallContext.workspace_id` must be empty or equal to that placement's
+       workspace. On a mismatch the call is denied with the §5.4 outcome computed on the covered name:
+       `PERMISSION_DENIED` if the caller can see it, not found otherwise. Nothing new is recorded: the
+       existing placement already covers the new resource and, through its prefix, the resource's children.
+       So a member of ws-A cannot claim a name inside ws-B's namespace by passing `workspace_id=ws-A`.
+     - **If no placement covers the name and `CallContext.workspace_id` is set**, the create is authorized
+       against the name placed in that workspace. On success the service records an exact placement, plus
+       the `<id>/*` prefix when the type is a container. A caller cannot create in a workspace they hold no
+       create right in.
+     - **If no placement covers the name and `workspace_id` is empty**, the resource is platform-level. The
+       create is authorized against `abi:-:-:…` and nothing is recorded.
+     - IAM maps the workspace to its org with its scope registry. Nexus registers each org and workspace with
+       `iam:PutScope`.
   2. **Explicitly**, with `iam:PutPlacement`, mainly for prefixes. Nexus places its per-workspace prefixes
      when it creates a workspace, and the migration places existing data (§13).
-  3. **On delete.** Deleting a resource (`Drop*`, `Delete*` on a container) deletes its exact placement.
-- **What `workspace_id` does not do.** It never renames an existing resource. For an operation on an
-  existing resource it is ignored.
+  3. **On delete.** Deleting a container or a placed resource (`Drop*`, `Delete*`) deletes the placements
+     that the create recorded: the exact id and, for a container, its prefix.
+- **What `workspace_id` does not do.** It never renames an existing resource and never overrides an existing
+  placement. For an operation on an existing resource it is ignored.
 - **Caching.** Placements are cached like policies (§11.4).
 
 #### 4.5 Wildcards
@@ -322,7 +347,7 @@ ids rarely encode a workspace either: Nexus graph IRIs are `…/graph/<slug>-<uu
   | `abi:org-1:ws-2:*` | everything in workspace `ws-2` |
   | `abi:org-1:*` | the org's own resources and all its workspaces |
   | `abi:*:*:triple_store:graph/*` | every graph |
-  | `abi:-:-:document:*/people` and `abi:-:-:document:*/people/*` | the `people` document namespace, its collections and documents |
+  | `abi:-:-:document:namespace/people`, `abi:-:-:document:collection/people/*` and `abi:-:-:document:document/people/*` | the `people` document namespace, its collections and documents. Not `abi:-:-:document:*/people*`: that also matches another namespace's collection named `people`. |
 
 ### 5. Evaluation
 
@@ -391,9 +416,12 @@ Further rules:
 
 - **Order.** The check runs before the backend is touched. A denied call never reveals existence through
   timing, side effects or error text.
-- **Create.** A create on a name that does not exist yet uses the same rule. A caller who can see the target
-  workspace in that service (any allowed action on any of its types there) gets `PERMISSION_DENIED`, and
-  anyone else gets the not-found error of the containing scope.
+- **Create.** A create on a name that does not exist yet uses the same rule, on the name as placed by §4.4.
+  A caller who can see that name (any allowed action of the service on it) gets `PERMISSION_DENIED`.
+  Anyone else gets the service's not-found error for the type being created (`GRAPH_NOT_FOUND` for
+  `CreateGraph`, `COLLECTION_NOT_FOUND` for `CreateCollection`, …), or the generic `NOT_FOUND` when the
+  service has none. The error never says whether the name, its container or its workspace is the part
+  that is missing.
 - **Credentials.** Missing, invalid or expired credentials are `UNAUTHENTICATED`. That is authentication,
   not authorization.
 
@@ -405,15 +433,16 @@ Further rules:
   derived from hidden items.
 - **Paging.** `limit` and cursors apply after filtering. Adapters over-fetch or push filters down.
 - **Container-scoped lists** (`ListObjects(prefix)`, `ListVectors(collection)`, `ListKeys(prefix)`,
-  `document:Find`):
+  `document:Collections(namespace)`):
   - When the container is itself a resource (a vector collection, a document collection), it first gets
     the visibility rule of §5.4: not found if invisible.
   - Then its items are filtered.
 - **Engine-wide lists** (`ListGraphs`, `ListCollections`, secret `List`) never fail for authorization.
   They return the allowed subset, possibly empty.
-- **Unfiltered counts.** `document:Count`, `vector_store:CountVectors` and `dataset:InlinedRowCount` are
-  checked on their container. They are not item-filtered, so grant them only where the whole container may
-  be read.
+- **Container-level reads.** `document:Find`, `document:Count`, `vector_store:Search`,
+  `vector_store:CountVectors` and `dataset:InlinedRowCount` are checked once, on their container. Their
+  results are not item-filtered, so grant them only where the whole container may be read. `document:Find`
+  is a query, not a list action.
 - **Push-down.** `filter` (§11.2) also returns prefix hints, the literal prefixes of the matching Allow
   patterns, so storage can push them down:
   - a SPARQL `VALUES` list;
@@ -459,6 +488,8 @@ resource_types:
   - name: graph
     id: opaque                  # opaque | path | singleton
     placement: placed           # placed | platform
+    container: false            # true: children's ids extend this id (§4.4)
+    personal: false             # true: the id starts with the owner's principal id (§6.3)
     description: A named graph, by IRI. `default` is the default graph.
 actions:
   - name: Query
@@ -493,11 +524,15 @@ Rules:
 - **Several resources.** An operation that names several resources (`vector_store:DeleteVectors`, SQL
   touching several tables) requires the action on each of them. One denial fails the whole call, with the
   §5.4 outcome of the first denied resource.
-- **Owner from records.** A personal resource type (`personal: true` in the catalog) has an id that starts
-  with its owner's principal id. Services read the owner from their own records, never from the request.
-  Built-in roles give access to personal resources only through `${user.id}` (§7).
+- **Personal resources.** A personal resource type (`personal: true` in the catalog) has an id whose first
+  segment is its owner's principal id: either the owner id alone (`actor/<owner>`, `forge_user/<owner>`,
+  `coder_user/<owner>`) or `<owner>/<rest>` (`conversation/<owner>/<id>`,
+  `environment/<owner>/<id>`, `run/<owner>/<project>/<invocation>`, `key/<owner>/<key id>`).
+  - Services read the owner from their own records, never from the request.
+  - A role reaches a personal type only through its owner, with both forms:
+    `<type>/${principal.id}` and `<type>/${principal.id}/*` (§7).
 
-### 6.4 Kernel service catalogs
+#### 6.4 Kernel service catalogs
 
 In the tables below:
 
@@ -506,7 +541,7 @@ In the tables below:
 - **"stream"** is the service's transfer subjects: `transfer.open` and `transfer.<owner>.{write,start,read,close}`.
 - **Level** is the access level (§6.1).
 
-#### object_storage
+##### object_storage
 
 Resource types:
 
@@ -525,24 +560,26 @@ Nexus places `workspaces/<ws>/*` and `users/<user>/*` prefixes.
 | `PutObjectStream` | write | `object/<prefix>/<key>` | stream, operation `put` |
 | `DeleteObject` | write | `object/<prefix>/<key>` | `delete_object` |
 
-#### document
+##### document
 
 Resource types (`path`, placed):
 
-- `namespace/<ns>`
-- `collection/<ns>/<collection>`
+- `namespace/<ns>` (container)
+- `collection/<ns>/<collection>` (container)
 - `document/<ns>/<collection>/<id>`
 
 Placement and binding:
 
 - A module's own namespace is platform-level unless placed.
 - In process, the SDK and `ServicesProxy` bind a module to its namespace. Over NATS the namespace now comes
-  from the request and is authorized like any other id; the old "bound namespace" becomes a policy:
+  from the request and is authorized like any other id. The old "bound namespace" becomes a policy that
+  names each type, so it cannot match another namespace's collection of the same name:
 
   ```yaml
   resources:
-    - "abi:-:-:document:*/<module_id>"
-    - "abi:-:-:document:*/<module_id>/*"
+    - "abi:-:-:document:namespace/<module_id>"
+    - "abi:-:-:document:collection/<module_id>/*"
+    - "abi:-:-:document:document/<module_id>/*"
   ```
 
 | Action | Level | Resource | Subject |
@@ -553,7 +590,7 @@ Placement and binding:
 | `EnsureCollection` | admin | `collection/<ns>/<c>` (creates) | `ensure_collection` |
 | `DropCollection` | admin | `collection/<ns>/<c>` | `drop_collection` |
 | `Get` | read | `document/<ns>/<c>/<id>` | `get` |
-| `Find` | read | `collection/<ns>/<c>` (results not item-filtered, §5.5) | `find` |
+| `Find` | read | `collection/<ns>/<c>`, checked once; results are not item-filtered (§5.5) | `find` |
 | `Count` | read | `collection/<ns>/<c>` | `count` |
 | `Put` | write | `document/<ns>/<c>/<id>` | `put` |
 | `Delete` | write | `document/<ns>/<c>/<id>` | `delete` |
@@ -561,7 +598,7 @@ Placement and binding:
 `document_admin` and `ADMIN_IDENTITIES = {"api", "engine"}` are removed. Namespace administration is
 `Namespaces`, `EnsureCollection` and `DropCollection` on the namespace, granted by policy.
 
-#### keyvalue
+##### keyvalue
 
 Resource types:
 
@@ -578,16 +615,16 @@ Resource types:
 | `Delete` | write | `key/<key>` | `delete` |
 | `DeleteIfValueMatches` | write | `key/<key>` | `delete_if_value_matches` |
 
-#### secret
+##### secret
 
 Resource types:
 
 - `secret/<key>` (`opaque`, placed by key prefix)
 
-Sealed prefixes (§10.4, §11.3):
+Sealed prefixes (§11.3, §12.3):
 
-- `idp%2F*` belongs to `idp`.
-- `iam%2F*` belongs to `engine`.
+- `secret/idp%2F*` belongs to `idp`.
+- `secret/iam%2F*` belongs to `engine`.
 
 | Action | Level | Resource | Subject |
 |---|---|---|---|
@@ -596,7 +633,7 @@ Sealed prefixes (§10.4, §11.3):
 | `Set` | write | `secret/<key>` | `set` |
 | `Remove` | write | `secret/<key>` | `remove` |
 
-#### cache
+##### cache
 
 Resource types:
 
@@ -615,11 +652,11 @@ Resource types:
 
 The per-tier subjects are the engine's own; the broker grants them to `engine` only.
 
-#### vector_store
+##### vector_store
 
 Resource types:
 
-- `collection/<name>` (`path`, placed)
+- `collection/<name>` (`path`, placed, container)
 - `vector/<collection>/<id>` (`path`)
 - `service/-` (singleton, platform)
 
@@ -640,7 +677,7 @@ Resource types:
 | `Initialize` | admin | `service/-` | `initialize` |
 | `Close` | admin | `service/-` | `close` |
 
-#### triple_store
+##### triple_store
 
 Resource types:
 
@@ -700,11 +737,11 @@ targets:
 Nexus `GraphAccessScope` (`services/graph/access.py`) moves into this check (subtask 4), and the Nexus
 graph routes call the kernel as the user.
 
-#### dataset
+##### dataset
 
 Resource types:
 
-- `namespace/<ns>` (`path`, placed)
+- `namespace/<ns>` (`path`, placed, container)
 - `dataset/<ns>/<name>` (`path`)
 - `catalog/-` (singleton, platform)
 
@@ -730,7 +767,7 @@ Resource types:
 - file-reading table functions;
 - `ATTACH`.
 
-#### event
+##### event
 
 Resource types:
 
@@ -748,7 +785,7 @@ Resource types:
 | `Append` | write | `event_type/<type>` | `append` |
 | `SetCursor` | write | `cursor/<consumer>/<type>` | `set_cursor` |
 
-#### activity_log
+##### activity_log
 
 Resource types:
 
@@ -760,12 +797,12 @@ Resource types:
 | `ListActors` | list | each `actor/<id>` | `list_actors` |
 | `Query` | read | `actor/<actor_id>` | `query` |
 | `QueryStream` | read | `actor/<actor_id>` | stream, operation `query` |
-| `Record` | write | `actor/<event's actor>`; the actor is the call's `${user.id}`, never a request field | `record` |
+| `Record` | write | `actor/<event's actor>`; the actor is the call's user (§10.1), never a request field | `record` |
 | `Shutdown` | admin | `service/-` | `shutdown` |
 
 Every user reads their own activity through `builtin.self` (§7).
 
-#### email
+##### email
 
 Resource types:
 
@@ -779,7 +816,7 @@ Resource types:
 | `Send` | write | `sender/<from_email>`, `sender/default` when empty; creates `message/<id>` | `send` |
 | `DeleteSent` | write | `message/<id>` | `delete_sent` |
 
-#### model_registry
+##### model_registry
 
 Resource types:
 
@@ -793,7 +830,7 @@ Resource types:
 | `ChatStream` | read | `model/<id>`; one action for the open, next and close subjects | `stream_open`, `<owner>.stream_next`, `<owner>.stream_close` |
 | `Embed` | read | `model/<id>` | `embed` |
 
-#### discovery (modules, agents, models, apps, jobs)
+##### discovery (modules, agents, models, apps, jobs)
 
 Resource types (all platform):
 
@@ -802,7 +839,8 @@ Resource types (all platform):
 - `model/<project>/<module_id>/<model>`
 - `app/<project>/<module_id>/<app>`
 - `job/<project>/<module_id>/<job>`
-- `run/<project>/<user id or service account id>/<invocation_id>` (`personal: true`)
+- `run/<owner>/<project>/<invocation_id>` (`personal: true`; the owner is the call's user, or the actor
+  when the call is on behalf of no one)
 - `job_run/<project>/<module_id>/<job>/<run_id>`
 
 | Action | Level | Resource | Subject |
@@ -833,11 +871,11 @@ Resource types (all platform):
 - Hosting subjects gain the service-account token `<sa>` (§8.4). Callers never build these subjects: they
   read them from the discovery record.
 
-#### source_control
+##### source_control
 
 Resource types:
 
-- `repo/<repo_id>` (`opaque`, placed). The id is the service's id, never a Nexus value.
+- `repo/<repo_id>` (`opaque`, placed, container). The id is the service's id, never a Nexus value.
 - `branch/<repo_id>/<name>` (`path`)
 - `proposal/<repo_id>/<number>` (`path`)
 - `forge_user/<principal id>` (`opaque`, platform, `personal: true`)
@@ -871,7 +909,7 @@ Resource types:
 | `Merge` | write | `proposal/…` | `merge` |
 | `ListWorkflowRuns` | list | `repo/…` | `list_workflow_runs` |
 | `EnsureUser` | admin | `forge_user/<principal id>` | `ensure_user` |
-| `MintGitToken` | write | `forge_user/<principal id>`; the user is `${user.id}`, never `request.user_id` | `mint_git_token` |
+| `MintGitToken` | write | `forge_user/<principal id>`; the user is the call's user (§10.1), never `request.user_id` | `mint_git_token` |
 
 Bug (b) is closed in two places:
 
@@ -879,7 +917,7 @@ Bug (b) is closed in two places:
 - `AddCollaborator` is an admin action. Nexus grants a member write on a workspace repo by checking
   `source_control:UpsertFile` on that repo for the user, then calling `AddCollaborator` as `api` (§10.2).
 
-#### coding_environment
+##### coding_environment
 
 Resource types:
 
@@ -896,7 +934,7 @@ Resource types:
 | `GetStatus` | read | `environment/…` | `get_status` |
 | `GetLogs` | read | `environment/…` | `get_logs` |
 | `GetAccess` | write | `environment/…` (returns a credential) | `get_access` |
-| `Provision` | write | `environment/${user.id}/-` (creates) | `provision` |
+| `Provision` | write | `environment/<the call's user>/-` (creates) | `provision` |
 | `Start` | write | `environment/…` | `start` |
 | `Stop` | write | `environment/…` | `stop` |
 | `Delete` | write | `environment/…` | `delete` |
@@ -905,7 +943,7 @@ Resource types:
 The service reads the owner and the user from `CallContext` and from its own records. It never uses
 `request.user_id`.
 
-#### iam (its own catalog)
+##### iam (its own catalog)
 
 Resource types:
 
@@ -940,23 +978,23 @@ All resource types are platform-level unless their scope says otherwise.
 
 The JWKS (§9.1) is public and needs no action.
 
-### 6.5 Nexus catalog (`nexus`)
+#### 6.5 Nexus catalog (`nexus`)
 
 Nexus registers the catalog below. Resources are under `abi:<org>:<ws>:nexus:` unless marked org
 (`abi:<org>:-:nexus:`) or platform (`abi:-:-:nexus:`).
 
-- Every router authorizes through IAM with the user as `${user.id}` (§10.2).
+- Every router authorizes through IAM as `api` on behalf of the signed-in user (§10.2).
 - Kernel calls that Nexus makes for a user are authorized again by the kernel, on behalf of that user.
 
 | Router | Resource types | Actions (level) |
 |---|---|---|
 | organizations | `organization/-` (org), `member/<user>` (org), `domain/<domain>` (org), `billing/-` (org), `role_features/-` (org) | `ListOrganizations` (list, items `organization/-`), `GetOrganization` (read), `CreateOrganization` (write, platform `organization/-`), `UpdateOrganization` (admin), `DeleteOrganization` (admin), `ListOrganizationMembers` (list), `InviteOrganizationMember` (admin), `UpdateOrganizationMember` (admin), `RemoveOrganizationMember` (admin), `ListOrganizationDomains` (list), `AddOrganizationDomain` (admin), `VerifyOrganizationDomain` (admin), `RemoveOrganizationDomain` (admin), `GetBilling` (admin), `UpdateBilling` (admin), `GetRoleFeatures` (read), `UpdateRoleFeatures` (admin), `CreateWorkspace` (write, org `organization/-`, creates `workspace/-` in the new workspace) |
 | workspaces | `workspace/-`, `member/<user>`, `server/<id>`, `resource_access/<kind>` | `ListWorkspaces` (list, items `workspace/-`), `GetWorkspace` (read), `GetWorkspaceStats` (read), `UpdateWorkspace` (admin), `DeleteWorkspace` (admin), `ListWorkspaceMembers` (list), `InviteWorkspaceMember` (admin), `UpdateWorkspaceMember` (admin), `RemoveWorkspaceMember` (admin), `ListServers` (list), `CreateServer` (admin), `UpdateServer` (admin), `DeleteServer` (admin), `UpdateWorkspaceTheme` (admin), `GetResourceAccess` (read), `UpdateResourceAccess` (admin) |
-| features | `feature/<FeatureKey>` | `UseFeature` (read). Every router of a flagged section requires it, in addition to its own action. |
+| features | `feature/<FeatureKey>`, one of Nexus's `FeatureKey` values (`core/config.py`): `maps`, `chat`, `files`, `agents`, `skills`, `apps`, `marketplace`, `search`, `ontology`, `graph`, `datasets`, `settings`, `code`, `slides`, `documents`, `sheets` | `UseFeature` (read). Every router of a flagged section requires it, in addition to its own action. |
 | chat | `conversation/<owner>/<id>` (personal) | `ListConversations` (list), `GetConversation` (read), `CreateConversation` (write), `SendMessage` (write: complete, stream), `UpdateConversation` (write), `DeleteConversation` (write), `ExportConversation` (read), `GetIngestionJob` (read) |
 | agents, skills | `agent/<id>`, `skill/<id>` | `ListAgents`, `GetAgent`, `CreateAgent`, `UpdateAgent`, `DeleteAgent`, `SyncAgents` (admin), `UseAgent` (read; invoking it in chat or `/v1`), and the same set for skills with `UseSkill` |
 | openai gateway | `agent/<id>` | `UseAgent`, plus `UseFeature` on `feature/chat` |
-| files | `file/<drive>/<path>` (`path`) | `ListFiles` (list), `GetFile` (read: raw, preview, archive), `PutFile` (write: create, upload, rename, extract), `DeleteFile` (write); the platform and system drives need `UseFeature` on `feature/platform_drive` / `feature/system_drive` |
+| files | `file/<drive>/<path>` (`path`) | `ListFiles` (list), `GetFile` (read: raw, preview, archive), `PutFile` (write: create, upload, rename, extract), `DeleteFile` (write); the platform and system drives also need their workspace setting (`platform_drive_enabled`, `system_drive_enabled`), and the system drive admin actions |
 | office (slides, documents, sheets) | `project/<kind>/<slug>` | `ListProjects` (list), `GetProject` (read: content, history, diff, export), `CreateProject` (write), `UpdateProject` (write: every PUT, PATCH and edit command), `DeleteProject` (write), `RunProject` (write: runtime, evaluate) |
 | graph and views | `view/<id>` (graph data itself is `triple_store` resources) | `ListViews` (list), `GetView` (read), `CreateView`, `UpdateView`, `DeleteView` (write) |
 | ontology | `ontology/<id>`, `icon/<class>` | `ListOntologies`, `GetOntology`, `ExportOntology` (read), `ImportOntology`, `CreateOntologyEntity`, `DeleteOntologyEntity` (write), `UpdateIcons` (write), `RefreshOntologyCache` (admin) |
@@ -964,12 +1002,12 @@ Nexus registers the catalog below. Resources are under `abi:<org>:<ws>:nexus:` u
 | maps | `layout/<id>`, `layer/<id>` | `ListLayouts`, `GetLayout` (read), `UpdateLayout`, `DeleteLayout` (write), `ListLayers`, `GetLayer` (read) |
 | apps | `app/<id>`, `app_project/<slug>` | `ListApps` (list), `GetApp` (read), `UseApp` (read: open, link, grant), `InstallApp`, `UpdateApp`, `UninstallApp` (admin), `ListAppProjects`, `GetAppProject` (read), `CreateAppProject`, `UpdateAppProject`, `DeleteAppProject`, `PreviewAppProject`, `SubmitAppProject` (write) |
 | secrets | `secret/<id>` | `ListSecrets` (list: masked), `CreateSecret`, `UpdateSecret`, `DeleteSecret`, `ImportSecrets` (admin) |
-| coding and code review | (kernel `coding_environment` and `source_control` resources) | `UseFeature` on `feature/coding`; then kernel actions; `SetDefaultRepo` (admin, `workspace/-`) |
+| coding and code review | (kernel `coding_environment` and `source_control` resources) | `UseFeature` on `feature/code`; then kernel actions; `SetDefaultRepo` (admin, `workspace/-`) |
 | providers | `provider_model/<id>` (platform) | `ListProviderModels` (list), `GetProviderModel` (read), `UpdateProviderModel` (admin) |
 | abi servers | `abi_server/<id>` | `ListAbiServers`, `GetAbiServer` (read), `CreateAbiServer`, `UpdateAbiServer`, `DeleteAbiServer` (admin) |
 | realtime | `presence/-` | `GetPresence` (read), `Broadcast` (write) |
 | speech | `speech/-` | `Transcribe`, `Speak` (read) |
-| platform storage | (kernel `object_storage` under `users/${user.id}/`) | kernel actions; `root=true` needs `object_storage:*` on `object/*` |
+| platform storage | (kernel `object_storage` under `users/<the call's user>/`) | kernel actions; `root=true` needs `object_storage:*` on `object/*` |
 | datasets | (kernel `dataset` resources) | kernel actions |
 | analytics | `analytics/-` (platform) | `ReadAnalytics` (read), `WriteAnalytics` (admin) |
 | system | `system/-` (platform) | `ReadSystem` (read: overview, services, modules, telemetry, NATS, traffic, traces, jobs, runs), `ManageSystem` (admin: reveal, edit or delete entries, trigger or cancel jobs and runs, Ollama pull) |
@@ -994,25 +1032,61 @@ Built-in policies are managed:
 They are attached at a scope (§3.4). "Viewer on workspace W" is `builtin.viewer` attached with scope
 `abi:<org>:W`. That gives the read-only policy on `abi:<org>:W:*`.
 
-For each catalog resource type `(service, type)`, the role's statement covers
-`${scope}:<service>:<type>/*`. A personal type covers `${scope}:<service>:<type>/${user.id}/*` instead.
+For each catalog resource type `(service, type)` that can be placed in a workspace, the role's statement
+covers `${scope}:<service>:<type>/*`. A personal type covers `${scope}:<service>:<type>/${principal.id}`
+and `${scope}:<service>:<type>/${principal.id}/*` instead. `${principal.id}` is the member being evaluated
+(§3.4), so on a Nexus call it is the user, not `api`.
+
+A workspace-scoped role never reaches a platform-level resource (`abi:-:-:…`). Platform types are covered
+by name, in the table "Platform types" below.
+
+**Baseline features.** `UseFeature` statements come from Nexus's feature configuration
+(`feature_flags.role_baseline` in `core/config.py`), restricted to `feature_flags.enabled_features`:
+
+- `owner` and `admin`: every enabled feature;
+- `member` and `viewer`: `maps`, `chat`, `files`, `datasets`, `skills`, `slides`, `documents`, `sheets`,
+  by default.
+
+A deployment that changes `role_baseline` regenerates the role policies. An org overlay
+(`organization_role_features`) replaces them for that org (§6.5).
 
 | Policy | Allows | Excludes |
 |---|---|---|
-| `builtin.viewer` | every `list` and `read` action on the scope's types; `UseFeature` on the role's baseline features; the shared catalog below, read actions only | — |
-| `builtin.member` | viewer, plus every `write` action on the scope's types; the shared catalog below | — |
+| `builtin.viewer` | every `list` and `read` action on the scope's types; `UseFeature` on the viewer's baseline features; the viewer column of "Platform types" | — |
+| `builtin.member` | viewer, plus every `write` action on the scope's types; the member's baseline features; the member column of "Platform types" | — |
 | `builtin.admin` | every action on the scope's types except the `iam` `attachment` type; `iam:ListAttachments` on `${scope}:iam:attachment/*`; `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}:iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` | anything on `attachment/builtin.owner/*`; `nexus:DeleteWorkspace`; `nexus:DeleteOrganization` |
 | `builtin.owner` | `*` on `${scope}:*`, including every `attachment/…` | — |
 | `builtin.platform_admin` | `*` on `*` (attached without scope) | sealed resources (§11.3), which no policy can unlock |
-| `builtin.self` | auto-attached to every user, no scope: `iam:GetPrincipal` on `abi:-:-:iam:principal/${principal.id}`; `iam:ListKeys`, `iam:CreateKey`, `iam:RevokeKey` on `abi:-:-:iam:key/${principal.id}/*`; `activity_log:Query`, `activity_log:QueryStream` on `abi:-:-:activity_log:actor/${user.id}` | — |
+| `builtin.self` | auto-attached to every user, no scope; the "self" column of "Platform types" | — |
 
-**The shared catalog.** These are platform resources that workspace roles reach:
+**Platform types.** Every platform-level type of every catalog is listed here with who reaches it.
 
-- `model_registry:ListModels`, `Resolve` (viewer), `Chat`, `ChatStream`, `Embed` (member) on
-  `abi:-:-:model_registry:model/*`;
-- `discovery:ListModules`, `ListAgents`, `ListApps`, `OpenApp` (viewer), `InvokeAgent`, `ChatModel`
-  (member) on `abi:-:-:discovery:*`, and `GetAgentRun`, `CancelAgentRun` on
-  `abi:-:-:discovery:run/*/${user.id}/*`.
+- **Viewer and member** are statements of `builtin.viewer` and `builtin.member` with absolute patterns, so
+  they apply whatever the attachment's scope.
+- **Self** is `builtin.self`, held by every user.
+- **None** means only the platform admin, the built-in service accounts and explicit policies.
+
+Because Nexus calls as `api` on behalf of the user, the user must hold these, not only `api`.
+
+| Service:type | Viewer | Member adds | Self | Notes |
+|---|---|---|---|---|
+| `model_registry:model/*` | `ListModels`, `Resolve` | `Chat`, `ChatStream`, `Embed` | — | |
+| `discovery:module/*`, `agent/*`, `app/*` | `ListModules`, `GetModule`, `ListAgents`, `ListApps`, `OpenApp` | `InvokeAgent` | — | Nexus also checks `nexus:UseAgent` / `UseApp` |
+| `discovery:model/*` | — | `ChatModel` | — | |
+| `discovery:run/${principal.id}/*` | `GetAgentRun` | `CancelAgentRun` | — | personal |
+| `discovery:job/*`, `job_run/*` | — | — | — | none: jobs are platform admin |
+| `triple_store:view/*` | `QueryView` | — | — | `Query` rules still apply to the graphs the view reads |
+| `coding_environment:template/*` | `ListTemplates` | — | — | |
+| `coding_environment:coder_user/${principal.id}` | — | — | `EnsureUser` | personal |
+| `source_control:forge_user/${principal.id}` | — | — | `EnsureUser`, `MintGitToken` | personal |
+| `activity_log:actor/${principal.id}` | — | — | `Query`, `QueryStream` | personal |
+| `iam:principal/${principal.id}` | — | — | `GetPrincipal` | |
+| `iam:key/${principal.id}/*` | — | — | `ListKeys`, `CreateKey`, `RevokeKey` | personal API keys |
+| `nexus:organization/-` (platform) | — | — | `CreateOrganization` | removed from `self` when `nexus.organizations.self_service: false` |
+| `nexus:provider_model/*` | `ListProviderModels`, `GetProviderModel` | — | — | |
+| `email:sender/*`, `email:message/*` (unplaced) | — | — | — | none: mail is sent by `api`, `engine` and `idp` |
+| `dataset:catalog/-`, `cache:service/-`, `vector_store:service/-`, `activity_log:service/-` | — | — | — | none: maintenance and lifecycle |
+| unplaced data (`object`, `document`, `key`, `secret`, `graph`, `event_type`, …) | — | — | — | none until placed (§4.4) or granted explicitly |
 
 Which agents and apps a workspace may use stays a Nexus decision: `nexus:UseAgent`, `nexus:UseApp` and
 `UseFeature`, checked before the kernel call.
@@ -1037,7 +1111,7 @@ Which agents and apps a workspace may use stays a Nexus decision: `nexus:UseAgen
   - `api` keeps what Nexus does for users. Because of the OBO intersection, the user still bounds every
     call.
   - `engine` keeps boot, jobs and schedulers.
-- `builtin.idp` covers only its own namespace, secrets and sender (§10.4).
+- `builtin.idp` covers only its own namespace, secrets and sender (§12.3).
 
 ### 8. Service accounts
 
@@ -1089,7 +1163,10 @@ statements:
   - sid: OwnDocuments
     effect: Allow
     actions: ["document:*"]
-    resources: ["abi:-:-:document:*/${module.id}", "abi:-:-:document:*/${module.id}/*"]
+    resources:
+      - "abi:-:-:document:namespace/${module.id}"
+      - "abi:-:-:document:collection/${module.id}/*"
+      - "abi:-:-:document:document/${module.id}/*"
   - sid: ReadOntologyGraphs
     effect: Allow
     actions: ["triple_store:Query", "triple_store:ListGraphs"]
@@ -1227,7 +1304,7 @@ The flow:
   |---|---|
   | `grant_type` | `urn:ietf:params:oauth:grant-type:token-exchange` |
   | `subject_token` | the token being exchanged |
-  | `subject_token_type` | `urn:ietf:params:oauth:token-type:id_token`, `…:access_token` (IdP tokens) or `…:jwt` (engine tokens) |
+  | `subject_token_type` | `urn:ietf:params:oauth:token-type:id_token`, `…:access_token` (IdP tokens), `…:jwt` (engine tokens) or `urn:abi:params:oauth:token-type:api_key` (an `abi_pk_…` key) |
   | `audience` | the wanted audience |
   | `resource` | optional, the canonical name of the target agent, app, project or environment |
   | `scope` | optional, a JSON `abi_scope` list |
@@ -1244,6 +1321,13 @@ The flow:
   - `exp` and `nbf` hold.
 
   Then IAM resolves or creates the principal, maps groups and refuses a suspended principal.
+- **ABI keys** (`urn:abi:params:oauth:token-type:api_key`): IAM checks the hash, the expiry, the revocation
+  and the owner's status.
+  - A personal API key reaches `abi:delegated:api-key` only.
+  - A coding-environment key, a personal key created for one environment (§9.3), reaches
+    `abi:delegated:coding` only.
+  - Either way, `sub` is the key's owner and `abi_scope` is the key's own narrowing.
+  - Service-account keys (`abi_sk_…`) are not exchanged here: they use `abi.iam.v1.token` (§8.2).
 - **Engine tokens** can be exchanged only toward a narrower audience:
   - `session` → `agent`, `app`, `preview`, `coding`;
   - never back to `session`;
@@ -1283,6 +1367,10 @@ class CallContext:
 current_call_context: ContextVar[CallContext]   # default: ANONYMOUS, which every check denies
 ```
 
+**The call's user** is `on_behalf_of` when it is set, else `principal` when it is a user, else none. Services
+use it wherever an operation concerns "the user": the activity actor, the forge or Coder user, the owner of
+a new personal resource. It never comes from a request field.
+
 Helpers:
 
 - `use_call_context(ctx)`: a context manager that sets the variable and resets it on exit.
@@ -1310,6 +1398,15 @@ Every primary adapter sets it **only from verified credentials**:
   an input like any other and is authorized.
 - `HttpRequest.user_id` (app proto), `request.user_id` in `source_control` and `coding_environment`, the
   prompt preamble Nexus prepends for agents, and any `X-User-*` header are not identity.
+
+**Credentials never reach module code.** When Nexus forwards a request to a module (remote apps, the
+built-in IdP route), it forwards an allow-list of headers, never a deny-list. Every credential is dropped:
+
+- `Authorization` and `Cookie` (except the IdP route's own `Path=/idp` cookies, §12.3);
+- `X-Api-Key`;
+- auth-proxy identity headers such as `X-Amzn-Oidc-*`, `X-Auth-Request-*` and `X-Goog-Iap-Jwt-Assertion`.
+
+The module learns who is calling only from the delegated token's verified claims.
 
 **Transition.** Until subtask 8 issues delegated tokens, an `Abi-On-Behalf-Of: <principal id>` header is
 honoured only when the verified caller is `api` or `engine`. Subtask 8 removes it.
@@ -1392,7 +1489,8 @@ A sealed resource is a resource pattern bound to one principal.
 - Seals are declared in code by the service that owns them and loaded at boot. No API changes them, so
   editing policies cannot open them.
 - The seals:
-  - `abi:-:-:document:*/idp` and `abi:-:-:document:*/idp/*`, sealed to `idp`;
+  - `abi:-:-:document:namespace/idp`, `abi:-:-:document:collection/idp/*` and
+    `abi:-:-:document:document/idp/*`, sealed to `idp`;
   - `abi:-:-:secret:secret/idp%2F*`, sealed to `idp`;
   - `abi:-:-:secret:secret/iam%2F*`, sealed to `engine`.
 - An operator who needs the IdP's data back uses the IdP's own admin API or the database directly. That
