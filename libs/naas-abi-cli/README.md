@@ -217,12 +217,14 @@ replaces the local Caddy edge.
   `coder.`, `*.coder.` and `git.` to Coder and Forgejo. `abi` is built from the
   project `Dockerfile` on each deploy, with no source mount
 - Writes `config.dokploy.yaml` (from `config.local.yaml`, read with
-  `ENV=dokploy`) and the `.deploy/docker` files the compose mounts. Its `.env`
-  dotenv secret adapter moves to the `abi_secrets` volume, so secrets the
-  engine writes survive redeploys; the project's other adapters are kept
+  `ENV=dokploy`) and the `.deploy/docker` files the compose mounts. A dotenv
+  secret adapter on the `abi_secrets` volume is added ahead of the project's
+  own, which are kept line for line, so secrets the engine writes survive
+  redeploys. The Environment tab wins over that file
 - Writes the gitignored `.env.dokploy` with generated passwords and keys, to
-  paste into Dokploy's Environment tab. Reruns keep its values; `--regenerate`
-  replaces them and backs the old file up
+  paste into Dokploy's Environment tab; the config secrets it has no value for
+  are commented out. Reruns keep its values; `--regenerate` replaces them and
+  backs the old file up
 - With `--coding`, the minted Coder/Forgejo admin tokens live on the
   `coding_secrets` volume, which the engine reads through a read-only dotenv
   secret adapter, so they survive redeploys. `--wildcard-cert-resolver` names

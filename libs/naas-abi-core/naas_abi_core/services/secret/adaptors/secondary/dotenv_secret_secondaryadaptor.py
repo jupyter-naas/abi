@@ -13,11 +13,21 @@ class DotenvSecretSecondaryAdaptor(ISecretAdapter):
     ``read_only`` serves a file another process owns, such as one on a volume
     mounted read-only: ``set`` and ``remove`` leave it alone, so the service
     can still write to its other adapters.
+
+    Reads take the file first, then the process environment.
+    ``environment_first`` reverses that, so a variable the deployment sets wins
+    over a value saved in the file earlier, as when the config is rendered.
     """
 
-    def __init__(self, path: str = ".env", read_only: bool = False):
+    def __init__(
+        self,
+        path: str = ".env",
+        read_only: bool = False,
+        environment_first: bool = False,
+    ):
         self.path = path
         self.read_only = read_only
+        self.environment_first = environment_first
         self._lock = Lock()
 
         if not os.path.exists(self.path):
@@ -34,11 +44,14 @@ class DotenvSecretSecondaryAdaptor(ISecretAdapter):
 
     def get(self, key: str, default: Any = None) -> str | Any | None:
         with self._lock:
+            env_value = os.environ.get(key)
+            if self.environment_first and env_value is not None:
+                return env_value
+
             secret_value = self.secrets.get(key)
             if secret_value is not None:
                 return str(secret_value)
 
-            env_value = os.environ.get(key)
             if env_value is not None:
                 return env_value
 

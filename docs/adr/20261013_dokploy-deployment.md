@@ -71,12 +71,26 @@ on it:
   its values and `--regenerate` replaces them.
 - **`config.dokploy.yaml`.** The stack sets `ENV=dokploy`. The command derives
   the file from `config.local.yaml` on every run, so the two do not drift. It
-  rewrites only the `services.secret.secret_adapters` list, parsed as YAML,
-  and checks that the result reads back as written. The project's adapters
-  are kept.
-- **The abi_secrets volume.** The dotenv adapter on `.env` reads
-  `/var/lib/abi-secrets/.env` on the `abi_secrets` named volume instead, so
-  secrets the engine writes at runtime survive redeploys.
+  only inserts lines: a dotenv adapter at the head of
+  `services.secret.secret_adapters` (found by indentation, not by the first
+  key of that name) and, with coding, one at its end. The project's adapter
+  lines, comments, quoting and Jinja are copied unchanged. The list is read
+  with the engine's own renderer (`render_without_secrets`, which resolves
+  `{% if %}` and `{% include %}`) before and after, and the command refuses a
+  result that does not read back as the project's list plus the two adapters.
+- **The abi_secrets volume.** The added head adapter reads
+  `/var/lib/abi-secrets/.env` on the `abi_secrets` named volume, so secrets
+  the engine writes at runtime survive redeploys. The project's own `.env`
+  dotenv stays behind it and reads an empty file. A dotenv on `.env.*`
+  (excluded from the image) or on a file missing from the project is refused,
+  since the engine would stop at boot on it.
+- **The Environment tab wins over every secrets file.** Config rendering
+  already reads the environment first. The dotenv adapter takes
+  `environment_first: true`, set on the head adapter, so runtime reads agree:
+  environment, then the secrets file, then the project's adapters.
+  `.env.dokploy` comments out the keys it has no value for, since an empty
+  variable would hide a value in the file. A key saved from Nexus that is also
+  in the Environment tab is replaced by the tab's value on the next deploy.
 - **The coding-secrets volume.** `coding-init` writes the tokens to
   `CODING_SECRETS_FILE`, a dotenv file on the `coding_secrets` named volume.
   `abi` waits for it, mounts the volume read-only, and `config.dokploy.yaml`
@@ -86,12 +100,20 @@ on it:
 - **Read-only dotenv adapters.** The secret service writes to every adapter
   and fails on the first error, so a dotenv on a read-only mount broke every
   secret write. The dotenv adapter takes `read_only: true`: it serves reads,
-  and `set` / `remove` skip it. The coding adapter uses it.
+  and `set` / `remove` skip it, logging a warning when the key is in the
+  file. The coding adapter uses it.
 - **`coding-init` on Dokploy fails loudly.** The bootstrap mints tokens under
   names that carry the time, so a mint after the volume was lost does not
   collide with an existing token. With `CODING_INIT_STRICT=1`, set by the
   Dokploy compose, it exits 1 when a token is still missing, which fails the
   deploy instead of starting `abi` without it.
+- **Aliases rather than Dokploy's isolated deployments.** Isolated
+  deployments connect Traefik to each app's own network and would remove the
+  shared names altogether, but the compose would then depend on a Dokploy
+  setting the repository does not carry, and on how Dokploy rewrites the
+  compose's networks, while Coder workspaces and CI jobs join a network by a
+  name the stack sets. The aliases keep the stack self-contained; the guide
+  states that internal URLs must use them.
 - **A fixed network name.** The internal network is named
   `${ABI_STACK_NAME}-abi-network`. Coder workspaces, the act-runner config
   (inlined as a Compose `configs:` entry, so it reads the same variable) and
@@ -118,9 +140,13 @@ on it:
 - Workspace apps on `*.coder` need a DNS-challenge resolver on the Dokploy
   server and a rerun with `--wildcard-cert-resolver`; until then they get
   Traefik's default certificate.
-- A key saved from Nexus lands in the `abi_secrets` file, which runtime reads
-  consult before the environment: it wins over the Environment tab until it
-  is deleted in Nexus.
+- A key is managed either in the Environment tab or from Nexus, not both:
+  the tab's value replaces a Nexus save on the next deploy.
+- Deleting a coding token in Nexus does not remove it: it is still served
+  from the read-only file until the `coding_secrets` volume is deleted.
+- A secret the config reads that is in neither the Environment tab nor the
+  secrets file stops the engine at boot, where an empty value used to let it
+  start.
 - A project config that calls Coder or Forgejo from `abi` must use their
   public URLs or the stack aliases, not the bare service names. Another
   Dokploy app that puts a service named like an internal one (`postgres`,

@@ -6,6 +6,12 @@ from pathlib import Path
 import pytest
 import yaml
 from click.testing import CliRunner
+from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+    EngineConfiguration,
+)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_SecretService import (
+    SecretServiceConfiguration,
+)
 
 from naas_abi_cli.cli.deploy.deploy import deploy
 from naas_abi_cli.cli.deploy.dokploy import (
@@ -81,8 +87,9 @@ def _env(project: Path) -> dict[str, str]:
 
 
 def _secret_adapters(project: Path) -> list:
+    """The engine's view of config.dokploy.yaml, with every secret empty."""
     text = (project / CONFIG_FILE).read_text(encoding="utf-8")
-    config = yaml.safe_load(re.sub(r"\{\{.*?\}\}", "x", text))
+    config = EngineConfiguration.render_without_secrets(text, base_dir=str(project))
     return config["services"]["secret"]["secret_adapters"]
 
 
@@ -213,6 +220,14 @@ def test_the_wildcard_certificate_is_requested_only_from_a_dns_resolver(
     _deploy(project, include_coding=True, wildcard_cert_resolver="route53")
     assert _env(project)["CODER_WILDCARD_CERT_RESOLVER"] == "route53"
 
+    # A run without --coding keeps it for the next --coding run.
+    _deploy(project, domain=None)
+    text = (project / ENV_FILE).read_text(encoding="utf-8")
+    assert text.count("CODER_WILDCARD_CERT_RESOLVER=") == 1
+    assert _env(project)["CODER_WILDCARD_CERT_RESOLVER"] == "route53"
+    coder = _labels(_deploy(project, include_coding=True)["services"]["coder"])
+    assert coder[f"{apps}.tls.domains[0].sans"] == "*.coder.${PUBLIC_WEB_HOST}"
+
 
 def test_a_wildcard_resolver_without_coding_is_refused(tmp_path: Path) -> None:
     with pytest.raises(DokployDeployError, match="--coding"):
@@ -260,10 +275,13 @@ def test_the_env_holds_every_variable_the_compose_needs(
     assert ("NATS_JWT_SECRET" in env) is nats
     assert ("NATS_ABI_PASSWORD" in env) is nats
     assert ("RABBITMQ_PASSWORD" in env) is not nats
-    # Every secret the config reads is present, so the engine never prompts.
-    assert "OPENROUTER_API_KEY" in env
+    # Every secret the config reads is listed, commented out until filled in:
+    # an empty variable would still win over the engine's secrets file.
+    lines = (project / ENV_FILE).read_text(encoding="utf-8").splitlines()
+    assert "# OPENROUTER_API_KEY=" in lines
+    assert "OPENROUTER_API_KEY" not in env
     # A commented-out module is not a requirement.
-    assert "OPENAI_API_KEY" not in env
+    assert not any("OPENAI_API_KEY" in line for line in lines)
     # The minted tokens live on the coding_secrets volume: an empty value here
     # would shadow them (environment variables win over dotenv files).
     assert "CODER_ADMIN_TOKEN" not in env
@@ -343,6 +361,17 @@ def test_the_deploy_files_the_compose_mounts_are_rendered(
         assert 'ENV_FILE="${CODING_SECRETS_FILE:-/host/.env}"' in script
 
 
+_PERSISTENT = {
+    "adapter": "dotenv",
+    "config": {"path": SECRETS_FILE, "environment_first": True},
+}
+_MINTED = {
+    "adapter": "dotenv",
+    "config": {"path": CODING_SECRETS_FILE, "read_only": True},
+}
+_PROJECT_DOTENV = {"adapter": "dotenv", "config": {}}
+
+
 @pytest.mark.parametrize("nats, coding", MODES)
 def test_the_dokploy_config_keeps_secrets_on_volumes(
     tmp_path: Path, nats: bool, coding: bool
@@ -352,19 +381,14 @@ def test_the_dokploy_config_keeps_secrets_on_volumes(
     text = (project / CONFIG_FILE).read_text(encoding="utf-8")
     services = compose["services"]
 
-    persistent = {"adapter": "dotenv", "config": {"path": SECRETS_FILE}}
-    minted = {
-        "adapter": "dotenv",
-        "config": {"path": CODING_SECRETS_FILE, "read_only": True},
-    }
     assert _secret_adapters(project) == (
-        [persistent, minted] if coding else [persistent]
+        [_PERSISTENT, _PROJECT_DOTENV] + ([_MINTED] if coding else [])
     )
     # Every service that reads the config has the writable secrets volume.
     readers = ["abi"] + ([] if nats else ["dagster"])
     for name in readers:
         assert "abi_secrets:/var/lib/abi-secrets" in services[name]["volumes"], name
-        assert "touch /var/lib/abi-secrets/.env" in str(services[name]["command"])
+        assert "touch /var/lib/abi-secrets/.env .env" in str(services[name]["command"])
         if coding:
             assert "coding_secrets:/run/abi-secrets:ro" in services[name]["volumes"]
     assert "abi_secrets" in compose["volumes"]
@@ -382,7 +406,14 @@ def test_the_dokploy_config_keeps_secrets_on_volumes(
     assert "#     openai_api_key:" in text
 
 
-_OWN_ADAPTERS = """services:
+_OWN_ADAPTERS = """\
+modules:
+  - module: demo
+    config:
+      # Not the engine's list: left alone.
+      secret_adapters:
+        - adapter: "dotenv"
+services:
   secret:
     secret_adapters:
       - adapter: "dotenv"
@@ -393,10 +424,12 @@ _OWN_ADAPTERS = """services:
       - adapter: "naas"
         config:
           naas_api_key: "{{ secret.NAAS_API_KEY }}"
-          naas_api_url: "https://api.naas.ai"
+          naas_api_url: 'https://api.naas.ai'
+      # - adapter: "dotenv"
+      #   config: {path: "spare.env"}
       - adapter: "base64"
         config:
-          base64_secret_key: "ABI_SECRETS"
+          base64_secret_key: "{{ secret.B64 }}"
           secret_adapter:
             adapter: "dotenv"
             config: {}
@@ -406,38 +439,35 @@ _OWN_ADAPTERS = """services:
 
 
 @pytest.mark.parametrize("trailing_newline", [True, False])
-def test_the_projects_own_secret_adapters_are_kept(
+def test_the_projects_own_secret_adapters_are_kept_line_for_line(
     tmp_path: Path, trailing_newline: bool
 ) -> None:
     config = _OWN_ADAPTERS + ("\n" if trailing_newline else "")
     project = _project(tmp_path, nats=False, config=config)
+    (project / "config").mkdir()
+    (project / "config/extra.env").touch()
     _deploy(project, include_coding=True)
 
     assert _secret_adapters(project) == [
+        _PERSISTENT,
         {"adapter": "dotenv", "config": {"path": "config/extra.env"}},
         {
             "adapter": "naas",
-            "config": {"naas_api_key": "x", "naas_api_url": "https://api.naas.ai"},
+            "config": {"naas_api_key": "", "naas_api_url": "https://api.naas.ai"},
         },
         {
             "adapter": "base64",
-            "config": {
-                "base64_secret_key": "ABI_SECRETS",
-                "secret_adapter": {
-                    "adapter": "dotenv",
-                    "config": {"path": SECRETS_FILE},
-                },
-            },
+            "config": {"base64_secret_key": "", "secret_adapter": _PROJECT_DOTENV},
         },
-        {
-            "adapter": "dotenv",
-            "config": {"path": CODING_SECRETS_FILE, "read_only": True},
-        },
+        _MINTED,
     ]
     text = (project / CONFIG_FILE).read_text(encoding="utf-8")
-    assert text.count("secret_adapters:") == 1
-    assert "naas_api_key: '{{ secret.NAAS_API_KEY }}'" in text
-    assert "NAAS_API_KEY" in _env(project)
+    # The project's lines, quoting and comments are unchanged.
+    original = config.split("\n    secret_adapters:\n", 1)[1].split("  kv:", 1)[0]
+    assert original in text
+    assert text.count("secret_adapters:") == 2
+    assert '      secret_adapters:\n        - adapter: "dotenv"\nservices:' in text
+    assert "NAAS_API_KEY" in (project / ENV_FILE).read_text(encoding="utf-8")
 
 
 def test_secret_adapters_at_the_end_of_the_file_are_not_duplicated(
@@ -448,12 +478,45 @@ def test_secret_adapters_at_the_end_of_the_file_are_not_duplicated(
     project = _project(tmp_path, nats=True, config=config)
     _deploy(project, include_coding=True)
 
+    assert _secret_adapters(project) == [_PERSISTENT, _PROJECT_DOTENV, _MINTED]
+
+
+@pytest.mark.parametrize("coding", [False, True])
+def test_jinja_control_flow_and_includes_are_kept(tmp_path: Path, coding: bool) -> None:
+    config = _CONFIG.replace(
+        "api:\n  title: demo\n",
+        "api:\n  title: demo\n{% if true %}\n  extra: 1\n{% endif %}\n"
+        "{% include 'api.yaml' %}\n",
+    ).replace(
+        '      - adapter: "dotenv"\n        config: {}\n',
+        '{% for name in ["dotenv"] %}\n'
+        '      - adapter: "{{ name }}"\n        config: {}\n{% endfor %}\n',
+    )
+    project = _project(tmp_path, nats=True, config=config)
+    (project / "api.yaml").write_text("  version: 2\n", encoding="utf-8")
+    _deploy(project, include_coding=coding)
+
     text = (project / CONFIG_FILE).read_text(encoding="utf-8")
-    assert "config: {}" not in text
-    assert [a["config"]["path"] for a in _secret_adapters(project)] == [
-        SECRETS_FILE,
-        CODING_SECRETS_FILE,
-    ]
+    assert "{% if true %}\n  extra: 1\n{% endif %}\n{% include 'api.yaml' %}" in text
+    assert _secret_adapters(project) == (
+        [_PERSISTENT, _PROJECT_DOTENV] + ([_MINTED] if coding else [])
+    )
+
+
+@pytest.mark.parametrize(
+    "path, reason",
+    [(".env.prod", ".dockerignore"), ("secrets/missing.env", "not in the project")],
+)
+def test_a_dotenv_the_image_will_not_have_is_refused(
+    tmp_path: Path, path: str, reason: str
+) -> None:
+    config = _CONFIG.replace("config: {}", f'config:\n          path: "{path}"')
+    project = _project(tmp_path, nats=True, config=config)
+    if path.startswith(".env"):
+        (project / path).touch()  # present locally, excluded from the image
+
+    with pytest.raises(DokployDeployError, match=reason):
+        _deploy(project)
 
 
 def test_a_failed_render_writes_nothing(tmp_path: Path) -> None:
@@ -607,30 +670,40 @@ def test_the_engine_reads_minted_tokens_and_writes_to_its_volume(
     tmp_path: Path, monkeypatch
 ) -> None:
     from dotenv import dotenv_values
-    from naas_abi_core.engine.engine_configuration.EngineConfiguration_SecretService import (
-        SecretServiceConfiguration,
-    )
 
     project = _project(tmp_path, nats=True)
     _deploy(project, include_coding=True)
     text = (project / CONFIG_FILE).read_text(encoding="utf-8")
-    # The abi container: both volumes mounted, coding_secrets read-only.
-    secrets_volume, coding_volume = tmp_path / "abi-secrets", tmp_path / "coding"
-    secrets_volume.mkdir()
-    coding_volume.mkdir()
-    (secrets_volume / ".env").touch()  # the container command touches it
+    # The abi container: /app with an empty .env, both volumes mounted,
+    # coding_secrets read-only.
+    app, secrets_volume, coding_volume = (
+        tmp_path / "app",
+        tmp_path / "abi-secrets",
+        tmp_path / "coding",
+    )
+    for directory in (app, secrets_volume, coding_volume):
+        directory.mkdir()
+    (app / ".env").touch()  # the container command touches both
+    (secrets_volume / ".env").write_text(
+        "SAVED_KEY=saved\nTAB_KEY=stale\n", encoding="utf-8"
+    )
     minted = coding_volume / "coding.env"
     minted.write_text("CODER_ADMIN_TOKEN=minted\n", encoding="utf-8")
     minted.chmod(0o444)
     text = text.replace("/var/lib/abi-secrets", str(secrets_volume))
     text = text.replace("/run/abi-secrets", str(coding_volume))
-    block = yaml.safe_load(re.sub(r"\{\{.*?\}\}", "x", text))["services"]["secret"]
-    monkeypatch.delenv("CODER_ADMIN_TOKEN", raising=False)
-    monkeypatch.delenv("NEXUS_USER_DEMO_PASSWORD", raising=False)
+    monkeypatch.chdir(app)
+    for key in ("CODER_ADMIN_TOKEN", "SAVED_KEY", "NEXUS_USER_DEMO_PASSWORD"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("TAB_KEY", "from-the-tab")  # set in the Environment tab
 
-    secret = SecretServiceConfiguration(**block).load()
+    config = EngineConfiguration.render_without_secrets(text, base_dir=str(app))
+    secret = SecretServiceConfiguration(**config["services"]["secret"]).load()
 
     assert secret.get("CODER_ADMIN_TOKEN") == "minted"
+    assert secret.get("SAVED_KEY") == "saved"
+    # The Environment tab wins over the file, as when the config is rendered.
+    assert secret.get("TAB_KEY") == "from-the-tab"
     # A secret stored at runtime (a generated user password) lands on the
     # writable volume; the read-only file is left alone.
     secret.set("NEXUS_USER_DEMO_PASSWORD", "generated")

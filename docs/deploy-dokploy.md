@@ -37,16 +37,18 @@ It writes:
 
 - `docker-compose.dokploy.yml`: the stack. NATS or classic follows the
   project's config, like `abi deploy local`.
-- `config.dokploy.yaml`: a copy of `config.local.yaml` with its secret
-  adapters set for Dokploy (see [Secrets](#secrets)). Only the
-  `secret_adapters` list is rewritten; the rest of the file, comments
-  included, is copied as is.
+- `config.dokploy.yaml`: a copy of `config.local.yaml` with Dokploy's secret
+  adapters added to `services.secret.secret_adapters` (see
+  [Secrets](#secrets)). Nothing else changes: the project's adapters,
+  comments and Jinja (`{% if %}`, `{% include %}`) are copied line for line.
 - `.deploy/docker/`: the Postgres init scripts, `nats.conf`, `dagster.yaml`
   and, with `--coding`, the coding bootstrap script. The compose mounts them
   from the repository.
 - `.env.dokploy`: every variable the stack needs, with generated passwords and
-  keys. It is added to `.gitignore`; `.env` and `.env.*` are added to
-  `.dockerignore`, so the Environment tab never ends up in the image.
+  keys. The secrets the config reads that have no value yet, such as
+  `OPENROUTER_API_KEY`, are listed commented out at the end. It is added to
+  `.gitignore`; `.env` and `.env.*` are added to `.dockerignore`, so the
+  Environment tab never ends up in the image.
 
 Rerun the command after upgrading the CLI or editing `config.local.yaml`: the
 compose file, `config.dokploy.yaml` and `.deploy/docker` are rewritten, and the
@@ -87,9 +89,12 @@ settings if it is not set yet.
      (`use_local_abi_sources`), enable submodules.
 3. **Compose type**: Docker Compose. **Compose path**:
    `./docker-compose.dokploy.yml`.
-4. **Environment**: paste the content of `.env.dokploy`, and fill in the empty
-   values it lists at the end, such as `OPENROUTER_API_KEY`. Dokploy writes
-   the tab to `.env` next to the compose file on every deploy.
+4. **Environment**: paste the content of `.env.dokploy`, then uncomment and
+   fill in the keys it lists commented out at the end, such as
+   `OPENROUTER_API_KEY`. Leave a key commented out only if the engine's
+   secrets file already holds it (see [Secrets](#secrets)): the engine stops
+   at boot on a secret it finds nowhere. Dokploy writes the tab to `.env` next
+   to the compose file on every deploy.
 5. Leave the **Domains** tab empty: routing is in the compose labels. Leave
    **Isolated Deployment** and **Randomize Compose** off, since the stack joins
    `dokploy-network` itself and its router names come from `ABI_STACK_NAME`.
@@ -107,10 +112,10 @@ The Environment tab is the source of truth for a deployed stack. Each variable
 in it:
 
 - is interpolated into the compose file, and
-- reaches the `abi` engine as an environment variable (`env_file: .env`).
-  When the engine renders `config.dokploy.yaml`, environment variables come
-  before the dotenv files, so every `{{ secret.X }}` in the config can be set
-  here. Add the keys of the modules you enable to this tab.
+- reaches the `abi` engine as an environment variable (`env_file: .env`), and
+  wins over every secrets file (see [Secrets](#secrets)). Every
+  `{{ secret.X }}` in the config can be set here. Add the keys of the modules
+  you enable to this tab.
 
 Variables specific to this stack:
 
@@ -119,33 +124,39 @@ Variables specific to this stack:
 | `ABI_STACK_NAME` | Prefix of the Traefik router names, of the stack's DNS aliases (`<name>-abi`, ...) and name of the internal network (`<name>-abi-network`). Unique per stack on a server. |
 | `PUBLIC_WEB_HOST`, `PUBLIC_API_HOST`, `NEXUS_API_URL` | Public hosts and the API URL the browser calls. |
 | `TRAEFIK_CERT_RESOLVER` | Traefik certificate resolver; Dokploy's is `letsencrypt`. |
-| `CODER_WILDCARD_CERT_RESOLVER` | DNS-challenge resolver of the `*.coder` certificate. Written by `--wildcard-cert-resolver`; absent until then. |
+| `CODER_WILDCARD_CERT_RESOLVER` | DNS-challenge resolver of the `*.coder` certificate. Written by `--wildcard-cert-resolver`, absent until then, and kept by later runs. |
 
 Changing a value takes effect on the next deploy.
 
 ## Secrets
 
-The image has no `.env` of its own, and the container's files are replaced on
-every deploy. `config.dokploy.yaml` therefore keeps the project's secret
-adapters with two changes:
+The container's files are replaced on every deploy, so `config.dokploy.yaml`
+adds two dotenv adapters on named volumes to the project's own:
 
-- The dotenv adapter on `.env` (the default one `abi new project` writes)
-  reads `/var/lib/abi-secrets/.env` on the `abi_secrets` volume instead. What
-  the engine stores at runtime goes there and survives redeploys: passwords it
-  generates for users in `users:` with no password set, keys saved from the
-  Nexus admin console. The engine creates the file on start.
-- With `--coding`, a read-only dotenv adapter reads the minted Coder and
-  Forgejo tokens from the `coding_secrets` volume (see
-  [Coding workspaces](#coding-workspaces)). Writes skip it.
+- **First, the engine's secrets file**: `/var/lib/abi-secrets/.env` on the
+  `abi_secrets` volume, which the container creates on start. Every secret the
+  engine writes lands there and survives redeploys: passwords it generates for
+  users in `users:` that have none, keys saved from the Nexus admin console.
+- **Last, with `--coding`, the coding tokens**: a read-only adapter on the
+  `coding_secrets` volume (see [Coding workspaces](#coding-workspaces)).
+  Writes skip it, so deleting `CODER_ADMIN_TOKEN` or `FORGEJO_ADMIN_TOKEN` in
+  Nexus reports success but the token is still served from that file. Delete
+  the volume to replace them.
 
-Other adapters (`naas`, `base64`, a dotenv on another path) are kept as they
-are. A dotenv on another relative path reads a file in the image: the engine
-cannot keep what it writes there.
+The project's adapters stay between the two, unchanged. Its default dotenv on
+`.env` reads an empty file: `.env` is kept out of the image. A dotenv on
+`.env.*`, also kept out of the image, or on a file that is not in the project
+cannot work on Dokploy, and the command refuses it: move its values to the
+Environment tab.
 
-Code that reads secrets at runtime asks the adapters in order, and a dotenv
-adapter answers from its file before the environment. A key saved from Nexus
-therefore wins over the same key in the Environment tab. To go back to the
-Environment tab's value, delete the key in Nexus.
+**The Environment tab wins.** A key set there is the value the engine sees,
+both when it renders `config.dokploy.yaml` and when code reads the secret
+service at runtime: the secrets file comes after the environment. The file
+serves the keys the tab does not set. A key saved from Nexus that is also in
+the tab takes effect at once and is replaced by the tab's value on the next
+deploy; to manage a key from Nexus, leave it out of the tab. This is why
+`.env.dokploy` comments out the keys it has no value for: an empty variable
+would still win over the file.
 
 ## Another environment
 
@@ -162,10 +173,12 @@ The services Traefik reaches (`abi`, `nexus-web`, and with `--coding`
 `coder` and `forgejo`) join `dokploy-network` under their service names, and
 so do those of every other stack on the server. From one of these containers a
 bare name such as `abi` can resolve to another stack. The stack's own calls
-use aliases that exist only on its internal network: `<ABI_STACK_NAME>-abi`,
-`-nexus-web`, `-coder` and `-forgejo`. Follow the same rule in
-`config.local.yaml`: when `abi` calls Coder or Forgejo, use their public URLs
-or these aliases, never `http://coder:7080` or `http://forgejo:3000`. The other
+use aliases that exist only on its internal network:
+`${ABI_STACK_NAME}-<service>`, that is `<ABI_STACK_NAME>-abi`, `-nexus-web`,
+`-coder` and `-forgejo`. Internal URLs between these services must use these
+aliases. Follow the same rule in `config.local.yaml`: when `abi` calls Coder or
+Forgejo, use their public URLs or these aliases, never `http://coder:7080` or
+`http://forgejo:3000`. The other
 services (`postgres`, `nats`, `redis`, ...) are only on the internal network;
 keep services of other Dokploy apps with those names off `dokploy-network`.
 

@@ -62,3 +62,22 @@ def test_a_read_only_file_beside_a_writable_one_lets_the_service_write(
     secret.remove(key)
     assert key not in dotenv_values(writable)
     assert secret.get("CODER_ADMIN_TOKEN") == "minted"
+
+
+def test_environment_first_lets_the_environment_win_over_the_file(
+    tmp_path, monkeypatch
+):
+    key, only_in_file = "ABI_DOTENV_ENV_FIRST_TEST", "ABI_DOTENV_ENV_FIRST_FILE"
+    path = tmp_path / ".env"
+    path.write_text(f"{key}=saved\n{only_in_file}=saved\n")
+    monkeypatch.setenv(key, "deployed")
+    monkeypatch.delenv(only_in_file, raising=False)
+
+    assert DotenvSecretSecondaryAdaptor(str(path)).get(key) == "saved"
+    adapter = DotenvSecretSecondaryAdaptor(str(path), environment_first=True)
+    assert adapter.get(key) == "deployed"
+    assert adapter.get(only_in_file) == "saved"
+    # A value saved in this process is seen at once.
+    adapter.set(key, "changed")
+    assert adapter.get(key) == "changed"
+    assert dotenv_values(path)[key] == "changed"
