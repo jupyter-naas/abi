@@ -56,7 +56,7 @@ Constraints found while reviewing it:
 
 - Events already in the log that carry ids (agent and analytics events) resolve to people and workspaces as soon as the graph exists. No migration is needed.
 - Uploads, triple-store writes and other service events caused by a Nexus request now carry the actor and workspace without changes to those services.
-- A first boot on a fresh database logs one event per seeded record. For the current Forvis Mazars configuration that is 576 events (87 users, 26 workspaces, 311 memberships, 64 app configurations). Later boots log only what the seed actually changes.
+- A first boot on a fresh database logs one event per seeded record. For one production configuration that is 576 events (87 users, 26 workspaces, 311 memberships, 64 app configurations). Later boots log only what the seed actually changes.
 - Names and emails live in Postgres and in the identity graph, never in the event log. `AnalyticsEventRecorded` no longer writes `user_email` (column or payload); the analytics adapter restores it on read from its user directory (`ref-users.json`), which stays mutable, so an address can be changed or erased. Events written before 2026-09-10 keep theirs.
 - Configuration values that come from `{{ secret.* }}` templates are resolved before the graph sees them. Secrets are filtered by key name (`password`, `secret`, `token`, `api_key`, `database_url`, …), not by origin. With the current configuration that keeps `email_from_name` and `frontend_url`, which are public-facing.
 - Bulk SQL `update()` / `delete()` statements bypass the ORM listener. The only one (demoting the previous default agent) now updates ORM rows, locked `FOR UPDATE`; any new bulk statement on an identity table is reported as a warning (`do_orm_execute`).

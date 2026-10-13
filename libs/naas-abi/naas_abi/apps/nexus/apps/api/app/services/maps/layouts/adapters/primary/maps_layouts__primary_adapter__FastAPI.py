@@ -45,6 +45,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.layouts__schema impo
     MapsLayoutNotFoundError,
     MapsLayoutPolicyError,
     MapsLayoutValidationError,
+    legacy_group_label,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.service import MapsLayoutService
 from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.factory import (
@@ -78,7 +79,9 @@ class LayoutIn(BaseModel):
     order: int = 100
     feed_type: str = FEED_SPARQL
     feed_url: str = Field(default="", max_length=500)
-    category: str = Field(default="custom", max_length=48)
+    # Sidebar group label. ``category`` is the pre-``group`` slug, read when no group is sent.
+    group: str = Field(default="", max_length=80)
+    category: str = Field(default="", max_length=48)
     logo_url: str = Field(default="", max_length=500)
     basemap_id: str = Field(default="", max_length=48)
     meta_label: str = Field(default="", max_length=120)
@@ -99,6 +102,10 @@ class ColorIn(BaseModel):
 
 def layout_seed_revisions(request: Request) -> dict[str, int]:
     return maps_seed_registry(request.app).layout_revisions()
+
+
+def hidden_layout_seeds(request: Request) -> dict[str, int]:
+    return dict(maps_seed_registry(request.app).hidden_layouts)
 
 
 def layout_seeds(request: Request) -> list[MapsLayout]:
@@ -164,7 +171,7 @@ def _layout(layout_id: str, body: LayoutIn) -> MapsLayout:
         order=body.order,
         feed_type=body.feed_type,
         feed_url=body.feed_url.strip(),
-        category=body.category.strip() or "custom",
+        group=body.group.strip() or legacy_group_label(body.category),
         logo_url=body.logo_url.strip(),
         basemap_id=body.basemap_id.strip(),
         meta_label=body.meta_label.strip(),
@@ -183,7 +190,10 @@ async def list_layouts(
     await require_workspace_access(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
     listed = await service.list(
-        workspace_id, seeds=layout_seeds(request), revisions=layout_seed_revisions(request)
+        workspace_id,
+        seeds=layout_seeds(request),
+        revisions=layout_seed_revisions(request),
+        hidden_seeds=hidden_layout_seeds(request),
     )
     role = await get_workspace_role(current_user.id, workspace_id)
     return {

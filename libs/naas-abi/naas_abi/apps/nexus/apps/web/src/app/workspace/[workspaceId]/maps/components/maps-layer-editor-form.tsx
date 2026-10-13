@@ -1,11 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Download, Loader2, Play, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input, Select, Textarea } from '@/components/ui/input';
-import type { MapsLayerGroupId } from '../lib/datasets';
 import { MapsIconGallery } from './maps-icon-gallery';
 import {
   downloadLayerTemplate,
@@ -14,12 +13,7 @@ import {
   slugifyLayerSlug,
   validateLayerSlug,
 } from '../lib/maps-imported-layers';
-import {
-  BUILTIN_LAYER_GROUPS,
-  CREATE_LAYER_GROUP_VALUE,
-  resolveLayerGroupSelection,
-  type CustomLayerGroup,
-} from '../lib/maps-layer-groups';
+import { DEFAULT_LAYER_GROUP, MAX_LAYER_GROUP_LENGTH } from '../lib/maps-layer-groups';
 import {
   blankLayout,
   LayoutApiError,
@@ -30,7 +24,6 @@ import {
 } from '../lib/layouts-api';
 import { isFeedLayout, type WorkspaceMapLayout } from '../lib/layouts';
 import { useMapsStore } from '@/stores/maps';
-import { setWorkspaceLayerGroupId } from '../lib/maps-workspace-layer-meta';
 import { useWorkspaceGraphs } from '../lib/use-workspace-graphs';
 import { ALL_LAYERS_ID } from '../lib/layouts';
 import { FALLBACK_BASEMAP_ID, splitBasemapPickerDefs } from '../lib/maps-basemaps';
@@ -55,10 +48,10 @@ function layoutSlugError(slug: string, isNew: boolean, takenIds: ReadonlySet<str
 export function MapsLayerEditorForm({
   workspaceId,
   takenIds,
-  customLayerGroups,
+  layerGroups,
   canEdit,
   workspaceLayout,
-  initialGroupId = 'custom',
+  initialGroup = DEFAULT_LAYER_GROUP,
   initialSource = 'geojson',
   variant,
   formId = 'maps-layer-editor-form',
@@ -67,11 +60,12 @@ export function MapsLayerEditorForm({
 }: {
   workspaceId: string;
   takenIds: ReadonlySet<string>;
-  customLayerGroups: ReadonlyArray<CustomLayerGroup>;
+  /** Group labels already in use, suggested by the group field. */
+  layerGroups: readonly string[];
   canEdit: boolean;
   /** When set, edit mode for that record (SPARQL or feed; source tabs hidden). */
   workspaceLayout: WorkspaceMapLayout | null;
-  initialGroupId?: MapsLayerGroupId;
+  initialGroup?: string;
   /** Tab a new record starts on. */
   initialSource?: LayerDataSource;
   variant: 'modal' | 'page';
@@ -95,8 +89,8 @@ export function MapsLayerEditorForm({
     const { id: _id, ...rest } = workspaceLayout;
     return rest;
   });
-  const [groupSelection, setGroupSelection] = useState<string>(initialGroupId);
-  const [newGroupName, setNewGroupName] = useState('');
+  const [group, setGroup] = useState(initialGroup);
+  const groupListId = useId();
   const [geoJsonText, setGeoJsonText] = useState('');
   const [featureCount, setFeatureCount] = useState<number | null>(null);
   const [preview, setPreview] = useState<LayoutPreview | null>(null);
@@ -108,8 +102,6 @@ export function MapsLayerEditorForm({
     [basemapCatalog],
   );
   const [defaultBasemapId, setDefaultBasemapId] = useState(FALLBACK_BASEMAP_ID);
-
-  const creatingGroup = groupSelection === CREATE_LAYER_GROUP_VALUE;
 
   useEffect(() => {
     if (!isEdit || !workspaceLayout) return;
@@ -172,19 +164,14 @@ export function MapsLayerEditorForm({
     }
   };
 
-  const persistGroup = (layerId: string) => {
-    const resolved = resolveLayerGroupSelection(workspaceId, groupSelection, newGroupName);
-    if (resolved.groupId) setWorkspaceLayerGroupId(workspaceId, layerId, resolved.groupId);
-  };
-
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const nextErrors: string[] = [];
     if (!draft.title.trim()) nextErrors.push('Title is required.');
     if (slugErr) nextErrors.push(slugErr);
-    if (creatingGroup) {
-      const g = resolveLayerGroupSelection(workspaceId, groupSelection, newGroupName);
-      if (g.error) nextErrors.push(g.error);
+    const groupLabel = group.trim() || DEFAULT_LAYER_GROUP;
+    if (groupLabel.length > MAX_LAYER_GROUP_LENGTH) {
+      nextErrors.push(`Group name is too long (max ${MAX_LAYER_GROUP_LENGTH}).`);
     }
 
     if (source === 'geojson') {
@@ -212,11 +199,6 @@ export function MapsLayerEditorForm({
           setErrors([parsed.error]);
           return;
         }
-        const resolved = resolveLayerGroupSelection(workspaceId, groupSelection, newGroupName);
-        if (resolved.error || !resolved.groupId) {
-          setErrors([resolved.error ?? 'Could not assign a layer group.']);
-          return;
-        }
         const layerId = slug.trim();
         const basemap =
           defaultBasemapId && defaultBasemapId !== FALLBACK_BASEMAP_ID
@@ -229,7 +211,7 @@ export function MapsLayerEditorForm({
           icon: draft.icon,
           color: draft.color,
           order: draft.order,
-          groupId: resolved.groupId,
+          group: groupLabel,
           featureCollection: parsed.collection,
           defaultBasemapId: basemap,
         });
@@ -245,18 +227,12 @@ export function MapsLayerEditorForm({
 
       const layoutId = isNew ? slug.trim() : workspaceLayout!.id;
       if (source === 'feed') {
-        // Feed layers keep their group on the record (shared), not in this browser.
-        const resolved = resolveLayerGroupSelection(workspaceId, groupSelection, newGroupName);
-        if (resolved.error || !resolved.groupId) {
-          setErrors([resolved.error ?? 'Could not assign a layer group.']);
-          return;
-        }
         const saved = await layoutsApi.save(workspaceId, layoutId, {
           ...draft,
           title: draft.title.trim(),
           feed_type: 'geojson_url',
           feed_url: (draft.feed_url ?? '').trim(),
-          category: resolved.groupId,
+          group: groupLabel,
           query: '',
           graphs: [],
           fit_max_zoom: draft.fit_max_zoom || null,
@@ -271,8 +247,8 @@ export function MapsLayerEditorForm({
         title: draft.title.trim(),
         icon: draft.icon,
         color: draft.color,
+        group: groupLabel,
       });
-      persistGroup(saved.id);
       await loadLayouts(workspaceId, true);
       onSavedWorkspace(saved);
     } catch (e) {
@@ -395,38 +371,24 @@ export function MapsLayerEditorForm({
 
       <label className="maps-new-layer-form__field">
         <span>Layer group</span>
-        <Select
-          value={groupSelection}
+        <Input
+          value={group}
           disabled={readOnly}
-          onChange={(e) => setGroupSelection(e.target.value)}
+          list={groupListId}
+          maxLength={MAX_LAYER_GROUP_LENGTH}
+          onChange={(e) => setGroup(e.target.value)}
+          placeholder={DEFAULT_LAYER_GROUP}
           data-testid="maps-new-layer-group"
-        >
-          {BUILTIN_LAYER_GROUPS.map((group) => (
-            <option key={group.id} value={group.id}>
-              {group.label}
-            </option>
+        />
+        <datalist id={groupListId}>
+          {layerGroups.map((label) => (
+            <option key={label} value={label} />
           ))}
-          {customLayerGroups.map((group) => (
-            <option key={group.id} value={group.id}>
-              {group.label}
-            </option>
-          ))}
-          <option value={CREATE_LAYER_GROUP_VALUE}>Create new group…</option>
-        </Select>
+        </datalist>
+        <span className="maps-new-layer-form__hint-block">
+          Pick a group in use or type a new one. Layers with the same group are listed together.
+        </span>
       </label>
-
-      {creatingGroup ? (
-        <label className="maps-new-layer-form__field">
-          <span>New group name</span>
-          <Input
-            value={newGroupName}
-            disabled={readOnly}
-            onChange={(e) => setNewGroupName(e.target.value)}
-            placeholder="Operations, Exercises…"
-            data-testid="maps-new-layer-group-name"
-          />
-        </label>
-      ) : null}
 
       <div className="maps-new-layer-form__row">
         <label className="maps-new-layer-form__field">

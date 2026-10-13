@@ -1,8 +1,3 @@
-import {
-  isMapsCategoryVisible,
-  MAPS_VISIBLE_CATEGORIES,
-} from './maps-deployment';
-
 export type MapsBuiltinDatasetId =
   | 'earthquakes'
   | 'wildfires'
@@ -26,49 +21,19 @@ export type MapsBuiltinDatasetId =
  */
 export type MapsDatasetId = MapsBuiltinDatasetId | (string & {});
 
-/** Sidebar / legend grouping for map layers. */
-export type MapsDatasetCategory =
-  | 'environment'
-  | 'sigint'
-  | 'situation'
-  | 'organizations-facility'
-  | 'custom';
-
-/** Built-in sidebar group or `user-*` group created in File → New layer. */
-export type MapsLayerGroupId = MapsDatasetCategory | `user-${string}`;
-
 export interface MapsDataset {
   id: MapsDatasetId;
   title: string;
   description: string;
-  category: MapsLayerGroupId;
+  /** Sidebar group label (see maps-layer-groups.ts). */
+  group: string;
   /** Lucide icon key (see mapsIconMap). */
   icon: string;
-  /** Sort order within a category (lower first). */
+  /** Sort order within a group (lower first). */
   order: number;
   /** Optional brand logo for sidebar and legend (HTTPS or /api/…). */
   layerLogoUrl?: string;
 }
-
-const MAPS_CATEGORIES_ALL: {
-  id: MapsDatasetCategory;
-  label: string;
-}[] = [
-  { id: 'environment', label: 'Environment' },
-  { id: 'sigint', label: 'SIGINT' },
-  { id: 'situation', label: 'Situation' },
-  { id: 'organizations-facility', label: 'Organizations Facilities' },
-  { id: 'custom', label: 'Custom' },
-];
-
-/** Sidebar groups. Basemaps are chosen on the map control. */
-export const MAPS_CATEGORIES = MAPS_VISIBLE_CATEGORIES
-  ? MAPS_CATEGORIES_ALL.filter(({ id }) => MAPS_VISIBLE_CATEGORIES.includes(id))
-  : MAPS_CATEGORIES_ALL;
-
-export const MAPS_CATEGORY_LABEL: Record<MapsDatasetCategory, string> = Object.fromEntries(
-  MAPS_CATEGORIES.map(({ id, label }) => [id, label]),
-) as Record<MapsDatasetCategory, string>;
 
 /**
  * Built-in Maps data layers. The basemap is separate (see maps-basemaps.ts).
@@ -86,7 +51,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     id: 'earthquakes',
     title: 'Earthquakes',
     description: 'USGS GeoJSON feed (M≥2.5, past day). Free public layer.',
-    category: 'environment',
+    group: 'Environment',
     icon: 'Activity',
     order: 2,
   },
@@ -95,7 +60,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     title: 'Wildfires',
     description:
       'EONET named open wildfires (7d). Optional FIRMS VIIRS 24h WMS when FIRMS_MAP_KEY is set.',
-    category: 'environment',
+    group: 'Environment',
     icon: 'Flame',
     order: 3,
   },
@@ -104,7 +69,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     title: 'Temperature',
     description:
       'Current 2m air temperature city samples via Open-Meteo (free, no API key).',
-    category: 'environment',
+    group: 'Environment',
     icon: 'Thermometer',
     order: 8,
   },
@@ -113,7 +78,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     title: 'GDACS',
     description:
       'UN GDACS multi-hazard events (quakes, storms, floods, volcanoes, drought, wildfire).',
-    category: 'environment',
+    group: 'Environment',
     icon: 'AlertTriangle',
     order: 1,
   },
@@ -122,7 +87,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     title: 'EONET Events',
     description:
       'NASA EONET open natural events (all categories, last 30 days). Wildfires stay as a dedicated layer.',
-    category: 'environment',
+    group: 'Environment',
     icon: 'Sparkles',
     order: 7,
   },
@@ -131,7 +96,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     title: 'Air Quality',
     description:
       'OpenAQ when OPENAQ_API_KEY is set; Open-Meteo PM2.5 city samples otherwise.',
-    category: 'environment',
+    group: 'Environment',
     icon: 'Wind',
     order: 9,
   },
@@ -140,7 +105,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     title: 'NWS Alerts',
     description:
       'US NWS active weather alerts (centroid pins). Proxied with a Maps User-Agent.',
-    category: 'environment',
+    group: 'Environment',
     icon: 'Bell',
     order: 6,
   },
@@ -148,7 +113,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     id: 'tropical-storms',
     title: 'Tropical Storms',
     description: 'NHC active tropical cyclones (CurrentStorms GeoJSON-compatible).',
-    category: 'environment',
+    group: 'Environment',
     icon: 'CloudLightning',
     order: 5,
   },
@@ -156,7 +121,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     id: 'volcanoes',
     title: 'Volcanoes',
     description: 'NASA EONET open volcano events (last 90 days).',
-    category: 'environment',
+    group: 'Environment',
     icon: 'Mountain',
     order: 4,
   },
@@ -165,7 +130,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     title: 'Flights',
     description:
       'Live aircraft: viewport query via adsb.lol, global sample via airplanes.live.',
-    category: 'sigint',
+    group: 'SIGINT',
     icon: 'Plane',
     order: 1,
   },
@@ -174,7 +139,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     title: 'Conflict Sites',
     description:
       'Curated static OSINT conflict pins (Maps-owned list under maps/lib).',
-    category: 'situation',
+    group: 'Situation',
     icon: 'Crosshair',
     order: 1,
   },
@@ -183,7 +148,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     title: 'Gulf Strikes',
     description:
       'Live Gulf / Iran / Israel strike headlines from RSS, geocoded to theater sites via /api/maps/gulf-strikes.',
-    category: 'situation',
+    group: 'Situation',
     icon: 'Rocket',
     order: 2,
   },
@@ -192,7 +157,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     title: 'News',
     description:
       'World RSS headlines (BBC / Al Jazeera / Reuters) mapped to light region geocodes.',
-    category: 'situation',
+    group: 'Situation',
     icon: 'Newspaper',
     order: 3,
   },
@@ -201,7 +166,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     title: 'AIS Vessels',
     description:
       'Live ships via AISStream when AISSTREAM_API_KEY is set on nexus-web. Honest empty state without a key.',
-    category: 'sigint',
+    group: 'SIGINT',
     icon: 'Ship',
     order: 2,
   },
@@ -210,16 +175,14 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     title: 'ISS',
     description:
       'International Space Station current position (open-notify). Thin CelesTrak substitute.',
-    category: 'sigint',
+    group: 'SIGINT',
     icon: 'Satellite',
     order: 3,
   },
 ];
 
 /** Built-in feeds drawn by this app; layer records come from `/api/maps/catalog`. */
-export const MAPS_DATASETS: MapsDataset[] = MAPS_VISIBLE_CATEGORIES
-  ? MAPS_BUILTIN_DATASETS.filter((d) => isMapsCategoryVisible(d.category))
-  : MAPS_BUILTIN_DATASETS;
+export const MAPS_DATASETS: MapsDataset[] = MAPS_BUILTIN_DATASETS;
 
 /**
  * Public feed URLs and Maps-owned API proxies.
@@ -254,10 +217,9 @@ export function mapsCustomFeedUrl(datasetId: string, workspaceId: string): strin
   return `/api/maps/custom/${encodeURIComponent(datasetId)}?${query.toString()}`;
 }
 
-export function getMapsDatasetsByCategory(
-  category: MapsDatasetCategory,
-): MapsDataset[] {
-  return MAPS_DATASETS.filter((d) => d.category === category).sort(
+export function getMapsDatasetsByGroup(group: string): MapsDataset[] {
+  const key = group.trim().toLowerCase();
+  return MAPS_DATASETS.filter((d) => d.group.toLowerCase() === key).sort(
     (a, b) => a.order - b.order,
   );
 }

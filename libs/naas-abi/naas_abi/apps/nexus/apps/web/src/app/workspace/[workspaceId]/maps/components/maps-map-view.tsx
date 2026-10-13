@@ -22,20 +22,20 @@ export function MapsMapView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [geoJsonLayersOpen, setGeoJsonLayersOpen] = useState(false);
-  const { layerIds, rawLayerIds, defaultLayerIds, workspaceId } = useMapsLayerParams();
+  const { layerIds, rawLayerIds, defaultLayerIds, defaultsReady, workspaceId } = useMapsLayerParams();
 
   useEffect(() => {
     if (isMapsGeoJsonDebugEnabled(searchParams)) setGeoJsonLayersOpen(true);
   }, [searchParams]);
-  const { all, entries, loading, customLayerGroups, canEdit } = useMapLayers();
+  const { all, entries, loading, layerGroups, canEdit } = useMapLayers();
   const [newLayerOpen, setNewLayerOpen] = useState(false);
   const [newBasemapOpen, setNewBasemapOpen] = useState(false);
 
   useEffect(() => {
-    if (isMobile || rawLayerIds.length > 0 || loading) return;
+    if (isMobile || rawLayerIds.length > 0 || loading || !defaultsReady) return;
     if (!defaultLayerIds.length) return;
     router.replace(mapsPath(workspaceId, defaultLayerIds));
-  }, [isMobile, rawLayerIds.length, loading, defaultLayerIds, router, workspaceId]);
+  }, [isMobile, rawLayerIds.length, loading, defaultsReady, defaultLayerIds, router, workspaceId]);
 
   const subtitle = useMemo(() => {
     if (layerIds.length === 0) return 'Basemap';
@@ -86,7 +86,7 @@ export function MapsMapView() {
               onClose={() => setNewLayerOpen(false)}
               workspaceId={workspaceId}
               takenIds={takenLayerIds}
-              customLayerGroups={customLayerGroups}
+              layerGroups={layerGroups}
               canEdit={canEdit}
               onCreated={onLayerCreated}
             />

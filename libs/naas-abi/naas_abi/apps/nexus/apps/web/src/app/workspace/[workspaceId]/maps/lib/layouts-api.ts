@@ -124,7 +124,7 @@ export function blankFeedLayout(): LayoutDraft {
     query: '',
     feed_type: 'geojson_url',
     feed_url: '/api/',
-    category: 'custom',
+    group: 'Custom',
     logo_url: '',
     basemap_id: '',
     meta_label: '',

@@ -12,8 +12,8 @@ import {
   type WorkspaceMapLayout,
 } from './layouts';
 
-const ds = (id: string, category: MapsDataset['category'], order = 0): MapsDataset => ({
-  id, title: id, description: '', category, icon: 'Map', order,
+const ds = (id: string, group: string, order = 0): MapsDataset => ({
+  id, title: id, description: '', group, icon: 'Map', order,
 });
 const workspaceLayer = (id: string): WorkspaceMapLayout => ({
   id, title: id.toUpperCase(), description: '', icon: 'MapPin', color: '#2563eb', query: '', graphs: [], order: 100,
@@ -22,8 +22,8 @@ const workspaceLayer = (id: string): WorkspaceMapLayout => ({
 describe('buildLayoutEntries', () => {
   it('merges built-in, graph and workspace layers, first id wins', () => {
     const entries = buildLayoutEntries(
-      [ds('gdacs', 'environment'), ds('earthquakes', 'environment'), ds('iss', 'sigint')],
-      [{ ...ds('kg-sites', 'custom'), graphUri: 'http://g' }, { ...ds('gdacs', 'custom'), graphUri: 'http://g' }],
+      [ds('gdacs', 'Environment'), ds('earthquakes', 'Environment'), ds('iss', 'SIGINT')],
+      [{ ...ds('kg-sites', 'Custom'), graphUri: 'http://g' }, { ...ds('gdacs', 'Custom'), graphUri: 'http://g' }],
       [workspaceLayer('offices'), workspaceLayer(ALL_LAYERS_ID)],
     );
 
@@ -34,19 +34,19 @@ describe('buildLayoutEntries', () => {
       ['kg-sites', 'graph', true],
       ['offices', 'workspace', true],
     ]);
-    expect(entries.find((e) => e.id === 'offices')?.category).toBe('custom');
+    expect(entries.find((e) => e.id === 'offices')?.group).toBe('Custom');
     expect(entries.find((e) => e.id === 'offices')?.color).toBe('#2563eb');
   });
 
   it('treats deployment Custom datasets as pin feeds', () => {
-    const [entry] = buildLayoutEntries([ds('fleet', 'custom')], [], [], { customIds: new Set(['fleet']) });
+    const [entry] = buildLayoutEntries([ds('fleet', 'Custom')], [], [], { customIds: new Set(['fleet']) });
     expect(entry.combinable).toBe(true);
   });
 });
 
 describe('isLayerOn', () => {
   const [gdacs, earthquakes, news] = buildLayoutEntries(
-    [ds('gdacs', 'environment'), ds('earthquakes', 'environment'), ds('news', 'situation')],
+    [ds('gdacs', 'Environment'), ds('earthquakes', 'Environment'), ds('news', 'Situation')],
     [],
     [],
   );
@@ -68,9 +68,9 @@ describe('isLayerOn', () => {
 
 describe('compareLayerEntriesAsc', () => {
   it('sorts by title ascending', () => {
-    expect(compareLayerEntriesAsc(ds('z', 'environment'), ds('a', 'environment'))).toBeGreaterThan(0);
+    expect(compareLayerEntriesAsc(ds('z', 'Environment'), ds('a', 'Environment'))).toBeGreaterThan(0);
     expect(
-      [ds('iss', 'sigint'), ds('ais', 'sigint'), ds('flights', 'sigint')].sort(compareLayerEntriesAsc).map(
+      [ds('iss', 'SIGINT'), ds('ais', 'SIGINT'), ds('flights', 'SIGINT')].sort(compareLayerEntriesAsc).map(
         (e) => e.id,
       ),
     ).toEqual(['ais', 'flights', 'iss']);
@@ -79,7 +79,7 @@ describe('compareLayerEntriesAsc', () => {
 
 describe('visibleEntries / groupLayerEntries', () => {
   const entries = buildLayoutEntries(
-    [ds('volcanoes', 'environment', 2), ds('gdacs', 'environment', 1), ds('iss', 'sigint', 3)],
+    [ds('volcanoes', 'Environment', 2), ds('gdacs', 'Environment', 1), ds('iss', 'SIGINT', 3)],
     [],
     [workspaceLayer('offices')],
   );
@@ -88,11 +88,25 @@ describe('visibleEntries / groupLayerEntries', () => {
     expect(visibleEntries(entries, ['gdacs', 'offices']).map((e) => e.id)).toEqual(['volcanoes', 'iss']);
   });
 
-  it('groups Environment, SIGINT, Situation, then Custom; empty groups omitted', () => {
+  it('groups by the entries\' labels, sorted, Custom last; empty groups omitted', () => {
     const groups = groupLayerEntries(visibleEntries(entries, ['iss']));
-    expect(groups.map((g) => [g.id, g.entries.map((e) => e.id)])).toEqual([
-      ['environment', ['gdacs', 'volcanoes']],
-      ['custom', ['offices']],
+    expect(groups.map((g) => [g.id, g.label, g.entries.map((e) => e.id)])).toEqual([
+      ['environment', 'Environment', ['gdacs', 'volcanoes']],
+      ['custom', 'Custom', ['offices']],
+    ]);
+  });
+
+  it('keeps every feed: any group label, a legacy category, or none', () => {
+    const feeds = buildLayoutEntries([], [], [
+      { ...workspaceLayer('a'), group: 'Field Offices' },
+      { ...workspaceLayer('b'), category: 'public' },
+      { ...workspaceLayer('c'), group: 'field offices' },
+      { ...workspaceLayer('d'), category: 'not-a-known-slug' },
+    ]);
+    expect(groupLayerEntries(feeds).map((g) => [g.label, g.entries.map((e) => e.id)])).toEqual([
+      ['Field Offices', ['a', 'c']],
+      ['not-a-known-slug', ['d']],
+      ['Public', ['b']],
     ]);
   });
 });
@@ -109,7 +123,7 @@ describe('feed layers', () => {
     order: 3,
     feed_type: 'geojson_url' as const,
     feed_url: '/api/maps/feeds/energy.geojson',
-    category: 'custom',
+    group: 'Custom',
     logo_url: '/api/organizations/logos/Energy/Energy.ico',
   };
   const layer = (id: string, title: string, order: number, icon = '', class_labels: string[] = []) => ({

@@ -2,6 +2,7 @@
 
 A layout is the server record behind one Maps layer: its metadata (title, group,
 icon, logo, color, order, default basemap) and how its pins are fetched. The
+sidebar group is a plain label on the feed (``group``), not a record of its own. The
 feed itself stays where it was: a SPARQL query run on the workspace graphs, or
 a GeoJSON/pins endpoint on the Nexus API that the web proxy calls.
 """
@@ -16,8 +17,18 @@ LAYOUT_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,47}$")
 COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
 MAX_QUERY_LENGTH = 20_000
 MAX_PINS = 2_000
-CATEGORY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,47}$")
 MAX_URL_LENGTH = 500
+MAX_GROUP_LENGTH = 80
+DEFAULT_GROUP = "Custom"
+# Labels for the group slugs records stored as ``category`` before ``group``.
+LEGACY_GROUP_LABELS = {
+    "public": "Public",
+    "environment": "Environment",
+    "sigint": "SIGINT",
+    "situation": "Situation",
+    "organizations-facility": "Organizations Facilities",
+    "custom": DEFAULT_GROUP,
+}
 
 FEED_SPARQL = "sparql"
 # Pins / GeoJSON served by an endpoint on the Nexus API (e.g. a module router).
@@ -71,8 +82,8 @@ class MapsLayout:
     # FEED_GEOJSON_URL: path on the Nexus API ("/api/..."), never an absolute URL,
     # because the web proxy forwards the caller's Bearer token to it.
     feed_url: str = ""
-    # Sidebar group id (built-in category such as "organizations-facility", or "custom").
-    category: str = "custom"
+    # Sidebar group label; feeds sharing a label (case-insensitive) form one group.
+    group: str = DEFAULT_GROUP
     # Sidebar / pin logo: HTTPS URL or a Nexus API path (/api/organizations/logos/...).
     logo_url: str = ""
     basemap_id: str = ""
@@ -102,7 +113,7 @@ class MapsLayout:
             order=int(data.get("order", 100)),
             feed_type=str(data.get("feed_type", FEED_SPARQL) or FEED_SPARQL),
             feed_url=str(data.get("feed_url", "") or ""),
-            category=str(data.get("category", "custom") or "custom"),
+            group=group_from_record(data),
             logo_url=str(data.get("logo_url", "") or ""),
             basemap_id=str(data.get("basemap_id", "") or ""),
             meta_label=str(data.get("meta_label", "") or ""),
@@ -110,6 +121,19 @@ class MapsLayout:
             system=bool(data.get("system", False)),
             shared_from=str(data.get("shared_from", "") or ""),
         )
+
+
+def legacy_group_label(category: str) -> str:
+    """The group label for a pre-``group`` category slug (unknown slugs as written)."""
+    slug = category.strip()
+    return LEGACY_GROUP_LABELS.get(slug.lower(), slug) or DEFAULT_GROUP
+
+
+def group_from_record(data: dict[str, Any]) -> str:
+    group = str(data.get("group", "") or "").strip()
+    if group:
+        return group
+    return legacy_group_label(str(data.get("category", "") or ""))
 
 
 @dataclass(frozen=True)

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   getMapsDataset,
-  getMapsDatasetsByCategory,
+  getMapsDatasetsByGroup,
   isMapsDatasetId,
   mapsCustomFeedUrl,
   MAPS_DATASETS,
@@ -30,14 +30,14 @@ const BUILTIN_IDS = [...ENVIRONMENT_IDS, ...SIGINT_IDS, ...SITUATION_IDS] as con
 
 describe('MAPS_DATASETS taxonomy', () => {
   it('groups built-in layers by Environment, SIGINT, and Situation', () => {
-    expect(getMapsDatasetsByCategory('environment').map((d) => d.id)).toEqual([...ENVIRONMENT_IDS]);
-    expect(getMapsDatasetsByCategory('sigint').map((d) => d.id)).toEqual([...SIGINT_IDS]);
-    expect(getMapsDatasetsByCategory('situation').map((d) => d.id)).toEqual([...SITUATION_IDS]);
-    expect(getMapsDatasetsByCategory('custom')).toEqual([]);
+    expect(getMapsDatasetsByGroup('Environment').map((d) => d.id)).toEqual([...ENVIRONMENT_IDS]);
+    expect(getMapsDatasetsByGroup('SIGINT').map((d) => d.id)).toEqual([...SIGINT_IDS]);
+    expect(getMapsDatasetsByGroup('situation').map((d) => d.id)).toEqual([...SITUATION_IDS]);
+    expect(getMapsDatasetsByGroup('Custom')).toEqual([]);
   });
 
   it('includes every built-in id once (Custom empty upstream)', () => {
-    const ids = MAPS_DATASETS.filter((d) => d.category !== 'custom').map((d) => d.id);
+    const ids = MAPS_DATASETS.filter((d) => d.group !== 'Custom').map((d) => d.id);
     expect([...ids].sort()).toEqual([...BUILTIN_IDS].sort());
   });
 
@@ -46,7 +46,7 @@ describe('MAPS_DATASETS taxonomy', () => {
       expect(isMapsDatasetId(dataset.id)).toBe(true);
     }
     expect(isMapsDatasetId('not-a-dataset')).toBe(false);
-    expect(MAPS_DATASETS.filter((d) => d.category !== 'custom')).toHaveLength(BUILTIN_IDS.length);
+    expect(MAPS_DATASETS.filter((d) => d.group !== 'Custom')).toHaveLength(BUILTIN_IDS.length);
   });
 });
 

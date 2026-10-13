@@ -4,14 +4,13 @@ import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MapsLayerEditorForm } from './maps-layer-editor-form';
-import type { CustomLayerGroup } from '../lib/maps-layer-groups';
 
 export function MapsNewLayerModal({
   open,
   onClose,
   workspaceId,
   takenIds,
-  customLayerGroups,
+  layerGroups,
   canEdit,
   onCreated,
 }: {
@@ -19,7 +18,7 @@ export function MapsNewLayerModal({
   onClose: () => void;
   workspaceId: string;
   takenIds: ReadonlySet<string>;
-  customLayerGroups: ReadonlyArray<CustomLayerGroup>;
+  layerGroups: readonly string[];
   canEdit: boolean;
   onCreated: (layerId: string) => void;
 }) {
@@ -76,7 +75,7 @@ export function MapsNewLayerModal({
             formId="maps-new-layer-form"
             workspaceId={workspaceId}
             takenIds={takenIds}
-            customLayerGroups={customLayerGroups}
+            layerGroups={layerGroups}
             canEdit={canEdit}
             workspaceLayout={null}
             onSavedWorkspace={(layout) => {

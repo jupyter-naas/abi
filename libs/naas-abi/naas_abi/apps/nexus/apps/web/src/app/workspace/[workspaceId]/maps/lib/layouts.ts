@@ -6,15 +6,14 @@
  * The API still calls workspace records "layouts"; this module is the
  * frontend layer list and visibility model.
  */
-import type { CustomLayerGroup } from './maps-layer-groups';
-import { layerGroupDefinitions } from './maps-layer-groups';
-import type { MapsDataset, MapsLayerGroupId } from './datasets';
+import type { MapsDataset } from './datasets';
+import { mapsDefaultOnFeedIds } from './maps-deployment';
 import {
-  isMapsCategoryVisible,
-  isMapsLayerGroupIdVisible,
-  isMapsOrganizationFacilityOnlyDeployment,
-  mapsDefaultOnFeedIds,
-} from './maps-deployment';
+  DEFAULT_LAYER_GROUP,
+  layerGroupKey,
+  layerGroupLabels,
+  layoutGroup,
+} from './maps-layer-groups';
 import { mapsPinImageUrl } from './maps-pin-image-url';
 
 /** Reserved route for the combined map (`/maps/all`). */
@@ -34,7 +33,7 @@ export interface ImportedLayerMeta {
   icon: string;
   color: string;
   order: number;
-  groupId: MapsLayerGroupId;
+  group: string;
 }
 
 /** A layer record from Settings → Maps (the API's MapsLayout). */
@@ -51,7 +50,9 @@ export interface WorkspaceMapLayout {
   feed_type?: LayoutFeedType;
   /** geojson_url: Nexus API path the web proxy fetches with the member's token. */
   feed_url?: string;
-  /** Sidebar group id (built-in category or custom). */
+  /** Sidebar group label; feeds sharing it form one group. */
+  group?: string;
+  /** Pre-`group` slug from older API responses (read through layoutGroup). */
   category?: string;
   logo_url?: string;
   basemap_id?: string;
@@ -141,7 +142,6 @@ export function buildLayoutEntries(
   _options: {
     customIds?: ReadonlySet<string>;
     importedLayers?: ImportedLayerMeta[];
-    workspaceLayerGroup?: (layoutId: string) => MapsLayerGroupId | undefined;
     /** Workspace colors for layers without a record (built-in, graph). */
     colors?: Readonly<Record<string, string>>;
     /** Layers of the feeds; when absent each feed is one layer (its default). */
@@ -160,8 +160,13 @@ export function buildLayoutEntries(
     add({ ...dataset, kind: 'builtin', combinable: true, color: colors[dataset.id] });
   }
   for (const layer of graphLayers) {
-    if (!isMapsCategoryVisible('custom')) continue;
-    add({ ...layer, category: 'custom', kind: 'graph', combinable: true, color: colors[layer.id] });
+    add({
+      ...layer,
+      group: layer.group?.trim() || DEFAULT_LAYER_GROUP,
+      kind: 'graph',
+      combinable: true,
+      color: colors[layer.id],
+    });
   }
   // One entry per layer; each layer draws from a feed record (SPARQL or API feed).
   const feedsById = new Map(workspaceLayouts.map((feed) => [feed.id, feed]));
@@ -170,19 +175,13 @@ export function buildLayoutEntries(
     const feed = feedsById.get(layer.feed_id);
     if (!feed) continue;
     const apiFeed = isFeedLayout(feed);
-    const category = (
-      apiFeed
-        ? feed.category || 'custom'
-        : _options.workspaceLayerGroup?.(feed.id) ?? feed.category ?? 'custom'
-    ) as MapsLayerGroupId;
-    if (!isMapsLayerGroupIdVisible(category)) continue;
     add({
       id: layer.id,
       title: layer.title,
       description:
         layer.description || feed.description || (apiFeed ? 'Feed layer' : 'Workspace layer (SPARQL)'),
       icon: layer.icon || feed.icon || 'MapPin',
-      category,
+      group: layoutGroup(feed),
       order: layer.order,
       kind: apiFeed ? 'feed' : 'workspace',
       combinable: true,
@@ -202,14 +201,12 @@ export function buildLayoutEntries(
     });
   }
   for (const layer of _options.importedLayers ?? []) {
-    const groupId = layer.groupId ?? 'custom';
-    if (!isMapsLayerGroupIdVisible(groupId)) continue;
     add({
       id: layer.id,
       title: layer.title,
       description: layer.description || 'Imported GeoJSON (this browser)',
       icon: layer.icon || 'Layers',
-      category: layer.groupId ?? 'custom',
+      group: layer.group.trim() || DEFAULT_LAYER_GROUP,
       order: layer.order,
       kind: 'imported',
       combinable: true,
@@ -224,13 +221,6 @@ export function visibleEntries(entries: LayoutEntry[], hidden: ReadonlySet<strin
   return entries.filter((entry) => !set.has(entry.id));
 }
 
-export function isDefaultOnOrganizationFacilityFeed(
-  entry: Pick<LayoutEntry, 'id' | 'feedId'>,
-): boolean {
-  const feedId = entry.feedId ?? entry.id;
-  return mapsDefaultOnFeedIds().has(feedId);
-}
-
 /** Default on for a new session before the URL is seeded. */
 export function defaultLayerOn(
   entry: LayoutEntry,
@@ -242,9 +232,8 @@ export function defaultLayerOn(
     const feedId = entry.feedId ?? entry.id;
     return workspaceFeeds.has(feedId);
   }
-  if (isMapsOrganizationFacilityOnlyDeployment()) {
-    return isDefaultOnOrganizationFacilityFeed(entry);
-  }
+  const deploymentFeeds = mapsDefaultOnFeedIds();
+  if (deploymentFeeds.size) return deploymentFeeds.has(entry.feedId ?? entry.id);
   return entry.kind !== 'builtin' || DEFAULT_ON_BUILTIN_IDS.has(entry.id);
 }
 
@@ -267,8 +256,6 @@ export interface LayoutGroup {
   label: string;
   entries: LayoutEntry[];
 }
-
-export { layerGroupDefinitions };
 
 /** Ascending title sort within a sidebar / legend group. */
 export function compareLayerEntriesAsc(a: LayoutEntry, b: LayoutEntry): number {
@@ -312,20 +299,19 @@ export function groupFeedLayers(entries: readonly LayoutEntry[]): LayerGroupItem
   return items.sort((a, b) => titleOf(a).localeCompare(titleOf(b), undefined, { sensitivity: 'base' }));
 }
 
-/** Built-in groups, then user-defined groups; empty groups omitted. */
-export function groupLayerEntries(
-  entries: LayoutEntry[],
-  customGroups: ReadonlyArray<CustomLayerGroup> = [],
-): LayoutGroup[] {
-  return layerGroupDefinitions(customGroups)
-    .map(({ id, label }) => ({
-      id,
+/** One group per distinct `group` label on the entries (sorted, Custom last). */
+export function groupLayerEntries(entries: LayoutEntry[]): LayoutGroup[] {
+  const groupOf = (entry: LayoutEntry) => entry.group?.trim() || DEFAULT_LAYER_GROUP;
+  return layerGroupLabels(entries.map(groupOf)).map((label) => {
+    const key = layerGroupKey(label);
+    return {
+      id: key,
       label,
       entries: entries
-        .filter((entry) => entry.category === id)
+        .filter((entry) => layerGroupKey(groupOf(entry)) === key)
         .sort(compareLayerEntriesAsc),
-    }))
-    .filter((group) => group.entries.length > 0);
+    };
+  });
 }
 
 /** @deprecated use groupLayerEntries */

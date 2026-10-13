@@ -5,19 +5,19 @@ import { useMapsStore, workspaceLayoutsOf } from '@/stores/maps';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { MAPS_DATASETS } from './datasets';
 import { buildLayoutEntries, isLayerOn, visibleEntries, type LayoutEntry } from './layouts';
+import { layoutsApi } from './layouts-api';
 import {
   loadImportedMapLayers,
+  relabelImportedLayerGroups,
   subscribeImportedLayers,
 } from './maps-imported-layers';
 import {
-  loadCustomLayerGroups,
-  subscribeCustomLayerGroups,
-  type CustomLayerGroup,
+  DEFAULT_LAYER_GROUP,
+  layerGroupKey,
+  layerGroupLabels,
+  layoutGroup,
+  takeLegacyLocalGroups,
 } from './maps-layer-groups';
-import {
-  getWorkspaceLayerGroupId,
-  subscribeWorkspaceLayerMeta,
-} from './maps-workspace-layer-meta';
 import { useGraphMapLayers } from './use-graph-map-layers';
 
 /**
@@ -33,6 +33,7 @@ export function useMapLayers() {
   const storedBasemap = useMapsStore((s) => s.basemapId);
   const storeLoading = useMapsStore((s) => s.loading);
   const storeError = useMapsStore((s) => s.error);
+  const catalogLoaded = useMapsStore((s) => Boolean(workspaceId && s.byWorkspace[workspaceId]));
 
   useEffect(() => {
     if (workspaceId) void loadLayouts(workspaceId);
@@ -53,29 +54,27 @@ export function useMapLayers() {
     });
   }, [workspaceId]);
 
-  const [customLayerGroups, setCustomLayerGroups] = useState<CustomLayerGroup[]>(() =>
-    workspaceId ? loadCustomLayerGroups(workspaceId) : [],
-  );
-
+  // Groups older versions kept in this browser move onto the records once the
+  // catalog is loaded (layer records need an admin; imported layers are local).
   useEffect(() => {
-    if (!workspaceId) {
-      setCustomLayerGroups([]);
-      return;
-    }
-    setCustomLayerGroups(loadCustomLayerGroups(workspaceId));
-    return subscribeCustomLayerGroups(() => {
-      setCustomLayerGroups(loadCustomLayerGroups(workspaceId));
-    });
-  }, [workspaceId]);
-
-  const [workspaceMetaVersion, setWorkspaceMetaVersion] = useState(0);
-
-  useEffect(() => {
-    if (!workspaceId) return;
-    return subscribeWorkspaceLayerMeta(() => {
-      setWorkspaceMetaVersion((v) => v + 1);
-    });
-  }, [workspaceId]);
+    if (!workspaceId || storeLoading || !catalogLoaded) return;
+    const legacy = takeLegacyLocalGroups(workspaceId);
+    relabelImportedLayerGroups(workspaceId, legacy.labels);
+    if (!workspace.canEdit) return;
+    const custom = layerGroupKey(DEFAULT_LAYER_GROUP);
+    const moves = workspace.layouts.filter(
+      (feed) =>
+        !feed.shared_from
+        && legacy.layers[feed.id]
+        && layerGroupKey(layoutGroup(feed)) === custom,
+    );
+    if (!moves.length) return;
+    void Promise.allSettled(
+      moves.map(({ id, ...feed }) =>
+        layoutsApi.save(workspaceId, id, { ...feed, group: legacy.layers[id] }),
+      ),
+    ).then(() => loadLayouts(workspaceId, true));
+  }, [workspaceId, storeLoading, catalogLoaded, workspace.canEdit, workspace.layouts, loadLayouts]);
 
   const all = useMemo(
     () =>
@@ -85,17 +84,14 @@ export function useMapLayers() {
         feedLayers: workspace.feedLayers.length ? workspace.feedLayers : undefined,
         importedLayers: importedLayers.map((layer) => ({
           ...layer,
-          groupId: layer.groupId ?? 'custom',
+          group: layer.group ?? DEFAULT_LAYER_GROUP,
         })),
-        workspaceLayerGroup: workspaceId
-          ? (layoutId) => getWorkspaceLayerGroupId(workspaceId, layoutId)
-          : undefined,
       }),
-    // workspaceMetaVersion: re-read browser-side group overrides when they change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [graphLayers.layers, workspace.layouts, workspace.feedLayers, workspace.colors, importedLayers, workspaceId, workspaceMetaVersion],
+    [graphLayers.layers, workspace.layouts, workspace.feedLayers, workspace.colors, importedLayers],
   );
   const entries = useMemo(() => visibleEntries(all, workspace.hidden), [all, workspace.hidden]);
+  // Every group label in use (hidden layers included), for the group pickers.
+  const layerGroups = useMemo(() => layerGroupLabels(all.map((entry) => entry.group)), [all]);
   const isOn = (entry: LayoutEntry) => isLayerOn(entry, overrides);
   const basemapId = storedBasemap;
 
@@ -106,7 +102,7 @@ export function useMapLayers() {
     basemapId,
     hidden: workspace.hidden,
     layerColors: workspace.colors,
-    customLayerGroups,
+    layerGroups,
     canEdit: workspace.canEdit,
     workspaceLayouts: workspace.layouts,
     feedLayers: workspace.feedLayers,

@@ -1,4 +1,4 @@
-import type { MapsLayerGroupId } from './datasets';
+import { legacyGroupLabel } from './maps-layer-groups';
 import {
   buildMapsFeedPayload,
   isMapsFeatureCollection,
@@ -18,7 +18,8 @@ export type ImportedMapLayer = {
   icon: string;
   color: string;
   order: number;
-  groupId?: MapsLayerGroupId;
+  /** Sidebar group label (older imports stored a `groupId` slug instead). */
+  group?: string;
   featureCollection: MapsLayerFeatureCollection & Record<string, unknown>;
   /** Default Nexus basemap when this layer is shown alone. */
   defaultBasemapId?: string;
@@ -46,7 +47,10 @@ function writeStore(store: WorkspaceStore): void {
 }
 
 export function loadImportedMapLayers(workspaceId: string): ImportedMapLayer[] {
-  return readStore()[workspaceId] ?? [];
+  return (readStore()[workspaceId] ?? []).map((layer) => {
+    const legacy = (layer as { groupId?: string }).groupId;
+    return layer.group || !legacy ? layer : { ...layer, group: legacyGroupLabel(legacy) };
+  });
 }
 
 export function getImportedMapLayer(
@@ -195,6 +199,22 @@ export function saveImportedMapLayer(
   store[workspaceId] = list.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
   writeStore(store);
   return saved;
+}
+
+/** Store each imported layer's legacy `groupId` as a `group` label (one-time upgrade). */
+export function relabelImportedLayerGroups(
+  workspaceId: string,
+  labels: Readonly<Record<string, string>>,
+): void {
+  const store = readStore();
+  const list = store[workspaceId];
+  if (!list?.some((layer) => 'groupId' in layer)) return;
+  store[workspaceId] = list.map((layer) => {
+    const { groupId, ...rest } = layer as ImportedMapLayer & { groupId?: string };
+    if (rest.group || !groupId) return rest;
+    return { ...rest, group: labels[groupId] ?? legacyGroupLabel(groupId) };
+  });
+  writeStore(store);
 }
 
 /** Client hook: imported layers for the active workspace (localStorage). */

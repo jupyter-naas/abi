@@ -134,7 +134,7 @@ export function MapsDatasetGroups({
 }) {
   const { workspaceId, layerIds, isOn, setLayerOn, setLayersOn, selectLayerExclusive } =
     useMapsLayerParams();
-  const { entries, error, customLayerGroups, loading } = useMapLayers();
+  const { entries, error, loading } = useMapLayers();
   useMapsSidebarLayerCounts(workspaceId, entries, loading);
   const layerCounts = useMapsStore((s) => s.layerCounts);
   // Feeds start expanded while one of their layers is on; a click overrides.
@@ -158,7 +158,7 @@ export function MapsDatasetGroups({
         </span>
       </Link>
 
-      {groupLayerEntries(entries, customLayerGroups).map((group) => {
+      {groupLayerEntries(entries).map((group) => {
         const groupCombinable = group.entries.filter((e) => e.combinable);
         const allOn = groupCombinable.length > 0 && groupCombinable.every(isOn);
         return (

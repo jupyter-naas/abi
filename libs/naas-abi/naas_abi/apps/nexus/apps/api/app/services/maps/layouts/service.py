@@ -29,12 +29,12 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.scoped_s
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import GraphAccessError
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import IGraphQueryStore
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.layouts__schema import (
-    CATEGORY_PATTERN,
     COLOR_PATTERN,
     FEED_GEOJSON_URL,
     FEED_SPARQL,
     FEED_TYPES,
     LAYOUT_ID_PATTERN,
+    MAX_GROUP_LENGTH,
     MAX_PINS,
     MAX_QUERY_LENGTH,
     MAX_URL_LENGTH,
@@ -102,8 +102,11 @@ def validate_layout(
         errors.append("title is required")
     if not COLOR_PATTERN.match(layout.color):
         errors.append("color must be a #rrggbb hex value")
-    if not CATEGORY_PATTERN.match(layout.category):
-        errors.append("category must be lowercase letters, digits and dashes")
+    group = layout.group.strip()
+    if not group:
+        errors.append("group is required")
+    elif len(group) > MAX_GROUP_LENGTH or any(ord(c) < 32 for c in group):
+        errors.append(f"group must be 1-{MAX_GROUP_LENGTH} printable characters")
     if layout.logo_url and not _is_logo_url(layout.logo_url):
         errors.append("logo_url must be an https:// URL or a path starting with /")
     if layout.basemap_id and not LAYOUT_ID_PATTERN.match(layout.basemap_id):
@@ -263,6 +266,39 @@ class MapsLayoutService:
                 user_id=None,
             )
 
+    async def ensure_hidden_seeds(self, workspace_id: str, hidden_seeds: Mapping[str, int]) -> None:
+        """Hide the layers a deployment hides by default, once per seed revision.
+
+        An admin may show them again; only a higher revision hides them anew.
+        """
+
+        def pending_of(settings: MapsWorkspaceSettings) -> dict[str, int]:
+            return {
+                layer_id: revision
+                for layer_id, revision in hidden_seeds.items()
+                if revision > settings.seed_revisions.get(f"hidden:{layer_id}", 0)
+            }
+
+        if not pending_of(await self._settings.get(workspace_id)):
+            return
+        lock = self._seed_locks.setdefault(workspace_id, asyncio.Lock())
+        async with lock:
+            settings = await self._settings.get(workspace_id)
+            pending = pending_of(settings)
+            if not pending:
+                return
+            await self._settings.save(
+                workspace_id,
+                settings.with_(
+                    hidden_layouts=settings.hidden_layouts | set(pending),
+                    seed_revisions={
+                        **settings.seed_revisions,
+                        **{f"hidden:{layer_id}": rev for layer_id, rev in pending.items()},
+                    },
+                ),
+                user_id=None,
+            )
+
     async def _own(self, workspace_id: str, policy: MapsPolicy) -> list[MapsLayout]:
         """The workspace's records, minus deployment items it may no longer use."""
         return [
@@ -293,11 +329,14 @@ class MapsLayoutService:
         *,
         seeds: Sequence[MapsLayout] = (),
         revisions: Mapping[str, int] | None = None,
+        hidden_seeds: Mapping[str, int] | None = None,
     ) -> MapsLayoutList:
         policy = await self._access.policy(KIND_LAYOUT)
         allowed = [s for s in seeds if policy.allows(s.id, DEPLOYMENT, workspace_id)]
         if allowed:
             await self.ensure_seeded(workspace_id, allowed, revisions)
+        if hidden_seeds:
+            await self.ensure_hidden_seeds(workspace_id, hidden_seeds)
         settings = await self._settings.get(workspace_id)
         colors = dict(settings.layer_colors)
         layouts = [

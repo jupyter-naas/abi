@@ -90,5 +90,7 @@ export function useMapsLayerParams() {
     selectLayerExclusive,
     replaceLayers,
     defaultLayerIds,
+    /** False until the workspace defaults have loaded; defaults may change until then. */
+    defaultsReady: workspaceDefaultFeeds !== undefined,
   };
 }

@@ -5,7 +5,6 @@ import { ChevronDown, Map as MapIcon } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { groupFeedLayers, groupLayerEntries } from '../lib/layouts';
-import { useMapLayers } from '../lib/use-map-layouts';
 import { MapsLayerBrandIcon } from './maps-layer-brand-icon';
 import { resolveMapsPinImageUrl } from '../lib/maps-pin-image-url';
 import { mapsIconMap } from '../lib/maps-icons';
@@ -215,10 +214,9 @@ export function MapsActiveLayersLegend({
   noLayers,
   feedLegendsByLayerId,
 }: MapsActiveLayersLegendProps) {
-  const { customLayerGroups } = useMapLayers();
   const groups = useMemo(
-    () => groupLayerEntries(entries, customLayerGroups),
-    [entries, customLayerGroups],
+    () => groupLayerEntries(entries),
+    [entries],
   );
 
   const [collapsedLayers, setCollapsedLayers] = useState<Record<string, boolean>>({});

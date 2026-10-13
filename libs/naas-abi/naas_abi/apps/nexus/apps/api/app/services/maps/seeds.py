@@ -8,6 +8,7 @@ basemaps in its FastAPI hook::
         layouts=[MapsLayout(...)],          # feeds
         feed_layers=[MapsFeedLayer(...)],   # layers on those feeds (else one "all" layer)
         basemaps=[MapsBasemapSeed(...)],
+        hidden_layouts=["earthquakes"],     # any layer id hidden by default
     )
 
 Seeds are copied into a workspace the first time its catalog is listed and are
@@ -50,6 +51,9 @@ class MapsSeedRegistry:
     layouts: dict[str, MapsLayout] = field(default_factory=dict)
     basemaps: dict[str, MapsBasemapSeed] = field(default_factory=dict)
     feed_layers: dict[str, MapsFeedLayer] = field(default_factory=dict)
+    # Layer ids hidden by default in every workspace (built-in, feed or graph
+    # layers), with their revision: an admin may show them again.
+    hidden_layouts: dict[str, int] = field(default_factory=dict)
     # Seed revision per "layout:<id>" / "layer:<id>" (default 1). Raising it
     # re-applies the seed to the workspaces' system copy: a data migration.
     revisions: dict[str, int] = field(default_factory=dict)
@@ -111,10 +115,13 @@ def register_maps_seeds(
     layouts: Iterable[MapsLayout] = (),
     feed_layers: Iterable[MapsFeedLayer] = (),
     basemaps: Iterable[MapsBasemapSeed] = (),
+    hidden_layouts: Iterable[str] = (),
     revision: int = 1,
 ) -> None:
-    """``revision`` applies to the feeds and layers passed: bump it to migrate them."""
+    """``revision`` applies to the feeds, layers and hidden ids passed: bump it to migrate them."""
     registry = maps_seed_registry(app)
+    for layer_id in hidden_layouts:
+        registry.hidden_layouts[layer_id] = revision
     for layout in layouts:
         registry.add_layout(layout)
         registry.revisions[f"layout:{layout.id}"] = revision

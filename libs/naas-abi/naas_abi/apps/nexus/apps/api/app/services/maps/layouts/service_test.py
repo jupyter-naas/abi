@@ -162,7 +162,7 @@ def _feed(**overrides) -> MapsLayout:
         "title": "Acme",
         "feed_type": FEED_GEOJSON_URL,
         "feed_url": "/api/maps/organization-facilities/acme-facilities",
-        "category": "organizations-facility",
+        "group": "Organizations Facilities",
         "logo_url": "/api/organizations/logos/Acme/Acme.ico",
         "color": "#171c8f",
     }
@@ -180,15 +180,39 @@ def test_feed_layers_need_a_same_host_api_path(service) -> None:
         assert any("feed_url" in e for e in exc_info.value.errors)
 
 
-def test_feed_layer_logo_and_category_are_checked(service) -> None:
+def test_feed_layer_logo_and_group_are_checked(service) -> None:
     with pytest.raises(MapsLayoutValidationError) as exc_info:
         asyncio.run(
-            service.save(
-                "ws-1", _feed(logo_url="javascript:alert(1)", category="Bad Group"), user_id="u"
-            )
+            service.save("ws-1", _feed(logo_url="javascript:alert(1)", group=" "), user_id="u")
         )
     assert any("logo_url" in e for e in exc_info.value.errors)
-    assert any("category" in e for e in exc_info.value.errors)
+    assert any("group" in e for e in exc_info.value.errors)
+
+    with pytest.raises(MapsLayoutValidationError) as exc_info:
+        asyncio.run(service.save("ws-1", _feed(group="x" * 81), user_id="u"))
+    assert any("group" in e for e in exc_info.value.errors)
+
+
+def test_group_is_a_free_label(service) -> None:
+    saved = asyncio.run(service.save("ws-1", _feed(group="Field Offices"), user_id="u"))
+    assert saved.group == "Field Offices"
+    assert saved.to_dict()["group"] == "Field Offices" and "category" not in saved.to_dict()
+
+
+@pytest.mark.parametrize(
+    ("record", "group"),
+    [
+        ({"category": "public"}, "Public"),
+        ({"category": "environment"}, "Environment"),
+        ({"category": "organizations-facility"}, "Organizations Facilities"),
+        ({"category": "user-field-offices"}, "user-field-offices"),
+        ({"category": ""}, "Custom"),
+        ({}, "Custom"),
+        ({"group": "Partners", "category": "public"}, "Partners"),
+    ],
+)
+def test_legacy_category_records_read_as_groups(record, group) -> None:
+    assert MapsLayout.from_dict({"id": "x", "title": "X", **record}).group == group
 
 
 def test_seeds_are_copied_once_and_cannot_be_deleted(service) -> None:
@@ -248,3 +272,18 @@ def test_hidden_flags_keep_other_settings(service) -> None:
 def test_feed_layers_do_not_run_sparql(service) -> None:
     with pytest.raises(MapsLayoutValidationError):
         asyncio.run(service.feed(_feed(), _Store([])))
+
+
+def test_hidden_seeds_hide_once_per_revision(service) -> None:
+    listed = asyncio.run(service.list("ws-1", hidden_seeds={"earthquakes": 1, "news": 1}))
+    assert listed.hidden == {"earthquakes", "news"}
+
+    # An admin can show a layer again; the same revision does not hide it twice.
+    asyncio.run(service.set_hidden("ws-1", "news", False, user_id="u"))
+    again = asyncio.run(service.list("ws-1", hidden_seeds={"earthquakes": 1, "news": 1}))
+    assert again.hidden == {"earthquakes"}
+
+    # A higher revision re-applies it (a deployment migration).
+    bumped = asyncio.run(service.list("ws-1", hidden_seeds={"earthquakes": 1, "news": 2}))
+    assert bumped.hidden == {"earthquakes", "news"}
+    assert asyncio.run(service.list("ws-2")).hidden == set()

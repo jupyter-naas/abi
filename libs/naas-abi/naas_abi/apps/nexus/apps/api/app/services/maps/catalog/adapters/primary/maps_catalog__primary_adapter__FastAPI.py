@@ -35,6 +35,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.service import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.adapters.primary.maps_layouts__primary_adapter__FastAPI import (  # noqa: E501
     get_maps_layout_service,
+    hidden_layout_seeds,
     layout_seed_revisions,
     layout_seeds,
 )
@@ -56,7 +57,10 @@ async def get_catalog(
     await require_workspace_access(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
     listed_layouts = await layouts.list(
-        workspace_id, seeds=layout_seeds(request), revisions=layout_seed_revisions(request)
+        workspace_id,
+        seeds=layout_seeds(request),
+        revisions=layout_seed_revisions(request),
+        hidden_seeds=hidden_layout_seeds(request),
     )
     listed_layers = await feed_layers.list(
         workspace_id,

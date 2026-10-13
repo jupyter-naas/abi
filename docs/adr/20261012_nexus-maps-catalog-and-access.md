@@ -8,12 +8,12 @@
 Maps layers came from five places: built-in feeds in web code, deployment layers in
 `NEXT_PUBLIC_MAPS_CUSTOM_DATASETS`, workspace SPARQL layouts in Postgres, module
 graph layers in memory, and GeoJSON imports in localStorage. Basemaps were
-hard-coded in `maps-basemaps.ts` (including deployment ids such as the Forvis
-Mazars style), their previews were static files or a one-off BOB route, and
+hard-coded in `maps-basemaps.ts` (including deployment-specific styles), their
+previews were static files or a one-off deployment route, and
 hiding a basemap was localStorage-only. Settings → Maps could not add, update,
 delete or hide most of them, and other browsers or members did not see the same
 state. Deployments also need to choose *which workspaces* get a layer or
-basemap (e.g. Forvis Mazars facilities everywhere, Valeo facilities only on two
+basemap (e.g. one organization's facilities everywhere, another's only on two
 workspaces).
 
 ## Decision
@@ -40,7 +40,7 @@ workspaces).
    renderer; it holds no basemap ids, labels or previews.
 3. **Seeds**: Nexus seeds its generic basemaps; modules call
    `register_maps_seeds(app, layouts=..., feed_layers=..., basemaps=...)` in
-   their API hook (BOB: facility feeds, EDF's technology layers, the group
+   their API hook (e.g. facility feeds, per-technology layers, a group
    basemap). A feed without seeded layers gets its default layer.
    Seeds carry a **revision** (`register_maps_seeds(..., revision=N)`); each
    workspace records the revision applied per seed (`maps_settings.seed_revisions`),
@@ -48,7 +48,7 @@ workspaces).
    deployment migrates its seeded feeds and layers (admin edits to those copies
    are overwritten on that bump, never otherwise). Once a feed has seeded layers,
    its automatic "every feature" default is dropped. Features may carry several
-   types (`classLabels`, e.g. Valeo activity poles); a layer keeps a feature when
+   types (`classLabels`, e.g. activity poles); a layer keeps a feature when
    any of its types is listed. A seed is copied into a workspace the
    first time its catalog is listed (`maps_settings.seeded_*` prevents
    re-creation). Seeded items are `system`: editable and hideable, never deleted.

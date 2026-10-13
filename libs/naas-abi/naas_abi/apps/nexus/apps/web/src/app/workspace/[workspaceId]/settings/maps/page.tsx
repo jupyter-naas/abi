@@ -35,8 +35,7 @@ import { MapsLayerEditorForm } from '@/app/workspace/[workspaceId]/maps/componen
 import {
   MapsFeedLayerForm, slugifyLayerId, useFeedTypes,
 } from '@/app/workspace/[workspaceId]/maps/components/maps-feed-layer-form';
-import type { MapsLayerGroupId } from '@/app/workspace/[workspaceId]/maps/lib/datasets';
-import { getWorkspaceLayerGroupId, removeWorkspaceLayerMeta } from '@/app/workspace/[workspaceId]/maps/lib/maps-workspace-layer-meta';
+import { DEFAULT_LAYER_GROUP, layoutGroup } from '@/app/workspace/[workspaceId]/maps/lib/maps-layer-groups';
 import {
   mapsLayerPath, mapsPath, mapsSettingsPath, mapsSettingsSelectedFeed, mapsSettingsSelectedLayer,
 } from '@/app/workspace/[workspaceId]/maps/lib/maps-route';
@@ -78,7 +77,7 @@ function MapsSettings() {
   const selectedFeed = mapsSettingsSelectedFeed(search);
   const forFeed = search?.get('for') ?? undefined;
   const {
-    all, hidden, canEdit, workspaceLayouts: feeds, feedLayers, loading, error, customLayerGroups,
+    all, hidden, canEdit, workspaceLayouts: feeds, feedLayers, loading, error, layerGroups,
   } = useMapLayouts();
   const applyLayouts = useMapsStore((s) => s.applyLayouts);
   const loadLayouts = useMapsStore((s) => s.loadLayouts);
@@ -147,7 +146,6 @@ function MapsSettings() {
     if (!ok) return;
     await run(feed.id, async () => {
       await layoutsApi.remove(workspaceId, feed.id);
-      removeWorkspaceLayerMeta(workspaceId, feed.id);
       await reload();
       if (selectedFeed === feed.id) go({});
     }, 'Could not delete the feed');
@@ -186,7 +184,7 @@ function MapsSettings() {
             layers={feed ? layersByFeed.get(feed.id) ?? [] : []}
             takenIds={takenLayerIds}
             canEdit={canEdit}
-            customLayerGroups={customLayerGroups}
+            layerGroups={layerGroups}
             busyId={busyId}
             onSavedGeoJson={(layerId) => router.push(mapsLayerPath(workspaceId, layerId))}
             onSaved={async (saved) => {
@@ -388,7 +386,7 @@ function FeedPage({
   layers,
   takenIds,
   canEdit,
-  customLayerGroups,
+  layerGroups,
   busyId,
   onSaved,
   onSavedGeoJson,
@@ -406,7 +404,7 @@ function FeedPage({
   layers: WorkspaceFeedLayer[];
   takenIds: Set<string>;
   canEdit: boolean;
-  customLayerGroups: ReturnType<typeof useMapLayouts>['customLayerGroups'];
+  layerGroups: readonly string[];
   busyId: string | null;
   onSaved: (feed: WorkspaceMapLayout) => void;
   onSavedGeoJson: (layerId: string) => void;
@@ -452,13 +450,7 @@ function FeedPage({
     } finally { setAdding(null); }
   };
 
-  const initialGroupId = (
-    feed
-      ? isFeedLayout(feed)
-        ? feed.category || 'custom'
-        : getWorkspaceLayerGroupId(workspaceId, feed.id) ?? feed.category ?? 'custom'
-      : 'custom'
-  ) as MapsLayerGroupId;
+  const initialGroup = feed ? layoutGroup(feed) : DEFAULT_LAYER_GROUP;
 
   return (
     <div className="space-y-6">
@@ -503,10 +495,10 @@ function FeedPage({
           variant="page"
           workspaceId={workspaceId}
           takenIds={takenIds}
-          customLayerGroups={customLayerGroups}
+          layerGroups={layerGroups}
           canEdit={canEdit && !shared}
           workspaceLayout={feed}
-          initialGroupId={initialGroupId}
+          initialGroup={initialGroup}
           initialSource="feed"
           onSavedWorkspace={onSaved}
           onSavedGeoJson={onSavedGeoJson}

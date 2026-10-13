@@ -168,6 +168,13 @@ def test_feed_layer_record_and_colors(client_for) -> None:
         "color": "#171c8f",
     }
     assert admin.put("/api/maps/layouts/acme?workspace_id=ws-1", json=body).status_code == 200
+    # A legacy category slug is stored as its group label; group wins when sent.
+    assert admin.get("/api/maps/layouts/acme?workspace_id=ws-1").json()["group"] == (
+        "Organizations Facilities"
+    )
+    renamed = {**body, "group": "Partners"}
+    assert admin.put("/api/maps/layouts/acme?workspace_id=ws-1", json=renamed).status_code == 200
+    assert admin.get("/api/maps/layouts/acme?workspace_id=ws-1").json()["group"] == "Partners"
 
     member = client_for("member")
     record = member.get("/api/maps/layouts/acme?workspace_id=ws-1").json()
