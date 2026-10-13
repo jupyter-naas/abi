@@ -2,6 +2,56 @@
 
 <!-- version list -->
 
+## v2.84.0 (2026-10-13)
+
+### Bug Fixes
+
+- **nexus**: Satisfy Users table TypeScript for export and pane
+  ([`4436d23`](https://github.com/jupyter-naas/abi/commit/4436d23e7524aae83e9dfddf2bc4869792f2394a))
+
+### Features
+
+- **nexus**: Rebuild org Users table with column filters
+  ([`5a46b01`](https://github.com/jupyter-naas/abi/commit/5a46b01e0a6693261c2b162f0eebf158b1b66f64))
+
+
+## v2.83.1 (2026-10-12)
+
+### Bug Fixes
+
+- **nexus**: Restrict org admin reads to owners and admins
+  ([`9bf1349`](https://github.com/jupyter-naas/abi/commit/9bf134980ee79673e942a3400534cfb89b457082))
+
+
+## v2.83.0 (2026-10-09)
+
+### Bug Fixes
+
+- **identity_graph**: Drop graph silently instead of clear
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+- **triple_store**: Decode invalid UTF-8 error bodies in _raise_for_status
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+### Features
+
+- **files**: Add PDF preview support for PPTX files
+  ([`f56e33f`](https://github.com/jupyter-naas/abi/commit/f56e33f23b88498cbfb0c3e7d1b9bbc230c0bf8f))
+
+- **identity_graph**: Retry sync on Fuseki dataset lock races
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+### Refactoring
+
+- **files**: Reorganize file drives and add platform drive
+  ([`ad0eed4`](https://github.com/jupyter-naas/abi/commit/ad0eed46afa5d61217b7ab07f63cf35ba1502d72))
+
+### Testing
+
+- **triple_store**: Add test for _raise_for_status decoding invalid UTF-8
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+
 ## v2.82.0 (2026-10-09)
 
 ### Bug Fixes

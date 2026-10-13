@@ -1,16 +1,28 @@
 /* organization settings layout — shell and sidebar nav semantic styles */
 
 .org-settings-layout-root {
+  --org-settings-header-height: 56px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100vh;
   height: 100dvh;
   background-color: var(--background-hex);
 }
 
+.org-settings-layout-left {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
 .org-settings-layout-header {
   display: flex;
-  min-height: 56px;
+  box-sizing: border-box;
+  height: var(--org-settings-header-height);
+  min-height: var(--org-settings-header-height);
   align-items: center;
   padding: env(safe-area-inset-top, 0px) var(--space-4) 0;
   border-bottom: 1px solid var(--border-hex);
@@ -19,7 +31,7 @@
 
 .org-settings-layout-header-inner {
   display: flex;
-  height: 56px;
+  height: 100%;
   width: 100%;
   align-items: center;
 }
@@ -155,6 +167,10 @@
 
 /* Mobile: list-then-detail (matches account / useIsMobile md = 768px) */
 @media (max-width: 767px) {
+  .org-settings-layout-root {
+    flex-direction: column;
+  }
+
   .org-settings-layout-body-mobile-list {
     flex-direction: column;
     overflow: auto;
