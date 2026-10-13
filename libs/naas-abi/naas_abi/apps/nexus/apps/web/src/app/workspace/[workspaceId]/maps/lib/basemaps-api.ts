@@ -54,6 +54,8 @@ export interface MapsCatalogResponse {
   layouts: WorkspaceMapLayout[];
   feed_layers?: WorkspaceFeedLayer[];
   hidden_layouts: string[];
+  /** Feeds switched off: every layer drawn from them is hidden. */
+  hidden_feeds?: string[];
   layer_colors: Record<string, string>;
   basemaps: WorkspaceBasemap[];
   hidden_basemaps: string[];

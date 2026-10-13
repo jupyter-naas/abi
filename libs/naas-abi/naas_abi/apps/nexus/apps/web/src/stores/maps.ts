@@ -18,6 +18,8 @@ export interface WorkspaceLayouts {
   /** Layers drawn from those feeds; a feed has one at least. */
   feedLayers: WorkspaceFeedLayer[];
   hidden: string[];
+  /** Feeds switched off in Settings → Maps (all their layers hidden). */
+  hiddenFeeds: string[];
   /** Default pin / group-by-country color of layers without a record (built-in, graph). */
   colors: Record<string, string>;
   basemaps: WorkspaceBasemap[];
@@ -57,6 +59,7 @@ const EMPTY: WorkspaceLayouts = {
   layouts: [],
   feedLayers: [],
   hidden: [],
+  hiddenFeeds: [],
   colors: {},
   basemaps: [],
   hiddenBasemaps: [],
@@ -103,6 +106,7 @@ export const useMapsStore = create<MapsState>()(
                 layouts: list(data.layouts),
                 feedLayers: list(data.feed_layers),
                 hidden: list(data.hidden_layouts),
+                hiddenFeeds: list(data.hidden_feeds),
                 colors: data.layer_colors ?? {},
                 basemaps: list(data.basemaps),
                 hiddenBasemaps: list(data.hidden_basemaps),

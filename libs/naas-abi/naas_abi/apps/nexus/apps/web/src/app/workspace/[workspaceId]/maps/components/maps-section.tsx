@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Layers, LayoutGrid, Map } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -8,12 +8,20 @@ import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from '@/components/shell/sidebar/collapsible-section';
+import { OntologyMultiPicker } from '@/components/shell/sidebar/ontology-multi-picker';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
 import { MapsLayerBrandIcon } from './maps-layer-brand-icon';
 import { mapsIconMap } from '../lib/maps-icons';
 import { groupFeedLayers, groupLayerEntries, type LayoutEntry } from '../lib/layouts';
 import { mapsLayerPath, mapsLibraryPath, mapsPath } from '../lib/maps-route';
 import { layerPinColor } from '../lib/maps-layer-colors';
+import {
+  filterSidebarEntries,
+  sidebarFeedOptions,
+  sidebarFilterLabel,
+  sidebarGroupOptions,
+  toggleValue,
+} from '../lib/maps-sidebar-filter';
 import { resolveMapsPinImageUrl } from '../lib/maps-pin-image-url';
 import { useMapsLayerParams } from '../lib/use-maps-layer-params';
 import { useMapLayers } from '../lib/use-map-layouts';
@@ -117,6 +125,8 @@ function LayerRow({
   );
 }
 
+const NO_SELECTION: string[] = [];
+
 function rowClass(active: boolean) {
   return cn(
     'flex w-full items-center gap-2 rounded-md px-2 py-1 text-left search-sidebar-list-row transition-colors hover:bg-workspace-accent-10',
@@ -125,20 +135,39 @@ function rowClass(active: boolean) {
 }
 
 /**
- * Sidebar: Active layers, then Environment, SIGINT, Situation, and Custom.
+ * Sidebar: Active layers, the Groups / Feeds filters, then each group's feeds
+ * and layers.
  */
 export function MapsDatasetGroups({
   dense,
 }: {
   dense?: boolean;
 }) {
-  const { workspaceId, layerIds, isOn, setLayerOn, setLayersOn, selectLayerExclusive } =
+  const { workspaceId, layerIds, hasLayerChoice, isOn, setLayerOn, setLayersOn, selectLayerExclusive } =
     useMapsLayerParams();
   const { entries, error, loading } = useMapLayers();
   useMapsSidebarLayerCounts(workspaceId, entries, loading);
   const layerCounts = useMapsStore((s) => s.layerCounts);
   // Feeds start expanded while one of their layers is on; a click overrides.
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // Sidebar filters (empty = all); they narrow the list, not the map.
+  const [filter, setFilter] = useState<{ workspaceId: string | null; groups: string[]; feeds: string[] }>({
+    workspaceId,
+    groups: [],
+    feeds: [],
+  });
+  const sameWorkspace = filter.workspaceId === workspaceId;
+  const groups = sameWorkspace ? filter.groups : NO_SELECTION;
+  const feeds = sameWorkspace ? filter.feeds : NO_SELECTION;
+  const groupOptions = useMemo(() => sidebarGroupOptions(entries), [entries]);
+  const feedOptions = useMemo(() => sidebarFeedOptions(entries, groups), [entries, groups]);
+  const listed = useMemo(() => filterSidebarEntries(entries, { groups, feeds }), [entries, groups, feeds]);
+  const setGroups = (next: string[]) => {
+    // Feeds outside the chosen groups leave the selection with them.
+    const offered = new Set(sidebarFeedOptions(entries, next).map((option) => option.value));
+    setFilter({ workspaceId, groups: next, feeds: feeds.filter((feed) => offered.has(feed)) });
+  };
+  const setFeeds = (next: string[]) => setFilter({ workspaceId, groups, feeds: next });
   const combinable = entries.filter((e) => e.combinable);
   const onCount = layerIds.length;
   const allActive = layerIds.length !== 1;
@@ -147,7 +176,7 @@ export function MapsDatasetGroups({
     <div className={cn('maps-section-list', dense && 'maps-section-list--dense')}>
       {error && <p className="maps-status maps-status--error">{error}</p>}
       <Link
-        href={mapsPath(workspaceId, layerIds)}
+        href={mapsPath(workspaceId, layerIds, { explicit: hasLayerChoice })}
         aria-current={allActive ? 'page' : undefined}
         className="shell-sidebar-home"
       >
@@ -158,7 +187,38 @@ export function MapsDatasetGroups({
         </span>
       </Link>
 
-      {groupLayerEntries(entries).map((group) => {
+      <div className="ontology-sidebar-filters shell-sidebar-home-gutter mb-2">
+        <OntologyMultiPicker
+          key={`groups:${workspaceId}`}
+          items={groupOptions}
+          value={groups}
+          onToggle={(value) => setGroups(toggleValue(groups, value))}
+          onClear={() => setGroups([])}
+          loading={loading}
+          error={null}
+          label={sidebarFilterLabel(groups, groupOptions, 'groups')}
+          noun="groups"
+          allLabel="All groups"
+        />
+        <OntologyMultiPicker
+          key={`feeds:${workspaceId}`}
+          items={feedOptions}
+          value={feeds}
+          onToggle={(value) => setFeeds(toggleValue(feeds, value))}
+          onClear={() => setFeeds([])}
+          loading={loading}
+          error={null}
+          label={sidebarFilterLabel(feeds, feedOptions, 'feeds')}
+          noun="feeds"
+          allLabel="All feeds"
+        />
+      </div>
+
+      {!loading && listed.length === 0 && entries.length > 0 && (
+        <p className="maps-status">No layers match these filters.</p>
+      )}
+
+      {groupLayerEntries(listed).map((group) => {
         const groupCombinable = group.entries.filter((e) => e.combinable);
         const allOn = groupCombinable.length > 0 && groupCombinable.every(isOn);
         return (

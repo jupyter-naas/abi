@@ -1,4 +1,4 @@
-"""A workspace's Maps settings: what is hidden, layer colors, which seeds were applied."""
+"""A workspace's Maps settings: hidden layers and feeds, layer colors, which seeds were applied."""
 
 from __future__ import annotations
 
@@ -20,6 +20,9 @@ class MapsWorkspaceSettings:
     """
 
     hidden_layouts: frozenset[str] = frozenset()
+    # Feeds switched off in this workspace: every layer drawn from them is hidden.
+    # A built-in or graph layer outside any feed is its own feed (same id).
+    hidden_feeds: frozenset[str] = frozenset()
     hidden_basemaps: frozenset[str] = frozenset()
     layer_colors: dict[str, str] = field(default_factory=dict)
     seeded_layouts: frozenset[str] = frozenset()
@@ -32,6 +35,7 @@ class MapsWorkspaceSettings:
         return json.dumps(
             {
                 "hidden_layouts": sorted(self.hidden_layouts),
+                "hidden_feeds": sorted(self.hidden_feeds),
                 "hidden_basemaps": sorted(self.hidden_basemaps),
                 "layer_colors": dict(sorted(self.layer_colors.items())),
                 "seeded_layouts": sorted(self.seeded_layouts),
@@ -52,6 +56,7 @@ class MapsWorkspaceSettings:
         revisions = data.get("seed_revisions")
         return cls(
             hidden_layouts=_ids(data.get("hidden_layouts")),
+            hidden_feeds=_ids(data.get("hidden_feeds")),
             hidden_basemaps=_ids(data.get("hidden_basemaps")),
             layer_colors=(
                 {str(k): str(v) for k, v in colors.items()} if isinstance(colors, dict) else {}

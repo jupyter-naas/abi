@@ -104,6 +104,8 @@ export function MapsAccessCell({
   );
 }
 
+type AccessScope = 'all' | 'some' | 'none';
+
 function MapsAccessModal({
   workspaceId,
   item,
@@ -119,11 +121,15 @@ function MapsAccessModal({
 }) {
   const titleId = useId();
   const loadLayouts = useMapsStore((s) => s.loadLayouts);
-  const [all, setAll] = useState(item.all_workspaces);
+  const deployment = item.owner === '';
+  // Deployment items may also be available nowhere (kept, but listed in no workspace).
+  const [scope, setScope] = useState<AccessScope>(() =>
+    item.all_workspaces ? 'all' : deployment && item.workspace_ids.length === 0 ? 'none' : 'some',
+  );
+  const all = scope === 'all';
   const [selected, setSelected] = useState<Set<string>>(() => new Set(item.workspace_ids));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const deployment = item.owner === '';
   // Workspaces already in the list that this user does not administer stay as they are.
   const others = item.workspace_ids.filter((id) => !data.workspaces.some((w) => w.id === id));
 
@@ -149,7 +155,7 @@ function MapsAccessModal({
     try {
       await mapsPermissionsApi.update(workspaceId, item.kind, item.item_id, {
         all_workspaces: all,
-        workspace_ids: all ? [] : [...selected],
+        workspace_ids: scope === 'some' ? [...selected] : [],
       });
       // The current workspace may have gained or lost the item.
       await loadLayouts(workspaceId, true);
@@ -189,16 +195,33 @@ function MapsAccessModal({
                 name={`${titleId}-scope`}
                 checked={all}
                 disabled={!data.superadmin}
-                onChange={() => setAll(true)}
+                onChange={() => setScope('all')}
               />
               All workspaces{!data.superadmin ? ' (superadmin only)' : ''}
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name={`${titleId}-scope`} checked={!all} onChange={() => setAll(false)} />
+              <input
+                type="radio"
+                name={`${titleId}-scope`}
+                checked={scope === 'some'}
+                onChange={() => setScope('some')}
+              />
               {deployment ? 'Only these workspaces' : 'This workspace, plus'}
             </label>
+            {deployment ? (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name={`${titleId}-scope`}
+                  checked={scope === 'none'}
+                  onChange={() => setScope('none')}
+                />
+                No workspace
+                <span className="text-xs text-muted-foreground">(kept, but not available anywhere)</span>
+              </label>
+            ) : null}
           </fieldset>
-          {!all ? (
+          {scope === 'some' ? (
             <div className="max-h-64 space-y-1 overflow-y-auto border border-border p-2">
               {data.workspaces.length === 0 ? (
                 <p className="text-sm text-muted-foreground">You do not administer other workspaces.</p>

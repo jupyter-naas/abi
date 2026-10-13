@@ -19,7 +19,7 @@ import asyncio
 import builtins
 import math
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import replace
 from typing import Any
 
@@ -266,34 +266,49 @@ class MapsLayoutService:
                 user_id=None,
             )
 
-    async def ensure_hidden_seeds(self, workspace_id: str, hidden_seeds: Mapping[str, int]) -> None:
-        """Hide the layers a deployment hides by default, once per seed revision.
+    async def ensure_hidden_seeds(
+        self,
+        workspace_id: str,
+        hidden_seeds: Mapping[str, int],
+        hidden_feed_seeds: Mapping[str, int] | None = None,
+    ) -> None:
+        """Hide the layers and switch off the feeds a deployment disables by default,
+        once per seed revision.
 
         An admin may show them again; only a higher revision hides them anew.
         """
+        feed_seeds = hidden_feed_seeds or {}
 
-        def pending_of(settings: MapsWorkspaceSettings) -> dict[str, int]:
+        def pending_of(settings: MapsWorkspaceSettings, seeds: Mapping[str, int], prefix: str):
             return {
-                layer_id: revision
-                for layer_id, revision in hidden_seeds.items()
-                if revision > settings.seed_revisions.get(f"hidden:{layer_id}", 0)
+                item_id: revision
+                for item_id, revision in seeds.items()
+                if revision > settings.seed_revisions.get(f"{prefix}:{item_id}", 0)
             }
 
-        if not pending_of(await self._settings.get(workspace_id)):
+        def pending(settings: MapsWorkspaceSettings) -> tuple[dict[str, int], dict[str, int]]:
+            return (
+                pending_of(settings, hidden_seeds, "hidden"),
+                pending_of(settings, feed_seeds, "hidden-feed"),
+            )
+
+        if not any(pending(await self._settings.get(workspace_id))):
             return
         lock = self._seed_locks.setdefault(workspace_id, asyncio.Lock())
         async with lock:
             settings = await self._settings.get(workspace_id)
-            pending = pending_of(settings)
-            if not pending:
+            layers, feeds = pending(settings)
+            if not layers and not feeds:
                 return
             await self._settings.save(
                 workspace_id,
                 settings.with_(
-                    hidden_layouts=settings.hidden_layouts | set(pending),
+                    hidden_layouts=settings.hidden_layouts | set(layers),
+                    hidden_feeds=settings.hidden_feeds | set(feeds),
                     seed_revisions={
                         **settings.seed_revisions,
-                        **{f"hidden:{layer_id}": rev for layer_id, rev in pending.items()},
+                        **{f"hidden:{i}": rev for i, rev in layers.items()},
+                        **{f"hidden-feed:{i}": rev for i, rev in feeds.items()},
                     },
                 ),
                 user_id=None,
@@ -330,13 +345,14 @@ class MapsLayoutService:
         seeds: Sequence[MapsLayout] = (),
         revisions: Mapping[str, int] | None = None,
         hidden_seeds: Mapping[str, int] | None = None,
+        hidden_feed_seeds: Mapping[str, int] | None = None,
     ) -> MapsLayoutList:
         policy = await self._access.policy(KIND_LAYOUT)
         allowed = [s for s in seeds if policy.allows(s.id, DEPLOYMENT, workspace_id)]
         if allowed:
             await self.ensure_seeded(workspace_id, allowed, revisions)
-        if hidden_seeds:
-            await self.ensure_hidden_seeds(workspace_id, hidden_seeds)
+        if hidden_seeds or hidden_feed_seeds:
+            await self.ensure_hidden_seeds(workspace_id, hidden_seeds or {}, hidden_feed_seeds)
         settings = await self._settings.get(workspace_id)
         colors = dict(settings.layer_colors)
         layouts = [
@@ -347,7 +363,12 @@ class MapsLayoutService:
             for layout in await self._visible(workspace_id, policy)
         ]
         layouts.sort(key=lambda layout: (layout.order, layout.title.lower()))
-        return MapsLayoutList(layouts=layouts, hidden=set(settings.hidden_layouts), colors=colors)
+        return MapsLayoutList(
+            layouts=layouts,
+            hidden=set(settings.hidden_layouts),
+            hidden_feeds=set(settings.hidden_feeds),
+            colors=colors,
+        )
 
     async def visible(self, workspace_id: str) -> builtins.list[MapsLayout]:
         """Feeds the workspace may use: its own and those shared with it (no seeding)."""
@@ -408,12 +429,18 @@ class MapsLayoutService:
             raise MapsLayoutNotFoundError(f"Map layout {layout_id!r} not found")
         await self._access.forget(KIND_LAYOUT, layout_id, workspace_id)
         settings = await self._settings.get(workspace_id)
-        if layout_id in settings.hidden_layouts or layout_id in settings.layer_colors:
+        if (
+            layout_id in settings.hidden_layouts
+            or layout_id in settings.hidden_feeds
+            or layout_id in settings.layer_colors
+        ):
             colors = {k: v for k, v in settings.layer_colors.items() if k != layout_id}
             await self._settings.save(
                 workspace_id,
                 settings.with_(
-                    hidden_layouts=settings.hidden_layouts - {layout_id}, layer_colors=colors
+                    hidden_layouts=settings.hidden_layouts - {layout_id},
+                    hidden_feeds=settings.hidden_feeds - {layout_id},
+                    layer_colors=colors,
                 ),
                 user_id=None,
             )
@@ -429,6 +456,34 @@ class MapsLayoutService:
         if updated != current:
             await self._settings.save(
                 workspace_id, settings.with_(hidden_layouts=updated), user_id=user_id
+            )
+        return set(updated)
+
+    async def set_feed_hidden(
+        self, workspace_id: str, feed_id: str, hidden: bool, *, user_id: str | None
+    ) -> set[str]:
+        """Switch a whole feed off or on (any feed id: record, built-in or graph layer)."""
+        return await self.set_feeds_hidden(workspace_id, [feed_id], hidden, user_id=user_id)
+
+    async def set_feeds_hidden(
+        self,
+        workspace_id: str,
+        feed_ids: Iterable[str],
+        hidden: bool,
+        *,
+        user_id: str | None,
+    ) -> set[str]:
+        """Switch several feeds off or on in one write (bulk from Settings → Maps)."""
+        ids = set(feed_ids)
+        invalid = sorted(i for i in ids if not LAYOUT_ID_PATTERN.match(i))
+        if invalid:
+            raise MapsLayoutValidationError([f"invalid feed id {i!r}" for i in invalid])
+        settings = await self._settings.get(workspace_id)
+        current = settings.hidden_feeds
+        updated = current | ids if hidden else current - ids
+        if updated != current:
+            await self._settings.save(
+                workspace_id, settings.with_(hidden_feeds=updated), user_id=user_id
             )
         return set(updated)
 

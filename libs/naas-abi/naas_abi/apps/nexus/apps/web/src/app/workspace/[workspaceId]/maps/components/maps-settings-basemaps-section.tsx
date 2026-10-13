@@ -129,7 +129,7 @@ export function MapsSettingsBasemapsSection({
                 <th className={cn(settingsTable.th, 'w-32')}>Column</th>
                 <th className={cn(settingsTable.th, 'w-28')}>Style</th>
                 {showAccess ? <th className={cn(settingsTable.th, 'w-44')}>Access</th> : null}
-                <th className={cn(settingsTable.th, 'w-20')}>Shown</th>
+                <th className={cn(settingsTable.th, 'w-24')}>Enabled</th>
                 <th className={cn(settingsTable.th, 'w-24')} aria-label="Actions" />
               </tr>
             </thead>
@@ -189,7 +189,7 @@ export function MapsSettingsBasemapsSection({
                           checked={shown}
                           disabled={!canEdit || busy}
                           onCheckedChange={() => void toggleShown(row)}
-                          aria-label={`${row.title} shown in map type picker`}
+                          aria-label={`${row.title} enabled in the map type picker`}
                         />
                         {busy ? <Loader2 size={12} className="animate-spin text-muted-foreground" /> : null}
                       </span>

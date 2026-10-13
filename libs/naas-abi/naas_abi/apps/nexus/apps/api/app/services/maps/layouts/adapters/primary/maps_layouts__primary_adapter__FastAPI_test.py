@@ -142,6 +142,32 @@ def test_hiding_builtin_and_custom_layouts(client_for) -> None:
     ]
 
 
+def test_switching_whole_feeds_off(client_for) -> None:
+    admin = client_for("admin")
+    url = "/api/maps/layouts/{}/feed-visibility?workspace_id=ws-1"
+
+    admin.put(url.format("earthquakes"), json={"hidden": True})
+    switched = admin.put(url.format("offices"), json={"hidden": True}).json()
+    assert switched == {"hidden_feeds": ["earthquakes", "offices"]}
+    assert admin.put(url.format("offices"), json={"hidden": False}).json() == {
+        "hidden_feeds": ["earthquakes"]
+    }
+    member = client_for("member")
+    assert member.put(url.format("offices"), json={"hidden": True}).status_code == 403
+
+
+def test_switching_feeds_in_bulk(client_for) -> None:
+    admin = client_for("admin")
+    url = "/api/maps/layouts/feed-visibility?workspace_id=ws-1"
+
+    off = admin.post(url, json={"ids": ["earthquakes", "iss", "offices"], "hidden": True})
+    assert off.json() == {"hidden_feeds": ["earthquakes", "iss", "offices"]}
+    on = admin.post(url, json={"ids": ["iss", "offices"], "hidden": False})
+    assert on.json() == {"hidden_feeds": ["earthquakes"]}
+    assert admin.post(url, json={"ids": [], "hidden": True}).status_code == 422
+    assert client_for("member").post(url, json={"ids": ["iss"], "hidden": True}).status_code == 403
+
+
 def test_preview_reports_errors_or_pins(client_for) -> None:
     admin = client_for("admin")
 

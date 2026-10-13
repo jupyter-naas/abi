@@ -45,8 +45,13 @@ feed, not an entity.
    layers and browser imports carry it too, defaulting to `Custom`. Seeds set
    it on the `MapsLayout` they register. Choosing a group in Settings → Maps
    means picking an existing value or typing a new one.
-4. **No group-level visibility or access.** Hiding stays per layer
-   (`hidden_layouts`): hiding a group means hiding each of its layers. Access follows the feed (`maps_grants`). A deployment
+4. **No group-level visibility or access.** Hiding is per layer
+   (`hidden_layouts`) or per feed (`hidden_feeds`, the Feed Layers table in
+   Settings → Maps); built-in and graph layers are one-layer feeds sharing their
+   id. Access follows the feed (`maps_grants`); a deployment feed may be
+   available in no workspace at all. A deployment switches feeds off by
+   default with `register_maps_seeds(hidden_feeds=[...])` (same once-per-revision
+   rule, `seed_revisions["hidden-feed:<id>"]`). A deployment
    hides layers by default with `register_maps_seeds(hidden_layouts=[...])`:
    the ids are added to each workspace's `hidden_layouts` once per seed
    revision (`seed_revisions["hidden:<id>"]`), so an admin may show them again.

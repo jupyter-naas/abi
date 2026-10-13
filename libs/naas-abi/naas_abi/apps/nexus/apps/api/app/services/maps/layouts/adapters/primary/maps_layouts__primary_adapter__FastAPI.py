@@ -96,6 +96,11 @@ class VisibilityIn(BaseModel):
     hidden: bool
 
 
+class FeedsVisibilityIn(BaseModel):
+    ids: list[str] = Field(..., min_length=1, max_length=1000)
+    hidden: bool
+
+
 class ColorIn(BaseModel):
     color: str | None
 
@@ -106,6 +111,10 @@ def layout_seed_revisions(request: Request) -> dict[str, int]:
 
 def hidden_layout_seeds(request: Request) -> dict[str, int]:
     return dict(maps_seed_registry(request.app).hidden_layouts)
+
+
+def hidden_feed_seeds(request: Request) -> dict[str, int]:
+    return dict(maps_seed_registry(request.app).hidden_feeds)
 
 
 def layout_seeds(request: Request) -> list[MapsLayout]:
@@ -194,6 +203,7 @@ async def list_layouts(
         seeds=layout_seeds(request),
         revisions=layout_seed_revisions(request),
         hidden_seeds=hidden_layout_seeds(request),
+        hidden_feed_seeds=hidden_feed_seeds(request),
     )
     role = await get_workspace_role(current_user.id, workspace_id)
     return {
@@ -227,6 +237,24 @@ async def preview_layout(
         "type": "FeatureCollection",
         "features": payload["features"][:PREVIEW_PINS],
     }
+
+
+@router.post("/feed-visibility")
+async def set_feeds_visibility(
+    body: FeedsVisibilityIn,
+    workspace_id: str = Query(..., min_length=1),
+    current_user=Depends(get_current_user_required),
+    service: MapsLayoutService = Depends(get_maps_layout_service),
+) -> dict[str, Any]:
+    """Switch several feeds off or on at once (Settings → Maps bulk action)."""
+    await require_workspace_admin(current_user.id, workspace_id)
+    try:
+        hidden = await service.set_feeds_hidden(
+            workspace_id, body.ids, body.hidden, user_id=current_user.id
+        )
+    except Exception as exc:
+        raise _http_error(exc) from exc
+    return {"hidden_feeds": sorted(hidden)}
 
 
 @router.get("/{layout_id}/feed")
@@ -300,6 +328,25 @@ async def set_layout_visibility(
     except Exception as exc:
         raise _http_error(exc) from exc
     return {"hidden": sorted(hidden)}
+
+
+@router.put("/{layout_id}/feed-visibility")
+async def set_feed_visibility(
+    layout_id: str,
+    body: VisibilityIn,
+    workspace_id: str = Query(..., min_length=1),
+    current_user=Depends(get_current_user_required),
+    service: MapsLayoutService = Depends(get_maps_layout_service),
+) -> dict[str, Any]:
+    """Switch a whole feed (every layer drawn from it) off or on in this workspace."""
+    await require_workspace_admin(current_user.id, workspace_id)
+    try:
+        hidden = await service.set_feed_hidden(
+            workspace_id, layout_id, body.hidden, user_id=current_user.id
+        )
+    except Exception as exc:
+        raise _http_error(exc) from exc
+    return {"hidden_feeds": sorted(hidden)}
 
 
 @router.put("/{layout_id}")

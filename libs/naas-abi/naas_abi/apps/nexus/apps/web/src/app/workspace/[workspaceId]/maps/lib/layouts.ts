@@ -156,8 +156,17 @@ export function buildLayoutEntries(
     taken.add(entry.id);
     entries.push(entry);
   };
+  // Built-in and graph layers are one-layer feeds: the feed is the source, the
+  // layer what is drawn (both share the id).
   for (const dataset of builtins) {
-    add({ ...dataset, kind: 'builtin', combinable: true, color: colors[dataset.id] });
+    add({
+      ...dataset,
+      kind: 'builtin',
+      combinable: true,
+      color: colors[dataset.id],
+      feedId: dataset.id,
+      feedTitle: dataset.title,
+    });
   }
   for (const layer of graphLayers) {
     add({
@@ -166,6 +175,8 @@ export function buildLayoutEntries(
       kind: 'graph',
       combinable: true,
       color: colors[layer.id],
+      feedId: layer.id,
+      feedTitle: layer.title,
     });
   }
   // One entry per layer; each layer draws from a feed record (SPARQL or API feed).
@@ -216,9 +227,15 @@ export function buildLayoutEntries(
   return entries;
 }
 
-export function visibleEntries(entries: LayoutEntry[], hidden: ReadonlySet<string> | string[]): LayoutEntry[] {
+/** Entries not hidden: neither the layer itself nor the feed it is drawn from. */
+export function visibleEntries(
+  entries: LayoutEntry[],
+  hidden: ReadonlySet<string> | string[],
+  hiddenFeeds: ReadonlySet<string> | string[] = [],
+): LayoutEntry[] {
   const set = hidden instanceof Set ? hidden : new Set(hidden);
-  return entries.filter((entry) => !set.has(entry.id));
+  const feeds = hiddenFeeds instanceof Set ? hiddenFeeds : new Set(hiddenFeeds);
+  return entries.filter((entry) => !set.has(entry.id) && !feeds.has(entry.feedId ?? entry.id));
 }
 
 /** Default on for a new session before the URL is seeded. */

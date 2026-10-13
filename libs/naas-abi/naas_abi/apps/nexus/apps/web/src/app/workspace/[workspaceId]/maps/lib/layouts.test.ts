@@ -88,6 +88,12 @@ describe('visibleEntries / groupLayerEntries', () => {
     expect(visibleEntries(entries, ['gdacs', 'offices']).map((e) => e.id)).toEqual(['volcanoes', 'iss']);
   });
 
+  it('drops every layer of a feed switched off, and built-ins are one-layer feeds', () => {
+    expect(entries.find((e) => e.id === 'gdacs')).toMatchObject({ feedId: 'gdacs', feedTitle: 'gdacs' });
+    expect(visibleEntries(entries, [], ['gdacs', 'offices']).map((e) => e.id)).toEqual(['volcanoes', 'iss']);
+    expect(visibleEntries(entries, [], ['nothing']).length).toBe(entries.length);
+  });
+
   it('groups by the entries\' labels, sorted, Custom last; empty groups omitted', () => {
     const groups = groupLayerEntries(visibleEntries(entries, ['iss']));
     expect(groups.map((g) => [g.id, g.label, g.entries.map((e) => e.id)])).toEqual([

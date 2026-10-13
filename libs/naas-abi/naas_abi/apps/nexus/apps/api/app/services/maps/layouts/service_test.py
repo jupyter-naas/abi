@@ -110,6 +110,39 @@ def test_visibility_is_per_workspace(service) -> None:
     assert (asyncio.run(service.list("ws-2"))).hidden == set()
 
 
+def test_feeds_are_switched_off_apart_from_layers(service) -> None:
+    asyncio.run(service.set_feed_hidden("ws-1", "offices", True, user_id="u"))
+    asyncio.run(service.set_feed_hidden("ws-1", "earthquakes", True, user_id="u"))
+    asyncio.run(service.set_feed_hidden("ws-1", "earthquakes", False, user_id="u"))
+
+    listed = asyncio.run(service.list("ws-1"))
+    assert listed.hidden_feeds == {"offices"}
+    # A layer with the feed's id keeps its own flag.
+    assert listed.hidden == set()
+    assert asyncio.run(service.list("ws-2")).hidden_feeds == set()
+    with pytest.raises(MapsLayoutValidationError):
+        asyncio.run(service.set_feed_hidden("ws-1", "Not An Id", True, user_id="u"))
+
+
+def test_feeds_are_switched_in_bulk(service) -> None:
+    asyncio.run(service.set_feeds_hidden("ws-1", ["a", "b", "c"], True, user_id="u"))
+    assert asyncio.run(service.set_feeds_hidden("ws-1", ["a", "c", "zz"], False, user_id="u")) == {
+        "b"
+    }
+    with pytest.raises(MapsLayoutValidationError):
+        asyncio.run(service.set_feeds_hidden("ws-1", ["ok", "Bad Id"], True, user_id="u"))
+    assert asyncio.run(service.list("ws-1")).hidden_feeds == {"b"}
+
+
+def test_deleting_a_feed_forgets_its_switch(service) -> None:
+    asyncio.run(service.save("ws-1", _layout(), user_id="u"))
+    asyncio.run(service.set_feed_hidden("ws-1", "offices", True, user_id="u"))
+
+    asyncio.run(service.delete("ws-1", "offices"))
+
+    assert asyncio.run(service.list("ws-1")).hidden_feeds == set()
+
+
 def test_deleting_a_layout_forgets_its_hidden_flag(service) -> None:
     asyncio.run(service.save("ws-1", _layout(), user_id="u"))
     asyncio.run(service.set_hidden("ws-1", "offices", True, user_id="u"))
@@ -287,3 +320,18 @@ def test_hidden_seeds_hide_once_per_revision(service) -> None:
     bumped = asyncio.run(service.list("ws-1", hidden_seeds={"earthquakes": 1, "news": 2}))
     assert bumped.hidden == {"earthquakes", "news"}
     assert asyncio.run(service.list("ws-2")).hidden == set()
+
+
+def test_hidden_feed_seeds_switch_feeds_off_once_per_revision(service) -> None:
+    seeds = {"earthquakes": 1, "iss": 1}
+    listed = asyncio.run(service.list("ws-1", hidden_feed_seeds=seeds))
+    assert listed.hidden_feeds == {"earthquakes", "iss"}
+    assert listed.hidden == set()
+
+    # An admin enables one again: the same revision leaves it on.
+    asyncio.run(service.set_feed_hidden("ws-1", "iss", False, user_id="u"))
+    assert asyncio.run(service.list("ws-1", hidden_feed_seeds=seeds)).hidden_feeds == {
+        "earthquakes"
+    }
+    bumped = asyncio.run(service.list("ws-1", hidden_feed_seeds={"earthquakes": 1, "iss": 2}))
+    assert bumped.hidden_feeds == {"earthquakes", "iss"}

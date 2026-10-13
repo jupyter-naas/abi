@@ -22,7 +22,8 @@ import { useGraphMapLayers } from './use-graph-map-layers';
 
 /**
  * Every Maps data layer for the current workspace. `entries` omits layers hidden
- * in Settings → Maps; `all` includes them (for that settings page).
+ * in Settings → Maps, and those of feeds switched off there; `all` includes them
+ * (for that settings page).
  */
 export function useMapLayers() {
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
@@ -89,7 +90,10 @@ export function useMapLayers() {
       }),
     [graphLayers.layers, workspace.layouts, workspace.feedLayers, workspace.colors, importedLayers],
   );
-  const entries = useMemo(() => visibleEntries(all, workspace.hidden), [all, workspace.hidden]);
+  const entries = useMemo(
+    () => visibleEntries(all, workspace.hidden, workspace.hiddenFeeds),
+    [all, workspace.hidden, workspace.hiddenFeeds],
+  );
   // Every group label in use (hidden layers included), for the group pickers.
   const layerGroups = useMemo(() => layerGroupLabels(all.map((entry) => entry.group)), [all]);
   const isOn = (entry: LayoutEntry) => isLayerOn(entry, overrides);
@@ -101,6 +105,7 @@ export function useMapLayers() {
     entries,
     basemapId,
     hidden: workspace.hidden,
+    hiddenFeeds: workspace.hiddenFeeds,
     layerColors: workspace.colors,
     layerGroups,
     canEdit: workspace.canEdit,

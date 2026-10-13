@@ -35,6 +35,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.service import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.adapters.primary.maps_layouts__primary_adapter__FastAPI import (  # noqa: E501
     get_maps_layout_service,
+    hidden_feed_seeds,
     hidden_layout_seeds,
     layout_seed_revisions,
     layout_seeds,
@@ -61,6 +62,7 @@ async def get_catalog(
         seeds=layout_seeds(request),
         revisions=layout_seed_revisions(request),
         hidden_seeds=hidden_layout_seeds(request),
+        hidden_feed_seeds=hidden_feed_seeds(request),
     )
     listed_layers = await feed_layers.list(
         workspace_id,
@@ -74,6 +76,7 @@ async def get_catalog(
         "layouts": [layout.to_dict() for layout in listed_layouts.layouts],
         "feed_layers": [layer.to_dict() for layer in listed_layers],
         "hidden_layouts": sorted(listed_layouts.hidden),
+        "hidden_feeds": sorted(listed_layouts.hidden_feeds),
         "layer_colors": listed_layouts.colors,
         "basemaps": [basemap.to_dict() for basemap in listed_basemaps.basemaps],
         "hidden_basemaps": sorted(listed_basemaps.hidden),

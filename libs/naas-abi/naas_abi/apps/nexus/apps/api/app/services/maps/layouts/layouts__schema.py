@@ -140,6 +140,8 @@ def group_from_record(data: dict[str, Any]) -> str:
 class MapsLayoutList:
     layouts: list[MapsLayout]
     hidden: set[str]
+    # Feed ids switched off in the workspace (all their layers hidden).
+    hidden_feeds: set[str] = field(default_factory=set)
     # Color per layer id for layers without a record (built-in, graph layers).
     colors: dict[str, str] = field(default_factory=dict)
 

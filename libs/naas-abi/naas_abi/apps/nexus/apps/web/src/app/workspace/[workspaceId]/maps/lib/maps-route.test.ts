@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  hasMapsLayerChoice,
   mapsLayerPath,
   mapsLibraryPath,
   mapsPath,
@@ -69,6 +70,16 @@ describe('mapsPath', () => {
       `${BASE}?layer=earthquakes&layer=temperature`,
     );
     expect(mapsPath(WS, [])).toBe(BASE);
+  });
+
+  it('keeps an explicit "no layers" choice so defaults are not applied again', () => {
+    const none = mapsPath(WS, [], { explicit: true });
+    expect(none).toBe(`${BASE}?layer=`);
+    expect(parseMapsLayerIds(none.split('?')[1])).toEqual([]);
+    expect(hasMapsLayerChoice(none.split('?')[1])).toBe(true);
+    expect(hasMapsLayerChoice('')).toBe(false);
+    expect(hasMapsLayerChoice('?layer=iss')).toBe(true);
+    expect(mapsPath(WS, ['iss'], { explicit: true })).toBe(`${BASE}?layer=iss`);
   });
 
   it('degrades before a workspace is known', () => {

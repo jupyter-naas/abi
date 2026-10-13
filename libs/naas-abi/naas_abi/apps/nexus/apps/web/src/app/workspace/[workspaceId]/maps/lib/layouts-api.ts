@@ -85,6 +85,18 @@ export const layoutsApi = {
   /** Default pin / group-by-country color; null resets a built-in or graph layer. */
   setColor: (workspaceId: string, id: string, color: string | null) =>
     request<{ colors: Record<string, string> }>(`${base()}/${encodeURIComponent(id)}/color?${ws(workspaceId)}`, json('PUT', { color })),
+  /** Switch a whole feed (record, built-in or graph layer) off or on. */
+  setFeedHidden: (workspaceId: string, feedId: string, hidden: boolean) =>
+    request<{ hidden_feeds: string[] }>(
+      `${base()}/${encodeURIComponent(feedId)}/feed-visibility?${ws(workspaceId)}`,
+      json('PUT', { hidden }),
+    ),
+  /** Switch several feeds off or on in one write (bulk). */
+  setFeedsHidden: (workspaceId: string, feedIds: string[], hidden: boolean) =>
+    request<{ hidden_feeds: string[] }>(
+      `${base()}/feed-visibility?${ws(workspaceId)}`,
+      json('POST', { ids: feedIds, hidden }),
+    ),
   setHidden: (workspaceId: string, id: string, hidden: boolean) =>
     request<{ hidden: string[] }>(`${base()}/${encodeURIComponent(id)}/visibility?${ws(workspaceId)}`, json('PUT', { hidden })),
   preview: (workspaceId: string, draft: LayoutDraft) =>

@@ -3,6 +3,10 @@
  *
  *   /workspace/{id}/maps
  *   /workspace/{id}/maps?layer=earthquakes&layer=temperature
+ *   /workspace/{id}/maps?layer=          (every layer switched off)
+ *
+ * No `layer` param means the member has not chosen yet: the map applies the
+ * default layers. An empty `layer=` keeps an explicit "none" from being undone.
  */
 
 export interface MapsRoute {
@@ -17,6 +21,15 @@ export interface MapsRoute {
   datasetId: string | null;
 }
 
+/** Query string or search params (Next's read-only params included). */
+type MapsSearch = string | Pick<URLSearchParams, 'getAll' | 'has'> | null | undefined;
+
+function searchParamsOf(search: string | Pick<URLSearchParams, 'getAll' | 'has'>) {
+  return typeof search === 'string'
+    ? new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
+    : search;
+}
+
 /** Workspace Maps app only — not Settings → Maps (`…/settings/maps`). */
 const MAPS_SEGMENT = /\/maps(?=[/?#]|$)/;
 
@@ -25,14 +38,9 @@ function isWorkspaceMapsPath(pathname: string): boolean {
   return MAPS_SEGMENT.test(pathname);
 }
 
-export function parseMapsLayerIds(
-  search: string | URLSearchParams | null | undefined,
-): string[] {
+export function parseMapsLayerIds(search: MapsSearch): string[] {
   if (!search) return [];
-  const params =
-    typeof search === 'string'
-      ? new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
-      : search;
+  const params = searchParamsOf(search);
   const seen = new Set<string>();
   const ids: string[] = [];
   for (const raw of params.getAll('layer')) {
@@ -44,9 +52,14 @@ export function parseMapsLayerIds(
   return ids;
 }
 
+/** Whether the URL carries a layer choice (possibly empty), as opposed to none yet. */
+export function hasMapsLayerChoice(search: MapsSearch): boolean {
+  return !!search && searchParamsOf(search).has('layer');
+}
+
 export function parseMapsRoute(
   pathname: string | null | undefined,
-  search?: string | URLSearchParams | null,
+  search?: MapsSearch,
 ): MapsRoute {
   if (!pathname || !isWorkspaceMapsPath(pathname)) {
     return { isMapsRoute: false, layerIds: [], isMapView: false, isDataset: false, datasetId: null };
@@ -67,11 +80,18 @@ export function mapsLibraryPath(workspaceId: string | null): string {
   return workspaceId ? `/workspace/${workspaceId}/maps` : '/maps';
 }
 
-/** Map URL with zero or more active layers. */
-export function mapsPath(workspaceId: string | null, layerIds: readonly string[]): string {
+/**
+ * Map URL with zero or more active layers. With `explicit`, no layers is kept
+ * as `?layer=` so the defaults are not applied again.
+ */
+export function mapsPath(
+  workspaceId: string | null,
+  layerIds: readonly string[],
+  options: { explicit?: boolean } = {},
+): string {
   const base = mapsLibraryPath(workspaceId);
   const unique = [...new Set(layerIds.filter(Boolean))];
-  if (!unique.length) return base;
+  if (!unique.length) return options.explicit ? `${base}?layer=` : base;
   const qs = unique.map((id) => `layer=${encodeURIComponent(id)}`).join('&');
   return `${base}?${qs}`;
 }

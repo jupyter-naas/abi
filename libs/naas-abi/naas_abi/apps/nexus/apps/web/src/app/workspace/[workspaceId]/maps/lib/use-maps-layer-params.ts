@@ -4,7 +4,7 @@ import { useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { defaultLayerOn, type LayoutEntry } from './layouts';
-import { mapsPath, parseMapsLayerIds } from './maps-route';
+import { hasMapsLayerChoice, mapsPath, parseMapsLayerIds } from './maps-route';
 import { useWorkspaceMapDefaultFeeds } from './use-workspace-map-default-feeds';
 import { useMapLayers } from './use-map-layouts';
 
@@ -24,6 +24,7 @@ export function useMapsLayerParams() {
   );
 
   const rawLayerIds = useMemo(() => parseMapsLayerIds(searchParams), [searchParams]);
+  const hasLayerChoice = useMemo(() => hasMapsLayerChoice(searchParams), [searchParams]);
   const knownIds = useMemo(() => new Set(entries.map((e) => e.id)), [entries]);
 
   const layerIds = useMemo(
@@ -33,7 +34,7 @@ export function useMapsLayerParams() {
 
   const replaceLayers = useCallback(
     (next: string[]) => {
-      router.replace(mapsPath(workspaceId, next));
+      router.replace(mapsPath(workspaceId, next, { explicit: true }));
     },
     [router, workspaceId],
   );
@@ -83,6 +84,8 @@ export function useMapsLayerParams() {
     workspaceId,
     layerIds,
     rawLayerIds,
+    /** The URL holds a layer choice, even an empty one: defaults do not apply. */
+    hasLayerChoice,
     entries,
     isOn,
     setLayerOn,
