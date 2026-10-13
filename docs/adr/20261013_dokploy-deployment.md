@@ -26,10 +26,17 @@ on it:
 - Dokploy names the compose project after the app, so the derived network
   name `<dir>_abi-network`, which Coder workspaces and CI jobs join, does not
   match.
+- The container's files are replaced on every deploy, so what the engine
+  writes to its `.env` at runtime (generated user passwords, keys saved from
+  Nexus) would be lost.
+- Every stack on a Dokploy server shares `dokploy-network`, and Compose adds
+  each service's name on every network it joins. A container on both networks
+  can resolve `abi` to another stack's container.
 
 ## Decision
 
-- `abi deploy dokploy [--domain D] [--coding] [--regenerate]` renders
+- `abi deploy dokploy [--domain D] [--coding] [--regenerate]
+  [--wildcard-cert-resolver R]` renders
   `docker-compose.dokploy.yml` from its own template, with the same `NATS` and
   `INCLUDE_CODING` switches as the local one. The `.deploy/docker` files it
   mounts come from the local and coding templates.
@@ -38,9 +45,20 @@ on it:
   `dokploy-network` and carry Traefik labels: the web host to nexus-web,
   `/app-html/` on the web host to abi at a higher priority, the API host to
   abi, and with `--coding` `coder.`, `*.coder.` and `git.` to Coder and
-  Forgejo. Certificates come from Dokploy's `letsencrypt` resolver. The
-  `*.coder` wildcard has its own resolver variable, since a wildcard needs a
-  DNS challenge that a server must set up.
+  Forgejo. Certificates come from Dokploy's `letsencrypt` resolver.
+- **The `*.coder` wildcard certificate is opt-in.** Let's Encrypt issues a
+  wildcard only through a DNS challenge, which the server must set up. The
+  compose asks for one only when rendered with `--wildcard-cert-resolver`;
+  otherwise the workspace-app router serves Traefik's default certificate
+  rather than make a request Let's Encrypt refuses and counts toward its rate
+  limit. The choice is kept in `.env.dokploy` across reruns.
+- **Stack-unique aliases for internal calls.** The services Traefik reaches
+  join `dokploy-network`; their names there are shared by every stack. Each of
+  them also gets the alias `${ABI_STACK_NAME}-<service>` on the stack's own
+  network, and every call between them (nexus-web to abi, the runner to
+  Forgejo, mcp-server to abi) uses the alias. Services that are not routed
+  stay off `dokploy-network`, so their bare names resolve only inside the
+  stack.
 - **Dokploy builds the image.** `abi` (and mcp-server and Dagster) build from
   the project `Dockerfile` on each deploy, with no source mount and no venv
   volume. `.env` and `.env.*` go to `.dockerignore`, so the Environment tab is
@@ -52,13 +70,28 @@ on it:
   `.env.dokploy`, with the same generators as `abi deploy local`; reruns keep
   its values and `--regenerate` replaces them.
 - **`config.dokploy.yaml`.** The stack sets `ENV=dokploy`. The command derives
-  the file from `config.local.yaml` on every run, so the two do not drift.
+  the file from `config.local.yaml` on every run, so the two do not drift. It
+  rewrites only the `services.secret.secret_adapters` list, parsed as YAML,
+  and checks that the result reads back as written. The project's adapters
+  are kept.
+- **The abi_secrets volume.** The dotenv adapter on `.env` reads
+  `/var/lib/abi-secrets/.env` on the `abi_secrets` named volume instead, so
+  secrets the engine writes at runtime survive redeploys.
 - **The coding-secrets volume.** `coding-init` writes the tokens to
   `CODING_SECRETS_FILE`, a dotenv file on the `coding_secrets` named volume.
   `abi` waits for it, mounts the volume read-only, and `config.dokploy.yaml`
-  adds the file as a second dotenv secret adapter. Tokens survive every
+  appends the file as a dotenv secret adapter. Tokens survive every
   redeploy, and nothing is pasted by hand. The tokens are left out of
   `.env.dokploy`: an empty environment variable would shadow the file.
+- **Read-only dotenv adapters.** The secret service writes to every adapter
+  and fails on the first error, so a dotenv on a read-only mount broke every
+  secret write. The dotenv adapter takes `read_only: true`: it serves reads,
+  and `set` / `remove` skip it. The coding adapter uses it.
+- **`coding-init` on Dokploy fails loudly.** The bootstrap mints tokens under
+  names that carry the time, so a mint after the volume was lost does not
+  collide with an existing token. With `CODING_INIT_STRICT=1`, set by the
+  Dokploy compose, it exits 1 when a token is still missing, which fails the
+  deploy instead of starting `abi` without it.
 - **A fixed network name.** The internal network is named
   `${ABI_STACK_NAME}-abi-network`. Coder workspaces, the act-runner config
   (inlined as a Compose `configs:` entry, so it reads the same variable) and
@@ -71,7 +104,8 @@ on it:
   it to the volume also means adding the second adapter to every existing
   `config.local.yaml`, which is not a trivial change. The bootstrap script
   defaults to `/host/.env` when `CODING_SECRETS_FILE` is not set, so the
-  local stack works as before.
+  local stack works as before. It shares the time-stamped token names and
+  stays non-strict: a missing token is a warning there.
 
 ## Consequences
 
@@ -82,7 +116,17 @@ on it:
   and no image pipeline; build time and server resources grow with the
   project.
 - Workspace apps on `*.coder` need a DNS-challenge resolver on the Dokploy
-  server; until then they get Traefik's default certificate.
+  server and a rerun with `--wildcard-cert-resolver`; until then they get
+  Traefik's default certificate.
+- A key saved from Nexus lands in the `abi_secrets` file, which runtime reads
+  consult before the environment: it wins over the Environment tab until it
+  is deleted in Nexus.
+- A project config that calls Coder or Forgejo from `abi` must use their
+  public URLs or the stack aliases, not the bare service names. Another
+  Dokploy app that puts a service named like an internal one (`postgres`,
+  `redis`, ...) on `dokploy-network` could still shadow it for `abi`.
+- A Coder or Forgejo failure during `coding-init` keeps the whole Dokploy
+  stack from deploying until a redeploy succeeds.
 - The Dokploy stack has no hot reload and no admin UIs on host ports.
   Internal services are reached through the Dokploy terminal or a tunnel.
 - `config.dokploy.yaml` is generated: edits go to `config.local.yaml`,

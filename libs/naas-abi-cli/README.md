@@ -206,7 +206,7 @@ abi deploy naas
 abi deploy naas --env prod
 ```
 
-#### `abi deploy dokploy [--domain <domain>] [--coding] [--regenerate]`
+#### `abi deploy dokploy [--domain <domain>] [--coding] [--regenerate] [--wildcard-cert-resolver <name>]`
 Renders the project for a [Dokploy](https://dokploy.com) server, where Traefik
 replaces the local Caddy edge.
 
@@ -217,13 +217,19 @@ replaces the local Caddy edge.
   `coder.`, `*.coder.` and `git.` to Coder and Forgejo. `abi` is built from the
   project `Dockerfile` on each deploy, with no source mount
 - Writes `config.dokploy.yaml` (from `config.local.yaml`, read with
-  `ENV=dokploy`) and the `.deploy/docker` files the compose mounts
+  `ENV=dokploy`) and the `.deploy/docker` files the compose mounts. Its `.env`
+  dotenv secret adapter moves to the `abi_secrets` volume, so secrets the
+  engine writes survive redeploys; the project's other adapters are kept
 - Writes the gitignored `.env.dokploy` with generated passwords and keys, to
   paste into Dokploy's Environment tab. Reruns keep its values; `--regenerate`
   replaces them and backs the old file up
 - With `--coding`, the minted Coder/Forgejo admin tokens live on the
-  `coding_secrets` volume, which the engine reads as a second dotenv secret
-  adapter, so they survive redeploys
+  `coding_secrets` volume, which the engine reads through a read-only dotenv
+  secret adapter, so they survive redeploys. `--wildcard-cert-resolver` names
+  a DNS-challenge resolver in Dokploy's Traefik for the `*.coder` certificate;
+  without it, no wildcard certificate is requested
+- Calls between services use stack-unique aliases (`<ABI_STACK_NAME>-abi`,
+  ...), so several stacks can share a server
 - `--headscale` is not supported on Dokploy yet
 
 **Example:**

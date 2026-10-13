@@ -52,7 +52,7 @@ list() -> Dict[str, str | None]                     # merged view (earlier overr
 
 | Adapter | Backend / Notes |
 |---|---|
-| `DotenvSecretSecondaryAdaptor(path=".env")` | Reads / writes `.env` files with thread-safe locking |
+| `DotenvSecretSecondaryAdaptor(path=".env", read_only=False)` | Reads / writes `.env` files with thread-safe locking. `read_only=True` serves a file another process owns (e.g. a volume mounted `:ro`): `set` / `remove` skip it, so the fan-out still writes to the other adapters |
 | `NaasSecret(naas_api_key, naas_api_url=None)` | Naas API over HTTPS (Bearer token) |
 | `Base64Secret(secret_adapter, base64_secret_key)` | **Decorator** — wraps another adapter; encodes / decodes a base64 dotenv blob under a single key |
 
@@ -79,6 +79,7 @@ secret = Secret(adapters=[
 uv run pytest libs/naas-abi-core/naas_abi_core/services/secret/Secret_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/secret/adaptors/secondary/Base64Secret_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/secret/adaptors/secondary/NaasSecret_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/secret/adaptors/secondary/dotenv_secret_secondaryadaptor_test.py
 ```
 
 ## Adding a new adapter

@@ -14,9 +14,11 @@ import shutil
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import jinja2
+import yaml
 from rich.prompt import Prompt
 
 import naas_abi_cli
@@ -37,6 +39,7 @@ from .local import (
     _build_hosts_from_domain,
     _build_nexus_api_url,
     _read_env_vars,
+    compose_project_name,
     project_uses_nats,
 )
 
@@ -44,12 +47,21 @@ COMPOSE_FILE = "docker-compose.dokploy.yml"
 CONFIG_FILE = "config.dokploy.yaml"
 ENV_FILE = ".env.dokploy"
 BACKUP_DIRECTORY = os.path.join(".abi-backups", "deploy-dokploy")
+# The writable dotenv secret file, on the abi_secrets volume: secrets the
+# engine stores at runtime (generated user passwords, keys saved from Nexus)
+# outlive a redeploy. Replaces the project's `.env` dotenv adapter.
+SECRETS_DIR = "/var/lib/abi-secrets"
+SECRETS_FILE = f"{SECRETS_DIR}/.env"
 # Where coding-init writes the minted admin tokens: on the coding_secrets
-# volume, which abi mounts read-only.
-CODING_SECRETS_FILE = "/run/abi-secrets/coding.env"
+# volume, which abi mounts read-only and reads as a read-only dotenv adapter.
+CODING_SECRETS_DIR = "/run/abi-secrets"
+CODING_SECRETS_FILE = f"{CODING_SECRETS_DIR}/coding.env"
 # Minted at deploy time into CODING_SECRETS_FILE. Never written to the env: an
 # environment variable, even empty, wins over the dotenv file.
 _MINTED_TOKENS = frozenset({"CODER_ADMIN_TOKEN", "FORGEJO_ADMIN_TOKEN"})
+# The Traefik resolver for the *.coder wildcard certificate; set only with a
+# DNS-challenge resolver.
+_WILDCARD_RESOLVER_KEY = "CODER_WILDCARD_CERT_RESOLVER"
 
 # .deploy/docker files the compose mounts, rendered from the local and coding
 # templates `abi deploy local` uses.
@@ -67,11 +79,8 @@ _CODING_FILES = (
 )
 
 _SECRET_REF = re.compile(r"\{\{\s*secret\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
-_SECRET_ADAPTERS = re.compile(
-    r"^(?P<indent>[ \t]*)secret_adapters:[ \t]*\n"
-    r"(?:(?P=indent)(?:[ \t]+|- ).*\n)*",
-    re.MULTILINE,
-)
+_JINJA = re.compile(r"\{\{.*?\}\}|\{%.*?%\}")
+_SECRET_ADAPTERS_KEY = re.compile(r"(?P<indent>[ \t]*)secret_adapters:[ \t]*(#.*)?")
 
 
 class DokployDeployError(Exception):
@@ -85,11 +94,11 @@ def _templates(name: str) -> str:
 
 
 def _stack_name(project_path: str) -> str:
-    base = os.path.basename(os.path.abspath(project_path)).lower()
-    return re.sub(r"[^a-z0-9-]", "", base).strip("-") or "abi"
+    # Also a DNS alias prefix: no underscores in host names.
+    return compose_project_name(project_path).replace("_", "-").strip("-") or "abi"
 
 
-def _render_compose(nats: bool, include_coding: bool) -> str:
+def _render_compose(nats: bool, include_coding: bool, wildcard_cert: bool) -> str:
     with open(
         os.path.join(_templates("dokploy"), COMPOSE_FILE), "r", encoding="utf-8"
     ) as template:
@@ -99,13 +108,20 @@ def _render_compose(nats: bool, include_coding: bool) -> str:
         undefined=jinja2.StrictUndefined,
         keep_trailing_newline=True,
         trim_blocks=True,
-    ).render(NATS=nats, INCLUDE_CODING=include_coding)
+    ).render(
+        NATS=nats,
+        INCLUDE_CODING=include_coding,
+        CODER_WILDCARD_CERT=wildcard_cert,
+        SECRETS_DIR=SECRETS_DIR,
+        CODING_SECRETS_DIR=CODING_SECRETS_DIR,
+        CODING_SECRETS_FILE=CODING_SECRETS_FILE,
+    )
 
 
 def _render_deploy_files(
-    project_path: str, include_coding: bool, values: dict[str, object]
-) -> None:
-    """Write the .deploy/docker files the compose mounts.
+    include_coding: bool, values: dict[str, object]
+) -> dict[str, str]:
+    """The .deploy/docker files the compose mounts: {relative path: content}.
 
     Rendered from the same templates as `abi deploy local`, so a project that
     runs both stacks gets the same files.
@@ -114,47 +130,154 @@ def _render_deploy_files(
     if include_coding:
         wanted += [("coding", path) for path in _CODING_FILES]
 
+    files: dict[str, str] = {}
     for tree, path in wanted:
         with open(os.path.join(_templates(tree), path), "r", encoding="utf-8") as src:
-            content = jinja2.Template(
+            files[os.path.join(".deploy", path)] = jinja2.Template(
                 src.read(),
                 undefined=jinja2.StrictUndefined,
                 keep_trailing_newline=True,
             ).render(values)
-        target = os.path.join(project_path, ".deploy", path)
-        os.makedirs(os.path.dirname(target), exist_ok=True)
-        with open(target, "w", encoding="utf-8") as out:
-            out.write(content)
+    return files
+
+
+def _without_jinja(text: str) -> str:
+    return _JINJA.sub("x", text)
+
+
+def _persistent_dotenv(adapter: Any) -> Any:
+    """The adapter, with a dotenv on the project's `.env` moved to SECRETS_FILE.
+
+    `.env` is in the image, so what the engine writes there is lost on the next
+    deploy. Other paths are the project's choice and are kept.
+    """
+    if not isinstance(adapter, dict):
+        return adapter
+    config = adapter.get("config")
+    if adapter.get("adapter") == "dotenv":
+        config = dict(config or {})
+        if os.path.normpath(str(config.get("path", ".env"))) == ".env":
+            config["path"] = SECRETS_FILE
+        return {**adapter, "config": config}
+    if adapter.get("adapter") == "base64" and isinstance(config, dict):
+        inner = _persistent_dotenv(config.get("secret_adapter"))
+        return {**adapter, "config": {**config, "secret_adapter": inner}}
+    return adapter
+
+
+class _IndentedDumper(yaml.SafeDumper):
+    """Indents list items under their key, as config.local.yaml does."""
+
+    def increase_indent(self, flow: bool = False, indentless: bool = False) -> None:
+        return super().increase_indent(flow, False)
+
+
+def _secret_adapters_block(local_config: str) -> tuple[int, int, str]:
+    """(first line, line after, indent) of the secret_adapters block."""
+    lines = local_config.splitlines()
+    for start, line in enumerate(lines):
+        match = _SECRET_ADAPTERS_KEY.fullmatch(line)
+        if match:
+            indent = match.group("indent")
+            break
+    else:
+        raise DokployDeployError(
+            "config.local.yaml has no services.secret.secret_adapters list. "
+            "Add one (see the `abi new project` template) and rerun."
+        )
+
+    end = start + 1
+    last = start
+    while end < len(lines):
+        line = lines[end]
+        if not line.strip():
+            end += 1
+            continue
+        rest = line[len(indent) :] if line.startswith(indent) else ""
+        if rest.startswith((" ", "\t", "-")):
+            last = end
+            end += 1
+            continue
+        break
+    return start, last + 1, indent
 
 
 def _dokploy_config(local_config: str, include_coding: bool) -> str:
+    """config.dokploy.yaml: config.local.yaml with its secret adapters set for
+    Dokploy.
+
+    The project's adapters are kept, with the `.env` dotenv moved onto the
+    abi_secrets volume; with coding, the minted tokens are appended as a
+    read-only dotenv. Only the secret_adapters block is rewritten, so the rest
+    of the file keeps its comments.
+    """
     header = (
         "# Generated by `abi deploy dokploy` from config.local.yaml; rerunning\n"
         "# the command rewrites it. Edit config.local.yaml instead. The Dokploy\n"
         "# stack sets ENV=dokploy, so the engine reads this file.\n"
     )
-    if not include_coding:
-        return header + local_config
+    if not local_config.endswith("\n"):
+        local_config += "\n"
+    start, end, indent = _secret_adapters_block(local_config)
+    lines = local_config.splitlines(keepends=True)
 
-    def adapters(match: re.Match[str]) -> str:
-        indent = match.group("indent")
-        return (
-            f"{indent}secret_adapters:\n"
-            f'{indent}  - adapter: "dotenv"\n'
-            f"{indent}    config: {{}}\n"
-            f"{indent}  # Admin tokens minted by coding-init on the coding_secrets\n"
-            f"{indent}  # volume, mounted read-only.\n"
-            f'{indent}  - adapter: "dotenv"\n'
-            f"{indent}    config:\n"
-            f'{indent}      path: "{CODING_SECRETS_FILE}"\n'
+    try:
+        # The key at column 0; its items stay deeper, so the YAML holds.
+        parsed = yaml.safe_load(
+            "".join([lines[start].lstrip()] + lines[start + 1 : end])
+        )
+    except yaml.YAMLError as error:
+        raise DokployDeployError(
+            f"Cannot read services.secret.secret_adapters in config.local.yaml: {error}"
+        ) from error
+    adapters = parsed.get("secret_adapters") if isinstance(parsed, dict) else None
+    if not isinstance(adapters, list):
+        raise DokployDeployError(
+            "services.secret.secret_adapters in config.local.yaml is not a list."
         )
 
-    config, count = _SECRET_ADAPTERS.subn(adapters, local_config, count=1)
-    if count == 0:
+    adapters = [_persistent_dotenv(adapter) for adapter in adapters]
+    if include_coding:
+        adapters.append(
+            {
+                "adapter": "dotenv",
+                "config": {"path": CODING_SECRETS_FILE, "read_only": True},
+            }
+        )
+    dumped = yaml.dump(
+        {"secret_adapters": adapters},
+        Dumper=_IndentedDumper,
+        sort_keys=False,
+        default_flow_style=False,
+        width=1000,
+    )
+    comment = [
+        "# Set by `abi deploy dokploy`: the `.env` dotenv is on the abi_secrets\n",
+    ]
+    if include_coding:
+        comment.append(
+            "# volume; the coding tokens are read from the coding_secrets volume.\n"
+        )
+    else:
+        comment.append("# volume.\n")
+    block = [indent + line for line in comment]
+    block += [f"{indent}{line}\n" for line in dumped.splitlines()]
+    config = "".join(lines[:start] + block + lines[end:])
+
+    # The engine must see exactly these adapters: no leftover of the old block.
+    try:
+        rendered = yaml.safe_load(_without_jinja(config))
+        seen = rendered["services"]["secret"]["secret_adapters"]
+    except (yaml.YAMLError, KeyError, TypeError) as error:
         raise DokployDeployError(
-            "config.local.yaml has no services.secret.secret_adapters list, so "
-            f"the coding tokens in {CODING_SECRETS_FILE} cannot be added to it. "
-            "Add one (see the `abi new project` template) and rerun."
+            "Cannot rewrite services.secret.secret_adapters in config.local.yaml "
+            f"({error}). Keep it a plain YAML list under services.secret."
+        ) from error
+    if seen != yaml.safe_load(_without_jinja(dumped))["secret_adapters"]:
+        raise DokployDeployError(
+            "Cannot rewrite services.secret.secret_adapters in config.local.yaml: "
+            "the rewritten list does not read back as written. Keep it a plain "
+            "YAML list under services.secret."
         )
     return header + config
 
@@ -171,15 +294,16 @@ def _config_secret_names(config: str) -> list[str]:
     return names
 
 
-def _ensure_ignored(path: Path, entries: list[str]) -> None:
+def _with_ignored(path: Path, entries: list[str]) -> str | None:
+    """The ignore file with ``entries`` added, or None if it has them all."""
     lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
     missing = [entry for entry in entries if entry not in lines]
     if not missing:
-        return
+        return None
     if lines and lines[-1].strip():
         lines.append("")
     lines += ["# abi deploy dokploy", *missing]
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return "\n".join(lines) + "\n"
 
 
 def _env_layout(
@@ -188,6 +312,7 @@ def _env_layout(
     hosts: dict[str, str],
     nats: bool,
     include_coding: bool,
+    wildcard_resolver: str | None,
     config_secrets: list[str],
 ) -> list[tuple[str, list[tuple[str, Callable[[], str]]]]]:
     """Sections of .env.dokploy: (title, [(key, value factory)])."""
@@ -203,7 +328,8 @@ def _env_layout(
         return f"Abi1!{secrets.token_urlsafe(24)}"
 
     stack: list[tuple[str, Callable[[], str]]] = [
-        # Router names and the network name; unique per stack on a server.
+        # Router names, DNS aliases and the network name; unique per stack on a
+        # server.
         ("ABI_STACK_NAME", fixed(stack_name)),
         ("PUBLIC_WEB_HOST", fixed(hosts["PUBLIC_WEB_HOST"])),
         ("PUBLIC_API_HOST", fixed(hosts["PUBLIC_API_HOST"])),
@@ -248,28 +374,29 @@ def _env_layout(
         ("Infrastructure (generated)", infrastructure),
     ]
     if include_coding:
+        coding: list[tuple[str, Callable[[], str]]] = []
+        if wildcard_resolver:
+            # The DNS-challenge resolver for *.coder.<web host>; changing
+            # whether it is set needs a rerun (the compose labels follow it).
+            coding.append((_WILDCARD_RESOLVER_KEY, fixed(wildcard_resolver)))
+        coding += [
+            ("CODING_FORGEJO_ORG", fixed("abi")),
+            ("CODER_ADMIN_EMAIL", fixed(ADMIN_EMAIL)),
+            ("CODER_ADMIN_USERNAME", fixed("admin")),
+            ("CODER_ADMIN_PASSWORD", password),
+            ("FORGEJO_ADMIN_EMAIL", fixed(ADMIN_EMAIL)),
+            ("FORGEJO_ADMIN_USERNAME", fixed("forgejo-admin")),
+            ("FORGEJO_ADMIN_PASSWORD", password),
+            # Forgejo runner registration: a 40-char hex shared secret.
+            ("FORGEJO_RUNNER_REGISTRATION_TOKEN", lambda: secrets.token_hex(20)),
+        ]
         sections.append(
             (
                 (
                     "Coding workspaces (Coder + Forgejo + Actions CI). The admin "
                     "tokens are minted on the coding_secrets volume, not here."
                 ),
-                [
-                    # Set to a DNS-challenge resolver for *.coder.<web host>.
-                    ("CODER_WILDCARD_CERT_RESOLVER", fixed("letsencrypt")),
-                    ("CODING_FORGEJO_ORG", fixed("abi")),
-                    ("CODER_ADMIN_EMAIL", fixed(ADMIN_EMAIL)),
-                    ("CODER_ADMIN_USERNAME", fixed("admin")),
-                    ("CODER_ADMIN_PASSWORD", password),
-                    ("FORGEJO_ADMIN_EMAIL", fixed(ADMIN_EMAIL)),
-                    ("FORGEJO_ADMIN_USERNAME", fixed("forgejo-admin")),
-                    ("FORGEJO_ADMIN_PASSWORD", password),
-                    # Forgejo runner registration: a 40-char hex shared secret.
-                    (
-                        "FORGEJO_RUNNER_REGISTRATION_TOKEN",
-                        lambda: secrets.token_hex(20),
-                    ),
-                ],
+                coding,
             )
         )
 
@@ -286,13 +413,12 @@ def _env_layout(
     return sections
 
 
-def _write_env(
-    env_path: Path,
+def _render_env(
     sections: list[tuple[str, list[tuple[str, Callable[[], str]]]]],
     existing: dict[str, str],
     overrides: dict[str, str],
-) -> list[str]:
-    """Write .env.dokploy; return the keys left empty."""
+) -> tuple[str, list[str]]:
+    """The content of .env.dokploy, and the keys left empty."""
     lines = [
         "# Paste into the Dokploy compose app's Environment tab.",
         (
@@ -318,14 +444,17 @@ def _write_env(
                 empty.append(key)
 
     custom = [
-        key for key in existing if key not in written and key not in _MINTED_TOKENS
+        key
+        for key in existing
+        if key not in written
+        and key not in _MINTED_TOKENS
+        and key != _WILDCARD_RESOLVER_KEY
     ]
     if custom:
         lines += ["", "# Your own values"]
         lines += [f"{key}={existing[key]}" for key in custom]
 
-    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return empty
+    return "\n".join(lines) + "\n", empty
 
 
 def _backup_env(project_path: str, env_path: Path) -> str | None:
@@ -341,6 +470,7 @@ def _backup_env(project_path: str, env_path: Path) -> str | None:
 def _print_next_steps(
     hosts: dict[str, str],
     include_coding: bool,
+    wildcard_cert: bool,
     empty: list[str],
 ) -> None:
     web, api = hosts["PUBLIC_WEB_HOST"], hosts["PUBLIC_API_HOST"]
@@ -361,10 +491,11 @@ def _print_next_steps(
     if include_coding:
         records += [f"coder.{web}", f"*.coder.{web}", f"git.{web}"]
     print(f"4. Point these DNS records at the Dokploy server: {', '.join(records)}")
-    if include_coding:
+    if include_coding and not wildcard_cert:
         print(
-            "   *.coder needs a wildcard certificate: add a DNS-challenge resolver "
-            "to Dokploy's Traefik and set CODER_WILDCARD_CERT_RESOLVER to it."
+            "   Workspace apps on *.coder get Traefik's default certificate until "
+            "you add a DNS-challenge resolver to Dokploy's Traefik and rerun with "
+            "--wildcard-cert-resolver <name>."
         )
     print(
         f"5. Deploy, then sign in at https://{web} with the admin login in {ENV_FILE}."
@@ -378,12 +509,15 @@ def setup_dokploy_deploy(
     include_coding: bool = False,
     regenerate: bool = False,
     nats: bool | None = None,
+    wildcard_cert_resolver: str | None = None,
 ) -> None:
     """Render the Dokploy stack and its env into ``project_path``.
 
     ``docker-compose.dokploy.yml``, ``config.dokploy.yaml`` and the
     ``.deploy/docker`` files are rewritten on every run. ``.env.dokploy`` keeps
     its values unless ``regenerate``; ``domain`` moves the hosts only.
+    ``wildcard_cert_resolver`` names a DNS-challenge resolver for the
+    ``*.coder`` certificate; it is kept on later runs, even regenerated ones.
     """
     project_path = os.path.abspath(os.path.expanduser(project_path))
     local_config_path = os.path.join(project_path, "config.local.yaml")
@@ -391,6 +525,10 @@ def setup_dokploy_deploy(
         raise DokployDeployError(
             f"No config.local.yaml in {project_path}: run `abi deploy dokploy` "
             "from an ABI project (created with `abi new project`)."
+        )
+    if wildcard_cert_resolver is not None and not include_coding:
+        raise DokployDeployError(
+            "--wildcard-cert-resolver only applies to the coding stack: add --coding."
         )
     if nats is None:
         nats = bool(project_uses_nats(project_path))
@@ -402,10 +540,10 @@ def setup_dokploy_deploy(
 
     env_path = Path(project_path) / ENV_FILE
     existing = _read_env_vars(str(env_path))
+    if wildcard_cert_resolver is None:
+        wildcard_cert_resolver = existing.get(_WILDCARD_RESOLVER_KEY) or None
+    wildcard_cert = include_coding and bool(wildcard_cert_resolver)
     if regenerate:
-        backup_path = _backup_env(project_path, env_path)
-        if backup_path is not None:
-            print(f"Backed up the previous {ENV_FILE} to {backup_path}")
         existing = {}
 
     overrides: dict[str, str] = {}
@@ -424,36 +562,57 @@ def setup_dokploy_deploy(
         key: overrides.get(key) or existing.get(key, "")
         for key in ("PUBLIC_WEB_HOST", "PUBLIC_API_HOST", "NEXUS_API_URL")
     }
+    if wildcard_cert and wildcard_cert_resolver:
+        overrides[_WILDCARD_RESOLVER_KEY] = wildcard_cert_resolver
 
+    # Render everything before writing anything: a failure leaves the
+    # project's files as they were.
     with open(local_config_path, "r", encoding="utf-8") as config_file:
-        local_config = config_file.read()
-    dokploy_config = _dokploy_config(local_config, include_coding)
-
-    # Render everything before writing anything.
-    compose = _render_compose(nats=nats, include_coding=include_coding)
-    with open(os.path.join(project_path, COMPOSE_FILE), "w", encoding="utf-8") as out:
-        out.write(compose)
-    with open(os.path.join(project_path, CONFIG_FILE), "w", encoding="utf-8") as out:
-        out.write(dokploy_config)
-    _render_deploy_files(
-        project_path,
-        include_coding=include_coding,
-        values={
-            **DEFAULT_ENV_VALUES,
-            "NATS": nats,
-            "INCLUDE_CODING": include_coding,
-            "INCLUDE_HEADSCALE": False,
-        },
-    )
-
+        dokploy_config = _dokploy_config(config_file.read(), include_coding)
+    files = {
+        COMPOSE_FILE: _render_compose(
+            nats=nats, include_coding=include_coding, wildcard_cert=wildcard_cert
+        ),
+        CONFIG_FILE: dokploy_config,
+        **_render_deploy_files(
+            include_coding=include_coding,
+            values={
+                **DEFAULT_ENV_VALUES,
+                "NATS": nats,
+                "INCLUDE_CODING": include_coding,
+                "INCLUDE_HEADSCALE": False,
+            },
+        ),
+    }
     sections = _env_layout(
         stack_name=_stack_name(project_path),
         hosts=hosts,
         nats=nats,
         include_coding=include_coding,
+        wildcard_resolver=wildcard_cert_resolver if wildcard_cert else None,
         config_secrets=_config_secret_names(dokploy_config),
     )
-    empty = _write_env(env_path, sections, existing, overrides)
+    files[ENV_FILE], empty = _render_env(sections, existing, overrides)
+    # Dokploy writes the Environment tab to .env in the build context: keep it
+    # out of the image.
+    for name, entries in (
+        (".gitignore", [ENV_FILE]),
+        (".dockerignore", [".env", ".env.*"]),
+    ):
+        content = _with_ignored(Path(project_path) / name, entries)
+        if content is not None:
+            files[name] = content
+
+    if regenerate:
+        backup_path = _backup_env(project_path, env_path)
+        if backup_path is not None:
+            print(f"Backed up the previous {ENV_FILE} to {backup_path}")
+    for name, content in files.items():
+        target = os.path.join(project_path, name)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "w", encoding="utf-8") as out:
+            out.write(content)
+
     # Validators: they keep valid values and replace a shipped default or a
     # value too short to be safe.
     ensure_admin_credentials(env_path)
@@ -461,9 +620,6 @@ def setup_dokploy_deploy(
         ensure_nats_passwords(env_path)
         ensure_nats_secret(env_path)
 
-    _ensure_ignored(Path(project_path) / ".gitignore", [ENV_FILE])
-    # Dokploy writes the Environment tab to .env in the build context: keep it
-    # out of the image.
-    _ensure_ignored(Path(project_path) / ".dockerignore", [".env", ".env.*"])
-
-    _print_next_steps(hosts, include_coding=include_coding, empty=empty)
+    _print_next_steps(
+        hosts, include_coding=include_coding, wildcard_cert=wildcard_cert, empty=empty
+    )

@@ -239,7 +239,7 @@ abi stack start
 
 ### Deploying with Dokploy
 
-`abi deploy dokploy --domain <domain> [--coding]` renders `docker-compose.dokploy.yml`, `config.dokploy.yaml` and a gitignored `.env.dokploy` for a Dokploy server: Traefik labels instead of Caddy, no host ports, `abi` built from the project `Dockerfile`. Code: `libs/naas-abi-cli/naas_abi_cli/cli/deploy/dokploy.py`, template in `deploy/templates/dokploy/`, tests in `deploy/dokploy_test.py`. Guide: `docs/deploy-dokploy.md`; decision: `docs/adr/20261013_dokploy-deployment.md`.
+`abi deploy dokploy --domain <domain> [--coding] [--wildcard-cert-resolver <name>]` renders `docker-compose.dokploy.yml`, `config.dokploy.yaml` and a gitignored `.env.dokploy` for a Dokploy server: Traefik labels instead of Caddy, no host ports, `abi` built from the project `Dockerfile`. Code: `libs/naas-abi-cli/naas_abi_cli/cli/deploy/dokploy.py`, template in `deploy/templates/dokploy/`, tests in `deploy/dokploy_test.py`. Guide: `docs/deploy-dokploy.md`; decision: `docs/adr/20261013_dokploy-deployment.md`.
 
 ## Stack Management
 

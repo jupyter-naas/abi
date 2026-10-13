@@ -8,8 +8,16 @@ from naas_abi_core.utils.Logger import logger
 
 
 class DotenvSecretSecondaryAdaptor(ISecretAdapter):
-    def __init__(self, path: str = ".env"):
+    """Secrets in a dotenv file.
+
+    ``read_only`` serves a file another process owns, such as one on a volume
+    mounted read-only: ``set`` and ``remove`` leave it alone, so the service
+    can still write to its other adapters.
+    """
+
+    def __init__(self, path: str = ".env", read_only: bool = False):
         self.path = path
+        self.read_only = read_only
         self._lock = Lock()
 
         if not os.path.exists(self.path):
@@ -37,16 +45,31 @@ class DotenvSecretSecondaryAdaptor(ISecretAdapter):
         return default
 
     def set(self, key: str, value: str):
+        if self.read_only:
+            self._skip_write("set", key)
+            return
         with self._lock:
             os.environ[key] = value
             set_key(self.path, key, value)
             self.secrets[key] = value
 
     def remove(self, key: str):
+        if self.read_only:
+            self._skip_write("remove", key)
+            return
         with self._lock:
             unset_key(self.path, key)
             self.secrets.pop(key, None)
             os.environ.pop(key, None)
+
+    def _skip_write(self, operation: str, key: str) -> None:
+        if key in self.secrets:
+            # The value in this file still answers reads that no earlier
+            # adapter answers.
+            logger.warning(
+                f"Secret {key} is in the read-only file {self.path}: {operation} "
+                "does not change it there."
+            )
 
     def list(self) -> dict[str, str | None]:
         with self._lock:
