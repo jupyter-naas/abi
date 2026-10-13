@@ -47,6 +47,12 @@ function upstreamHeaders(request: NextRequest): HeadersInit {
  * without ``?token=`` receive 401.
  */
 async function proxy(request: NextRequest, params: { path: string[] }) {
+  // A remote module's app never runs on this origin, next to the Nexus
+  // session: the Apps page frames it from the API origin, sandboxed, under a
+  // grant (POST /api/apps/remote-grant).
+  if (params.path[0] === 'remote') {
+    return NextResponse.json({ error: 'Open this app from the Apps page' }, { status: 404 });
+  }
   const subpath = params.path.join('/');
   const qs = request.nextUrl.search;
   const target = `${UPSTREAM.replace(/\/$/, '')}/app-html/${subpath}${qs}`;
@@ -71,6 +77,9 @@ async function proxy(request: NextRequest, params: { path: string[] }) {
       'last-modified',
       'set-cookie',
       'www-authenticate',
+      'content-security-policy',
+      'referrer-policy',
+      'x-content-type-options',
     ]) {
       // set-cookie may appear multiple times; Headers#get joins — prefer getSetCookie when available.
       if (name === 'set-cookie' && typeof res.headers.getSetCookie === 'function') {

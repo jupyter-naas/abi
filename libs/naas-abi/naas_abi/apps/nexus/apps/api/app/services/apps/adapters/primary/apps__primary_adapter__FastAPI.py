@@ -452,6 +452,35 @@ async def create_app_html_access_token(
     )
 
 
+class RemoteAppGrantRequest(BaseModel):
+    """Open one app of a remote module (``/app-remote/``)."""
+
+    module_id: str = Field(..., pattern=r"^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,127}$")
+    app: str = Field(..., pattern=r"^[A-Za-z0-9_-]{1,64}$")
+
+
+class RemoteAppGrantResponse(BaseModel):
+    path: str
+    expires_in: int
+
+
+@router.post("/remote-grant", response_model=RemoteAppGrantResponse)
+async def create_remote_app_grant(
+    body: RemoteAppGrantRequest,
+    current_user: User = Depends(get_current_user_required),
+) -> RemoteAppGrantResponse:
+    """The app's root under a grant: the page runs sandboxed, from the API
+    origin, and the grant in its path is its only credential."""
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
+        remote_app_grant_url,
+    )
+
+    return RemoteAppGrantResponse(
+        path=remote_app_grant_url(current_user.id, body.module_id, body.app),
+        expires_in=nexus_config.settings.remote_app_grant_expire_minutes * 60,
+    )
+
+
 class PagesSsoTokenRequest(BaseModel):
     """Mint a short-lived HMAC token for a Cloudflare Pages portal."""
 

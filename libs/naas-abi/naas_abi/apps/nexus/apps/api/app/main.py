@@ -441,8 +441,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                     try:
                         from urllib.parse import urlparse
 
-                        ref_origin = f"{urlparse(header).scheme}://{urlparse(header).netloc}".rstrip("/")
-                        if ref_origin and ref_origin not in ancestors:
+                        parsed = urlparse(header)
+                        # "Origin: null" (a sandboxed page) names no origin.
+                        ref_origin = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+                        if parsed.netloc and ref_origin not in ancestors:
                             ancestors.append(ref_origin)
                     except Exception:
                         pass
@@ -452,8 +454,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             else:
                 response.headers["X-Frame-Options"] = "DENY"
 
-            # Referrer policy
-            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            # Referrer policy, unless the route set a stricter one (remote apps).
+            response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
 
             # Permissions policy (restrict features)
             response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
@@ -584,6 +586,14 @@ def _configure_middleware(app: FastAPI) -> None:
 
     app.add_middleware(RequestIdentityMiddleware)
 
+    # Remote app pages preflight from an opaque origin, which the CORS
+    # middleware refuses: answered outside it.
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
+        RemoteAppPreflight,
+    )
+
+    app.add_middleware(RemoteAppPreflight)
+
     # Outermost: one span per request, around everything else (no-op unless the
     # engine config enables telemetry).
     from naas_abi.apps.nexus.apps.api.app.core.tracing import TracingMiddleware
@@ -664,27 +674,42 @@ def _register_routes(app: FastAPI) -> None:
     )
     # The core API's middleware already guards /app-html/; checking here too keeps
     # the route closed when Nexus is served without that middleware.
-    # Apps of remote modules, forwarded over NATS; before the catch-all below.
+    # Apps of remote modules, forwarded over NATS. The catalog URL redirects
+    # to a grant URL, before the /app-html/ catch-all below; the grant is the
+    # only credential of /app-remote/.
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
         METHODS as REMOTE_APP_METHODS,
     )
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
+        open_remote_app,
         redirect_remote_app_root,
         serve_remote_app,
     )
 
     app.add_api_route(
         "/app-html/remote/{module_id}/{app}/{path:path}",
-        serve_remote_app,
-        methods=REMOTE_APP_METHODS,
+        open_remote_app,
+        methods=["GET", "HEAD"],
         dependencies=[Depends(require_abi_api_token)],
         include_in_schema=False,
     )
     app.add_api_route(
         "/app-html/remote/{module_id}/{app}",
-        redirect_remote_app_root,
+        open_remote_app,
         methods=["GET", "HEAD"],
         dependencies=[Depends(require_abi_api_token)],
+        include_in_schema=False,
+    )
+    app.add_api_route(
+        "/app-remote/{grant}/{module_id}/{app}/{path:path}",
+        serve_remote_app,
+        methods=REMOTE_APP_METHODS,
+        include_in_schema=False,
+    )
+    app.add_api_route(
+        "/app-remote/{grant}/{module_id}/{app}",
+        redirect_remote_app_root,
+        methods=["GET", "HEAD"],
         include_in_schema=False,
     )
     app.add_api_route(
