@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.60.0 (2026-10-13)
+
+### Features
+
+- **people-app**: Add workspace_id support and enhance app navigation config
+  ([`6ac1869`](https://github.com/jupyter-naas/abi/commit/6ac1869beabc89e40f9ee434f84343218dc64b88))
+
+
 ## v3.59.0 (2026-10-09)
 
 ### Features
