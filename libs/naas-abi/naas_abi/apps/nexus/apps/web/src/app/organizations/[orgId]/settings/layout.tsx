@@ -155,10 +155,12 @@ export default function OrganizationSettingsLayout({
   return (
     <div
       className="org-settings-layout-root"
+      data-org-settings-root=""
       data-org-branded="true"
       style={themeStyles}
       key={layoutKey}
     >
+      <div className="org-settings-layout-left">
       <header className="org-settings-layout-header">
         <div className="org-settings-layout-header-inner">
           <button
@@ -183,6 +185,7 @@ export default function OrganizationSettingsLayout({
       </header>
 
       <div
+        data-org-settings-body=""
         className={
           showMobileList
             ? 'org-settings-layout-body org-settings-layout-body-mobile-list'
@@ -216,6 +219,7 @@ export default function OrganizationSettingsLayout({
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );
