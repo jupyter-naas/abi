@@ -75,6 +75,23 @@ abi agent list
 
 ### Configuration Management
 
+#### `abi config init [--configuration-file <path>] [--force]`
+Writes a default configuration file. Every section of a `config.yaml` has an
+engine default, so the generated file only carries the one a project starts by
+editing — `modules` — and documents the rest in comments. An empty `.env` is
+created beside it when missing: that is where the default secret service reads
+from.
+
+**Options:**
+- `--configuration-file` / `-f`: Path to write (default: `config.yaml`)
+- `--force`: Overwrite the file if it already exists (refuses by default)
+
+**Example:**
+```bash
+abi config init
+abi config init -f config.local.yaml
+```
+
 #### `abi config validate [--configuration-file <path>]`
 Validates the ABI configuration file for correctness.
 
