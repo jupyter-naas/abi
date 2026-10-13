@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.84.0 (2026-10-13)
+
+### Bug Fixes
+
+- **nexus**: Satisfy Users table TypeScript for export and pane
+  ([`4436d23`](https://github.com/jupyter-naas/abi/commit/4436d23e7524aae83e9dfddf2bc4869792f2394a))
+
+### Features
+
+- **nexus**: Rebuild org Users table with column filters
+  ([`5a46b01`](https://github.com/jupyter-naas/abi/commit/5a46b01e0a6693261c2b162f0eebf158b1b66f64))
+
+
 ## v2.83.1 (2026-10-12)
 
 ### Bug Fixes
