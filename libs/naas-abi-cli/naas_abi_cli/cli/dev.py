@@ -62,6 +62,8 @@ from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 
+from naas_abi_core.utils.LegacyExtras import LEGACY_NOTICE, install_hint
+
 from naas_abi_cli.cli.admin_credentials import (
     NATS_USERS,
     ensure_admin_credentials,
@@ -472,8 +474,10 @@ def _project_declares_nats() -> bool:
 
 
 DAGSTER_MISSING = (
-    "dagster: not installed in this project. Dagster is a legacy extra, for "
-    "projects without NATS: add it with `uv add 'naas-abi-core[dagster]'`."
+    "dagster: not installed in this project, so it is left out. "
+    f"{LEGACY_NOTICE} Start on NATS with `--with-nats` (module jobs and "
+    "dataset maintenance run in the engine), or keep Dagster. "
+    f"{install_hint('dagster')}"
 )
 
 
