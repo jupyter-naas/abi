@@ -149,16 +149,21 @@ def test_module_tokens_bind_an_audience_too():
         verify_service_token(token, SECRET)
 
 
-def test_bound_tokens_are_short_and_reused_until_half_their_life():
+def test_bound_tokens_are_short_and_always_handed_out_with_most_of_their_life():
+    """A call may wait in a module's queue before it is authorized: a reused bound
+    token must not arrive with seconds left."""
     from naas_abi_core.engine.nats_auth import BOUND_TTL, ServiceTokenSource
+    from naas_abi_sdk.service_token import BOUND_REUSE_SECONDS, BOUND_TTL_SECONDS
 
+    assert BOUND_TTL.total_seconds() == BOUND_TTL_SECONDS
     now = [1_000_000.0]
     source = ServiceTokenSource("api", SECRET, clock=lambda: now[0])
     first = source.for_audience("i-1")
-    claims = jwt.decode(first, options={"verify_signature": False})
-    assert claims["exp"] - claims["iat"] == BOUND_TTL.total_seconds()
-    assert source.for_audience("i-1") == first
     assert source.for_audience("i-2") != first
-    now[0] += BOUND_TTL.total_seconds() / 2
-    assert source.for_audience("i-1") != first
+    for step in range(0, 200, 7):
+        now[0] = 1_000_000.0 + step
+        token = source.for_audience("i-1")
+        claims = jwt.decode(token, options={"verify_signature": False})
+        assert claims["exp"] - claims["iat"] == BOUND_TTL_SECONDS
+        assert claims["exp"] - now[0] >= BOUND_TTL_SECONDS - BOUND_REUSE_SECONDS - 1
     assert "aud" not in jwt.decode(source(), options={"verify_signature": False})

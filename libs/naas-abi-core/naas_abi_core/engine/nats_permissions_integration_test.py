@@ -68,6 +68,7 @@ def test_a_module_cannot_listen_on_the_engine_nor_touch_its_buckets(broker):
     listen = [
         "abi.svc.document.v1.get",
         "abi.discovery.acme.v1.register",
+        "abi.rpc.overflow.open",
         "_INBOX.engine-replies",
         "$KV.abi.key",
     ]
@@ -78,6 +79,8 @@ def test_a_module_cannot_listen_on_the_engine_nor_touch_its_buckets(broker):
         "$JS.API.STREAM.UPDATE.ABI_JOBS_acme",
         "$JS.API.STREAM.DELETE.ABI_JOBS_acme",
         "$JS.API.DIRECT.GET.KV_abi",
+        # Deleting another module's durable job consumer would drop its triggers.
+        "$JS.API.CONSUMER.DELETE.ABI_JOBS_acme.other",
     ]
 
     denied = asyncio.run(_violations(module, subscribe=listen, publish=write))
@@ -260,3 +263,55 @@ def _register_response():
     from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
     return pb.RegisterResponse
+
+
+def test_a_module_cannot_overhear_rpc_overflow_but_still_uploads_through_it(broker):
+    """Overflow requests carry the caller's unbound token (an ``api`` upload from
+    Nexus above the broker limit): a module listening there would get it."""
+    engine, module = broker
+    from naas_abi_core.engine.nats_overflow import OverflowHost
+    from naas_abi_sdk import overflow
+    from naas_abi_sdk.transport import Transport
+
+    payload = b"x" * (3 * 64 * 1024)
+
+    async def scenario():
+        nc = await nats.connect(engine)
+        host = OverflowHost(SECRET, chunk_bytes=64 * 1024)
+        await host.start(nc)
+        errors: list[str] = []
+        overheard: list[bytes] = []
+
+        async def on_error(exc: Exception) -> None:
+            errors.append(str(exc).lower())
+
+        async def overhear(msg) -> None:
+            overheard.append(msg.data)
+
+        spy = await nats.connect(module, error_cb=on_error, inbox_prefix="_INBOX_MODULES")
+        await spy.subscribe("abi.rpc.overflow.>", cb=overhear)
+        await spy.flush()
+        nexus = Transport(engine, ServiceTokenSource("api", SECRET), timeout=5)
+        peer = Transport(module, _module_token("acme.consumer"), timeout=5)
+        try:
+            for client in (nexus, peer):  # a module's own upload still goes through
+                transfer_id = await overflow.upload(
+                    client.call, payload, chunk_bytes=64 * 1024
+                )
+                await overflow.close(client.call, transfer_id)
+            await spy.flush()
+            await asyncio.sleep(0.2)
+        finally:
+            await nexus.close()
+            await peer.close()
+            await spy.close()
+            await host.stop()
+            await nc.close()
+        return errors, overheard
+
+    errors, overheard = asyncio.run(scenario())
+
+    assert overheard == []
+    assert any(
+        "permissions violation" in e and "abi.rpc.overflow.>" in e for e in errors
+    ), errors

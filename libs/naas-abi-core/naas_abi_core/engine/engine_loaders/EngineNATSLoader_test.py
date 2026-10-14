@@ -564,3 +564,45 @@ def test_expose_services_sizes_the_services_it_starts_from_the_configuration(
 
     assert nats_dispatch.max_concurrent_requests() == 16
     assert primary._dispatch.max_workers == 16
+
+
+def test_the_streams_modules_use_exist_before_discovery_serves(monkeypatch):
+    """A module may register as soon as discovery answers, and start a job host
+    that may not create the jobs stream itself."""
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        DiscoveryConfiguration,
+    )
+
+    config = SimpleNamespace(
+        nats=NATSConfiguration(
+            jwt_secret="x" * 32,
+            discovery=DiscoveryConfiguration(project="acme"),
+        )
+    )
+    order: list[str] = []
+
+    async def prepare(nc, project):
+        order.append(f"prepare:{project}")
+
+    async def start_discovery(*args, **kwargs):
+        order.append("discovery")
+        return MagicMock()
+
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_permissions.prepare_module_streams", prepare
+    )
+    monkeypatch.setattr(
+        "naas_abi_core.services.discovery.discovery_factory.start_discovery",
+        start_discovery,
+    )
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    import asyncio
+
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_runtime.run_coro",
+        lambda coro, *a, **k: asyncio.run(coro),
+    )
+
+    EngineNATSLoader(config).expose_services(_services())
+
+    assert order == ["prepare:acme", "discovery"]
