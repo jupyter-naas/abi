@@ -18,7 +18,7 @@ import pytest
 from naas_abi_proto.app.v1 import app_pb2 as pb
 from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 
-from naas_abi_sdk import app_streams
+from naas_abi_sdk import app_host, app_streams
 from naas_abi_sdk.app_host import AppHost, call_app
 from naas_abi_sdk.app_streams import BodySource, pull_body, rechunk
 from naas_abi_sdk.apps import read_app
@@ -41,6 +41,37 @@ class NexusToken:
 
     def for_audience(self, audience: str) -> str:
         return f"nexus-token-for-{audience}"
+
+
+def _start_broker(tmp_path, *config_lines):
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    command = ["nats-server", "-a", "127.0.0.1", "-p", str(port)]
+    if config_lines:
+        config = tmp_path / "nats.conf"
+        config.write_text("\n".join(config_lines) + "\n")
+        command += ["-c", str(config)]
+    process = subprocess.Popen(
+        command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        try:
+            socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
+            break
+        except OSError:
+            time.sleep(0.05)
+    return process, f"nats://127.0.0.1:{port}"
+
+
+@pytest.fixture
+def small_broker(tmp_path):
+    """A broker whose messages hold 64 KiB, under the 256 KiB inline bodies."""
+    process, url = _start_broker(tmp_path, "max_payload: 65536")
+    yield url
+    process.terminate()
+    process.wait(timeout=5)
 
 
 @pytest.fixture
@@ -109,13 +140,43 @@ def _app():
     async def stall():
         await asyncio.sleep(3600)
 
+    @api.get("/api/quiet")
+    async def quiet():
+        """Server-sent events with one event, then nothing for a long time."""
+
+        async def body():
+            try:
+                yield b"data: hello\n\n"
+                await asyncio.sleep(3600)
+            except asyncio.CancelledError:
+                seen.cancelled = True
+                raise
+
+        return StreamingResponse(body(), media_type="text/event-stream")
+
+    @api.get("/api/broken")
+    async def broken():
+        async def body():
+            yield b"b" * MB
+            raise RuntimeError("the disk went away")
+
+        return StreamingResponse(body(), media_type="application/octet-stream")
+
+    @api.get("/api/whole")
+    async def whole(size: int):
+        return fastapi.Response(b"w" * size, media_type="application/octet-stream")
+
+    @api.get("/api/ping")
+    async def ping():
+        return {"pong": True}
+
     return api, seen
 
 
-async def _module(url, tmp_path, app, **kwargs):
+async def _module(url, tmp_path, app, manifest=None, **kwargs):
     folder = tmp_path / "apps" / "console"
     folder.mkdir(parents=True)
-    (folder / "manifest.json").write_text(json.dumps({"name": "Console"}))
+    (folder / "manifest.json").write_text(json.dumps(manifest or {"name": "Console"}))
     (folder / "big.js").write_bytes(b"j" * (3 * MB + 17))
     transport = Transport(url, "module-token")
     session = SimpleNamespace(
@@ -321,5 +382,287 @@ def test_a_holder_that_stops_answering_fails_the_pull(broker):
                     pass
         finally:
             await nexus.close()
+
+    asyncio.run(scenario())
+
+
+# -- review findings of 2026-10-13 (A5, A6, A9, A11, A12, A21, A22) ------------------
+
+
+async def _upload(nexus, size, *, max_body_bytes=0, gate=None):
+    """Start a PUT of ``size`` bytes; ``gate`` holds its last chunk back."""
+    source = BodySource(await nexus.connect())
+    await source.start()
+
+    async def produce():
+        sent = 0
+        while sent < size:
+            piece = min(256 * 1024, size - sent)
+            if gate is not None and sent + piece >= size:
+                await gate.wait()
+            await source.put(b"u" * piece)
+            sent += piece
+        await source.finish()
+
+    producer = asyncio.create_task(produce())
+    call = asyncio.create_task(
+        call_app(
+            nexus,
+            "acme",
+            "i-1",
+            _request(
+                "/api/upload",
+                "PUT",
+                body_follows=True,
+                body_inbox=source.inbox,
+                max_body_bytes=max_body_bytes,
+            ),
+        )
+    )
+    return source, producer, call
+
+
+def test_closing_ends_an_open_stream_with_an_error(broker, tmp_path):
+    """A5: SIGTERM with a browser reading server-sent events: the host closes
+    within its bound, and the reader sees an error, not a clean end."""
+
+    async def scenario():
+        api, _ = _app()
+        host = await _module(broker, tmp_path, api)
+        nexus = Transport(broker, NexusToken(), timeout=60)
+        try:
+            events = await call_app(nexus, "acme", "i-1", _request("/api/events"))
+            quiet = await call_app(nexus, "acme", "i-1", _request("/api/quiet"))
+            nc = await nexus.connect()
+
+            async def read(response):
+                async for _ in pull_body(nc, response.body_inbox):
+                    pass
+
+            readers = [asyncio.create_task(read(r)) for r in (events, quiet)]
+            await asyncio.sleep(0.8)
+            started = time.monotonic()
+            await asyncio.wait_for(host.close(), app_host.CLOSE_SECONDS + 2)
+            assert time.monotonic() - started < app_host.CLOSE_SECONDS + 1
+            for reader in readers:
+                with pytest.raises(RPCError) as raised:
+                    await asyncio.wait_for(reader, 5)
+                assert raised.value.code == "MODULE_UNAVAILABLE"
+        finally:
+            await host.close()
+            await nexus.close()
+            await host.session.client.transport.close()
+
+    asyncio.run(scenario())
+
+
+def test_an_app_failing_mid_stream_is_an_error_to_the_reader(broker, tmp_path):
+    """A6, the module's half: the reader learns the body is cut."""
+
+    async def scenario():
+        api, _ = _app()
+        host = await _module(broker, tmp_path, api)
+        nexus = Transport(broker, NexusToken(), timeout=60)
+        try:
+            response = await call_app(nexus, "acme", "i-1", _request("/api/broken"))
+            assert response.status == 200 and response.body_follows
+            received = 0
+            with pytest.raises(RPCError) as raised:
+                async for chunk in pull_body(
+                    await nexus.connect(), response.body_inbox
+                ):
+                    received += len(chunk)
+            assert raised.value.code == "APP_ERROR"
+            assert received == MB
+        finally:
+            await host.close()
+            await nexus.close()
+            await host.session.client.transport.close()
+
+    asyncio.run(scenario())
+
+
+def test_a_body_too_large_for_one_message_streams(small_broker, tmp_path):
+    """A9: under a 64 KiB broker limit, a 100 KiB answer (inline size for a
+    1 MB broker) streams instead of failing to send."""
+
+    async def scenario():
+        api, _ = _app()
+        host = await _module(small_broker, tmp_path, api)
+        nexus = Transport(small_broker, NexusToken(), timeout=10)
+        try:
+            whole = await call_app(
+                nexus, "acme", "i-1", _request("/api/whole", query="size=102400")
+            )
+            assert whole.status == 200 and whole.body_follows
+            assert await _body(nexus, whole) == b"w" * 102400
+            small = await call_app(
+                nexus, "acme", "i-1", _request("/api/whole", query="size=1000")
+            )
+            assert small.body == b"w" * 1000 and not small.body_follows
+        finally:
+            await host.close()
+            await nexus.close()
+            await host.session.client.transport.close()
+
+    asyncio.run(scenario())
+
+
+def test_slow_uploads_hold_slots_of_their_own(broker, tmp_path):
+    """A11: with every upload slot taken by a slow upload, other requests are
+    answered, and one more upload is refused at once."""
+
+    async def scenario():
+        api, _ = _app()
+        host = await _module(broker, tmp_path, api, max_concurrency=1, max_uploads=1)
+        nexus = Transport(broker, NexusToken(), timeout=60)
+        quick = Transport(broker, NexusToken(), timeout=2)
+        gate = asyncio.Event()
+        try:
+            source, producer, upload = await _upload(nexus, 2 * MB, gate=gate)
+            await asyncio.sleep(0.5)  # the app reads it, slowly
+            assert not upload.done()
+            ping = await call_app(quick, "acme", "i-1", _request("/api/ping"))
+            assert (ping.status, json.loads(ping.body)) == (200, {"pong": True})
+            other, other_producer, refused = await _upload(quick, 2 * MB)
+            with pytest.raises(RPCError) as raised:
+                await refused
+            assert raised.value.code == "MODULE_UNAVAILABLE"
+            other_producer.cancel()
+            await other.close()
+            gate.set()
+            response = await upload
+            assert response.status == 200
+            assert json.loads(response.body)["size"] == 2 * MB
+            await producer
+            await source.close()
+        finally:
+            await host.close()
+            await nexus.close()
+            await quick.close()
+            await host.session.client.transport.close()
+
+    asyncio.run(scenario())
+
+
+def test_the_apps_own_upload_limit_holds_whatever_the_request_says(broker, tmp_path):
+    """A12: a request asking for no limit (0) still stops at the manifest's."""
+
+    async def scenario():
+        api, _ = _app()
+        host = await _module(
+            broker,
+            tmp_path,
+            api,
+            manifest={"name": "Console", "max_upload_bytes": MB},
+        )
+        nexus = Transport(broker, NexusToken(), timeout=60)
+        try:
+            source, producer, upload = await _upload(nexus, 2 * MB, max_body_bytes=0)
+            response = await upload
+            assert response.status == 413
+            producer.cancel()
+            await asyncio.gather(producer, return_exceptions=True)
+            await source.close()
+            fits, fits_producer, fits_upload = await _upload(nexus, MB)
+            assert (await fits_upload).status == 200
+            await fits_producer
+            await fits.close()
+        finally:
+            await host.close()
+            await nexus.close()
+            await host.session.client.transport.close()
+
+    asyncio.run(scenario())
+
+
+def test_a_lost_last_reply_is_answered_again(broker, monkeypatch):
+    """A21: the reader asks for the last chunk again after its pull timeout;
+    the holder still answers (it lingers past that timeout)."""
+    monkeypatch.setattr(app_streams, "LINGER_SECONDS", 1.0)
+
+    async def scenario():
+        nexus = Transport(broker, NexusToken(), timeout=60)
+        try:
+            nc = await nexus.connect()
+            source = BodySource(nc)
+            await source.start()
+            await source.put(b"only")
+            finish = asyncio.create_task(source.finish())
+            first = pb.BodyChunk.FromString(
+                (
+                    await nc.request(
+                        source.inbox,
+                        pb.BodyPull(sequence=0).SerializeToString(),
+                        timeout=2,
+                    )
+                ).data
+            )
+            assert first.data == b"only"
+            await finish
+            last = pb.BodyPull(sequence=1).SerializeToString()
+            await nc.request(source.inbox, last, timeout=2)  # its reply "lost"
+            await asyncio.sleep(0.5)  # the reader's timeout, scaled down
+            again = pb.BodyChunk.FromString(
+                (await nc.request(source.inbox, last, timeout=2)).data
+            )
+            assert again.last and again.sequence == 1
+            await source.close()
+        finally:
+            await nexus.close()
+
+    asyncio.run(scenario())
+
+
+def test_a_finished_stream_lingers_without_holding_a_slot(broker, tmp_path):
+    """A21: the linger outlasts the reader's pull timeout, so a finished body
+    must not count against MAX_STREAMS while it lingers."""
+
+    async def scenario():
+        api, _ = _app()
+        host = await _module(broker, tmp_path, api)
+        nexus = Transport(broker, NexusToken(), timeout=60)
+        try:
+            response = await call_app(nexus, "acme", "i-1", _request("/big.js"))
+            assert len(await _body(nexus, response)) == 3 * MB + 17
+            for _ in range(20):
+                if not host._streams:
+                    break
+                await asyncio.sleep(0.05)
+            assert not host._streams
+        finally:
+            await host.close()
+            await nexus.close()
+            await host.session.client.transport.close()
+
+    asyncio.run(scenario())
+
+
+def test_leaving_an_idle_stream_stops_the_app_at_once(broker, tmp_path, monkeypatch):
+    """A22: the browser leaves while the stream is quiet and a pull waits for
+    the next event: the app stops now, not after the keepalive."""
+    monkeypatch.setattr(app_streams, "KEEPALIVE_SECONDS", 10.0)
+
+    async def scenario():
+        api, seen = _app()
+        host = await _module(broker, tmp_path, api)
+        nexus = Transport(broker, NexusToken(), timeout=60)
+        try:
+            response = await call_app(nexus, "acme", "i-1", _request("/api/quiet"))
+            stream = pull_body(await nexus.connect(), response.body_inbox)
+            assert await stream.__anext__() == b"data: hello\n\n"
+            waiting = asyncio.create_task(stream.__anext__())
+            await asyncio.sleep(0.3)
+            waiting.cancel()  # the browser left, mid-pull
+            await asyncio.gather(waiting, return_exceptions=True)
+            started = time.monotonic()
+            while not seen.cancelled and time.monotonic() - started < 3:
+                await asyncio.sleep(0.05)
+            assert seen.cancelled
+            assert time.monotonic() - started < 2
+        finally:
+            await host.close()
+            await nexus.close()
+            await host.session.client.transport.close()
 
     asyncio.run(scenario())

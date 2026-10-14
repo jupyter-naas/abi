@@ -19,6 +19,7 @@ from collections.abc import AsyncIterable, AsyncIterator
 from typing import Any
 
 from naas_abi_proto.app.v1 import app_pb2 as pb
+from nats.errors import NoRespondersError
 from nats.errors import TimeoutError as NATSTimeoutError
 
 from naas_abi_sdk.messages import reply
@@ -37,8 +38,9 @@ PULL_TIMEOUT_SECONDS = KEEPALIVE_SECONDS + 15.0
 PULL_RETRIES = 3
 # The holder gives up when nobody pulled for this long (the reader is gone).
 IDLE_SECONDS = 60.0
-# After the last chunk, a repeated pull is still answered for this long.
-LINGER_SECONDS = 5.0
+# After the last chunk, a repeated pull is still answered for this long: past
+# the reader's pull timeout, so the retry of a lost last reply finds it.
+LINGER_SECONDS = PULL_TIMEOUT_SECONDS + 5.0
 
 _END = object()
 
@@ -73,8 +75,11 @@ class BodySource:
 
     The producer puts chunks with ``await put(data)`` (it waits while the
     previous chunk was not pulled yet) and ends with ``await finish()``, or
-    ``await fail(code, message)``. ``gone`` is set when the reader cancelled or
-    stopped pulling for IDLE_SECONDS; ``put`` then raises ReaderGone.
+    ``await fail(code, message)``; ``abort(code, message)`` drops what was not
+    pulled yet and ends with an error at once. ``gone`` is set when the reader
+    cancelled or stopped pulling for IDLE_SECONDS; ``put`` then raises
+    ReaderGone. After the last chunk the source answers a repeated pull for
+    LINGER_SECONDS, then stops by itself: its owner need not wait for that.
     """
 
     def __init__(self, nc: Any, *, idle_seconds: float = IDLE_SECONDS) -> None:
@@ -88,6 +93,7 @@ class BodySource:
         self._last: pb.BodyChunk | None = None
         self._subscription: Any = None
         self._watchdog: asyncio.Task | None = None
+        self._pulls: set[asyncio.Task] = set()
         self._last_pull = 0.0
         self._lock = asyncio.Lock()
 
@@ -107,6 +113,25 @@ class BodySource:
     async def fail(self, code: str, message: str) -> None:
         await self._put(RPCError(code, message))
 
+    def abort(self, code: str, message: str) -> None:
+        """End the body with an error now, dropping the chunk not pulled yet:
+        the reader's next pull gets the error instead of a clean end."""
+        if self.done.is_set() or self.gone.is_set():
+            return
+        while not self.queue.empty():
+            self.queue.get_nowait()
+        self.queue.put_nowait(RPCError(code, message))
+
+    async def settled(self) -> None:
+        """Return once the reader took the body's end, or left."""
+        done = asyncio.ensure_future(self.done.wait())
+        gone = asyncio.ensure_future(self.gone.wait())
+        try:
+            await asyncio.wait({done, gone}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            done.cancel()
+            gone.cancel()
+
     async def _put(self, item: Any) -> None:
         put = asyncio.ensure_future(self.queue.put(item))
         gone = asyncio.ensure_future(self.gone.wait())
@@ -124,6 +149,9 @@ class BodySource:
             self._watchdog.cancel()
             await asyncio.gather(self._watchdog, return_exceptions=True)
             self._watchdog = None
+        for task in list(self._pulls):
+            task.cancel()
+        await asyncio.gather(*self._pulls, return_exceptions=True)
         if self._subscription is not None:
             with contextlib.suppress(Exception):
                 await self._subscription.unsubscribe()
@@ -146,16 +174,25 @@ class BodySource:
             self._subscription = None
 
     async def _on_pull(self, msg: Any) -> None:
+        # A subscription runs one callback at a time: a pull waiting for the
+        # next chunk must not hold back a cancel behind it (an idle stream).
+        self._last_pull = asyncio.get_running_loop().time()
+        try:
+            pull = pb.BodyPull.FromString(msg.data)
+        except Exception:  # noqa: BLE001 - a malformed pull gets an error
+            return await self._answer(msg, _error("INVALID_ARGUMENT", "Bad pull"))
+        if pull.cancel:
+            self.gone.set()
+            return None
+        task = asyncio.create_task(self._serve(msg, pull))
+        self._pulls.add(task)
+        task.add_done_callback(self._pulls.discard)
+        return None
+
+    async def _serve(self, msg: Any, pull: pb.BodyPull) -> None:
         # Pulls are sequential; the lock keeps a re-sent pull in order.
         async with self._lock:
             self._last_pull = asyncio.get_running_loop().time()
-            try:
-                pull = pb.BodyPull.FromString(msg.data)
-            except Exception:  # noqa: BLE001 - a malformed pull gets an error
-                return await self._answer(msg, _error("INVALID_ARGUMENT", "Bad pull"))
-            if pull.cancel:
-                self.gone.set()
-                return None
             last = self._last
             if last is not None and pull.sequence == last.sequence:
                 return await self._answer(msg, last)  # its reply was lost
@@ -164,10 +201,11 @@ class BodySource:
                 return await self._answer(
                     msg, _error("INVALID_ARGUMENT", "Pull out of sequence")
                 )
-            try:
-                item = await asyncio.wait_for(self.queue.get(), KEEPALIVE_SECONDS)
-            except asyncio.TimeoutError:
-                return await self._answer(msg, pb.BodyChunk(sequence=pull.sequence))
+            item = await self._next_item()
+            if item is None:
+                if not self.gone.is_set():
+                    await self._answer(msg, pb.BodyChunk(sequence=pull.sequence))
+                return None
             if isinstance(item, RPCError):
                 chunk = _error(item.code, str(item))
                 chunk.sequence, chunk.last = pull.sequence, True
@@ -181,6 +219,24 @@ class BodySource:
             self.pulled = True
             await self._answer(msg, chunk)
             return None
+
+    async def _next_item(self) -> Any:
+        """The next chunk, or None after KEEPALIVE_SECONDS or once the reader left."""
+        get = asyncio.ensure_future(self.queue.get())
+        gone = asyncio.ensure_future(self.gone.wait())
+        try:
+            await asyncio.wait(
+                {get, gone},
+                timeout=KEEPALIVE_SECONDS,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+        finally:
+            gone.cancel()
+            if not get.done():
+                get.cancel()
+        if get.done() and not get.cancelled():
+            return get.result()
+        return None
 
     async def _answer(self, msg: Any, chunk: pb.BodyChunk) -> None:
         if msg.reply:
@@ -197,13 +253,19 @@ def _error(code: str, message: str) -> pb.BodyChunk:
 
 
 async def pull_body(
-    nc: Any, inbox: str, *, max_bytes: int = 0, timeout: float = PULL_TIMEOUT_SECONDS
+    nc: Any,
+    inbox: str,
+    *,
+    max_bytes: int | None = None,
+    timeout: float = PULL_TIMEOUT_SECONDS,
 ) -> AsyncIterator[bytes]:
     """The chunks of the body held at ``inbox``, pulled as they are iterated.
 
     Raises RPCError when the holder reports an error, ``BodyTooLarge`` past
-    ``max_bytes`` (0: no limit), and ``RPCError("DEADLINE_EXCEEDED")`` when the
-    holder stopped answering. Leaving the iteration early tells the holder.
+    ``max_bytes`` (None: no limit), ``RPCError("DEADLINE_EXCEEDED")`` when the
+    holder stopped answering and ``RPCError("UNAVAILABLE")`` when it is gone.
+    Leaving the iteration early tells the holder, even when the reader is
+    being cancelled.
     """
     sequence, total, finished = 0, 0, False
     try:
@@ -221,6 +283,9 @@ async def pull_body(
                         raise RPCError(
                             "DEADLINE_EXCEEDED", "The body's holder stopped answering"
                         ) from None
+                except NoRespondersError:
+                    finished = True  # nobody to tell
+                    raise RPCError("UNAVAILABLE", "The body's holder is gone") from None
             chunk = pb.BodyChunk.FromString(msg.data)
             if chunk.HasField("error") and chunk.error.code:
                 finished = True
@@ -230,7 +295,7 @@ async def pull_body(
             if not chunk.data and not chunk.last:
                 continue  # keepalive: nothing new yet
             total += len(chunk.data)
-            if max_bytes and total > max_bytes:
+            if max_bytes is not None and total > max_bytes:
                 raise BodyTooLarge(f"Body exceeds {max_bytes} bytes")
             if chunk.data:
                 yield chunk.data
@@ -240,5 +305,23 @@ async def pull_body(
             sequence += 1
     finally:
         if not finished:
-            with contextlib.suppress(Exception):
-                await nc.publish(inbox, pb.BodyPull(cancel=True).SerializeToString())
+            await _tell_holder(nc, inbox)
+
+
+_cancels: set[asyncio.Task] = set()
+
+
+async def _tell_holder(nc: Any, inbox: str) -> None:
+    """Send the holder a cancel. The send runs in a task of its own: a reader
+    leaves on cancellation (the browser went away), and the send must not be
+    cancelled with it."""
+    task = asyncio.ensure_future(_publish_cancel(nc, inbox))
+    _cancels.add(task)
+    task.add_done_callback(_cancels.discard)
+    await asyncio.shield(task)
+
+
+async def _publish_cancel(nc: Any, inbox: str) -> None:
+    with contextlib.suppress(Exception):
+        await nc.publish(inbox, pb.BodyPull(cancel=True).SerializeToString())
+        await nc.flush(timeout=1)
