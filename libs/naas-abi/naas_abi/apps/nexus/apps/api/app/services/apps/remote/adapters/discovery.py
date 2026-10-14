@@ -30,6 +30,15 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
 CONTRACT_MAJOR = 1
 # Discovery is read at most this often: the catalog and every request share it.
 SNAPSHOT_SECONDS = 10.0
+# A name the snapshot does not know reads discovery again (an app that just
+# started), but no more than this often, whatever names requests make up.
+MISS_SNAPSHOT_SECONDS = 1.0
+# The longest a read of discovery may take. Requests and the catalog wait for
+# it under one lock, so it bounds how long a slow discovery holds /api/apps.
+REFRESH_SECONDS = 5.0
+# After a failed read, callers fail at once for this long instead of each
+# waiting for a read of its own.
+RETRY_AFTER_SECONDS = 5.0
 # After the last upload chunk, the module answers within its idle limit.
 ANSWER_AFTER_UPLOAD_SECONDS = 65.0
 # The module is gone or going: another READY instance may answer.
@@ -56,6 +65,7 @@ class _Client:
         # Ordinary requests; and uploads, whose answer waits for the whole body.
         self.transport, self.upload_transport = transport, upload_transport
         self.snapshot: _Snapshot | None = None
+        self.failed_at: float | None = None
         self.lock = asyncio.Lock()
 
 
@@ -72,12 +82,14 @@ class DiscoveryRemoteAppDirectory:
         *,
         clock: Callable[[], float] | None = None,
         call_app: Callable[..., Any] | None = None,
+        refresh_seconds: float = REFRESH_SECONDS,
     ) -> None:
         """``client_factory`` returns (DiscoveryClient, Transport for requests,
         Transport for uploads, discovery project)."""
         self._factory = client_factory
         self._clock = clock
         self._call_app = call_app
+        self._refresh_seconds = refresh_seconds
         self._clients: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, _Client] = (
             weakref.WeakKeyDictionary()
         )
@@ -91,48 +103,72 @@ class DiscoveryRemoteAppDirectory:
     def _now(self) -> float:
         return self._clock() if self._clock else asyncio.get_running_loop().time()
 
-    async def _snapshot(self, client: _Client, *, fresh: bool = False) -> _Snapshot:
+    async def _snapshot(self, client: _Client, *, max_age: float = SNAPSHOT_SECONDS) -> _Snapshot:
+        """The apps of READY instances, read at most every ``max_age`` seconds.
+
+        One read at a time, bounded by ``refresh_seconds``; callers that waited
+        for it share its result. A failed read fails the callers of the next
+        RETRY_AFTER_SECONDS at once (503), rather than each waiting in turn.
+        """
         async with client.lock:
             current = client.snapshot
-            if not fresh and current is not None and self._now() - current.taken < SNAPSHOT_SECONDS:
+            now = self._now()
+            if current is not None and now - current.taken < max_age:
                 return current
-            apps: dict[tuple[str, str], RemoteApp] = {}
-            instances: dict[tuple[str, str], list[str]] = {}
-            after = ""
-            while True:
-                page, after = await client.discovery.list_modules(
-                    limit=100, after_instance_id=after
+            if client.failed_at is not None and now - client.failed_at < RETRY_AFTER_SECONDS:
+                raise RemoteAppUnavailable(503, "Module discovery is unavailable")
+            try:
+                client.snapshot = await asyncio.wait_for(
+                    self._read(client), timeout=self._refresh_seconds
                 )
-                for instance in page:
-                    if instance.status != "READY" or instance.contract_major != CONTRACT_MAJOR:
-                        continue
-                    for app in getattr(instance, "apps", ()):
-                        if app.contract_major != CONTRACT_MAJOR:
-                            continue
-                        key = (instance.module_id, app.name)
-                        # Replicas declare identical apps (discovery checks it).
-                        apps.setdefault(
-                            key,
-                            RemoteApp(
-                                instance.module_id,
-                                app.name,
-                                app.title,
-                                app.description,
-                                app.category or "module",
-                                app.icon_emoji,
-                                app.entry or "index.html",
-                                getattr(app, "max_upload_bytes", 0),
-                            ),
-                        )
-                        instances.setdefault(key, []).append(instance.instance_id)
-                if not after:
-                    break
-            client.snapshot = _Snapshot(
-                self._now(),
-                sorted(apps.values(), key=lambda a: (a.module_id, a.name)),
-                instances,
-            )
+            except Exception as exc:
+                client.failed_at = self._now()
+                reason = (
+                    "Module discovery did not answer in time"
+                    if isinstance(exc, TimeoutError)
+                    else f"Module discovery failed: {exc}"
+                )
+                raise RemoteAppUnavailable(503, reason) from exc
+            client.failed_at = None
             return client.snapshot
+
+    async def _read(self, client: _Client) -> _Snapshot:
+        apps: dict[tuple[str, str], RemoteApp] = {}
+        instances: dict[tuple[str, str], list[str]] = {}
+        after = ""
+        while True:
+            page, after = await client.discovery.list_modules(
+                limit=100, after_instance_id=after
+            )
+            for instance in page:
+                if instance.status != "READY" or instance.contract_major != CONTRACT_MAJOR:
+                    continue
+                for app in getattr(instance, "apps", ()):
+                    if app.contract_major != CONTRACT_MAJOR:
+                        continue
+                    key = (instance.module_id, app.name)
+                    # Replicas declare identical apps (discovery checks it).
+                    apps.setdefault(
+                        key,
+                        RemoteApp(
+                            instance.module_id,
+                            app.name,
+                            app.title,
+                            app.description,
+                            app.category or "module",
+                            app.icon_emoji,
+                            app.entry or "index.html",
+                            getattr(app, "max_upload_bytes", 0),
+                        ),
+                    )
+                    instances.setdefault(key, []).append(instance.instance_id)
+            if not after:
+                break
+        return _Snapshot(
+            self._now(),
+            sorted(apps.values(), key=lambda a: (a.module_id, a.name)),
+            instances,
+        )
 
     async def list_apps(self) -> list[RemoteApp]:
         return list((await self._snapshot(self._client())).apps)
@@ -154,7 +190,7 @@ class DiscoveryRemoteAppDirectory:
         candidates = list(snapshot.instances.get((module_id, app), ()))
         if not candidates:
             # Just started? Read discovery again before answering 404.
-            snapshot = await self._snapshot(client, fresh=True)
+            snapshot = await self._snapshot(client, max_age=MISS_SNAPSHOT_SECONDS)
             candidates = list(snapshot.instances.get((module_id, app), ()))
         if not candidates:
             raise RemoteAppUnavailable(404, "App not published by a ready module")

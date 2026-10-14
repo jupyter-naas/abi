@@ -253,13 +253,22 @@ def _granted_user(grant: str, module_id: str, app: str) -> str:
     return granted.user_id
 
 
+def _unavailable(module_id: str, app: str, exc: RemoteAppUnavailable) -> HTTPException:
+    if exc.status >= 500:
+        _log.warning("Remote app %s/%s: %s", module_id, app, exc.reason)
+    return HTTPException(status_code=exc.status, detail=exc.reason, headers=SECURITY_HEADERS)
+
+
 async def serve_remote_app(
     grant: str, module_id: str, app: str, path: str, request: Request
 ) -> Response:
     user_id = _granted_user(grant, module_id, app)
     root = grant_root(grant, module_id, app)
     directory = get_remote_app_directory()
-    limit = await directory.upload_limit(module_id, app)
+    try:
+        limit = await directory.upload_limit(module_id, app)
+    except RemoteAppUnavailable as exc:
+        raise _unavailable(module_id, app, exc) from exc
     declared = request.headers.get("content-length", "")
     if declared.isdigit() and int(declared) > limit:
         raise HTTPException(
@@ -284,11 +293,7 @@ async def serve_remote_app(
             with _uploads.slot(module_id):
                 answer = await directory.forward(module_id, app, forwarded)
     except RemoteAppUnavailable as exc:
-        if exc.status >= 500:
-            _log.warning("Remote app %s/%s: %s", module_id, app, exc.reason)
-        raise HTTPException(
-            status_code=exc.status, detail=exc.reason, headers=SECURITY_HEADERS
-        ) from exc
+        raise _unavailable(module_id, app, exc) from exc
     if answer.body_stream is not None:
         response: Response = StreamingResponse(answer.body_stream, status_code=answer.status)
     else:

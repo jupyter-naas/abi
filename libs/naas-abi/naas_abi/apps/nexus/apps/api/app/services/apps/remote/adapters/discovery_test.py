@@ -142,16 +142,89 @@ def test_failures_become_http_statuses(failure, status):
 
 def test_unknown_apps_are_404_after_a_fresh_read():
     discovery = FakeDiscovery([])
-    directory = _directory(discovery, [], [])
+    now = [0.0]
+    directory = _directory(discovery, [], [], now)
 
     async def scenario():
         await directory.list_apps()
+        now[0] = 2.0
         with pytest.raises(RemoteAppUnavailable) as raised:
             await directory.forward("acme.research", "console", AppRequest("GET", "/"))
         return raised.value.status
 
     assert asyncio.run(scenario()) == 404
     assert discovery.reads == 2  # the cached snapshot, then a fresh one
+
+
+def test_unknown_names_read_discovery_at_most_once_a_second():
+    """Made-up module or app names cannot make every request read discovery."""
+    discovery = FakeDiscovery([_instance("acme.research", "i-1", CONSOLE)])
+    now = [0.0]
+    directory = _directory(discovery, [], [], now)
+
+    async def miss(name):
+        with pytest.raises(RemoteAppUnavailable):
+            await directory.forward(name, "console", AppRequest("GET", "/"))
+
+    async def scenario():
+        await directory.list_apps()
+        now[0] = 5.0
+        await asyncio.gather(*(miss(f"made.up{i}") for i in range(20)))
+        now[0] = 5.5
+        await asyncio.gather(*(miss(f"other{i}") for i in range(20)))
+
+    asyncio.run(scenario())
+    assert discovery.reads == 2  # the first listing, then one read for 40 misses
+
+
+class SlowDiscovery(FakeDiscovery):
+    async def list_modules(self, *, limit, after_instance_id):
+        self.reads += 1
+        await asyncio.sleep(3600)
+        raise AssertionError("unreachable")
+
+
+def test_a_slow_discovery_fails_the_catalog_within_the_refresh_bound():
+    discovery = SlowDiscovery([])
+    now = [0.0]
+    directory = DiscoveryRemoteAppDirectory(
+        lambda: (discovery, object(), object(), "acme"),
+        clock=lambda: now[0],
+        refresh_seconds=0.05,
+    )
+
+    async def scenario():
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        results = await asyncio.gather(
+            *(directory.list_apps() for _ in range(10)), return_exceptions=True
+        )
+        return loop.time() - started, results
+
+    elapsed, results = asyncio.run(scenario())
+    # One bounded read; the callers that waited for it fail with it at once.
+    assert elapsed < 1.0
+    assert discovery.reads == 1
+    assert all(isinstance(r, RemoteAppUnavailable) and r.status == 503 for r in results)
+
+
+def test_discovery_is_read_again_after_a_failure_once_the_retry_delay_passed():
+    discovery = SlowDiscovery([])
+    now = [0.0]
+    directory = DiscoveryRemoteAppDirectory(
+        lambda: (discovery, object(), object(), "acme"),
+        clock=lambda: now[0],
+        refresh_seconds=0.01,
+    )
+
+    async def scenario():
+        for at in (0.0, 1.0, 4.9, 5.1):
+            now[0] = at
+            with pytest.raises(RemoteAppUnavailable):
+                await directory.list_apps()
+
+    asyncio.run(scenario())
+    assert discovery.reads == 2  # at 0 and at 5.1, not in between
 
 
 def test_discovery_is_read_at_most_every_10_seconds():
