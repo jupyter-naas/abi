@@ -1,8 +1,9 @@
 """A broker as deployed: the engine logs in as ``abi``, modules as ``module``.
 
 The module user's permissions (nats_permissions.MODULE_PERMISSIONS) keep it off the
-engine's service and discovery subjects and its key-value buckets, and modules hold
-keys of their own instead of the project secret. A module still registers, serves its
+engine's service and discovery subjects and replies, and out of stream creation and
+key-value writes; modules hold keys of their own instead of the project secret, and
+the tokens they are sent are bound to them. A module still registers, serves its
 agents and apps, and calls other modules. Jobs and claim checks run as ``module`` in
 the SDK's integration suites (tests/test_jobs_integration.py, test_claim_check.py).
 """
@@ -14,11 +15,7 @@ import json
 
 import nats
 import pytest
-from naas_abi_core.engine.nats_auth import (
-    issue_module_token,
-    issue_service_token,
-    module_key,
-)
+from naas_abi_core.engine.nats_auth import ServiceTokenSource, module_key
 from naas_abi_core.engine.nats_test_server import (
     login,
     native_nats_server,
@@ -40,8 +37,10 @@ def broker(tmp_path):
         yield login(url, "abi", PASSWORDS["abi"]), login(url, "module", PASSWORDS["module"])
 
 
-def _module_token(module_id: str) -> str:
-    return issue_module_token(module_id, module_key(SECRET, module_id))
+def _module_token(module_id: str):
+    from naas_abi_sdk.service_token import ModuleToken
+
+    return ModuleToken(module_id, module_key(SECRET, module_id))
 
 
 async def _violations(url: str, *, subscribe=(), publish=()) -> list[str]:
@@ -66,8 +65,20 @@ async def _violations(url: str, *, subscribe=(), publish=()) -> list[str]:
 
 def test_a_module_cannot_listen_on_the_engine_nor_touch_its_buckets(broker):
     engine, module = broker
-    listen = ["abi.svc.document.v1.get", "abi.discovery.acme.v1.register", "$KV.abi.key"]
-    write = ["$KV.abi.key", "$JS.API.STREAM.DELETE.ABI_JOBS_acme"]
+    listen = [
+        "abi.svc.document.v1.get",
+        "abi.discovery.acme.v1.register",
+        "_INBOX.engine-replies",
+        "$KV.abi.key",
+    ]
+    write = [
+        "$KV.abi.key",
+        # A stream on abi.svc.> would capture the engine's calls and their tokens.
+        "$JS.API.STREAM.CREATE.CAPTURE",
+        "$JS.API.STREAM.UPDATE.ABI_JOBS_acme",
+        "$JS.API.STREAM.DELETE.ABI_JOBS_acme",
+        "$JS.API.DIRECT.GET.KV_abi",
+    ]
 
     denied = asyncio.run(_violations(module, subscribe=listen, publish=write))
 
@@ -81,7 +92,7 @@ def test_a_module_cannot_listen_on_the_engine_nor_touch_its_buckets(broker):
         asyncio.run(
             _violations(
                 module,
-                subscribe=["abi.mod.acme.i-1.app.console.http", "_INBOX.x"],
+                subscribe=["abi.mod.acme.i-1.app.console.http", "_INBOX_MODULES.x"],
                 publish=["abi.svc.document.v1.get", "abi.discovery.acme.v1.register"],
             )
         )
@@ -161,7 +172,7 @@ def test_modules_register_and_serve_agents_and_apps_as_the_module_user(broker, t
                 agent = await self.engine.modules["acme.provider"].get_agent("Echo")
                 return await agent.invoke("hi", timeout=10)
 
-        nexus = Transport(engine, issue_service_token("api", SECRET), timeout=10)
+        nexus = Transport(engine, ServiceTokenSource("api", SECRET), timeout=10)
         provider = asyncio.create_task(
             run_module(
                 Provider,
@@ -191,6 +202,16 @@ def test_modules_register_and_serve_agents_and_apps_as_the_module_user(broker, t
             )
             assert answer.status == 200
             assert json.loads(answer.body) == {"user_id": "u-1", "caller": "api"}
+
+            # The token the provider was sent is bound to it: replayed to the
+            # engine's services, it is refused (it would act as api there).
+            sent = nexus.token.for_audience(instance.instance_id)
+            replay = Transport(module, sent, timeout=10)
+            try:
+                with pytest.raises(RPCError, match="UNAUTHENTICATED"):
+                    await DiscoveryClient(replay).evict(instance.instance_id)
+            finally:
+                await replay.close()
 
             # Another module may call the app, never on behalf of a user.
             peer = Transport(module, _module_token("acme.consumer"), timeout=10)

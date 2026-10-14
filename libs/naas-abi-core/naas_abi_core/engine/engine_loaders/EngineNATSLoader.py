@@ -186,6 +186,18 @@ class EngineNATSLoader:
                     )
                 )
             )
+            from naas_abi_core.engine.nats_permissions import prepare_module_streams
+
+            try:
+                # Modules may not create streams (MODULE_PERMISSIONS).
+                nats_runtime.run_coro(
+                    prepare_module_streams(nc, nats_config.discovery.project)
+                )
+            except Exception:  # noqa: BLE001 - modules report it; the engine serves on
+                logger.exception(
+                    "EngineNATSLoader: could not create the jobs stream and the "
+                    "claim-check store modules use"
+                )
 
         if services.object_storage_available() and not isinstance(
             services.object_storage.adapter, ObjectStorageSecondaryAdapterNATSClient
