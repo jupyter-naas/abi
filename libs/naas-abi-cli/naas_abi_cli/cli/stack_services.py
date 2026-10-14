@@ -66,7 +66,7 @@ SERVICE_CATALOG: dict[str, ServiceDefinition] = {
         key="dagster",
         display_name="Dagster",
         category="Orchestration",
-        description="Pipeline orchestration UI.",
+        description="Pipeline orchestration UI (legacy, projects without NATS).",
         urls=("http://127.0.0.1:3001",),
     ),
     "minio": ServiceDefinition(
@@ -96,7 +96,7 @@ SERVICE_CATALOG: dict[str, ServiceDefinition] = {
         key="rabbitmq",
         display_name="RabbitMQ",
         category="Messaging",
-        description="Message bus and management UI.",
+        description="Message bus and management UI (legacy, projects without NATS).",
         urls=("http://127.0.0.1:15672",),
         tcp_targets=(("127.0.0.1", 5672),),
     ),

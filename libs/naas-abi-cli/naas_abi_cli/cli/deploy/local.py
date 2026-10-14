@@ -1,7 +1,10 @@
 import os
 import re
 import secrets
+import shlex
 import shutil
+import subprocess
+import tomllib
 from datetime import UTC, datetime
 from ipaddress import ip_address
 from pathlib import Path
@@ -28,6 +31,12 @@ MIGRATE_TO_NATS_DOC = (
 # The configs a project's mode is read from, the one docker-compose runs first.
 _PROJECT_CONFIGS = ("config.local.yaml", "config.yaml")
 _NATS_BLOCK = re.compile(r"^nats\s*:", re.MULTILINE)
+# The naas-abi-core extras a project without NATS installs: Dagster schedules
+# its orchestrations, RabbitMQ is its bus. Legacy, not in naas-abi-core[all].
+LEGACY_EXTRAS = ("dagster", "rabbitmq")
+_CORE_REQUIREMENT = re.compile(
+    r"^\s*naas[-_.]abi[-_.]core(?![\w.-])\s*(?:\[([^\]]*)\])?(.*)$", re.IGNORECASE
+)
 
 DEFAULT_ENV_VALUES: dict[str, str] = {
     "BASE_DOMAIN": "localhost",
@@ -172,9 +181,58 @@ def _print_classic_stack_notice() -> None:
     print(
         "This project runs without NATS (its config has no `nats:` block), so "
         "the stack keeps RabbitMQ and Dagster, and the `nats` service stays "
-        "behind the `nats` profile.\n"
+        "behind the `nats` profile. Dagster and RabbitMQ are legacy and will be "
+        "removed in the next major.\n"
         f"To move it to NATS, follow {MIGRATE_TO_NATS_DOC}\n"
     )
+
+
+def legacy_extras_requirement(project_path: str) -> str | None:
+    """The naas-abi-core requirement that adds the legacy extras to the
+    project's ``pyproject.toml``, keeping its other extras and version; None
+    when it has them already, or has no ``pyproject.toml``."""
+    path = Path(project_path) / "pyproject.toml"
+    if not path.is_file():
+        return None
+    with open(path, "rb") as pyproject:
+        dependencies = tomllib.load(pyproject).get("project", {}).get(
+            "dependencies", []
+        )
+    matches = [m for d in dependencies if (m := _CORE_REQUIREMENT.match(d))]
+    extras = {
+        extra.strip()
+        for match in matches
+        for extra in (match.group(1) or "").split(",")
+        if extra.strip()
+    }
+    if set(LEGACY_EXTRAS) <= extras:
+        return None
+    rest = matches[0].group(2).strip() if matches else ""
+    return f"naas-abi-core[{','.join(sorted(extras | set(LEGACY_EXTRAS)))}]{rest}"
+
+
+def ensure_legacy_extras(project_path: str) -> None:
+    """Add Dagster and RabbitMQ to a project without NATS that lacks them.
+
+    Before 3.0 naas-abi-core installed them by default; the stack's `dagster`
+    service and a `rabbitmq` bus still need them.
+    """
+    requirement = legacy_extras_requirement(project_path)
+    if requirement is None:
+        return
+    command = ["uv", "add", requirement]
+    print(
+        "Adding the legacy Dagster and RabbitMQ extras, which this project's "
+        f"stack runs on: {shlex.join(command)}"
+    )
+    if shutil.which("uv") is None:
+        print(f"uv is not on PATH: run `{shlex.join(command)}` in {project_path}.")
+        return
+    if subprocess.run(command, cwd=project_path, check=False).returncode != 0:
+        print(
+            f"`{shlex.join(command)}` failed (see above): run it in "
+            f"{project_path} before starting the stack."
+        )
 
 
 def _compose_project_network(project_path: str) -> str:

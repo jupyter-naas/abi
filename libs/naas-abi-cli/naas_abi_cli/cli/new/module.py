@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Literal
@@ -103,10 +104,14 @@ def new_module(
     kind: ModuleKind = "remote",
     standalone: bool = False,
     abi_ref: str | None = None,
+    orchestration: bool | None = None,
 ):
     """``kind="remote"``: an SDK module, in the enclosing project's ``src/``
     or, outside a project or with ``standalone``, as a repository of its own.
-    ``kind="in-engine"``: the classic module the engine loads."""
+    ``kind="in-engine"``: the classic module the engine loads.
+
+    ``orchestration``: whether an in-engine module gets a Dagster orchestration
+    (legacy). None: only in a project without NATS, or outside any project."""
     module_name = to_kebab_case(module_name)
     project = find_project(Path(os.getcwd()))
 
@@ -174,11 +179,16 @@ def new_module(
         extra_values={"module_name_snake": to_snake_case(module_name)},
     )
 
-    new_orchestration(
-        module_name,
-        os.path.join(module_path, "orchestrations"),
-        extra_values={"module_name_snake": to_snake_case(module_name)},
-    )
+    if orchestration is None:
+        orchestration = project is None or not project.nats()
+    if orchestration:
+        new_orchestration(
+            module_name,
+            os.path.join(module_path, "orchestrations"),
+            extra_values={"module_name_snake": to_snake_case(module_name)},
+        )
+    else:
+        shutil.rmtree(os.path.join(module_path, "orchestrations"))
 
     new_app(
         module_name,

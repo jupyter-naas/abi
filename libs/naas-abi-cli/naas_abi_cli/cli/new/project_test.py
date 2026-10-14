@@ -281,10 +281,14 @@ def test_new_project_runs_on_nats_by_default(tmp_path, monkeypatch) -> None:
     assert len(env["NATS_JWT_SECRET"]) >= 32
     assert env["NATS_ABI_PASSWORD"] and env["NATS_MODULE_PASSWORD"]
     assert "naas-abi-sdk[agent]" in _uv_add(commands)
+    # No legacy extras: Dagster and RabbitMQ are not installed.
+    assert "naas-abi-core[all]" in _uv_add(commands)
     assert "nats-server" in result.output
     # The project's own module holds the default agent the engine loads.
     module = (tmp_path / "demo" / "src" / "demo" / "__init__.py").read_text()
     assert "naas_abi_core" in module
+    # Module jobs schedule a NATS project: no Dagster orchestration.
+    assert not (tmp_path / "demo" / "src" / "demo" / "orchestrations").exists()
     assert not (tmp_path / "demo" / "docker-compose.override.yml").exists()
 
 
@@ -301,6 +305,10 @@ def test_new_project_without_nats_is_the_classic_project(tmp_path, monkeypatch) 
     assert "NATS_JWT_SECRET" not in _env(tmp_path)
     assert not any("naas-abi-sdk" in arg for arg in _uv_add(commands))
     assert "nats-server" not in result.output
+    # The legacy extras its Dagster and RabbitMQ setup runs on.
+    assert "naas-abi-core[all,dagster,rabbitmq]" in _uv_add(commands)
+    orchestrations = tmp_path / "demo" / "src" / "demo" / "orchestrations"
+    assert (orchestrations / "DemoOrchestration.py").is_file()
 
 
 def test_a_nats_project_refuses_to_skip_the_submodule(tmp_path, monkeypatch) -> None:
