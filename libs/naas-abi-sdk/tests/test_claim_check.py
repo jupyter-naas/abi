@@ -130,7 +130,7 @@ def test_bus_queues_carry_payloads_above_the_limit_and_at_its_edge(broker):
         # The queue's stream is the engine's to create: modules may not create streams.
         engine = Transport(broker_users.as_engine(broker), "token", timeout=5)
         try:
-            await BusClient(engine)._stream((await engine.connect()).jetstream(), "jobs")
+            await BusClient(engine)._stream(await engine.connect(), "jobs")
         finally:
             await engine.close()
         transport = Transport(broker, "token", timeout=5)
@@ -151,3 +151,19 @@ def test_bus_queues_carry_payloads_above_the_limit_and_at_its_edge(broker):
             await transport.close()
 
     assert asyncio.run(scenario()) == [big, edge]
+
+
+def test_a_bus_queue_without_its_stream_says_why(broker):
+    if "nats://module:" not in broker:
+        pytest.skip("an open broker lets anyone create streams")
+    from naas_abi_sdk.streams import StreamNotCreated
+
+    async def scenario():
+        transport = Transport(broker, "token", timeout=2)
+        try:
+            with pytest.raises(StreamNotCreated, match="queue stream of topic 'fresh'"):
+                await BusClient(transport).enqueue("fresh", "work", b"x")
+        finally:
+            await transport.close()
+
+    asyncio.run(scenario())

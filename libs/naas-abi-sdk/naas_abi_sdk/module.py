@@ -31,6 +31,7 @@ from naas_abi_sdk.discovery import (
 from naas_abi_sdk.health import HealthServer
 from naas_abi_sdk.jobs import JobsMixin
 from naas_abi_sdk.services import service_proxy
+from naas_abi_sdk.transport import MODULE_INBOX_PREFIX
 
 if TYPE_CHECKING:
     from naas_abi_sdk.bus import BusClient
@@ -400,6 +401,10 @@ async def run_module(
     telemetry.configure_from_env(identity)
     # Named after the module so the broker's /connz shows which module is which.
     connection_options.setdefault("name", f"{identity}@{socket.gethostname()}")
+    # A module reads its replies on the module inbox prefix, however it logs in
+    # (URL, user/password options, creds or token): the broker user `module` may
+    # not subscribe to _INBOX.>, where the engine's replies go.
+    connection_options.setdefault("inbox_prefix", MODULE_INBOX_PREFIX)
     # NATS gone for good stops the module (SIGTERM drains it), and its supervisor
     # restarts it, instead of a process that serves nothing.
     async with (

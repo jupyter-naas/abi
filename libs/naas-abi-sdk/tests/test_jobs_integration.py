@@ -962,3 +962,21 @@ def test_a_trigger_for_a_new_job_sent_before_its_host_starts_runs_once(broker):
     assert executions == [record["run_id"]]
     assert len(docs.runs("fresh")) == 1
     assert max_ack_pending == 3  # start() applies the new generation's limits
+
+
+def test_a_module_that_may_not_create_the_jobs_stream_says_so(broker):
+    """The engine creates it; a module that finds it missing gets the reason, not
+    a JetStream timeout."""
+    if "nats://module:" not in broker:
+        pytest.skip("an open broker lets anyone create streams")
+    from naas_abi_sdk.streams import StreamNotCreated
+
+    async def scenario():
+        nc = await broker_users.connect(broker)
+        try:
+            with pytest.raises(StreamNotCreated, match="may not create or update streams"):
+                await ensure_stream(nc.jetstream(timeout=1), "unprepared")
+        finally:
+            await nc.close()
+
+    asyncio.run(scenario())
