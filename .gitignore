@@ -77,6 +77,8 @@ storage/*
 !storage/*/README.md
 !storage/datastore/
 !storage/triplestore/
+# Caches written when tests or the CLI run inside a package folder
+libs/*/storage/
 !storage/vectorstore/
 storage/datastore/*
 storage/triplestore/*
