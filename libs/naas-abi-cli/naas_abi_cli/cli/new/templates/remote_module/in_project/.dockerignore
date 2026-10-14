@@ -1,5 +1,17 @@
+# The build context is this module's folder: keep secrets, caches and local
+# state out of it (they would reach the builder, and maybe the image).
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+.venv
 **/__pycache__
+**/*.py[cod]
 **/.pytest_cache
+.ruff_cache
+.mypy_cache
+*.egg-info
+storage/
 tests/
 Dockerfile
 .dockerignore
