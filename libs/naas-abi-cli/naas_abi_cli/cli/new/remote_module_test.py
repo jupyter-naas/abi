@@ -230,17 +230,35 @@ def test_a_second_module_joins_the_first(tmp_path: Path) -> None:
     assert list(services) == ["research", "writer"]
 
 
-def test_a_classic_project_gets_no_compose_service(tmp_path: Path) -> None:
-    """Its Docker stack has no broker: the module would never start."""
+def test_a_classic_project_gets_an_in_engine_module_by_default(
+    tmp_path: Path,
+) -> None:
+    """Nothing runs a remote module without NATS: neither `abi dev up`
+    in-process nor the classic Docker stack, which has no broker."""
     root = _project(tmp_path, nats=False)
 
     result = _invoke(_new_module, root, "research")
 
     assert result.exit_code == 0, result.output
+    assert "naas_abi_core" in (root / "src" / "research" / "__init__.py").read_text()
+    assert "  - module: research" in result.output
+    assert "--remote" in result.output
+    assert load_dev_configuration(str(root / "config.yaml")).modules == []
+
+
+def test_a_remote_module_in_a_classic_project_gets_no_compose_service(
+    tmp_path: Path,
+) -> None:
+    """Its Docker stack has no broker: the module would never start."""
+    root = _project(tmp_path, nats=False)
+
+    result = _invoke(_new_module, root, "research", "--remote")
+
+    assert result.exit_code == 0, result.output
     assert not (root / COMPOSE_OVERRIDE).exists()
     assert "migrate-to-nats" in result.output
     assert "research:" in result.output  # the snippet, to add by hand
-    # `abi dev up` runs on NATS by default, so the dev entry is still added.
+    # Ready for `abi dev up` once the project is on NATS.
     assert [
         m.name for m in load_dev_configuration(str(root / "config.yaml")).modules
     ] == ["research"]
@@ -351,6 +369,13 @@ def test_standalone_pins_the_sdk_to_this_cli_release_by_default(
     for dependency in project["project"]["dependencies"]:
         assert "@ git+https://github.com/jupyter-naas/abi.git@naas-abi-cli-v3.0.0#" in dependency
         assert "@main" not in dependency
+
+
+def test_remote_and_in_engine_exclude_each_other(tmp_path: Path) -> None:
+    result = _invoke(_new_module, tmp_path, "x", "--remote", "--in-engine")
+
+    assert result.exit_code == 2
+    assert "drop --in-engine" in result.output
 
 
 def test_standalone_and_in_engine_exclude_each_other(tmp_path: Path) -> None:

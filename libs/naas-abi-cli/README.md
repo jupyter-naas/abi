@@ -50,7 +50,7 @@ abi new project my-abi-project --without-local-deploy
 abi new project my-abi-project --without-nats   # classic, in-process
 ```
 
-#### `abi new module <name> [path] [--in-engine] [--standalone] [--abi-ref <ref>]`
+#### `abi new module <name> [path] [--in-engine | --remote] [--standalone] [--abi-ref <ref>]`
 Creates a module. By default a **remote module**: a `naas-abi-sdk` package that
 runs in its own process, reaches the engine only through NATS, and never
 imports `naas_abi_core`. It has an agent (an SDK `IntentAgent` on the engine's
@@ -74,7 +74,10 @@ tests.
   `Dockerfile`, `README.md`, `AGENTS.md`, ready for `git init`.
 - **`--in-engine`** (alias `--local`) creates the classic module the engine
   loads (agents, integrations, pipelines, workflows, orchestrations,
-  ontologies); add it under `modules:`.
+  ontologies); add it under `modules:`. It is the default in a project whose
+  config has no `nats:` block, where nothing would run a remote module;
+  **`--remote`** creates a remote one there anyway, ready for when the
+  project moves to NATS.
 
 Inside a remote module, `abi new agent` writes an SDK agent and `abi new app`
 adds an app the module serves through Nexus, with an optional backend
@@ -84,7 +87,7 @@ refuse and say what to use instead.
 
 **Example:**
 ```bash
-abi new module research                 # remote, in the project
+abi new module research                 # remote, in a NATS project
 abi new module research --standalone    # its own repository
 abi new module legacy --in-engine       # loaded by the engine
 ```
