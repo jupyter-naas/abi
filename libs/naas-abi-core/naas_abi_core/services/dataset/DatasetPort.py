@@ -310,7 +310,8 @@ class IDatasetPort(ABC):
         namespace: str = "default",
         timeout_seconds: float | None = None,
     ) -> QueryResult:
-        """Merge eligible small files within partitions, preserving snapshots.
+        """Rewrite files holding deleted rows and merge small files within
+        partitions, preserving snapshots.
 
         Returns adapter maintenance statistics. Does not flush inlined rows,
         expire snapshots, or delete old files. Raises DatasetNotFoundError.
