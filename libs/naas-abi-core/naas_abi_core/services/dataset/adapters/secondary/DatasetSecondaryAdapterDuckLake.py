@@ -210,9 +210,12 @@ class _NoCatalogLock:
 class DatasetSecondaryAdapterDuckLake(IDatasetPort):
     """Store datasets in one DuckLake catalog and data warehouse.
 
-    Writes use a fresh DuckDB connection per attempt. Retriable catalog
-    conflicts replay the complete transaction against fresh state using bounded
-    exponential backoff with jitter.
+    Writes use a fresh DuckDB connection per attempt. A commit that loses the
+    race for the next snapshot to a commit that changed other data is retried
+    by DuckLake itself, up to ``commit_retries`` times: only the commit is
+    redone. Conflicts it cannot resolve (both changed the same table) replay
+    the complete transaction against fresh state, up to ``max_retries`` times,
+    using bounded exponential backoff with jitter.
 
     Reads (describe/list/query/list_snapshots) have no transaction to retry, so
     they instead share one lazily-created, kept-open connection: LOAD-ing the
@@ -231,6 +234,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         data_path: str,
         *,
         max_retries: int = 10,
+        commit_retries: int = 10,
         data_inlining_row_limit: int = 1000,
         retry_base_delay_seconds: float = 0.05,
         retry_max_delay_seconds: float = 1.0,
@@ -246,6 +250,8 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         self._data_inlining_row_limit = data_inlining_row_limit
         if max_retries < 0:
             raise ValueError("max_retries must be greater than or equal to zero")
+        if commit_retries < 0:
+            raise ValueError("commit_retries must be greater than or equal to zero")
         if retry_base_delay_seconds < 0:
             raise ValueError("retry_base_delay_seconds must be non-negative")
         if retry_max_delay_seconds < retry_base_delay_seconds:
@@ -276,6 +282,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
                 f"{self._data_path!r}"
             )
         self._max_retries = max_retries
+        self._commit_retries = commit_retries
         self._retry_base_delay_seconds = retry_base_delay_seconds
         self._retry_max_delay_seconds = retry_max_delay_seconds
         self._catalog_lock = (
@@ -796,7 +803,9 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             except duckdb.Error:
                 con.execute("INSTALL ducklake")
                 con.execute("LOAD ducklake")
-            con.execute("SET ducklake_max_retry_count = 0")
+            # With 0, a commit landing anywhere in the catalog while this
+            # transaction runs fails it, and the whole transaction is replayed.
+            con.execute(f"SET ducklake_max_retry_count = {int(self._commit_retries)}")
             self._configure_object_store(con)
             options = [
                 "AUTOMATIC_MIGRATION",
