@@ -241,7 +241,7 @@ def _sendable(name: str, value: str) -> bool:
 
 
 def _returned_headers(
-    headers: tuple[tuple[str, str], ...], root: str, path: str = "/"
+    headers: tuple[tuple[str, str], ...], root: str, path: str = "/", status: int = 200
 ) -> list[tuple[str, str]]:
     returned = []
     for name, value in headers:
@@ -249,6 +249,9 @@ def _returned_headers(
         if not _sendable(name, value):
             continue
         if _is_returned(lower):
+            returned.append((name, value))
+        elif lower == "location" and not 300 <= status < 400:
+            # A created resource's address (201): the browser does not go there.
             returned.append((name, value))
         elif lower == "location":
             location = _same_app_location(value, root, path)
@@ -475,7 +478,7 @@ async def _response(
         response = Response(content=answer.body, status_code=answer.status)
         if method.upper() == "HEAD" and length is not None:
             response.headers["content-length"] = str(length)  # what GET would send
-    for name, value in _returned_headers(answer.headers, root, path):
+    for name, value in _returned_headers(answer.headers, root, path, answer.status):
         response.headers.append(name, value)
     response.headers.update(SECURITY_HEADERS)
     return response
