@@ -412,18 +412,22 @@ class DatasetSecondaryAdapterContract(ABC):
 
     def test_long_operations_accept_a_callers_deadline(self, adapter: IDatasetPort):
         adapter.create(self._spec())
+        row = {
+            "sha": "a",
+            "project_id": "p",
+            "author_date": "2026-08-02",
+            "additions": 1,
+            "deletions": 0,
+        }
         adapter.write(
+            "github_commits", [row], namespace="acme", timeout_seconds=60.0
+        )
+        adapter.write_stream(
             "github_commits",
-            [
-                {
-                    "sha": "a",
-                    "project_id": "p",
-                    "author_date": "2026-08-02",
-                    "additions": 1,
-                    "deletions": 0,
-                }
-            ],
+            iter([row]),
             namespace="acme",
+            mode="replace",
+            timeout_seconds=60.0,
         )
 
         adapter.flush("github_commits", namespace="acme", timeout_seconds=60.0)

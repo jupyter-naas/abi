@@ -375,6 +375,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         namespace: str = "default",
         mode: WriteMode = "append",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,  # in process: runs to completion
     ) -> DatasetInfo:
         def operation(con: Any) -> DatasetSpec:
             current_snapshot = self._current_snapshot(con)
@@ -426,6 +427,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         namespace: str = "default",
         mode: WriteMode = "append",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,  # in process: runs to completion
     ) -> DatasetInfo:
         """Validate and stage the rows ``STAGE_ROWS`` at a time into a local
         Parquet file, then commit them in one transaction, whose retries
