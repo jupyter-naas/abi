@@ -431,6 +431,19 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
             for snapshot in response.snapshots.items
         ]
 
+    def namespace_version(self, namespace: str) -> int | None:
+        request = dataset_pb2.NamespaceVersionRequest(
+            context=self._context(), namespace=namespace
+        )
+        response = self._call(
+            f"{SUBJECT_PREFIX}.namespace_version",
+            request,
+            dataset_pb2.NamespaceVersionResponse,
+        )
+        if response.HasField("error"):
+            _raise_for_error(response.error)
+        return response.snapshot_id if response.HasField("snapshot_id") else None
+
     def drop(self, name: str, *, namespace: str = "default") -> None:
         request = dataset_pb2.DropRequest(
             context=self._context(), name=name, namespace=namespace
