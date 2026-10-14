@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { usePathname, useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Building2, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Building2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
+import { SettingsLayoutRoot, SettingsNavItem } from '@/components/settings/settings-shell';
 import {
   isOrgAdminRole,
   orgSettingsIndexPath,
@@ -30,24 +31,14 @@ function NavItem({
 }) {
   const fullHref = orgSettingsSectionPath(orgId, item.slug);
   const isActive = pathname === fullHref || pathname.startsWith(`${fullHref}/`);
-  const Icon = item.icon;
   return (
-    <li>
-      <Link
-        href={fullHref}
-        className={
-          isActive
-            ? 'org-settings-nav-item org-settings-nav-item-active'
-            : 'org-settings-nav-item'
-        }
-      >
-        <Icon size={18} />
-        <span className="org-settings-nav-item-label">{item.label}</span>
-        {mobileList && (
-          <ChevronRight size={18} className="org-settings-nav-item-chevron" />
-        )}
-      </Link>
-    </li>
+    <SettingsNavItem
+      href={fullHref}
+      label={item.label}
+      icon={item.icon}
+      active={isActive}
+      chevron={mobileList}
+    />
   );
 }
 
@@ -75,6 +66,11 @@ export default function OrganizationSettingsLayout({
 
   const [orgName, setOrgName] = useState('');
   const [borderRadius, setBorderRadius] = useState('0');
+  // The organization's colours, not the last workspace's (see SettingsLayoutRoot).
+  const [orgColors, setOrgColors] = useState<{ primary: string | null; accent: string | null }>({
+    primary: null,
+    accent: null,
+  });
   const [orgCount, setOrgCount] = useState<number | null>(null);
   const [layoutKey, setLayoutKey] = useState(0);
 
@@ -90,6 +86,10 @@ export default function OrganizationSettingsLayout({
           setViewerRole(data.current_user_role ?? null);
           const radius = data.loginBorderRadius ?? data.login_border_radius ?? '0';
           setBorderRadius(radius);
+          setOrgColors({
+            primary: data.primary_color ?? data.primaryColor ?? null,
+            accent: data.accent_color ?? data.accentColor ?? null,
+          });
         }
 
         const orgsResponse = await authFetch('/api/organizations/');
@@ -125,10 +125,6 @@ export default function OrganizationSettingsLayout({
     }
   }, [orgId, viewerRole, section, visibleNav, router]);
 
-  const themeStyles = {
-    '--org-border-radius': `${borderRadius}px`,
-  } as React.CSSProperties;
-
   const handleBack = () => {
     if (showMobileDetail) {
       router.push(orgSettingsIndexPath(orgId));
@@ -153,13 +149,7 @@ export default function OrganizationSettingsLayout({
   const showMain = !showMobileList;
 
   return (
-    <div
-      className="org-settings-layout-root"
-      data-org-settings-root=""
-      data-org-branded="true"
-      style={themeStyles}
-      key={layoutKey}
-    >
+    <SettingsLayoutRoot key={layoutKey} brand={orgColors} borderRadius={borderRadius}>
       <div className="org-settings-layout-left">
       <header className="org-settings-layout-header">
         <div className="org-settings-layout-header-inner">
@@ -195,10 +185,8 @@ export default function OrganizationSettingsLayout({
         }
       >
         {showNav && (
-          <nav className="org-settings-layout-nav">
-            <h2 className="org-settings-layout-nav-title">Organization Settings</h2>
-            <div className="org-settings-layout-nav-divider" />
-            <ul className="org-settings-layout-nav-list">
+          <SettingsLayoutNav title="Organization Settings" resizable={!showMobileList}>
+            <ul className="settings-layout-nav-list">
               {visibleNav.map((item) => (
                 <NavItem
                   key={item.slug}
@@ -209,7 +197,7 @@ export default function OrganizationSettingsLayout({
                 />
               ))}
             </ul>
-          </nav>
+          </SettingsLayoutNav>
         )}
 
         {showMain && (
@@ -221,6 +209,6 @@ export default function OrganizationSettingsLayout({
         )}
       </div>
       </div>
-    </div>
+    </SettingsLayoutRoot>
   );
 }

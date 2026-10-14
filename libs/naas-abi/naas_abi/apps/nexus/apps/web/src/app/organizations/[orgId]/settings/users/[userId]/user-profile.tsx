@@ -191,7 +191,7 @@ export default function OrgUserProfilePage() {
     <div className="account-profile-page">
       <AccountPageHeader
         title="Profile"
-        subtitle="Manage their personal information"
+        subtitle="Their profile in this organization. Their account and other organizations are unchanged."
       />
 
       {error ? (

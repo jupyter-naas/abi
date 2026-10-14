@@ -1,0 +1,331 @@
+/* Platform Settings additions on top of the Organization Settings shell. */
+
+/* Page header badges ("users · 94 rows · 11 columns") use the default neutral
+   background, not the primary (workspace) tint they have in Organization Settings. */
+.platform-settings-root .org-settings-page-header-badge {
+  background-color: hsl(var(--muted));
+  color: var(--muted-foreground-hex);
+}
+
+.platform-settings-nav-group + .platform-settings-nav-group {
+  margin-top: var(--space-4);
+}
+
+.platform-settings-nav-group-title {
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--muted-foreground-hex);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.platform-settings-nav-group .org-settings-nav-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Raw table pages: one cell per value, so keep rows compact and readable. */
+.platform-table-page .org-settings-users-table td {
+  max-width: 320px;
+  padding: 6px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.platform-table-page .org-settings-users-table th {
+  white-space: nowrap;
+  text-transform: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.platform-table-cell-null {
+  color: var(--muted-foreground-hex);
+  font-style: italic;
+}
+
+.platform-table-cell-redacted {
+  color: var(--muted-foreground-hex);
+}
+
+/* Table pages drop the 896px content cap and use the full page width. */
+.org-settings-layout-content.platform-settings-content-wide {
+  max-width: none;
+}
+
+/* Dashboard: tables by section, schema opens under the clicked row. */
+.platform-dashboard-number {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.platform-dashboard-th-numeric {
+  justify-content: flex-end;
+}
+
+.platform-dashboard-row {
+  cursor: pointer;
+}
+
+.platform-dashboard-row.is-open {
+  background-color: color-mix(in srgb, var(--muted-foreground-hex) 6%, transparent);
+}
+
+.platform-dashboard-name {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.platform-dashboard-name > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--muted-foreground-hex);
+}
+
+.platform-dashboard-link {
+  display: block;
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+.platform-dashboard-link:hover {
+  text-decoration: underline;
+}
+
+.platform-dashboard-raw {
+  display: block;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--muted-foreground-hex);
+}
+
+.platform-dashboard-description {
+  color: var(--muted-foreground-hex);
+}
+
+.platform-dashboard-schema > td {
+  padding: var(--space-3) var(--space-4) var(--space-4) var(--space-8);
+  background-color: var(--surface-subtle-hex);
+}
+
+.platform-schema-table {
+  border: 1px solid var(--border-hex);
+  background-color: var(--card-hex);
+}
+
+.platform-schema-table th {
+  padding: 6px 10px;
+}
+
+.platform-schema-table td {
+  padding: 6px 10px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.platform-schema-column,
+.platform-schema-keys {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.platform-schema-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--border-hex);
+  font-family: var(--font-sans, inherit);
+  font-size: 11px;
+  color: var(--muted-foreground-hex);
+}
+
+.platform-table-row-link {
+  cursor: pointer;
+}
+
+.platform-table-row-link:focus-visible {
+  outline: 2px solid var(--ring-hex, currentColor);
+  outline-offset: -2px;
+}
+
+/* Row page: one field per line, full values. */
+.platform-row-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  margin-bottom: calc(-1 * var(--space-6));
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.platform-row-back:hover {
+  color: var(--foreground-hex);
+}
+
+.platform-table-page .platform-row-table th.platform-row-field {
+  width: 1%;
+  padding: 8px 12px;
+  border-right: 1px solid var(--border-hex);
+  border-bottom: 1px solid var(--border-hex);
+  background-color: var(--surface-subtle-hex);
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.platform-row-field .platform-schema-tag {
+  margin-left: var(--space-2);
+  text-transform: none;
+}
+
+.platform-table-page .platform-row-table td {
+  max-width: none;
+  padding: 8px 12px;
+  overflow: visible;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Dashboard global search. */
+.platform-dashboard-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: calc(-1 * var(--space-4));
+  padding: 8px 12px;
+  border: 1px solid var(--border-hex);
+  background-color: var(--card-hex);
+  color: var(--muted-foreground-hex);
+}
+
+/* No focus colour on the box or the input: same opt-out as the other search fields in globals.css. */
+.platform-dashboard-search:focus-within {
+  border-color: var(--border-hex);
+  box-shadow: none;
+}
+
+.platform-dashboard-search :focus-visible,
+.platform-dashboard-search input:focus {
+  outline: none;
+  box-shadow: none;
+  --tw-ring-width: 0px;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+}
+
+.platform-dashboard-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: var(--font-size-sm);
+  color: var(--foreground-hex);
+  outline: none;
+}
+
+.platform-dashboard-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.platform-dashboard-search-clear {
+  display: inline-flex;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+}
+
+.platform-dashboard-search-clear:hover {
+  color: var(--foreground-hex);
+}
+
+/* Table pages: schema toggle under the title, schema panel and search box. */
+.platform-table-schema-toggle-row {
+  display: flex;
+  margin-top: calc(-1 * var(--space-4));
+}
+
+.platform-table-schema-panel {
+  overflow: auto;
+}
+
+.platform-table-page .platform-table-schema-panel .platform-schema-table td {
+  max-width: none;
+}
+
+/* Table pages fill the height: header, search and pager stay put, the table scrolls
+   (both ways) under sticky column headers. Row pages and the dashboard scroll normally. */
+.org-settings-layout-main.platform-settings-main-fill {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.org-settings-layout-content.platform-settings-content-fill {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+.platform-settings-content-fill > .platform-table-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.platform-settings-content-fill > .platform-table-page > .org-settings-users-main {
+  flex: 1;
+  min-height: 0;
+}
+
+.platform-settings-content-fill .org-settings-users-table-wrap {
+  flex: 1;
+  min-height: 160px;
+  overflow: auto;
+}
+
+.platform-settings-content-fill .org-settings-users-main > * {
+  flex-shrink: 0;
+}
+
+.platform-settings-content-fill .org-settings-users-main > .org-settings-users-table-wrap {
+  flex-shrink: 1;
+}
+
+.platform-settings-content-fill .platform-table-schema-panel {
+  max-height: 40vh;
+}
+
+.platform-table-page .org-settings-users-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.platform-table-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: calc(-1 * var(--space-4));
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}
+
+.platform-table-pager-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}

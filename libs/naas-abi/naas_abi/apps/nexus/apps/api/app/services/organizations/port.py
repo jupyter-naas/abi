@@ -132,6 +132,14 @@ class OrganizationWorkspaceMembershipRecord:
 
 
 @dataclass
+class UserOrganizationMembershipRecord:
+    user_id: str
+    organization_id: str
+    organization_name: str
+    role: str
+
+
+@dataclass
 class UserRecord:
     id: str
     email: str
@@ -221,6 +229,11 @@ class OrganizationPermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def list_all_organization_memberships(self) -> list[UserOrganizationMembershipRecord]:
+        """Every user's organizations across the platform (Platform Settings)."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def get_user_by_email(self, email: str) -> UserRecord | None:
         raise NotImplementedError
 
@@ -244,6 +257,27 @@ class OrganizationPermissionPort(ABC):
     async def update_organization_member_role(
         self, org_id: str, user_id: str, role: str
     ) -> OrganizationMemberRecord | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def update_organization_member_profile(
+        self,
+        org_id: str,
+        user_id: str,
+        *,
+        name: str | None,
+        company: str | None,
+        job_title: str | None,
+        bio: str | None,
+    ) -> OrganizationMemberRecord | None:
+        """Set the member's profile in this org; ``None`` leaves a field unchanged."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def set_organization_member_avatar(
+        self, org_id: str, user_id: str, avatar: str | None
+    ) -> str | None:
+        """Set (or clear, with ``None``) the org avatar; returns the previous org avatar."""
         raise NotImplementedError
 
     @abstractmethod

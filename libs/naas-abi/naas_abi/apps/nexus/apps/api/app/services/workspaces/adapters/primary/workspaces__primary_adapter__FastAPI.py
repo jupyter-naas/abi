@@ -16,6 +16,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import deprecated_encrypt
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import build_feature_flags
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_auth_service,
@@ -31,7 +32,10 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
     OrganizationSecondaryAdapterPostgres,
 )
-from naas_abi.apps.nexus.apps.api.app.services.organizations.service import OrganizationService
+from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
+    OrganizationMemberAlreadyExistsError,
+    OrganizationService,
+)
 from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
     check_rate_limit,
     get_rate_limit_identifier,
@@ -155,6 +159,7 @@ class WorkspaceMember(BaseModel):
     email: str | None = None
     name: str | None = None
     created_at: datetime | None = None
+    source: str = "workspace"
 
 
 class WorkspaceMemberInvite(BaseModel):
@@ -288,9 +293,7 @@ async def list_workspaces(
     roles = await asyncio.gather(
         *[service.get_workspace_role(user_id=current_user.id, workspace_id=row.id) for row in rows]
     )
-    overrides = await _load_org_role_overrides(
-        [row.organization_id for row in rows], org_service
-    )
+    overrides = await _load_org_role_overrides([row.organization_id for row in rows], org_service)
     return [
         _to_schema(
             row,
@@ -366,9 +369,7 @@ async def create_workspace(
     return _to_schema(
         record,
         "owner",
-        organization_override=await _load_org_role_override(
-            record.organization_id, org_service
-        ),
+        organization_override=await _load_org_role_override(record.organization_id, org_service),
     )
 
 
@@ -410,9 +411,7 @@ async def update_workspace(
     return _to_schema(
         record,
         role,
-        organization_override=await _load_org_role_override(
-            record.organization_id, org_service
-        ),
+        organization_override=await _load_org_role_override(record.organization_id, org_service),
     )
 
 
@@ -451,6 +450,7 @@ async def list_workspace_members(
             email=row.email,
             name=row.name,
             created_at=row.created_at,
+            source=row.source,
         )
         for row in rows
     ]
@@ -471,6 +471,7 @@ async def invite_workspace_member(
     request: Request,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
+    org_service: OrganizationService = Depends(get_organization_service),
     auth_service: AuthService = Depends(get_auth_service),
     email_service: EmailService | None = Depends(_get_email_service),
 ) -> dict[str, object]:
@@ -506,6 +507,20 @@ async def invite_workspace_member(
 
     if member is None:
         raise HTTPException(status_code=500, detail="Failed to create or find user for invite")
+
+    # The organization is the people directory (Org > Users): make sure someone
+    # invited straight into a workspace shows up there too.
+    workspace = await service.get_workspace(workspace_id=workspace_id)
+    if workspace is not None and workspace.organization_id:
+        try:
+            await org_service.invite_member(
+                org_id=workspace.organization_id,
+                email=email,
+                role="member",
+                now=datetime.now(UTC).replace(tzinfo=None),
+            )
+        except OrganizationMemberAlreadyExistsError:
+            pass
 
     sign_in_email_sent = await issue_and_send_invite_sign_in(
         auth_service,
@@ -551,6 +566,12 @@ async def update_workspace_member(
     role = await get_workspace_role(current_user.id, workspace_id)
     if role not in ["admin", "owner"]:
         raise HTTPException(status_code=403, detail="Only admins can update members")
+    if "role" in updates:
+        if user_id == current_user.id:
+            raise HTTPException(status_code=400, detail="Cannot change your own role")
+        workspace = await service.get_workspace(workspace_id=workspace_id)
+        if workspace is not None and workspace.owner_id == user_id:
+            raise HTTPException(status_code=400, detail="Cannot change the workspace owner role")
 
     changed = await service.update_workspace_member(
         workspace_id=workspace_id,

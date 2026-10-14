@@ -76,6 +76,9 @@ class WorkspaceMemberRecord:
     email: str | None = None
     name: str | None = None
     created_at: datetime | None = None
+    # "workspace": explicit membership row. "organization": no row, the role is
+    # inherited from being an owner/admin of the workspace's organization.
+    source: str = "workspace"
 
 
 @dataclass

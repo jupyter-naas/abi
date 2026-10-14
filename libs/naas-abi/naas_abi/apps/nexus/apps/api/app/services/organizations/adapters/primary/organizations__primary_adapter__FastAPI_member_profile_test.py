@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -68,18 +68,11 @@ def _client(
         update_organization_member_role=AsyncMock(
             return_value=OrganizationMemberRecord(**{**member.__dict__, "role": "admin"})
         ),
+        update_organization_member_profile=AsyncMock(return_value=updated),
+        set_organization_member_avatar=AsyncMock(return_value="/api/auth/avatar/old.png"),
     )
+    # The profile is per organization: the account must never be written.
     auth_service = AsyncMock()
-    auth_service.update_profile.return_value = SimpleNamespace(id=member.user_id)
-    auth_service.update_avatar.return_value = SimpleNamespace(id=member.user_id)
-
-    # After a profile write, return the prepared row.
-    async def _get_member(**_kwargs):
-        if auth_service.update_profile.await_count:
-            return updated
-        return member
-
-    adapter.get_organization_member = AsyncMock(side_effect=_get_member)
 
     app = FastAPI()
     app.include_router(org_api.router, prefix="/organizations")
@@ -94,17 +87,17 @@ def _client(
 
 
 def test_member_cannot_patch_profile() -> None:
-    client, auth_service, _ = _client(viewer_role="member")
+    client, _, adapter = _client(viewer_role="member")
     resp = client.patch(
         "/organizations/org-1/members/user-2",
         json={"name": "Prepared", "bio": "Works on audit."},
     )
     assert resp.status_code == 403
-    auth_service.update_profile.assert_not_awaited()
+    adapter.update_organization_member_profile.assert_not_awaited()
 
 
-def test_admin_can_prep_profile_without_touching_email() -> None:
-    client, auth_service, _ = _client(viewer_role="admin")
+def test_admin_edits_the_org_profile_not_the_account() -> None:
+    client, auth_service, adapter = _client(viewer_role="admin")
     resp = client.patch(
         "/organizations/org-1/members/user-2",
         json={
@@ -121,10 +114,50 @@ def test_admin_can_prep_profile_without_touching_email() -> None:
     assert body["job_title"] == "Partner"
     assert body["bio"] == "Works on audit."
     assert body["email"] == "member@example.com"
-    auth_service.update_profile.assert_awaited_once()
-    kwargs = auth_service.update_profile.await_args.kwargs
-    assert kwargs["email"] is None
-    assert kwargs["role"] == "Partner"
+    adapter.update_organization_member_profile.assert_awaited_once_with(
+        org_id="org-1",
+        user_id="user-2",
+        name="Prepared",
+        company="Acme",
+        job_title="Partner",
+        bio="Works on audit.",
+    )
+    assert auth_service.mock_calls == []
+
+
+def test_admin_sets_the_org_avatar_not_the_account(monkeypatch) -> None:
+    storage = SimpleNamespace(put_object=Mock(), delete_object=Mock())
+    client, auth_service, adapter = _client(viewer_role="admin")
+    client.app.dependency_overrides[org_api._get_object_storage] = lambda: storage
+
+    resp = client.post(
+        "/organizations/org-1/members/user-2/avatar",
+        files={"file": ("me.png", b"png-bytes", "image/png")},
+    )
+
+    assert resp.status_code == 200
+    adapter.set_organization_member_avatar.assert_awaited_once()
+    assert adapter.set_organization_member_avatar.await_args.kwargs["avatar"].startswith(
+        "/api/auth/avatar/user-2-"
+    )
+    # Only the org's previous upload is deleted, never the account avatar.
+    deleted = {call.args[1] for call in storage.delete_object.call_args_list}
+    assert deleted == {"old.png"}
+    assert auth_service.mock_calls == []
+
+
+def test_removing_the_org_avatar_falls_back_to_the_account() -> None:
+    storage = SimpleNamespace(put_object=Mock(), delete_object=Mock())
+    client, auth_service, adapter = _client(viewer_role="admin")
+    client.app.dependency_overrides[org_api._get_object_storage] = lambda: storage
+
+    resp = client.delete("/organizations/org-1/members/user-2/avatar")
+
+    assert resp.status_code == 200
+    adapter.set_organization_member_avatar.assert_awaited_once_with(
+        org_id="org-1", user_id="user-2", avatar=None
+    )
+    assert auth_service.mock_calls == []
 
 
 def test_admin_cannot_change_own_org_role() -> None:

@@ -114,6 +114,21 @@ def test_send_failure_propagates_so_the_challenge_is_not_left_live(monkeypatch) 
     send.assert_awaited_once()
 
 
+def test_invite_refuses_owner_role(monkeypatch) -> None:
+    """Owners come from the config only, so the API accepts admin or member."""
+    send = AsyncMock(return_value=True)
+    monkeypatch.setattr(org_api, "issue_and_send_invite_sign_in", send)
+
+    client = _client([])
+    resp = client.post(
+        "/organizations/org-1/members/invite",
+        json={"email": "new@example.com", "role": "owner"},
+    )
+
+    assert resp.status_code == 422
+    send.assert_not_called()
+
+
 def test_already_exists_error_carries_the_user_id() -> None:
     """_find_org_member relies on this to locate the row it should resend to."""
     exc = OrganizationMemberAlreadyExistsError(org_id="org-1", user_id="user-2")

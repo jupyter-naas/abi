@@ -331,9 +331,7 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         rows = await self.list_unused_magic_links_for_user(user_id)
         return rows[0] if rows else None
 
-    async def list_unused_magic_links_for_user(
-        self, user_id: str
-    ) -> list[MagicLinkTokenRecord]:
+    async def list_unused_magic_links_for_user(self, user_id: str) -> list[MagicLinkTokenRecord]:
         result = await self.db.execute(
             select(MagicLinkTokenModel)
             .where(
@@ -373,6 +371,29 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         if user is None:
             return None
         user.avatar = avatar_url
+        user.updated_at = now
+        await self.db.flush()
+        await self.db.refresh(user)
+        return self._to_user_record(user)
+
+    async def list_users(self) -> list[AuthUserRecord]:
+        result = await self.db.execute(select(UserModel).order_by(UserModel.email))
+        return [self._to_user_record(user) for user in result.scalars().all()]
+
+    async def count_superadmins(self) -> int:
+        result = await self.db.execute(
+            select(func.count()).select_from(UserModel).where(UserModel.is_superadmin.is_(True))
+        )
+        return int(result.scalar_one())
+
+    async def set_user_superadmin(
+        self, user_id: str, is_superadmin: bool, now: datetime
+    ) -> AuthUserRecord | None:
+        result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
+        user = result.scalar_one_or_none()
+        if user is None:
+            return None
+        user.is_superadmin = is_superadmin
         user.updated_at = now
         await self.db.flush()
         await self.db.refresh(user)

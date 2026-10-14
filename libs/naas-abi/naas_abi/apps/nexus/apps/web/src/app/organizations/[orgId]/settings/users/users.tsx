@@ -538,7 +538,7 @@ export default function OrgUsersPage() {
       name: user.name || 'Unknown',
       email: user.email || user.userId,
       role: ROLE_LABEL[user.role],
-      workspaces: (assignedNamesByUser[user.userId] || []).join('; '),
+      groups: (assignedNamesByUser[user.userId] || []).join('; '),
     }));
     const date = new Date().toISOString().slice(0, 10);
     downloadUsersExport(rows, format, `users_${date}`);

@@ -15,6 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationUpdateInput,
     OrganizationWorkspaceMembershipRecord,
     OrganizationWorkspaceRecord,
+    UserOrganizationMembershipRecord,
 )
 
 
@@ -42,6 +43,19 @@ class OrganizationMemberAlreadyExistsError(ValueError):
 
     def __str__(self) -> str:
         return "organization_member_already_exists"
+
+
+# Roles the platform can grant. Owners come only from the config seed
+# (organizations[].owner_email), never from an invite or a role change.
+ASSIGNABLE_MEMBER_ROLES = ("admin", "member")
+
+
+@dataclass
+class OrganizationRoleNotAssignableError(ValueError):
+    role: str
+
+    def __str__(self) -> str:
+        return f"organization_role_not_assignable:{self.role}"
 
 
 @dataclass
@@ -164,6 +178,9 @@ class OrganizationService:
     ) -> list[OrganizationWorkspaceMembershipRecord]:
         return await self.adapter.list_workspace_memberships_for_org(org_id=org_id)
 
+    async def list_all_memberships(self) -> list[UserOrganizationMembershipRecord]:
+        return await self.adapter.list_all_organization_memberships()
+
     async def list_members(self, org_id: str) -> list[OrganizationMemberRecord]:
         return await self.adapter.list_organization_members(org_id=org_id)
 
@@ -177,6 +194,8 @@ class OrganizationService:
         """Attach an existing user by email. Callers that support create-on-invite
         must ensure the user exists (via AuthService.ensure_user_for_invite) first.
         """
+        if role not in ASSIGNABLE_MEMBER_ROLES:
+            raise OrganizationRoleNotAssignableError(role=role)
         normalized_email = email.lower().strip()
         user = await self.adapter.get_user_by_email(email=normalized_email)
         if user is None:
@@ -203,10 +222,38 @@ class OrganizationService:
         user_id: str,
         role: str,
     ) -> OrganizationMemberRecord | None:
+        if role not in ASSIGNABLE_MEMBER_ROLES:
+            raise OrganizationRoleNotAssignableError(role=role)
         return await self.adapter.update_organization_member_role(
             org_id=org_id,
             user_id=user_id,
             role=role,
+        )
+
+    async def update_member_profile(
+        self,
+        org_id: str,
+        user_id: str,
+        *,
+        name: str | None = None,
+        company: str | None = None,
+        job_title: str | None = None,
+        bio: str | None = None,
+    ) -> OrganizationMemberRecord | None:
+        """Edit the member's profile in this organization only (never the account)."""
+        return await self.adapter.update_organization_member_profile(
+            org_id=org_id,
+            user_id=user_id,
+            name=name,
+            company=company,
+            job_title=job_title,
+            bio=bio,
+        )
+
+    async def set_member_avatar(self, org_id: str, user_id: str, avatar: str | None) -> str | None:
+        """Set or clear the org avatar; returns the previous org avatar to clean up."""
+        return await self.adapter.set_organization_member_avatar(
+            org_id=org_id, user_id=user_id, avatar=avatar
         )
 
     async def remove_member(self, org_id: str, user_id: str) -> bool:

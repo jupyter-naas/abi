@@ -9,6 +9,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationDomainAlreadyExistsError,
     OrganizationMemberAlreadyExistsError,
     OrganizationPermissionError,
+    OrganizationRoleNotAssignableError,
     OrganizationService,
     OrganizationSlugAlreadyExistsError,
 )
@@ -103,3 +104,33 @@ async def test_list_workspace_memberships_delegates_to_adapter() -> None:
 
     assert result == rows
     adapter.list_workspace_memberships_for_org.assert_awaited_once_with(org_id="org-1")
+
+
+@pytest.mark.asyncio
+async def test_invite_member_refuses_owner_role() -> None:
+    """Owners come from the config only: no invite path may create one."""
+    adapter = SimpleNamespace(
+        get_user_by_email=AsyncMock(return_value=SimpleNamespace(id="user-2")),
+        is_organization_member=AsyncMock(return_value=False),
+        add_organization_member=AsyncMock(),
+    )
+    service = OrganizationService(adapter=adapter)
+
+    with pytest.raises(OrganizationRoleNotAssignableError):
+        await service.invite_member(
+            org_id="org-1",
+            email="user@example.com",
+            role="owner",
+            now=datetime.utcnow(),
+        )
+    adapter.add_organization_member.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_member_role_refuses_owner_role() -> None:
+    adapter = SimpleNamespace(update_organization_member_role=AsyncMock())
+    service = OrganizationService(adapter=adapter)
+
+    with pytest.raises(OrganizationRoleNotAssignableError):
+        await service.update_member_role(org_id="org-1", user_id="user-2", role="owner")
+    adapter.update_organization_member_role.assert_not_called()

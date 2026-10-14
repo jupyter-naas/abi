@@ -158,9 +158,7 @@ class AuthPersistencePort(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def list_unused_magic_links_for_user(
-        self, user_id: str
-    ) -> list[MagicLinkTokenRecord]:
+    async def list_unused_magic_links_for_user(self, user_id: str) -> list[MagicLinkTokenRecord]:
         """Unused OTP challenges for a user, newest first."""
         raise NotImplementedError
 
@@ -176,6 +174,20 @@ class AuthPersistencePort(ABC):
     @abstractmethod
     async def update_user_avatar(
         self, user_id: str, avatar_url: str, now: datetime
+    ) -> AuthUserRecord | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def list_users(self) -> list[AuthUserRecord]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def count_superadmins(self) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def set_user_superadmin(
+        self, user_id: str, is_superadmin: bool, now: datetime
     ) -> AuthUserRecord | None:
         raise NotImplementedError
 

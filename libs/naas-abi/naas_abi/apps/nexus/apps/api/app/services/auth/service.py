@@ -124,6 +124,14 @@ class ExpiredOtpError(ValueError):
 
 
 @dataclass
+class SuperadminChangeError(ValueError):
+    reason: str  # cannot_demote_self | last_superadmin
+
+    def __str__(self) -> str:
+        return self.reason
+
+
+@dataclass
 class SignupDisabledError(PermissionError):
     def __str__(self) -> str:
         return "signup_disabled"
@@ -446,6 +454,31 @@ class AuthService:
             user_id=user_id,
             avatar_url=avatar_url,
             now=now_utc_naive(),
+        )
+        if updated is None:
+            raise UserNotFoundError(user_id=user_id)
+        await self.adapter.commit()
+        return updated
+
+    async def list_users(self) -> list[AuthUserRecord]:
+        return await self.adapter.list_users()
+
+    async def set_superadmin(
+        self, *, actor_id: str, user_id: str, is_superadmin: bool
+    ) -> AuthUserRecord:
+        """Promote or demote a platform superadmin. Never leaves the platform without one."""
+        user = await self.adapter.get_user_by_id(user_id)
+        if user is None:
+            raise UserNotFoundError(user_id=user_id)
+        if user.is_superadmin == is_superadmin:
+            return user
+        if not is_superadmin:
+            if user_id == actor_id:
+                raise SuperadminChangeError(reason="cannot_demote_self")
+            if await self.adapter.count_superadmins() <= 1:
+                raise SuperadminChangeError(reason="last_superadmin")
+        updated = await self.adapter.set_user_superadmin(
+            user_id=user_id, is_superadmin=is_superadmin, now=now_utc_naive()
         )
         if updated is None:
             raise UserNotFoundError(user_id=user_id)

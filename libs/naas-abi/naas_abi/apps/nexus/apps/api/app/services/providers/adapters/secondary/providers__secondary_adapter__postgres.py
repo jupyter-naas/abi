@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import os
 
+from naas_abi.apps.nexus.apps.api.app.core.workspace_access import accessible_workspace_ids
 from naas_abi.apps.nexus.apps.api.app.models import (
     ModelCatalogRecordModel,
     SecretModel,
-    WorkspaceMemberModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.providers.port import (
     ModelCatalogStorePort,
@@ -22,9 +22,7 @@ class ProvidersSecondaryAdapterPostgres(ProviderAvailabilityPort):
         self.db = db
 
     async def list_workspace_ids_for_user(self, user_id: str) -> list[str]:
-        result = await self.db.execute(
-            select(WorkspaceMemberModel.workspace_id).where(WorkspaceMemberModel.user_id == user_id)
-        )
+        result = await self.db.execute(accessible_workspace_ids(user_id))
         return [row[0] for row in result.fetchall()]
 
     async def list_secret_keys_for_workspaces(self, workspace_ids: list[str]) -> set[str]:

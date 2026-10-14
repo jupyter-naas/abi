@@ -14,6 +14,8 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
     InvalidMagicLinkError,
     InvalidOtpError,
     PasswordAuthenticationDisabledError,
+    SuperadminChangeError,
+    UserNotFoundError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.refresh_token import hash_otp_code, hash_token
 
@@ -516,3 +518,60 @@ async def test_a_wrong_code_counts_against_every_active_code(monkeypatch) -> Non
 
     charged = {call.args[0] for call in adapter.increment_magic_link_otp_attempts.await_args_list}
     assert charged == {"ml-0", "ml-1", "ml-2"}
+
+
+def _record(user_id: str, *, is_superadmin: bool) -> AuthUserRecord:
+    return AuthUserRecord(
+        id=user_id,
+        email=f"{user_id}@example.com",
+        name=user_id,
+        hashed_password="hashed",
+        created_at=datetime.utcnow(),
+        is_superadmin=is_superadmin,
+    )
+
+
+@pytest.mark.asyncio
+async def test_set_superadmin_promotes_and_commits() -> None:
+    adapter = AsyncMock()
+    adapter.get_user_by_id.return_value = _record("user-2", is_superadmin=False)
+    adapter.set_user_superadmin.return_value = _record("user-2", is_superadmin=True)
+    service = AuthService(adapter=adapter)
+
+    updated = await service.set_superadmin(actor_id="user-1", user_id="user-2", is_superadmin=True)
+
+    assert updated.is_superadmin is True
+    adapter.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_set_superadmin_refuses_self_demotion() -> None:
+    adapter = AsyncMock()
+    adapter.get_user_by_id.return_value = _record("user-1", is_superadmin=True)
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(SuperadminChangeError, match="cannot_demote_self"):
+        await service.set_superadmin(actor_id="user-1", user_id="user-1", is_superadmin=False)
+    adapter.set_user_superadmin.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_set_superadmin_refuses_to_demote_the_last_superadmin() -> None:
+    adapter = AsyncMock()
+    adapter.get_user_by_id.return_value = _record("user-2", is_superadmin=True)
+    adapter.count_superadmins.return_value = 1
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(SuperadminChangeError, match="last_superadmin"):
+        await service.set_superadmin(actor_id="user-1", user_id="user-2", is_superadmin=False)
+    adapter.set_user_superadmin.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_set_superadmin_unknown_user() -> None:
+    adapter = AsyncMock()
+    adapter.get_user_by_id.return_value = None
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(UserNotFoundError):
+        await service.set_superadmin(actor_id="user-1", user_id="ghost", is_superadmin=True)

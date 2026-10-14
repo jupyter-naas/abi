@@ -5,12 +5,18 @@ from datetime import datetime
 from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.core.workspace_access import (
+    INHERITED_FROM_ORG,
+    accessible_workspace_ids,
+    resolve_workspace_role,
+)
 from naas_abi.apps.nexus.apps.api.app.models import (
     AgentConfigModel,
     ConversationModel,
     GraphEdgeModel,
     GraphNodeModel,
     InferenceServerModel,
+    OrganizationMemberModel,
     OrganizationModel,
     UserModel,
     WorkspaceMemberModel,
@@ -51,22 +57,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
         return db
 
     async def get_workspace_role(self, user_id: str, workspace_id: str) -> str | None:
-        member_result = await self.db.execute(
-            select(WorkspaceMemberModel.role)
-            .where(WorkspaceMemberModel.workspace_id == workspace_id)
-            .where(WorkspaceMemberModel.user_id == user_id)
-        )
-        member_role = member_result.scalar_one_or_none()
-        if member_role is not None:
-            return member_role
-
-        owner_result = await self.db.execute(
-            select(WorkspaceModel.owner_id).where(WorkspaceModel.id == workspace_id)
-        )
-        owner_id = owner_result.scalar_one_or_none()
-        if owner_id == user_id:
-            return "owner"
-        return None
+        return await resolve_workspace_role(self.db, user_id, workspace_id)
 
     @staticmethod
     def _to_workspace_record(model: WorkspaceModel) -> WorkspaceRecord:
@@ -135,9 +126,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
     async def list_workspaces_for_user(self, user_id: str) -> list[WorkspaceRecord]:
         result = await self.db.execute(
             select(WorkspaceModel)
-            .outerjoin(WorkspaceMemberModel, WorkspaceModel.id == WorkspaceMemberModel.workspace_id)
-            .where((WorkspaceModel.owner_id == user_id) | (WorkspaceMemberModel.user_id == user_id))
-            .distinct()
+            .where(WorkspaceModel.id.in_(accessible_workspace_ids(user_id)))
             .order_by(WorkspaceModel.name)
         )
         rows = [self._to_workspace_record(row) for row in result.scalars().all()]
@@ -294,7 +283,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             """
         )
         result = await self.db.execute(query, {"workspace_id": workspace_id})
-        return [
+        members = [
             WorkspaceMemberRecord(
                 id=row.id,
                 workspace_id=row.workspace_id,
@@ -305,6 +294,57 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
                 created_at=row.created_at,
             )
             for row in result.fetchall()
+        ]
+        return members + await self._inherited_members(workspace_id, members)
+
+    async def _inherited_members(
+        self, workspace_id: str, explicit: list[WorkspaceMemberRecord]
+    ) -> list[WorkspaceMemberRecord]:
+        """Org owners/admins without a row, who reach the workspace through the org."""
+        org_id = (
+            await self.db.execute(
+                select(WorkspaceModel.organization_id).where(WorkspaceModel.id == workspace_id)
+            )
+        ).scalar_one_or_none()
+        if not org_id:
+            return []
+        org_roles: dict[str, str | None] = {}
+        rows = await self.db.execute(
+            select(OrganizationMemberModel.user_id, OrganizationMemberModel.role).where(
+                OrganizationMemberModel.organization_id == org_id
+            )
+        )
+        for user_id, role in rows.all():
+            org_roles[user_id] = role
+        owner_id = (
+            await self.db.execute(
+                select(OrganizationModel.owner_id).where(OrganizationModel.id == org_id)
+            )
+        ).scalar_one_or_none()
+        if owner_id:
+            org_roles[owner_id] = "owner"
+
+        explicit_ids = {member.user_id for member in explicit}
+        inherited = {
+            user_id: INHERITED_FROM_ORG[role]
+            for user_id, role in org_roles.items()
+            if role in INHERITED_FROM_ORG and user_id not in explicit_ids
+        }
+        if not inherited:
+            return []
+        users = await self.db.execute(select(UserModel).where(UserModel.id.in_(inherited)))
+        return [
+            WorkspaceMemberRecord(
+                id=f"org:{user.id}",
+                workspace_id=workspace_id,
+                user_id=user.id,
+                role=inherited[user.id],
+                email=user.email,
+                name=user.name,
+                created_at=None,
+                source="organization",
+            )
+            for user in sorted(users.scalars().all(), key=lambda u: u.email)
         ]
 
     async def get_user_by_email(self, email: str) -> UserRecord | None:

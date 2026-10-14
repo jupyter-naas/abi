@@ -372,7 +372,7 @@ class UserSeedConfig(BaseModel):
 
 
 class OrganizationMemberSeedConfig(BaseModel):
-    """Organization member assignment."""
+    """Deprecated: organization members are managed in the platform."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -381,7 +381,7 @@ class OrganizationMemberSeedConfig(BaseModel):
 
 
 class WorkspaceMemberSeedConfig(BaseModel):
-    """Workspace member assignment."""
+    """Deprecated: workspace members are managed in the platform."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -396,7 +396,10 @@ class WorkspaceSeedConfig(BaseModel):
 
     name: str
     slug: str
+    # Defaults to the organization owner. Org owners and admins reach every
+    # workspace of their org without a membership row.
     owner_email: EmailStr | None = None
+    # Deprecated and ignored by the seed (kept so older configs still load).
     members: list[WorkspaceMemberSeedConfig] = Field(default_factory=list)
 
     logo_url: str | None = None
@@ -429,6 +432,7 @@ class OrganizationSeedConfig(BaseModel):
     name: str
     slug: str
     owner_email: EmailStr | None = None
+    # Deprecated and ignored by the seed (kept so older configs still load).
     members: list[OrganizationMemberSeedConfig] = Field(default_factory=list)
     workspaces: list[WorkspaceSeedConfig] = Field(default_factory=list)
 
@@ -488,7 +492,9 @@ class Settings(BaseSettings):
     documents_hidden_template_ids: list[str] = Field(default_factory=list)
     sheets_template_sources: list[SheetsTemplateSourceConfig] = Field(default_factory=list)
 
-    # User seed configs (upserted by email on startup)
+    # Bootstrap users (created by email on startup). Keep this to platform
+    # operators: everyone else is invited from the platform. is_superadmin
+    # only promotes; demote with PATCH /api/admin/users/{id}.
     users: list[UserSeedConfig] = Field(default_factory=list)
 
     # Organization seed configs (upserted by slug on startup)

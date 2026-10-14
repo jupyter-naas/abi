@@ -2,12 +2,14 @@
 Apply config-driven provisioning on startup.
 
 This provisions:
-- users (create by email if missing)
-- organizations (upsert by slug)
-- organization members
-- workspaces (upsert by slug)
-- workspace members
+- bootstrap users (create by email if missing; ``is_superadmin`` only promotes)
+- organizations (upsert by slug) and their owner membership
+- workspaces (upsert by slug) and their owner membership
 - workspace app enable rows from ``WorkspaceSeedConfig.apps``
+
+People are managed in the platform (Org > Users, workspace Members, Admin >
+Users). Config ``members`` lists are deprecated and ignored: existing rows are
+kept, and ``core.users_import`` replays a snapshot without overwriting roles.
 
 It can also mirror configured user credentials into the Secret service.
 """
@@ -292,17 +294,13 @@ async def _upsert_users(
                 "User email=%s already exists; skipping config-driven updates",
                 normalized_email,
             )
-            # is_superadmin is the one config-driven field we always
-            # reconcile, so an admin can promote/demote users via config.yaml
-            # without recreating the account.
-            if bool(user.is_superadmin) != bool(user_cfg.is_superadmin):
-                user.is_superadmin = user_cfg.is_superadmin
+            # Config only promotes: superadmins are managed in Platform
+            # Settings > Users, and listing an operator here keeps them from
+            # being locked out.
+            if user_cfg.is_superadmin and not user.is_superadmin:
+                user.is_superadmin = True
                 user.updated_at = now
-                logger.info(
-                    "Reconciled is_superadmin=%s for email=%s from config",
-                    user_cfg.is_superadmin,
-                    normalized_email,
-                )
+                logger.info("Promoted email=%s to superadmin from config", normalized_email)
             if _has_shipped_default_password(user.hashed_password):
                 rotated = _generate_password()
                 user.hashed_password = _hash_password(rotated)
@@ -346,6 +344,18 @@ async def _resolve_user(
     if user is not None:
         users_by_email[normalized_email] = user
     return user
+
+
+def _warn_ignored_members(kind: str, slug: str, count: int) -> None:
+    if count:
+        logger.warning(
+            "Ignoring %d config members of %s slug=%s: members are managed in the "
+            "platform now (existing memberships are kept). Remove the list from the "
+            "config; replay a snapshot with core.users_import if needed.",
+            count,
+            kind,
+            slug,
+        )
 
 
 async def _upsert_workspace(
@@ -404,17 +414,7 @@ async def _upsert_workspace(
         )
 
     await _ensure_workspace_member(session, workspace.id, owner.id, "owner")
-    for membership in workspace_cfg.members:
-        member = await _resolve_user(session, users_by_email, str(membership.email))
-        if member is None:
-            logger.warning(
-                "Skipping workspace member email=%s in workspace slug=%s because user does not exist",
-                membership.email,
-                workspace_cfg.slug,
-            )
-            continue
-        member_role = "owner" if member.id == owner.id else membership.role
-        await _ensure_workspace_member(session, workspace.id, member.id, member_role)
+    _warn_ignored_members("workspace", workspace_cfg.slug, len(workspace_cfg.members))
 
     await _seed_workspace_apps(session, workspace.id, workspace_cfg.apps)
 
@@ -434,8 +434,7 @@ async def _seed_workspace_apps(
             continue
         result = await session.execute(
             select(AppConfigModel).where(
-                (AppConfigModel.workspace_id == workspace_id)
-                & (AppConfigModel.app_id == app_id)
+                (AppConfigModel.workspace_id == workspace_id) & (AppConfigModel.app_id == app_id)
             )
         )
         row = result.scalar_one_or_none()
@@ -503,17 +502,7 @@ async def _upsert_organization(
     if owner is not None:
         await _ensure_org_member(session, organization.id, owner.id, "owner")
 
-    for membership in org_cfg.members:
-        member = await _resolve_user(session, users_by_email, str(membership.email))
-        if member is None:
-            logger.warning(
-                "Skipping org member email=%s in org slug=%s because user does not exist",
-                membership.email,
-                org_cfg.slug,
-            )
-            continue
-        member_role = "owner" if owner is not None and member.id == owner.id else membership.role
-        await _ensure_org_member(session, organization.id, member.id, member_role)
+    _warn_ignored_members("organization", org_cfg.slug, len(org_cfg.members))
 
     for workspace_cfg in org_cfg.workspaces:
         await _upsert_workspace(session, workspace_cfg, organization, users_by_email)

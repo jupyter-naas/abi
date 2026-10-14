@@ -15,23 +15,39 @@ export type UsersExportRow = {
   name: string;
   email: string;
   role: string;
-  workspaces: string;
+  /** Joined with "; ". Workspaces for an organization, organizations for the platform. */
+  groups: string;
 };
 
 export type UsersExportFormat = 'csv' | 'xlsx';
 
-const HEADER = ['Name', 'Email', 'Role', 'Workspaces'] as const;
-const COLS = ['A', 'B', 'C', 'D'] as const;
+function header(groupsHeader: string): string[] {
+  return ['Name', 'Email', 'Role', groupsHeader];
+}
 
-/** One row per user. Workspaces are joined with "; " so Excel keeps them in one cell. */
-export function usersToCsv(rows: UsersExportRow[]): string {
-  const header = HEADER.map(escapeCsvField).join(',');
-  const body = rows.map((row) =>
-    [row.name, row.email, row.role, row.workspaces]
-      .map(escapeCsvField)
-      .join(',')
-  );
-  return [header, ...body].join('\r\n');
+function userValues(row: UsersExportRow): string[] {
+  return [row.name, row.email, row.role, row.groups];
+}
+
+const USERS_COLUMN_WIDTHS = [24, 32, 12, 48];
+
+/** Any table as CSV (RFC 4180). */
+export function tableToCsv(headers: readonly string[], rows: readonly (readonly string[])[]): string {
+  return [headers, ...rows].map((values) => values.map(escapeCsvField).join(',')).join('\r\n');
+}
+
+/** One row per user. Groups are joined with "; " so Excel keeps them in one cell. */
+export function usersToCsv(rows: UsersExportRow[], groupsHeader = 'Workspaces'): string {
+  return tableToCsv(header(groupsHeader), rows.map(userValues));
+}
+
+/** Spreadsheet column letters: 0 → A, 25 → Z, 26 → AA. */
+export function columnLetter(index: number): string {
+  let letters = '';
+  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) {
+    letters = String.fromCharCode(65 + ((n - 1) % 26)) + letters;
+  }
+  return letters;
 }
 
 function xmlCell(col: string, row: number, value: string): string {
@@ -40,26 +56,27 @@ function xmlCell(col: string, row: number, value: string): string {
 
 function xmlRow(row: number, values: readonly string[]): string {
   return `<row r="${row}">${values
-    .map((value, index) => xmlCell(COLS[index], row, value))
+    .map((value, index) => xmlCell(columnLetter(index), row, value))
     .join('')}</row>`;
 }
 
-function usersSheetXml(rows: UsersExportRow[]): string {
-  const data = [
-    xmlRow(1, HEADER),
-    ...rows.map((row, index) =>
-      xmlRow(index + 2, [row.name, row.email, row.role, row.workspaces])
-    ),
-  ].join('');
+function sheetXml(
+  headers: readonly string[],
+  rows: readonly (readonly string[])[],
+  widths?: readonly number[]
+): string {
+  const data = [xmlRow(1, headers), ...rows.map((values, index) => xmlRow(index + 2, values))].join(
+    ''
+  );
+  const cols = widths?.length
+    ? `<cols>${widths
+        .map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`)
+        .join('')}</cols>`
+    : '';
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-    '<cols>' +
-    '<col min="1" max="1" width="24" customWidth="1"/>' +
-    '<col min="2" max="2" width="32" customWidth="1"/>' +
-    '<col min="3" max="3" width="12" customWidth="1"/>' +
-    '<col min="4" max="4" width="48" customWidth="1"/>' +
-    '</cols>' +
+    cols +
     `<sheetData>${data}</sheetData>` +
     '</worksheet>'
   );
@@ -176,8 +193,18 @@ function xmlBytes(xml: string): Uint8Array {
   return new TextEncoder().encode(xml);
 }
 
-/** Office Open XML workbook. One Users sheet. */
-export function usersToXlsx(rows: UsersExportRow[]): Uint8Array {
+export type WorkbookSheet = {
+  name: string;
+  headers: readonly string[];
+  rows: readonly (readonly string[])[];
+  widths?: readonly number[];
+};
+
+const XLSX_SHEET_NAME_MAX = 31;
+
+/** Office Open XML workbook, one sheet per entry (names cut to Excel's 31 characters). */
+export function workbookToXlsx(sheets: readonly WorkbookSheet[]): Uint8Array {
+  const parts = sheets.map((_, index) => index + 1);
   return zipStore([
     {
       name: '[Content_Types].xml',
@@ -187,7 +214,12 @@ export function usersToXlsx(rows: UsersExportRow[]): Uint8Array {
           '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
           '<Default Extension="xml" ContentType="application/xml"/>' +
           '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
-          '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+          parts
+            .map(
+              (n) =>
+                `<Override PartName="/xl/worksheets/sheet${n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`
+            )
+            .join('') +
           '</Types>'
       ),
     },
@@ -205,7 +237,12 @@ export function usersToXlsx(rows: UsersExportRow[]): Uint8Array {
       data: xmlBytes(
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
           '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-          '<sheets><sheet name="Users" sheetId="1" r:id="rId1"/></sheets>' +
+          `<sheets>${sheets
+            .map(
+              (sheet, index) =>
+                `<sheet name="${escapeXml(sheet.name.slice(0, XLSX_SHEET_NAME_MAX))}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`
+            )
+            .join('')}</sheets>` +
           '</workbook>'
       ),
     },
@@ -214,15 +251,35 @@ export function usersToXlsx(rows: UsersExportRow[]): Uint8Array {
       data: xmlBytes(
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
           '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-          '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+          parts
+            .map(
+              (n) =>
+                `<Relationship Id="rId${n}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${n}.xml"/>`
+            )
+            .join('') +
           '</Relationships>'
       ),
     },
-    {
-      name: 'xl/worksheets/sheet1.xml',
-      data: xmlBytes(usersSheetXml(rows)),
-    },
+    ...sheets.map((sheet, index) => ({
+      name: `xl/worksheets/sheet${index + 1}.xml`,
+      data: xmlBytes(sheetXml(sheet.headers, sheet.rows, sheet.widths)),
+    })),
   ]);
+}
+
+/** Office Open XML workbook with one sheet. */
+export function tableToXlsx(
+  headers: readonly string[],
+  rows: readonly (readonly string[])[],
+  sheetName = 'Sheet1',
+  widths?: readonly number[]
+): Uint8Array {
+  return workbookToXlsx([{ name: sheetName, headers, rows, widths }]);
+}
+
+/** Office Open XML workbook. One Users sheet. */
+export function usersToXlsx(rows: UsersExportRow[], groupsHeader = 'Workspaces'): Uint8Array {
+  return tableToXlsx(header(groupsHeader), rows.map(userValues), 'Users', USERS_COLUMN_WIDTHS);
 }
 
 function triggerDownload(filename: string, blob: Blob): void {
@@ -236,28 +293,79 @@ function triggerDownload(filename: string, blob: Blob): void {
   URL.revokeObjectURL(url);
 }
 
-export function downloadUsersExport(
-  rows: UsersExportRow[],
+function downloadExport(
   format: UsersExportFormat,
-  basename: string
+  basename: string,
+  csv: () => string,
+  xlsx: () => Uint8Array
 ): void {
   if (format === 'csv') {
     const bom = String.fromCharCode(0xfeff);
     triggerDownload(
       `${basename}.csv`,
-      new Blob([bom + usersToCsv(rows)], { type: 'text/csv;charset=utf-8;' })
+      new Blob([bom + csv()], { type: 'text/csv;charset=utf-8;' })
     );
     return;
   }
-  const xlsx = usersToXlsx(rows);
-  const xlsxBuffer = xlsx.buffer.slice(
-    xlsx.byteOffset,
-    xlsx.byteOffset + xlsx.byteLength
+  const bytes = xlsx();
+  const xlsxBuffer = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength
   ) as ArrayBuffer;
   triggerDownload(
     `${basename}.xlsx`,
     new Blob([xlsxBuffer], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
+  );
+}
+
+export function downloadUsersExport(
+  rows: UsersExportRow[],
+  format: UsersExportFormat,
+  basename: string,
+  groupsHeader = 'Workspaces'
+): void {
+  downloadExport(
+    format,
+    basename,
+    () => usersToCsv(rows, groupsHeader),
+    () => usersToXlsx(rows, groupsHeader)
+  );
+}
+
+/** Any table, every column. The sheet is named after the table. */
+export function downloadTableExport(
+  headers: readonly string[],
+  rows: readonly (readonly string[])[],
+  format: UsersExportFormat,
+  basename: string,
+  sheetName: string
+): void {
+  downloadExport(
+    format,
+    basename,
+    () => tableToCsv(headers, rows),
+    () => tableToXlsx(headers, rows, sheetName)
+  );
+}
+
+function xlsxBlob(bytes: Uint8Array): Blob {
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  return new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+}
+
+/** Several tables in one Excel file, one sheet each. */
+export function downloadWorkbookExport(sheets: readonly WorkbookSheet[], basename: string): void {
+  triggerDownload(`${basename}.xlsx`, xlsxBlob(workbookToXlsx(sheets)));
+}
+
+/** Any JSON value as a pretty-printed .json file. */
+export function downloadJsonExport(data: unknown, basename: string): void {
+  triggerDownload(
+    `${basename}.json`,
+    new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8;' })
   );
 }

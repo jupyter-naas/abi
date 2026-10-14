@@ -182,3 +182,80 @@ def test_an_existing_admin_with_a_real_password_is_left_alone(seed_admin) -> Non
 
     assert user.hashed_password == original
     assert PASSWORD_KEY not in secrets.values
+
+
+@pytest.fixture
+def seed_users(monkeypatch: pytest.MonkeyPatch):
+    def run(existing_user, users: list[UserSeedConfig]):
+        async def lookup(_session, _email):
+            return existing_user
+
+        monkeypatch.setattr(org_seed, "_get_user_by_email", lookup)
+        monkeypatch.setattr(org_seed.settings, "users", users)
+        asyncio.run(org_seed._upsert_users(session=MagicMock(), secret_service=FakeSecrets()))
+
+    return run
+
+
+def test_config_promotes_an_existing_user_to_superadmin(seed_users) -> None:
+    user = SimpleNamespace(is_superadmin=False, hashed_password=_hash(CUSTOM), updated_at=None)
+
+    seed_users(user, [UserSeedConfig(email=ADMIN, name="Admin", is_superadmin=True)])
+
+    assert user.is_superadmin is True
+
+
+def test_config_never_demotes_a_superadmin_promoted_in_the_platform(seed_users) -> None:
+    user = SimpleNamespace(is_superadmin=True, hashed_password=_hash(CUSTOM), updated_at=None)
+
+    seed_users(user, [UserSeedConfig(email=ADMIN, name="Admin", is_superadmin=False)])
+
+    assert user.is_superadmin is True
+
+
+def _patch_member_helpers(monkeypatch: pytest.MonkeyPatch, owner) -> list[tuple]:
+    ensured: list[tuple] = []
+
+    async def owner_lookup(*_args, **_kwargs):
+        return owner
+
+    async def record_ws_member(_session, workspace_id, user_id, role):
+        ensured.append(("workspace", workspace_id, user_id, role))
+
+    async def noop(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(org_seed, "_resolve_user", owner_lookup)
+    monkeypatch.setattr(org_seed, "_get_user_by_id", owner_lookup)
+    monkeypatch.setattr(org_seed, "_ensure_workspace_member", record_ws_member)
+    monkeypatch.setattr(org_seed, "_seed_workspace_apps", noop)
+    return ensured
+
+
+def test_workspace_seed_only_ensures_the_owner_and_ignores_members(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    workspace = SimpleNamespace(
+        id="ws-1", owner_id="user-1", organization_id="org-1", updated_at=None
+    )
+    session = MagicMock()
+    session.execute = AsyncMock(
+        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=workspace))
+    )
+    ensured = _patch_member_helpers(monkeypatch, SimpleNamespace(id="user-1"))
+    cfg = WorkspaceSeedConfig(
+        name="Valeo",
+        slug="valeo",
+        owner_email=ADMIN,
+        members=[{"email": "someone@example.com", "role": "admin"}],
+    )
+
+    with caplog.at_level("WARNING"):
+        asyncio.run(
+            org_seed._upsert_workspace(
+                session, cfg, SimpleNamespace(id="org-1", owner_id="user-1", slug="forvis"), {}
+            )
+        )
+
+    assert ensured == [("workspace", "ws-1", "user-1", "owner")]
+    assert "members" in caplog.text and "valeo" in caplog.text

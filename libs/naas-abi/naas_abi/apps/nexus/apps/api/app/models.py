@@ -108,6 +108,13 @@ class OrganizationMemberModel(Base):
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String, nullable=False, default="member")  # owner, admin, member
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    # Profile in this organization, set by its admins. NULL falls back to the
+    # account value on users.* (see organizations postgres adapter).
+    name = Column(String(200), nullable=True)
+    avatar = Column(String, nullable=True)
+    company = Column(String(200), nullable=True)
+    job_title = Column(String(100), nullable=True)
+    bio = Column(String(2000), nullable=True)
 
     __table_args__ = (UniqueConstraint("organization_id", "user_id", name="uq_organization_user"),)
 
