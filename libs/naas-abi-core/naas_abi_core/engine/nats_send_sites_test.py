@@ -61,6 +61,10 @@ REVIEWED = {
             "min(32 KiB, a quarter of the broker limit), else its part count"
         ),
     ),
+    "naas-abi-sdk/naas_abi_sdk/app_streams.py": (
+        2,
+        "body pulls and their cancel: a BodyPull of a sequence number or a flag",
+    ),
     "naas-abi-sdk/naas_abi_sdk/bus.py": (
         2,
         "bus publish/enqueue: claim_check.prepare (JetStream header reserved)",
