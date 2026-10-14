@@ -42,7 +42,9 @@ def authorization_config(passwords: Mapping[str, str]) -> str:
     ``module`` within MODULE_PERMISSIONS, with their ``passwords`` by user name."""
     users = [
         f"    {{ user: {json.dumps('abi')}, password: {json.dumps(passwords['abi'])} }}",
-        f"    {{ user: {json.dumps('module')}, password: {json.dumps(passwords['module'])}, "
-        f"permissions: {json.dumps(MODULE_PERMISSIONS)} }}",
+        (
+            f"    {{ user: {json.dumps('module')}, password: {json.dumps(passwords['module'])}, "
+            f"permissions: {json.dumps(MODULE_PERMISSIONS)} }}"
+        ),
     ]
     return "authorization {\n  users = [\n" + "\n".join(users) + "\n  ]\n}\n"
