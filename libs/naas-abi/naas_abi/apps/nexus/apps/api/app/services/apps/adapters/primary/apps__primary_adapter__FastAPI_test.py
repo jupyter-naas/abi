@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC
 from pathlib import Path
 
 import pytest
@@ -107,3 +108,112 @@ def test_a_grant_names_one_path_segment_each(module_id: str, app: str) -> None:
 
     with pytest.raises(ValidationError):
         adapter.RemoteAppGrantRequest(module_id=module_id, app=app)
+
+
+def test_a_listed_remote_app_can_be_enabled_in_a_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Remote apps are listed disabled: the toggle (PATCH) must accept their id."""
+    import asyncio
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+    from naas_abi.apps.nexus.apps.api.app.services.apps.port import AppConfigRecord
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import factory
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters.in_memory import (
+        InMemoryRemoteAppDirectory,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import RemoteApp
+
+    async def allowed(user_id: str, workspace_id: str) -> None:
+        return None
+
+    class Configs:
+        async def upsert_app_config(self, workspace_id, app_id, updates):
+            now = datetime.now(UTC)
+            return AppConfigRecord("c1", workspace_id, app_id, updates.enabled, now, now)
+
+    monkeypatch.setattr(adapter, "require_workspace_access", allowed)
+    monkeypatch.setattr(adapter, "_scan_apps_catalog", lambda: ())
+    monkeypatch.setattr(
+        factory,
+        "get_remote_app_directory",
+        lambda: InMemoryRemoteAppDirectory({RemoteApp("acme.research", "console"): None}),
+    )
+    user = SimpleNamespace(id="u1")
+
+    def enable(app_id: str) -> dict:
+        return asyncio.run(
+            adapter.update_app_config(
+                "ws1", app_id, adapter.AppConfigUpdate(enabled=True), user, Configs()
+            )
+        )
+
+    assert enable("remote/acme.research:console")["enabled"] is True
+    with pytest.raises(HTTPException) as unknown:
+        enable("remote/acme.research:missing")
+    assert unknown.value.status_code == 404
+
+
+def test_a_configured_remote_app_stays_manageable_while_its_module_is_down(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Discovery lists nothing: the existing row can be read, disabled and
+    deleted, never enabled, and an app without a row stays unknown."""
+    import asyncio
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+    from naas_abi.apps.nexus.apps.api.app.services.apps.port import AppConfigRecord
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import factory
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters.in_memory import (
+        InMemoryRemoteAppDirectory,
+    )
+
+    async def allowed(user_id: str, workspace_id: str) -> None:
+        return None
+
+    stale = "remote/acme.research:console"
+    now = datetime.now(UTC)
+
+    class Configs:
+        rows = {stale: AppConfigRecord("c1", "ws1", stale, True, now, now)}
+
+        async def get_app_config(self, workspace_id, app_id):
+            return self.rows.get(app_id)
+
+        async def upsert_app_config(self, workspace_id, app_id, updates):
+            self.rows[app_id] = AppConfigRecord(
+                "c1", workspace_id, app_id, updates.enabled, now, now
+            )
+            return self.rows[app_id]
+
+        async def delete_app_config(self, workspace_id, app_id):
+            return self.rows.pop(app_id, None) is not None
+
+    monkeypatch.setattr(adapter, "require_workspace_access", allowed)
+    monkeypatch.setattr(adapter, "_scan_apps_catalog", lambda: ())
+    monkeypatch.setattr(factory, "get_remote_app_directory", InMemoryRemoteAppDirectory)
+    user, configs = SimpleNamespace(id="u1"), Configs()
+
+    def status(call) -> int:
+        try:
+            asyncio.run(call)
+        except HTTPException as exc:
+            return exc.status_code
+        return 200
+
+    def patch(app_id: str, enabled: bool):
+        return adapter.update_app_config(
+            "ws1", app_id, adapter.AppConfigUpdate(enabled=enabled), user, configs
+        )
+
+    assert status(adapter.get_app_config("ws1", stale, user, configs)) == 200
+    assert status(patch(stale, True)) == 404
+    assert status(patch(stale, False)) == 200
+    assert configs.rows[stale].enabled is False
+    assert status(adapter.delete_app_config("ws1", stale, user, configs)) == 200
+    assert status(adapter.get_app_config("ws1", stale, user, configs)) == 404
+    assert status(patch("remote/acme.research:other", False)) == 404

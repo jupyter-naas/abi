@@ -167,3 +167,82 @@ def test_discovery_is_read_at_most_every_10_seconds():
 
     asyncio.run(scenario())
     assert discovery.reads == 2
+
+
+@pytest.mark.parametrize("code", ["APP_ERROR", "DEADLINE_EXCEEDED"])
+def test_a_response_that_fails_mid_stream_is_not_ended_cleanly(monkeypatch, code):
+    """The status line is out: only an error makes the server abort the
+    connection, so the browser does not save a truncated file as complete."""
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters import discovery
+    from naas_abi_sdk import app_streams
+
+    async def pull_body(nc, inbox):
+        yield b"first"
+        raise RPCError(code, "gone")
+
+    monkeypatch.setattr(app_streams, "pull_body", pull_body)
+
+    async def read():
+        received = []
+        async for chunk in discovery._pulled(object(), "_INBOX.x"):
+            received.append(chunk)
+        return received
+
+    with pytest.raises(RPCError):
+        asyncio.run(read())
+
+
+def test_a_browser_that_drops_its_upload_fails_the_body():
+    """Else the app waits in receive() until its idle limit."""
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters import discovery
+    from starlette.requests import ClientDisconnect
+
+    class Source:
+        def __init__(self):
+            self.chunks, self.failed, self.finished = [], None, False
+
+        async def put(self, chunk):
+            self.chunks.append(chunk)
+
+        async def finish(self):
+            self.finished = True
+
+        async def fail(self, code, message):
+            self.failed = code
+
+    async def browser():
+        yield b"part"
+        raise ClientDisconnect()
+
+    source = Source()
+    nc = type("NC", (), {"max_payload": 1024 * 1024})()
+    asyncio.run(discovery._pump(browser(), source, 0, nc))
+
+    assert (source.failed, source.finished) == ("CANCELLED", False)
+
+
+def test_an_unknown_app_is_not_looked_up_again_for_5_seconds():
+    """Stale tabs polling a removed module's assets must not hold the discovery
+    lock that every remote app request waits on."""
+    discovery = FakeDiscovery([])
+    now = [0.0]
+    directory = _directory(discovery, [], [], now)
+
+    async def missing():
+        with pytest.raises(RemoteAppUnavailable):
+            await directory.forward("acme.gone", "console", AppRequest("GET", "/"))
+
+    async def scenario():
+        await missing()  # snapshot, then a fresh read
+        now[0] = 4.0
+        await missing()  # neither: the snapshot is current, the miss is recent
+        assert discovery.reads == 2
+        now[0] = 6.0
+        await missing()  # the miss is stale: one fresh read
+        assert discovery.reads == 3
+        discovery.instances.append(_instance("acme.gone", "i-9", CONSOLE))
+        now[0] = 20.0
+        answer = await directory.forward("acme.gone", "console", AppRequest("GET", "/"))
+        assert answer.body == b"ok"
+
+    asyncio.run(scenario())

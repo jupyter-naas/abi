@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import random
 import weakref
 from collections.abc import AsyncIterator, Callable
@@ -27,9 +28,15 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
     RemoteAppUnavailable,
 )
 
+_log = logging.getLogger(__name__)
+
 CONTRACT_MAJOR = 1
 # Discovery is read at most this often: the catalog and every request share it.
 SNAPSHOT_SECONDS = 10.0
+# An app discovery just did not list is not looked up again for this long:
+# stale tabs polling a removed module must not hold the discovery lock.
+MISS_SECONDS = 5.0
+MAX_MISSES = 1024
 # After the last upload chunk, the module answers within its idle limit.
 ANSWER_AFTER_UPLOAD_SECONDS = 65.0
 # The module is gone or going: another READY instance may answer.
@@ -57,6 +64,8 @@ class _Client:
         self.transport, self.upload_transport = transport, upload_transport
         self.snapshot: _Snapshot | None = None
         self.lock = asyncio.Lock()
+        # (module_id, app) -> when a fresh read did not find it
+        self.misses: dict[tuple[str, str], float] = {}
 
 
 class _Retry(Exception):
@@ -150,14 +159,21 @@ class DiscoveryRemoteAppDirectory:
         from naas_abi_sdk.app_streams import BodySource
 
         client = self._client()
+        key = (module_id, app)
         snapshot = await self._snapshot(client)
-        candidates = list(snapshot.instances.get((module_id, app), ()))
-        if not candidates:
+        candidates = list(snapshot.instances.get(key, ()))
+        missed = client.misses.get(key)
+        if not candidates and (missed is None or self._now() - missed >= MISS_SECONDS):
             # Just started? Read discovery again before answering 404.
             snapshot = await self._snapshot(client, fresh=True)
-            candidates = list(snapshot.instances.get((module_id, app), ()))
+            candidates = list(snapshot.instances.get(key, ()))
+            if not candidates:
+                if len(client.misses) >= MAX_MISSES:
+                    client.misses.clear()
+                client.misses[key] = self._now()
         if not candidates:
             raise RemoteAppUnavailable(404, "App not published by a ready module")
+        client.misses.pop(key, None)
         message = pb.HttpRequest(
             app=app,
             method=request.method,
@@ -250,6 +266,10 @@ async def _pump(stream: AsyncIterator[bytes], source: Any, max_bytes: int, nc: A
         await source.finish()
     except ReaderGone:
         pass
+    except Exception as exc:  # noqa: BLE001 - the browser left (ClientDisconnect)
+        # Tell the app, or it waits in receive() until its idle limit.
+        with contextlib.suppress(ReaderGone):
+            await source.fail("CANCELLED", f"The upload ended early: {exc!r}")
 
 
 async def _upload(call: Any, source: Any) -> Any:
@@ -277,17 +297,16 @@ async def _upload(call: Any, source: Any) -> Any:
 
 
 async def _pulled(nc: Any, inbox: str) -> AsyncIterator[bytes]:
-    """The response body; an error after the response started ends it early
-    (the status line is already sent)."""
+    """The response body. An error after the response started (the app failed,
+    the module died) propagates: the status line is already sent, so the server
+    aborts the connection, and the browser does not keep a truncated file. The
+    server logs it, once."""
     from naas_abi_sdk.app_streams import pull_body
-    from naas_abi_sdk.transport import RPCError
 
     stream = pull_body(nc, inbox)
     try:
         async for chunk in stream:
             yield chunk
-    except RPCError:
-        return
     finally:
         with contextlib.suppress(Exception):
             await stream.aclose()

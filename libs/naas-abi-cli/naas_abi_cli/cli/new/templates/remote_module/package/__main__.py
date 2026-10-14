@@ -21,6 +21,7 @@ import os
 import signal
 import sys
 from collections.abc import Awaitable, Mapping
+from typing import TypeVar
 
 from naas_abi_sdk import DiscoveryConfiguration, run_module
 
@@ -31,8 +32,10 @@ DEFAULT_NATS_URL = "nats://127.0.0.1:4222"
 DEFAULT_DISCOVERY_PROJECT = "{{discovery_project}}"
 DEFAULT_IDENTITY = "{{module_name}}"
 
+T = TypeVar("T")
 
-async def run_until_signalled[T](work: Awaitable[T]) -> T | None:
+
+async def run_until_signalled(work: Awaitable[T]) -> T | None:
     """Run ``work``; on SIGTERM/SIGINT cancel it and return None.
 
     Once the module is running, ``run_module`` takes over both signals: it
