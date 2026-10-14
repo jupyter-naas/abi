@@ -19,7 +19,7 @@ import hashlib
 import logging
 import mimetypes
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
@@ -55,6 +55,10 @@ IDLE_SECONDS = 60.0
 MAX_STREAMS = 256
 AUTHORIZATION_SECONDS = 5.0
 MAX_AUTHORIZATIONS = 1024
+# Callers whose user ids an app trusts: Nexus's API, the one process that
+# authenticates users. Any other caller (a module, a script) may call an app,
+# but never on behalf of a user (docs/adr/20261014_module-identities.md).
+USER_CALLERS = frozenset({"api"})
 # The browser assets Nexus serves for in-engine apps.
 STATIC_SUFFIXES = frozenset(
     {
@@ -117,8 +121,10 @@ class AppHost:
         *,
         max_concurrency: int = DEFAULT_LIMIT,
         idle_seconds: float = IDLE_SECONDS,
+        user_callers: Iterable[str] = USER_CALLERS,
     ) -> None:
         self.session, self.apps = session, apps
+        self.user_callers = frozenset(user_callers)
         self.subscriptions: list[Any] = []
         self.closing = False
         self.idle_seconds = idle_seconds
@@ -184,8 +190,15 @@ class AppHost:
                 raise RPCError("MODULE_UNAVAILABLE", "App is draining")
             if request.app not in ("", name):
                 raise RPCError("INVALID_ARGUMENT", "App request names another app")
-            await self._authorize(name, (msg.headers or {}).get("Nats-Auth-Token", ""))
-            answer = await self._answer(name, request)
+            caller = await self._authorize(
+                name, (msg.headers or {}).get("Nats-Auth-Token", "")
+            )
+            if request.user_id and caller not in self.user_callers:
+                raise RPCError(
+                    "PERMISSION_DENIED",
+                    f"{caller!r} cannot call an app on behalf of a user",
+                )
+            answer = await self._answer(name, request, caller)
             response.status = answer.status
             for key, value in answer.headers:
                 response.headers.add(name=key, value=value)
@@ -229,7 +242,9 @@ class AppHost:
             self._authorized[(token, name)] = (now + lifetime, response.caller_identity)
         return response.caller_identity
 
-    async def _answer(self, name: str, request: pb.HttpRequest) -> _Answer:
+    async def _answer(
+        self, name: str, request: pb.HttpRequest, caller: str = ""
+    ) -> _Answer:
         if len(request.body) > MAX_INLINE_REQUEST_BODY:
             return _text(413, "Request too large")
         if not request.path.startswith("/"):
@@ -246,7 +261,7 @@ class AppHost:
             return _text(404, "Not found")
         if len(self._streams) >= MAX_STREAMS:
             raise RPCError("MODULE_UNAVAILABLE", "Too many requests in progress")
-        return await self._asgi(asgi, request)
+        return await self._asgi(asgi, request, caller)
 
     # -- static files ---------------------------------------------------------
 
@@ -319,8 +334,10 @@ class AppHost:
 
     # -- the ASGI app ---------------------------------------------------------
 
-    async def _asgi(self, app: ASGIApp, request: pb.HttpRequest) -> _Answer:
-        call = _AsgiCall(self, app, request)
+    async def _asgi(
+        self, app: ASGIApp, request: pb.HttpRequest, caller: str = ""
+    ) -> _Answer:
+        call = _AsgiCall(self, app, request, caller)
         call.task = asyncio.create_task(call.run())
         self._keep(call.task)
         try:
@@ -337,8 +354,11 @@ class _AsgiCall:
     """One request through an ASGI app: its body pulled as the app reads it,
     its response answered inline or streamed as the app sends it."""
 
-    def __init__(self, host: AppHost, app: ASGIApp, request: pb.HttpRequest) -> None:
+    def __init__(
+        self, host: AppHost, app: ASGIApp, request: pb.HttpRequest, caller: str = ""
+    ) -> None:
         self.host, self.app, self.request = host, app, request
+        self.caller = caller
         loop = asyncio.get_running_loop()
         self.ready: asyncio.Future[_Answer] = loop.create_future()
         self.activity = loop.time()
@@ -432,8 +452,9 @@ class _AsgiCall:
             ],
             "client": None,
             "server": None,
-            # Who asked, as Nexus vouches for it: request.scope["abi"]["user_id"].
-            "abi": {"user_id": request.user_id},
+            # Who asked: the user, as Nexus vouches for it (empty when another
+            # caller calls the app), and the caller's service identity.
+            "abi": {"user_id": request.user_id, "caller": self.caller},
         }
 
     async def receive(self) -> dict:

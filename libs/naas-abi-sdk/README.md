@@ -116,11 +116,24 @@ async def save_report(content: bytes):
     )
 ```
 
-Install your module package alongside the SDK, supply `ABI_SERVICE_TOKEN` and
-`ABI_NATS_URL`, then run `naas-abi-module my_module --config module.json`.
-Alternatively call `await run_module(ABIModule, url=..., token=..., configuration=...)`.
-The configuration file contains fields for your dataclass, not engine configuration
-or signing credentials. `global_config` is a plain mapping.
+Install your module package alongside the SDK, supply `ABI_MODULE_KEY` (or an
+issued `ABI_SERVICE_TOKEN`) and `ABI_NATS_URL`, then run
+`naas-abi-module my_module --config module.json`. Alternatively call
+`await run_module(ABIModule, url=..., token=ModuleToken(module_id, key), configuration=...)`
+(`naas_abi_sdk.service_token`). The configuration file contains fields for your
+dataclass, not engine configuration or signing credentials. `global_config` is a
+plain mapping.
+
+### Identity
+
+A module calls the engine as itself: its token asserts its module id, signed
+with its **module key**. The project derives that key from its secret for one
+module id (`abi module key <module_id>` prints it); a module never receives the
+secret. The engine accepts the token for that module id only, never for one of
+its own identities (`api`, `engine`, `dagster`), and discovery registers a
+module only under a token for its own module id. `ModuleToken(module_id, key)`
+signs and refreshes the token; `token_from_env(os.environ, module_id)` reads
+`ABI_SERVICE_TOKEN` or `ABI_MODULE_KEY`.
 
 Migration preserves module structure/lifecycle; it is not binary compatibility
 with arbitrary engine modules. Change the base imports, declare service names
@@ -505,7 +518,7 @@ api = FastAPI()
 
 @api.get("/api/report")
 async def report(request: Request):
-    user = request.scope["abi"]["user_id"]  # the signed-in Nexus user
+    user = request.scope["abi"]["user_id"]  # the signed-in Nexus user, as Nexus vouches
     return {"user": user}
 
 class ABIModule(BaseModule):
@@ -520,6 +533,11 @@ The app's page calls `fetch("api/report")`, relative to its folder. The ASGI
 app runs in the module's process with `root_path` set to the Nexus path, and its
 lifespan (startup and shutdown) runs with the module. Nexus checks the user's
 access, then forwards the request without the user's credential.
+
+`request.scope["abi"]` holds `user_id` and `caller`, the service identity that
+sent the request. Only Nexus (`api`) may send a `user_id`: a request from any
+other caller that names a user is refused (`PERMISSION_DENIED`) before the app
+sees it, so another module can call an app, but never on behalf of a user.
 
 The page runs sandboxed, in an opaque origin, apart from the Nexus session. The
 grant in its URL is its only credential:

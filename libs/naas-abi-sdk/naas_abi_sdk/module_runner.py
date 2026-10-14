@@ -9,6 +9,7 @@ from pathlib import Path
 
 from naas_abi_sdk.discovery import DiscoveryConfiguration
 from naas_abi_sdk.module import BaseModule, run_module
+from naas_abi_sdk.service_token import token_from_env
 
 
 def main() -> None:
@@ -25,12 +26,15 @@ def main() -> None:
         "--discovery-project", help="Enable module discovery in this project"
     )
     args = parser.parse_args()
-    token = os.environ.get("ABI_SERVICE_TOKEN")
-    if not token:
-        parser.error("ABI_SERVICE_TOKEN must contain an issued service token")
     module_type = importlib.import_module(args.module).ABIModule
     if not issubclass(module_type, BaseModule):
         parser.error("ABIModule must extend naas_abi_sdk.BaseModule")
+    # The module registers as itself: its token asserts its module id.
+    identity = module_type.module_id or module_type.__module__
+    try:
+        token = token_from_env(os.environ, identity)
+    except RuntimeError as exc:
+        parser.error(str(exc))
     data = json.loads(args.config.read_text()) if args.config else {}
     configuration = module_type.Configuration(**data)
     asyncio.run(

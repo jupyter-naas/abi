@@ -56,9 +56,9 @@ class FakeMsg:
         return pb.HttpResponse.FromString(self.sent[-1])
 
 
-def _session():
+def _session(caller="api"):
     call = AsyncMock(
-        return_value=discovery_pb.AuthorizeAppResponse(caller_identity="api")
+        return_value=discovery_pb.AuthorizeAppResponse(caller_identity=caller)
     )
     return SimpleNamespace(
         instance_id="i-1",
@@ -67,9 +67,9 @@ def _session():
     )
 
 
-def _host(tmp_path, asgi=None):
+def _host(tmp_path, asgi=None, caller="api"):
     descriptor = read_app(_site(tmp_path))
-    return AppHost(_session(), {"console": (descriptor, asgi)})
+    return AppHost(_session(caller), {"console": (descriptor, asgi)})
 
 
 def _request(path="/", method="GET", **fields):
@@ -187,6 +187,29 @@ def test_a_fastapi_backend_answers_other_paths(tmp_path):
         assert (await _send(host, _request("/"))).body == b"<h1>console</h1>"
         missing = await _send(host, _request("/api/nothing"))
         assert missing.status == 404
+
+    asyncio.run(scenario())
+
+
+def test_only_nexus_calls_an_app_on_behalf_of_a_user(tmp_path):
+    """A module may call another module's app, but never as a user (A8)."""
+    fastapi = pytest.importorskip("fastapi")
+    app = fastapi.FastAPI()
+
+    @app.get("/api/whoami")
+    async def whoami(request: fastapi.Request):
+        return request.scope["abi"]
+
+    async def scenario():
+        nexus = _host(tmp_path / "nexus", app)
+        answered = await _send(nexus, _request("/api/whoami", user_id="u-7"))
+        assert json.loads(answered.body) == {"user_id": "u-7", "caller": "api"}
+        module = _host(tmp_path / "module", app, caller="acme.billing")
+        forged = await _send(module, _request("/api/whoami", user_id="u-7"))
+        assert forged.error.code == "PERMISSION_DENIED"
+        assert "acme.billing" in forged.error.message
+        anonymous = await _send(module, _request("/api/whoami"))
+        assert json.loads(anonymous.body) == {"user_id": "", "caller": "acme.billing"}
 
     asyncio.run(scenario())
 
