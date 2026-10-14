@@ -363,36 +363,50 @@ class TripleStoreSecondaryAdapterNATSClient(NatsRPCClient, ITripleStorePort):
             _raise_for_error(response.error, self._detail_or_none(response))
         return _nt_to_graph(response.triples_nt)
 
-    def create_graph(self, graph_name: URIRef) -> None:
+    def create_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ) -> None:
+        """``timeout_seconds``: as for ``insert``."""
         request = triple_store_pb2.CreateGraphRequest(
-            context=self._context(), graph_name=str(graph_name)
+            context=self._context(timeout_seconds), graph_name=str(graph_name)
         )
         response = self._call(
             f"{SUBJECT_PREFIX}.create_graph",
             request,
             triple_store_pb2.CreateGraphResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error, self._detail_or_none(response))
 
-    def clear_graph(self, graph_name: URIRef) -> None:
+    def clear_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ) -> None:
+        """``timeout_seconds``: as for ``insert``."""
         request = triple_store_pb2.ClearGraphRequest(
-            context=self._context(), graph_name=str(graph_name)
+            context=self._context(timeout_seconds), graph_name=str(graph_name)
         )
         response = self._call(
             f"{SUBJECT_PREFIX}.clear_graph",
             request,
             triple_store_pb2.ClearGraphResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error, self._detail_or_none(response))
 
-    def drop_graph(self, graph_name: URIRef) -> None:
+    def drop_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ) -> None:
+        """``timeout_seconds``: as for ``insert``."""
         request = triple_store_pb2.DropGraphRequest(
-            context=self._context(), graph_name=str(graph_name)
+            context=self._context(timeout_seconds), graph_name=str(graph_name)
         )
         response = self._call(
-            f"{SUBJECT_PREFIX}.drop_graph", request, triple_store_pb2.DropGraphResponse
+            f"{SUBJECT_PREFIX}.drop_graph",
+            request,
+            triple_store_pb2.DropGraphResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error, self._detail_or_none(response))

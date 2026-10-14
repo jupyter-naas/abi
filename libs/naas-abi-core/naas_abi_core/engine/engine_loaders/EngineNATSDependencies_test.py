@@ -314,5 +314,8 @@ def test_module_triple_store_writes_pass_their_deadline_to_the_client():
     service.insert(Graph(), graph_name, timeout_seconds=900.0)
     service.remove(Graph(), graph_name)
 
+    service.clear_graph(graph_name, timeout_seconds=900.0)
+
     assert client.insert.call_args.kwargs == {"timeout_seconds": 900.0}
     assert client.remove.call_args.kwargs == {}
+    assert client.clear_graph.call_args.kwargs == {"timeout_seconds": 900.0}
