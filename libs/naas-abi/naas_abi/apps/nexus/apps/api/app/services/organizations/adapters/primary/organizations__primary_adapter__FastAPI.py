@@ -28,7 +28,6 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
     AuthService,
     UserNotFoundError,
 )
-from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
     issue_and_send_invite_sign_in,
 )
@@ -60,6 +59,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
     WorkspaceService,
 )
 from naas_abi_core.services.email.EmailService import EmailService
+from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
