@@ -15,6 +15,7 @@ from click.testing import CliRunner
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
     load_dev_configuration,
 )
+from naas_abi_core.engine.nats_auth import module_key
 
 from naas_abi_cli.cli.new.agent import _new_agent
 from naas_abi_cli.cli.new.module import _new_module
@@ -94,7 +95,6 @@ def test_a_new_module_is_a_remote_module_in_the_project_src(tmp_path: Path) -> N
     for name in (
         "__init__.py",
         "__main__.py",
-        "service_token.py",
         "jobs.py",
         "agents/ResearchAgent.py",
         "tests/module_test.py",
@@ -163,8 +163,8 @@ def test_the_module_is_run_by_abi_dev_up_not_loaded_by_the_engine(
     _invoke(_new_module, root, "research")
 
     dev = load_dev_configuration(str(root / "config.yaml"))
-    assert [(m.name, m.module, m.args) for m in dev.modules] == [
-        ("research", "research", [])
+    assert [(m.name, m.module, m.args, m.identity) for m in dev.modules] == [
+        ("research", "research", [], "demo.research")
     ]
     config = yaml.safe_load((root / "config.yaml").read_text())
     # It registers itself through discovery.
@@ -190,6 +190,18 @@ def test_the_module_gets_a_compose_service_in_the_override(tmp_path: Path) -> No
     )
     assert "ABI_DISCOVERY_PROJECT=acme" in service["environment"]
     assert service["depends_on"] == {"abi": {"condition": "service_healthy"}}
+    # It signs as its module id with its own key, never with the project secret.
+    assert not any("NATS_JWT_SECRET" in item for item in service["environment"])
+    assert (
+        "ABI_MODULE_KEY=${ABI_MODULE_KEY_RESEARCH:?ABI_MODULE_KEY_RESEARCH is not in "
+        ".env: abi module key demo.research}" in service["environment"]
+    )
+    env = dict(
+        line.split("=", 1) for line in (root / ".env").read_text().splitlines() if "=" in line
+    )
+    assert env["ABI_MODULE_KEY_RESEARCH"] == module_key(
+        env["NATS_JWT_SECRET"], "demo.research"
+    )
     # docker-compose.yml, which --regenerate rewrites, is left alone.
     assert (root / "docker-compose.yml").read_text() == "services: {}\n"
 

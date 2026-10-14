@@ -19,6 +19,7 @@ import jinja2
 import yaml
 
 import naas_abi_cli
+from naas_abi_cli.cli.admin_credentials import ensure_module_key, module_key_variable
 from naas_abi_cli.cli.utils.Copier import Copier
 
 from .utils import to_pascal_case, to_snake_case
@@ -232,10 +233,10 @@ def _with_dev_module(text: str, entry: str) -> str | None:
     return "".join(lines[:last] + [entry] + lines[last:])
 
 
-def add_dev_module(config: Path, name: str, module: str) -> bool:
-    """Add ``name`` (``python -m module``) to ``dev.modules`` in ``config``,
-    keeping the file's comments and templating. False when it could not: the
-    file is then left as it was."""
+def add_dev_module(config: Path, name: str, module: str, identity: str = "") -> bool:
+    """Add ``name`` (``python -m module``, registering as ``identity``) to
+    ``dev.modules`` in ``config``, keeping the file's comments and templating.
+    False when it could not: the file is then left as it was."""
     from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
         load_dev_configuration,
     )
@@ -246,9 +247,10 @@ def add_dev_module(config: Path, name: str, module: str) -> bool:
             return True
     except _CONFIG_ERRORS:
         return False
-    updated = _with_dev_module(
-        original, f"    - name: {name}\n      module: {module}\n"
-    )
+    entry = f"    - name: {name}\n      module: {module}\n"
+    if identity:
+        entry += f"      identity: {identity}\n"
+    updated = _with_dev_module(original, entry)
     if updated is None:
         return False
     config.write_text(updated, encoding="utf-8")
@@ -262,10 +264,12 @@ def add_dev_module(config: Path, name: str, module: str) -> bool:
 
 
 def compose_service(
-    project: Project, name: str, package: Path, discovery_project: str
+    project: Project, name: str, package: Path, discovery_project: str, module_id: str
 ) -> dict:
-    """The module's service: its SDK-only image, logged in to the stack's broker."""
+    """The module's service: its SDK-only image, logged in to the stack's broker,
+    signing as ``module_id`` with its module key (from ``.env``)."""
     context = "./" + package.relative_to(project.root).as_posix()
+    variable = module_key_variable(name)
     return {
         "build": {
             "context": context,
@@ -277,9 +281,10 @@ def compose_service(
         "restart": "unless-stopped",
         "environment": [
             "ABI_NATS_URL=nats://module:${NATS_MODULE_PASSWORD}@nats:4222",
-            "NATS_JWT_SECRET=${NATS_JWT_SECRET}",
+            # Its own key, never the project's NATS_JWT_SECRET.
+            f"ABI_MODULE_KEY=${{{variable}:?{variable} is not in .env: "
+            f"abi module key {module_id}}}",
             f"ABI_DISCOVERY_PROJECT={discovery_project}",
-            f"ABI_MODULE_IDENTITY={name}",
             "LOG_LEVEL=${LOG_LEVEL:-INFO}",
         ],
         # Its first calls need the engine's model registry and documents.
@@ -350,7 +355,7 @@ def create_in_project(project: Project, module_name: str, package: Path) -> None
         "It runs in its own process and registers itself in discovery "
         f"(project {discovery_project!r}), so it is not added to `modules:`."
     )
-    if add_dev_module(project.config, name, dotted):
+    if add_dev_module(project.config, name, dotted, module_id):
         click.echo(
             f"- `abi dev up` runs it: added to dev.modules in {project.config.name}."
         )
@@ -359,9 +364,17 @@ def create_in_project(project: Project, module_name: str, package: Path) -> None
             f"- Could not edit dev.modules in {project.config.name}; add this "
             "for `abi dev up` to run it:\n\n"
             f"dev:\n  modules:\n    - name: {name}\n      module: {dotted}\n"
+            f"      identity: {module_id}\n"
         )
 
-    service = compose_service(project, name, package, discovery_project)
+    service = compose_service(project, name, package, discovery_project, module_id)
+    if project.nats():
+        # The service signs with its own key, kept in .env next to the secret.
+        ensure_module_key(project.root / ".env", name, module_id)
+        click.echo(
+            f"- Its module key is in .env ({module_key_variable(name)}): it signs "
+            f"its tokens as {module_id} only."
+        )
     if not project.nats():
         click.echo(
             "- This project's config has no `nats:` block, so its Docker stack "
@@ -405,8 +418,8 @@ def create_standalone(module_name: str, repository: Path, abi_git_ref: str) -> N
     click.echo(f"  cd {repository}")
     click.echo("  git init && uv sync && uv run pytest")
     click.echo(
-        f"  ABI_NATS_URL=... NATS_JWT_SECRET=... ABI_DISCOVERY_PROJECT=... "
-        f"uv run python -m {snake}   # see README.md\n"
+        f"  ABI_NATS_URL=... ABI_MODULE_KEY=$(abi module key {snake}) "
+        f"ABI_DISCOVERY_PROJECT=... uv run python -m {snake}   # see README.md\n"
     )
 
 

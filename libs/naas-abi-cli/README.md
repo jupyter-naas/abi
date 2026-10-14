@@ -55,14 +55,16 @@ Creates a module. By default a **remote module**: a `naas-abi-sdk` package that
 runs in its own process, reaches the engine only through NATS, and never
 imports `naas_abi_core`. It has an agent (an SDK `IntentAgent` on the engine's
 default models, its memory in the Document Service), an hourly `@job`, a
-`python -m <name>` entrypoint with discovery and SIGTERM handling, a service
-token signer, an app scaffold and offline tests.
+`python -m <name>` entrypoint with discovery and SIGTERM handling (it signs
+its tokens with its module key, `ABI_MODULE_KEY`), an app scaffold and offline
+tests.
 
 - **In a project** (a folder with `config.yaml` and `pyproject.toml`), it goes
   to `src/<name>/` with an SDK-only `Dockerfile`, gets a `dev.modules` entry in
   `config.yaml` (`abi dev up` runs it) and a service in
   `docker-compose.override.yml` (`abi start` runs it; `abi deploy local
-  --regenerate` never touches that file). It is not added to `modules:`: it
+  --regenerate` never touches that file), with its module key in `.env`
+  (`ABI_MODULE_KEY_<NAME>`). It is not added to `modules:`: it
   registers itself through discovery, and Nexus lists its agent once the
   module logs `READY`.
 - **`--standalone`** (the default outside a project) creates a repository of
@@ -163,6 +165,14 @@ Lists all available modules and their enabled/disabled status.
 abi module list
 ```
 
+#### `abi module key <module_id>`
+Prints the module key of `<module_id>`, derived from the project's
+`NATS_JWT_SECRET` (`$NATS_JWT_SECRET`, else `./.env`). A remote module signs its
+tokens with it (`ABI_MODULE_KEY`), and the engine accepts them for that module
+id only, never for `api`, `engine` or `dagster`. Discovery registers a module
+only under a token for its own module id. Give a module its key, never the
+secret; a new secret means new keys.
+
 ### Local dev stack
 
 #### `abi dev up [--service <name>]... [-d] [--with-nats/--without-nats] [--with-tracing]`
@@ -175,12 +185,13 @@ dev:
   modules:
     - name: probe-researcher                # logs, pid, --service name
       module: operations.projects.nats_probe  # run as `python -m <module> <args>`
+      identity: zen.nats_probe.researcher   # its module id (default: name)
       args: [researcher]
       env: {NATS_PROBE_DISCOVERY_PROJECT: "${ABI_DISCOVERY_PROJECT}"}
       restart: on-failure                   # or always, never
 ```
 
-Each module gets `ABI_NATS_URL`, `NATS_JWT_SECRET`, `ABI_SERVICE_TOKEN` (for `python -m naas_abi_sdk.module_runner`), `ABI_DISCOVERY_PROJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT` with tracing, and the project's `src/` on `PYTHONPATH`; `env` values may name them as `${VAR}`. A module is addressed like a service: `abi dev up --service probe-researcher -d` (it joins the running NATS stack and starts no broker of its own), `abi dev logs probe-researcher -f`, `abi dev down --service probe-researcher`. `abi dev down` stops modules before the stack. The engine validates the block and otherwise ignores it.
+Each module gets `ABI_NATS_URL`, `ABI_MODULE_KEY` (the key of its `identity`, which must be its module id: discovery registers a module only under its own identity), `ABI_SERVICE_TOKEN` signed with that key (for `python -m naas_abi_sdk.module_runner`), `ABI_DISCOVERY_PROJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT` with tracing, and the project's `src/` on `PYTHONPATH`; `env` values may name them as `${VAR}`. A module is addressed like a service: `abi dev up --service probe-researcher -d` (it joins the running NATS stack and starts no broker of its own), `abi dev logs probe-researcher -f`, `abi dev down --service probe-researcher`. `abi dev down` stops modules before the stack. The engine validates the block and otherwise ignores it.
 
 ### Deployment
 

@@ -34,15 +34,34 @@ MODULE = DevModuleConfiguration(
 
 def test_a_module_gets_the_dev_broker_and_a_service_token(tmp_path):
     env = module_environment(
-        MODULE, OVERLAY, tmp_path, {"HOME": "/home/me"}, nats_password=MODULE_PASSWORD
+        MODULE,
+        OVERLAY,
+        tmp_path,
+        {"HOME": "/home/me", "NATS_JWT_SECRET": SECRET},
+        nats_password=MODULE_PASSWORD,
     )
 
     assert env["HOME"] == "/home/me"
     assert env["ABI_NATS_URL"] == f"nats://module:{MODULE_PASSWORD}@127.0.0.1:13042"
-    assert env["NATS_JWT_SECRET"] == SECRET
     assert env["ABI_DISCOVERY_PROJECT"] == "zen"
     assert verify_service_token(env["ABI_SERVICE_TOKEN"], SECRET) == "probe-researcher"
     assert "OTEL_EXPORTER_OTLP_ENDPOINT" not in env
+
+
+def test_a_module_signs_for_its_identity_and_never_gets_the_secret(tmp_path):
+    from naas_abi_core.engine.nats_auth import module_key
+
+    module = MODULE.model_copy(update={"identity": "zen.nats_probe.researcher"})
+    env = module_environment(
+        module, OVERLAY, tmp_path, {"NATS_JWT_SECRET": SECRET}, nats_password=MODULE_PASSWORD
+    )
+
+    assert SECRET not in env.values()
+    assert env["ABI_MODULE_KEY"] == module_key(SECRET, "zen.nats_probe.researcher")
+    assert (
+        verify_service_token(env["ABI_SERVICE_TOKEN"], SECRET)
+        == "zen.nats_probe.researcher"
+    )
 
 
 def test_module_env_names_the_dev_settings(tmp_path):

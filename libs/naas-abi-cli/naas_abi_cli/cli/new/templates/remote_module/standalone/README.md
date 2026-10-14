@@ -18,12 +18,15 @@ uv run pytest
 
 ## Run it against a project
 
-From the project's `.env`, the module needs the broker password of the user
-`module` and the token signing secret:
+The module needs the broker password of the user `module`, from the
+project's `.env`, and its module key: the project derives it from its secret
+for the module id, and `abi module key {{module_id}}` (run in the project)
+prints it. The module never gets the secret itself, and its key signs tokens
+for `{{module_id}}` only.
 
 ```bash
 export ABI_NATS_URL="nats://module:<NATS_MODULE_PASSWORD>@127.0.0.1:4222"
-export NATS_JWT_SECRET="<NATS_JWT_SECRET>"
+export ABI_MODULE_KEY="<abi module key {{module_id}}>"
 export ABI_DISCOVERY_PROJECT="<the project's nats.discovery.project>"
 uv run python -m {{module_name_snake}}
 ```
@@ -35,8 +38,8 @@ Ctrl+C or SIGTERM: it finishes running work and unregisters.
 |---|---|---|
 | `ABI_NATS_URL` | `nats://127.0.0.1:4222` | the broker, logged in as `module` |
 | `ABI_DISCOVERY_PROJECT` | `{{discovery_project}}` | the engine's discovery project |
-| `ABI_SERVICE_TOKEN` | | an issued service token; else one is signed from `NATS_JWT_SECRET` |
-| `ABI_MODULE_IDENTITY` | `{{module_name}}` | the token's subject |
+| `ABI_MODULE_KEY` | | the module key: tokens for `{{module_id}}` are signed with it |
+| `ABI_SERVICE_TOKEN` | | an issued service token, used instead of the key |
 | `{{module_name_upper}}_CHAT_MODEL` | the engine's default | chat model id |
 | `ABI_HEALTH_PORT` | off | `/health` and `/ready` probes |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | off | trace export |
@@ -47,7 +50,7 @@ Ctrl+C or SIGTERM: it finishes running work and unregisters.
 docker build -t {{module_name}} .
 docker run --rm --network <project>_abi-network \
   -e ABI_NATS_URL="nats://module:<NATS_MODULE_PASSWORD>@nats:4222" \
-  -e NATS_JWT_SECRET="<NATS_JWT_SECRET>" \
+  -e ABI_MODULE_KEY="<abi module key {{module_id}}>" \
   -e ABI_DISCOVERY_PROJECT="<project>" \
   {{module_name}}
 ```
