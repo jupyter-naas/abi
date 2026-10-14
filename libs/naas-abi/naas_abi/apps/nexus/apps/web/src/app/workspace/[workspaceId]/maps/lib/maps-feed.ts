@@ -98,20 +98,21 @@ export function normalizeFeedLoad(loaded: unknown): MapsFeedResult {
   if (!loaded || typeof loaded !== 'object') {
     throw new TypeError('Map feed did not return locations');
   }
-  const data = loaded as MapsFeedPayload & {features?: unknown; type?: string; coveragePins?: unknown};
-  const pinRecords = isMapsFeatureCollection(data)
-    ? asPinRecords(data.features)
-    : asPinRecords(data.pins) ?? asPinRecords(data.features) ?? asPinRecords(data);
+  const feed = loaded as MapsFeedPayload & {features?: unknown; type?: string; coveragePins?: unknown};
+  const geoJson = isMapsFeatureCollection(loaded) ? (loaded as { features: unknown }) : null;
+  const pinRecords = geoJson
+    ? asPinRecords(geoJson.features)
+    : asPinRecords(feed.pins) ?? asPinRecords(feed.features) ?? asPinRecords(feed);
   const coverageObject =
-    data.coverage && typeof data.coverage === 'object' && !Array.isArray(data.coverage)
-      ? data.coverage as {pins?: unknown; features?: unknown; type?: string}
+    feed.coverage && typeof feed.coverage === 'object' && !Array.isArray(feed.coverage)
+      ? feed.coverage as {pins?: unknown; features?: unknown; type?: string}
       : undefined;
   const coverageRecords =
     asPinRecords(coverageObject?.features)
     ?? asPinRecords(coverageObject?.pins)
-    ?? asPinRecords(data.coveragePins);
-  const looksLikeFeed = isMapsFeatureCollection(data) || 'pins' in data || 'features' in data || 'coverage' in data
-    || 'coveragePins' in data || 'empty' in data || 'needsKey' in data;
+    ?? asPinRecords(feed.coveragePins);
+  const looksLikeFeed = geoJson != null || 'pins' in feed || 'features' in feed || 'coverage' in feed
+    || 'coveragePins' in feed || 'empty' in feed || 'needsKey' in feed;
   if (pinRecords === undefined && coverageRecords === undefined && !looksLikeFeed) {
     throw new TypeError('Map feed did not return locations');
   }
@@ -121,22 +122,22 @@ export function normalizeFeedLoad(loaded: unknown): MapsFeedResult {
     ...pin, memberIds: pin.memberIds?.filter((id) => allowedIds.has(id)) ?? [],
   })) : undefined;
   const coverageLabel =
-    typeof data.coverageLabel === 'string'
-      ? data.coverageLabel
-      : typeof data.coverage === 'string'
-        ? data.coverage
+    typeof feed.coverageLabel === 'string'
+      ? feed.coverageLabel
+      : typeof feed.coverage === 'string'
+        ? feed.coverage
         : undefined;
   return {
     pins,
     coveragePins,
-    reason: data.reason || data.message,
-    empty: Boolean(data.empty || data.needsKey || pins.length === 0),
-    source: typeof data.source === 'string' ? data.source : undefined,
-    attribution: typeof data.attribution === 'string' ? data.attribution : undefined,
-    observedAt: typeof data.observedAt === 'string' ? data.observedAt : undefined,
-    stale: data.stale === true,
-    needsKey: data.needsKey === true,
-    status: typeof data.status === 'string' ? data.status : undefined,
+    reason: feed.reason || feed.message,
+    empty: Boolean(feed.empty || feed.needsKey || pins.length === 0),
+    source: typeof feed.source === 'string' ? feed.source : undefined,
+    attribution: typeof feed.attribution === 'string' ? feed.attribution : undefined,
+    observedAt: typeof feed.observedAt === 'string' ? feed.observedAt : undefined,
+    stale: feed.stale === true,
+    needsKey: feed.needsKey === true,
+    status: typeof feed.status === 'string' ? feed.status : undefined,
     coverage: coverageLabel,
   };
 }

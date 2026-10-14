@@ -118,14 +118,15 @@ export async function GET(
       );
     }
     if (isMapsFeatureCollection(data)) {
+      const feed = data as FeedPayload;
       return mapsFeedResponse(
         {
           ...data,
-          source: data.source ?? dataset.endpoint,
-          layer_title: data.layer_title ?? dataset.title,
-          observation_date: data.observation_date,
-          empty: data.empty,
-          message: data.message,
+          source: feed.source ?? dataset.endpoint,
+          layer_title: feed.layer_title ?? dataset.title,
+          observation_date: feed.observation_date,
+          empty: feed.empty,
+          message: feed.message,
         },
         { cacheSeconds: 0 },
       );

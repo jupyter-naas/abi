@@ -57,7 +57,9 @@ export function downloadJson(filename: string, data: unknown): void {
 }
 
 /** Open the GeoJSON layers modal when `?mapsDebug=geojson` is on the Maps URL. */
-export function isMapsGeoJsonDebugEnabled(searchParams: URLSearchParams | null | undefined): boolean {
+export function isMapsGeoJsonDebugEnabled(
+  searchParams: Pick<URLSearchParams, 'get'> | null | undefined,
+): boolean {
   return searchParams?.get('mapsDebug') === 'geojson';
 }
 
