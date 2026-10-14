@@ -66,7 +66,13 @@ own processes keep it and may assert any identity. Modules never receive it.
 A token sent to a module instance (`abi.agent.<project>.<instance>...`,
 `abi.mod.<project>.<instance>...`) carries `aud: <instance id>` and lasts five
 minutes (`nats_auth.BOUND_TTL`). The SDK's `Transport` asks its token source
-for one (`for_audience`) for every call to such a subject; `ModuleToken` and
+for one (`for_audience`) for every call to such a subject, bound to the
+instance id the caller passes (`call(..., instance_id=...)`), which must be the
+subject's whole instance token. Discovery accepts an instance id only as one
+subject token (letters, digits, `_` and `-`): an instance registered as
+`<another instance>.x` would otherwise receive calls on
+`abi.mod.<project>.<another instance>.x...`, with tokens bound to that other
+instance. `ModuleToken` and
 the engine's `nats_auth.ServiceTokenSource` provide it (one cache,
 `naas_abi_sdk.service_token.TokenCache`), and a static token cannot call a
 module. A bound token is handed out again only in its first 30 seconds, so it
@@ -98,7 +104,10 @@ user may not:
 - subscribe to the subjects the engine serves, where calls carry their callers'
   unbound tokens: `abi.svc.>`, `abi.discovery.>` and `abi.rpc.>` (RPC
   overflow: an upload above the broker limit, Nexus's included); nor to
-  `_INBOX.>` or `$KV.>`. Module connections use their own inbox prefix,
+  `_INBOX.>`, `$JS.>` (the engine's JetStream requests, such as its reads of
+  discovery's registry and of the engine lease, travel there with their reply
+  subjects, and a forged reply raced to one would be parsed as the registry)
+  or `$KV.>`. Module connections use their own inbox prefix,
   `_INBOX_MODULES` (`run_module` sets it, and `Transport` for a URL logged in
   as `module`), so the engine's and Nexus's replies, on `_INBOX.>`, never reach
   a module;
@@ -159,7 +168,9 @@ is where the token is verified, so the identity rule sits next to it.
     inbox (`_INBOX_MODULES.>`): it sees the requests and replies sent there,
     and can replay a token sent to that module, to that module only, within
     its five minutes (a token Nexus sent to that module's app lets it name a
-    user there);
+    user there). It also sees the callers' reply subjects there, and may
+    publish to them (modules answer calls on `_INBOX.>`), so it can race a
+    forged answer to Nexus or the engine for a call made to that module;
   - read any stream through the JetStream consumer API and
     `$JS.API.STREAM.MSG.GET`: the jobs stream (every module's triggers and
     payloads), the claim-check store, bus and event streams, and the engine's
