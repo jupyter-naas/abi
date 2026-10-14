@@ -38,8 +38,9 @@ import jwt
 
 ALGORITHM = "HS256"
 DEFAULT_TTL = timedelta(hours=1)
-# A token bound to one module instance (``aud``): short, so one a module kept is soon useless.
-BOUND_TTL = timedelta(minutes=2)
+# A token bound to one module instance (``aud``): short, so one a module kept is soon
+# useless, and handed out with most of it left (naas_abi_sdk.service_token).
+BOUND_TTL = timedelta(minutes=5)
 # The ``kid`` header of a token signed with a module key.
 MODULE_KEY_ID = "module"
 # The engine's own processes. No module key exists for them, and no module token asserts them.
@@ -119,9 +120,8 @@ def _claims(
 class ServiceTokenSource:
     """Token source for an engine process's ``Transport``: ``source()`` gives a token for
     the engine's services, ``source.for_audience(instance_id)`` one bound to that module
-    instance (:data:`BOUND_TTL`). Each is reused until half its lifetime."""
-
-    MAX_AUDIENCES = 1024
+    instance (:data:`BOUND_TTL`, handed out with most of it left). The cache is the
+    SDK's ``TokenCache``, shared with ``ModuleToken``."""
 
     def __init__(
         self,
@@ -131,33 +131,29 @@ class ServiceTokenSource:
         ttl: timedelta = DEFAULT_TTL,
         clock: Callable[[], float] = time.time,
     ) -> None:
+        from naas_abi_sdk.service_token import TokenCache
+
         if not identity:
             raise ValueError("identity must be a non-empty string")
-        self.identity, self.secret, self.ttl, self.clock = identity, secret, ttl, clock
-        self._tokens: dict[str | None, tuple[float, str]] = {}
+        self.identity, self.secret = identity, secret
+        self._cache = TokenCache(
+            self._sign, ttl_seconds=int(ttl.total_seconds()), clock=clock
+        )
 
     def __call__(self) -> str:
-        return self._token(None, self.ttl)
+        return self._cache.unbound()
 
     def for_audience(self, audience: str) -> str:
-        return self._token(audience, BOUND_TTL)
+        return self._cache.bound(audience)
 
-    def _token(self, audience: str | None, ttl: timedelta) -> str:
-        now = self.clock()
-        cached = self._tokens.get(audience)
-        if cached is not None and now < cached[0]:
-            return cached[1]
-        if len(self._tokens) >= self.MAX_AUDIENCES:
-            self._tokens.clear()
-        token = issue_service_token(
+    def _sign(self, audience: str | None, issued_at: int, ttl: int) -> str:
+        return issue_service_token(
             self.identity,
             self.secret,
-            ttl=ttl,
-            now=datetime.fromtimestamp(now, UTC),
+            ttl=timedelta(seconds=ttl),
+            now=datetime.fromtimestamp(issued_at, UTC),
             audience=audience,
         )
-        self._tokens[audience] = (now + ttl.total_seconds() / 2, token)
-        return token
 
 
 def verify_service_token(

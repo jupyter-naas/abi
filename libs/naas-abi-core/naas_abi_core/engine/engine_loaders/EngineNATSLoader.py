@@ -172,9 +172,23 @@ class EngineNATSLoader:
         nc = nats_runtime.get_connection(nats_config.nats_url)
         started: list[object] = []
         if nats_config.discovery is not None:
+            from naas_abi_core.engine.nats_permissions import prepare_module_streams
             from naas_abi_core.services.discovery.discovery_factory import (
                 start_discovery,
             )
+
+            # Before discovery serves: a module that registers at once and
+            # starts its job host must find the streams it may not create
+            # (MODULE_PERMISSIONS).
+            try:
+                nats_runtime.run_coro(
+                    prepare_module_streams(nc, nats_config.discovery.project)
+                )
+            except Exception:  # noqa: BLE001 - modules report it; the engine serves on
+                logger.exception(
+                    "EngineNATSLoader: could not create the jobs stream and the "
+                    "claim-check store modules use"
+                )
 
             started.append(
                 nats_runtime.run_coro(
@@ -186,18 +200,6 @@ class EngineNATSLoader:
                     )
                 )
             )
-            from naas_abi_core.engine.nats_permissions import prepare_module_streams
-
-            try:
-                # Modules may not create streams (MODULE_PERMISSIONS).
-                nats_runtime.run_coro(
-                    prepare_module_streams(nc, nats_config.discovery.project)
-                )
-            except Exception:  # noqa: BLE001 - modules report it; the engine serves on
-                logger.exception(
-                    "EngineNATSLoader: could not create the jobs stream and the "
-                    "claim-check store modules use"
-                )
 
         if services.object_storage_available() and not isinstance(
             services.object_storage.adapter, ObjectStorageSecondaryAdapterNATSClient
