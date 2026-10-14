@@ -49,6 +49,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
     AppRequest,
     AppResponse,
     RemoteApp,
+    RemoteAppStreamFailed,
     RemoteAppUnavailable,
 )
 from naas_abi_core.apps.api.abi_api_key_auth import (
@@ -101,13 +102,32 @@ _RETURNED = frozenset(
         "link",
     }
 )
-# x- response headers that are not the app's to set: a proxy in front of
-# Nexus acts on the first ones (X-Accel-Redirect serves any file it names),
-# and Nexus sets framing and sniffing itself.
+# x- response headers that are not the app's to set: proxies, CDNs and edge
+# runtimes in front of Nexus act on these (X-Accel-Redirect serves any file it
+# names, X-Middleware-Rewrite reroutes), and Nexus sets framing and sniffing
+# itself. A deny-list, not an allow-list: an app's API has headers of its own
+# (request ids, rate limits) that no list could name. The deployments ABI
+# ships (Caddy, Cloudflare) act on no x- response header.
 _NOT_RETURNED = (
     "x-accel-",
     "x-sendfile",
-    "x-lighttpd-send-file",
+    "x-lighttpd-",
+    "x-litespeed-",
+    "x-envoy-",
+    "x-middleware-",
+    "x-nextjs-",
+    "x-vercel-",
+    "x-nf-",
+    "x-amz-",
+    "x-amzn-",
+    "x-goog-",
+    "x-ms-",
+    "x-azure-",
+    "x-varnish",
+    "x-cache",
+    "x-original-",
+    "x-rewrite-",
+    "x-http-method-override",
     "x-forwarded-",
     "x-real-ip",
     "x-frame-options",
@@ -354,8 +374,10 @@ class _RemoteAppStream(StreamingResponse):
                 async def respond() -> None:
                     try:
                         await self.stream_response(send)
-                    except Exception as exc:  # raised below, not as a group
+                    except RemoteAppStreamFailed as exc:  # raised below, not as a group
                         failed.append(exc)
+                    except Exception:  # the browser left mid-stream: not an error
+                        _log.debug("A remote app's reader left mid-stream", exc_info=True)
                     group.cancel_scope.cancel()
 
                 group.start_soon(respond)

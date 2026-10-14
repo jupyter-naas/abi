@@ -272,12 +272,24 @@ request, `request.scope["abi"]["workspace_id"]` (`HttpRequest.workspace_id`),
 under the same rule as `user_id`: only Nexus may name one.
 `POST /api/apps/remote-grant` takes `workspace_id`. The catalog URL takes
 `?workspace_id=`, and without it opens the first of the user's workspaces that
-enables the app, so old links still work. A grant never outlives the session
-token it was asked with (the Apps page opens the app again under a fresh one
-before it expires), and it ends when the user logs out, changes their password
-or calls `POST /api/apps/remote-grant/revoke`: each request checks the user's
-revocations (`revoked_tokens`, cached 5 s) against the grant's issue time
-(`iat`). A logout ends the user's grants on every device.
+enables the app (by slug), so old links still work.
+
+A grant is bound to the user's session by revocation, not by the access
+token's few minutes: it ends when the user logs out (on any device), changes
+their password or calls `POST /api/apps/remote-grant/revoke`. Each request
+checks the user's latest revocation (`revoked_tokens`, cached 5 s) against
+the grant's issue time (`iat`); the row a logout writes for the grants lasts as
+long as the longest grant, so no grant it ended works again once the cleanup
+job runs. Nexus credentials carry a fractional `iat` too: one whose `jti` is
+revoked, or issued before the user's latest revocation, mints no grant (a
+logged-out browser's token or app-html cookie gets 401; the Apps page
+refreshes its token and asks again). The Apps page's grant lasts
+`remote_app_grant_expire_minutes` (8 hours), and the page opens the app again a
+minute before it expires, never within five minutes of opening it, since a
+reload loses the page's state. The catalog URL's grant still never outlives
+the credential presented, so a share link stays as short as it was. This
+replaces the 2026-10-13 rule that a grant expires with the credential it was
+exchanged for, for the Apps page.
 
 **The catalog URL** takes every method: a user's request is redirected with a
 307, which keeps the method and body; an `ABI_API_KEY` caller (a script, no
@@ -287,9 +299,17 @@ origin (`NEXUS_API_URL`); a remote app still never runs on the Nexus web
 origin. The local Caddyfile sends `/app-html/remote/*` through nexus-web for
 that reason. This replaces "nexus-web does not proxy `/app-html/remote/`".
 
-**Headers.** Responses also pass the app's `x-` headers (not `X-Accel-*`,
-`X-Sendfile`, `X-Lighttpd-Send-File`, `X-Forwarded-*`, `X-Real-IP`,
-`X-Frame-Options` or `X-Content-Type-Options`), `Retry-After`,
+**Headers.** Responses also pass the app's `x-` headers, but for those a
+proxy, CDN or edge runtime in front of Nexus acts on (`X-Accel-*`,
+`X-Sendfile`, `X-Lighttpd-*`, `X-LiteSpeed-*`, `X-Envoy-*`, `X-Middleware-*`,
+`X-Nextjs-*`, `X-Vercel-*`, `X-Nf-*`, `X-Amz-*`, `X-Amzn-*`, `X-Goog-*`,
+`X-Ms-*`, `X-Azure-*`, `X-Varnish*`, `X-Cache*`, `X-Original-*`,
+`X-Rewrite-*`, `X-HTTP-Method-Override`, `X-Forwarded-*`, `X-Real-IP`) and
+those Nexus sets itself (`X-Frame-Options`, `X-Content-Type-Options`). It is
+a deny-list because an app's API has `x-` headers of its own (request ids,
+rate limits) that no list could name; the deployments ABI ships (Caddy,
+Cloudflare) act on no `x-` response header. A deployment behind another proxy
+should check its control headers against the list. Also `Retry-After`,
 `WWW-Authenticate`, `Link` and `Content-Length`, with
 `Access-Control-Expose-Headers: *`. The `Location` of a response that is not a
 redirect (a 201's) passes as sent: the browser does not go there. A

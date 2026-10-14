@@ -299,7 +299,8 @@ subject token (letters, digits, `_`, `-`).
 Apps receive a `user_id` and a `workspace_id` from Nexus only:
 `request.scope["abi"]["caller"]` names who called. `POST
 /api/apps/remote-grant` needs a `workspace_id` where the app is enabled, and a
-grant ends with the session token it was asked with or at logout. A module
+grant ends at the user's logout (on any device), password change or
+`POST /api/apps/remote-grant/revoke`. A module
 stops reading an upload at its app's `max_upload_bytes` (default 1 GiB)
 whatever Nexus asks.
 
