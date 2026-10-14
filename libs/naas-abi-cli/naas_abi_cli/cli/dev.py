@@ -629,7 +629,7 @@ def _nats_server_version(binary: str) -> tuple[int, int, int] | None:
     cannot be read."""
     try:
         result = subprocess.run(
-            [binary, "--version"], capture_output=True, text=True, timeout=10
+            [binary, "--version"], capture_output=True, text=True, timeout=10, check=False
         )
     except (OSError, subprocess.SubprocessError):
         return None
