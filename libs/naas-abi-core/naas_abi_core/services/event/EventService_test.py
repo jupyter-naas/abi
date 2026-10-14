@@ -655,3 +655,85 @@ def test_subscribe_fanout_across_multiple_subscribers(tmp_path):
     assert pdf_done.wait(timeout=2)
     assert received_unfiltered == ["alice", "report.pdf", "bob"]
     assert received_pdf_only == ["report.pdf"]
+
+
+# ---------------------------------------------------------------------------
+# raw access by type IRI (admin views)
+# ---------------------------------------------------------------------------
+
+
+class _Other(LogProcess):
+    _class_uri: ClassVar[str] = "http://example.org/Other"
+
+
+def test_event_types_and_raw_queries_by_type_iri(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    service.publish(UserAuthenticated(user_id="alice"))
+    service.publish(_Other())
+    service.publish(UserAuthenticated(user_id="bob"))
+
+    types = {t.event_type: t for t in service.event_types()}
+    newest = service.query_stored(
+        UserAuthenticated._class_uri, newest_first=True, limit=1
+    )
+    older = service.query_stored(
+        UserAuthenticated._class_uri, until_seq=newest[0].seq - 1, newest_first=True
+    )
+
+    assert (types[UserAuthenticated._class_uri].count, types[_Other._class_uri].count) == (2, 1)
+    assert [e.seq for e in newest] == [3]
+    assert [e.seq for e in older] == [1]
+    assert b"bob" in newest[0].payload
+
+
+def test_get_stored_by_seq(tmp_path):
+    import pytest
+
+    from naas_abi_core.services.event.EventPort import EventNotFoundError
+
+    service, _, _ = _make_service(tmp_path)
+    service.publish(UserAuthenticated(user_id="alice"))
+    service.publish(_Other())
+
+    assert service.get_stored(2).event_type == _Other._class_uri
+    with pytest.raises(EventNotFoundError):
+        service.get_stored(3)
+
+
+# ---------------------------------------------------------------------------
+# query_stream / query_stored_stream
+# ---------------------------------------------------------------------------
+
+
+def test_query_stream_reconstructs_what_query_returns(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    for i in range(1_100):
+        service.publish(UserAuthenticated(user_id=f"u{i}"))
+
+    with service.query_stream(
+        event_class=UserAuthenticated, newest_first=True, limit=600
+    ) as events:
+        streamed = list(events)
+
+    expected = service.query(
+        event_class=UserAuthenticated, newest_first=True, limit=600
+    )
+    assert all(isinstance(event, UserAuthenticated) for event in streamed)
+    assert [e.user_id for e in streamed] == [e.user_id for e in expected]
+    assert streamed[0].user_id == "u1099"
+
+
+def test_query_stored_stream_reads_raw_records_by_type_iri(tmp_path):
+    service, _, _ = _make_service(tmp_path)
+    for i in range(5):
+        service.publish(UserAuthenticated(user_id=f"u{i}"))
+
+    with service.query_stored_stream(
+        event_type=UserAuthenticated._class_uri, since_seq=1, limit=3
+    ) as records:
+        streamed = list(records)
+
+    assert [record.seq for record in streamed] == [2, 3, 4]
+    assert streamed == service.query_stored(
+        event_type=UserAuthenticated._class_uri, since_seq=1, limit=3
+    )

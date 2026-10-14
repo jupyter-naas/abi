@@ -36,6 +36,7 @@ It also covers the full stack from ingestion to UI, so you are not stitching tog
 
 - Python 3.12+, Git, [uv](https://astral.sh/uv) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - Node.js 18+ and [pnpm](https://pnpm.io/installation) 8.15+ (`npm install -g pnpm`) — for the Nexus web app; required by `abi dev up`, not by the Docker stack
+- [`nats-server`](https://docs.nats.io/running-a-nats-service/introduction/installation) on `PATH` (`brew install nats-server`, or a release binary) — new projects run on NATS; required by `abi dev up`, not by the Docker stack
 - [Docker Desktop](https://www.docker.com/products/docker-desktop) (8GB+ RAM for full stack)
 - LLM API keys: any OpenAI-compatible provider (OpenAI, OpenRouter, or equivalent)
 
@@ -80,7 +81,7 @@ abi chat             # Chat with Abi in the terminal
 abi logs             # Tail logs from a service (e.g. abi logs abi)
 abi stack status     # Check health of all running containers
 abi config validate  # Check your config.yaml for errors
-abi new module       # Scaffold a new module
+abi new module       # Scaffold a module that runs in its own process (NATS)
 abi new agent        # Scaffold a new agent
 abi new workflow     # Scaffold a new workflow
 ```
@@ -108,6 +109,8 @@ Each infrastructure concern is abstracted as a port with a swappable adapter. Ch
 - **Message bus** (async task routing): Community: RabbitMQ / Enterprise: Amazon MQ, Azure Service Bus, Google Pub/Sub
 - **Cache** (sessions and hot data): Community: Redis / Enterprise: Amazon ElastiCache, Azure Cache for Redis, Memorystore
 - **Orchestration** (schedules and sensors): Community: Dagster / Enterprise: Dagster Cloud, Airflow on MWAA, Cloud Composer
+
+New projects run on **NATS**: the engine serves every kernel service over the broker, the bus is JetStream, and modules can run in their own process with `naas-abi-sdk`, registering through discovery. `abi new module` creates such a module; `abi new module --in-engine` and `abi new project --without-nats` keep the classic in-process setup. Existing projects move over with [docs/migrate-to-nats.md](docs/migrate-to-nats.md).
 
 The **Context Engine** wires all these services at startup and routes every request to the right agent. **Abi** acts as the supervisor: it reads the intent behind each request and dispatches to the right domain agent or answers directly from the knowledge graph, vector store, or file system.
 

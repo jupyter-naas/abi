@@ -44,10 +44,10 @@ _BASE_VALUES = {
 }
 
 
-def _render(filename: str, *, include_coding: bool = False) -> dict:
+def _render(filename: str, *, include_coding: bool = False, nats: bool = True) -> dict:
     src = open(os.path.join(_TEMPLATES_DIR, filename), encoding="utf-8").read()
     rendered = jinja2.Template(src).render(
-        {**_BASE_VALUES, "include_coding": include_coding}
+        {**_BASE_VALUES, "include_coding": include_coding, "nats": nats}
     )
     return yaml.safe_load(rendered)  # also asserts the render is valid YAML
 
@@ -165,3 +165,65 @@ def test_document_config_uses_sqlite_locally_and_existing_postgres_database_in_s
     document = _render("config.local.yaml")["services"]["document"]["document_adapter"]
     assert document["adapter"] == "postgresql"
     assert document["config"]["dsn"].endswith("@postgres:5432/{{ secret.POSTGRES_DB }}")
+
+
+# =============================================================================
+# NATS mode (the default) and the classic project (--without-nats).
+# =============================================================================
+
+# Where each config's engine finds the broker, logged in as the user `abi`.
+_NATS_HOSTS = {
+    "config.yaml": "@127.0.0.1:4222",  # abi dev up overlays its own port
+    "config.local.yaml": "@nats:4222",  # the Compose service
+}
+
+
+@pytest.mark.parametrize("filename", _ALL_CONFIGS)
+def test_nats_configs_pass_the_engine_validation(filename: str) -> None:
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        NATSConfiguration,
+    )
+
+    nats = NATSConfiguration.model_validate(_render(filename)["nats"])
+
+    # Exactly one engine hosts discovery: the project's, under its own name.
+    assert nats.discovery is not None
+    assert nats.discovery.project == "demo"
+    # Outlives an engine restart, so remote modules renew instead of dropping out.
+    assert nats.discovery.lease_seconds == 180
+    assert nats.jwt_secret == "{{ secret.NATS_JWT_SECRET }}"
+
+
+@pytest.mark.parametrize("filename", sorted(_NATS_HOSTS))
+def test_nats_engines_log_in_as_the_abi_user(filename: str) -> None:
+    nats = _render(filename)["nats"]
+
+    assert nats["nats_url"] == (
+        "nats://abi:{{ secret.NATS_ABI_PASSWORD }}" + _NATS_HOSTS[filename]
+    )
+    assert nats["monitoring_url"].endswith(":8222")
+
+
+def test_the_remote_config_reads_the_broker_url_from_a_secret() -> None:
+    assert _render("config.remote.yaml")["nats"]["nats_url"] == "{{ secret.NATS_URL }}"
+
+
+@pytest.mark.parametrize("filename", _ALL_CONFIGS)
+def test_nats_configs_leave_the_bus_to_jetstream(filename: str) -> None:
+    """In NATS mode the engine refuses any bus adapter but nats_jetstream."""
+    services = _render(filename)["services"]
+
+    assert "bus" not in services
+    # Cache tiers must not mix local and nats_rpc; the templates declare none.
+    assert "cache" not in services
+
+
+@pytest.mark.parametrize("filename", _ALL_CONFIGS)
+def test_classic_configs_keep_their_bus_and_no_nats(filename: str) -> None:
+    doc = _render(filename, nats=False)
+
+    assert "nats" not in doc
+    assert doc["services"]["bus"]["bus_adapter"]["adapter"] in {
+        "python_queue",
+        "rabbitmq",
+    }

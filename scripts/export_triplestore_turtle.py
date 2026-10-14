@@ -2,7 +2,6 @@ from dotenv import load_dotenv
 from naas_abi_core import logger
 from naas_abi_core.utils.StorageUtils import StorageUtils
 from rdflib import Graph, URIRef
-from rdflib.query import ResultRow
 
 load_dotenv()
 
@@ -31,12 +30,10 @@ if __name__ == "__main__":
     }
     """
 
-    # Execute query and add results to export graph
-    results = triple_store_service.query(sparql_query)
-    for row in results:
-        assert isinstance(row, ResultRow)
-        s, p, o = row["s"], row["p"], row["o"]
-        export_graph.add((URIRef(s), URIRef(p), o))
+    # Read the result as a stream: no RPC size cap, no result next to the graph.
+    with triple_store_service.query_stream(sparql_query) as result:
+        for row in result.rows:
+            export_graph.add((URIRef(row["s"]), URIRef(row["p"]), row["o"]))
 
     # Save exported graph
     dir_path = "triplestore/export/turtle"

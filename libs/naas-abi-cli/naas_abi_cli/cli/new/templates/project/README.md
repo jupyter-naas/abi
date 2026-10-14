@@ -9,7 +9,10 @@ nothing to install locally.
 
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) — Python package manager
 - An [OpenRouter API key](https://openrouter.ai/keys)
-
+{% if nats %}- [`nats-server`](https://docs.nats.io/running-a-nats-service/introduction/installation)
+  on `PATH`, for `abi dev up` (`brew install nats-server`, or a release binary).
+  The Docker stack (`abi start`) runs its own.
+{% endif %}
 Put the key in `.env`:
 
 ```bash
@@ -29,7 +32,68 @@ The command prints the URLs it serves. To chat from the terminal instead:
 ```bash
 uv run abi chat
 ```
+{% if nats %}
+## How it runs: NATS
 
+This project runs on [NATS](https://nats.io). The engine (the API process)
+serves every kernel service (object storage, documents, KV, triple store,
+vector store, events, model registry) over the broker, the bus is JetStream,
+and module jobs are JetStream schedules. Modules can run in their own process
+and reach the engine only through NATS: they register in the engine's module
+registry (discovery), and their agents show up in Nexus next to the engine's.
+
+- `abi dev up` starts a native `nats-server` next to the engine, then the
+  modules listed under `dev.modules` in `config.yaml`.
+- `abi start` (Docker) runs the `nats` service; the modules you add run in
+  their own containers, declared in `docker-compose.override.yml`.
+- The broker only admits clients with a password: the engine logs in as `abi`
+  (`NATS_ABI_PASSWORD`), modules as `module` (`NATS_MODULE_PASSWORD`). Calls
+  carry tokens signed with `NATS_JWT_SECRET`. All three were generated in
+  `.env`; every process of the project must use the same values.
+
+`abi dev up --without-nats` runs the engine in-process instead, without a
+broker or the modules.
+
+### Check that it works
+
+With `abi start` the broker's monitoring port is `localhost:8222`. With
+`abi dev up` it is printed at start (`NATS mode (... monitoring http://...)`).
+
+```bash
+curl -s localhost:8222/healthz     # {"status":"ok"}
+curl -s localhost:8222/connz | python3 -m json.tool | grep '"name"'
+                                   # the engine's connections, then each module's
+```
+
+A module that registered logs `READY`. The [NATS CLI](https://github.com/nats-io/natscli)
+lists the registry and the kernel services:
+
+```bash
+export $(grep ^NATS_ABI_PASSWORD= .env)
+nats --server "nats://abi:$NATS_ABI_PASSWORD@localhost:4222" kv ls
+nats --server "nats://abi:$NATS_ABI_PASSWORD@localhost:4222" micro list
+```
+
+### Add a module that runs on its own
+
+```bash
+uv run abi new module research
+```
+
+This creates `src/research/`: a module built on `naas-abi-sdk` that never
+imports the engine. It has an agent (on the engine's default chat model, with
+its memory in the Document Service) and an hourly job. The command also
+
+- adds it to `dev.modules` in `config.yaml`, so `abi dev up` runs it
+  (`abi dev logs research` to follow it);
+- adds a `research` service to `docker-compose.override.yml`, so `abi start`
+  builds and runs it in its own container.
+
+It is not listed under `modules:`: the engine does not load it, the module
+registers itself. Its `Research` agent appears in Nexus once it is `READY`.
+`abi new module <name> --in-engine` creates a classic module the engine loads
+instead; add that one under `modules:`.
+{% endif %}
 ## What's configured
 
 `config.yaml` is the dev configuration. Out of the box:
@@ -50,7 +114,10 @@ working; both bill through the same OpenRouter key.
 
 `config.local.yaml` (docker-compose) and `config.remote.yaml` (remote
 deployment) use the same two defaults.
-
+{% if nats %}
+All three configs have a `nats:` block. `config.remote.yaml` reads the broker
+URL from `NATS_URL` in `.env.remote`.
+{% endif %}
 ### Swapping the chat model
 
 Edit `services.model_registry` in `config.yaml`. Anything the enabled provider
@@ -210,8 +277,8 @@ export ABI_OLLAMA_BASE_URL=http://$(ip route show default | awk '{print $3}'):11
 config.yaml          dev configuration (models, modules, services)
 config.local.yaml    docker-compose deployment
 config.remote.yaml   remote deployment
-src/                 your module — agents, integrations, pipelines, workflows
-storage/             local state (triple store, vector store, bus, KV)
+src/                 your modules — agents, integrations, pipelines, workflows
+storage/             local state (triple store, vector store, bus, KV{% if nats %}, NATS{% endif %})
 ```
 
 ## Useful commands
@@ -223,4 +290,6 @@ uv run abi config validate   # check config.yaml resolves
 uv run abi chat              # chat in the terminal
 uv run abi new agent         # scaffold an agent
 uv run abi new integration   # scaffold an integration
-```
+{% if nats %}uv run abi new module        # a module that runs in its own process (NATS)
+uv run abi dev logs <module> # follow a dev module's log
+{% endif %}```

@@ -15,6 +15,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     MergeBlockedError,
     MergeConflictError,
     ProposalNotFoundError,
+    RepoNotFoundError,
 )
 from naas_abi_core.services.source_control.tests.source_control__secondary_adapter__generic_test import (
     GenericSourceControlSecondaryAdapterTest,
@@ -604,3 +605,20 @@ def test_upsert_files_routes_a_single_delete_through_change_files() -> None:
     assert not [c for c in session.calls if c["method"] == "PUT"]
     body = next(c for c in session.calls if c["method"] == "POST")["json"]
     assert body["files"][0]["operation"] == "delete"
+
+
+def test_delete_repo_deletes_the_repository() -> None:
+    session = FakeSession([("DELETE", "/repos/alice/proj", FakeResponse(204))])
+
+    _adapter(session).delete_repo(repo_id="alice/proj")
+
+    assert session.find("DELETE", "/api/v1/repos/alice/proj") is not None
+
+
+def test_delete_repo_of_a_missing_repo_raises_repo_not_found() -> None:
+    session = FakeSession(
+        [("DELETE", "/repos/alice/gone", FakeResponse(404, {"message": "not found"}))]
+    )
+
+    with pytest.raises(RepoNotFoundError):
+        _adapter(session).delete_repo(repo_id="alice/gone")

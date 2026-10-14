@@ -318,6 +318,35 @@ def _scan_apps_html_paths() -> dict[str, str]:
     return html_map
 
 
+def _remote_app_info(app: Any) -> AppInfo:
+    return AppInfo(
+        module_path=app.module_path,
+        module_name=app.module_id,
+        app_name=app.name,
+        app_id=app.app_id,
+        category=app.category or "module",
+        name=app.title or _fallback_name(app.name),
+        description=app.description,
+        url=app.url,
+        icon_emoji=app.icon_emoji or None,
+    )
+
+
+async def _remote_apps_catalog() -> tuple[AppInfo, ...]:
+    """Apps of READY remote modules (NATS discovery); none when it is off or
+    unreachable, so the loaded modules' apps are always listed."""
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.factory import (
+        get_remote_app_directory,
+    )
+
+    try:
+        apps = await get_remote_app_directory().list_apps()
+    except Exception:  # noqa: BLE001 - discovery down: list the local apps
+        _log.warning("Could not list remote module apps", exc_info=True)
+        return ()
+    return tuple(_remote_app_info(app) for app in apps)
+
+
 def apps_catalog() -> tuple[AppInfo, ...]:
     """The process-cached module catalog. The Apps agent tools read it too."""
     return _scan_apps_catalog()
@@ -469,7 +498,7 @@ async def list_apps(
     current_user: User = Depends(get_current_user_required),
     apps_service: AppsService = Depends(get_apps_service),
 ) -> AppsResponse:
-    """Return every app discovered from loaded-module manifests.
+    """Return every app of the loaded modules and of READY remote modules.
 
     When ``workspace_id`` is provided, results carry the workspace's enable
     state. Apps without a stored record default to ``enabled=False``.
@@ -484,7 +513,7 @@ async def list_apps(
     except Exception:
         loaded_modules = {}
 
-    catalog = _scan_apps_catalog()
+    catalog = (*_scan_apps_catalog(), *await _remote_apps_catalog())
     workspace_slug: str | None = None
     if workspace_id:
         workspace_slug = await _workspace_slug(workspace_id)

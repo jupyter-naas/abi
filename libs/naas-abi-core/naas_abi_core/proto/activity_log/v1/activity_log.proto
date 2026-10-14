@@ -1,0 +1,2 @@
+syntax = "proto3";
+import public "naas_abi_proto/activity_log/v1/activity_log.proto";

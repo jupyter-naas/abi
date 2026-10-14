@@ -13,7 +13,11 @@ import sqlite3
 import threading
 
 from naas_abi_core.services.event.EventFilter import build_where
-from naas_abi_core.services.event.EventPort import IEventAdapter, StoredEvent
+from naas_abi_core.services.event.EventPort import (
+    EventTypeSummary,
+    IEventAdapter,
+    StoredEvent,
+)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
@@ -166,6 +170,30 @@ class EventSQLiteAdapter(IEventAdapter):
         with self._lock:
             row = self._conn.execute(sql, params).fetchone()
         return int(row[0]) if row else 0
+
+    def list_event_types(self) -> list[EventTypeSummary]:
+        # Served by idx_events_type_seq: one index range per type.
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT event_type, COUNT(*), MAX(seq) FROM events "
+                "GROUP BY event_type ORDER BY event_type"
+            ).fetchall()
+            last = {
+                r[0]: r[1]
+                for r in self._conn.execute(
+                    "SELECT seq, timestamp FROM events WHERE seq IN "
+                    "(SELECT MAX(seq) FROM events GROUP BY event_type)"
+                ).fetchall()
+            }
+        return [
+            EventTypeSummary(
+                event_type=r[0],
+                count=int(r[1]),
+                last_seq=int(r[2]),
+                last_timestamp=last.get(r[2], ""),
+            )
+            for r in rows
+        ]
 
     # ------------------------------------------------------------------
     # cursor / per-consumer

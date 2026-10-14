@@ -1,4 +1,6 @@
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import numpy as np
@@ -14,7 +16,16 @@ from naas_abi_core.services.vector_store.ontologies.modules.VectorStoreEventOnto
     VectorStoreError,
 )
 
-from .IVectorStorePort import IVectorStorePort, SearchResult, VectorDocument
+from .IVectorStorePort import (
+    CollectionInfo,
+    IVectorStorePort,
+    SearchResult,
+    VectorDocument,
+    VectorPage,
+)
+
+# Bound one call: a page travels as one NATS reply in NATS mode.
+MAX_PAGE_SIZE = 10_000
 
 logger = logging.getLogger(__name__)
 
@@ -247,6 +258,38 @@ class VectorStoreService(ServiceBase):
     def list_collections(self) -> list[str]:
         self.initialize()
         return self.adapter.list_collections()
+
+    def list_documents(
+        self,
+        collection_name: str,
+        *,
+        limit: int = 100,
+        cursor: str | None = None,
+        include_vectors: bool = False,
+    ) -> VectorPage:
+        """Page through a collection in a stable order; pass ``next_cursor`` back."""
+        self.initialize()
+        if not 0 < limit <= MAX_PAGE_SIZE:
+            raise ValueError(f"limit must be between 1 and {MAX_PAGE_SIZE}")
+        return self.adapter.list_vectors(
+            collection_name, limit=limit, cursor=cursor, include_vectors=include_vectors
+        )
+
+    @contextmanager
+    def list_documents_stream(
+        self, collection_name: str, *, include_vectors: bool = False
+    ) -> Iterator[Iterator[VectorDocument]]:
+        """Every document of a collection, read lazily inside the block, in
+        ``list_documents`` order; for exports and whole-collection scans."""
+        self.initialize()
+        with self.adapter.list_vectors_stream(
+            collection_name, include_vectors=include_vectors
+        ) as documents:
+            yield documents
+
+    def get_collection_info(self, collection_name: str) -> CollectionInfo:
+        self.initialize()
+        return self.adapter.get_collection_info(collection_name)
 
     def delete_collection(self, collection_name: str) -> None:
         self.initialize()

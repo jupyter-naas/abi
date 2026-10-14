@@ -1,0 +1,871 @@
+"""Unit tests for VectorStorePrimaryAdapterNATS's auth/dispatch/error-mapping.
+
+None of these need a real NATS server: each handler is invoked directly
+against a minimal fake ``Request`` that records whatever gets passed to
+``respond``, matching the "test the handler logic directly" option called
+out for this adapter (see the object_storage sibling test's docstring).
+
+The stub ``IVectorStorePort`` below is plain Python lists/dicts -- no real
+vector math -- since the point of these tests is round-tripping data through
+the wire encoding faithfully, not exercising similarity search.
+"""
+
+import asyncio
+from typing import Any
+
+import numpy as np
+from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
+from naas_abi_core.services.vector_store.adapters.primary.vector_store__primary_adapter__NATS import (
+    AUTH_HEADER,
+    VectorStorePrimaryAdapterNATS,
+)
+from naas_abi_core.services.vector_store.IVectorStorePort import (
+    CollectionInfo,
+    IVectorStorePort,
+    SearchResult,
+    VectorDocument,
+    VectorPage,
+)
+from naas_abi_proto.vector_store.values import decode_object, encode_object
+
+SECRET = "test-shared-secret"
+
+
+class _FakeRequest:
+    """Stands in for nats.micro.request.Request: same ``.data``/``.headers``
+    surface, and ``respond`` just records the payload instead of publishing
+    it anywhere."""
+
+    def __init__(
+        self,
+        data: bytes,
+        headers: dict[str, str] | None = None,
+        subject: str = "abi.svc.vector_store.v1.list_collections",
+    ) -> None:
+        self.data = data
+        self.headers = headers
+        self.subject = subject
+        self.responses: list[bytes] = []
+
+    async def respond(
+        self, data: bytes = b"", headers: dict[str, str] | None = None
+    ) -> None:
+        self.responses.append(data)
+
+
+class _StubAdapter(IVectorStorePort):
+    """Minimal in-memory IVectorStorePort for driving the handlers."""
+
+    def __init__(self) -> None:
+        self.initialized = False
+        self.closed = False
+        self.collections: dict[str, dict[str, Any]] = {}
+        self.vectors: dict[str, dict[str, VectorDocument]] = {}
+
+    def initialize(self) -> None:
+        self.initialized = True
+
+    def create_collection(
+        self,
+        collection_name: str,
+        dimension: int,
+        distance_metric: str = "cosine",
+        **kwargs,
+    ) -> None:
+        self.collections[collection_name] = {
+            "dimension": dimension,
+            "distance_metric": distance_metric,
+        }
+        self.vectors.setdefault(collection_name, {})
+
+    def delete_collection(self, collection_name: str) -> None:
+        self.collections.pop(collection_name, None)
+        self.vectors.pop(collection_name, None)
+
+    def list_collections(self) -> list[str]:
+        return list(self.collections.keys())
+
+    def store_vectors(
+        self, collection_name: str, documents: list[VectorDocument]
+    ) -> None:
+        coll = self.vectors.setdefault(collection_name, {})
+        for doc in documents:
+            coll[doc.id] = doc
+
+    def search(
+        self,
+        collection_name: str,
+        query_vector: np.ndarray,
+        k: int = 10,
+        filter: dict[str, Any] | None = None,
+        include_vectors: bool = False,
+        include_metadata: bool = True,
+    ) -> list[SearchResult]:
+        results = []
+        for doc in self.vectors.get(collection_name, {}).values():
+            if filter and any(
+                doc.metadata.get(key) != value for key, value in filter.items()
+            ):
+                continue
+            results.append(
+                SearchResult(
+                    id=doc.id,
+                    score=1.0,
+                    vector=doc.vector if include_vectors else None,
+                    metadata=doc.metadata if include_metadata else None,
+                    payload=doc.payload,
+                )
+            )
+            if len(results) >= k:
+                break
+        return results
+
+    def get_vector(
+        self, collection_name: str, vector_id: str, include_vector: bool = True
+    ) -> VectorDocument | None:
+        doc = self.vectors.get(collection_name, {}).get(vector_id)
+        if doc is None:
+            return None
+        if include_vector:
+            return doc
+        return VectorDocument(
+            id=doc.id, vector=np.array([]), metadata=doc.metadata, payload=doc.payload
+        )
+
+    def update_vector(
+        self,
+        collection_name: str,
+        vector_id: str,
+        vector: np.ndarray | None = None,
+        metadata: dict[str, Any] | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        existing = self.vectors[collection_name][vector_id]
+        self.vectors[collection_name][vector_id] = VectorDocument(
+            id=vector_id,
+            vector=vector if vector is not None else existing.vector,
+            metadata=metadata if metadata is not None else existing.metadata,
+            payload=payload if payload is not None else existing.payload,
+        )
+
+    def delete_vectors(self, collection_name: str, vector_ids: list[str]) -> None:
+        coll = self.vectors.get(collection_name, {})
+        for vector_id in vector_ids:
+            coll.pop(vector_id, None)
+
+    def count_vectors(self, collection_name: str) -> int:
+        return len(self.vectors.get(collection_name, {}))
+
+    def list_vectors(
+        self,
+        collection_name: str,
+        limit: int = 100,
+        cursor: str | None = None,
+        include_vectors: bool = False,
+    ) -> VectorPage:
+        documents = sorted(
+            self.vectors.get(collection_name, {}).values(), key=lambda d: d.id
+        )
+        if cursor is not None:
+            documents = [d for d in documents if d.id >= cursor]
+        page = [
+            VectorDocument(
+                id=d.id,
+                vector=d.vector if include_vectors else np.array([]),
+                metadata=d.metadata,
+                payload=d.payload,
+            )
+            for d in documents[:limit]
+        ]
+        next_cursor = documents[limit].id if len(documents) > limit else None
+        return VectorPage(documents=page, next_cursor=next_cursor)
+
+    def get_collection_info(self, collection_name: str) -> CollectionInfo:
+        return CollectionInfo(
+            name=collection_name,
+            dimension=self.collections.get(collection_name, {}).get("dimension"),
+            distance_metric=self.collections.get(collection_name, {}).get(
+                "distance_metric"
+            ),
+            size=len(self.vectors.get(collection_name, {})),
+        )
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _valid_token() -> str:
+    return issue_service_token("api", SECRET)
+
+
+def _list_collections_request() -> bytes:
+    return vector_store_pb2.ListCollectionsRequest().SerializeToString()
+
+
+# ---------------------------------------------------------------------------
+# Auth.
+# ---------------------------------------------------------------------------
+
+
+def test_missing_token_returns_unauthenticated():
+    adapter = VectorStorePrimaryAdapterNATS(_StubAdapter(), SECRET)
+    request = _FakeRequest(data=_list_collections_request(), headers=None)
+
+    asyncio.run(adapter._handle_list_collections(request))
+
+    response = vector_store_pb2.ListCollectionsResponse()
+    response.ParseFromString(request.responses[0])
+    assert response.HasField("error")
+    assert response.error.code == "UNAUTHENTICATED"
+    assert response.error.retryable is False
+
+
+def test_empty_token_header_returns_unauthenticated():
+    adapter = VectorStorePrimaryAdapterNATS(_StubAdapter(), SECRET)
+    request = _FakeRequest(data=_list_collections_request(), headers={AUTH_HEADER: ""})
+
+    asyncio.run(adapter._handle_list_collections(request))
+
+    response = vector_store_pb2.ListCollectionsResponse()
+    response.ParseFromString(request.responses[0])
+    assert response.error.code == "UNAUTHENTICATED"
+
+
+def test_malformed_token_returns_unauthenticated():
+    adapter = VectorStorePrimaryAdapterNATS(_StubAdapter(), SECRET)
+    request = _FakeRequest(
+        data=_list_collections_request(), headers={AUTH_HEADER: "not-a-jwt"}
+    )
+
+    asyncio.run(adapter._handle_list_collections(request))
+
+    response = vector_store_pb2.ListCollectionsResponse()
+    response.ParseFromString(request.responses[0])
+    assert response.error.code == "UNAUTHENTICATED"
+
+
+def test_token_signed_with_wrong_secret_returns_unauthenticated():
+    adapter = VectorStorePrimaryAdapterNATS(_StubAdapter(), SECRET)
+    wrong_secret_token = issue_service_token("api", "a-different-secret")
+    request = _FakeRequest(
+        data=_list_collections_request(), headers={AUTH_HEADER: wrong_secret_token}
+    )
+
+    asyncio.run(adapter._handle_list_collections(request))
+
+    response = vector_store_pb2.ListCollectionsResponse()
+    response.ParseFromString(request.responses[0])
+    assert response.error.code == "UNAUTHENTICATED"
+
+
+# ---------------------------------------------------------------------------
+# Happy path -- one per IVectorStorePort method.
+# ---------------------------------------------------------------------------
+
+
+def test_successful_initialize_returns_no_error():
+    stub = _StubAdapter()
+    adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=vector_store_pb2.InitializeRequest().SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.initialize",
+    )
+
+    asyncio.run(adapter._handle_initialize(request))
+
+    response = vector_store_pb2.InitializeResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert stub.initialized is True
+
+
+def test_successful_create_collection_returns_no_error():
+    stub = _StubAdapter()
+    adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=vector_store_pb2.CreateCollectionRequest(
+            collection_name="docs", dimension=4, distance_metric="cosine"
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.create_collection",
+    )
+
+    asyncio.run(adapter._handle_create_collection(request))
+
+    response = vector_store_pb2.CreateCollectionResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert stub.collections["docs"] == {"dimension": 4, "distance_metric": "cosine"}
+
+
+def test_successful_delete_collection_returns_no_error():
+    stub = _StubAdapter()
+    stub.create_collection("docs", 4)
+    adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=vector_store_pb2.DeleteCollectionRequest(
+            collection_name="docs"
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.delete_collection",
+    )
+
+    asyncio.run(adapter._handle_delete_collection(request))
+
+    response = vector_store_pb2.DeleteCollectionResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert "docs" not in stub.collections
+
+
+def test_list_collections_round_trips_names():
+    stub = _StubAdapter()
+    stub.create_collection("docs", 4)
+    stub.create_collection("images", 8)
+    adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=_list_collections_request(),
+        headers={AUTH_HEADER: _valid_token()},
+    )
+
+    asyncio.run(adapter._handle_list_collections(request))
+
+    response = vector_store_pb2.ListCollectionsResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert sorted(response.collections.names) == ["docs", "images"]
+
+
+def test_store_vectors_round_trips_documents():
+    stub = _StubAdapter()
+    stub.create_collection("docs", 3)
+    adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
+    document = vector_store_pb2.VectorDocument(
+        id="doc-1",
+        vector=vector_store_pb2.VectorData(values=[0.1, 0.2, 0.3]),
+        metadata=encode_object({"category": "a"}),
+        payload=encode_object({"raw": "x"}),
+    )
+    request = _FakeRequest(
+        data=vector_store_pb2.StoreVectorsRequest(
+            collection_name="docs", documents=[document]
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.store_vectors",
+    )
+
+    asyncio.run(adapter._handle_store_vectors(request))
+
+    response = vector_store_pb2.StoreVectorsResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    stored = stub.vectors["docs"]["doc-1"]
+    assert stored.id == "doc-1"
+    np.testing.assert_array_almost_equal(stored.vector, [0.1, 0.2, 0.3], decimal=5)
+    assert stored.metadata == {"category": "a"}
+    assert stored.payload == {"raw": "x"}
+
+
+def test_search_round_trips_results():
+    stub = _StubAdapter()
+    stub.create_collection("docs", 2)
+    stub.store_vectors(
+        "docs",
+        [
+            VectorDocument(
+                id="doc-1",
+                vector=np.array([1.0, 0.0], dtype=np.float32),
+                metadata={"category": "a"},
+                payload={"raw": "x"},
+            )
+        ],
+    )
+    adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=vector_store_pb2.SearchRequest(
+            collection_name="docs",
+            query_vector=[1.0, 0.0],
+            k=5,
+            include_vectors=True,
+            include_metadata=True,
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.search",
+    )
+
+    asyncio.run(adapter._handle_search(request))
+
+    response = vector_store_pb2.SearchResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert len(response.results.results) == 1
+    result = response.results.results[0]
+    assert result.id == "doc-1"
+    assert result.HasField("vector")
+    np.testing.assert_array_almost_equal(result.vector.values, [1.0, 0.0], decimal=5)
+    assert decode_object(result.metadata) == {"category": "a"}
+
+
+def test_search_with_filter_is_forwarded_to_adapter():
+    stub = _StubAdapter()
+    stub.create_collection("docs", 2)
+    stub.store_vectors(
+        "docs",
+        [
+            VectorDocument(
+                id="doc-1",
+                vector=np.array([1.0, 0.0], dtype=np.float32),
+                metadata={"category": "a"},
+            ),
+            VectorDocument(
+                id="doc-2",
+                vector=np.array([0.0, 1.0], dtype=np.float32),
+                metadata={"category": "b"},
+            ),
+        ],
+    )
+    adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=vector_store_pb2.SearchRequest(
+            collection_name="docs",
+            query_vector=[1.0, 0.0],
+            k=5,
+            filter=encode_object({"category": "b"}),
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.search",
+    )
+
+    asyncio.run(adapter._handle_search(request))
+
+    response = vector_store_pb2.SearchResponse()
+    response.ParseFromString(request.responses[0])
+    assert [r.id for r in response.results.results] == ["doc-2"]
+
+
+def test_get_vector_found_round_trips_document():
+    stub = _StubAdapter()
+    stub.create_collection("docs", 2)
+    stub.store_vectors(
+        "docs",
+        [
+            VectorDocument(
+                id="doc-1",
+                vector=np.array([1.0, 2.0], dtype=np.float32),
+                metadata={"category": "a"},
+                payload={"raw": "x"},
+            )
+        ],
+    )
+    adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=vector_store_pb2.GetVectorRequest(
+            collection_name="docs", vector_id="doc-1", include_vector=True
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.get_vector",
+    )
+
+    asyncio.run(adapter._handle_get_vector(request))
+
+    response = vector_store_pb2.GetVectorResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert response.found.HasField("document")
+    document = response.found.document
+    assert document.id == "doc-1"
+    np.testing.assert_array_almost_equal(document.vector.values, [1.0, 2.0], decimal=5)
+    assert decode_object(document.payload) == {"raw": "x"}
+
+
+def test_get_vector_missing_returns_found_with_no_document():
+    stub = _StubAdapter()
+    stub.create_collection("docs", 2)
+    adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=vector_store_pb2.GetVectorRequest(
+            collection_name="docs", vector_id="missing"
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.get_vector",
+    )
+
+    asyncio.run(adapter._handle_get_vector(request))
+
+    response = vector_store_pb2.GetVectorResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert response.HasField("found")
+    assert not response.found.HasField("document")
+
+
+def test_successful_update_vector_returns_no_error():
+    stub = _StubAdapter()
+    stub.create_collection("docs", 2)
+    stub.store_vectors(
+        "docs",
+        [
+            VectorDocument(
+                id="doc-1",
+                vector=np.array([1.0, 2.0], dtype=np.float32),
+                metadata={"category": "a"},
+            )
+        ],
+    )
+    adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=vector_store_pb2.UpdateVectorRequest(
+            collection_name="docs",
+            vector_id="doc-1",
+            metadata=encode_object({"category": "updated"}),
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.update_vector",
+    )
+
+    asyncio.run(adapter._handle_update_vector(request))
+
+    response = vector_store_pb2.UpdateVectorResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    updated = stub.vectors["docs"]["doc-1"]
+    assert updated.metadata == {"category": "updated"}
+    np.testing.assert_array_almost_equal(updated.vector, [1.0, 2.0], decimal=5)
+
+
+def test_successful_delete_vectors_returns_no_error():
+    stub = _StubAdapter()
+    stub.create_collection("docs", 2)
+    stub.store_vectors(
+        "docs",
+        [
+            VectorDocument(
+                id="doc-1", vector=np.array([1.0, 2.0], dtype=np.float32), metadata={}
+            ),
+            VectorDocument(
+                id="doc-2", vector=np.array([3.0, 4.0], dtype=np.float32), metadata={}
+            ),
+        ],
+    )
+    adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=vector_store_pb2.DeleteVectorsRequest(
+            collection_name="docs", vector_ids=["doc-1"]
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.delete_vectors",
+    )
+
+    asyncio.run(adapter._handle_delete_vectors(request))
+
+    response = vector_store_pb2.DeleteVectorsResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert list(stub.vectors["docs"].keys()) == ["doc-2"]
+
+
+def test_count_vectors_round_trips_count():
+    stub = _StubAdapter()
+    stub.create_collection("docs", 2)
+    stub.store_vectors(
+        "docs",
+        [
+            VectorDocument(
+                id="doc-1", vector=np.array([1.0, 2.0], dtype=np.float32), metadata={}
+            ),
+            VectorDocument(
+                id="doc-2", vector=np.array([3.0, 4.0], dtype=np.float32), metadata={}
+            ),
+        ],
+    )
+    adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=vector_store_pb2.CountVectorsRequest(
+            collection_name="docs"
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.count_vectors",
+    )
+
+    asyncio.run(adapter._handle_count_vectors(request))
+
+    response = vector_store_pb2.CountVectorsResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert response.count == 2
+
+
+def test_successful_close_returns_no_error():
+    stub = _StubAdapter()
+    adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=vector_store_pb2.CloseRequest().SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.close",
+    )
+
+    asyncio.run(adapter._handle_close(request))
+
+    response = vector_store_pb2.CloseResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert stub.closed is True
+
+
+# ---------------------------------------------------------------------------
+# Generic exception mapping -- IVectorStorePort declares no typed exceptions,
+# so every adapter failure maps to INTERNAL (see the module docstring).
+# ---------------------------------------------------------------------------
+
+
+def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():
+    class _BoomAdapter(_StubAdapter):
+        def list_collections(self) -> list[str]:
+            raise RuntimeError("some sensitive internal detail")
+
+    adapter = VectorStorePrimaryAdapterNATS(_BoomAdapter(), SECRET)
+    request = _FakeRequest(
+        data=_list_collections_request(), headers={AUTH_HEADER: _valid_token()}
+    )
+
+    asyncio.run(adapter._handle_list_collections(request))
+
+    response = vector_store_pb2.ListCollectionsResponse()
+    response.ParseFromString(request.responses[0])
+    assert response.error.code == "INTERNAL"
+    assert response.error.retryable is True
+    assert "sensitive internal detail" not in response.error.message
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle no-ops.
+# ---------------------------------------------------------------------------
+
+
+def test_stop_without_start_is_a_noop():
+    adapter = VectorStorePrimaryAdapterNATS(_StubAdapter(), SECRET)
+    asyncio.run(adapter.stop())  # must not raise
+
+
+def test_owner_emits_audit_for_remote_vector_mutations():
+    from unittest.mock import Mock
+
+    from naas_abi_core.services.vector_store.ontologies.modules.VectorStoreEventOntology import (
+        CollectionDeleted,
+        CollectionEnsured,
+        DocumentsDeleted,
+    )
+
+    events = []
+    primary = VectorStorePrimaryAdapterNATS(
+        Mock(), SECRET, event_publisher=events.append
+    )
+    primary._call_create_collection(
+        vector_store_pb2.CreateCollectionRequest(collection_name="test", dimension=3)
+    )
+    primary._call_delete_vectors(
+        vector_store_pb2.DeleteVectorsRequest(
+            collection_name="test", vector_ids=["one"]
+        )
+    )
+    primary._call_delete_collection(
+        vector_store_pb2.DeleteCollectionRequest(collection_name="test")
+    )
+    assert [type(e) for e in events] == [
+        CollectionEnsured,
+        DocumentsDeleted,
+        CollectionDeleted,
+    ]
+    assert events[1].document_count == 1
+
+
+# ---------------------------------------------------------------------------
+# list_vectors / get_collection_info (admin browsing).
+# ---------------------------------------------------------------------------
+
+
+def _seeded_stub() -> _StubAdapter:
+    stub = _StubAdapter()
+    stub.create_collection("docs", 2, "euclidean")
+    stub.store_vectors(
+        "docs",
+        [
+            VectorDocument(
+                id=f"doc-{i}",
+                vector=np.array([float(i), 1.0], dtype=np.float32),
+                metadata={"i": i},
+                payload={"text": f"t{i}"} if i else None,
+            )
+            for i in range(3)
+        ],
+    )
+    return stub
+
+
+def _list_vectors(adapter, **fields) -> vector_store_pb2.ListVectorsResponse:
+    request = _FakeRequest(
+        data=vector_store_pb2.ListVectorsRequest(**fields).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.list_vectors",
+    )
+    asyncio.run(adapter._handle_list_vectors(request))
+    response = vector_store_pb2.ListVectorsResponse()
+    response.ParseFromString(request.responses[0])
+    return response
+
+
+def test_list_vectors_round_trips_pages_and_cursor():
+    adapter = VectorStorePrimaryAdapterNATS(_seeded_stub(), SECRET)
+
+    first = _list_vectors(adapter, collection_name="docs", limit=2)
+    second = _list_vectors(
+        adapter, collection_name="docs", limit=2, cursor=first.page.next_cursor
+    )
+
+    assert [d.id for d in first.page.documents] == ["doc-0", "doc-1"]
+    assert first.page.next_cursor == "doc-2"
+    assert [d.id for d in second.page.documents] == ["doc-2"]
+    assert not second.page.HasField("next_cursor")
+    doc = first.page.documents[1]
+    assert decode_object(doc.metadata) == {"i": 1}  # an int, not 1.0
+    assert decode_object(doc.payload) == {"text": "t1"}
+    assert not first.page.documents[0].HasField("payload")
+
+
+def test_list_vectors_sends_vectors_only_on_request():
+    adapter = VectorStorePrimaryAdapterNATS(_seeded_stub(), SECRET)
+
+    light = _list_vectors(adapter, collection_name="docs", limit=1)
+    full = _list_vectors(adapter, collection_name="docs", limit=1, include_vectors=True)
+
+    assert list(light.page.documents[0].vector.values) == []
+    assert list(full.page.documents[0].vector.values) == [0.0, 1.0]
+
+
+def test_get_collection_info_round_trips():
+    adapter = VectorStorePrimaryAdapterNATS(_seeded_stub(), SECRET)
+    request = _FakeRequest(
+        data=vector_store_pb2.GetCollectionInfoRequest(
+            collection_name="docs"
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.get_collection_info",
+    )
+
+    asyncio.run(adapter._handle_get_collection_info(request))
+
+    response = vector_store_pb2.GetCollectionInfoResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert (response.info.name, response.info.dimension) == ("docs", 2)
+    assert (response.info.distance_metric, response.info.size) == ("euclidean", 3)
+
+
+def test_get_collection_info_leaves_unknown_fields_unset():
+    stub = _seeded_stub()
+    stub.collections["docs"] = {}
+    adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=vector_store_pb2.GetCollectionInfoRequest(
+            collection_name="docs"
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.get_collection_info",
+    )
+
+    asyncio.run(adapter._handle_get_collection_info(request))
+
+    response = vector_store_pb2.GetCollectionInfoResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.info.HasField("dimension")
+    assert not response.info.HasField("distance_metric")
+
+
+def test_new_endpoints_require_a_token():
+    adapter = VectorStorePrimaryAdapterNATS(_seeded_stub(), SECRET)
+    request = _FakeRequest(
+        data=vector_store_pb2.ListVectorsRequest(
+            collection_name="docs"
+        ).SerializeToString(),
+        headers={},
+        subject="abi.svc.vector_store.v1.list_vectors",
+    )
+
+    asyncio.run(adapter._handle_list_vectors(request))
+
+    response = vector_store_pb2.ListVectorsResponse()
+    response.ParseFromString(request.responses[0])
+    assert response.error.code == "UNAUTHENTICATED"
+
+
+# ---------------------------------------------------------------------------
+# Streamed listing: the transfer operation's frames.
+# ---------------------------------------------------------------------------
+
+
+def test_list_vectors_transfer_frames_carry_every_document_in_bounded_pages():
+    from naas_abi_core.services.vector_store.adapters.QdrantInMemoryAdapter import (
+        QdrantInMemoryAdapter,
+    )
+    from naas_abi_core.services.vector_store.adapters.vector_store_stream_codec import (
+        decode_frame,
+    )
+
+    store = QdrantInMemoryAdapter(storage_path=":memory:")
+    store.initialize()
+    store.create_collection("docs", 256)
+    store.store_vectors(
+        "docs",
+        [
+            VectorDocument(
+                id=f"d{i:04d}",
+                vector=np.full(256, i, dtype=np.float32),
+                metadata={"i": i},
+            )
+            for i in range(1_200)
+        ],
+    )
+    primary = VectorStorePrimaryAdapterNATS(store, SECRET)
+    metadata = vector_store_pb2.ListVectorsRequest(
+        collection_name="docs", include_vectors=True
+    ).SerializeToString()
+
+    async def frames():
+        return [
+            frame
+            async for frame in primary._transfer_frames("list_vectors", metadata, None)
+        ]
+
+    collected = asyncio.run(frames())
+
+    assert len(collected) > 1 and all(len(f) < 512 * 1024 for f in collected)
+    documents = [d for frame in collected for d in decode_frame(frame)]
+    assert len(documents) == 1_200 and len({d.id for d in documents}) == 1_200
+    assert all(len(d.vector.values) == 256 for d in documents)
+
+
+def test_the_owner_prepares_its_adapter_before_serving_a_call():
+    # An engine's adapter may need initialize() (SqliteVec does); remote
+    # callers must not depend on something in-process touching it first.
+    from naas_abi_core.services.vector_store.adapters.SqliteVecAdapter import (
+        SqliteVecAdapter,
+    )
+
+    store = SqliteVecAdapter(":memory:")
+    adapter = VectorStorePrimaryAdapterNATS(store, SECRET, prepare=store.initialize)
+    request = _FakeRequest(
+        data=vector_store_pb2.CreateCollectionRequest(
+            collection_name="docs", dimension=4, distance_metric="cosine"
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.vector_store.v1.create_collection",
+    )
+
+    asyncio.run(adapter._handle_create_collection(request))
+
+    response = vector_store_pb2.CreateCollectionResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert store.list_collections() == ["docs"]

@@ -29,11 +29,17 @@ class FilterError(ValueError):
     """Raised when a filter dict is malformed."""
 
 
-def _path_to_json_path(key: str) -> str:
+def path_parts(key: str) -> list[str]:
+    """The keys along a dotted filter path; raises ``FilterError`` if invalid."""
     if not _PATH_RE.match(key):
         raise FilterError(
             f"Invalid filter path {key!r}: must match {_PATH_RE.pattern}"
         )
+    return key.split(".")
+
+
+def _path_to_json_path(key: str) -> str:
+    path_parts(key)
     return "$." + key
 
 

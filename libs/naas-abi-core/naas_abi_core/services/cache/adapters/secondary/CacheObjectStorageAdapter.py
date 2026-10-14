@@ -1,12 +1,18 @@
 import hashlib
 import json
+import re
 from pathlib import PurePosixPath
 
 from naas_abi_core.services.cache.CachePort import (
     CachedData,
+    CacheKeyPage,
     CacheNotFoundError,
     ICacheAdapter,
+    check_page_limit,
+    paginate_keys,
 )
+
+_ENTRY_FILE = re.compile(r"[0-9a-f]{64}\.json")
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -79,3 +85,27 @@ class CacheObjectStorageAdapter(ICacheAdapter):
             return True
         except Exceptions.ObjectNotFound:
             return False
+
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> CacheKeyPage:
+        """Lists the entry objects and reads each one's key: O(entries)."""
+        check_page_limit(limit)
+        try:
+            # Trailing slash: S3-style listings then return the folder's children.
+            paths = self.object_storage.list_objects(f"{self.__entry_prefix()}/")
+        except Exceptions.ObjectNotFound:
+            paths = []
+        keys: list[str] = []
+        for path in paths:
+            name = path.rstrip("/").rsplit("/", 1)[-1]
+            if not _ENTRY_FILE.fullmatch(name):
+                continue
+            try:
+                payload = self.object_storage.get_object(self.__entry_prefix(), name)
+            except Exceptions.ObjectNotFound:
+                continue  # deleted while listing
+            key = json.loads(payload.decode("utf-8")).get("key")
+            if isinstance(key, str):
+                keys.append(key)
+        return paginate_keys(keys, prefix, limit, after)

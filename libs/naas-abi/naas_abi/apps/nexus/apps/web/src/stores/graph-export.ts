@@ -59,7 +59,9 @@ async function fetchExport(
   if (!response.ok) throw new Error(`Export failed (${response.status})`);
   const tripleCount = parseCountHeader(response.headers.get('X-Triple-Count'));
   const namedIndividualCount = parseCountHeader(response.headers.get('X-Named-Individual-Count'));
-  await response.blob();
+  // The counts come first, as headers; the download itself happens on click.
+  // Cancelling the streamed body stops the server's export too.
+  await response.body?.cancel();
   return { tripleCount, namedIndividualCount };
 }
 

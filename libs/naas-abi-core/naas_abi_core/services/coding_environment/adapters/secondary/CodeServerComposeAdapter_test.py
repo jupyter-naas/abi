@@ -54,3 +54,13 @@ def test_lifecycle_is_noop_but_reports_running() -> None:
     assert adapter.stop(workspace_id="w").phase == PHASE_RUNNING
     adapter.delete(workspace_id="w")  # no-op; returns None
     assert adapter.get_status(workspace_id="w").phase == PHASE_RUNNING
+
+
+def test_list_all_environments_is_the_shared_editor() -> None:
+    adapter = CodeServerComposeAdapter(url="https://code.example.com")
+
+    (environment,) = adapter.list_all_environments()
+
+    assert environment.id == CodeServerComposeAdapter.WORKSPACE_ID
+    assert environment.owner == ""
+    assert environment.template == "code-server"

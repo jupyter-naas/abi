@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -10,9 +12,13 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     Exceptions,
     ITripleStorePort,
     OntologyEvent,
+    QueryStream,
+    Triple,
 )
-from rdflib import BNode, Graph, URIRef
+from rdflib import BNode, Graph, Literal, URIRef
+from rdflib.namespace import XSD
 from rdflib.plugins.sparql.results.jsonresults import JSONResultParser
+from rdflib.term import Node
 
 
 class TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(ITripleStorePort):
@@ -151,6 +157,56 @@ class TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(ITripleStorePort):
 
         raise ValueError(f"Unsupported query result type: {type(result)}")
 
+    @contextmanager
+    def query_stream(self, query: str) -> Iterator[QueryStream]:
+        """Iterate pyoxigraph's lazy result (docs/adr/20261003_nats-streamed-results.md).
+
+        pyoxigraph results are bound to the thread that ran the query (another
+        thread touching them aborts the process): open and read a stream on
+        one thread.
+        """
+        from pyoxigraph import QueryBoolean, QuerySolutions, QueryTriples
+
+        with self._lock:
+            result = self._store.query(query)
+        if isinstance(result, QueryBoolean):
+            yield QueryStream("ASK", ask_answer=bool(result))
+        elif isinstance(result, QuerySolutions):
+            names = [variable.value for variable in result.variables]
+            yield QueryStream(
+                "SELECT",
+                vars=names,
+                rows=(
+                    {
+                        name: _term(solution[name])
+                        for name in names
+                        if solution[name] is not None
+                    }
+                    for solution in result
+                ),
+            )
+        elif isinstance(result, QueryTriples):
+            yield QueryStream(
+                "CONSTRUCT",
+                triples=(
+                    (_term(t.subject), _term(t.predicate), _term(t.object))
+                    for t in result
+                ),
+            )
+        else:  # an update: nothing to read
+            yield QueryStream("SELECT")
+
+    @contextmanager
+    def export(self, graph_name: URIRef | None = None) -> Iterator[Iterator[Triple]]:
+        """One named graph, or every graph as ``get()`` (a triple held in several
+        graphs is then read once per graph)."""
+        from pyoxigraph import NamedNode
+
+        graph = NamedNode(str(graph_name)) if graph_name is not None else None
+        with self._lock:
+            quads = self._store.quads_for_pattern(None, None, None, graph)
+        yield ((_term(q.subject), _term(q.predicate), _term(q.object)) for q in quads)
+
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
         return self.query(query)
 
@@ -185,3 +241,19 @@ class TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(ITripleStorePort):
     def list_graphs(self) -> list[URIRef]:
         with self._lock:
             return [URIRef(graph.value) for graph in self._store.named_graphs()]
+
+
+def _term(node: Any) -> Node:
+    """A pyoxigraph term as rdflib's (a plain string stays a plain Literal)."""
+    from pyoxigraph import BlankNode, NamedNode
+
+    if isinstance(node, NamedNode):
+        return URIRef(node.value)
+    if isinstance(node, BlankNode):
+        return BNode(node.value)
+    if node.language:
+        return Literal(node.value, lang=node.language)
+    datatype = node.datatype.value
+    if datatype == str(XSD.string):
+        return Literal(node.value)
+    return Literal(node.value, datatype=URIRef(datatype))

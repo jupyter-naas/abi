@@ -1,13 +1,17 @@
 #!/bin/sh
 # One-shot bootstrap for the coding-workspaces stack (compose `coding-init`).
-# Idempotent, safe to re-run on every `up`. It NEVER fails the container (always
-# exits 0) so abi/act-runner are not blocked by a transient hiccup; re-running
-# `up` retries. It:
+# Idempotent, safe to re-run on every `up`. By default it never fails the
+# container (always exits 0) so abi/act-runner are not blocked by a transient
+# hiccup; re-running `up` retries. With CODING_INIT_STRICT=1 (Dokploy) it exits
+# 1 when an admin token is still missing at the end, so the deploy fails
+# visibly instead of starting abi without it. It:
 #   1. mints a long-lived Coder admin token (create first user + API token),
 #   2. creates a Forgejo admin and mints an access token (Forgejo CLI as `git`),
 #   3. registers the Forgejo Actions runner with the shared 40-hex secret,
-# writing the two tokens into the host .env, which abi reads at startup (its
-# dotenv secret adapter reads the file, not compose-injected env).
+# writing the two tokens into a dotenv file abi reads at startup (its dotenv
+# secret adapter reads the file, not compose-injected env): the host .env for
+# `abi deploy local`, CODING_SECRETS_FILE on the coding_secrets volume for
+# `abi deploy dokploy`.
 
 log() { echo "[coding-init] $*"; }
 
@@ -16,7 +20,8 @@ if ! command -v curl >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
   apk add --no-cache curl jq >/dev/null 2>&1 || log "WARN: could not install curl/jq"
 fi
 
-ENV_FILE=/host/.env
+ENV_FILE="${CODING_SECRETS_FILE:-/host/.env}"
+mkdir -p "$(dirname "$ENV_FILE")" && touch "$ENV_FILE"
 CODER_URL="http://coder:7080"
 FORGEJO_URL="http://forgejo:3000"
 FORGEJO_ORG="${CODING_FORGEJO_ORG:-abi}"
@@ -24,10 +29,19 @@ FORGEJO_ORG="${CODING_FORGEJO_ORG:-abi}"
 # Resolve the Forgejo container by its compose-service label. -q avoids docker
 # --format go-templates, whose double braces would collide with the Jinja that
 # renders this file at `abi deploy local` time.
-FJ_CID="$(docker ps -q --filter label=com.docker.compose.service=forgejo | head -1)"
+# CODING_STACK_NETWORK narrows the lookup to this stack when several run on
+# one Docker host (Dokploy).
+NET_FILTER=""
+[ -n "${CODING_STACK_NETWORK:-}" ] && NET_FILTER="--filter network=$CODING_STACK_NETWORK"
+# shellcheck disable=SC2086
+FJ_CID="$(docker ps -q $NET_FILTER --filter label=com.docker.compose.service=forgejo | head -1)"
 fj() { docker exec -u git "$FJ_CID" "$@"; }
 
-# Set KEY=VALUE in the host .env; never clobber an existing non-empty value.
+# Token names carry the time: a name already taken (a token minted before the
+# secrets file was lost) would make the mint fail.
+TOKEN_SUFFIX="$(date -u +%Y%m%d%H%M%S)"
+
+# Set KEY=VALUE in ENV_FILE; never clobber an existing non-empty value.
 set_env() {
   _k="$1"; _v="$2"
   if grep -qE "^${_k}=" "$ENV_FILE" 2>/dev/null; then
@@ -37,7 +51,7 @@ set_env() {
   else
     printf '%s=%s\n' "$_k" "$_v" >> "$ENV_FILE"
   fi
-  log "$_k written to .env"
+  log "$_k written to $ENV_FILE"
 }
 
 env_has() { grep -qE "^$1=.+" "$ENV_FILE" 2>/dev/null; }
@@ -68,7 +82,7 @@ else
       # ~1y lifetime in nanoseconds (within CODER_MAX_ADMIN_TOKEN_LIFETIME=8760h).
       KEY="$(curl -fsS -X POST "$CODER_URL/api/v2/users/me/keys/tokens" \
         -H "Coder-Session-Token: $SESSION" -H 'Content-Type: application/json' \
-        -d '{"token_name":"nexus-admin","lifetime":31536000000000000}' \
+        -d "$(printf '{"token_name":"nexus-admin-%s","lifetime":31536000000000000}' "$TOKEN_SUFFIX")" \
         2>/dev/null | jq -r '.key // empty')"
       if [ -n "$KEY" ]; then set_env CODER_ADMIN_TOKEN "$KEY"; else log "WARN: Coder token mint failed"; fi
     else
@@ -92,9 +106,9 @@ else
     log "FORGEJO_ADMIN_TOKEN present : skipping token mint"
   else
     TOK="$(fj forgejo admin user generate-access-token -u "$FORGEJO_ADMIN_USERNAME" \
-           --raw --scopes all --token-name nexus 2>/dev/null | tr -d '\r' | tail -1)"
+           --raw --scopes all --token-name "nexus-$TOKEN_SUFFIX" 2>/dev/null | tr -d '\r' | tail -1)"
     case "$TOK" in
-      "" | *[!0-9a-f]*) log "WARN: Forgejo token mint skipped (exists or error)" ;;
+      "" | *[!0-9a-f]*) log "WARN: Forgejo token mint failed" ;;
       *) set_env FORGEJO_ADMIN_TOKEN "$TOK" ;;
     esac
   fi
@@ -135,7 +149,8 @@ else
 fi
 
 # ----------------------------------------------------------- Coder templates
-CODER_CID="$(docker ps -q --filter label=com.docker.compose.service=coder | head -1)"
+# shellcheck disable=SC2086
+CODER_CID="$(docker ps -q $NET_FILTER --filter label=com.docker.compose.service=coder | head -1)"
 TEMPLATE_DIR="/host/.abi/.deploy/docker/coder_prototype/template"
 CODER_TOK="$(grep -E '^CODER_ADMIN_TOKEN=.+' "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2-)"
 if [ -z "$CODER_CID" ] || [ -z "$CODER_TOK" ]; then
@@ -164,6 +179,16 @@ if [ -n "${TEMPLATE_DIR:-}" ] && [ -f "$TEMPLATE_DIR/main.tf" ] && [ -n "$CODER_
     else
       log "WARN: Coder template push failed"
     fi
+  fi
+fi
+
+if [ "${CODING_INIT_STRICT:-0}" = "1" ]; then
+  _missing=""
+  env_has CODER_ADMIN_TOKEN || _missing="$_missing CODER_ADMIN_TOKEN"
+  env_has FORGEJO_ADMIN_TOKEN || _missing="$_missing FORGEJO_ADMIN_TOKEN"
+  if [ -n "$_missing" ]; then
+    log "ERROR: not minted:$_missing (see the warnings above). Redeploy to retry."
+    exit 1
   fi
 fi
 
