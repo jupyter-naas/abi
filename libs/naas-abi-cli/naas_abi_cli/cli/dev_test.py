@@ -533,7 +533,12 @@ def test_the_dev_broker_has_a_user_for_the_engine_and_one_for_modules(
     for user, key in (("abi", "NATS_ABI_PASSWORD"), ("module", "NATS_MODULE_PASSWORD")):
         password = _env_value(tmp_path / ".env", key)
         assert len(password) >= 32
-        assert f'{{ user: "{user}", password: "{password}" }}' in config
+        assert f'{{ user: "{user}", password: "{password}"' in config
+    # Modules get the Docker stack's permissions, the engine every right.
+    module_line = next(line for line in config.splitlines() if '"module"' in line)
+    assert '"abi.svc.>"' in module_line and '"$KV.>"' in module_line
+    abi_line = next(line for line in config.splitlines() if 'user: "abi"' in line)
+    assert "permissions" not in abi_line
     assert config_path.stat().st_mode & 0o777 == 0o600
 
 
@@ -572,6 +577,22 @@ def test_the_dev_broker_refuses_a_client_without_a_password(tmp_path) -> None:
                 await connect(login)
         for login in ("abi:nats-abi-pw@", "module:nats-module-pw@"):
             await (await connect(login)).close()
+        # A module cannot listen on the engine's service subjects.
+        errors: list[str] = []
+
+        async def on_error(exc: Exception) -> None:
+            errors.append(str(exc).lower())
+
+        module = await nats.connect(
+            f"nats://module:nats-module-pw@127.0.0.1:{port}",
+            allow_reconnect=False,
+            error_cb=on_error,
+        )
+        await module.subscribe("abi.svc.document.v1.get")
+        await module.flush()
+        await asyncio.sleep(0.2)
+        await module.close()
+        assert any("permissions violation" in error for error in errors), errors
 
     try:
         deadline = time.monotonic() + 5
