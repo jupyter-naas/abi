@@ -153,3 +153,15 @@ def test_maybe_rerun_in_project_context_propagates_reexec_failure(
         bootstrap.maybe_rerun_in_project_context(["config", "validate"])
 
     assert error.value.code == 4
+
+
+def test_the_rerun_notice_goes_to_stderr_not_into_captured_output(capsys) -> None:
+    from pathlib import Path
+
+    from naas_abi_cli.cli import bootstrap
+
+    bootstrap._show_rerun_info(Path("/p"), "1.0", "1.0")
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "Re-running" in captured.err
