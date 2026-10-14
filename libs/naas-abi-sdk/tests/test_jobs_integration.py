@@ -14,6 +14,7 @@ import subprocess
 import time
 from datetime import datetime, timedelta, timezone
 
+import broker_users
 import pytest
 from nats.js.errors import NotFoundError
 
@@ -93,11 +94,13 @@ class Documents:
         ]
 
 
-@pytest.fixture
-def broker(tmp_path):
+@pytest.fixture(params=broker_users.KINDS)
+def broker(request, tmp_path):
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
+    config = tmp_path / "nats.conf"
+    config.write_text(broker_users.config(request.param))
     process = subprocess.Popen(
         [
             "nats-server",
@@ -105,6 +108,8 @@ def broker(tmp_path):
             "127.0.0.1",
             "-p",
             str(port),
+            "-c",
+            str(config),
             "-js",
             "-sd",
             str(tmp_path / "js"),
@@ -119,7 +124,7 @@ def broker(tmp_path):
             break
         except OSError:
             time.sleep(0.05)
-    yield f"nats://127.0.0.1:{port}"
+    yield broker_users.login(f"nats://127.0.0.1:{port}", request.param)
     process.terminate()
     process.wait(timeout=5)
 
@@ -848,8 +853,9 @@ def test_a_recreated_jobs_stream_runs_triggers_that_reuse_old_sequences(broker):
 
     async def scenario():
         first_id = await run_once(1)
-        nc = await Transport(broker, "t").connect()
-        await nc.jetstream().delete_stream(stream_name(PROJECT))  # lost or recreated
+        # Lost or recreated by an operator: modules may not delete streams.
+        nc = await Transport(broker_users.as_engine(broker), "t").connect()
+        await nc.jetstream().delete_stream(stream_name(PROJECT))
         await nc.close()
         return first_id, await run_once(2)
 
