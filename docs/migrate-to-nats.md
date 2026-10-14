@@ -271,21 +271,28 @@ A module built with `naas-abi-sdk` runs as its own process and reaches the
 engine only through NATS. See `libs/naas-abi-sdk/README.md` and the example in
 `examples/standalone_module/`. In short:
 
-1. Issue a token for the module with the shared secret:
-
-   ```python
-   from naas_abi_core.engine.nats_auth import issue_service_token
-
-   token = issue_service_token("my-module", nats_jwt_secret)  # valid 1 hour
-   ```
-
-   Give the module a fresh token before it expires. `run_module()` also accepts
-   a function that returns a new token on each call.
-2. Run the module with `ABI_NATS_URL` and `ABI_SERVICE_TOKEN` set:
+1. Give the module its **module key**, never `NATS_JWT_SECRET`. In the
+   project, `abi module key <module_id>` prints it: it is derived from the
+   secret for that module id, and signs tokens for that id only
+   (docs/adr/20261014_module-identities.md). The module's token must assert its
+   own module id: discovery registers a module only under its own identity.
+2. Run the module with `ABI_NATS_URL` (logged in as the broker user `module`)
+   and `ABI_MODULE_KEY` set:
 
    ```bash
    naas-abi-module my_module --config module.json
    ```
+
+   In code, `run_module(..., token=ModuleToken(module_id, key))`
+   (`naas_abi_sdk.service_token`) signs and refreshes the token.
+
+A module that signed its tokens from `NATS_JWT_SECRET` (modules created before
+module keys) must move to its key, as its module id. A `dev.modules` entry whose
+name is not the module id declares it: `identity: <module_id>`. The broker user
+`module` may not listen on `abi.svc.>` or `abi.discovery.>`, use `$KV` directly,
+or delete streams; a module that did must call the services instead. Apps
+receive a `user_id` from Nexus only: `request.scope["abi"]["caller"]` names
+who called.
 
 ### Discovery
 
@@ -331,10 +338,12 @@ version and running `abi deploy local --regenerate` again.
 - Projects are separated by subject prefix and the shared signing secret, not by
   NATS accounts. The token proves which of your processes is calling; it does
   not limit what that process can reach.
-- The broker's passwords keep out clients that don't have one. The `abi` and
-  `module` users have the same rights, and any process holding
-  `NATS_JWT_SECRET` can sign a token for any identity
-  (docs/adr/20261008_nats-broker-passwords.md).
+- The broker's passwords keep out clients that don't have one. Modules sign
+  with keys for their own module id and the `module` user stays off the
+  engine's subjects, but all modules share that user: one module can listen on
+  another's subjects and read the tokens sent there, and can read the engine's
+  key-value buckets through the JetStream API. Run only trusted modules
+  (docs/adr/20261014_module-identities.md).
 - Traffic to the broker is not encrypted (no TLS). Keep the broker on a
   private network; a module on another machine should reach it through a
   VPN or an SSH tunnel.
