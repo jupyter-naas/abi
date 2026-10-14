@@ -52,8 +52,8 @@ registry (discovery), and their agents show up in Nexus next to the engine's.
   `.env`; every process of the project must use the same values.
 - Modules never get `NATS_JWT_SECRET`: each signs with its own module key,
   for its module id only (`abi module key <module_id>` prints it). The broker
-  user `module` cannot listen on the engine's service, discovery, RPC overflow
-  or reply subjects, write its key-value buckets, create or delete streams, or
+  user `module` cannot listen on the engine's service, discovery, RPC overflow,
+  reply or JetStream subjects, write its key-value buckets, create or delete streams, or
   delete consumers. All modules share that user, so one can still listen on
   another's subjects, read or purge any stream, and take over another module's
   jobs: run only trusted modules (docs/adr/20261014_module-identities.md).
