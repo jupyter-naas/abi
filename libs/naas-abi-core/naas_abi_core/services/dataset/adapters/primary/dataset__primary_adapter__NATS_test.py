@@ -109,6 +109,7 @@ class _StubAdapter(IDatasetPort):
         namespace: str = "default",
         mode: WriteMode = "append",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> DatasetInfo:
         key = (namespace, name)
         if key not in self.datasets:
