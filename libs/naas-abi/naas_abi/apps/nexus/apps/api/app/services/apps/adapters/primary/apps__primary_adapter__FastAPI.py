@@ -28,9 +28,9 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from dataclasses import asdict
-from functools import lru_cache
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import Any
 
@@ -404,9 +404,24 @@ def _serialize_record(record: AppConfigRecord) -> dict:
     return data
 
 
-async def _ensure_app_exists(app_id: str) -> None:
-    if not await _app_exists(app_id):
-        raise HTTPException(status_code=404, detail=f"Unknown app_id: {app_id}")
+async def _ensure_app_exists(
+    app_id: str,
+    configured: Callable[[], Awaitable[AppConfigRecord | None]] | None = None,
+) -> None:
+    """404 unless the catalog lists ``app_id``. A remote app's existing config
+    row (``configured``) stays reachable while its module is down, so it can
+    be read, disabled or deleted; creating or enabling one needs discovery."""
+    if await _app_exists(app_id):
+        return
+    if configured is not None and app_id.startswith("remote/") and await configured():
+        return
+    raise HTTPException(status_code=404, detail=f"Unknown app_id: {app_id}")
+
+
+def _existing_config(
+    apps_service: AppsService, workspace_id: str, app_id: str
+) -> Callable[[], Awaitable[AppConfigRecord | None]]:
+    return partial(apps_service.get_app_config, workspace_id, app_id)
 
 
 class AppsFastAPIPrimaryAdapter:
@@ -639,7 +654,7 @@ async def get_app_config(
 ) -> dict:
     """Get a single app config row."""
     await require_workspace_access(current_user.id, workspace_id)
-    await _ensure_app_exists(app_id)
+    await _ensure_app_exists(app_id, _existing_config(apps_service, workspace_id, app_id))
     record = await apps_service.get_app_config(workspace_id, app_id)
     if record is None:
         raise HTTPException(status_code=404, detail="App config not found")
@@ -660,7 +675,10 @@ async def update_app_config(
     values. This lets the UI toggle simply call PATCH without a prior POST.
     """
     await require_workspace_access(current_user.id, workspace_id)
-    await _ensure_app_exists(app_id)
+    await _ensure_app_exists(
+        app_id,
+        None if updates.enabled else _existing_config(apps_service, workspace_id, app_id),
+    )
 
     record = await apps_service.upsert_app_config(
         workspace_id=workspace_id,
@@ -679,7 +697,7 @@ async def delete_app_config(
 ) -> dict[str, str]:
     """Delete the app config (reverts to the default ``enabled=False``)."""
     await require_workspace_access(current_user.id, workspace_id)
-    await _ensure_app_exists(app_id)
+    await _ensure_app_exists(app_id, _existing_config(apps_service, workspace_id, app_id))
     deleted = await apps_service.delete_app_config(workspace_id, app_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="App config not found")
