@@ -299,17 +299,14 @@ async def _upload(call: Any, source: Any) -> Any:
 async def _pulled(nc: Any, inbox: str) -> AsyncIterator[bytes]:
     """The response body. An error after the response started (the app failed,
     the module died) propagates: the status line is already sent, so the server
-    aborts the connection, and the browser does not keep a truncated file."""
+    aborts the connection, and the browser does not keep a truncated file. The
+    server logs it, once."""
     from naas_abi_sdk.app_streams import pull_body
-    from naas_abi_sdk.transport import RPCError
 
     stream = pull_body(nc, inbox)
     try:
         async for chunk in stream:
             yield chunk
-    except RPCError as exc:
-        _log.warning("Remote app response ended early: %s", exc)
-        raise
     finally:
         with contextlib.suppress(Exception):
             await stream.aclose()
