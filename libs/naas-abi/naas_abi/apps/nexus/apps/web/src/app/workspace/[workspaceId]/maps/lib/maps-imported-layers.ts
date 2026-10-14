@@ -3,6 +3,7 @@ import {
   buildMapsFeedPayload,
   isMapsFeatureCollection,
   pinRecordsToFeatures,
+  type MapsGeoJsonFeature,
   type MapsLayerFeatureCollection,
 } from './maps-pin-geojson';
 
@@ -129,9 +130,9 @@ export function normalizeImportedGeoJson(parsed: unknown): ParseGeoJsonResult {
   const record = parsed as Record<string, unknown>;
 
   if (record.type === 'Feature' && record.geometry) {
-    const collection = {
-      type: 'FeatureCollection' as const,
-      features: [record],
+    const collection: MapsLayerFeatureCollection & Record<string, unknown> = {
+      type: 'FeatureCollection',
+      features: [record as unknown as MapsGeoJsonFeature],
       count: 1,
     };
     return { ok: true, collection, featureCount: 1 };
