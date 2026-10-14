@@ -291,7 +291,9 @@ that reason. This replaces "nexus-web does not proxy `/app-html/remote/`".
 `X-Sendfile`, `X-Lighttpd-Send-File`, `X-Forwarded-*`, `X-Real-IP`,
 `X-Frame-Options` or `X-Content-Type-Options`), `Retry-After`,
 `WWW-Authenticate`, `Link` and `Content-Length`, with
-`Access-Control-Expose-Headers: *`. A value HTTP cannot carry (outside
+`Access-Control-Expose-Headers: *`. The `Location` of a response that is not a
+redirect (a 201's) passes as sent: the browser does not go there. A
+redirect's still stays in the app. A value HTTP cannot carry (outside
 latin-1, a line break or another control byte) is dropped. A `Set-Cookie`
 pair is cut at its first `;` and needs a valid name. A `Location` whose
 resolved path holds `%2e` is dropped, the request's own path included. The

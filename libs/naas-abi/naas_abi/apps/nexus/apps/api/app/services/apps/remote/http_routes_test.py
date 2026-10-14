@@ -679,7 +679,7 @@ def test_an_apis_response_headers_reach_the_page(monkeypatch):
             ("Retry-After", "30"),
             ("WWW-Authenticate", 'Bearer realm="app"'),
             ("Link", '<page/2>; rel="next"'),
-            ("Location", "items/5"),
+            ("Location", "/items/5"),
             ("X-Accel-Redirect", "/internal/secrets"),
             ("X-Sendfile", "/etc/passwd"),
             ("X-Forwarded-Host", "evil.example"),
@@ -695,7 +695,8 @@ def test_an_apis_response_headers_reach_the_page(monkeypatch):
     assert response.headers["retry-after"] == "30"
     assert response.headers["www-authenticate"] == 'Bearer realm="app"'
     assert response.headers["link"] == '<page/2>; rel="next"'
-    assert response.headers["location"] == f"{ROOT}/api/items/5"
+    # Not a redirect: the browser does not go there; the page reads it as sent.
+    assert response.headers["location"] == "/items/5"
     for dropped in ("x-accel-redirect", "x-sendfile", "x-forwarded-host"):
         assert dropped not in response.headers, dropped
     # The page's fetch() is cross-origin: it may read them.
