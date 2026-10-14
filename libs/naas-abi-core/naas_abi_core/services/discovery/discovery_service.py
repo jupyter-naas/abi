@@ -36,6 +36,15 @@ def _name(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,255}", value))
 
 
+def _instance_id(value: str) -> bool:
+    """One NATS subject token: instance-addressed subjects
+    (``abi.mod.<project>.<instance_id>...``) carry it, and the tokens sent to an
+    instance are bound to it, so it may hold no ``.`` (an id ``<other>.x`` would
+    put another instance's id where callers read the audience), and no
+    wildcard. naas_abi_sdk.transport.INSTANCE_ID is the same pattern."""
+    return bool(re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value))
+
+
 def _rollout_id(value: str) -> bool:
     return value == "" or bool(
         re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,127}", value)
@@ -316,7 +325,7 @@ class DiscoveryService:
     def _validate(self, req: pb.RegisterRequest, state: pb.RegistryState) -> None:
         d = req.descriptor
         _require(
-            _name(d.module_id) and _name(req.instance_id),
+            _name(d.module_id) and _instance_id(req.instance_id),
             "INVALID_ARGUMENT",
             "Invalid module or instance identity",
         )
@@ -676,7 +685,7 @@ class DiscoveryService:
             "Only platform administrators can evict registrations",
         )
         _require(
-            _name(req.instance_id), "INVALID_ARGUMENT", "Invalid instance identity"
+            _instance_id(req.instance_id), "INVALID_ARGUMENT", "Invalid instance identity"
         )
 
         def apply(state):

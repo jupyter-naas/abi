@@ -51,7 +51,7 @@ def _register_as(primary, identity, module_id, *, module_token=False):
     msg = SimpleNamespace(
         data=pb.RegisterRequest(
             descriptor=pb.ModuleDescriptor(module_id=module_id, contract_major=1),
-            instance_id=f"{module_id}-1",
+            instance_id=module_id.replace(".", "-") + "-1",
             lease_token="t" * 32,
         ).SerializeToString(),
         headers={"Nats-Auth-Token": token},
