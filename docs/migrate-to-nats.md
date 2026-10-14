@@ -287,12 +287,24 @@ engine only through NATS. See `libs/naas-abi-sdk/README.md` and the example in
    (`naas_abi_sdk.service_token`) signs and refreshes the token.
 
 A module that signed its tokens from `NATS_JWT_SECRET` (modules created before
-module keys) must move to its key, as its module id. A `dev.modules` entry whose
-name is not the module id declares it: `identity: <module_id>`. The broker user
-`module` may not listen on `abi.svc.>` or `abi.discovery.>`, use `$KV` directly,
-or delete streams; a module that did must call the services instead. Apps
-receive a `user_id` from Nexus only: `request.scope["abi"]["caller"]` names
+module keys) must move to its key, as its module id. `abi dev up` reads a
+`dev.modules` entry's module id from the `ABIModule` its package exports, or
+from `identity: <module_id>`, and refuses an entry it cannot tell. The tokens
+a module sends to another module are bound to the instance called and last two
+minutes; only a key (or the engine's `ServiceTokenSource`) can bind them, so a
+module holding only a static `ABI_SERVICE_TOKEN` cannot call other modules.
+Apps receive a `user_id` from Nexus only: `request.scope["abi"]["caller"]` names
 who called.
+
+The broker user `module` may not subscribe to `abi.svc.>`, `abi.discovery.>`,
+`_INBOX.>` or `$KV.>`, nor write `$KV.>`, create or update streams, or use the
+JetStream direct get (`naas_abi_core.engine.nats_permissions`). Update the
+project's `.deploy/docker/nats/nats.conf` (`abi deploy local --regenerate`
+writes it). A module connecting as `module` with the SDK's `Transport` uses the
+inbox prefix `_INBOX_MODULES` by itself; a raw `nats.connect` must pass
+`inbox_prefix="_INBOX_MODULES"`. The engine that hosts discovery creates the
+jobs stream and the claim-check store; a bus queue works in a module only on a
+topic whose stream the engine created.
 
 ### Discovery
 
@@ -339,11 +351,14 @@ version and running `abi deploy local --regenerate` again.
   NATS accounts. The token proves which of your processes is calling; it does
   not limit what that process can reach.
 - The broker's passwords keep out clients that don't have one. Modules sign
-  with keys for their own module id and the `module` user stays off the
-  engine's subjects, but all modules share that user: one module can listen on
-  another's subjects and read the tokens sent there, and can read the engine's
-  key-value buckets through the JetStream API. Run only trusted modules
-  (docs/adr/20261014_module-identities.md).
+  with keys for their own module id, the tokens they are sent are bound to
+  them, and the `module` user stays off the engine's subjects and replies. But
+  all modules share that user: one module can listen on another module's
+  subjects and inbox, and replay a token sent to that module, to it, for two
+  minutes; through the JetStream consumer and message-get API it can read any
+  stream (the engine's key-value buckets, the jobs stream and the claim-check
+  store included), and it can purge any stream. Run only trusted modules
+  (docs/adr/20261014_module-identities.md, "Still open").
 - Traffic to the broker is not encrypted (no TLS). Keep the broker on a
   private network; a module on another machine should reach it through a
   VPN or an SSH tunnel.
