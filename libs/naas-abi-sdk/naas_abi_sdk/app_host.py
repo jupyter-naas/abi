@@ -27,6 +27,7 @@ from typing import Any
 
 from naas_abi_proto.app.v1 import app_pb2 as pb
 from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
+from nats.errors import MaxPayloadError
 
 from naas_abi_sdk import overflow
 from naas_abi_sdk.agent_host import _token_expiry
@@ -53,6 +54,13 @@ MAX_REQUEST_BYTES = MAX_INLINE_REQUEST_BODY + 64 * 1024
 IDLE_SECONDS = 60.0
 # Responses streaming at once (downloads, server-sent events) in this process.
 MAX_STREAMS = 256
+# Uploads streaming into this process's apps at once. They go as fast as the
+# browser sends, so they have slots of their own and never hold the slots of
+# other requests; one more is refused at once (Nexus tries another instance).
+MAX_UPLOADS = 16
+# When the host closes, a response still streaming ends with an error, which
+# its reader has this long to take.
+CLOSE_SECONDS = 3.0
 AUTHORIZATION_SECONDS = 5.0
 MAX_AUTHORIZATIONS = 1024
 # Callers whose user ids an app trusts: Nexus's API, the one process that
@@ -73,6 +81,9 @@ HOP_BY_HOP = frozenset(
         "te", "trailer", "transfer-encoding", "upgrade", "content-length",
     }
 )  # fmt: skip
+# A response's Content-Length crosses: Nexus sends it, so a reader can tell a
+# streamed body that ended early from a whole one.
+RESPONSE_HOP_BY_HOP = HOP_BY_HOP - {"content-length"}
 
 ASGIApp = Callable[[dict, Callable[[], Awaitable[dict]], Callable[[dict], Awaitable[None]]], Awaitable[None]]  # fmt: skip
 
@@ -116,6 +127,32 @@ def _header(request: pb.HttpRequest, name: str) -> str:
     return next((h.value for h in request.headers if h.name.lower() == name), "")
 
 
+def _asgi_headers(request: pb.HttpRequest) -> list[tuple[bytes, bytes]]:
+    """The request's headers as ASGI wants them: latin-1 bytes, as HTTP has them."""
+    try:
+        return [
+            (h.name.lower().encode("latin-1"), h.value.encode("latin-1"))
+            for h in request.headers
+            if h.name.lower() not in HOP_BY_HOP
+        ]
+    except UnicodeEncodeError:
+        raise RPCError("INVALID_ARGUMENT", "A header is not latin-1 text") from None
+
+
+def _is_upload(msg: Any) -> bool:
+    """A request whose body follows: it waits on its sender as long as it lasts."""
+    if len(msg.data) > MAX_REQUEST_BYTES:
+        return False
+    try:
+        return pb.HttpRequest.FromString(msg.data).body_follows
+    except Exception:  # noqa: BLE001 - _handle answers a malformed request
+        return False
+
+
+class _AppFailed(Exception):
+    """The app raised before it answered: never retried elsewhere, since it ran."""
+
+
 class AppHost:
     def __init__(
         self,
@@ -123,6 +160,7 @@ class AppHost:
         apps: dict[str, tuple[AppDescriptor, ASGIApp | None]],
         *,
         max_concurrency: int = DEFAULT_LIMIT,
+        max_uploads: int = MAX_UPLOADS,
         idle_seconds: float = IDLE_SECONDS,
         user_callers: Iterable[str] = USER_CALLERS,
     ) -> None:
@@ -132,17 +170,25 @@ class AppHost:
         self.closing = False
         self.idle_seconds = idle_seconds
         self.calls = ConcurrentCalls(max_concurrency)
+        self.uploads = ConcurrentCalls(max_uploads)
         self._authorized: dict[tuple[str, str], tuple[float, str]] = {}
+        # One discovery call per token and app at a time; the others wait for it.
+        self._authorizing: dict[tuple[str, str], asyncio.Future[str]] = {}
         self._etags: dict[Path, tuple[float, int, str]] = {}
         self._lifespans: list[_Lifespan] = []
+        # What each app's lifespan put in its state (ASGI lifespan "state").
+        self._states: dict[str, dict] = {}
         # Requests whose app still runs: reading an upload, or streaming its answer.
         self._streams: set[asyncio.Task] = set()
+        # Response bodies not over yet, lingering ones included.
+        self._sources: set[BodySource] = set()
 
     async def start(self) -> None:
         try:
             for descriptor, asgi in self.apps.values():
                 if asgi is not None:
                     lifespan = _Lifespan(asgi, descriptor.name)
+                    self._states[descriptor.name] = lifespan.state
                     await lifespan.startup()
                     self._lifespans.append(lifespan)
             nc = await self._nc()
@@ -152,7 +198,7 @@ class AppHost:
                         app_subject(
                             self.session.client.project, self.session.instance_id, name
                         ),
-                        cb=self.calls.callback(partial(self._handle, name)),
+                        cb=self._receiver(name),
                     )
                 )
             await nc.flush()
@@ -161,13 +207,24 @@ class AppHost:
             raise
 
     async def close(self) -> None:
+        """Stop serving. A response still streaming (a download, server-sent
+        events) ends with an error its reader sees, not a clean end, and the
+        host waits CLOSE_SECONDS at most for the readers to take it."""
+        self.closing = True
         for subscription in self.subscriptions:
             await subscription.unsubscribe()
         self.subscriptions.clear()
         await self.calls.cancel()
+        await self.uploads.cancel()
+        for source in list(self._sources):
+            source.abort("MODULE_UNAVAILABLE", "The module stopped")
         for task in list(self._streams):
             task.cancel()
-        await asyncio.gather(*self._streams, return_exceptions=True)
+        if self._streams:
+            await asyncio.wait(set(self._streams), timeout=CLOSE_SECONDS + 1)
+        for source in list(self._sources):
+            await source.close()
+        self._sources.clear()
         for lifespan in reversed(self._lifespans):
             await lifespan.shutdown()
         self._lifespans.clear()
@@ -175,14 +232,69 @@ class AppHost:
     async def _nc(self) -> Any:
         return await self.session.client.transport.connect()
 
+    async def _fits_inline(self, size: int) -> bool:
+        """Whether a body of ``size`` bytes is answered inline: it fits one
+        broker message with its envelope, under INLINE_BYTES."""
+        if size <= chunk_bytes(0):  # the smallest chunk fits any broker
+            return True
+        nc = await self._nc()
+        limit = chunk_bytes(getattr(nc, "max_payload", 1024 * 1024))
+        return size <= min(INLINE_BYTES, limit)
+
+    async def _source(self) -> BodySource:
+        """A new response body, closed with the host."""
+        self._sources = {s for s in self._sources if not s.gone.is_set()}
+        source = BodySource(await self._nc(), idle_seconds=self.idle_seconds)
+        await source.start()
+        self._sources.add(source)
+        return source
+
+    async def _settle(self, source: BodySource) -> None:
+        """Wait until the reader took the body's end, or left; the source then
+        lingers for a repeated last pull on its own. While the host closes,
+        the reader has CLOSE_SECONDS."""
+        with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
+            await asyncio.wait_for(
+                source.settled(), CLOSE_SECONDS if self.closing else None
+            )
+        if self.closing or not source.done.is_set():
+            await source.close()
+
     def _keep(self, task: asyncio.Task) -> None:
         self._streams.add(task)
         task.add_done_callback(self._streams.discard)
+
+    def _receiver(self, name: str) -> Callable[[Any], Awaitable[None]]:
+        """The app's subscription callback: uploads run on slots of their own."""
+        call = self.calls.callback(partial(self._handle, name))
+        upload = self.uploads.callback(partial(self._handle, name))
+
+        async def receive(msg: Any) -> None:
+            if not _is_upload(msg):
+                await call(msg)
+            elif self.uploads.in_flight >= self.uploads.limit:
+                # Waiting for a slot would hold this subscription's other requests.
+                await self._refuse(
+                    msg, "MODULE_UNAVAILABLE", "Too many uploads in progress"
+                )
+            else:
+                await upload(msg)
+
+        return receive
+
+    async def _refuse(self, msg: Any, code: str, message: str) -> None:
+        if not msg.reply:
+            return
+        response = pb.HttpResponse()
+        response.error.code, response.error.message = code, message
+        with contextlib.suppress(Exception):
+            await reply(msg, response.SerializeToString())
 
     # -- one request ----------------------------------------------------------
 
     async def _handle(self, name: str, msg: Any) -> None:
         response = pb.HttpResponse()
+        stream: BodySource | None = None
         try:
             if len(msg.data) > MAX_REQUEST_BYTES or overflow.REQUEST_HEADER in (
                 msg.headers or {}
@@ -206,24 +318,68 @@ class AppHost:
             for key, value in answer.headers:
                 response.headers.add(name=key, value=value)
             if answer.stream is not None:
-                response.body_follows, response.body_inbox = True, answer.stream.inbox
+                stream = answer.stream
+                response.body_follows, response.body_inbox = True, stream.inbox
             else:
                 response.body = answer.body
         except RPCError as exc:
             response = pb.HttpResponse()
             response.error.code, response.error.message = exc.code, str(exc)
+        except _AppFailed as exc:
+            logger.error("App %s failed", name, exc_info=exc.__cause__)
+            response = pb.HttpResponse()
+            response.error.code, response.error.message = "APP_ERROR", "App failed"
         except Exception:
             logger.exception("App %s failed", name)
             response = pb.HttpResponse()
             response.error.code, response.error.message = "APP_ERROR", "App failed"
         if msg.reply:
+            await self._reply(name, msg, response, stream)
+
+    async def _reply(
+        self, name: str, msg: Any, response: pb.HttpResponse, stream: BodySource | None
+    ) -> None:
+        """Send the answer; when it cannot go (too large for one message, or the
+        send failed), a short error instead, so Nexus is not left waiting."""
+        try:
             await reply(msg, response.SerializeToString())
+            return
+        except MaxPayloadError:
+            logger.warning(
+                "App %s answered with more headers than a message holds", name
+            )
+            message = "The app's response headers are too large"
+        except Exception:
+            logger.warning("Could not send app %s's answer", name, exc_info=True)
+            message = "Could not send the app's answer"
+        if stream is not None:
+            await stream.close()  # its reader never learnt where it is
+        failed = pb.HttpResponse()
+        failed.error.code, failed.error.message = "APP_ERROR", message
+        with contextlib.suppress(Exception):
+            await reply(msg, failed.SerializeToString())
 
     async def _authorize(self, name: str, token: str) -> str:
         now = asyncio.get_running_loop().time()
         cached = self._authorized.get((token, name))
         if cached is not None and now < cached[0]:
             return cached[1]
+        # A page loads many files at once with one token: one discovery call.
+        key = (token, name)
+        pending = self._authorizing.get(key)
+        if pending is None:
+            pending = asyncio.ensure_future(self._ask_discovery(name, token))
+            self._authorizing[key] = pending
+            pending.add_done_callback(partial(self._authorized_now, key))
+        return await asyncio.shield(pending)
+
+    def _authorized_now(self, key: tuple[str, str], future: asyncio.Future) -> None:
+        self._authorizing.pop(key, None)
+        if not future.cancelled():
+            future.exception()  # retrieved: every waiter may have left
+
+    async def _ask_discovery(self, name: str, token: str) -> str:
+        now = asyncio.get_running_loop().time()
         response = await self.session.client._call(
             "authorize_app",
             discovery_pb.AuthorizeAppRequest(
@@ -248,13 +404,15 @@ class AppHost:
     async def _answer(
         self, name: str, request: pb.HttpRequest, caller: str = ""
     ) -> _Answer:
+        descriptor, asgi = self.apps[name]
         if len(request.body) > MAX_INLINE_REQUEST_BODY:
             return _text(413, "Request too large")
+        if len(request.body) > descriptor.upload_limit:
+            return _text(413, "Request body too large")
         if not request.path.startswith("/"):
             raise RPCError("INVALID_ARGUMENT", "App path must start with /")
         if request.body_follows and not is_inbox(request.body_inbox):
             raise RPCError("INVALID_ARGUMENT", "A body inbox must be an inbox subject")
-        descriptor, asgi = self.apps[name]
         method = request.method.upper()
         if method in ("GET", "HEAD") and descriptor.root is not None:
             found = await self._static(descriptor, request)
@@ -264,7 +422,7 @@ class AppHost:
             return _text(404, "Not found")
         if len(self._streams) >= MAX_STREAMS:
             raise RPCError("MODULE_UNAVAILABLE", "Too many requests in progress")
-        return await self._asgi(asgi, request, caller)
+        return await self._asgi(asgi, request, caller, descriptor)
 
     # -- static files ---------------------------------------------------------
 
@@ -277,6 +435,8 @@ class AppHost:
         relative = request.path.lstrip("/") or descriptor.entry
         parts = relative.split("/")
         if any(part in ("", ".", "..") for part in parts) or "\\" in relative:
+            return None
+        if "\x00" in relative:  # no file has it; the OS would raise
             return None
         path = (root / relative).resolve()
         try:
@@ -300,14 +460,14 @@ class AppHost:
         ]
         if _header(request, "if-none-match") == etag:
             return _Answer(304, headers)
+        headers.append(("content-length", str(stat.st_size)))
         if request.method.upper() == "HEAD":
             return _Answer(200, headers)
-        if stat.st_size <= INLINE_BYTES:
+        if await self._fits_inline(stat.st_size):
             return _Answer(200, headers, path.read_bytes())
         if len(self._streams) >= MAX_STREAMS:
             raise RPCError("MODULE_UNAVAILABLE", "Too many responses streaming")
-        source = BodySource(await self._nc(), idle_seconds=self.idle_seconds)
-        await source.start()
+        source = await self._source()
         self._keep(asyncio.create_task(self._send_file(path, source)))
         return _Answer(200, headers, stream=source)
 
@@ -318,11 +478,13 @@ class AppHost:
                 while chunk := await asyncio.to_thread(file.read, size):
                     await source.put(chunk)
             await source.finish()
-            await source.gone.wait()  # the last pull, then the linger
         except ReaderGone:
             pass
+        except Exception:
+            logger.exception("Could not send %s", path.name)
+            source.abort("APP_ERROR", "Could not read the file")
         finally:
-            await source.close()
+            await self._settle(source)
 
     def _etag(self, path: Path, mtime: float, size: int) -> str:
         cached = self._etags.get(path)
@@ -338,9 +500,13 @@ class AppHost:
     # -- the ASGI app ---------------------------------------------------------
 
     async def _asgi(
-        self, app: ASGIApp, request: pb.HttpRequest, caller: str = ""
+        self,
+        app: ASGIApp,
+        request: pb.HttpRequest,
+        caller: str = "",
+        descriptor: AppDescriptor | None = None,
     ) -> _Answer:
-        call = _AsgiCall(self, app, request, caller)
+        call = _AsgiCall(self, app, request, caller, descriptor)
         call.task = asyncio.create_task(call.run())
         self._keep(call.task)
         try:
@@ -358,10 +524,17 @@ class _AsgiCall:
     its response answered inline or streamed as the app sends it."""
 
     def __init__(
-        self, host: AppHost, app: ASGIApp, request: pb.HttpRequest, caller: str = ""
+        self,
+        host: AppHost,
+        app: ASGIApp,
+        request: pb.HttpRequest,
+        caller: str = "",
+        descriptor: AppDescriptor | None = None,
     ) -> None:
         self.host, self.app, self.request = host, app, request
         self.caller = caller
+        self.descriptor = descriptor or AppDescriptor(request.app or "app")
+        self.headers_in = _asgi_headers(request)
         loop = asyncio.get_running_loop()
         self.ready: asyncio.Future[_Answer] = loop.create_future()
         self.activity = loop.time()
@@ -401,7 +574,11 @@ class _AsgiCall:
             pass
         except Exception as exc:
             if not self.ready.done():
-                self.ready.set_exception(exc)
+                # Even an RPCError of the app's own (a service it called) is
+                # the app failing, never the host: Nexus must not resend it.
+                failed = _AppFailed()
+                failed.__cause__ = exc
+                self.ready.set_exception(failed)
             elif not self.too_large:
                 logger.exception("App failed after it started answering")
                 if self.source is not None and not self.source.done.is_set():
@@ -418,12 +595,10 @@ class _AsgiCall:
                     if self.too_large
                     else _text(500, "App sent no response")
                 )
-            if self.source is not None:
-                with contextlib.suppress(asyncio.CancelledError):
-                    await self.source.gone.wait()  # the last pull, then the linger
-                await self.source.close()
             if self._watcher is not None:
                 self._watcher.cancel()
+            if self.source is not None:
+                await self.host._settle(self.source)
 
     async def _stop_when_reader_gone(self) -> None:
         """An app awaiting its next event (server-sent events) never learns from
@@ -448,13 +623,11 @@ class _AsgiCall:
             "raw_path": path.encode(),
             "root_path": root_path,
             "query_string": request.query.encode(),
-            "headers": [
-                (h.name.lower().encode("latin-1"), h.value.encode("latin-1"))
-                for h in request.headers
-                if h.name.lower() not in HOP_BY_HOP
-            ],
+            "headers": self.headers_in,
             "client": None,
             "server": None,
+            # A shallow copy of what the app's lifespan stored, as servers pass it.
+            "state": dict(self.host._states.get(self.descriptor.name, {})),
             # Who asked: the user, as Nexus vouches for it (empty when another
             # caller calls the app), and the caller's service identity.
             "abi": {"user_id": request.user_id, "caller": self.caller},
@@ -465,10 +638,14 @@ class _AsgiCall:
         if self.first:
             self.first = False
             if request.body_follows:
+                # The app's own limit, whatever the request asks; lower if it asks.
+                limit = self.descriptor.upload_limit
+                if request.max_body_bytes:
+                    limit = min(limit, request.max_body_bytes)
                 self.body = pull_body(
                     await self.host._nc(),
                     request.body_inbox,
-                    max_bytes=max(0, request.max_body_bytes - len(request.body)),
+                    max_bytes=max(0, limit - len(request.body)),
                 )
             return {
                 "type": "http.request",
@@ -501,7 +678,7 @@ class _AsgiCall:
             self.headers = [
                 (k.decode("latin-1"), v.decode("latin-1"))
                 for k, v in message.get("headers", [])
-                if k.decode("latin-1").lower() not in HOP_BY_HOP
+                if k.decode("latin-1").lower() not in RESPONSE_HOP_BY_HOP
             ]
             return
         if kind != "http.response.body":
@@ -516,14 +693,11 @@ class _AsgiCall:
                 # caller sent too much, which is what it is told.
                 self.ready.set_result(_text(413, "Request body too large"))
                 return
-            if not more and len(body) <= INLINE_BYTES:
+            if not more and await self.host._fits_inline(len(body)):
                 # The whole response at once, small: inline.
                 self.ready.set_result(_Answer(self.status, self.headers, body))
                 return
-            self.source = BodySource(
-                await self.host._nc(), idle_seconds=self.host.idle_seconds
-            )
-            await self.source.start()
+            self.source = await self.host._source()
             self._watcher = asyncio.create_task(self._stop_when_reader_gone())
             self.ready.set_result(
                 _Answer(self.status, self.headers, stream=self.source)
@@ -544,6 +718,9 @@ class _Lifespan:
 
     def __init__(self, app: ASGIApp, name: str) -> None:
         self.app, self.name = app, name
+        # The lifespan "state": what the app stores at startup, copied into
+        # each request's scope (FastAPI lifespans that yield a dict need it).
+        self.state: dict = {}
         self.inbox: asyncio.Queue[dict] = asyncio.Queue()
         self.outbox: asyncio.Queue[dict] = asyncio.Queue()
         self.task: asyncio.Task | None = None
@@ -572,7 +749,11 @@ class _Lifespan:
     async def _run(self) -> None:
         try:
             await self.app(
-                {"type": "lifespan", "asgi": {"version": "3.0", "spec_version": "2.0"}},
+                {
+                    "type": "lifespan",
+                    "asgi": {"version": "3.0", "spec_version": "2.0"},
+                    "state": self.state,
+                },
                 self.inbox.get,
                 self.outbox.put,
             )

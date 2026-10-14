@@ -60,10 +60,16 @@ def _session(caller="api"):
     call = AsyncMock(
         return_value=discovery_pb.AuthorizeAppResponse(caller_identity=caller)
     )
+    # The host reads the broker's limit to decide what travels inline.
+    nc = SimpleNamespace(max_payload=8 * 1024 * 1024)
     return SimpleNamespace(
         instance_id="i-1",
         lease_token="l" * 32,
-        client=SimpleNamespace(_call=call, project="acme"),
+        client=SimpleNamespace(
+            _call=call,
+            project="acme",
+            transport=SimpleNamespace(connect=AsyncMock(return_value=nc)),
+        ),
     )
 
 
@@ -387,3 +393,189 @@ def test_expose_app_needs_a_declared_app():
         module.expose_app("console", app)
     with pytest.raises(ValueError, match="Declare the app"):
         module.expose_app("other", app)
+
+
+# -- review findings of 2026-10-13 (A9, A10, A23-A25, A28) ----------------------------
+
+
+def test_an_answer_too_large_for_a_message_is_an_error_not_silence(tmp_path):
+    """A9: Nexus gets an error at once instead of waiting for its timeout."""
+
+    async def huge_headers(scope, receive, send):
+        headers = [(b"x-padding", b"p" * (96 * 1024))]
+        await send({"type": "http.response.start", "status": 200, "headers": headers})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    async def scenario():
+        msg = FakeMsg(_request("/x"))
+        msg._client.max_payload = 64 * 1024
+        await _host(tmp_path, huge_headers)._handle("console", msg)
+        assert msg.response.error.code == "APP_ERROR"
+        assert "too large" in msg.response.error.message
+
+    asyncio.run(scenario())
+
+
+def test_a_failed_send_of_the_answer_is_followed_by_an_error(tmp_path):
+    """A9: the first send fails; the module still answers."""
+
+    async def scenario():
+        msg = FakeMsg(_request("/"))
+        sent = msg._publish
+        calls = []
+
+        async def flaky(subject, data, headers=None):
+            calls.append(data)
+            if len(calls) == 1:
+                raise ConnectionError("broker hiccup")
+            await sent(subject, data, headers)
+
+        msg._client.publish = flaky
+        await _host(tmp_path)._handle("console", msg)
+        assert len(calls) == 2
+        assert msg.response.error.code == "APP_ERROR"
+
+    asyncio.run(scenario())
+
+
+def test_an_rpc_error_of_the_app_itself_is_an_app_error(tmp_path):
+    """A10: an app whose own call failed is not "the module is unavailable",
+    which Nexus would resend to another instance after the app ran."""
+
+    async def calls_a_service(scope, receive, send):
+        raise RPCError("UNAVAILABLE", "the vector store is down")
+
+    async def scenario():
+        response = await _send(_host(tmp_path, calls_a_service), _request("/x"))
+        assert response.error.code == "APP_ERROR"
+        assert "vector store" not in response.error.message
+
+    asyncio.run(scenario())
+
+
+def test_a_header_that_is_not_latin_1_is_refused(tmp_path):
+    """A23: refused as a bad request, not an app failure."""
+
+    async def app(scope, receive, send):  # pragma: no cover - never reached
+        raise AssertionError("the app must not run")
+
+    async def scenario():
+        request = _request("/x")
+        request.headers.add(name="X-Label", value="café ☕")
+        response = await _send(_host(tmp_path, app), request)
+        assert response.error.code == "INVALID_ARGUMENT"
+
+    asyncio.run(scenario())
+
+
+def test_head_and_get_of_a_file_carry_its_length(tmp_path):
+    """A23: HEAD answers the length GET would send."""
+
+    async def scenario():
+        host = _host(tmp_path)
+        head = await _send(host, _request("/index.html", method="HEAD"))
+        get = await _send(host, _request("/index.html"))
+        size = str(len(b"<h1>console</h1>"))
+        assert (
+            _headers(head)["content-length"] == size == _headers(get)["content-length"]
+        )
+        assert head.body == b""
+
+    asyncio.run(scenario())
+
+
+def test_the_apps_content_length_reaches_nexus(tmp_path):
+    """A6: Nexus forwards it, so a cut stream is seen as cut."""
+
+    async def app(scope, receive, send):
+        headers = [(b"content-length", b"2"), (b"connection", b"close")]
+        await send({"type": "http.response.start", "status": 200, "headers": headers})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    async def scenario():
+        response = await _send(_host(tmp_path, app), _request("/x"))
+        assert _headers(response) == {"content-length": "2"}
+
+    asyncio.run(scenario())
+
+
+def test_a_nul_in_a_path_is_not_found(tmp_path):
+    """A24: not an error the module logs as an app failure."""
+
+    async def scenario():
+        response = await _send(_host(tmp_path), _request("/index.html\x00.js"))
+        assert response.status == 404
+
+    asyncio.run(scenario())
+
+
+def test_the_lifespan_state_reaches_each_request(tmp_path):
+    """A25: a FastAPI lifespan that yields its state starts, and requests see it."""
+    fastapi = pytest.importorskip("fastapi")
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def lifespan(app):
+        yield {"greeting": "hello"}
+
+    app = fastapi.FastAPI(lifespan=lifespan)
+
+    @app.get("/api/greeting")
+    async def greeting(request: fastapi.Request):
+        return {"greeting": request.state.greeting}
+
+    async def scenario():
+        host = _host(tmp_path, app)
+        nc = SimpleNamespace(
+            subscribe=AsyncMock(), flush=AsyncMock(), max_payload=8 * 1024 * 1024
+        )
+        host.session.client.transport = SimpleNamespace(
+            connect=AsyncMock(return_value=nc)
+        )
+        await host.start()
+        try:
+            response = await _send(host, _request("/api/greeting"))
+            assert (response.status, json.loads(response.body)) == (
+                200,
+                {"greeting": "hello"},
+            )
+        finally:
+            await host.close()
+
+    asyncio.run(scenario())
+
+
+def test_requests_with_one_token_share_one_authorization(tmp_path):
+    """A28: a page loading its files at once asks discovery once."""
+
+    async def scenario():
+        host = _host(tmp_path)
+        call = host.session.client._call
+        answer = call.return_value
+
+        async def slow(*args, **kwargs):
+            await asyncio.sleep(0.05)
+            return answer
+
+        call.side_effect = slow
+        responses = await asyncio.gather(
+            *(_send(host, _request("/assets/app.js")) for _ in range(20))
+        )
+        assert all(r.status == 200 for r in responses)
+        assert call.await_count == 1
+        call.side_effect = RPCError("UNAUTHENTICATED", "bad token")
+        refused = await asyncio.gather(
+            *(_send(host, _request("/"), token="other") for _ in range(5))
+        )
+        assert {r.error.code for r in refused} == {"UNAUTHENTICATED"}
+        assert call.await_count == 2
+
+    asyncio.run(scenario())
+
+
+def test_a_finished_body_outlasts_the_readers_retry_of_its_last_pull():
+    """A21: a lost reply to the last pull is asked for again after the reader's
+    pull timeout; the holder must still be there to answer it."""
+    from naas_abi_sdk import app_streams
+
+    assert app_streams.LINGER_SECONDS > app_streams.PULL_TIMEOUT_SECONDS
