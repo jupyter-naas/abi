@@ -388,6 +388,23 @@ class ApacheJenaTDB2(ITripleStorePort):
             attempts=attempts,
         )
 
+    @staticmethod
+    def _transport_error(
+        exc: requests.RequestException, operation: str, endpoint: str, attempts: int
+    ) -> Exceptions.RequestError:
+        """A request that got no answer (a read timeout behind another writer,
+        a lost connection) as a domain ``RequestError``: unwrapped, it crossed
+        NATS as a bare INTERNAL, which a caller cannot tell from a rejection."""
+        return Exceptions.RequestError(
+            operation=operation,
+            message=(
+                f"Fuseki {operation} request got no answer: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+            endpoint=endpoint,
+            attempts=attempts,
+        )
+
     @contextmanager
     def _acquire_write_lock(self) -> Generator[None, None, None]:
         """Acquire a write lock appropriate for the deployment topology.
@@ -458,12 +475,17 @@ class ApacheJenaTDB2(ITripleStorePort):
         """
         with self._acquire_write_lock():
             for attempt in range(self.max_retries + 1):
-                response = self._session.post(
-                    self.update_endpoint,
-                    headers={"Content-Type": "application/sparql-update"},
-                    data=sparql.encode("utf-8"),
-                    timeout=self.timeout,
-                )
+                try:
+                    response = self._session.post(
+                        self.update_endpoint,
+                        headers={"Content-Type": "application/sparql-update"},
+                        data=sparql.encode("utf-8"),
+                        timeout=self.timeout,
+                    )
+                except requests.RequestException as exc:
+                    raise self._transport_error(
+                        exc, "update", self.update_endpoint, attempt + 1
+                    ) from exc
                 if response.status_code in self._RETRYABLE_STATUS_CODES and attempt < self.max_retries:
                     delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
                     logger.warning(
@@ -500,16 +522,21 @@ class ApacheJenaTDB2(ITripleStorePort):
         ever happens before the caller has read anything.
         """
         for attempt in range(self.max_retries + 1):
-            response = self._session.post(
-                self.query_endpoint,
-                headers={
-                    "Content-Type": "application/sparql-query",
-                    "Accept": accept,
-                },
-                data=sparql.encode("utf-8"),
-                timeout=self.timeout,
-                stream=stream,
-            )
+            try:
+                response = self._session.post(
+                    self.query_endpoint,
+                    headers={
+                        "Content-Type": "application/sparql-query",
+                        "Accept": accept,
+                    },
+                    data=sparql.encode("utf-8"),
+                    timeout=self.timeout,
+                    stream=stream,
+                )
+            except requests.RequestException as exc:
+                raise self._transport_error(
+                    exc, "query", self.query_endpoint, attempt + 1
+                ) from exc
             if response.status_code in self._RETRYABLE_STATUS_CODES and attempt < self.max_retries:
                 response.close()
                 delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
