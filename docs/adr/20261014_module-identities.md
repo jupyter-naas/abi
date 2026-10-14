@@ -190,3 +190,10 @@ is where the token is verified, so the identity rule sits next to it.
   uploads hold a module's call slots that long (A11, remote app serving).
 - Rotating `NATS_JWT_SECRET` rotates every module key; there is no way to
   revoke one module's key alone.
+
+## Amendment (2026-10-14): the workspace too
+The app scope also carries the workspace the user opened the app from,
+`scope["abi"] = {"user_id": ..., "workspace_id": ..., "caller": ...}`, under
+the same rule: a request from another caller than `api` that names a
+workspace is refused with `PERMISSION_DENIED` (remote apps ADR, amendment of
+2026-10-14).

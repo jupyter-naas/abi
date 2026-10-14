@@ -296,8 +296,12 @@ module holding only a static `ABI_SERVICE_TOKEN` cannot call other modules.
 Code that calls a module subject through `Transport.call` passes the instance
 id it calls (`instance_id=`); discovery refuses an instance id that is not one
 subject token (letters, digits, `_`, `-`).
-Apps receive a `user_id` from Nexus only: `request.scope["abi"]["caller"]` names
-who called.
+Apps receive a `user_id` and a `workspace_id` from Nexus only:
+`request.scope["abi"]["caller"]` names who called. `POST
+/api/apps/remote-grant` needs a `workspace_id` where the app is enabled, and a
+grant ends with the session token it was asked with or at logout. A module
+stops reading an upload at its app's `max_upload_bytes` (default 1 GiB)
+whatever Nexus asks.
 
 The broker user `module` may not subscribe to `abi.svc.>`, `abi.discovery.>`,
 `abi.rpc.>`, `_INBOX.>`, `$JS.>` or `$KV.>`, nor write `$KV.>`, create or update streams,
