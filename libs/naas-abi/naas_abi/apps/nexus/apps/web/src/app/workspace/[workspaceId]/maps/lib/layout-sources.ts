@@ -11,15 +11,16 @@ import { fetchPins as issPins } from '../components/maps-iss';
 import { fetchPins as newsPins } from '../components/maps-news';
 import { fetchPins as nwsAlertsPins } from '../components/maps-nws-alerts';
 import { fetchPins as openaqPins } from '../components/maps-openaq';
-import { fetchPins as presencePins } from '../components/maps-presence';
 import { fetchPins as temperaturePins } from '../components/maps-temperature';
 import { fetchPins as tropicalStormsPins } from '../components/maps-tropical-storms';
 import { fetchPins as volcanoesPins } from '../components/maps-volcanoes';
 import { fetchPins as wildfirePins } from '../components/maps-wildfires';
 import { mapsCustomFeedUrl } from './datasets';
 import type { LayoutEntry } from './layouts';
-import { layoutsApi } from './layouts-api';
+import { getImportedMapLayer } from './maps-imported-layers';
+import { feedLayersApi, layoutsApi } from './layouts-api';
 import { fetchMapsFeedPins, normalizeFeedLoad, type MapsFeedResult } from './maps-feed';
+import { sharedFeedLoad } from './shared-feed-loads';
 import type { MapsFeedView } from './maps-view';
 
 /**
@@ -40,7 +41,6 @@ const BUILTIN_FETCHERS: Record<string, Fetcher> = {
   news: newsPins,
   'nws-alerts': nwsAlertsPins,
   openaq: openaqPins,
-  presence: presencePins,
   temperature: temperaturePins,
   'tropical-storms': tropicalStormsPins,
   volcanoes: volcanoesPins,
@@ -58,8 +58,31 @@ export function layoutPinSource(
   workspaceId: string,
 ): ((signal: AbortSignal, view?: MapsFeedView) => Promise<MapsFeedResult>) | null {
   if (!entry.combinable) return null;
+  if (entry.kind === 'imported') {
+    return async () => {
+      const layer = getImportedMapLayer(workspaceId, entry.id);
+      if (!layer) throw new Error(`Imported layer ${entry.id} not found in this browser`);
+      return normalizeFeedLoad(layer.featureCollection);
+    };
+  }
+  const feedId = entry.feedId ?? entry.id;
+  if (entry.kind === 'feed') {
+    // API feed: the authed proxy reads the feed's feed_url from the API.
+    return (signal) => fetchMapsFeedPins(mapsCustomFeedUrl(feedId, workspaceId), signal, authHeader());
+  }
+  if (entry.kind === 'stored') {
+    // The layer's object, every feature: layers sharing it reuse one request and
+    // keep their own feature types (maps-all-layouts filters by classLabels).
+    return (signal) =>
+      sharedFeedLoad(
+        feedLayersApi.dataUrl(workspaceId, entry.id, { all: true }),
+        authHeader(),
+        signal,
+        entry.storagePath ? `${workspaceId}:${entry.storagePath}` : undefined,
+      );
+  }
   if (entry.kind === 'workspace') {
-    return (signal) => fetchMapsFeedPins(layoutsApi.feedUrl(workspaceId, entry.id), signal, authHeader());
+    return (signal) => fetchMapsFeedPins(layoutsApi.feedUrl(workspaceId, feedId), signal, authHeader());
   }
   if (entry.kind === 'graph') {
     const url = `${getApiUrl()}/api/maps/layers/${encodeURIComponent(entry.id)}?workspace_id=${encodeURIComponent(workspaceId)}`;
@@ -67,6 +90,5 @@ export function layoutPinSource(
   }
   const builtin = BUILTIN_FETCHERS[entry.id];
   if (builtin) return async (signal, view) => normalizeFeedLoad(await builtin(signal, view));
-  // Deployment Custom dataset: the authed proxy route.
-  return (signal) => fetchMapsFeedPins(mapsCustomFeedUrl(entry.id, workspaceId), signal, authHeader());
+  return null;
 }

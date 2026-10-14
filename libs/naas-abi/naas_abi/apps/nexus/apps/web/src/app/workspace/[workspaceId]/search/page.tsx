@@ -126,12 +126,12 @@ function Search() {
               // a tab is a step Back can undo, a new query on the results is not.
               go({ q: input.trim(), tab: 'results' }, route.tab === 'results' ? 'replace' : 'push');
             }}
-            className={cn('group flex items-center gap-3 rounded-xl border bg-card shadow-sm transition-[border-color,box-shadow]',
-              // The accent is a CSS variable, not a Tailwind colour: arbitrary values carry it.
-              'focus-within:border-[color:var(--workspace-accent,#22c55e)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--workspace-accent,#22c55e)_22%,transparent)]',
-              landing ? 'w-full px-4 py-3.5' : 'p-3')}
+            className={cn(
+              'workspace-omni-search group flex items-center gap-3 rounded-xl border border-border bg-card shadow-sm',
+              landing ? 'w-full px-4 py-3.5' : 'p-3',
+            )}
           >
-            <SearchIcon size={landing ? 20 : 18} className="text-muted-foreground transition-colors group-focus-within:text-[color:var(--workspace-accent,#22c55e)]" />
+            <SearchIcon size={landing ? 20 : 18} className="text-muted-foreground" />
             <input
               type="search"
               value={input}
