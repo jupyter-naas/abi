@@ -43,6 +43,7 @@ def test_schedules_match_the_dagster_ones_in_utc():
     assert jobs["dataset_catalog_monitor"].triggers == (
         Cron("0 0 * * * *", time_zone="UTC"),
     )
+    assert jobs["dataset_cleanup"].triggers == (Cron("0 0 3 * * *", time_zone="UTC"),)
     assert DatasetMaintenanceJobs(_service()).missing_job_handlers() == set()
 
 
@@ -115,3 +116,37 @@ def test_catalog_monitor_reports_unflushed_records():
     service.check_catalog_pressure.assert_any_call(
         "a", namespace="first", threshold_records=10
     )
+
+
+@pytest.mark.parametrize(
+    "payload, retention, expected_log",
+    [
+        ({}, None, "Expired 0 snapshots (no retention: snapshots are kept); deleted 12 unused files"),
+        ({"dry_run": True}, 7.0, "Would expire 4 snapshots (older than 7 days); would delete 12 unused files"),
+    ],
+)
+def test_cleanup_runs_the_adapters_clean_up(payload, retention, expected_log):
+    service = _service()
+    service.adapter = Mock()
+    service.adapter.clean_up.side_effect = lambda dry_run: {
+        "dry_run": dry_run,
+        "retention_days": retention,
+        "snapshots_expired": 4 if retention else 0,
+        "files_deleted": 12,
+    }
+    ctx = _ctx(payload)
+
+    report = DatasetMaintenanceJobs(service).clean_up(ctx)
+
+    service.adapter.clean_up.assert_called_once_with(dry_run=bool(payload))
+    assert report["files_deleted"] == 12
+    assert ctx.logs == [expected_log]
+
+
+def test_cleanup_skips_an_adapter_without_files_to_clean():
+    service = _service()
+    service.adapter = Mock(spec=["write"])
+    ctx = _ctx()
+
+    assert DatasetMaintenanceJobs(service).clean_up(ctx) == {}
+    assert ctx.skipped

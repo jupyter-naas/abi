@@ -4,7 +4,7 @@ Not a module: the engine hosts these jobs under ``DATASET_JOBS_OWNER`` whenever
 the dataset service is loaded in NATS mode, on its own dataset service (no RPC
 hop when the engine owns it). Handlers are sync and run in a worker thread.
 Payload keys for a manual trigger: ``namespace``, ``name``,
-``inline_warning_threshold``.
+``inline_warning_threshold``; ``dry_run`` for ``dataset_cleanup``.
 
 ``flush`` and ``compact`` take as long as the data: when the service is remote
 they wait ``call_timeout``, not a client's default of seconds.
@@ -47,7 +47,8 @@ class DatasetMaintenanceJobs(JobsMixin):
         triggers=(Cron("0 0 2 * * *", time_zone="UTC"),),
     )
     def compact(self, ctx: JobContext) -> dict[str, Any]:
-        """Flush inline data, then merge small files within partitions; preserve snapshots."""
+        """Flush inline data, then rewrite files with deletes and merge small
+        files within partitions; preserve snapshots."""
         namespace = ctx.payload.get("namespace")
         name = ctx.payload.get("name")
         if name is not None:
@@ -75,6 +76,34 @@ class DatasetMaintenanceJobs(JobsMixin):
             ctx.log(f"Compacted {dataset.namespace}.{dataset.name}: {compacted.rows}")
             processed += 1
         return {"datasets_processed": processed}
+
+    @job(
+        "dataset_cleanup",
+        triggers=(Cron("0 0 3 * * *", time_zone="UTC"),),
+    )
+    def clean_up(self, ctx: JobContext) -> dict[str, Any]:
+        """Expire snapshots past the catalog's retention, if it has one, then
+        delete the files no snapshot uses (compaction's replaced files among
+        them). Skipped when the adapter keeps no such files."""
+        clean_up = getattr(self.service.adapter, "clean_up", None)
+        if clean_up is None:
+            ctx.skip("The dataset adapter keeps no files to clean up")
+            return {}
+        report = clean_up(dry_run=bool(ctx.payload.get("dry_run", False)))
+        expire, delete = (
+            ("Would expire", "would delete") if report["dry_run"] else ("Expired", "deleted")
+        )
+        retention = report["retention_days"]
+        ctx.log(
+            f"{expire} {report['snapshots_expired']} snapshots "
+            + (
+                f"(older than {retention:g} days)"
+                if retention is not None
+                else "(no retention: snapshots are kept)"
+            )
+            + f"; {delete} {report['files_deleted']} unused files"
+        )
+        return report
 
     @job(
         "dataset_catalog_monitor",
