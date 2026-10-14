@@ -25,6 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
     AppRequest,
     AppResponse,
     RemoteApp,
+    RemoteAppStreamFailed,
     RemoteAppUnavailable,
 )
 
@@ -44,6 +45,8 @@ REFRESH_SECONDS = 5.0
 RETRY_AFTER_SECONDS = 5.0
 # After the last upload chunk, the module answers within its idle limit.
 ANSWER_AFTER_UPLOAD_SECONDS = 65.0
+# How long the module has to take the error of an upload the browser dropped.
+CUT_NOTICE_SECONDS = 2.0
 # The module is gone or going: another READY instance may answer.
 # Each is raised before the app ran the request, so even a POST is safe to resend.
 _RETRY_ELSEWHERE = {"MODULE_UNAVAILABLE", "LEASE_EXPIRED", "UNAVAILABLE"}
@@ -141,9 +144,7 @@ class DiscoveryRemoteAppDirectory:
         instances: dict[tuple[str, str], list[str]] = {}
         after = ""
         while True:
-            page, after = await client.discovery.list_modules(
-                limit=100, after_instance_id=after
-            )
+            page, after = await client.discovery.list_modules(limit=100, after_instance_id=after)
             for instance in page:
                 if instance.status != "READY" or instance.contract_major != CONTRACT_MAJOR:
                     continue
@@ -206,6 +207,7 @@ class DiscoveryRemoteAppDirectory:
             body=request.body,
             root_path=request.root_path or RemoteApp(module_id, app).root_path,
             user_id=request.user_id,
+            workspace_id=request.workspace_id,
         )
         for name, value in request.headers:
             message.headers.add(name=name, value=value)
@@ -225,7 +227,7 @@ class DiscoveryRemoteAppDirectory:
         try:
             for instance_id in candidates[:2]:  # one retry, elsewhere
                 try:
-                    response = await self._send(client, instance_id, message, source)
+                    response = await self._send(client, instance_id, message, source, pump)
                 except _Retry as exc:
                     last = exc.reason
                     client.snapshot = None  # that instance is gone or going
@@ -241,7 +243,14 @@ class DiscoveryRemoteAppDirectory:
             if source is not None:
                 await source.close()
 
-    async def _send(self, client: _Client, instance_id: str, message: Any, source: Any) -> Any:
+    async def _send(
+        self,
+        client: _Client,
+        instance_id: str,
+        message: Any,
+        source: Any,
+        pump: asyncio.Task | None = None,
+    ) -> Any:
         from naas_abi_sdk.app_host import call_app
         from naas_abi_sdk.transport import RPCError
         from nats.errors import NoRespondersError
@@ -251,7 +260,9 @@ class DiscoveryRemoteAppDirectory:
         try:
             if source is None:
                 return await call(transport, client.project, instance_id, message)
-            return await _upload(call(transport, client.project, instance_id, message), source)
+            return await _upload(
+                call(transport, client.project, instance_id, message), source, pump
+            )
         except RPCError as exc:
             if exc.code in _RETRY_ELSEWHERE:
                 raise _Retry(str(exc)) from exc
@@ -273,12 +284,18 @@ class DiscoveryRemoteAppDirectory:
         return AppResponse(
             response.status or 200,
             headers,
-            body_stream=_pulled(nc, response.body_inbox),
+            body_stream=_Pulled(nc, response.body_inbox),
         )
 
 
+class UploadCut(Exception):
+    """The browser's body ended before it was whole (the browser left)."""
+
+
 async def _pump(stream: AsyncIterator[bytes], source: Any, max_bytes: int, nc: Any) -> None:
-    """Feed the browser's body to ``source`` as the module pulls it."""
+    """Feed the browser's body to ``source`` as the module pulls it. A body
+    the browser stops sending (it left) ends with an error at once, so the
+    module's app stops reading it now, not after its idle limit."""
     from naas_abi_sdk.app_streams import ReaderGone, chunk_bytes, rechunk
 
     total = 0
@@ -292,20 +309,33 @@ async def _pump(stream: AsyncIterator[bytes], source: Any, max_bytes: int, nc: A
         await source.finish()
     except ReaderGone:
         pass
+    except Exception as exc:  # the browser's stream broke: ClientDisconnect
+        source.abort("CANCELLED", "The upload was cut off")
+        raise UploadCut() from exc
 
 
-async def _upload(call: Any, source: Any) -> Any:
+async def _upload(call: Any, source: Any, pump: asyncio.Task | None = None) -> Any:
     """The module's answer to a streamed upload. It comes once the app has read
     what it needs; fail when the module stops pulling (it died, or its app
-    stalled) or does not answer after the whole body."""
+    stalled), when the browser stops sending, or when the module does not
+    answer after the whole body."""
     task = asyncio.ensure_future(call)
     loop = asyncio.get_running_loop()
     finished_at: float | None = None
+    waits: set[asyncio.Future] = {task} if pump is None else {task, pump}
     try:
         while True:
-            await asyncio.wait({task}, timeout=1.0)
+            await asyncio.wait(waits, timeout=1.0, return_when=asyncio.FIRST_COMPLETED)
             if task.done():
                 return task.result()
+            if pump is not None and pump in waits and pump.done():
+                waits.discard(pump)
+                if not pump.cancelled() and pump.exception() is not None:
+                    # The slot is free at once. The module's next pull gets the
+                    # error (its app sees a disconnect), if it takes it soon.
+                    with contextlib.suppress(TimeoutError):
+                        await asyncio.wait_for(source.settled(), CUT_NOTICE_SECONDS)
+                    raise RemoteAppUnavailable(400, "The upload was cut off")
             if source.done.is_set():
                 finished_at = finished_at or loop.time()
                 if loop.time() - finished_at > ANSWER_AFTER_UPLOAD_SECONDS:
@@ -318,18 +348,39 @@ async def _upload(call: Any, source: Any) -> Any:
             await asyncio.gather(task, return_exceptions=True)
 
 
-async def _pulled(nc: Any, inbox: str) -> AsyncIterator[bytes]:
-    """The response body; an error after the response started ends it early
-    (the status line is already sent)."""
-    from naas_abi_sdk.app_streams import pull_body
-    from naas_abi_sdk.transport import RPCError
+class _Pulled:
+    """A module's response body, pulled as it is iterated.
 
-    stream = pull_body(nc, inbox)
-    try:
-        async for chunk in stream:
-            yield chunk
-    except RPCError:
-        return
-    finally:
-        with contextlib.suppress(Exception):
-            await stream.aclose()
+    An error after the response started (its status line is sent) raises
+    RemoteAppStreamFailed: the server aborts the connection, so the browser
+    sees the body as cut, not as whole. Closing it tells the module, even
+    before the first chunk (a browser that left at once)."""
+
+    def __init__(self, nc: Any, inbox: str) -> None:
+        from naas_abi_sdk.app_streams import pull_body
+
+        self.nc, self.inbox = nc, inbox
+        self.stream = pull_body(nc, inbox)
+        self.started = False
+
+    def __aiter__(self) -> _Pulled:
+        return self
+
+    async def __anext__(self) -> bytes:
+        from naas_abi_sdk.transport import RPCError
+
+        self.started = True
+        try:
+            return await self.stream.__anext__()
+        except RPCError as exc:
+            _log.warning("A remote app's response broke off: %s %s", exc.code, exc)
+            raise RemoteAppStreamFailed(str(exc)) from exc
+
+    async def aclose(self) -> None:
+        from naas_abi_sdk.app_streams import cancel_body
+
+        if self.started:
+            await self.stream.aclose()
+        else:
+            self.started = True
+            await cancel_body(self.nc, self.inbox)

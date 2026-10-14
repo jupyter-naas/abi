@@ -6,30 +6,36 @@
   so the browser sends it no cookie: the grant in the path is its credential
   (``grant.py``), and relative URLs carry it.
 * ``/app-html/remote/<module_id>/<app>/<path>``, the catalog URL, runs the
-  usual ``/app-html/`` access check and redirects to a fresh grant.
+  usual ``/app-html/`` access check and redirects a user to a fresh grant;
+  an ``ABI_API_KEY`` caller (no user, no browser) is answered directly.
 
-The module gets the user's id, never the user's credential. Headers pass on
-allow-lists both ways. The module's cookies stay on its own path, under names
-of their own, and only those come back to it.
+A grant names the workspace the app opens in (``access.py``) and ends when the
+user logs out (``revocation.py``). The module gets the user's id and the
+workspace, never the user's credential. Headers pass on allow-lists both ways.
+The module's cookies stay on its own path, under names of their own, and only
+those come back to it.
 """
 
 from __future__ import annotations
 
 import contextlib
 import logging
-from collections.abc import AsyncIterator, Iterator
+import re
+from collections.abc import AsyncIterator, Callable, Iterator
 from datetime import UTC, datetime
-from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
+from urllib.parse import unquote_plus, urljoin, urlsplit
 
 from fastapi import HTTPException, Request
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key
+from naas_abi.apps.nexus.apps.api.app.services.apps.remote import access, revocation
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.factory import (
     get_remote_app_directory,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
     GRANT_ROUTE_PREFIX,
+    RemoteAppGrant,
     grant_root,
     is_segment,
     mint_remote_app_grant,
@@ -38,8 +44,11 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
     INLINE_BYTES,
+    MAX_STREAMS_PER_MODULE,
     MAX_UPLOADS_PER_MODULE,
     AppRequest,
+    AppResponse,
+    RemoteApp,
     RemoteAppUnavailable,
 )
 from naas_abi_core.apps.api.abi_api_key_auth import (
@@ -60,8 +69,10 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
     # From the opaque origin, the app's fetch() calls are cross-origin. They
-    # carry no credential but the grant in their URL.
+    # carry no credential but the grant in their URL, and may read every
+    # header the browser gets (the returned ones below).
     "Access-Control-Allow-Origin": "*",
+    "Access-Control-Expose-Headers": "*",
 }
 
 # Request headers the app may read: content negotiation, conditional and range
@@ -69,9 +80,10 @@ SECURITY_HEADERS = {
 _FORWARDED = frozenset({"content-type", "content-disposition", "range", "user-agent"})
 _FORWARDED_PREFIXES = ("accept", "if-")
 _NOT_THE_APPS = ("x-forwarded-", "x-real-ip", "x-api-key")
-# Response headers the browser gets from the module, besides a same-app
-# Location and app-scoped cookies. The content-* and range ones keep the
-# forwarded Accept-Encoding and Range requests working.
+# Response headers the browser gets from the module, besides its x- headers,
+# a same-app Location, app-scoped cookies and Content-Length. The content-*
+# and range ones keep the forwarded Accept-Encoding and Range requests
+# working; the others are an API's: rate limits, auth challenges, pagination.
 _RETURNED = frozenset(
     {
         "content-type",
@@ -84,10 +96,29 @@ _RETURNED = frozenset(
         "content-language",
         "content-range",
         "accept-ranges",
+        "retry-after",
+        "www-authenticate",
+        "link",
     }
+)
+# x- response headers that are not the app's to set: a proxy in front of
+# Nexus acts on the first ones (X-Accel-Redirect serves any file it names),
+# and Nexus sets framing and sniffing itself.
+_NOT_RETURNED = (
+    "x-accel-",
+    "x-sendfile",
+    "x-lighttpd-send-file",
+    "x-forwarded-",
+    "x-real-ip",
+    "x-frame-options",
+    "x-content-type-options",
 )
 # The module's cookies, renamed in the browser so that only they come back.
 APP_COOKIE_PREFIX = "abi_app."
+# RFC 6265 cookie names: an HTTP token.
+_COOKIE_NAME = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
+# Characters no header value may carry (they would split or end the header).
+_BAD_VALUE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f]")
 
 
 def _presented_user(request: Request) -> tuple[str, datetime | None]:
@@ -102,6 +133,11 @@ def _presented_user(request: Request) -> tuple[str, datetime | None]:
     subject, exp = payload.get("sub"), payload.get("exp")
     expires = datetime.fromtimestamp(exp, UTC) if isinstance(exp, int | float) else None
     return (subject if isinstance(subject, str) else ""), expires
+
+
+def presented_credential_expiry(request: Request) -> datetime | None:
+    """When the credential of ``request`` expires (a grant never outlives it)."""
+    return _presented_user(request)[1]
 
 
 def _is_forwarded(name: str) -> bool:
@@ -124,13 +160,15 @@ def _forwarded_headers(request: Request) -> tuple[tuple[str, str], ...]:
     return tuple(headers)
 
 
-def _query(request: Request) -> str:
-    return urlencode(
-        [
-            (key, value)
-            for key, value in parse_qsl(request.url.query, keep_blank_values=True)
-            if key != "token"
-        ]
+def _query(request: Request, *dropped: str) -> str:
+    """The query as the browser sent it, byte for byte, without ``token`` (an
+    access credential) and the ``dropped`` parameters (Nexus's own)."""
+    names = {"token", *dropped}
+    raw = request.scope.get("query_string", b"").decode("latin-1")
+    return "&".join(
+        part
+        for part in raw.split("&")
+        if part and unquote_plus(part.partition("=")[0]) not in names
     )
 
 
@@ -153,6 +191,10 @@ def _same_app_location(value: str, root: str, path: str) -> str | None:
     resolved = urlsplit(urljoin(f"http://nexus{root}{path}", value.strip()))
     if resolved.netloc != "nexus" or not _within(resolved.path, root):
         return None
+    # The request's own path is joined in: "%252e%252e" reached the route as
+    # "%2e%2e", which the browser would read as a dot segment.
+    if _reinterpreted(resolved.path):
+        return None
     location = resolved.path
     if resolved.query:
         location += f"?{resolved.query}"
@@ -163,12 +205,14 @@ def _same_app_location(value: str, root: str, path: str) -> str | None:
 
 def _app_cookie(value: str, root: str) -> str | None:
     """A cookie the module sets on its own path and host, renamed; else None."""
-    name, separator, rest = value.partition("=")
+    pair, _, attributes = value.partition(";")
+    name, separator, cookie_value = pair.partition("=")
     name = name.strip()
-    if not separator or not name or name == APP_HTML_TOKEN_COOKIE:
+    if not separator or not _COOKIE_NAME.fullmatch(name) or name == APP_HTML_TOKEN_COOKIE:
         return None
+    rest = f"{cookie_value.strip()};{attributes}" if attributes else cookie_value.strip()
     path = None
-    for attribute in rest.split(";")[1:]:
+    for attribute in attributes.split(";"):
         key, _, attribute_value = attribute.partition("=")
         key = key.strip().lower()
         if key == "domain":
@@ -180,13 +224,31 @@ def _app_cookie(value: str, root: str) -> str | None:
     return f"{APP_COOKIE_PREFIX}{name}={rest}"
 
 
+def _is_returned(name: str) -> bool:
+    if name in _RETURNED:
+        return True
+    return name.startswith("x-") and not name.startswith(_NOT_RETURNED)
+
+
+def _sendable(name: str, value: str) -> bool:
+    """A header HTTP can carry: latin-1, no line break, NUL or control byte."""
+    try:
+        name.encode("latin-1")
+        value.encode("latin-1")
+    except UnicodeEncodeError:
+        return False
+    return bool(_COOKIE_NAME.fullmatch(name)) and not _BAD_VALUE.search(value)
+
+
 def _returned_headers(
     headers: tuple[tuple[str, str], ...], root: str, path: str = "/"
 ) -> list[tuple[str, str]]:
     returned = []
     for name, value in headers:
         lower = name.lower()
-        if lower in _RETURNED:
+        if not _sendable(name, value):
+            continue
+        if _is_returned(lower):
             returned.append((name, value))
         elif lower == "location":
             location = _same_app_location(value, root, path)
@@ -199,28 +261,95 @@ def _returned_headers(
     return returned
 
 
-class _Uploads:
-    """Uploads streaming to each module from this worker (MAX_UPLOADS_PER_MODULE)."""
+def _content_length(headers: tuple[tuple[str, str], ...]) -> int | None:
+    value = next((v for k, v in headers if k.lower() == "content-length"), "").strip()
+    return int(value) if value.isdigit() else None
 
-    def __init__(self) -> None:
+
+class _Slots:
+    """Bodies streaming to or from each module from this worker, at most
+    ``limit`` per module (uploads, or responses)."""
+
+    def __init__(self, limit: int, busy: str) -> None:
+        self.limit, self.busy = limit, busy
         self.active: dict[str, int] = {}
+
+    def acquire(self, module_id: str) -> Callable[[], None]:
+        """Take a slot (503 when none is left); call the result to give it back."""
+        if self.active.get(module_id, 0) >= self.limit:
+            raise HTTPException(status_code=503, detail=self.busy, headers=SECURITY_HEADERS)
+        self.active[module_id] = self.active.get(module_id, 0) + 1
+        released = False
+
+        def release() -> None:
+            nonlocal released
+            if not released:
+                released = True
+                self.active[module_id] -= 1
+                if not self.active[module_id]:
+                    del self.active[module_id]
+
+        return release
 
     @contextlib.contextmanager
     def slot(self, module_id: str) -> Iterator[None]:
-        if self.active.get(module_id, 0) >= MAX_UPLOADS_PER_MODULE:
-            raise HTTPException(
-                status_code=503, detail="Too many uploads to this app", headers=SECURITY_HEADERS
-            )
-        self.active[module_id] = self.active.get(module_id, 0) + 1
+        release = self.acquire(module_id)
         try:
             yield
         finally:
-            self.active[module_id] -= 1
-            if not self.active[module_id]:
-                del self.active[module_id]
+            release()
 
 
-_uploads = _Uploads()
+_uploads = _Slots(MAX_UPLOADS_PER_MODULE, "Too many uploads to this app")
+_streams = _Slots(MAX_STREAMS_PER_MODULE, "Too many responses streaming from this app")
+
+
+async def _close(body: AsyncIterator[bytes]) -> None:
+    """Close a module's body: the module hears of it and stops its app."""
+    closing = getattr(body, "aclose", None)
+    if closing is not None:
+        with contextlib.suppress(Exception):
+            await closing()
+
+
+class _RemoteAppStream(StreamingResponse):
+    """A module's streamed body, holding one of its module's stream slots.
+
+    It stops when the browser leaves, even while the stream is idle
+    (server-sent events), whatever ASGI spec version the server speaks, and
+    it always closes the body, so the module stops its app. A body that
+    breaks off raises from its iterator (RemoteAppStreamFailed): the server
+    then aborts the connection."""
+
+    def __init__(
+        self, body: AsyncIterator[bytes], release: Callable[[], None], status_code: int
+    ) -> None:
+        super().__init__(body, status_code=status_code)
+        self._body, self._release = body, release
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        import anyio
+
+        failed: list[Exception] = []
+        try:
+            async with anyio.create_task_group() as group:
+
+                async def respond() -> None:
+                    try:
+                        await self.stream_response(send)
+                    except Exception as exc:  # raised below, not as a group
+                        failed.append(exc)
+                    group.cancel_scope.cancel()
+
+                group.start_soon(respond)
+                await self.listen_for_disconnect(receive)
+                group.cancel_scope.cancel()
+        finally:
+            self._release()
+            with anyio.CancelScope(shield=True):
+                await _close(self._body)
+        if failed:
+            raise failed[0]
 
 
 async def _read_head(request: Request) -> tuple[bytes, AsyncIterator[bytes] | None]:
@@ -242,15 +371,23 @@ async def _rest(head: bytes, stream: AsyncIterator[bytes]) -> AsyncIterator[byte
             yield chunk
 
 
-def _granted_user(grant: str, module_id: str, app: str) -> str:
+_EXPIRED = "This app link has expired. Open the app again."
+
+
+def _granted(grant: str, module_id: str, app: str) -> RemoteAppGrant:
     granted = read_remote_app_grant(grant, secret=current_secret_key())
     if granted is None or (granted.module_id, granted.app) != (module_id, app):
-        raise HTTPException(
-            status_code=401,
-            detail="This app link has expired. Open the app again.",
-            headers=SECURITY_HEADERS,
-        )
-    return granted.user_id
+        raise HTTPException(status_code=401, detail=_EXPIRED, headers=SECURITY_HEADERS)
+    return granted
+
+
+async def _live_grant(grant: str, module_id: str, app: str) -> RemoteAppGrant:
+    """The grant, unless it expired or the user logged out since it was issued."""
+    granted = _granted(grant, module_id, app)
+    assert granted.issued_at is not None  # read_remote_app_grant requires it
+    if await revocation.grant_revoked(granted.user_id, granted.issued_at):
+        raise HTTPException(status_code=401, detail=_EXPIRED, headers=SECURITY_HEADERS)
+    return granted
 
 
 def _unavailable(module_id: str, app: str, exc: RemoteAppUnavailable) -> HTTPException:
@@ -262,8 +399,28 @@ def _unavailable(module_id: str, app: str, exc: RemoteAppUnavailable) -> HTTPExc
 async def serve_remote_app(
     grant: str, module_id: str, app: str, path: str, request: Request
 ) -> Response:
-    user_id = _granted_user(grant, module_id, app)
-    root = grant_root(grant, module_id, app)
+    granted = await _live_grant(grant, module_id, app)
+    return await _forward(
+        module_id,
+        app,
+        path,
+        request,
+        user_id=granted.user_id,
+        workspace_id=granted.workspace_id,
+        root=grant_root(grant, module_id, app),
+    )
+
+
+async def _forward(
+    module_id: str,
+    app: str,
+    path: str,
+    request: Request,
+    *,
+    user_id: str,
+    workspace_id: str,
+    root: str,
+) -> Response:
     directory = get_remote_app_directory()
     try:
         limit = await directory.upload_limit(module_id, app)
@@ -282,8 +439,10 @@ async def serve_remote_app(
         headers=_forwarded_headers(request),
         body=body,
         user_id=user_id,
+        workspace_id=workspace_id,
         body_stream=rest,
-        max_body_bytes=limit if rest is not None else 0,
+        # The module holds to its own limit too, whatever this says.
+        max_body_bytes=limit,
         root_path=root,
     )
     try:
@@ -294,11 +453,29 @@ async def serve_remote_app(
                 answer = await directory.forward(module_id, app, forwarded)
     except RemoteAppUnavailable as exc:
         raise _unavailable(module_id, app, exc) from exc
+    return await _response(module_id, answer, request.method, root, "/" + path)
+
+
+async def _response(
+    module_id: str, answer: AppResponse, method: str, root: str, path: str
+) -> Response:
+    length = _content_length(answer.headers)
+    response: Response
     if answer.body_stream is not None:
-        response: Response = StreamingResponse(answer.body_stream, status_code=answer.status)
+        try:
+            release = _streams.acquire(module_id)
+        except HTTPException:
+            await _close(answer.body_stream)
+            raise
+        response = _RemoteAppStream(answer.body_stream, release, answer.status)
+        if length is not None:
+            # A body cut short then fails in the browser, through any proxy.
+            response.headers["content-length"] = str(length)
     else:
         response = Response(content=answer.body, status_code=answer.status)
-    for name, value in _returned_headers(answer.headers, root, "/" + path):
+        if method.upper() == "HEAD" and length is not None:
+            response.headers["content-length"] = str(length)  # what GET would send
+    for name, value in _returned_headers(answer.headers, root, path):
         response.headers.append(name, value)
     response.headers.update(SECURITY_HEADERS)
     return response
@@ -308,7 +485,7 @@ async def redirect_remote_app_root(
     grant: str, module_id: str, app: str, request: Request
 ) -> Response:
     """``.../<app>`` -> ``.../<app>/``: relative links in the entry page resolve."""
-    _granted_user(grant, module_id, app)
+    await _live_grant(grant, module_id, app)
     query = f"?{request.url.query}" if request.url.query else ""
     return RedirectResponse(
         f"{request.url.path}/{query}", status_code=307, headers=SECURITY_HEADERS
@@ -316,7 +493,11 @@ async def redirect_remote_app_root(
 
 
 def remote_app_grant_url(
-    user_id: str, module_id: str, app: str, not_after: datetime | None = None
+    user_id: str,
+    module_id: str,
+    app: str,
+    not_after: datetime | None = None,
+    workspace_id: str = "",
 ) -> str:
     """The app's root under a fresh grant, ending with ``/``."""
     grant = mint_remote_app_grant(
@@ -326,21 +507,42 @@ def remote_app_grant_url(
         app=app,
         minutes=nexus_config.settings.remote_app_grant_expire_minutes,
         not_after=not_after,
+        workspace_id=workspace_id,
     )
     return grant_root(grant, module_id, app) + "/"
 
 
 async def open_remote_app(module_id: str, app: str, request: Request, path: str = "") -> Response:
-    """The catalog URL, after the ``/app-html/`` access check: the same page
-    under a fresh grant, for the same user and no longer than the credential
-    that was presented (a share link stays a share link)."""
+    """The catalog URL, after the ``/app-html/`` access check.
+
+    A user gets the same page under a fresh grant (307: a POST stays a POST),
+    for the workspace ``?workspace_id=`` names, or the first of theirs that
+    enables the app, and no longer than the credential that was presented (a
+    share link stays a share link). An ``ABI_API_KEY`` caller is a script, not
+    a browser: it is answered directly, with no user and no workspace."""
     if not is_segment(module_id, app):
         raise HTTPException(status_code=404, detail="Not Found")
     user_id, expires = _presented_user(request)
     if not user_id:
-        raise HTTPException(status_code=403, detail="A remote app opens for a signed-in user")
-    query = _query(request)
-    target = remote_app_grant_url(user_id, module_id, app, not_after=expires) + path
+        return await _forward(
+            module_id,
+            app,
+            path,
+            request,
+            user_id="",
+            workspace_id="",
+            root=RemoteApp(module_id, app).root_path,
+        )
+    workspace_id = await access.remote_app_workspace(
+        user_id,
+        RemoteApp(module_id, app).app_id,
+        request.query_params.get("workspace_id") or None,
+    )
+    query = _query(request, "workspace_id")
+    target = (
+        remote_app_grant_url(user_id, module_id, app, not_after=expires, workspace_id=workspace_id)
+        + path
+    )
     return RedirectResponse(f"{target}?{query}" if query else target, status_code=307)
 
 
