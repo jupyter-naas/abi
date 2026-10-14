@@ -3767,6 +3767,7 @@ dagster = [
     { name = "dagster-aws" },
     { name = "dagster-postgres" },
     { name = "dagster-webserver" },
+    { name = "sqlalchemy" },
 ]
 nats = [
     { name = "naas-abi-proto" },
@@ -3833,6 +3834,7 @@ requires-dist = [
     { name = "rich", specifier = ">=13.9.4,<14" },
     { name = "spacy", specifier = ">=3.8.7" },
     { name = "sparqlwrapper", specifier = ">=2.0.0" },
+    { name = "sqlalchemy", marker = "extra == 'dagster'", specifier = "<2.1" },
     { name = "sqlite-vec", marker = "extra == 'sqlite-vec'", specifier = ">=0.1.9" },
     { name = "sse-starlette", specifier = ">=2.1.3,<3" },
     { name = "sshtunnel", marker = "extra == 'ssh'", specifier = ">=0.4.0" },

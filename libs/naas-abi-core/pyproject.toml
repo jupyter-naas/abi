@@ -79,12 +79,15 @@ openrouter = [
 # Legacy, for projects without NATS, to be removed in the next major: Dagster
 # schedules module orchestrations and dataset compaction (NATS mode uses module
 # jobs), RabbitMQ is the bus (NATS mode uses JetStream). dagster-aws holds the
-# S3 compute log manager the local deploy's dagster.yaml configures.
+# S3 compute log manager the local deploy's dagster.yaml configures. With
+# SQLAlchemy 2.1 (dagster 1.13.26), every Postgres storage call from the
+# webserver fails with "the connection is closed".
 dagster = [
     "dagster>=1.12.13",
     "dagster-aws>=0.28.14",
     "dagster-postgres>=0.28.14",
     "dagster-webserver>=1.12.14",
+    "sqlalchemy<2.1",
 ]
 redis = [
     "redis>=7.1.0",
