@@ -472,3 +472,41 @@ SELECT ?filePath (COUNT(?s) AS ?n) WHERE {
     service.load_schemas(filepaths)
     assert len(adapter.insert_calls) == inserts_before
     assert len(adapter.remove_calls) == removes_before
+
+
+def test_a_write_deadline_reaches_only_an_adapter_that_takes_one():
+    class _RemoteAdapter(_FakeTripleStoreAdapter):
+        """Calls another process, so a caller's deadline matters (NATS client)."""
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.deadlines: list[float | None] = []
+
+        def insert(self, triples, graph_name=None, *, timeout_seconds=None):
+            self.deadlines.append(timeout_seconds)
+            super().insert(triples, graph_name)
+
+        def remove(self, triples, graph_name=None, *, timeout_seconds=None):
+            self.deadlines.append(timeout_seconds)
+            super().remove(triples, graph_name)
+
+    graph_name = URIRef("http://example.org/graph/billing")
+    triples = Graph()
+    triples.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+
+    remote = _RemoteAdapter()
+    remote.schema_graph_present = True
+    service = TripleStoreService(remote)
+    service.insert(triples, graph_name, timeout_seconds=900.0)
+    service.remove(triples, graph_name, timeout_seconds=900.0)
+    service.insert(triples, graph_name)
+    assert remote.deadlines == [900.0, 900.0, None]
+
+    # An in-process store runs to completion: its adapter never sees one.
+    local = _FakeTripleStoreAdapter()
+    local.schema_graph_present = True
+    service = TripleStoreService(local)
+    service.insert(triples, graph_name, timeout_seconds=900.0)
+    service.remove(triples, graph_name, timeout_seconds=900.0)
+    assert [name for _, name in local.insert_calls] == [graph_name]
+    assert [name for _, name in local.remove_calls] == [graph_name]

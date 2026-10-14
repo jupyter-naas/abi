@@ -205,26 +205,48 @@ class TripleStoreSecondaryAdapterNATSClient(NatsRPCClient, ITripleStorePort):
     # ITripleStorePort.
     # ------------------------------------------------------------------
 
-    def insert(self, triples: Graph, graph_name: URIRef) -> None:
+    def insert(
+        self,
+        triples: Graph,
+        graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> None:
+        """``timeout_seconds`` replaces the client's default deadline for this
+        write: the store takes one write at a time, so a write can wait minutes
+        behind a long one."""
         request = triple_store_pb2.InsertRequest(
-            context=self._context(),
+            context=self._context(timeout_seconds),
             triples_nt=_graph_to_nt(triples),
             graph_name=str(graph_name),
         )
         response = self._call(
-            f"{SUBJECT_PREFIX}.insert", request, triple_store_pb2.InsertResponse
+            f"{SUBJECT_PREFIX}.insert",
+            request,
+            triple_store_pb2.InsertResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error, self._detail_or_none(response))
 
-    def remove(self, triples: Graph, graph_name: URIRef) -> None:
+    def remove(
+        self,
+        triples: Graph,
+        graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> None:
+        """``timeout_seconds``: as for ``insert``."""
         request = triple_store_pb2.RemoveRequest(
-            context=self._context(),
+            context=self._context(timeout_seconds),
             triples_nt=_graph_to_nt(triples),
             graph_name=str(graph_name),
         )
         response = self._call(
-            f"{SUBJECT_PREFIX}.remove", request, triple_store_pb2.RemoveResponse
+            f"{SUBJECT_PREFIX}.remove",
+            request,
+            triple_store_pb2.RemoveResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error, self._detail_or_none(response))

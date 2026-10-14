@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import inspect
 import io
 import os
 import uuid
@@ -199,16 +200,32 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             return "*"
         return self._hash_value(graph_name)
 
+    def _deadline(self, method: Callable, timeout_seconds: float | None) -> dict:
+        """A caller's deadline, for an adapter whose ``method`` takes one (one
+        that calls another process); an in-process store runs to completion."""
+        if timeout_seconds is None:
+            return {}
+        if "timeout_seconds" not in inspect.signature(method).parameters:
+            return {}
+        return {"timeout_seconds": timeout_seconds}
+
     def insert(
         self,
         triples: Graph,
         graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
     ) -> None:
         assert graph_name is not None
 
         # Insert the triples into the store
+        adapter = self.__triple_store_adapter
         try:
-            self.__triple_store_adapter.insert(triples, graph_name=graph_name)
+            adapter.insert(
+                triples,
+                graph_name=graph_name,
+                **self._deadline(adapter.insert, timeout_seconds),
+            )
         except Exception as exc:
             self.__publish_event(
                 TripleStoreError(
@@ -238,12 +255,19 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         self,
         triples: Graph,
         graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
     ) -> None:
         assert graph_name is not None
 
         # Remove the triples from the store
+        adapter = self.__triple_store_adapter
         try:
-            self.__triple_store_adapter.remove(triples, graph_name=graph_name)
+            adapter.remove(
+                triples,
+                graph_name=graph_name,
+                **self._deadline(adapter.remove, timeout_seconds),
+            )
         except Exception as exc:
             self.__publish_event(
                 TripleStoreError(
