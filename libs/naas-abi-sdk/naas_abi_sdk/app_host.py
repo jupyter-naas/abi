@@ -308,7 +308,9 @@ class AppHost:
             caller = await self._authorize(
                 name, (msg.headers or {}).get("Nats-Auth-Token", "")
             )
-            if request.user_id and caller not in self.user_callers:
+            if (request.user_id or request.workspace_id) and (
+                caller not in self.user_callers
+            ):
                 raise RPCError(
                     "PERMISSION_DENIED",
                     f"{caller!r} cannot call an app on behalf of a user",
@@ -628,9 +630,14 @@ class _AsgiCall:
             "server": None,
             # A shallow copy of what the app's lifespan stored, as servers pass it.
             "state": dict(self.host._states.get(self.descriptor.name, {})),
-            # Who asked: the user, as Nexus vouches for it (empty when another
-            # caller calls the app), and the caller's service identity.
-            "abi": {"user_id": request.user_id, "caller": self.caller},
+            # Who asked: the user and the workspace they opened the app from,
+            # as Nexus vouches for them (empty when another caller calls the
+            # app), and the caller's service identity.
+            "abi": {
+                "user_id": request.user_id,
+                "workspace_id": request.workspace_id,
+                "caller": self.caller,
+            },
         }
 
     async def receive(self) -> dict:

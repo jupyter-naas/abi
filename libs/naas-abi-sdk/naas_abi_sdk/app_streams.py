@@ -305,16 +305,17 @@ async def pull_body(
             sequence += 1
     finally:
         if not finished:
-            await _tell_holder(nc, inbox)
+            await cancel_body(nc, inbox)
 
 
 _cancels: set[asyncio.Task] = set()
 
 
-async def _tell_holder(nc: Any, inbox: str) -> None:
-    """Send the holder a cancel. The send runs in a task of its own: a reader
-    leaves on cancellation (the browser went away), and the send must not be
-    cancelled with it."""
+async def cancel_body(nc: Any, inbox: str) -> None:
+    """Tell the holder of the body at ``inbox`` that its reader left (as
+    leaving ``pull_body`` early does, also before its first pull). The send
+    runs in a task of its own: a reader leaves on cancellation (the browser
+    went away), and the send must not be cancelled with it."""
     task = asyncio.ensure_future(_publish_cancel(nc, inbox))
     _cancels.add(task)
     task.add_done_callback(_cancels.discard)
