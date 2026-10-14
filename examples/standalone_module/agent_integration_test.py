@@ -10,7 +10,6 @@ from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from naas_abi_core.engine.nats_auth import (
-    issue_module_token,
     issue_service_token,
     module_key,
 )
@@ -30,9 +29,12 @@ pytestmark = [
 
 
 
-def _module_token(module_id: str) -> str:
-    """A module registers with a token for its own module id, signed with its key."""
-    return issue_module_token(module_id, module_key(SECRET, module_id))
+def _module_token(module_id: str):
+    """A module registers with a token for its own module id, signed with its key;
+    its calls to other modules carry tokens bound to them."""
+    from naas_abi_sdk.service_token import ModuleToken
+
+    return ModuleToken(module_id, module_key(SECRET, module_id))
 
 def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa: F811
     from naas_abi_proto.agent.v1 import agent_pb2 as pb
@@ -137,9 +139,18 @@ def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa:
                 assert (await builder.compile().ainvoke({"result": ""}))[
                     "result"
                 ] == "network answer"
-                # Host validates the incoming token through the engine, not just discovery lookup.
+                # Host validates the incoming token through the engine, not just
+                # discovery lookup: a valid token not bound to it is refused.
                 target = (await module.ready_instances())[0]
-                bad = Transport(document_host, "invalid", timeout=2)
+
+                class Unbound:
+                    def __call__(self):
+                        return issue_service_token("test", SECRET)
+
+                    def for_audience(self, audience):
+                        return issue_service_token("test", SECRET)
+
+                bad = Transport(document_host, Unbound(), timeout=2)
                 try:
                     with pytest.raises(RPCError, match="UNAUTHENTICATED"):
                         await bad.call(

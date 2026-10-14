@@ -14,7 +14,8 @@ NATS primary authenticates issued service tokens; mutations bind to verified
 caller identity plus a lease token. It accepts a registration only when the
 token's identity is the descriptor's module id (a module registers as itself,
 docs/adr/20261014_module-identities.md); the service's own tests treat the owner
-as an opaque lease holder.
+as an opaque lease holder. An authorize call's caller token must be bound to the
+instance asking (``aud``); its own calls refuse a token with an audience.
 `discovery_factory.py` composes the service. Engine exposure is explicit opt-in;
 replicas use a project queue group and share the same JetStream CAS snapshot. No silent in-memory fallback.
 
