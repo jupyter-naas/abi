@@ -7,7 +7,9 @@ module's own JavaScript can read it, so it must never work as a session token:
 * it is signed with a key derived from the API secret, never the secret
   itself, so ``decode_token`` (sessions, WebSocket, gateway) rejects it;
 * it carries no ``sub``: the user id is ``uid``;
-* it opens one app of one module, as one user, until it expires.
+* it opens one app of one module, as one user, in one workspace (``ws``),
+  until it expires or the user logs out (``revocation.py``: ``iat`` is when it
+  was issued).
 """
 
 from __future__ import annotations
@@ -33,6 +35,8 @@ class RemoteAppGrant:
     user_id: str
     module_id: str
     app: str
+    workspace_id: str = ""
+    issued_at: datetime | None = None
 
 
 def _key(secret: str) -> str:
@@ -52,12 +56,14 @@ def mint_remote_app_grant(
     app: str,
     minutes: int = 60,
     not_after: datetime | None = None,
+    workspace_id: str = "",
 ) -> str:
     """A grant for one user; it never outlives ``not_after`` (the credential
     it was exchanged for)."""
     if not user_id:
         raise ValueError("a remote app grant needs a user")
-    expires = datetime.now(UTC) + timedelta(minutes=max(1, min(minutes, 24 * 60)))
+    now = datetime.now(UTC)
+    expires = now + timedelta(minutes=max(1, min(minutes, 24 * 60)))
     if not_after is not None:
         expires = min(expires, not_after)
     claims = {
@@ -65,6 +71,9 @@ def mint_remote_app_grant(
         "uid": user_id,
         "mod": module_id,
         "app": app,
+        "ws": workspace_id,
+        # Fractional: a logout just before it must not end it (revocation.py).
+        "iat": now.timestamp(),
         "exp": expires,
     }
     return jwt.encode(claims, _key(secret), algorithm=_ALGORITHM)
@@ -78,11 +87,20 @@ def read_remote_app_grant(token: str, *, secret: str) -> RemoteAppGrant | None:
     if claims.get("scope") != GRANT_SCOPE or "sub" in claims:
         return None
     uid, module_id, app = claims.get("uid"), claims.get("mod"), claims.get("app")
-    if not (isinstance(uid, str) and isinstance(module_id, str) and isinstance(app, str)):
+    workspace_id, issued = claims.get("ws", ""), claims.get("iat")
+    if not all(isinstance(v, str) for v in (uid, module_id, app, workspace_id)):
         return None
     if not (uid and module_id and app):
         return None
-    return RemoteAppGrant(user_id=uid, module_id=module_id, app=app)
+    if isinstance(issued, bool) or not isinstance(issued, int | float):
+        return None
+    return RemoteAppGrant(
+        user_id=uid,
+        module_id=module_id,
+        app=app,
+        workspace_id=workspace_id,
+        issued_at=datetime.fromtimestamp(issued, UTC),
+    )
 
 
 def grant_root(grant: str, module_id: str, app: str) -> str:

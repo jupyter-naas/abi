@@ -34,7 +34,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
@@ -132,7 +132,7 @@ def _resolve_manifest_url(raw_url: str | None, module_path: str, app_name: str) 
     ``naas_abi_marketplace/ai/chatgpt`` in the URL.
     """
     if raw_url and raw_url.startswith("html:"):
-        filename = raw_url[len("html:"):]
+        filename = raw_url[len("html:") :]
         module_path_url = module_path.replace(".", "/")
         return f"/app-html/{module_path_url}/{app_name}/{filename}"
     return raw_url
@@ -225,6 +225,19 @@ def _iter_loaded_modules() -> Iterator[Any]:
         yield module
 
 
+def _shadowed_by_remote_apps(module_path: str) -> bool:
+    """A loaded module whose apps would be served under ``/app-html/remote/``,
+    where the apps of remote modules are: its apps are left out, with a warning."""
+    if module_path != "remote" and not module_path.startswith("remote."):
+        return False
+    _log.warning(
+        "Module %s: its apps are not served. /app-html/remote/ is where remote "
+        "modules' apps are; rename the package.",
+        module_path,
+    )
+    return True
+
+
 def _scan_module_apps(module: Any) -> list[AppInfo]:
     """Discover apps under ``<module_root_path>/apps/<app_name>/manifest.json``."""
     module_root = getattr(module, "module_root_path", None)
@@ -235,6 +248,8 @@ def _scan_module_apps(module: Any) -> list[AppInfo]:
         return []
 
     module_path = module.__class__.__module__
+    if _shadowed_by_remote_apps(module_path):
+        return []
 
     catalog: list[AppInfo] = []
     for app_dir in sorted(apps_dir.iterdir()):
@@ -301,7 +316,7 @@ def _scan_apps_html_paths() -> dict[str, str]:
         module_path = module.__class__.__module__
         module_path_url = module_path.replace(".", "/")
         apps_dir = Path(module_root) / "apps"
-        if not apps_dir.is_dir():
+        if not apps_dir.is_dir() or _shadowed_by_remote_apps(module_path):
             continue
         for app_dir in apps_dir.iterdir():
             if not app_dir.is_dir() or app_dir.name.startswith("_"):
@@ -310,10 +325,7 @@ def _scan_apps_html_paths() -> dict[str, str]:
             if not manifest_path.is_file():
                 continue
             for asset_file in app_dir.rglob("*"):
-                if (
-                    not asset_file.is_file()
-                    or asset_file.suffix.lower() not in _APP_ASSET_SUFFIXES
-                ):
+                if not asset_file.is_file() or asset_file.suffix.lower() not in _APP_ASSET_SUFFIXES:
                     continue
                 rel = asset_file.relative_to(app_dir).as_posix()
                 url_key = f"{module_path_url}/{app_dir.name}/{rel}"
@@ -457,10 +469,11 @@ async def create_app_html_access_token(
 
 
 class RemoteAppGrantRequest(BaseModel):
-    """Open one app of a remote module (``/app-remote/``)."""
+    """Open one app of a remote module (``/app-remote/``) in a workspace."""
 
     module_id: str = Field(..., pattern=MODULE_ID_PATTERN)
     app: str = Field(..., pattern=APP_NAME_PATTERN)
+    workspace_id: str = Field(..., min_length=1, max_length=255)
 
 
 class RemoteAppGrantResponse(BaseModel):
@@ -471,18 +484,50 @@ class RemoteAppGrantResponse(BaseModel):
 @router.post("/remote-grant", response_model=RemoteAppGrantResponse)
 async def create_remote_app_grant(
     body: RemoteAppGrantRequest,
+    request: Request,
     current_user: User = Depends(get_current_user_required),
 ) -> RemoteAppGrantResponse:
     """The app's root under a grant: the page runs sandboxed, from the API
-    origin, and the grant in its path is its only credential."""
+    origin, and the grant in its path is its only credential. The user must
+    be able to open the workspace, and the app be enabled in it; the grant
+    ends with the session token it was asked with, or at the user's logout."""
+    from datetime import UTC, datetime
+
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import access
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
+        presented_credential_expiry,
         remote_app_grant_url,
     )
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import RemoteApp
 
-    return RemoteAppGrantResponse(
-        path=remote_app_grant_url(current_user.id, body.module_id, body.app),
-        expires_in=nexus_config.settings.remote_app_grant_expire_minutes * 60,
+    workspace_id = await access.remote_app_workspace(
+        current_user.id, RemoteApp(body.module_id, body.app).app_id, body.workspace_id
     )
+    expires = presented_credential_expiry(request)
+    lifetime = nexus_config.settings.remote_app_grant_expire_minutes * 60
+    if expires is not None:
+        lifetime = min(lifetime, max(0, int((expires - datetime.now(UTC)).total_seconds())))
+    return RemoteAppGrantResponse(
+        path=remote_app_grant_url(
+            current_user.id,
+            body.module_id,
+            body.app,
+            not_after=expires,
+            workspace_id=workspace_id,
+        ),
+        expires_in=lifetime,
+    )
+
+
+@router.post("/remote-grant/revoke", status_code=204, response_class=Response)
+async def revoke_remote_app_grants(
+    current_user: User = Depends(get_current_user_required),
+) -> Response:
+    """End every remote app grant of the current user (a logout does too)."""
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import revocation
+
+    await revocation.revoke_remote_app_grants(current_user.id)
+    return Response(status_code=204)
 
 
 class PagesSsoTokenRequest(BaseModel):
@@ -558,15 +603,11 @@ async def list_apps(
     if workspace_id:
         seed = workspace_seed_for_slug(workspace_slug)
         if seed is not None and seed.apps:
-            seed_apps = {
-                str(app_id).strip() for app_id in seed.apps if str(app_id).strip()
-            }
+            seed_apps = {str(app_id).strip() for app_id in seed.apps if str(app_id).strip()}
 
     results: list[AppInfo] = []
     for app in catalog:
-        update: dict = {
-            "enabled": resolve_app_enabled(app.app_id, enabled_by_app_id, seed_apps)
-        }
+        update: dict = {"enabled": resolve_app_enabled(app.app_id, enabled_by_app_id, seed_apps)}
 
         # Manifest values take precedence; only fall back to runtime config
         # when the manifest omits the credential.

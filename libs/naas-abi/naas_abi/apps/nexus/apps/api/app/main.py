@@ -695,17 +695,19 @@ def _register_routes(app: FastAPI) -> None:
         serve_remote_app,
     )
 
+    # Every method: a user's request is redirected with a 307, which keeps it,
+    # and an ABI_API_KEY caller's is answered directly.
     app.add_api_route(
         "/app-html/remote/{module_id}/{app}/{path:path}",
         open_remote_app,
-        methods=["GET", "HEAD"],
+        methods=REMOTE_APP_METHODS,
         dependencies=[Depends(require_abi_api_token)],
         include_in_schema=False,
     )
     app.add_api_route(
         "/app-html/remote/{module_id}/{app}",
         open_remote_app,
-        methods=["GET", "HEAD"],
+        methods=REMOTE_APP_METHODS,
         dependencies=[Depends(require_abi_api_token)],
         include_in_schema=False,
     )
