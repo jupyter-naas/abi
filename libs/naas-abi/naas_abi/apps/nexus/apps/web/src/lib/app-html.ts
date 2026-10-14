@@ -66,6 +66,19 @@ export function remoteAppGrantUrl(apiBase: string, grantPath: string, rest: stri
   return `${apiBase.replace(/\/+$/, '')}${grantPath}${rest.replace(/^\/+/, '')}`;
 }
 
+/**
+ * A remote app's catalog URL opening it in ``workspaceId`` (``?workspace_id=``):
+ * the API grants it there when the app is enabled in it. Other URLs unchanged.
+ */
+export function withRemoteAppWorkspace(url: string, workspaceId: string): string {
+  if (!workspaceId || !remoteAppParts(url)) return url;
+  const hashIndex = url.indexOf('#');
+  const withoutHash = hashIndex >= 0 ? url.slice(0, hashIndex) : url;
+  const hash = hashIndex >= 0 ? url.slice(hashIndex) : '';
+  const join = withoutHash.includes('?') ? '&' : '?';
+  return `${withoutHash}${join}workspace_id=${encodeURIComponent(workspaceId)}${hash}`;
+}
+
 /** Same flags as the API's CSP sandbox: no allow-same-origin for module code. */
 export const REMOTE_APP_SANDBOX = 'allow-scripts allow-forms allow-popups allow-downloads';
 const APP_HTML_SANDBOX =

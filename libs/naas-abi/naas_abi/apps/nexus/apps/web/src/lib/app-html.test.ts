@@ -9,6 +9,7 @@ import {
   pagesSsoAudience,
   withAppHtmlAccessToken,
   withPagesSsoToken,
+  withRemoteAppWorkspace,
 } from './app-html';
 
 describe('app-html helpers', () => {
@@ -104,6 +105,23 @@ describe('app-html helpers', () => {
     expect(remote).not.toContain('allow-same-origin');
     expect(appIframeSandbox('/app-html/report/counter_uas/dashboard/')).toContain(
       'allow-same-origin',
+    );
+  });
+});
+
+describe('remote app links name their workspace', () => {
+  it('adds the workspace to a remote app catalog URL only', () => {
+    expect(withRemoteAppWorkspace('/app-html/remote/acme.research/console/index.html', 'ws 1')).toBe(
+      '/app-html/remote/acme.research/console/index.html?workspace_id=ws%201',
+    );
+    expect(withRemoteAppWorkspace('/app-html/remote/acme.research/console/?q=1#top', 'ws-1')).toBe(
+      '/app-html/remote/acme.research/console/?q=1&workspace_id=ws-1#top',
+    );
+    expect(withRemoteAppWorkspace('/app-html/report/counter_uas/index.html', 'ws-1')).toBe(
+      '/app-html/report/counter_uas/index.html',
+    );
+    expect(withRemoteAppWorkspace('/app-html/remote/acme.research/console/', '')).toBe(
+      '/app-html/remote/acme.research/console/',
     );
   });
 });
