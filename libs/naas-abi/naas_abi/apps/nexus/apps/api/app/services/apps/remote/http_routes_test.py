@@ -693,6 +693,11 @@ def test_an_apis_response_headers_reach_the_page(monkeypatch):
             ("X-Accel-Redirect", "/internal/secrets"),
             ("X-Sendfile", "/etc/passwd"),
             ("X-Forwarded-Host", "evil.example"),
+            ("X-Middleware-Rewrite", "/api/admin"),
+            ("X-Envoy-Upstream-Service-Time", "1"),
+            ("X-Amzn-Remapped-Host", "evil.example"),
+            ("X-LiteSpeed-Cache-Control", "public"),
+            ("X-Cache-Tags", "all"),
         ),
         status=201,
     )
@@ -707,7 +712,16 @@ def test_an_apis_response_headers_reach_the_page(monkeypatch):
     assert response.headers["link"] == '<page/2>; rel="next"'
     # Not a redirect: the browser does not go there; the page reads it as sent.
     assert response.headers["location"] == "/items/5"
-    for dropped in ("x-accel-redirect", "x-sendfile", "x-forwarded-host"):
+    for dropped in (
+        "x-accel-redirect",
+        "x-sendfile",
+        "x-forwarded-host",
+        "x-middleware-rewrite",
+        "x-envoy-upstream-service-time",
+        "x-amzn-remapped-host",
+        "x-litespeed-cache-control",
+        "x-cache-tags",
+    ):
         assert dropped not in response.headers, dropped
     # The page's fetch() is cross-origin: it may read them.
     assert response.headers["access-control-expose-headers"] == "*"
@@ -942,3 +956,43 @@ def test_a_logged_out_credential_mints_no_grant(monkeypatch, forwarded, logged_o
     fresh, _ = auth_service.create_access_token({"sub": "u-7"})
     again = client.get(url, headers={"Authorization": f"Bearer {fresh}"}, follow_redirects=False)
     assert again.status_code == 307
+
+
+def test_a_browser_leaving_mid_stream_is_not_an_error():
+    """Review round 1: a tab closed mid-download is no "Exception in ASGI
+    application"; a module's stream breaking off still is."""
+    import asyncio
+
+    async def scenario(body):
+        released: list[bool] = []
+        response = http._RemoteAppStream(body, lambda: released.append(True), 200)
+        disconnected = asyncio.Event()
+
+        async def receive():
+            await disconnected.wait()
+            return {"type": "http.disconnect"}
+
+        async def send(message):
+            if message["type"] == "http.response.body" and message.get("body"):
+                disconnected.set()
+                raise OSError("the client went away")
+
+        await response({"type": "http", "asgi": {"spec_version": "2.4"}}, receive, send)
+        assert released == [True]
+
+    closed: list[bool] = []
+    asyncio.run(scenario(_Body([b"a", b"b"], False, closed)))  # returns quietly
+    assert closed == [True]
+
+    async def breaks():
+        async def receive():
+            await asyncio.sleep(3600)
+
+        async def send(message):
+            pass
+
+        response = http._RemoteAppStream(_Body([b"a"], True, None), lambda: None, 200)
+        await response({"type": "http", "asgi": {"spec_version": "2.4"}}, receive, send)
+
+    with pytest.raises(RemoteAppStreamFailed):
+        asyncio.run(breaks())
