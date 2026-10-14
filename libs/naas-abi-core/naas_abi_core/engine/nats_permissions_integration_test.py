@@ -27,14 +27,19 @@ SECRET = "permissions-integration-test-secret-32-bytes"
 PASSWORDS = {"abi": "nats-abi-integration", "module": "nats-module-integration"}
 pytestmark = [
     pytest.mark.integration,
-    pytest.mark.skipif(nats_server_binary() is None, reason="nats-server not installed"),
+    pytest.mark.skipif(
+        nats_server_binary() is None, reason="nats-server not installed"
+    ),
 ]
 
 
 @pytest.fixture
 def broker(tmp_path):
     with native_nats_server(tmp_path, jetstream=True, users=PASSWORDS) as url:
-        yield login(url, "abi", PASSWORDS["abi"]), login(url, "module", PASSWORDS["module"])
+        yield (
+            login(url, "abi", PASSWORDS["abi"]),
+            login(url, "module", PASSWORDS["module"]),
+        )
 
 
 def _module_token(module_id: str):
@@ -105,7 +110,9 @@ def test_a_module_cannot_listen_on_the_engine_nor_touch_its_buckets(broker):
     assert asyncio.run(_violations(engine, subscribe=listen, publish=write)) == []
 
 
-def test_modules_register_and_serve_agents_and_apps_as_the_module_user(broker, tmp_path):
+def test_modules_register_and_serve_agents_and_apps_as_the_module_user(
+    broker, tmp_path
+):
     engine, module = broker
     from naas_abi_core.services.document.adapters.primary.document__primary_adapter__NATS import (
         DocumentPrimaryAdapterNATS,
@@ -131,7 +138,9 @@ def test_modules_register_and_serve_agents_and_apps_as_the_module_user(broker, t
         nc = await nats.connect(engine)
         registry = await start_discovery(nc, SECRET)
         backend = DocumentSecondaryAdapterSQLite(str(tmp_path / "documents.sqlite"))
-        documents = DocumentPrimaryAdapterNATS(DocumentService._for_engine(backend), SECRET)
+        documents = DocumentPrimaryAdapterNATS(
+            DocumentService._for_engine(backend), SECRET
+        )
         await documents.start(nc)
         stop = asyncio.Event()
 
@@ -201,10 +210,16 @@ def test_modules_register_and_serve_agents_and_apps_as_the_module_user(broker, t
                 nexus,
                 "default",
                 instance.instance_id,
-                app_pb2.HttpRequest(app="console", method="GET", path="/", user_id="u-1"),
+                app_pb2.HttpRequest(
+                    app="console", method="GET", path="/", user_id="u-1"
+                ),
             )
             assert answer.status == 200
-            assert json.loads(answer.body) == {"user_id": "u-1", "caller": "api"}
+            assert json.loads(answer.body) == {
+                "user_id": "u-1",
+                "workspace_id": "",
+                "caller": "api",
+            }
 
             # The token the provider was sent is bound to it: replayed to the
             # engine's services, it is refused (it would act as api there).
@@ -296,7 +311,9 @@ def test_a_module_cannot_overhear_rpc_overflow_but_still_uploads_through_it(brok
         async def overhear(msg) -> None:
             overheard.append(msg.data)
 
-        spy = await nats.connect(module, error_cb=on_error, inbox_prefix="_INBOX_MODULES")
+        spy = await nats.connect(
+            module, error_cb=on_error, inbox_prefix="_INBOX_MODULES"
+        )
         await spy.subscribe("abi.rpc.overflow.>", cb=overhear)
         await spy.flush()
         nexus = Transport(engine, ServiceTokenSource("api", SECRET), timeout=5)
@@ -344,7 +361,9 @@ def test_a_module_cannot_overhear_the_engines_jetstream_requests(broker):
         async def overhear(msg) -> None:
             overheard.append(msg.subject)
 
-        spy = await nats.connect(module, error_cb=on_error, inbox_prefix="_INBOX_MODULES")
+        spy = await nats.connect(
+            module, error_cb=on_error, inbox_prefix="_INBOX_MODULES"
+        )
         for subject in ("$JS.API.>", "$JS.EVENT.>", "$JS.ACK.>"):
             await spy.subscribe(subject, cb=overhear)
         await spy.flush()
@@ -366,4 +385,6 @@ def test_a_module_cannot_overhear_the_engines_jetstream_requests(broker):
 
     assert overheard == []
     for subject in ("$js.api.>", "$js.event.>", "$js.ack.>"):
-        assert any("permissions violation" in e and subject in e for e in errors), errors
+        assert any("permissions violation" in e and subject in e for e in errors), (
+            errors
+        )
