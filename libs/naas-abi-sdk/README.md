@@ -133,7 +133,19 @@ secret. The engine accepts the token for that module id only, never for one of
 its own identities (`api`, `engine`, `dagster`), and discovery registers a
 module only under a token for its own module id. `ModuleToken(module_id, key)`
 signs and refreshes the token; `token_from_env(os.environ, module_id)` reads
-`ABI_SERVICE_TOKEN` or `ABI_MODULE_KEY`.
+`ABI_MODULE_KEY`, else `ABI_SERVICE_TOKEN`.
+
+A call to another module (its agents, models, apps) carries a token bound to the
+instance called, for two minutes: `Transport` asks the token source for it
+(`ModuleToken.for_audience`), so that module cannot replay it elsewhere. A
+static token cannot call a module.
+
+Logged in as the broker user `module`, a module may not subscribe to the
+engine's service, discovery or reply subjects (`_INBOX.>`), nor create streams
+(docs/adr/20261014_module-identities.md). `Transport` uses the inbox prefix
+`_INBOX_MODULES` for that user; pass `inbox_prefix="_INBOX_MODULES"` to a raw
+`nats.connect`. The engine creates the jobs stream and the claim-check store;
+`BusClient.enqueue` and `dequeue` need a topic whose stream exists.
 
 Migration preserves module structure/lifecycle; it is not binary compatibility
 with arbitrary engine modules. Change the base imports, declare service names

@@ -33,6 +33,16 @@ from fastapi.responses import StreamingResponse
 MB = 1024 * 1024
 
 
+class NexusToken:
+    """Nexus's token source: a call to a module gets a token bound to its instance."""
+
+    def __call__(self) -> str:
+        return "nexus-token"
+
+    def for_audience(self, audience: str) -> str:
+        return f"nexus-token-for-{audience}"
+
+
 @pytest.fixture
 def broker(tmp_path):
     with socket.socket() as s:
@@ -145,7 +155,7 @@ def test_a_large_upload_streams_through_the_app(broker, tmp_path):
     async def scenario():
         api, _ = _app()
         host = await _module(broker, tmp_path, api)
-        nexus = Transport(broker, "nexus-token", timeout=60)
+        nexus = Transport(broker, NexusToken(), timeout=60)
         try:
             payload = bytes(range(256)) * (20 * MB // 256)  # 20 MB
             source = BodySource(await nexus.connect())
@@ -197,7 +207,7 @@ def test_an_upload_above_its_limit_is_413(broker, tmp_path):
     async def scenario():
         api, _ = _app()
         host = await _module(broker, tmp_path, api)
-        nexus = Transport(broker, "nexus-token", timeout=60)
+        nexus = Transport(broker, NexusToken(), timeout=60)
         try:
             source = BodySource(await nexus.connect())
             await source.start()
@@ -236,7 +246,7 @@ def test_a_large_download_and_a_large_file_stream_back(broker, tmp_path):
     async def scenario():
         api, _ = _app()
         host = await _module(broker, tmp_path, api)
-        nexus = Transport(broker, "nexus-token", timeout=60)
+        nexus = Transport(broker, NexusToken(), timeout=60)
         try:
             download = await call_app(
                 nexus, "acme", "i-1", _request("/api/download", query=f"size={5 * MB}")
@@ -258,7 +268,7 @@ def test_leaving_an_endless_stream_stops_the_app(broker, tmp_path):
     async def scenario():
         api, seen = _app()
         host = await _module(broker, tmp_path, api)
-        nexus = Transport(broker, "nexus-token", timeout=60)
+        nexus = Transport(broker, NexusToken(), timeout=60)
         try:
             response = await call_app(nexus, "acme", "i-1", _request("/api/events"))
             assert response.body_follows
@@ -283,7 +293,7 @@ def test_an_idle_app_is_504(broker, tmp_path):
     async def scenario():
         api, _ = _app()
         host = await _module(broker, tmp_path, api, idle_seconds=0.5)
-        nexus = Transport(broker, "nexus-token", timeout=60)
+        nexus = Transport(broker, NexusToken(), timeout=60)
         try:
             response = await call_app(nexus, "acme", "i-1", _request("/api/stall"))
             assert response.status == 504
@@ -297,7 +307,7 @@ def test_an_idle_app_is_504(broker, tmp_path):
 
 def test_a_holder_that_stops_answering_fails_the_pull(broker):
     async def scenario():
-        nexus = Transport(broker, "nexus-token", timeout=60)
+        nexus = Transport(broker, NexusToken(), timeout=60)
         try:
             nc = await nexus.connect()
             inbox = nc.new_inbox()

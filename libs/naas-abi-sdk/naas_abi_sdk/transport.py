@@ -7,6 +7,7 @@ import math
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar, cast
+from urllib.parse import urlsplit
 
 from google.protobuf.message import Message
 from nats.aio.client import Client
@@ -24,6 +25,28 @@ from naas_abi_sdk.telemetry import (
 )
 
 Response = TypeVar("Response", bound=Message)
+
+# The broker user SDK modules log in as, and the inbox prefix their connections
+# use: the user may not subscribe to _INBOX.>, where the engine's replies go
+# (naas_abi_core.engine.nats_permissions).
+MODULE_USER = "module"
+MODULE_INBOX_PREFIX = "_INBOX_MODULES"
+# Reply and stream inboxes a peer may name: the engine's, and the modules'.
+INBOX_PREFIXES = ("_INBOX.", MODULE_INBOX_PREFIX + ".")
+
+
+def is_inbox(subject: str) -> bool:
+    return subject.startswith(INBOX_PREFIXES)
+
+
+def module_audience(subject: str) -> str | None:
+    """The module instance a call goes to (``abi.agent.<project>.<instance>...``,
+    ``abi.mod.<project>.<instance>...``), else None: the token sent with it is bound
+    to that instance (naas_abi_core.engine.nats_auth, "Audience")."""
+    parts = subject.split(".")
+    if len(parts) > 4 and parts[0] == "abi" and parts[1] in ("agent", "mod"):
+        return parts[3] or None
+    return None
 
 
 class RPCError(RuntimeError):
@@ -49,6 +72,8 @@ class Transport:
             raise ValueError("timeout must be finite and positive")
         self.url, self.token, self.timeout = url, token, timeout
         self.options = connection_options
+        if urlsplit(url).username == MODULE_USER:
+            self.options.setdefault("inbox_prefix", MODULE_INBOX_PREFIX)
         self.connection = Client()
         self._lock = asyncio.Lock()
         self._connected = False
@@ -99,6 +124,20 @@ class Transport:
                 else:
                     await self.connection.close()
 
+    def _token(self, subject: str) -> str:
+        audience = module_audience(subject)
+        if audience is None:
+            return self.token() if callable(self.token) else self.token
+        bind = getattr(self.token, "for_audience", None)
+        if bind is None:
+            raise ValueError(
+                f"A call to a module ({subject}) needs a token bound to it: give the "
+                "transport a token source with for_audience "
+                "(naas_abi_sdk.service_token.ModuleToken, or "
+                "naas_abi_core.engine.nats_auth.ServiceTokenSource)"
+            )
+        return bind(audience)
+
     async def call(
         self,
         subject: str,
@@ -114,7 +153,7 @@ class Transport:
         if not context.trace_id:
             context.trace_id = str(uuid.uuid4())
         context.timeout_ms = int(self.timeout * 1000)
-        token = self.token() if callable(self.token) else self.token
+        token = self._token(subject)
         if not token or "\r" in token or "\n" in token:
             raise ValueError("A nonempty service token without newlines is required")
         headers = {"Nats-Auth-Token": token}
