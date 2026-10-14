@@ -7,6 +7,7 @@ import subprocess
 import time
 from pathlib import Path
 
+import click
 import pytest
 import yaml
 
@@ -674,3 +675,15 @@ def test_the_generated_broker_admits_only_its_users(tmp_path: Path) -> None:
     finally:
         server.terminate()
         server.wait(timeout=5)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can write any file")
+def test_a_root_owned_env_stops_the_deploy_before_it_writes(tmp_path: Path) -> None:
+    env = tmp_path / ".env"
+    env.write_text("A=1\n")
+    env.chmod(0o444)
+
+    with pytest.raises(click.ClickException, match="chown"):
+        setup_local_deploy(str(tmp_path), base_domain="localhost", nats=False)
+
+    assert not (tmp_path / "docker-compose.yml").exists()

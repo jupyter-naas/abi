@@ -10,6 +10,7 @@ from ipaddress import ip_address
 from pathlib import Path
 from uuid import uuid4
 
+import click
 from rich.prompt import Prompt
 
 import naas_abi_cli
@@ -501,6 +502,17 @@ def _backup_local_deploy_files(
     return backup_path
 
 
+def _require_writable_env(path: str) -> None:
+    """Fail before writing anything when .env cannot be rewritten: a 2.x
+    container running as root rewrites the bind-mounted .env as root."""
+    if os.path.exists(path) and not os.access(path, os.W_OK):
+        raise click.ClickException(
+            f"{path} is not writable by this user (a container running as root "
+            "rewrote it). Give it back, then run the command again:\n"
+            f"  sudo chown {os.getuid()}:{os.getgid()} {shlex.quote(path)}"
+        )
+
+
 def setup_local_deploy(
     project_path: str,
     include_headscale: bool = False,
@@ -518,6 +530,7 @@ def setup_local_deploy(
     never switches it to NATS; a directory without a config gets NATS.
     """
     project_path = os.path.abspath(os.path.expanduser(project_path))
+    _require_writable_env(os.path.join(project_path, ".env"))
     if nats is None:
         detected = project_uses_nats(project_path)
         nats = True if detected is None else detected
