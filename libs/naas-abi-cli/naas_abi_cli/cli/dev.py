@@ -15,10 +15,12 @@ Added by a mode or a flag:
   - nats        (NATS/JetStream; requires the `nats-server` binary on PATH)
   - jaeger      (Jaeger v2, OpenTelemetry traces; requires the `jaeger` binary)
 
-`abi dev up` runs the engine in NATS mode by default: it starts nats first and
-leaves dagster out (module jobs replace it, and a second engine would compete
-for the serving lease). `--without-nats` runs the engine in-process, with
-dagster and without the broker or the modules. `--with-tracing` starts a
+`abi dev up` runs the engine in NATS mode when the project config has a
+`nats:` block: it starts nats first and leaves dagster out (module jobs replace
+it, and a second engine would compete for the serving lease). A project
+without one runs in-process, with dagster and without the broker or the
+modules. `--with-nats` and `--without-nats` choose the mode whatever the
+config says. `--with-tracing` starts a
 native Jaeger and has the engine export spans to it. The project config is
 left untouched: a generated overlay (`.abi/dev/dev.overlay.yaml`, via
 ABI_CONFIG_OVERLAY) adds the `nats:` and `telemetry:` blocks, or, with
@@ -143,8 +145,8 @@ ALT_NEXUS_WEB_DIR = ALT_NEXUS_ROOT / "apps" / "web"
 # the API URL is available when Next.js starts polling it.
 ALL_SERVICES = ("oxigraph", "api", "dagster", "nexus-web")
 
-# Selectable via `--service`, and added by their mode: nats in NATS mode (the
-# default; `--without-nats` leaves it out), jaeger with `--with-tracing`.
+# Selectable via `--service`, and added by their mode: nats in NATS mode (a
+# project with a `nats:` block, or `--with-nats`), jaeger with `--with-tracing`.
 OPTIONAL_SERVICES = ("nats", "jaeger")
 
 # nats-server refuses any single message above `max_payload` (1 MB by default),
@@ -620,12 +622,48 @@ NATS_SERVER_MISSING = (
 )
 
 
+# Message schedules (module job triggers) need JetStream from nats-server 2.14;
+# the Docker stacks pin the same release line (nats:2.14.7-alpine).
+NATS_SERVER_MIN_VERSION = (2, 14)
+
+
+def _nats_server_version(binary: str) -> tuple[int, int, int] | None:
+    """`nats-server --version` ("nats-server: v2.14.7"), or None when it
+    cannot be read."""
+    try:
+        result = subprocess.run(
+            [binary, "--version"], capture_output=True, text=True, timeout=10
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    found = re.search(r"v?(\d+)\.(\d+)\.(\d+)", result.stdout + result.stderr)
+    if found is None:
+        return None
+    major, minor, patch = (int(part) for part in found.groups())
+    return major, minor, patch
+
+
 def _nats_server_binary() -> str:
     """The `nats-server` binary; fails with an install hint rather than
-    falling back to in-process mode."""
+    falling back to in-process mode, or when it is older than 2.14."""
     binary = shutil.which("nats-server")
     if binary is None:
         raise click.ClickException(NATS_SERVER_MISSING)
+    version = _nats_server_version(binary)
+    wanted = ".".join(map(str, NATS_SERVER_MIN_VERSION))
+    if version is None:
+        raise click.ClickException(
+            f"Could not read the version of {binary} (`nats-server --version`). "
+            f"`abi dev up` needs nats-server {wanted} or later."
+        )
+    if version[:2] < NATS_SERVER_MIN_VERSION:
+        found = ".".join(map(str, version))
+        raise click.ClickException(
+            f"{binary} is nats-server {found}; `abi dev up` needs {wanted} or "
+            "later (module job schedules use JetStream message schedules). "
+            "Upgrade it, or run the engine in-process with "
+            "`abi dev up --without-nats`."
+        )
     return binary
 
 
@@ -1857,8 +1895,8 @@ def dev() -> None:
     multiple=True,
     help=(
         "Limit to the given service(s) or dev module(s). Repeat the flag. "
-        "Default: oxigraph, nats, api, nexus-web, then every `dev.modules` "
-        "entry (--without-nats: oxigraph, api, dagster, nexus-web)."
+        "Default in NATS mode: oxigraph, nats, api, nexus-web, then every "
+        "`dev.modules` entry; in-process: oxigraph, api, dagster, nexus-web."
     ),
 )
 @click.option(
@@ -1882,14 +1920,16 @@ def dev() -> None:
 @click.option(
     "--with-nats/--without-nats",
     "with_nats",
-    default=True,
+    default=None,
     help=(
-        "NATS mode (default): start nats first and give the api the project "
+        "NATS mode: start nats first and give the api the project "
         "config plus a generated `nats:` overlay (discovery, monitoring, jobs), "
         "then the SDK modules of `dev.modules`; dagster is left out unless "
         "selected with --service. Needs `nats-server` on PATH. "
         "--without-nats runs the engine in-process, as before NATS, even when "
-        "the project config has a `nats:` block."
+        "the project config has a `nats:` block. "
+        "Default: NATS mode when the project config has a `nats:` block, "
+        "in-process otherwise."
     ),
 )
 @click.option(
@@ -1906,7 +1946,7 @@ def dev_up(
     services: tuple[str, ...],
     detach: bool,
     log_level: str | None,
-    with_nats: bool,
+    with_nats: bool | None,
     with_tracing: bool,
 ) -> None:
     """Start the selected dev services.
@@ -1918,6 +1958,9 @@ def dev_up(
     The api and dagster processes run at LOG_LEVEL=DEBUG so engine boot
     narrates itself; pass `--log-level INFO` (or lower) to quieten them.
     """
+    if with_nats is None:
+        # The project's own mode: NATS only when its config enables it.
+        with_nats = _project_declares_nats()
     modules = _dev_modules()
     core, named_modules = _split_selection(services, modules)
     if services:

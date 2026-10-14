@@ -164,8 +164,8 @@ abi module list
 
 ### Local dev stack
 
-#### `abi dev up [--service <name>]... [-d] [--without-nats] [--with-tracing]`
-Runs the stack natively (no Docker). By default the engine runs in NATS mode: oxigraph, nats, api, nexus-web, then the `dev.modules`. Dagster is left out (module jobs replace it). It needs `nats-server` on `PATH` and fails with an install hint without it, rather than falling back to in-process mode. `--without-nats` runs the engine in-process with oxigraph, api, dagster and nexus-web, even when the project config has a `nats:` block (the overlay sets `nats: null`). `--with-tracing` adds Jaeger. `abi dev down`, `abi dev status`, `abi dev logs <name> [-f]` manage it; pids and logs live in `.abi/dev/`. The discovery project is the config's `nats.discovery.project`, else the folder name.
+#### `abi dev up [--service <name>]... [-d] [--with-nats/--without-nats] [--with-tracing]`
+Runs the stack natively (no Docker). When the project config has a `nats:` block, the engine runs in NATS mode: oxigraph, nats, api, nexus-web, then the `dev.modules`. Dagster is left out (module jobs replace it). It needs `nats-server` 2.14 or later on `PATH` and fails with an install hint without it (or with an older one), rather than falling back to in-process mode. A project without a `nats:` block runs in-process with oxigraph, api, dagster and nexus-web. `--with-nats` and `--without-nats` choose the mode whatever the config says; `--without-nats` on a NATS project writes an overlay that sets `nats: null`. `--with-tracing` adds Jaeger. `abi dev down`, `abi dev status`, `abi dev logs <name> [-f]` manage it; pids and logs live in `.abi/dev/`. The discovery project is the config's `nats.discovery.project`, else the folder name.
 
 In NATS mode, the SDK modules listed under `dev.modules` in the project config (`abi new module` adds them) start once the api is ready, each under a supervisor that restarts it when it exits on its own (backing off from 1 s to 30 s):
 

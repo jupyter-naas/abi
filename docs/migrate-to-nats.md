@@ -128,9 +128,12 @@ In this phase every engine keeps its services and adds NATS on top.
    127.0.0.1 only). SDK modules log in as `module`:
    `ABI_NATS_URL=nats://module:<NATS_MODULE_PASSWORD>@nats:4222`.
    `abi dev up` runs its own broker on 127.0.0.1 with the same two users and
-   passwords (NATS mode is its default, also for a project without the
-   block; `--without-nats` turns it off): its overlay logs the engine in as
-   `abi`, and the `dev.modules` it starts as `module`.
+   passwords (NATS mode is its default once the config has the block;
+   `--without-nats` turns it off, `--with-nats` turns it on for a project
+   without one): its overlay logs the engine in as `abi`, and the
+   `dev.modules` it starts as `module`. It needs `nats-server` 2.14 or later
+   on `PATH` (module job schedules use JetStream message schedules), and
+   refuses an older one.
 
 4. **Remove the `bus:` section** from `services:`. Configs created by
    `abi new project` declare one: `rabbitmq` in `config.local.yaml`,

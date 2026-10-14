@@ -446,6 +446,7 @@ def test_nats_binds_the_ipv4_literal_and_both_ports(monkeypatch, tmp_path) -> No
         lambda spec, cmd, cwd, env: captured.update(cmd=cmd) or 1234,
     )
     monkeypatch.setattr(dev.shutil, "which", lambda name: "/usr/local/bin/nats-server")
+    monkeypatch.setattr(dev, "_nats_server_version", lambda binary: (2, 14, 7))
     # The launcher writes storage/nats/nats.conf and the passwords in .env.
     monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
 
@@ -474,6 +475,7 @@ def test_nats_is_started_with_a_config_file_raising_max_payload_to_8mb(
         lambda spec, cmd, cwd, env: captured.update(cmd=cmd) or 1234,
     )
     monkeypatch.setattr(dev.shutil, "which", lambda name: "/usr/local/bin/nats-server")
+    monkeypatch.setattr(dev, "_nats_server_version", lambda binary: (2, 14, 7))
     monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
 
     dev._launch_nats(_spec("nats", 13380))
@@ -491,6 +493,7 @@ def test_nats_config_file_is_rewritten_on_every_launch(monkeypatch, tmp_path) ->
     """A stale hand-edited file must not silently pin an old limit."""
     monkeypatch.setattr(dev, "_spawn", lambda spec, cmd, cwd, env: 1234)
     monkeypatch.setattr(dev.shutil, "which", lambda name: "/usr/local/bin/nats-server")
+    monkeypatch.setattr(dev, "_nats_server_version", lambda binary: (2, 14, 7))
     monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
     config_path = tmp_path / "storage" / "nats" / "nats.conf"
     config_path.parent.mkdir(parents=True)
@@ -520,6 +523,7 @@ def test_the_dev_broker_has_a_user_for_the_engine_and_one_for_modules(
         dev, "_spawn", lambda spec, cmd, cwd, env: captured.update(cmd=cmd) or 1234
     )
     monkeypatch.setattr(dev.shutil, "which", lambda name: "/usr/local/bin/nats-server")
+    monkeypatch.setattr(dev, "_nats_server_version", lambda binary: (2, 14, 7))
     monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
 
     dev._launch_nats(_spec("nats", 13380))
@@ -891,13 +895,26 @@ def test_with_nats_starts_the_dev_modules_after_the_stack(stack) -> None:
     ]
 
 
-def test_up_runs_on_nats_with_the_dev_modules_by_default(stack) -> None:
+def test_up_runs_on_nats_by_default_when_the_config_has_a_nats_block(
+    stack, monkeypatch
+) -> None:
+    monkeypatch.setattr(dev, "_project_nats", lambda: {"jwt_secret": ""})
+
     result = _abi("up", "-d")
 
     assert result.exit_code == 0, result.output
     assert [name for _, name in stack] == [
         "oxigraph", "nats", "api", "nexus-web", "researcher", "orchestrator",
     ]
+
+
+def test_up_stays_in_process_by_default_without_a_nats_block(stack, tmp_path) -> None:
+    """A project without `nats:` keeps its mode: no broker, no modules, no overlay."""
+    result = _abi("up", "-d")
+
+    assert result.exit_code == 0, result.output
+    assert [name for _, name in stack] == list(dev.ALL_SERVICES)
+    assert not (tmp_path / dev.DEV_OVERLAY_FILENAME).exists()
 
 
 def test_without_nats_is_the_in_process_stack(stack, tmp_path) -> None:
@@ -934,11 +951,55 @@ def test_up_fails_before_starting_anything_without_nats_server(
     monkeypatch.setattr(dev, "_nats_server_binary", _nats_server_binary)
     monkeypatch.setattr(dev.shutil, "which", lambda name: None)
 
-    result = _abi("up", "-d")
+    result = _abi("up", "--with-nats", "-d")
 
     assert result.exit_code != 0
     assert "nats-server" in result.output and "--without-nats" in result.output
     assert stack == []
+
+
+def _nats_server_reporting(monkeypatch, output: str) -> None:
+    import subprocess
+
+    monkeypatch.setattr(dev, "_nats_server_binary", _nats_server_binary)
+    monkeypatch.setattr(dev.shutil, "which", lambda name: "/opt/bin/nats-server")
+    monkeypatch.setattr(
+        dev.subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(a[0], 0, stdout=output, stderr=""),
+    )
+
+
+def test_up_refuses_a_nats_server_older_than_2_14(stack, monkeypatch) -> None:
+    """Module job schedules need JetStream message schedules (2.14)."""
+    _nats_server_reporting(monkeypatch, "nats-server: v2.11.8\n")
+
+    result = _abi("up", "--with-nats", "-d")
+
+    assert result.exit_code != 0
+    assert "2.11.8" in result.output and "2.14" in result.output
+    assert stack == []
+
+
+def test_up_refuses_a_nats_server_whose_version_it_cannot_read(
+    stack, monkeypatch
+) -> None:
+    _nats_server_reporting(monkeypatch, "")
+
+    result = _abi("up", "--with-nats", "-d")
+
+    assert result.exit_code != 0
+    assert "version" in result.output
+    assert stack == []
+
+
+@pytest.mark.parametrize("output", ["nats-server: v2.14.7\n", "nats-server: v3.0.0\n"])
+def test_up_accepts_nats_server_2_14_and_later(stack, monkeypatch, output) -> None:
+    _nats_server_reporting(monkeypatch, output)
+
+    result = _abi("up", "--with-nats", "-d")
+
+    assert result.exit_code == 0, result.output
 
 
 def test_selecting_services_leaves_the_modules_alone(stack) -> None:
