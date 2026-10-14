@@ -3,7 +3,7 @@
 ## Status
 Accepted.
 
-Amended four times since; see the amendments at the end. The text above
+Amended five times since; see the amendments at the end. The text above
 them is the decision as accepted on 2026-10-12.
 
 ## Date
@@ -241,3 +241,16 @@ Changes to the previous amendment, from its security review:
   forms in the frame send only `SameSite=None; Secure` ones, for as long as the
   grant URL lasts. Apps keep no session in cookies. (The previous amendment
   said the sandbox sends only `SameSite=None; Secure` cookies.)
+
+## Amendment (2026-10-14): only Nexus asserts the user
+This replaces the consequence "The user id a module receives is asserted by
+Nexus. It is as trustworthy as the service-token boundary (Stage 1: a secret
+shared by the project)."
+
+Modules no longer hold the project secret: each signs with a key for its own
+module id (`20261014_module-identities.md`). The app host passes a `user_id` on
+only from the `api` identity, which no module can sign for; a request from any
+other caller that names a user is refused with `PERMISSION_DENIED`. The ASGI
+scope carries both: `request.scope["abi"]` is `{"user_id": ..., "caller": ...}`.
+Discovery registers a module only under a token for its own module id, so no
+other module can serve `/app-html/remote/<module_id>/` either.

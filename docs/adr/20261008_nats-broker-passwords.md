@@ -79,3 +79,18 @@ The broker was reachable from:
 - An existing `.env` without the passwords stops the `nats` service. Running
   `abi deploy local --regenerate` adds them, and the engine's `nats_url` must
   name the `abi` user.
+
+## Amendment (2026-10-14): the module user stays off the engine
+This replaces the consequences "Both users have every right" and "Modules that
+receive `NATS_JWT_SECRET` can still sign a token for any identity"
+(`20261014_module-identities.md`):
+
+- The `module` user may not subscribe to `abi.svc.>`, `abi.discovery.>` or
+  `$KV.>`, nor publish to `$KV.>` or the JetStream API's stream delete,
+  message delete, snapshot, restore, peer, leader, meta, server and account
+  subjects (`naas_abi_core.engine.nats_permissions.MODULE_PERMISSIONS`, in the
+  Docker `nats.conf` and in the one `abi dev` writes). `abi` keeps every right.
+- Modules receive a key for their own module id instead of the secret, so they
+  can no longer sign for another identity.
+- Modules still share one broker user: one module can listen on another's
+  subjects. Per-module users or auth callout remain the next step.
