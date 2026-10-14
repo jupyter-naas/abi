@@ -19,7 +19,11 @@ import jinja2
 import yaml
 
 import naas_abi_cli
-from naas_abi_cli.cli.admin_credentials import ensure_module_key, module_key_variable
+from naas_abi_cli.cli.admin_credentials import (
+    MissingNatsSecret,
+    ensure_module_key,
+    module_key_variable,
+)
 from naas_abi_cli.cli.utils.Copier import Copier
 
 from .utils import to_pascal_case, to_snake_case
@@ -372,11 +376,25 @@ def create_in_project(project: Project, module_name: str, package: Path) -> None
     service = compose_service(project, name, package, discovery_project, module_id)
     if project.nats():
         # The service signs with its own key, kept in .env next to the secret.
-        ensure_module_key(project.root / ".env", name, module_id)
-        click.echo(
-            f"- Its module key is in .env ({module_key_variable(name)}): it signs "
-            f"its tokens as {module_id} only."
-        )
+        variable = module_key_variable(name)
+        try:
+            _, replaced = ensure_module_key(project.root / ".env", name, module_id)
+        except MissingNatsSecret:
+            click.echo(
+                f"- No NATS_JWT_SECRET in .env to derive its key from. Once the "
+                f"project has its secret (`abi deploy local`), add it: "
+                f"echo {variable}=$(abi module key {module_id}) >> .env"
+            )
+        else:
+            click.echo(
+                f"- Its module key is in .env ({variable}): it signs its tokens as "
+                f"{module_id} only."
+            )
+            if replaced:
+                click.echo(
+                    f"  Warning: {variable} in .env was another key (an older "
+                    "NATS_JWT_SECRET?); replaced with the current secret's."
+                )
     if not project.nats():
         click.echo(
             "- This project's config has no `nats:` block, so its Docker stack "

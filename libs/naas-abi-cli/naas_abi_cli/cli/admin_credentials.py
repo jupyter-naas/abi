@@ -129,22 +129,33 @@ def module_key_variable(name: str) -> str:
     return "ABI_MODULE_KEY_" + re.sub(r"[^A-Z0-9]", "_", name.upper())
 
 
-def ensure_module_key(env_path: Path, name: str, module_id: str) -> str:
-    """Write the module key of ``module_id`` to ``.env`` under
-    ``module_key_variable(name)`` and return it.
+class MissingNatsSecret(ValueError):
+    """``.env`` has no ``NATS_JWT_SECRET`` to derive a module key from."""
 
-    The key is derived from ``NATS_JWT_SECRET`` (generated when missing): a
-    module signs its tokens with it, for its module id only, and never gets the
-    secret itself (docs/adr/20261014_module-identities.md).
+
+def ensure_module_key(env_path: Path, name: str, module_id: str) -> tuple[str, bool]:
+    """Write the module key of ``module_id`` to ``.env`` under
+    ``module_key_variable(name)``; return it, and whether it replaced a different
+    one (a key derived from an older secret).
+
+    The key is derived from the ``NATS_JWT_SECRET`` already in ``.env``, the one
+    the engine signs with: a module signs its tokens with it, for its module id
+    only, and never gets the secret itself
+    (docs/adr/20261014_module-identities.md). Without one, MissingNatsSecret:
+    a secret made up here would not be the engine's.
     """
     from naas_abi_core.engine.nats_auth import module_key
 
-    key = module_key(ensure_nats_secret(env_path), module_id)
     lines = _read(env_path)
+    secret = _value(lines, NATS_SECRET)
+    if not secret:
+        raise MissingNatsSecret(f"{env_path} has no {NATS_SECRET}")
+    key = module_key(secret, module_id)
     variable = module_key_variable(name)
-    if _value(lines, variable) != key:
+    previous = _value(lines, variable)
+    if previous != key:
         _write(env_path, _set(lines, variable, key))
-    return key
+    return key, bool(previous) and previous != key
 
 
 def generate_nats_password() -> str:

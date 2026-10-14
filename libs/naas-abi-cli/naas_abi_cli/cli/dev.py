@@ -1102,9 +1102,12 @@ def _start_module(module, overlay: dict) -> ServiceSpec:
         click.echo(f"{module.name}: already running (pid {existing})")
         return spec
     password = ensure_nats_passwords(_project_root() / ".env")["NATS_MODULE_PASSWORD"]
-    env = module_environment(
-        module, overlay, _project_root(), os.environ, nats_password=password
-    )
+    try:
+        env = module_environment(
+            module, overlay, _project_root(), os.environ, nats_password=password
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
     pid = _spawn(spec, module_command(module), _project_root(), env)
     _pid_path(spec).write_text(f"{pid}\n")
     command = " ".join(["python -m", module.module, *module.args])

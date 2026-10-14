@@ -48,8 +48,9 @@ def test_the_module_never_imports_abi_core() -> None:
 
 def test_the_module_calls_the_engine_as_its_module_id() -> None:
     """Discovery registers a module only under a token for its own module id."""
-    assert token_from({"ABI_SERVICE_TOKEN": "issued", "ABI_MODULE_KEY": "k"}) == "issued"
-    assert token_from({"ABI_MODULE_KEY": "k"}).identity == MODULE_ID
+    # The key wins over an issued token: it signs fresh ones, bound to the module called.
+    assert token_from({"ABI_SERVICE_TOKEN": "issued", "ABI_MODULE_KEY": "k"}).identity == MODULE_ID
+    assert token_from({"ABI_SERVICE_TOKEN": "issued"}) == "issued"
     with pytest.raises(RuntimeError, match="ABI_MODULE_KEY"):
         token_from({})
 
