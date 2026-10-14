@@ -208,14 +208,27 @@ def test_only_nexus_calls_an_app_on_behalf_of_a_user(tmp_path):
 
     async def scenario():
         nexus = _host(tmp_path / "nexus", app)
-        answered = await _send(nexus, _request("/api/whoami", user_id="u-7"))
-        assert json.loads(answered.body) == {"user_id": "u-7", "caller": "api"}
+        answered = await _send(
+            nexus, _request("/api/whoami", user_id="u-7", workspace_id="ws-1")
+        )
+        assert json.loads(answered.body) == {
+            "user_id": "u-7",
+            "workspace_id": "ws-1",
+            "caller": "api",
+        }
         module = _host(tmp_path / "module", app, caller="acme.billing")
         forged = await _send(module, _request("/api/whoami", user_id="u-7"))
         assert forged.error.code == "PERMISSION_DENIED"
+        # A15: nor in a workspace.
+        placed = await _send(module, _request("/api/whoami", workspace_id="ws-1"))
+        assert placed.error.code == "PERMISSION_DENIED"
         assert "acme.billing" in forged.error.message
         anonymous = await _send(module, _request("/api/whoami"))
-        assert json.loads(anonymous.body) == {"user_id": "", "caller": "acme.billing"}
+        assert json.loads(anonymous.body) == {
+            "user_id": "",
+            "workspace_id": "",
+            "caller": "acme.billing",
+        }
 
     asyncio.run(scenario())
 
