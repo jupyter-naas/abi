@@ -7,7 +7,6 @@ import socket
 import subprocess
 import time
 
-import nats
 import broker_users
 import pytest
 
@@ -52,14 +51,16 @@ def broker(request, tmp_path):
             break
         except OSError:
             time.sleep(0.05)
-    yield broker_users.login(f"nats://127.0.0.1:{port}", request.param)
+    url = broker_users.login(f"nats://127.0.0.1:{port}", request.param)
+    broker_users.prepare(url, request.param, "claimcheck")
+    yield url
     process.terminate()
     process.wait(timeout=5)
 
 
 def test_a_message_that_fits_is_sent_unchanged(broker):
     async def scenario():
-        nc = await nats.connect(broker)
+        nc = await broker_users.connect(broker)
         try:
             body, headers = await claim_check.prepare(nc, b"small", {"A": "b"})
             assert (body, headers) == (b"small", {"A": "b"})
@@ -73,7 +74,7 @@ def test_a_message_above_the_limit_is_stored_and_resolved(broker):
     payload = os.urandom(5 * LIMIT)
 
     async def scenario():
-        nc = await nats.connect(broker)
+        nc = await broker_users.connect(broker)
         try:
             body, headers = await claim_check.prepare(nc, payload, {"A": "b"})
             assert body == b"" and headers["A"] == "b"
@@ -90,7 +91,7 @@ def test_values_above_the_cap_are_refused(broker, monkeypatch):
     monkeypatch.setattr(claim_check, "MAX_VALUE_BYTES", 2 * LIMIT)
 
     async def scenario():
-        nc = await nats.connect(broker)
+        nc = await broker_users.connect(broker)
         try:
             with pytest.raises(claim_check.ClaimCheckTooLarge):
                 await claim_check.prepare(nc, b"x" * (3 * LIMIT))
@@ -126,6 +127,12 @@ def test_bus_queues_carry_payloads_above_the_limit_and_at_its_edge(broker):
     edge = os.urandom(LIMIT - 20)
 
     async def scenario():
+        # The queue's stream is the engine's to create: modules may not create streams.
+        engine = Transport(broker_users.as_engine(broker), "token", timeout=5)
+        try:
+            await BusClient(engine)._stream((await engine.connect()).jetstream(), "jobs")
+        finally:
+            await engine.close()
         transport = Transport(broker, "token", timeout=5)
         bus = BusClient(transport)
         try:

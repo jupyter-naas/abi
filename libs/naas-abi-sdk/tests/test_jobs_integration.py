@@ -124,7 +124,9 @@ def broker(request, tmp_path):
             break
         except OSError:
             time.sleep(0.05)
-    yield broker_users.login(f"nats://127.0.0.1:{port}", request.param)
+    url = broker_users.login(f"nats://127.0.0.1:{port}", request.param)
+    broker_users.prepare(url, request.param, PROJECT)
+    yield url
     process.terminate()
     process.wait(timeout=5)
 
@@ -470,7 +472,6 @@ def test_a_module_triggers_its_own_job_once_per_idempotency_key(broker):
 
 
 def test_event_filters_and_skipped_runs_on_a_real_broker(broker):
-    import nats
 
     docs = Documents()
     puts = OnEvent("evt.itest.>", filter={"prefix": {"prefix": "naas/"}})
@@ -483,7 +484,7 @@ def test_event_filters_and_skipped_runs_on_a_real_broker(broker):
     async def scenario():
         host = _host(broker, docs, [(descriptor, handler)])
         await host.start()
-        nc = await nats.connect(broker)
+        nc = await broker_users.connect(broker)
         try:
             for n, (prefix, key) in enumerate(
                 [("other/", "a.csv"), ("naas/", "b.csv"), ("naas/", "empty.csv")]
@@ -857,6 +858,8 @@ def test_a_recreated_jobs_stream_runs_triggers_that_reuse_old_sequences(broker):
         nc = await Transport(broker_users.as_engine(broker), "t").connect()
         await nc.jetstream().delete_stream(stream_name(PROJECT))
         await nc.close()
+        # The engine creates it again at its next start.
+        await broker_users.prepare_async(broker, PROJECT)
         return first_id, await run_once(2)
 
     first_id, second_id = asyncio.run(scenario())
