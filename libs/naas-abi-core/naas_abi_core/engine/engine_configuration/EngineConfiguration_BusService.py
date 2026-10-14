@@ -14,6 +14,9 @@ from pydantic import BaseModel, ConfigDict, model_validator
 class BusAdapterRabbitMQConfiguration(BaseModel):
     """RabbitMQ bus adapter configuration.
 
+    Legacy, for projects without NATS, to be removed in the next major (NATS
+    projects use "nats_jetstream"). Needs the naas-abi-core[rabbitmq] extra.
+
     bus_adapter:
       adapter: "rabbitmq"
       config:
