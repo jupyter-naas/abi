@@ -30,7 +30,6 @@ the engine's.
 |---|---|
 | `__init__.py` | `ABIModule`: id, configuration, dependencies, agents, jobs, lifecycle |
 | `__main__.py` | `python -m {{module_name_snake}}`: `run_module` with discovery, signals |
-| `service_token.py` | `ABI_SERVICE_TOKEN`, or a token signed from `NATS_JWT_SECRET` |
 | `agents/` | SDK `IntentAgent`s on the engine's models, memory in the Document Service |
 | `jobs.py` | job bodies, testable without a broker |
 | `apps/` | web apps, served through Nexus at `/app-html/remote/{{module_id}}/<app>/` |
@@ -42,7 +41,7 @@ the engine's.
 |---|---|
 | `abi dev up` (in the project) | started from `dev.modules` in `config.yaml`; `abi dev logs {{module_name}}` |
 | Docker (`abi start`) | the `{{module_name}}` service in `docker-compose.override.yml` |
-| By hand | `ABI_NATS_URL=nats://module:<NATS_MODULE_PASSWORD>@127.0.0.1:4222 NATS_JWT_SECRET=... python -m {{module_name_snake}}` |
+| By hand | `ABI_NATS_URL=nats://module:<NATS_MODULE_PASSWORD>@127.0.0.1:4222 ABI_MODULE_KEY=$(abi module key {{module_id}}) python -m {{module_name_snake}}` |
 
 It is up when it logs `READY`. `ABI_HEALTH_PORT=8080` opens `/health` and
 `/ready`.

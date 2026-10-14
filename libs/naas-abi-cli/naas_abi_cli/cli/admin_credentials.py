@@ -124,6 +124,29 @@ def ensure_nats_secret(env_path: Path) -> str:
     return secret
 
 
+def module_key_variable(name: str) -> str:
+    """The ``.env`` key holding a module's key for Compose (``ABI_MODULE_KEY_<NAME>``)."""
+    return "ABI_MODULE_KEY_" + re.sub(r"[^A-Z0-9]", "_", name.upper())
+
+
+def ensure_module_key(env_path: Path, name: str, module_id: str) -> str:
+    """Write the module key of ``module_id`` to ``.env`` under
+    ``module_key_variable(name)`` and return it.
+
+    The key is derived from ``NATS_JWT_SECRET`` (generated when missing): a
+    module signs its tokens with it, for its module id only, and never gets the
+    secret itself (docs/adr/20261014_module-identities.md).
+    """
+    from naas_abi_core.engine.nats_auth import module_key
+
+    key = module_key(ensure_nats_secret(env_path), module_id)
+    lines = _read(env_path)
+    variable = module_key_variable(name)
+    if _value(lines, variable) != key:
+        _write(env_path, _set(lines, variable, key))
+    return key
+
+
 def generate_nats_password() -> str:
     """A broker password that nats.conf and a ``nats://`` URL take as is.
 

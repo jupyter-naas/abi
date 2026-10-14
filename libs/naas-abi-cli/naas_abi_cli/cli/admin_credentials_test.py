@@ -155,3 +155,24 @@ def test_nats_login_puts_the_user_and_password_in_the_url(url):
     from naas_abi_cli.cli.admin_credentials import nats_login
 
     assert nats_login(url, "module", "nats-pw_1") == "nats://module:nats-pw_1@127.0.0.1:13042"
+
+
+def test_a_module_key_is_written_for_compose_and_follows_the_secret(tmp_path):
+    from naas_abi_core.engine.nats_auth import module_key
+
+    from naas_abi_cli.cli.admin_credentials import (
+        ensure_module_key,
+        ensure_nats_secret,
+        module_key_variable,
+    )
+
+    env_path = tmp_path / ".env"
+    key = ensure_module_key(env_path, "research-bot", "demo.research_bot")
+
+    assert module_key_variable("research-bot") == "ABI_MODULE_KEY_RESEARCH_BOT"
+    secret = ensure_nats_secret(env_path)
+    assert key == module_key(secret, "demo.research_bot")
+    assert f"ABI_MODULE_KEY_RESEARCH_BOT={key}" in env_path.read_text().splitlines()
+    # Idempotent: the same line, once.
+    ensure_module_key(env_path, "research-bot", "demo.research_bot")
+    assert env_path.read_text().count("ABI_MODULE_KEY_RESEARCH_BOT=") == 1

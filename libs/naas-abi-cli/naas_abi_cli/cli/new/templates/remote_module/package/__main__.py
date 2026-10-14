@@ -5,8 +5,8 @@ Environment (``abi dev up`` and the Compose service set the first four):
 - ``ABI_NATS_URL``: the broker, logged in as the user ``module``
   (``nats://module:<NATS_MODULE_PASSWORD>@host:4222``);
 - ``ABI_DISCOVERY_PROJECT``: the project whose engine hosts discovery;
-- ``ABI_SERVICE_TOKEN``, or ``NATS_JWT_SECRET`` to sign one (service_token.py);
-- ``ABI_MODULE_IDENTITY``: the token's subject (default ``{{module_name}}``);
+- ``ABI_MODULE_KEY``: the module key it signs its tokens with, for its module
+  id (``abi module key {{module_id}}`` prints it), or ``ABI_SERVICE_TOKEN``;
 - ``{{module_name_upper}}_CHAT_MODEL``: a chat model id (default: the engine's);
 - ``ABI_HEALTH_PORT``: opens ``/health`` and ``/ready`` probes;
 - ``OTEL_EXPORTER_OTLP_ENDPOINT``: exports traces;
@@ -23,13 +23,12 @@ import sys
 from collections.abc import Awaitable, Mapping
 
 from naas_abi_sdk import DiscoveryConfiguration, run_module
+from naas_abi_sdk.service_token import ModuleToken, token_from_env
 
-from {{module_name_snake}} import ABIModule
-from {{module_name_snake}}.service_token import token_source
+from {{module_name_snake}} import MODULE_ID, ABIModule
 
 DEFAULT_NATS_URL = "nats://127.0.0.1:4222"
 DEFAULT_DISCOVERY_PROJECT = "{{discovery_project}}"
-DEFAULT_IDENTITY = "{{module_name}}"
 
 
 async def run_until_signalled[T](work: Awaitable[T]) -> T | None:
@@ -69,18 +68,22 @@ def configuration_from(env: Mapping[str, str]) -> ABIModule.Configuration:
     )
 
 
+def token_from(env: Mapping[str, str]) -> str | ModuleToken:
+    """The module calls the engine as itself: a token for its module id."""
+    return token_from_env(env, MODULE_ID)
+
+
 def main(env: Mapping[str, str] = os.environ) -> int:
     logging.basicConfig(
         level=env.get("LOG_LEVEL", "INFO"),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    identity = env.get("ABI_MODULE_IDENTITY") or DEFAULT_IDENTITY
     asyncio.run(
         run_until_signalled(
             run_module(
                 ABIModule,
                 url=env.get("ABI_NATS_URL") or DEFAULT_NATS_URL,
-                token=token_source(env, identity),
+                token=token_from(env),
                 configuration=configuration_from(env),
                 # Model calls stream, but each exchange can take a while.
                 timeout=60,

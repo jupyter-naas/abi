@@ -5,10 +5,12 @@ Each runs as `python -m <module> <args>` under `dev_supervisor`, which restarts
 it when it exits on its own. Its environment carries the dev broker from the
 overlay `abi dev up` generates:
 
-- ``ABI_NATS_URL``, logged in as the broker user ``module``,
-  ``NATS_JWT_SECRET`` and ``ABI_DISCOVERY_PROJECT``;
-- ``ABI_SERVICE_TOKEN``, a service token for the module's name, as
-  ``python -m naas_abi_sdk.module_runner`` expects;
+- ``ABI_NATS_URL``, logged in as the broker user ``module``, and
+  ``ABI_DISCOVERY_PROJECT``;
+- ``ABI_MODULE_KEY``, the module key of its ``identity`` (its module id,
+  default its name), and ``ABI_SERVICE_TOKEN``, a token signed with it, as
+  ``python -m naas_abi_sdk.module_runner`` expects. Never the project secret:
+  a module can sign for its own identity only;
 - ``OTEL_EXPORTER_OTLP_ENDPOINT`` with ``--with-tracing``;
 - the project's ``src/`` first on ``PYTHONPATH``.
 
@@ -33,7 +35,7 @@ if TYPE_CHECKING:
         DevModuleConfiguration,
     )
 
-# A dev process's token. Modules holding NATS_JWT_SECRET can issue their own.
+# A dev process's token. Modules sign fresh ones with their ABI_MODULE_KEY.
 SERVICE_TOKEN_TTL = timedelta(days=7)
 
 
@@ -94,17 +96,18 @@ def module_environment(
     nats_password: str,
 ) -> dict[str, str]:
     """``nats_password``: the broker user ``module``'s (NATS_MODULE_PASSWORD)."""
-    from naas_abi_core.engine.nats_auth import issue_service_token
+    from naas_abi_core.engine.nats_auth import issue_module_token, module_key
 
     nats = overlay["nats"]
+    identity = module.identity or module.name
+    key = module_key(nats["jwt_secret"], identity)
     env = dict(base)
+    env.pop("NATS_JWT_SECRET", None)  # the engine's, never a module's
     env.update(
         ABI_NATS_URL=nats_login(nats["nats_url"], "module", nats_password),
-        NATS_JWT_SECRET=nats["jwt_secret"],
         ABI_DISCOVERY_PROJECT=nats["discovery"]["project"],
-        ABI_SERVICE_TOKEN=issue_service_token(
-            module.name, nats["jwt_secret"], ttl=SERVICE_TOKEN_TTL
-        ),
+        ABI_MODULE_KEY=key,
+        ABI_SERVICE_TOKEN=issue_module_token(identity, key, ttl=SERVICE_TOKEN_TTL),
     )
     src = project_root / "src"
     if src.is_dir():
