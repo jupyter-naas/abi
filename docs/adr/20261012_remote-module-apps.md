@@ -251,7 +251,7 @@ Modules no longer hold the project secret: each signs with a key for its own
 module id (`20261014_module-identities.md`). The app host passes a `user_id` on
 only from the `api` identity, which no module can sign for; a request from any
 other caller that names a user is refused with `PERMISSION_DENIED`. The token
-Nexus sends with a request is bound to the instance it calls and lasts two
+Nexus sends with a request is bound to the instance it calls and lasts five
 minutes, so that instance cannot replay it to another module or to the
 engine's services. The ASGI scope carries both: `request.scope["abi"]` is
 `{"user_id": ..., "caller": ...}`. Discovery registers a module only under a
@@ -260,5 +260,5 @@ token for its own module id, so no other module can serve
 
 Not covered: modules share one broker user, so a module that subscribes to
 another module's app subjects sees Nexus's requests there, and can replay the
-token of one of them to that same module, within its two minutes, naming a
+token of one of them to that same module, within its five minutes, naming a
 user (see the module identities ADR, "Still open").
