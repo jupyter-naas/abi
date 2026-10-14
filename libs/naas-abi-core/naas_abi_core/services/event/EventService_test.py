@@ -137,7 +137,7 @@ def test_publish_preserves_caller_supplied_created_at(tmp_path):
 
     service, _, _ = _make_service(tmp_path)
 
-    ts = _dt.datetime(2020, 1, 1, 12, 0, 0)  # noqa: DTZ001
+    ts = _dt.datetime(2020, 1, 1, 12, 0, 0)
     evt = UserAuthenticated(user_id="alice", created_at=ts)
     service.publish(evt)
     assert evt.created_at == ts
@@ -147,7 +147,7 @@ def test_reconstructed_instance_round_trips_created_at(tmp_path):
     import datetime as _dt
 
     service, _, _ = _make_service(tmp_path)
-    ts = _dt.datetime(2020, 1, 1, 12, 0, 0)  # noqa: DTZ001
+    ts = _dt.datetime(2020, 1, 1, 12, 0, 0)
     service.publish(UserAuthenticated(user_id="alice", created_at=ts))
 
     [evt] = service.query(event_class=UserAuthenticated)
