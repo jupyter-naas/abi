@@ -525,6 +525,32 @@ def test_query_ask_encodes_boolean():
     assert response.success.ask_answer is False
 
 
+def test_query_update_encodes_an_empty_select():
+    """Oxigraph and Fuseki answer an update sent through ``query`` with an
+    empty ``Result("SELECT")`` that has no bindings."""
+
+    class _UpdatePort(_StubPort):
+        def query(self, query: str) -> rdflib.query.Result:
+            return rdflib.query.Result("SELECT")
+
+    adapter = TripleStorePrimaryAdapterNATS(_UpdatePort(), SECRET)
+    request = _FakeRequest(
+        data=triple_store_pb2.QueryRequest(
+            query="DROP SILENT GRAPH <http://test.example.org/g>"
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.triple_store.v1.query",
+    )
+
+    asyncio.run(adapter._handle_query(request))
+
+    response = triple_store_pb2.QueryResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert response.success.result_type == "SELECT"
+    assert list(response.success.select.rows) == []
+
+
 def test_query_construct_encodes_triples_nt():
     stub = _StubPort()
     adapter = TripleStorePrimaryAdapterNATS(stub, SECRET)
