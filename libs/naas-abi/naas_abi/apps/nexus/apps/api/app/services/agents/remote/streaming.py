@@ -60,7 +60,7 @@ async def stream_with_remote_agent(
                 if text.strip():
                     final_replay.append(text.strip())
                 continue
-            chunk = agent_event_chunk(name, text)
+            chunk = agent_event_chunk(name, text, chat_source=event.get("chat_source") is not False)
             if chunk is not None:
                 emitted = emitted or isinstance(chunk, str)
                 yield chunk
