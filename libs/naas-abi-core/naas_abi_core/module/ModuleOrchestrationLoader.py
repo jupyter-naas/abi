@@ -1,7 +1,10 @@
 import importlib
 import os
 
-from naas_abi_core.module.ModuleUtils import find_class_module_root_path
+from naas_abi_core.module.ModuleUtils import (
+    find_class_module_root_path,
+    module_package,
+)
 from naas_abi_core.orchestrations.Orchestrations import Orchestrations
 from naas_abi_core.utils.Logger import logger
 
@@ -20,7 +23,7 @@ class ModuleOrchestrationLoader:
             for file in os.listdir(orchestrations_path):
                 if file.endswith(".py") and not file.endswith("test.py"):
                     orchestration_module_path = (
-                        f"{class_.__module__}.orchestrations.{file.replace('.py', '')}"
+                        f"{module_package(class_)}.orchestrations.{file.replace('.py', '')}"
                     )
                     logger.debug(f"Importing orchestration module from {orchestration_module_path}")
                     orchestration_module = importlib.import_module(orchestration_module_path)
