@@ -1,4 +1,6 @@
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from threading import Lock
 from typing import Any
 
@@ -39,14 +41,34 @@ class DotenvSecretSecondaryAdaptor(ISecretAdapter):
     def set(self, key: str, value: str):
         with self._lock:
             os.environ[key] = value
-            set_key(self.path, key, value)
+            with self._keep_owner():
+                set_key(self.path, key, value)
             self.secrets[key] = value
 
     def remove(self, key: str):
         with self._lock:
-            unset_key(self.path, key)
+            with self._keep_owner():
+                unset_key(self.path, key)
             self.secrets.pop(key, None)
             os.environ.pop(key, None)
+
+    @contextmanager
+    def _keep_owner(self) -> Iterator[None]:
+        """python-dotenv rewrites the file through a new one. Give it back the
+        old file's owner: a container running as root must not leave the
+        project's bind-mounted .env unwritable for its user."""
+        try:
+            before = os.stat(self.path)
+        except OSError:
+            yield
+            return
+        yield
+        try:
+            after = os.stat(self.path)
+            if (after.st_uid, after.st_gid) != (before.st_uid, before.st_gid):
+                os.chown(self.path, before.st_uid, before.st_gid)
+        except OSError as exc:
+            logger.warning(f"Could not restore the owner of {self.path}: {exc}")
 
     def list(self) -> dict[str, str | None]:
         with self._lock:
