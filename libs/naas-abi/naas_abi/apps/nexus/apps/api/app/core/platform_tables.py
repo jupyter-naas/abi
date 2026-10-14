@@ -28,7 +28,7 @@ DEFAULT_ROW_LIMIT = 5000
 
 PLATFORM_TABLES: dict[str, str] = {
     # People & access
-    "users": "Accounts: email, name, password hash, avatar, company, job title, bio, "
+    "users": "Accounts: email, name, password hash, avatar, organization, job title, bio, "
     "superadmin flag.",
     "organizations": "Organizations with their owner, branding and login page settings.",
     "organization_members": "Each user's role in an organization (owner, admin, member) "

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -12,6 +12,9 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_auth_service,
+)
+from naas_abi.apps.nexus.apps.api.app.services.auth.avatar_store_test import (
+    MemoryStorage as _MemoryStorage,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.primary import (
     organizations__primary_adapter__FastAPI as org_api,
@@ -31,7 +34,7 @@ MEMBER = OrganizationMemberRecord(
     email="member@example.com",
     name="Member",
     created_at=datetime(2026, 7, 31),
-    company=None,
+    organization=None,
     job_title=None,
     bio=None,
 )
@@ -56,8 +59,7 @@ def _client(
     updated = OrganizationMemberRecord(
         **{
             **member.__dict__,
-            "name": "Prepared",
-            "company": "Acme",
+            "organization": "Acme",
             "job_title": "Partner",
             "bio": "Works on audit.",
         }
@@ -83,6 +85,9 @@ def _client(
         adapter=adapter
     )
     app.dependency_overrides[get_auth_service] = lambda: auth_service
+    # The drive sync (best effort) gets a storage and no database here.
+    app.dependency_overrides[org_api._get_object_storage] = lambda: _MemoryStorage()
+    app.dependency_overrides[org_api.get_db] = lambda: _NoDb()
     return TestClient(app), auth_service, adapter
 
 
@@ -101,32 +106,40 @@ def test_admin_edits_the_org_profile_not_the_account() -> None:
     resp = client.patch(
         "/organizations/org-1/members/user-2",
         json={
-            "name": "Prepared",
-            "company": "Acme",
+            "name": "Ignored: the full name is the account name",
+            "organization": "Acme",
             "job_title": "Partner",
             "bio": "Works on audit.",
+            "service_line": "Audit",
+            "country": "France",
+            "interest": "AI in audit",
         },
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["name"] == "Prepared"
-    assert body["company"] == "Acme"
+    assert body["name"] == "Member"
+    assert body["organization"] == "Acme"
     assert body["job_title"] == "Partner"
     assert body["bio"] == "Works on audit."
     assert body["email"] == "member@example.com"
     adapter.update_organization_member_profile.assert_awaited_once_with(
         org_id="org-1",
         user_id="user-2",
-        name="Prepared",
-        company="Acme",
+        name=None,
+        organization="Acme",
         job_title="Partner",
         bio="Works on audit.",
+        service_line="Audit",
+        country="France",
+        interest="AI in audit",
     )
     assert auth_service.mock_calls == []
 
 
-def test_admin_sets_the_org_avatar_not_the_account(monkeypatch) -> None:
-    storage = SimpleNamespace(put_object=Mock(), delete_object=Mock())
+def test_admin_sets_the_org_avatar_in_the_members_drive() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.avatar_store_test import MemoryStorage
+
+    storage = MemoryStorage()
     client, auth_service, adapter = _client(viewer_role="admin")
     client.app.dependency_overrides[org_api._get_object_storage] = lambda: storage
 
@@ -136,18 +149,20 @@ def test_admin_sets_the_org_avatar_not_the_account(monkeypatch) -> None:
     )
 
     assert resp.status_code == 200
-    adapter.set_organization_member_avatar.assert_awaited_once()
+    assert storage.paths() == {"naas_abi/my-drive/user-2/.settings/avatar/avatar_org.png"}
     assert adapter.set_organization_member_avatar.await_args.kwargs["avatar"].startswith(
-        "/api/auth/avatar/user-2-"
+        "/api/auth/avatar/user/user-2/org?v="
     )
-    # Only the org's previous upload is deleted, never the account avatar.
-    deleted = {call.args[1] for call in storage.delete_object.call_args_list}
-    assert deleted == {"old.png"}
+    # The account picture and the account itself are never touched.
     assert auth_service.mock_calls == []
 
 
-def test_removing_the_org_avatar_falls_back_to_the_account() -> None:
-    storage = SimpleNamespace(put_object=Mock(), delete_object=Mock())
+def test_removing_the_org_avatar_archives_it() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.avatar_store_test import MemoryStorage
+
+    storage = MemoryStorage()
+    storage.put_object("naas_abi/my-drive/user-2/.settings/avatar", "avatar_org.png", b"org")
+    storage.put_object("naas_abi/my-drive/user-2/.settings/avatar", "avatar.png", b"account")
     client, auth_service, adapter = _client(viewer_role="admin")
     client.app.dependency_overrides[org_api._get_object_storage] = lambda: storage
 
@@ -157,6 +172,10 @@ def test_removing_the_org_avatar_falls_back_to_the_account() -> None:
     adapter.set_organization_member_avatar.assert_awaited_once_with(
         org_id="org-1", user_id="user-2", avatar=None
     )
+    paths = storage.paths()
+    assert "naas_abi/my-drive/user-2/.settings/avatar/avatar_org.png" not in paths
+    assert "naas_abi/my-drive/user-2/.settings/avatar/avatar.png" in paths
+    assert any(p.endswith("_avatar_org.png") and "/archives/" in p for p in paths)
     assert auth_service.mock_calls == []
 
 
@@ -188,3 +207,75 @@ def test_cannot_assign_owner_via_patch() -> None:
     )
     assert resp.status_code == 422
     adapter.update_organization_member_role.assert_not_awaited()
+
+
+def _details_client(viewer_role: str) -> TestClient:
+    from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
+        OrganizationMemberAccountRecord,
+        OrganizationMemberDetailsRecord,
+        OrganizationMemberProfileRecord,
+        OrganizationWorkspaceMembershipRecord,
+    )
+
+    details = OrganizationMemberDetailsRecord(
+        member=MEMBER,
+        account=OrganizationMemberAccountRecord(
+            user_id="user-2",
+            email="member@example.com",
+            name="Member",
+            created_at=datetime(2026, 7, 1),
+        ),
+        organization_profile=OrganizationMemberProfileRecord(name="Member (Acme)"),
+    )
+    adapter = SimpleNamespace(
+        get_organization_role=AsyncMock(return_value=viewer_role),
+        get_organization_member_details=AsyncMock(
+            side_effect=lambda org_id, user_id: details if user_id == "user-2" else None
+        ),
+        list_workspaces_for_org=AsyncMock(
+            return_value=[SimpleNamespace(id="ws-1", name="Audit", slug="audit", owner_id="x")]
+        ),
+        list_workspace_memberships_for_org=AsyncMock(
+            return_value=[
+                OrganizationWorkspaceMembershipRecord(
+                    user_id="user-2", workspace_id="ws-1", role="member"
+                )
+            ]
+        ),
+    )
+    app = FastAPI()
+    app.include_router(org_api.router, prefix="/organizations")
+    app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
+        id="user-1", email="viewer@example.com", name="Viewer"
+    )
+    app.dependency_overrides[org_api.get_organization_service] = lambda: OrganizationService(
+        adapter=adapter
+    )
+    return TestClient(app)
+
+
+def test_admin_reads_account_and_membership_details() -> None:
+    resp = _details_client("admin").get("/organizations/org-1/members/user-2")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["member"]["role"] == "member"
+    assert body["account"]["email"] == "member@example.com"
+    assert body["account"]["created_at"].startswith("2026-07-01")
+    assert body["organization_profile"]["name"] == "Member (Acme)"
+    assert body["organization_profile"]["organization"] is None
+    assert body["workspaces"] == [
+        {"id": "ws-1", "name": "Audit", "slug": "audit", "role": "member", "source": "workspace"}
+    ]
+
+
+def test_member_details_are_admin_only_and_404_for_non_members() -> None:
+    assert _details_client("member").get("/organizations/org-1/members/user-2").status_code == 403
+    assert _details_client("admin").get("/organizations/org-1/members/nobody").status_code == 404
+
+
+class _NoDb:
+    """Stands in for the session: flush works, the drive sync then fails and is logged."""
+
+    async def flush(self) -> None:
+        return None

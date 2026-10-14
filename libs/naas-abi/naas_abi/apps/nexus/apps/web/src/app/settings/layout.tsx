@@ -8,7 +8,11 @@ import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { useSuperadminAccess } from '@/hooks/use-superadmin-access';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
-import { SettingsLayoutRoot, SettingsNavItem } from '@/components/settings/settings-shell';
+import {
+  SettingsLayoutRoot,
+  SettingsNavItem,
+  useWorkspaceReturnPath,
+} from '@/components/settings/settings-shell';
 import { SettingsLoading } from '@/components/settings/settings-ui';
 import {
   PLATFORM_SETTINGS_INDEX,
@@ -72,6 +76,11 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
   // On mobile the dashboard is the list of tables, so the nav is not shown.
   const showMobileTablePage = isMobile && isDetail;
 
+  const workspaceHref = useWorkspaceReturnPath(
+    currentWorkspaceId ? `/workspace/${currentWorkspaceId}/chat` : '/',
+    currentWorkspaceId
+  );
+
   const handleBack = () => {
     if (showMobileTablePage) {
       // A row page goes back to its table, a table page to the dashboard.
@@ -80,7 +89,7 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
       );
       return;
     }
-    router.push(currentWorkspaceId ? `/workspace/${currentWorkspaceId}/chat` : '/');
+    router.push(workspaceHref);
   };
 
   const headerTitle =

@@ -7,7 +7,11 @@ import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
-import { SettingsLayoutRoot, SettingsNavItem } from '@/components/settings/settings-shell';
+import {
+  SettingsLayoutRoot,
+  SettingsNavItem,
+  useWorkspaceReturnPath,
+} from '@/components/settings/settings-shell';
 import {
   isOrgAdminRole,
   orgSettingsIndexPath,
@@ -125,17 +129,18 @@ export default function OrganizationSettingsLayout({
     }
   }, [orgId, viewerRole, section, visibleNav, router]);
 
+  const workspaceHref = useWorkspaceReturnPath(
+    currentWorkspaceId ? `/workspace/${currentWorkspaceId}/maps` : '/',
+    currentWorkspaceId
+  );
+
   const handleBack = () => {
     if (showMobileDetail) {
       router.push(orgSettingsIndexPath(orgId));
       return;
     }
     if (orgCount === 1) {
-      if (currentWorkspaceId) {
-        router.push(`/workspace/${currentWorkspaceId}/maps`);
-      } else {
-        router.push('/');
-      }
+      router.push(workspaceHref);
       return;
     }
     router.push('/organizations');

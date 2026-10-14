@@ -7,6 +7,12 @@ const nextConfig = {
   // distDir must stay relative to this app (Next does not accept absolute paths).
   distDir: process.env.NODE_ENV === 'development' ? '.next-dev' : '.next',
   transpilePackages: ['@nexus/ui', '@embedpdf/snippet', 'three'],
+  // next dev only: keep compiled pages for an hour (default 60s), so going back
+  // from Organization/Platform Settings to a workspace does not recompile it.
+  onDemandEntries: {
+    maxInactiveAge: 60 * 60 * 1000,
+    pagesBufferLength: 25,
+  },
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },

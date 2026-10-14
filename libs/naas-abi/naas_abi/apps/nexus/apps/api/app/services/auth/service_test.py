@@ -140,9 +140,7 @@ async def test_ensure_user_for_invite_creates_user_without_workspace() -> None:
     )
     service = AuthService(adapter=adapter)
 
-    user, created = await service.ensure_user_for_invite(
-        "NEW@example.com", name="Emma Petit"
-    )
+    user, created = await service.ensure_user_for_invite("NEW@example.com", name="Emma Petit")
 
     assert created is True
     assert user.id == "user-new"
@@ -192,9 +190,7 @@ async def test_request_magic_link_public_signup_creates_default_workspace(
 
     assert challenge
     adapter.create_user_with_default_workspace.assert_awaited_once()
-    assert (
-        adapter.create_user_with_default_workspace.await_args.kwargs["name"] == "Unknown"
-    )
+    assert adapter.create_user_with_default_workspace.await_args.kwargs["name"] == "Unknown"
     adapter.create_user.assert_not_called()
     adapter.create_magic_link_token.assert_awaited_once()
     adapter.commit.assert_awaited_once()
@@ -216,9 +212,7 @@ async def test_request_magic_link_create_if_missing_true_skips_workspace(
     )
     service = AuthService(adapter=adapter)
 
-    challenge = await service.request_magic_link(
-        "invitee@example.com", create_if_missing=True
-    )
+    challenge = await service.request_magic_link("invitee@example.com", create_if_missing=True)
 
     assert challenge
     adapter.create_user.assert_awaited_once()
@@ -575,3 +569,62 @@ async def test_set_superadmin_unknown_user() -> None:
 
     with pytest.raises(UserNotFoundError):
         await service.set_superadmin(actor_id="user-1", user_id="ghost", is_superadmin=True)
+
+
+@pytest.mark.asyncio
+async def test_with_account_fallbacks_fills_empty_fields_from_member_profiles() -> None:
+    from datetime import datetime as _dt
+
+    from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthUserRecord as _Record
+
+    adapter = AsyncMock()
+    adapter.list_member_profiles.return_value = [
+        {
+            "avatar": "/api/auth/avatar/user/u1/org?v=1",
+            "organization": "Forvis Mazars",
+            "job_title": None,
+        },
+        {"avatar": None, "organization": "Other", "job_title": "Partner"},
+    ]
+    service = AuthService(adapter=adapter)
+    record = _Record(
+        id="u1",
+        email="a@b.c",
+        name="A",
+        hashed_password="x",
+        created_at=_dt(2026, 1, 1),
+        organization=None,
+        job_title=None,
+        avatar=None,
+    )
+
+    effective = await service.with_account_fallbacks(record)
+
+    assert (effective.avatar, effective.organization, effective.job_title) == (
+        "/api/auth/avatar/user/u1/org?v=1",
+        "Forvis Mazars",
+        "Partner",
+    )
+
+
+@pytest.mark.asyncio
+async def test_with_account_fallbacks_skips_the_query_when_the_account_is_complete() -> None:
+    from datetime import datetime as _dt
+
+    from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthUserRecord as _Record
+
+    adapter = AsyncMock()
+    service = AuthService(adapter=adapter)
+    record = _Record(
+        id="u1",
+        email="a@b.c",
+        name="A",
+        hashed_password="x",
+        created_at=_dt(2026, 1, 1),
+        organization="Own",
+        job_title="CTO",
+        avatar="/me.png",
+    )
+
+    assert await service.with_account_fallbacks(record) is record
+    adapter.list_member_profiles.assert_not_called()

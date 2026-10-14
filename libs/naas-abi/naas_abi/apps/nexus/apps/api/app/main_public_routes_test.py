@@ -30,6 +30,8 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/api/auth/magic-link/verify"): "sign-in with a link token",
     ("POST", "/api/auth/otp/verify"): "sign-in with a code",
     ("GET", "/api/auth/avatar/{filename}"): "avatar images used in <img> tags",
+    ("GET", "/api/auth/avatar/user/{user_id}"): "account pictures (personal drive) in <img> tags",
+    ("GET", "/api/auth/avatar/user/{user_id}/org"): "organization member pictures (personal drive)",
     ("GET", "/app-preview/{token}"): "capability URL (signed preview token)",
     ("GET", "/app-preview/{token}/{path:path}"): "capability URL (signed preview token)",
     ("GET", "/provider-logos/{provider_id}"): "static provider logos",

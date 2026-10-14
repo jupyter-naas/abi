@@ -18,6 +18,9 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationCreateInput,
     OrganizationDomainCreateInput,
     OrganizationDomainRecord,
+    OrganizationMemberAccountRecord,
+    OrganizationMemberDetailsRecord,
+    OrganizationMemberProfileRecord,
     OrganizationMemberRecord,
     OrganizationPermissionPort,
     OrganizationRecord,
@@ -48,12 +51,19 @@ def _member_record(
         user_id=member.user_id,
         role=member.role,
         email=user.email if user else None,
-        name=_org_or_account(member.name, user.name if user else None),
+        # The full name is always the account's (users.name), in every organization.
+        name=user.name if user else member.name,
         created_at=member.created_at,
-        avatar=_org_or_account(member.avatar, user.avatar if user else None),
-        company=_org_or_account(member.company, user.company if user else None),
-        job_title=_org_or_account(member.job_title, user.role if user else None),
         bio=_org_or_account(member.bio, user.bio if user else None),
+        # Set by org admins only, never taken from the account. It is the account
+        # that falls back to these (picture, organization, job title), not the
+        # other way around (see auth: account fallbacks).
+        avatar=member.avatar,
+        organization=member.organization_name,
+        job_title=member.job_title,
+        service_line=member.service_line,
+        country=member.country,
+        interest=member.interest,
     )
 
 
@@ -388,24 +398,64 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         )
         return result.scalar_one_or_none()
 
+    async def get_organization_member_details(
+        self, org_id: str, user_id: str
+    ) -> OrganizationMemberDetailsRecord | None:
+        row = await self._find_member_row(org_id, user_id)
+        if row is None:
+            return None
+        user = (
+            await self.db.execute(select(UserModel).where(UserModel.id == user_id))
+        ).scalar_one_or_none()
+        return OrganizationMemberDetailsRecord(
+            member=_member_record(row, user),
+            account=OrganizationMemberAccountRecord(
+                user_id=user_id,
+                email=user.email if user else None,
+                name=user.name if user else None,
+                avatar=user.avatar if user else None,
+                organization=user.organization if user else None,
+                job_title=user.job_title if user else None,
+                bio=user.bio if user else None,
+                created_at=user.created_at if user else None,
+                updated_at=user.updated_at if user else None,
+            ),
+            organization_profile=OrganizationMemberProfileRecord(
+                name=row.name,
+                avatar=row.avatar,
+                organization=row.organization_name,
+                job_title=row.job_title,
+                bio=row.bio,
+                service_line=row.service_line,
+                country=row.country,
+                interest=row.interest,
+            ),
+        )
+
     async def update_organization_member_profile(
         self,
         org_id: str,
         user_id: str,
         *,
         name: str | None,
-        company: str | None,
+        organization: str | None,
         job_title: str | None,
         bio: str | None,
+        service_line: str | None = None,
+        country: str | None = None,
+        interest: str | None = None,
     ) -> OrganizationMemberRecord | None:
         row = await self._find_member_row(org_id, user_id)
         if row is None:
             return None
         for field, value in (
             ("name", name),
-            ("company", company),
+            ("organization_name", organization),
             ("job_title", job_title),
             ("bio", bio),
+            ("service_line", service_line),
+            ("country", country),
+            ("interest", interest),
         ):
             if value is not None:
                 setattr(row, field, value)

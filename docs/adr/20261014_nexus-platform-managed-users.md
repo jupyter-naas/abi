@@ -57,11 +57,25 @@ and per-member workspace assignment.
 5. **Owners come only from the config.** Invites and role changes accept
    `admin` or `member` (and `viewer` on workspaces). The organizations service
    refuses `owner` with `OrganizationRoleNotAssignableError`.
-6. **Member profiles are per organization.** When an org admin edits a member's
-   name, company, job title, bio or avatar, the change is stored on
-   `organization_members` (migration 0052), not on `users`. A field left NULL
-   shows the account value. The account and other orgs are never changed.
-7. **Snapshots replace the yaml lists.** `config.users.yaml` (one entry per
+6. **Member profiles are per organization, and flow org -> account only.**
+   Org admins set a member's organization, job title, service line,
+   country, interest, bio and picture on `organization_members` (migrations
+   0052, 0055). Members cannot edit them. When the account (`users`) has no
+   picture, organization or job title, the account shows the member value
+   from the organization the person joined first. An organization never shows
+   the account's values for these fields. The full name is always the account
+   name (`users.name`), and bio still falls back to the account. The picture is stored in the person's drive as
+   `.settings/avatar/avatar_org.<ext>`, next to the account picture
+   `avatar.<ext>`.
+7. **Profile files in the personal drive.** After each profile change,
+   `naas_abi/my-drive/<user_id>/` gets `.settings/user/user.json` (the
+   account), `.settings/user/org_member.json` (the memberships) and `.USER.md`
+   (a summary built from both files, plus the picture URL). The JSON files and
+   pictures keep previous versions in `archives/<ts>_<name>`, and an upload
+   identical to the current file (same SHA-256 hash) changes nothing. The
+   database stays the source of truth: a storage failure is logged and never
+   fails the request.
+8. **Snapshots replace the yaml lists.** `config.users.yaml` (one entry per
    person: account fields, org roles, workspace roles) is not read on boot.
    `python -m naas_abi.apps.nexus.apps.api.app.core.users_import <file>`
    replays it create-only: missing accounts and memberships are inserted,

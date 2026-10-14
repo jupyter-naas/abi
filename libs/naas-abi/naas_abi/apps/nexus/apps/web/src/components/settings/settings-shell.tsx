@@ -1,9 +1,12 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ChevronRight, type LucideIcon } from 'lucide-react';
 import { applyBrandColorVariables, brandColorVariables } from '@/lib/color';
+import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
+import { workspaceReturnPath } from '@/lib/workspace-return-path';
 import './settings-shell.css';
 
 export type SettingsBrand = { primary: string | null; accent: string | null };
@@ -93,4 +96,23 @@ export function SettingsNavItem({
       </Link>
     </li>
   );
+}
+
+/**
+ * Where a settings page's back button leads: the last workspace page the user
+ * was on (else ``fallback``). The page is prefetched (and compiled ahead by
+ * ``next dev``) as soon as settings opens, so going back is immediate.
+ */
+export function useWorkspaceReturnPath(fallback: string, workspaceId?: string | null): string {
+  const router = useRouter();
+  // Read after mount: the remembered page lives in sessionStorage (client only).
+  const [href, setHref] = useState(fallback);
+  useEffect(() => {
+    setHref(workspaceReturnPath(fallback, workspaceId));
+  }, [fallback, workspaceId]);
+  useEffect(() => {
+    router.prefetch(href);
+  }, [router, href]);
+  useDevRouteWarmup([href]);
+  return href;
 }

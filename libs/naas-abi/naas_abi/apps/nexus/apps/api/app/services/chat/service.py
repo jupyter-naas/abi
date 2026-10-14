@@ -473,8 +473,8 @@ class UserProfile(Protocol):
     id: str
     name: str
     email: str
-    company: str | None
-    role: str | None
+    organization: str | None
+    job_title: str | None
     bio: str | None
 
 
@@ -486,8 +486,8 @@ def render_user_context_block(
     fields: list[tuple[str, str | None]] = [
         ("Name", user.name),
         ("Email", user.email),
-        ("Company", user.company),
-        ("Role", user.role),
+        ("Organization", user.organization),
+        ("Job title", user.job_title),
         ("Bio", user.bio),
     ]
     lines = [f"- {label}: {value}" for label, value in fields if value]

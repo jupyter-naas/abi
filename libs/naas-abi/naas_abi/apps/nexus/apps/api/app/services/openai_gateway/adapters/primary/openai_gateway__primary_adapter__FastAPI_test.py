@@ -129,8 +129,8 @@ def test_gateway_turn_carries_the_caller_profile_onto_the_agent_prompt(
         id="user-1",
         email="user@example.com",
         name="User One",
-        company="NaasAI",
-        role="CTO",
+        organization="NaasAI",
+        job_title="CTO",
         bio=None,
     )
 

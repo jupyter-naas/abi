@@ -119,9 +119,48 @@ class OrganizationMemberRecord:
     name: str | None = None
     created_at: datetime | None = None
     avatar: str | None = None
-    company: str | None = None
+    organization: str | None = None
     job_title: str | None = None
     bio: str | None = None
+    service_line: str | None = None
+    country: str | None = None
+    interest: str | None = None
+
+
+@dataclass
+class OrganizationMemberAccountRecord:
+    """The member's platform account (users row), as the account settings show it."""
+
+    user_id: str
+    email: str | None = None
+    name: str | None = None
+    avatar: str | None = None
+    organization: str | None = None
+    job_title: str | None = None
+    bio: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass
+class OrganizationMemberProfileRecord:
+    """What this organization set for the member; None falls back to the account."""
+
+    name: str | None = None
+    avatar: str | None = None
+    organization: str | None = None
+    job_title: str | None = None
+    bio: str | None = None
+    service_line: str | None = None
+    country: str | None = None
+    interest: str | None = None
+
+
+@dataclass
+class OrganizationMemberDetailsRecord:
+    member: OrganizationMemberRecord
+    account: OrganizationMemberAccountRecord
+    organization_profile: OrganizationMemberProfileRecord
 
 
 @dataclass
@@ -260,15 +299,25 @@ class OrganizationPermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def get_organization_member_details(
+        self, org_id: str, user_id: str
+    ) -> OrganizationMemberDetailsRecord | None:
+        """The membership with the account and the org profile kept apart."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def update_organization_member_profile(
         self,
         org_id: str,
         user_id: str,
         *,
         name: str | None,
-        company: str | None,
+        organization: str | None,
         job_title: str | None,
         bio: str | None,
+        service_line: str | None = None,
+        country: str | None = None,
+        interest: str | None = None,
     ) -> OrganizationMemberRecord | None:
         """Set the member's profile in this org; ``None`` leaves a field unchanged."""
         raise NotImplementedError

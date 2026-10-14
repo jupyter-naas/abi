@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.models import (
     MagicLinkTokenModel,
+    OrganizationMemberModel,
     PasswordResetTokenModel,
     UserModel,
     WorkspaceMemberModel,
@@ -48,8 +49,8 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
             name=model.name,
             hashed_password=model.hashed_password,
             avatar=model.avatar,
-            company=model.company,
-            role=model.role,
+            organization=model.organization,
+            job_title=model.job_title,
             bio=model.bio,
             is_superadmin=bool(model.is_superadmin),
             created_at=model.created_at,
@@ -162,8 +163,8 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         user_id: str,
         name: str | None,
         email: str | None,
-        company: str | None,
-        role: str | None,
+        organization: str | None,
+        job_title: str | None,
         bio: str | None,
     ) -> AuthUserRecord | None:
         result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
@@ -175,10 +176,10 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
             user.name = name
         if email is not None:
             user.email = email
-        if company is not None:
-            user.company = company
-        if role is not None:
-            user.role = role
+        if organization is not None:
+            user.organization = organization
+        if job_title is not None:
+            user.job_title = job_title
         if bio is not None:
             user.bio = bio
 
@@ -385,6 +386,21 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
             select(func.count()).select_from(UserModel).where(UserModel.is_superadmin.is_(True))
         )
         return int(result.scalar_one())
+
+    async def list_member_profiles(self, user_id: str) -> list[dict[str, str | None]]:
+        rows = await self.db.execute(
+            select(
+                OrganizationMemberModel.avatar,
+                OrganizationMemberModel.organization_name,
+                OrganizationMemberModel.job_title,
+            )
+            .where(OrganizationMemberModel.user_id == user_id)
+            .order_by(OrganizationMemberModel.created_at, OrganizationMemberModel.id)
+        )
+        return [
+            {"avatar": avatar, "organization": organization, "job_title": job_title}
+            for avatar, organization, job_title in rows.all()
+        ]
 
     async def set_user_superadmin(
         self, user_id: str, is_superadmin: bool, now: datetime

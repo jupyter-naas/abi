@@ -493,3 +493,134 @@
     justify-content: flex-end;
   }
 }
+
+/* Clicking a row opens the user page (admins only). */
+.org-settings-users-row-link {
+  cursor: pointer;
+}
+
+/* Organization member page (laid out like Account Settings > Profile). */
+.org-member-detail-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.org-member-detail-back:hover {
+  color: var(--foreground-hex);
+}
+
+.org-member-detail-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.org-member-detail-actions .account-profile-save-button {
+  width: auto;
+  white-space: nowrap;
+}
+
+.org-member-detail-remove-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--destructive-hex, #ef4444) 50%, transparent);
+  background: transparent;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--destructive-hex, #ef4444);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.org-member-detail-remove-button:hover:not(:disabled) {
+  background-color: var(--color-destructive-subtle);
+}
+
+.org-member-detail-remove-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.org-member-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.org-member-detail-section-header h3 {
+  margin: 0;
+  font-size: var(--font-size-base, 1rem);
+  font-weight: var(--font-weight-semibold);
+  color: var(--foreground-hex);
+}
+
+.org-member-detail-section-header p {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}
+
+.org-member-detail-value {
+  font-size: var(--font-size-sm);
+  color: var(--foreground-hex);
+}
+
+.org-member-detail-workspaces th {
+  padding: 8px 12px;
+}
+
+.org-member-detail-count {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-1);
+  padding: 0 var(--space-2);
+  background-color: hsl(var(--muted));
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--muted-foreground-hex);
+  vertical-align: middle;
+}
+
+/* Create user page. */
+.org-member-detail-cancel-button {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-hex);
+  background: transparent;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+  cursor: pointer;
+}
+
+.org-member-detail-cancel-button:hover {
+  background-color: hsl(var(--muted));
+}
+
+.org-create-user-workspaces ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  list-style: none;
+}
+
+.org-create-user-workspaces label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  font-size: var(--font-size-sm);
+  color: var(--foreground-hex);
+  cursor: pointer;
+}

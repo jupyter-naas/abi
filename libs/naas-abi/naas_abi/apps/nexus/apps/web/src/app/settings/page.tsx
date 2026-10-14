@@ -25,7 +25,7 @@ import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/comp
 import { platformSettingsSectionPath } from './lib/nav';
 import { matchesSearch } from './lib/search';
 import { fetchTableSchema, SchemaTable, type SchemaState } from './components/schema-table';
-import { SearchBox } from './components/search-box';
+import { SearchBox } from '@/components/settings/search-box';
 import {
   buildJsonExport,
   buildWorkbookSheets,

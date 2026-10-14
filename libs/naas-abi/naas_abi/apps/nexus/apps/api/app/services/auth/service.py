@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hmac
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from uuid import uuid4
 
@@ -10,6 +10,10 @@ import bcrypt
 from jose import JWTError, jwt
 from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key, settings
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.services.auth.account_fallbacks import (
+    FALLBACK_FIELDS,
+    effective_account_values,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.default_passwords import (
     is_known_default_password,
 )
@@ -304,8 +308,8 @@ class AuthService:
         user_id: str,
         name: str | None,
         email: str | None,
-        company: str | None,
-        role: str | None,
+        organization: str | None,
+        job_title: str | None,
         bio: str | None,
     ) -> AuthUserRecord:
         normalized_email = email.lower() if email is not None else None
@@ -319,8 +323,8 @@ class AuthService:
             user_id=user_id,
             name=name,
             email=normalized_email,
-            company=company,
-            role=role,
+            organization=organization,
+            job_title=job_title,
             bio=bio,
         )
         if updated_user is None:
@@ -462,6 +466,20 @@ class AuthService:
 
     async def list_users(self) -> list[AuthUserRecord]:
         return await self.adapter.list_users()
+
+    async def get_user(self, user_id: str) -> AuthUserRecord | None:
+        return await self.adapter.get_user_by_id(user_id)
+
+    async def with_account_fallbacks(self, user: AuthUserRecord) -> AuthUserRecord:
+        """The account as shown to its owner: empty picture, organization and job
+        title filled from their organization member profiles (org -> account only)."""
+        if all(getattr(user, field) for field in FALLBACK_FIELDS):
+            return user
+        profiles = await self.adapter.list_member_profiles(user.id)
+        effective = effective_account_values(
+            {field: getattr(user, field) for field in FALLBACK_FIELDS}, profiles
+        )
+        return replace(user, **effective)
 
     async def set_superadmin(
         self, *, actor_id: str, user_id: str, is_superadmin: bool

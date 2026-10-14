@@ -5,6 +5,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
+    OrganizationWorkspaceMembershipRecord,
+)
 from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationDomainAlreadyExistsError,
     OrganizationMemberAlreadyExistsError,
@@ -12,6 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationRoleNotAssignableError,
     OrganizationService,
     OrganizationSlugAlreadyExistsError,
+    member_workspace_access,
 )
 
 
@@ -134,3 +138,37 @@ async def test_update_member_role_refuses_owner_role() -> None:
     with pytest.raises(OrganizationRoleNotAssignableError):
         await service.update_member_role(org_id="org-1", user_id="user-2", role="owner")
     adapter.update_organization_member_role.assert_not_called()
+
+
+def _ws(ws_id: str, owner_id: str = "someone") -> SimpleNamespace:
+    return SimpleNamespace(id=ws_id, name=ws_id.upper(), slug=ws_id, owner_id=owner_id)
+
+
+def test_member_workspace_access_lists_explicit_memberships() -> None:
+    access = member_workspace_access(
+        user_id="u1",
+        organization_role="member",
+        workspaces=[_ws("a"), _ws("b"), _ws("c")],
+        memberships=[
+            OrganizationWorkspaceMembershipRecord(user_id="u1", workspace_id="a", role="viewer"),
+            OrganizationWorkspaceMembershipRecord(user_id="u2", workspace_id="b", role="admin"),
+        ],
+    )
+
+    assert [(a.workspace_id, a.role, a.source) for a in access] == [("a", "viewer", "workspace")]
+
+
+def test_org_admins_inherit_every_workspace_and_higher_roles_win() -> None:
+    access = member_workspace_access(
+        user_id="u1",
+        organization_role="admin",
+        workspaces=[_ws("a"), _ws("b", owner_id="u1")],
+        memberships=[
+            OrganizationWorkspaceMembershipRecord(user_id="u1", workspace_id="a", role="member"),
+        ],
+    )
+
+    assert [(a.workspace_id, a.role, a.source) for a in access] == [
+        ("a", "admin", "organization"),
+        ("b", "owner", "workspace"),
+    ]

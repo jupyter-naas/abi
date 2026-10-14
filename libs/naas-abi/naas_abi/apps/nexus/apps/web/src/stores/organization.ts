@@ -77,17 +77,34 @@ export interface OrganizationMember {
   name?: string;
   createdAt?: string;
   avatar?: string;
-  company?: string;
+  organization?: string;
   jobTitle?: string;
   bio?: string;
+  serviceLine?: string;
+  country?: string;
+  interest?: string;
 }
+
+/** Sent with Create user: the account name (new accounts only) and the member profile. */
+export type OrganizationMemberCreateProfile = {
+  name?: string;
+  organization?: string;
+  job_title?: string;
+  bio?: string;
+  service_line?: string;
+  country?: string;
+  interest?: string;
+};
 
 export type OrganizationMemberProfileUpdate = {
   role?: 'admin' | 'member';
   name?: string;
-  company?: string;
+  organization?: string;
   job_title?: string;
   bio?: string;
+  service_line?: string;
+  country?: string;
+  interest?: string;
 };
 
 function mapMember(m: any): OrganizationMember {
@@ -100,9 +117,12 @@ function mapMember(m: any): OrganizationMember {
     name: m.name,
     createdAt: m.created_at,
     avatar: m.avatar,
-    company: m.company,
+    organization: m.organization,
     jobTitle: m.job_title,
     bio: m.bio,
+    serviceLine: m.service_line,
+    country: m.country,
+    interest: m.interest,
   };
 }
 
@@ -148,7 +168,12 @@ interface OrganizationState {
   
   // Member actions
   fetchMembers: (orgId: string) => Promise<OrganizationMember[]>;
-  inviteMember: (orgId: string, email: string, role: 'admin' | 'member') => Promise<OrganizationMember | null>;
+  inviteMember: (
+    orgId: string,
+    email: string,
+    role: 'admin' | 'member',
+    profile?: OrganizationMemberCreateProfile
+  ) => Promise<OrganizationMember | null>;
   updateMemberRole: (orgId: string, userId: string, role: 'owner' | 'admin' | 'member') => Promise<OrganizationMember | null>;
   updateMemberProfile: (
     orgId: string,
@@ -383,12 +408,17 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
     }
   },
 
-  inviteMember: async (orgId: string, email: string, role: 'admin' | 'member'): Promise<OrganizationMember | null> => {
+  inviteMember: async (
+    orgId: string,
+    email: string,
+    role: 'admin' | 'member',
+    profile: OrganizationMemberCreateProfile = {}
+  ): Promise<OrganizationMember | null> => {
     try {
       const response = await authFetch(`/api/organizations/${orgId}/members/invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role }),
+        body: JSON.stringify({ email, role, ...profile }),
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));

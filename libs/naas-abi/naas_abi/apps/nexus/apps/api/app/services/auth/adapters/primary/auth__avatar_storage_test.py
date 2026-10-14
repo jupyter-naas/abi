@@ -59,3 +59,11 @@ def test_deleting_an_avatar_clears_both_locations(storage: ObjectStorageService)
 
     assert not _exists(storage, NEW, "user-1-a.png")
     assert not _exists(storage, LEGACY, "user-1-a.png")
+
+
+def test_drive_pictures_are_never_deleted_as_legacy(storage: ObjectStorageService) -> None:
+    storage.put_object(NEW, "user-1?v=abc", b"kept")
+
+    auth_adapter._delete_old_avatar(storage, "/api/auth/avatar/user/user-1?v=abc")
+
+    assert _exists(storage, NEW, "user-1?v=abc")

@@ -1,8 +1,9 @@
 'use client';
 
 import { Search, X } from 'lucide-react';
+import './search-box.css';
 
-/** Search box of the Platform Settings dashboard and table pages. Esc clears it. */
+/** Search box of the settings tables (Platform Settings, Organization Users). Esc clears it. */
 export function SearchBox({
   value,
   onChange,
@@ -15,7 +16,7 @@ export function SearchBox({
   label: string;
 }) {
   return (
-    <label className="platform-dashboard-search">
+    <label className="settings-search">
       <Search size={14} />
       <input
         type="search"
@@ -30,7 +31,7 @@ export function SearchBox({
       {value && (
         <button
           type="button"
-          className="platform-dashboard-search-clear"
+          className="settings-search-clear"
           onClick={() => onChange('')}
           aria-label="Clear search"
         >

@@ -4,10 +4,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import uuid4
 
+from naas_abi.apps.nexus.apps.api.app.core.workspace_access import INHERITED_FROM_ORG, max_role
 from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationCreateInput,
     OrganizationDomainCreateInput,
     OrganizationDomainRecord,
+    OrganizationMemberDetailsRecord,
     OrganizationMemberRecord,
     OrganizationPermissionPort,
     OrganizationRecord,
@@ -17,6 +19,46 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationWorkspaceRecord,
     UserOrganizationMembershipRecord,
 )
+
+
+@dataclass
+class MemberWorkspaceAccess:
+    workspace_id: str
+    name: str
+    slug: str
+    role: str
+    #: "workspace" for an explicit membership or ownership, "organization" when
+    #: the org role (owner/admin) gives the higher role.
+    source: str
+
+
+def member_workspace_access(
+    *,
+    user_id: str,
+    organization_role: str,
+    workspaces: list[OrganizationWorkspaceRecord],
+    memberships: list[OrganizationWorkspaceMembershipRecord],
+) -> list[MemberWorkspaceAccess]:
+    """The member's effective role on each workspace of the org (see core/workspace_access)."""
+    explicit = {m.workspace_id: m.role for m in memberships if m.user_id == user_id}
+    inherited = INHERITED_FROM_ORG.get(organization_role)
+    access: list[MemberWorkspaceAccess] = []
+    for workspace in workspaces:
+        own = max_role(explicit.get(workspace.id), "owner" if workspace.owner_id == user_id else None)
+        role = max_role(own, inherited)
+        if role is None:
+            continue
+        source = "workspace" if own == role else "organization"
+        access.append(
+            MemberWorkspaceAccess(
+                workspace_id=workspace.id,
+                name=workspace.name,
+                slug=workspace.slug,
+                role=role,
+                source=source,
+            )
+        )
+    return access
 
 
 @dataclass
@@ -230,24 +272,45 @@ class OrganizationService:
             role=role,
         )
 
+    async def get_member_details(
+        self, org_id: str, user_id: str
+    ) -> OrganizationMemberDetailsRecord | None:
+        return await self.adapter.get_organization_member_details(org_id=org_id, user_id=user_id)
+
+    async def get_member_workspace_access(
+        self, org_id: str, user_id: str, organization_role: str
+    ) -> list[MemberWorkspaceAccess]:
+        return member_workspace_access(
+            user_id=user_id,
+            organization_role=organization_role,
+            workspaces=await self.list_all_workspaces(org_id=org_id),
+            memberships=await self.list_workspace_memberships(org_id=org_id),
+        )
+
     async def update_member_profile(
         self,
         org_id: str,
         user_id: str,
         *,
         name: str | None = None,
-        company: str | None = None,
+        organization: str | None = None,
         job_title: str | None = None,
         bio: str | None = None,
+        service_line: str | None = None,
+        country: str | None = None,
+        interest: str | None = None,
     ) -> OrganizationMemberRecord | None:
         """Edit the member's profile in this organization only (never the account)."""
         return await self.adapter.update_organization_member_profile(
             org_id=org_id,
             user_id=user_id,
             name=name,
-            company=company,
+            organization=organization,
             job_title=job_title,
             bio=bio,
+            service_line=service_line,
+            country=country,
+            interest=interest,
         )
 
     async def set_member_avatar(self, org_id: str, user_id: str, avatar: str | None) -> str | None:

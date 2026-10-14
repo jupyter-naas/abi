@@ -589,7 +589,7 @@ async def test_complete_chat_request_forwards_injection_preamble_for_abi(monkeyp
         touch_conversation=AsyncMock(),
     )
     auth_adapter = SimpleNamespace(
-        get_user_by_id=AsyncMock(return_value=_user_record(company="Acme Corp"))
+        get_user_by_id=AsyncMock(return_value=_user_record(organization="Acme Corp"))
     )
     service = ChatService(adapter=adapter, auth_adapter=auth_adapter)
     service.get_or_create_conversation = AsyncMock(return_value="conv-1")
@@ -948,8 +948,8 @@ def test_inject_skips_chunks_from_other_users(monkeypatch) -> None:
 def _user_record(
     name: str = "Alice Smith",
     email: str = "alice@example.com",
-    company: str | None = None,
-    role: str | None = None,
+    organization: str | None = None,
+    job_title: str | None = None,
     bio: str | None = None,
 ) -> AuthUserRecord:
     return AuthUserRecord(
@@ -958,8 +958,8 @@ def _user_record(
         name=name,
         hashed_password="x",
         created_at=datetime.now(),
-        company=company,
-        role=role,
+        organization=organization,
+        job_title=job_title,
         bio=bio,
     )
 
@@ -969,8 +969,8 @@ async def test_build_system_prompt_injects_user_on_first_turn() -> None:
     auth_adapter = SimpleNamespace(
         get_user_by_id=AsyncMock(
             return_value=_user_record(
-                company="Acme Corp",
-                role="CTO",
+                organization="Acme Corp",
+                job_title="CTO",
                 bio="Loves bicycles.",
             )
         )
@@ -987,8 +987,8 @@ async def test_build_system_prompt_injects_user_on_first_turn() -> None:
     assert AGENT_SYSTEM_PROMPTS["aia"] in prompt
     assert "Name: Alice Smith" in prompt
     assert "Email: alice@example.com" in prompt
-    assert "Company: Acme Corp" in prompt
-    assert "Role: CTO" in prompt
+    assert "Organization: Acme Corp" in prompt
+    assert "Job title: CTO" in prompt
     assert "Bio: Loves bicycles." in prompt
     auth_adapter.get_user_by_id.assert_awaited_once_with("user-1")
 
@@ -1009,8 +1009,8 @@ async def test_build_system_prompt_omits_empty_user_fields() -> None:
 
     assert "Name: Alice Smith" in prompt
     assert "Email: alice@example.com" in prompt
-    assert "Company:" not in prompt
-    assert "Role:" not in prompt
+    assert "Organization:" not in prompt
+    assert "Job title:" not in prompt
     assert "Bio:" not in prompt
 
 
@@ -1424,7 +1424,7 @@ async def test_build_system_prompt_respects_explicit_override() -> None:
 async def test_build_user_context_addendum_returns_block_on_first_turn() -> None:
     auth_adapter = SimpleNamespace(
         get_user_by_id=AsyncMock(
-            return_value=_user_record(name="Bob", email="bob@example.com", role="PM")
+            return_value=_user_record(name="Bob", email="bob@example.com", job_title="PM")
         )
     )
     service = ChatService(adapter=SimpleNamespace(), auth_adapter=auth_adapter)
@@ -1436,7 +1436,7 @@ async def test_build_user_context_addendum_returns_block_on_first_turn() -> None
 
     assert "Name: Bob" in addendum
     assert "Email: bob@example.com" in addendum
-    assert "Role: PM" in addendum
+    assert "Job title: PM" in addendum
 
 
 @pytest.mark.asyncio

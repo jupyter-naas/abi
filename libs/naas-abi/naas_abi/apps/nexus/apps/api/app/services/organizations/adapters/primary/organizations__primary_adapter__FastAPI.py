@@ -14,12 +14,12 @@ from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     KNOWN_FEATURE_KEYS,
     resolve_role_baseline,
 )
+from naas_abi.apps.nexus.apps.api.app.services.auth import avatar_store, user_drive_profile
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_auth_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__FastAPI import (
     ALLOWED_AVATAR_EXTENSIONS,
-    AVATAR_STORAGE_PREFIX,
     MAX_AVATAR_SIZE,
     _delete_old_avatar,
     _get_object_storage,
@@ -209,29 +209,85 @@ class OrganizationMember(BaseModel):
     name: str | None = None
     created_at: datetime | None = None
     avatar: str | None = None
-    company: str | None = None
+    organization: str | None = None
     job_title: str | None = None
     bio: str | None = None
+    service_line: str | None = None
+    country: str | None = None
+    interest: str | None = None
     user_created: bool = False
     sign_in_email_sent: bool = False
     workspace_member_id: str | None = None
+
+
+class OrganizationMemberAccount(BaseModel):
+    """The member's platform account (read-only here)."""
+
+    user_id: str
+    email: str | None = None
+    name: str | None = None
+    avatar: str | None = None
+    organization: str | None = None
+    job_title: str | None = None
+    bio: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class OrganizationMemberProfile(BaseModel):
+    """What this organization set; null fields show the account value."""
+
+    name: str | None = None
+    avatar: str | None = None
+    organization: str | None = None
+    job_title: str | None = None
+    bio: str | None = None
+    service_line: str | None = None
+    country: str | None = None
+    interest: str | None = None
+
+
+class OrganizationMemberWorkspace(BaseModel):
+    id: str
+    name: str
+    slug: str
+    role: str
+    source: str
+
+
+class OrganizationMemberDetails(BaseModel):
+    member: OrganizationMember
+    account: OrganizationMemberAccount
+    organization_profile: OrganizationMemberProfile
+    workspaces: list[OrganizationMemberWorkspace]
 
 
 class OrganizationMemberInvite(BaseModel):
     email: str = Field(..., min_length=1)
     # Owners come from the config only (organizations[].owner_email).
     role: str = Field(default="member", pattern=r"^(admin|member)$")
+    # Account name, used only when the invite creates the account (users.name).
     name: str | None = Field(default=None, min_length=1, max_length=120)
     workspace_id: str | None = Field(default=None, min_length=1)
     workspace_role: str = Field(default="member", pattern=r"^(admin|member|viewer)$")
+    # Member profile in this organization (Organization Settings > Users > Create user).
+    organization: str | None = Field(default=None, max_length=200)
+    job_title: str | None = Field(default=None, max_length=100)
+    bio: str | None = Field(default=None, max_length=2000)
+    service_line: str | None = Field(default=None, max_length=200)
+    country: str | None = Field(default=None, max_length=100)
+    interest: str | None = Field(default=None, max_length=1000)
 
 
 class OrganizationMemberUpdate(BaseModel):
     role: str | None = Field(default=None, pattern=r"^(admin|member)$")
-    name: str | None = Field(default=None, min_length=1, max_length=200)
-    company: str | None = Field(default=None, max_length=200)
+    # No name: a member's full name is always their account name (users.name).
+    organization: str | None = Field(default=None, max_length=200)
     job_title: str | None = Field(default=None, max_length=100)
     bio: str | None = Field(default=None, max_length=2000)
+    service_line: str | None = Field(default=None, max_length=200)
+    country: str | None = Field(default=None, max_length=100)
+    interest: str | None = Field(default=None, max_length=1000)
 
 
 class OrganizationMemberWorkspacesUpdate(BaseModel):
@@ -776,6 +832,46 @@ async def list_org_members(
     return [OrganizationMember(**row.__dict__) for row in rows]
 
 
+async def _sync_member_drive(
+    db: AsyncSession, object_storage: ObjectStorageService, user_id: str
+) -> None:
+    """Refresh org_member.json and .USER.md in the member's drive (best effort)."""
+    await db.flush()
+    await user_drive_profile.sync_user_drive_profile_safely(
+        db, object_storage, user_id, datetime.now(UTC)
+    )
+
+
+@router.get("/{org_id}/members/{user_id}")
+async def get_org_member_details(
+    org_id: str,
+    user_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+) -> OrganizationMemberDetails:
+    """One member: their account, their profile in this org and their workspaces here."""
+    role = await require_org_access(current_user.id, org_id, service)
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only admins can view member details")
+    details = await service.get_member_details(org_id=org_id, user_id=user_id)
+    if details is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    workspaces = await service.get_member_workspace_access(
+        org_id=org_id, user_id=user_id, organization_role=details.member.role
+    )
+    return OrganizationMemberDetails(
+        member=OrganizationMember(**details.member.__dict__),
+        account=OrganizationMemberAccount(**details.account.__dict__),
+        organization_profile=OrganizationMemberProfile(**details.organization_profile.__dict__),
+        workspaces=[
+            OrganizationMemberWorkspace(
+                id=w.workspace_id, name=w.name, slug=w.slug, role=w.role, source=w.source
+            )
+            for w in workspaces
+        ],
+    )
+
+
 async def _find_org_member(
     service: OrganizationService, *, org_id: str, user_id: str
 ) -> OrganizationMemberRecord | None:
@@ -794,6 +890,8 @@ async def invite_org_member(
     workspace_service: WorkspaceService = Depends(get_workspace_service_for_org_invite),
     auth_service: AuthService = Depends(get_auth_service),
     email_service: EmailService | None = Depends(_get_email_service),
+    db: AsyncSession = Depends(get_db),
+    object_storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> OrganizationMember:
     role = await require_org_access(current_user.id, org_id, service)
     if role not in ("owner", "admin"):
@@ -835,6 +933,22 @@ async def invite_org_member(
     if member is None:
         raise HTTPException(status_code=500, detail="Failed to create or find user for invite")
 
+    profile = {
+        "organization": invite.organization,
+        "job_title": invite.job_title,
+        "bio": invite.bio,
+        "service_line": invite.service_line,
+        "country": invite.country,
+        "interest": invite.interest,
+    }
+    if any(value is not None for value in profile.values()):
+        member = (
+            await service.update_member_profile(
+                org_id=org_id, user_id=member.user_id, name=None, **profile
+            )
+            or member
+        )
+
     if invite.workspace_id:
         try:
             ws_member = await workspace_service.invite_workspace_member(
@@ -853,6 +967,7 @@ async def invite_org_member(
         email_service=email_service or _get_email_service(request),
     )
 
+    await _sync_member_drive(db, object_storage, member.user_id)
     return OrganizationMember(
         **member.__dict__,
         user_created=user_created,
@@ -868,6 +983,8 @@ async def update_org_member(
     updates: OrganizationMemberUpdate,
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
+    db: AsyncSession = Depends(get_db),
+    object_storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> OrganizationMember:
     role = await require_org_access(current_user.id, org_id, service)
     if role not in ("owner", "admin"):
@@ -890,7 +1007,14 @@ async def update_org_member(
 
     profile_touched = any(
         field is not None
-        for field in (updates.name, updates.company, updates.job_title, updates.bio)
+        for field in (
+            updates.organization,
+            updates.job_title,
+            updates.bio,
+            updates.service_line,
+            updates.country,
+            updates.interest,
+        )
     )
     if profile_touched:
         # Profile in this organization only: the account (users.*) and the
@@ -898,14 +1022,18 @@ async def update_org_member(
         member = await service.update_member_profile(
             org_id=org_id,
             user_id=user_id,
-            name=updates.name,
-            company=updates.company,
+            name=None,
+            organization=updates.organization,
             job_title=updates.job_title,
             bio=updates.bio,
+            service_line=updates.service_line,
+            country=updates.country,
+            interest=updates.interest,
         )
         if member is None:
             raise HTTPException(status_code=404, detail="Member not found")
 
+    await _sync_member_drive(db, object_storage, user_id)
     return OrganizationMember(**member.__dict__)
 
 
@@ -917,6 +1045,7 @@ async def upload_org_member_avatar(
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
     object_storage: ObjectStorageService = Depends(_get_object_storage),
+    db: AsyncSession = Depends(get_db),
 ) -> OrganizationMember:
     role = await require_org_access(current_user.id, org_id, service)
     if role not in ("owner", "admin"):
@@ -939,17 +1068,26 @@ async def upload_org_member_avatar(
     if len(content) > MAX_AVATAR_SIZE:
         raise HTTPException(status_code=400, detail="File too large (max 2MB)")
 
-    unique_filename = f"{user_id}-{os.urandom(4).hex()}{ext}"
-    object_storage.put_object(AVATAR_STORAGE_PREFIX, unique_filename, content)
-    avatar_url = f"/api/auth/avatar/{unique_filename}"
-    # The previous org avatar only: the account avatar is not the org's to delete.
+    # In the member's own drive as avatar_org.<ext>, the previous one archived
+    # (avatar_store). The account shows it when it has no picture of its own.
+    saved = avatar_store.save_avatar(
+        object_storage,
+        user_id,
+        content,
+        ext,
+        datetime.now(UTC),
+        basename=avatar_store.ORG_AVATAR_BASENAME,
+    )
+    avatar_url = avatar_store.avatar_url(user_id, saved.digest, avatar_store.ORG_AVATAR_BASENAME)
     previous_avatar = await service.set_member_avatar(
         org_id=org_id, user_id=user_id, avatar=avatar_url
     )
-    _delete_old_avatar(object_storage, previous_avatar, unique_filename)
+    # A picture from before the drive layout: its file is no longer used.
+    _delete_old_avatar(object_storage, previous_avatar)
     member = await service.get_organization_member(org_id=org_id, user_id=user_id)
     if member is None:
         raise HTTPException(status_code=404, detail="Member not found")
+    await _sync_member_drive(db, object_storage, user_id)
     return OrganizationMember(**member.__dict__)
 
 
@@ -960,6 +1098,7 @@ async def remove_org_member_avatar(
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
     object_storage: ObjectStorageService = Depends(_get_object_storage),
+    db: AsyncSession = Depends(get_db),
 ) -> OrganizationMember:
     role = await require_org_access(current_user.id, org_id, service)
     if role not in ("owner", "admin"):
@@ -969,12 +1108,15 @@ async def remove_org_member_avatar(
     if member is None:
         raise HTTPException(status_code=404, detail="Member not found")
 
-    # Clearing the org avatar falls back to the account avatar.
     previous_avatar = await service.set_member_avatar(org_id=org_id, user_id=user_id, avatar=None)
+    avatar_store.remove_avatar(
+        object_storage, user_id, datetime.now(UTC), basename=avatar_store.ORG_AVATAR_BASENAME
+    )
     _delete_old_avatar(object_storage, previous_avatar)
     member = await service.get_organization_member(org_id=org_id, user_id=user_id)
     if member is None:
         raise HTTPException(status_code=404, detail="Member not found")
+    await _sync_member_drive(db, object_storage, user_id)
     return OrganizationMember(**member.__dict__)
 
 
@@ -984,6 +1126,8 @@ async def remove_org_member(
     user_id: str,
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
+    db: AsyncSession = Depends(get_db),
+    object_storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> dict:
     role = await require_org_access(current_user.id, org_id, service)
     if role not in ("owner", "admin"):
@@ -998,6 +1142,7 @@ async def remove_org_member(
     removed = await service.remove_member(org_id=org_id, user_id=user_id)
     if not removed:
         raise HTTPException(status_code=404, detail="Member not found")
+    await _sync_member_drive(db, object_storage, user_id)
     return {"message": "Member removed successfully"}
 
 

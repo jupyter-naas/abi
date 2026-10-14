@@ -364,8 +364,8 @@ class UserSeedConfig(BaseModel):
     email: EmailStr
     name: str
     avatar: str | None = None
-    company: str | None = None
-    role: str | None = None
+    organization: str | None = None
+    job_title: str | None = None
     bio: str | None = None
     is_superadmin: bool = False
     store_credentials_in_secrets: bool = True

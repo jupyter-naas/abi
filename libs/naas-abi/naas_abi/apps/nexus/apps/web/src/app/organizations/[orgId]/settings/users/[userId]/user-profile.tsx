@@ -1,19 +1,45 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { Camera, RefreshCw, Save, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Camera, RefreshCw, Save, Trash2, X } from 'lucide-react';
 import { getApiUrl } from '@/lib/config';
-import { useAuthStore } from '@/stores/auth';
+import { authFetch, useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
+import { useConfirm } from '@/components/ui/dialogs';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
 import { orgSettingsSectionPath } from '../../lib/nav';
+import {
+  changedProfileFields,
+  PROFILE_FIELDS,
+  type MemberDetails,
+  type MemberProfileField,
+} from './member-details';
 import '@/app/account/profile/profile.css';
+import '../users.css';
 
 const BIO_MAX_LENGTH = 2000;
+const INTEREST_MAX_LENGTH = 1000;
 
-function photoUrl(avatar?: string) {
+/** Single-line fields, in form order (bio is the textarea below them). */
+const TEXT_FIELDS: { field: MemberProfileField; label: string; placeholder: string }[] = [
+  { field: 'organization', label: 'Organization', placeholder: 'Organization' },
+  { field: 'job_title', label: 'Job title', placeholder: 'Job title' },
+  { field: 'service_line', label: 'Service line', placeholder: 'Service line' },
+  { field: 'country', label: 'Country', placeholder: 'Country' },
+  { field: 'interest', label: 'Interest', placeholder: 'Interests' },
+];
+
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Owner',
+  admin: 'Admin',
+  member: 'Member',
+  viewer: 'Viewer',
+};
+
+function photoUrl(avatar?: string | null) {
   if (!avatar) return '';
   return avatar.startsWith('/') ? `${getApiUrl()}${avatar}` : avatar;
 }
@@ -23,94 +49,148 @@ function formatError(err: unknown, fallback: string) {
   return fallback;
 }
 
+async function readApiError(response: Response, fallback: string): Promise<string> {
+  try {
+    const data = await response.json();
+    if (typeof data?.detail === 'string') return data.detail;
+  } catch {
+    // ignore parse errors
+  }
+  return fallback;
+}
+
+const emptyDraft = (): Record<MemberProfileField, string> =>
+  Object.fromEntries(PROFILE_FIELDS.map((field) => [field, ''])) as Record<
+    MemberProfileField,
+    string
+  >;
+
+/**
+ * One member of the organization, laid out like Account Settings > Profile.
+ * Org admins set the member's profile here; it is the account that falls back
+ * to these values (picture, organization, job title), never the other way round.
+ * Members cannot edit it: the API only lets org owners and admins in.
+ */
 export default function OrgUserProfilePage() {
   const params = useParams();
   const router = useRouter();
   const orgId = params.orgId as string;
   const userId = params.userId as string;
   const authUser = useAuthStore((state) => state.user);
-  const setUser = useAuthStore((state) => state.setUser);
-  const {
-    fetchMembers,
-    updateMemberProfile,
-    uploadMemberAvatar,
-    removeMemberAvatar,
-    membersCache,
-    membersLoading,
-  } = useOrganizationStore();
+  const { updateMemberProfile, uploadMemberAvatar, removeMemberAvatar, removeMember } =
+    useOrganizationStore();
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
-  const members = membersCache[orgId] || [];
-  const member = members.find((row) => row.userId === userId) || null;
-  const myMembership = members.find((row) => row.userId === authUser?.id);
-  const canManage =
-    myMembership?.role === 'owner' || myMembership?.role === 'admin';
-
-  const [name, setName] = useState('');
-  const [company, setCompany] = useState('');
-  const [role, setRole] = useState('');
-  const [bio, setBio] = useState('');
+  const [details, setDetails] = useState<MemberDetails | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [draft, setDraft] = useState(emptyDraft);
   const [orgRole, setOrgRole] = useState<'admin' | 'member'>('member');
-  const [avatarUrl, setAvatarUrl] = useState('');
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (orgId) void fetchMembers(orgId);
-  }, [orgId, fetchMembers]);
-
-  useEffect(() => {
-    if (!membersLoading && members.length > 0 && !canManage) {
-      router.replace(orgSettingsSectionPath(orgId, 'users'));
+  /** ``resetForm: false`` refreshes the data (e.g. a new picture) and keeps unsaved edits. */
+  const load = useCallback(async ({ resetForm = true }: { resetForm?: boolean } = {}) => {
+    try {
+      const res = await authFetch(
+        `/api/organizations/${orgId}/members/${encodeURIComponent(userId)}`
+      );
+      if (res.status === 403) {
+        router.replace(orgSettingsSectionPath(orgId, 'users'));
+        return;
+      }
+      if (!res.ok) {
+        setLoadError(await readApiError(res, `Failed to load this user (HTTP ${res.status}).`));
+        return;
+      }
+      const data: MemberDetails = await res.json();
+      setDetails(data);
+      if (!resetForm) return;
+      setDraft(
+        Object.fromEntries(
+          PROFILE_FIELDS.map((field) => [field, data.organization_profile[field] ?? ''])
+        ) as Record<MemberProfileField, string>
+      );
+      setOrgRole(data.member.role === 'admin' ? 'admin' : 'member');
+    } catch {
+      setLoadError('Failed to load this user. Please try again.');
+    } finally {
+      setLoading(false);
     }
-  }, [membersLoading, members.length, canManage, orgId, router]);
+  }, [orgId, userId, router]);
 
   useEffect(() => {
-    if (!member) return;
-    setName(member.name || '');
-    setCompany(member.company || '');
-    setRole(member.jobTitle || '');
-    setBio(member.bio || '');
-    setOrgRole(member.role === 'admin' ? 'admin' : 'member');
-    setAvatarUrl(photoUrl(member.avatar));
-  }, [member]);
+    if (orgId && userId) void load();
+  }, [orgId, userId, load]);
 
-  const syncSelf = (next: {
-    name?: string;
-    company?: string;
-    role?: string;
-    bio?: string;
-    avatar?: string | undefined;
-  }) => {
-    if (!authUser || authUser.id !== userId) return;
-    setUser({
-      ...authUser,
-      name: next.name ?? authUser.name,
-      avatar: next.avatar ?? authUser.avatar,
-      company: next.company ?? authUser.company,
-      role: next.role ?? authUser.role,
-      bio: next.bio ?? authUser.bio,
-    });
+  if (loading) return <p className="text-sm text-muted-foreground">Loading user...</p>;
+  if (!details) {
+    return (
+      <div className="org-settings-users-alert" role="alert">
+        <AlertCircle size={16} />
+        <span>{loadError || 'User not found.'}</span>
+      </div>
+    );
+  }
+
+  const { member, account, organization_profile: orgProfile, workspaces } = details;
+  const isSelf = member.user_id === authUser?.id;
+  const isOwner = member.role === 'owner';
+  const canEditOrgRole = !isOwner && !isSelf;
+  const canRemove = !isOwner && !isSelf;
+  const changes = changedProfileFields(orgProfile, draft);
+  const roleChanged = canEditOrgRole && orgRole !== member.role;
+  const dirty = Object.keys(changes).length > 0 || roleChanged;
+  // Always the account name (users.name): an organization cannot rename someone.
+  const displayName = account.name || account.email || 'Unknown';
+  const orgAvatarUrl = photoUrl(orgProfile.avatar);
+
+  const handleSave = async () => {
+    setError('');
+    setSaving(true);
+    try {
+      await updateMemberProfile(orgId, member.user_id, {
+        ...changes,
+        ...(roleChanged ? { role: orgRole } : {}),
+      });
+      await load();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError(formatError(err, 'Failed to save'));
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const canEditOrgRole =
-    canManage && member?.role !== 'owner' && member?.userId !== authUser?.id;
+  const handleRemove = async () => {
+    if (
+      !(await confirm({
+        title: `Remove ${displayName} from this organization?`,
+        confirmLabel: 'Remove',
+      }))
+    ) {
+      return;
+    }
+    setError('');
+    setRemoving(true);
+    try {
+      await removeMember(orgId, member.user_id);
+      router.push(orgSettingsSectionPath(orgId, 'users'));
+    } catch (err) {
+      setError(formatError(err, 'Failed to remove this user'));
+      setRemoving(false);
+    }
+  };
 
-  const handleAvatarUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !orgId || !member) return;
-    const validTypes = [
-      'image/png',
-      'image/jpeg',
-      'image/jpg',
-      'image/gif',
-      'image/webp',
-    ];
-    if (!validTypes.includes(file.type)) {
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'].includes(file.type)) {
       setError('Please upload a valid image file (PNG, JPG, GIF, or WEBP)');
       return;
     }
@@ -121,12 +201,10 @@ export default function OrgUserProfilePage() {
     setError('');
     setUploading(true);
     try {
-      const updated = await uploadMemberAvatar(orgId, member.userId, file);
-      const nextUrl = photoUrl(updated?.avatar);
-      setAvatarUrl(nextUrl);
-      syncSelf({ avatar: nextUrl || undefined });
+      await uploadMemberAvatar(orgId, member.user_id, file);
+      await load({ resetForm: false });
     } catch (err) {
-      setError(formatError(err, 'Failed to upload avatar'));
+      setError(formatError(err, 'Failed to upload the picture'));
     } finally {
       setUploading(false);
       if (event.target) event.target.value = '';
@@ -134,71 +212,66 @@ export default function OrgUserProfilePage() {
   };
 
   const handleAvatarRemove = async () => {
-    if (!orgId || !member || !avatarUrl) return;
     setError('');
     try {
-      await removeMemberAvatar(orgId, member.userId);
-      setAvatarUrl('');
-      syncSelf({ avatar: undefined });
+      await removeMemberAvatar(orgId, member.user_id);
+      await load({ resetForm: false });
     } catch (err) {
-      setError(formatError(err, 'Failed to remove avatar'));
+      setError(formatError(err, 'Failed to remove the picture'));
     }
   };
-
-  const handleSave = async () => {
-    if (!orgId || !member || !canManage) return;
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      setError('Name is required');
-      return;
-    }
-    setError('');
-    setSaving(true);
-    try {
-      await updateMemberProfile(orgId, member.userId, {
-        name: trimmedName,
-        company: company.trim(),
-        job_title: role.trim(),
-        bio: bio.trim(),
-        ...(canEditOrgRole ? { role: orgRole } : {}),
-      });
-      syncSelf({
-        name: trimmedName,
-        company: company.trim(),
-        role: role.trim(),
-        bio: bio.trim(),
-      });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (err) {
-      setError(formatError(err, 'Failed to save profile'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (membersLoading && !member) {
-    return <p className="text-sm text-muted-foreground">Loading profile...</p>;
-  }
-
-  if (!member) {
-    return <p className="text-sm text-muted-foreground">User not found.</p>;
-  }
-
-  const email = member.email || '';
 
   return (
     <div className="account-profile-page">
+      <Link href={orgSettingsSectionPath(orgId, 'users')} className="org-member-detail-back">
+        <ArrowLeft size={14} />
+        Users
+      </Link>
+
       <AccountPageHeader
-        title="Profile"
-        subtitle="Their profile in this organization. Their account and other organizations are unchanged."
+        title={displayName}
+        subtitle="Their profile in this organization. Their account shows these values when it has none of its own."
+        actions={
+          <div className="org-member-detail-actions">
+            <button
+              type="button"
+              onClick={() => void handleRemove()}
+              disabled={!canRemove || removing}
+              className="org-member-detail-remove-button"
+              title={
+                isOwner
+                  ? 'The owner cannot be removed'
+                  : isSelf
+                    ? 'You cannot remove yourself'
+                    : undefined
+              }
+            >
+              <Trash2 size={16} />
+              {removing ? 'Removing...' : 'Remove from organization'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={!dirty || saving}
+              className={
+                saved
+                  ? 'account-profile-save-button account-profile-save-button-saved'
+                  : 'account-profile-save-button'
+              }
+            >
+              <Save size={16} />
+              {saving ? 'Saving...' : saved ? 'Saved!' : 'Save changes'}
+            </button>
+          </div>
+        }
       />
 
-      {error ? (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
+      {(error || loadError) && (
+        <div className="org-settings-users-alert" role="alert">
+          <AlertCircle size={16} />
+          <span>{error || loadError}</span>
+        </div>
+      )}
 
       <div className="account-profile-avatar-section">
         <div className="account-profile-avatar-wrapper">
@@ -209,16 +282,12 @@ export default function OrgUserProfilePage() {
             onChange={(event) => void handleAvatarUpload(event)}
             className="account-profile-avatar-input"
           />
-          {avatarUrl ? (
+          {orgAvatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={avatarUrl}
-              alt={name}
-              className="account-profile-avatar-image"
-            />
+            <img src={orgAvatarUrl} alt={displayName} className="account-profile-avatar-image" />
           ) : (
             <div className="account-profile-avatar-placeholder">
-              {(name || email || '?').charAt(0).toUpperCase()}
+              {displayName.charAt(0).toUpperCase()}
             </div>
           )}
           <button
@@ -226,27 +295,22 @@ export default function OrgUserProfilePage() {
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
             className="account-profile-avatar-upload-button"
-            title="Upload avatar"
+            title="Upload a picture for this organization"
           >
             {uploading ? (
-              <RefreshCw
-                size={16}
-                className="account-profile-avatar-upload-button-spin"
-              />
+              <RefreshCw size={16} className="account-profile-avatar-upload-button-spin" />
             ) : (
               <Camera size={16} />
             )}
           </button>
         </div>
         <div>
-          <h3 className="account-profile-avatar-info-name">
-            {name || 'Unknown'}
-          </h3>
-          <p className="account-profile-avatar-info-email">{email}</p>
+          <h3 className="account-profile-avatar-info-name">{displayName}</h3>
+          <p className="account-profile-avatar-info-email">{account.email}</p>
           <p className="account-profile-avatar-info-hint">
-            Click camera icon to upload avatar (max 2MB)
+            Organization picture (max 2MB). Their account shows it when it has no picture.
           </p>
-          {avatarUrl ? (
+          {orgAvatarUrl ? (
             <button
               type="button"
               onClick={() => void handleAvatarRemove()}
@@ -262,57 +326,66 @@ export default function OrgUserProfilePage() {
       <AccountSectionCard padded stack>
         <div className="account-profile-form-grid">
           <div className="account-profile-field">
-            <label className="account-profile-field-label">Full Name</label>
+            <label className="account-profile-field-label" htmlFor="org-member-name">
+              Full name
+            </label>
             <input
+              id="org-member-name"
               type="text"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
+              value={account.name ?? ''}
               className="account-profile-field-input"
-            />
-          </div>
-          <div className="account-profile-field">
-            <label className="account-profile-field-label">Email</label>
-            <input
-              type="email"
-              value={email}
-              className="account-profile-field-input"
+              title="The account name (Account Settings > Profile)"
               disabled
               readOnly
             />
           </div>
           <div className="account-profile-field">
-            <label className="account-profile-field-label">Company</label>
+            <label className="account-profile-field-label" htmlFor="org-member-email">
+              Email
+            </label>
             <input
-              type="text"
-              value={company}
-              onChange={(event) => setCompany(event.target.value)}
-              placeholder="Company"
+              id="org-member-email"
+              type="email"
+              value={account.email ?? ''}
               className="account-profile-field-input"
+              disabled
+              readOnly
             />
           </div>
+          {TEXT_FIELDS.slice(0, 2).map(({ field, label, placeholder }) => (
+            <div key={field} className="account-profile-field">
+              <label className="account-profile-field-label" htmlFor={`org-member-${field}`}>
+                {label}
+              </label>
+              <input
+                id={`org-member-${field}`}
+                type="text"
+                value={draft[field]}
+                onChange={(event) => setDraft((d) => ({ ...d, [field]: event.target.value }))}
+                placeholder={placeholder}
+                className="account-profile-field-input"
+              />
+            </div>
+          ))}
           <div className="account-profile-field">
-            <label className="account-profile-field-label">Role</label>
-            <input
-              type="text"
-              value={role}
-              onChange={(event) => setRole(event.target.value)}
-              placeholder="Job title"
-              className="account-profile-field-input"
-            />
-          </div>
-          <div className="account-profile-field">
-            <label className="account-profile-field-label">
-              Organization role
+            <label className="account-profile-field-label" htmlFor="org-member-role">
+              Member role
             </label>
             <select
-              value={member.role === 'owner' ? 'owner' : orgRole}
-              onChange={(event) =>
-                setOrgRole(event.target.value as 'admin' | 'member')
-              }
+              id="org-member-role"
+              value={isOwner ? 'owner' : orgRole}
+              onChange={(event) => setOrgRole(event.target.value as 'admin' | 'member')}
               className="account-profile-field-input"
               disabled={!canEditOrgRole}
+              title={
+                isOwner
+                  ? 'Owners come from the config'
+                  : isSelf
+                    ? 'You cannot change your own role'
+                    : undefined
+              }
             >
-              {member.role === 'owner' ? (
+              {isOwner ? (
                 <option value="owner">Owner</option>
               ) : (
                 <>
@@ -322,48 +395,104 @@ export default function OrgUserProfilePage() {
               )}
             </select>
           </div>
+          {TEXT_FIELDS.slice(2).map(({ field, label, placeholder }) => (
+            <div key={field} className="account-profile-field">
+              <label className="account-profile-field-label" htmlFor={`org-member-${field}`}>
+                {label}
+              </label>
+              <input
+                id={`org-member-${field}`}
+                type="text"
+                value={draft[field]}
+                onChange={(event) =>
+                  setDraft((d) => ({
+                    ...d,
+                    [field]:
+                      field === 'interest'
+                        ? event.target.value.slice(0, INTEREST_MAX_LENGTH)
+                        : event.target.value,
+                  }))
+                }
+                placeholder={placeholder}
+                className="account-profile-field-input"
+              />
+            </div>
+          ))}
         </div>
         <div className="account-profile-field">
           <div className="account-profile-bio-header">
-            <label className="account-profile-field-label">Bio</label>
+            <label className="account-profile-field-label" htmlFor="org-member-bio">
+              Bio
+            </label>
             <span
               className={
-                bio.length > BIO_MAX_LENGTH
+                draft.bio.length > BIO_MAX_LENGTH
                   ? 'account-profile-bio-count account-profile-bio-count-over'
                   : 'account-profile-bio-count'
               }
             >
-              {bio.length} / {BIO_MAX_LENGTH}
+              {draft.bio.length} / {BIO_MAX_LENGTH}
             </span>
           </div>
           <textarea
-            value={bio}
+            id="org-member-bio"
+            value={draft.bio}
             onChange={(event) =>
-              setBio(event.target.value.slice(0, BIO_MAX_LENGTH))
+              setDraft((d) => ({ ...d, bio: event.target.value.slice(0, BIO_MAX_LENGTH) }))
             }
-            placeholder="Tell us about yourself..."
-            rows={12}
+            placeholder={account.bio ?? 'Bio in this organization'}
+            rows={8}
             maxLength={BIO_MAX_LENGTH}
             className="account-profile-field-textarea"
           />
         </div>
       </AccountSectionCard>
 
-      <div className="account-profile-actions">
-        <button
-          type="button"
-          onClick={() => void handleSave()}
-          disabled={!name.trim() || saving}
-          className={
-            saved
-              ? 'account-profile-save-button account-profile-save-button-saved'
-              : 'account-profile-save-button'
-          }
-        >
-          <Save size={16} />
-          {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Changes'}
-        </button>
-      </div>
+      <section className="org-member-detail-section">
+        <header className="org-member-detail-section-header">
+          <h3>
+            Workspaces{' '}
+            <span className="org-member-detail-count">{workspaces.length}</span>
+          </h3>
+          <p>
+            Workspaces they can access in this organization. Assign them from the Users table; org
+            owners and admins reach every workspace.
+          </p>
+        </header>
+        <div className="org-settings-users-table-wrap">
+          {workspaces.length === 0 ? (
+            <p className="org-settings-users-no-match">No workspace in this organization.</p>
+          ) : (
+            <table className="org-settings-users-table org-member-detail-workspaces">
+              <thead>
+                <tr>
+                  <th>Workspace</th>
+                  <th>Role</th>
+                  <th>Access</th>
+                </tr>
+              </thead>
+              <tbody>
+                {workspaces.map((workspace) => (
+                  <tr key={workspace.id}>
+                    <td>{workspace.name}</td>
+                    <td>{ROLE_LABELS[workspace.role] ?? workspace.role}</td>
+                    <td>
+                      {workspace.source === 'organization' ? (
+                        <span className="org-settings-users-badge org-settings-users-badge-member">
+                          via organization
+                        </span>
+                      ) : (
+                        <span className="org-member-detail-value">Workspace member</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </section>
+      {confirmDialog}
     </div>
   );
 }
