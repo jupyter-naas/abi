@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.43.0 (2026-10-14)
+
+### Chores
+
+- **nexus-map**: Commit staged changes and push
+  ([`df724fe`](https://github.com/jupyter-naas/abi/commit/df724fe722b9bf76d6508ac88c6ae26b2aa3a29f))
+
+### Features
+
+- **maps**: Add new map icons and layer colors
+  ([`36ab3d9`](https://github.com/jupyter-naas/abi/commit/36ab3d9544a495a2cf34983c4045b1a100c12807))
+
+
 ## v2.42.1 (2026-10-12)
 
 ### Bug Fixes

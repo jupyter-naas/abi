@@ -2,6 +2,77 @@
 
 <!-- version list -->
 
+## v2.86.0 (2026-10-14)
+
+### Bug Fixes
+
+- **maps**: Refactor layer grouping and update dataset categories
+  ([`d4a74d7`](https://github.com/jupyter-naas/abi/commit/d4a74d75f66808bfc63c94327ae9130ee506c51c))
+
+- **maps**: Remove presence map references and update to use 'all' map
+  ([`532c8f7`](https://github.com/jupyter-naas/abi/commit/532c8f754f79d2391e086353a99395963c2ea253))
+
+- **maps**: Update feed and geojson debug handling
+  ([`f1cad6c`](https://github.com/jupyter-naas/abi/commit/f1cad6c1bbff5792716049a4c5f971138f3eae3a))
+
+- **maps,search**: Refine types and update map search subtitle
+  ([`dcf6830`](https://github.com/jupyter-naas/abi/commit/dcf68306aecd91fa64842abb2d6c703ed9466734))
+
+- **maps-components**: Adjust legend position and responsive max-width
+  ([`99e9396`](https://github.com/jupyter-naas/abi/commit/99e93960c961ce4896a649d28dcf491324e5a8be))
+
+- **nexus-map**: Update workspace maps routes and components
+  ([`4035ccc`](https://github.com/jupyter-naas/abi/commit/4035ccc7f770a4e3c86e47bb892d72caaea41997))
+
+### Chores
+
+- **nexus-map**: Commit staged changes and push
+  ([`df724fe`](https://github.com/jupyter-naas/abi/commit/df724fe722b9bf76d6508ac88c6ae26b2aa3a29f))
+
+- **scripts**: Make generate_basemap_previews.py executable
+  ([`3ffbb24`](https://github.com/jupyter-naas/abi/commit/3ffbb249136e9bf58260e50d4659b013308d9def))
+
+### Code Style
+
+- **web**: Update search input focus styles and clean up CSS
+  ([`6bc38b8`](https://github.com/jupyter-naas/abi/commit/6bc38b8da5958092961565211b103d655263c788))
+
+### Features
+
+- **maps**: Add and update multiple map components, API routes, and services
+  ([`5d43d37`](https://github.com/jupyter-naas/abi/commit/5d43d37b0d2e86dfc026119a53ac0949a05d6a33))
+
+- **maps**: Add basemap previews and basemap control component
+  ([`e5fc896`](https://github.com/jupyter-naas/abi/commit/e5fc8963e416f3e417b8600f3c07b9585b4877be))
+
+- **maps**: Add compactCountryCenters utility and related tests
+  ([`1459573`](https://github.com/jupyter-naas/abi/commit/1459573638dda80669ea8eedda90f9a0ade18e94))
+
+- **maps**: Add geojson debug support and modal UI
+  ([`ead5430`](https://github.com/jupyter-naas/abi/commit/ead5430786acd60a0a3142abb6c05f73a5829c86))
+
+- **maps**: Add new map icons and layer colors
+  ([`36ab3d9`](https://github.com/jupyter-naas/abi/commit/36ab3d9544a495a2cf34983c4045b1a100c12807))
+
+- **maps**: Add point search component and related styles
+  ([`9040303`](https://github.com/jupyter-naas/abi/commit/904030374e882fb9a4f08b2de748ee39b4f28942))
+
+- **maps**: Update and add multiple map components and API routes
+  ([`0a1c3b5`](https://github.com/jupyter-naas/abi/commit/0a1c3b5c5123e773b54c7071c97d00dbeadd7753))
+
+- **maps**: Update maps components and styles with region filter and sidebar layer counts
+  ([`44aa3c0`](https://github.com/jupyter-naas/abi/commit/44aa3c096142682efa16c6810e07c965f1ca77e5))
+
+- **maps**: Update nexus maps groups and related components
+  ([`bb22ddd`](https://github.com/jupyter-naas/abi/commit/bb22ddd24bd65dc11e0142186711df5ac43c4127))
+
+- **nexus-map**: Add extensive updates and new features for nexus maps module
+  ([`f496b5f`](https://github.com/jupyter-naas/abi/commit/f496b5f77261e496625206703ccea22207e00415))
+
+- **nexus-map**: Update nexus maps groups and workspace config
+  ([`d560e24`](https://github.com/jupyter-naas/abi/commit/d560e24a588405e222d1a8321957ef4a6fda0847))
+
+
 ## v2.85.0 (2026-10-13)
 
 ### Features
