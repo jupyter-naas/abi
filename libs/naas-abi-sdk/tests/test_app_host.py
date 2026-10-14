@@ -388,7 +388,10 @@ def test_draining_keeps_to_its_deadline_with_calls_in_flight(tmp_path):
     """Every slot busy, a request queued behind them: the queued one is refused
     for another instance at once, and the drain ends at its timeout."""
 
+    running = asyncio.Event()
+
     async def stuck(scope, receive, send):
+        running.set()
         await asyncio.Event().wait()
 
     async def scenario():
@@ -399,6 +402,7 @@ def test_draining_keeps_to_its_deadline_with_calls_in_flight(tmp_path):
         )
         receive = host._receiver("console")
         await receive(FakeMsg(_request("/x", method="POST")))  # takes the only slot
+        await asyncio.wait_for(running.wait(), 5)
         queued = FakeMsg(_request("/y", method="POST"))
         host.subscriptions.append(_QueuedSubscription(receive, [queued]))
         loop = asyncio.get_running_loop()
