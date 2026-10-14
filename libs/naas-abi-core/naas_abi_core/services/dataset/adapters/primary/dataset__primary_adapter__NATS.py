@@ -291,6 +291,11 @@ class DatasetPrimaryAdapterNATS(ServiceWithTransfers):
             handler=self._handle_list_snapshots,
         )
         await service.add_endpoint(
+            name="namespace_version",
+            subject=f"{SUBJECT_PREFIX}.namespace_version",
+            handler=self._handle_namespace_version,
+        )
+        await service.add_endpoint(
             name="drop",
             subject=f"{SUBJECT_PREFIX}.drop",
             handler=self._handle_drop,
@@ -652,6 +657,20 @@ class DatasetPrimaryAdapterNATS(ServiceWithTransfers):
                 items=[_dataset_snapshot_info_to_pb(snapshot) for snapshot in snapshots]
             )
         )
+
+    async def _handle_namespace_version(self, request: Request) -> None:
+        await self._handle(
+            request,
+            dataset_pb2.NamespaceVersionRequest,
+            dataset_pb2.NamespaceVersionResponse,
+            self._call_namespace_version,
+        )
+
+    def _call_namespace_version(
+        self, req: dataset_pb2.NamespaceVersionRequest
+    ) -> dataset_pb2.NamespaceVersionResponse:
+        version = self._adapter.namespace_version(req.namespace)
+        return dataset_pb2.NamespaceVersionResponse(snapshot_id=version)
 
     async def _handle_drop(self, request: Request) -> None:
         await self._handle(

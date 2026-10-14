@@ -63,5 +63,8 @@ class DatasetService(ServiceProxy):
             "list_snapshots",
         )
 
+    async def namespace_version(self, namespace: str) -> int | None:
+        return await self._request("namespace_version", namespace=namespace)
+
     async def drop(self, name: str, *, namespace: str = "default") -> None:
         return await self._request("drop", name=name, namespace=namespace)

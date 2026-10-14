@@ -34,6 +34,7 @@ OPERATIONS = {
         "inlined_row_count",
         "compact",
         "list_snapshots",
+        "namespace_version",
         "drop",
     ],
     "document": [

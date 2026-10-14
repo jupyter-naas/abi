@@ -91,6 +91,30 @@ def test_long_operations_send_the_callers_deadline(operation, response):
     assert sent == [(3_600_000, 3600.0), (10_000, None)]
 
 
+@pytest.mark.parametrize(
+    "response, expected",
+    [
+        (dataset_pb2.NamespaceVersionResponse(snapshot_id=7), 7),
+        (dataset_pb2.NamespaceVersionResponse(snapshot_id=0), 0),
+        (dataset_pb2.NamespaceVersionResponse(), None),
+    ],
+)
+def test_namespace_version_reads_an_unset_version_as_none(response, expected):
+    client = DatasetSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", JWT_SECRET, "api"
+    )
+    sent = []
+
+    def fake_call(subject, request, response_cls, **kwargs):
+        sent.append((subject, request.namespace))
+        return response
+
+    client._call = fake_call  # type: ignore[method-assign]
+
+    assert client.namespace_version("acme") == expected
+    assert sent == [("abi.svc.dataset.v1.namespace_version", "acme")]
+
+
 # ---------------------------------------------------------------------------
 # Error-code -> exception mapping. Must stay exactly symmetric with how
 # DatasetPrimaryAdapterNATS encodes DatasetError.
