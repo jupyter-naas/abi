@@ -8,7 +8,9 @@ process as ``abi``, with every right, and SDK modules as ``module``, within
   discovery (``abi.discovery.>``) and RPC overflow (``abi.rpc.>``), where calls
   carry their callers' unbound tokens; to ``_INBOX.>``, where the engine's and
   Nexus's replies go (modules use ``_INBOX_MODULES``, ``naas_abi_sdk.transport``);
-  or to ``$KV.>``;
+  to ``$JS.>``, where the engine's JetStream requests go with their reply subjects
+  (reads of discovery's registry and of the engine lease: a module listening there
+  could race a forged reply); or to ``$KV.>``;
 - publish to ``$KV.>`` (writing a key), create or update a stream (a stream on
   ``abi.svc.>`` would capture the engine's calls), delete or restore one, delete a
   consumer (another module's job consumer, whose triggers would then be lost), read a
@@ -23,7 +25,10 @@ Still open, with one ``module`` user for every module. A module can:
 - subscribe to another module's subjects (``abi.mod.>``, ``abi.agent.>``) and inbox
   (``_INBOX_MODULES.>``): it sees the requests and replies sent there, and can replay
   a token sent to that module, to that module only, while it lasts (five minutes;
-  with a token Nexus sent to that module's app, it can name a user there);
+  with a token Nexus sent to that module's app, it can name a user there). It also
+  sees the callers' reply subjects there (Nexus's and the engine's ``_INBOX.``
+  ones), and may publish to them, so it can race a forged answer to a call made to
+  that module;
 - read any stream through the JetStream consumer API and ``$JS.API.STREAM.MSG.GET``:
   the jobs stream (every module's triggers and payloads), the claim-check store, bus
   and event streams, and the engine's key-value buckets (``KV_*``: discovery's
@@ -65,7 +70,14 @@ MODULE_PERMISSIONS: dict[str, dict[str, list[str]]] = {
         ]
     },
     "subscribe": {
-        "deny": ["abi.svc.>", "abi.discovery.>", "abi.rpc.>", "_INBOX.>", "$KV.>"]
+        "deny": [
+            "abi.svc.>",
+            "abi.discovery.>",
+            "abi.rpc.>",
+            "_INBOX.>",
+            "$KV.>",
+            "$JS.>",
+        ]
     },
 }
 

@@ -1069,3 +1069,16 @@ def test_replicas_must_declare_the_same_apps():
             await service.register(other, "owner")
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("instance_id", ["victim.x", "a.b.c", "*", ">", "x y", ""])
+def test_an_instance_id_is_one_subject_token(instance_id):
+    """Callers bind the token they send to the subject's instance token: an id
+    ``<other>.x`` would let a module receive tokens bound to another instance."""
+
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+            await service.register(registration("acme.c", instance_id), "acme.c")
+
+    asyncio.run(scenario())

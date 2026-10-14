@@ -228,6 +228,14 @@ def test_modules_register_and_serve_agents_and_apps_as_the_module_user(broker, t
                             app="console", method="GET", path="/", user_id="u-1"
                         ),
                     )
+                # Nor register an instance whose id puts the provider's id where
+                # callers read the audience: abi.mod.<p>.<provider>.x... .
+                dotted = _register_request("acme.consumer")
+                dotted.instance_id = f"{instance.instance_id}.x"
+                with pytest.raises(RPCError, match="INVALID_ARGUMENT"):
+                    await DiscoveryClient(peer)._call(
+                        "register", dotted, _register_response()
+                    )
                 # Nor register under the provider's module id.
                 with pytest.raises(RPCError, match="PERMISSION_DENIED"):
                     await DiscoveryClient(peer)._call(
@@ -315,3 +323,47 @@ def test_a_module_cannot_overhear_rpc_overflow_but_still_uploads_through_it(brok
     assert any(
         "permissions violation" in e and "abi.rpc.overflow.>" in e for e in errors
     ), errors
+
+
+def test_a_module_cannot_overhear_the_engines_jetstream_requests(broker):
+    """A module subscribed to $JS.API.> would see the engine's reads of discovery's
+    registry, reply subject included, and could race a forged reply."""
+    engine, module = broker
+    from naas_abi_sdk.discovery import DiscoveryClient
+    from naas_abi_sdk.transport import Transport
+
+    async def scenario():
+        nc = await nats.connect(engine)
+        registry = await start_discovery(nc, SECRET)
+        errors: list[str] = []
+        overheard: list[str] = []
+
+        async def on_error(exc: Exception) -> None:
+            errors.append(str(exc).lower())
+
+        async def overhear(msg) -> None:
+            overheard.append(msg.subject)
+
+        spy = await nats.connect(module, error_cb=on_error, inbox_prefix="_INBOX_MODULES")
+        for subject in ("$JS.API.>", "$JS.EVENT.>", "$JS.ACK.>"):
+            await spy.subscribe(subject, cb=overhear)
+        await spy.flush()
+        peer = Transport(module, _module_token("acme.consumer"), timeout=5)
+        try:
+            # Each call reads the registry: a JetStream message get by the engine.
+            for _ in range(3):
+                await DiscoveryClient(peer).list_modules()
+            await spy.flush()
+            await asyncio.sleep(0.2)
+        finally:
+            await peer.close()
+            await spy.close()
+            await registry.stop()
+            await nc.close()
+        return errors, overheard
+
+    errors, overheard = asyncio.run(scenario())
+
+    assert overheard == []
+    for subject in ("$js.api.>", "$js.event.>", "$js.ack.>"):
+        assert any("permissions violation" in e and subject in e for e in errors), errors
