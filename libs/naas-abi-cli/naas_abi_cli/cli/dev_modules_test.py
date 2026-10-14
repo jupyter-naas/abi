@@ -167,5 +167,16 @@ def test_a_module_whose_id_cannot_be_told_is_refused(tmp_path):
     _package(tmp_path, "no_module_here", "")
     module = DevModuleConfiguration(name="research", module="no_module_here")
 
-    with pytest.raises(ValueError, match="identity: <module_id>"):
+    with pytest.raises(ValueError, match="exports no ABIModule.*identity: <module_id>"):
         module_identity(module, tmp_path, dict(os.environ))
+
+
+def test_a_module_that_fails_to_import_shows_the_import_error(tmp_path):
+    from naas_abi_cli.cli.dev_modules import module_identity
+
+    _package(tmp_path, "broken_module", "import this_dependency_is_missing\n")
+    module = DevModuleConfiguration(name="research", module="broken_module")
+
+    with pytest.raises(ValueError, match="this_dependency_is_missing") as raised:
+        module_identity(module, tmp_path, dict(os.environ))
+    assert "exports no ABIModule" not in str(raised.value)
