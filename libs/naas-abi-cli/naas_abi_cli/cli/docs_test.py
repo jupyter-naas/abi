@@ -1,4 +1,5 @@
 import importlib
+import os
 from pathlib import Path
 
 import pytest
@@ -45,8 +46,9 @@ def test_collect_docs_to_regenerate_flags_outdated_markdown(tmp_path: Path) -> N
     _write(source_file, "class Service: ...\n")
     _write(target_file, "# Service\n")
 
-    target_file.touch()
-    source_file.touch()
+    # Explicit times: two touches in a row can share one mtime.
+    os.utime(target_file, (1_000, 1_000))
+    os.utime(source_file, (2_000, 2_000))
 
     stale = collect_docs_to_regenerate(source_root=source_root, output_root=output_root)
 
@@ -64,7 +66,8 @@ def test_collect_docs_to_regenerate_ignores_up_to_date_markdown(tmp_path: Path) 
     _write(target_file, "# Service\n")
     _write(source_file, "class Service: ...\n")
 
-    target_file.touch()
+    os.utime(source_file, (1_000, 1_000))
+    os.utime(target_file, (2_000, 2_000))
 
     stale = collect_docs_to_regenerate(source_root=source_root, output_root=output_root)
     assert stale == []
