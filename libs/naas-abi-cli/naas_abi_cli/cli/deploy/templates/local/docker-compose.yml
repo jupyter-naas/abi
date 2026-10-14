@@ -499,7 +499,7 @@ services:
   nats:
     profiles: ["nats"]
 {% endif %}
-    image: nats:2-alpine
+    image: nats:2.14.7-alpine
     pull_policy: always
     restart: unless-stopped
     environment:

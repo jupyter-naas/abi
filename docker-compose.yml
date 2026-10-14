@@ -484,7 +484,7 @@ services:
   # the NATS Services framework's $SRV.* discovery subjects.
   nats:
     profiles: ["nats"]
-    image: nats:2-alpine
+    image: nats:2.14.7-alpine
     pull_policy: always
     restart: unless-stopped
     environment:
