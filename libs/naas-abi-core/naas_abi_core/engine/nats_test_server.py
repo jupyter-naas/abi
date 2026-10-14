@@ -12,7 +12,7 @@ import shutil
 import socket
 import subprocess
 import time
-from collections.abc import Generator, Iterator
+from collections.abc import Generator, Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -53,9 +53,17 @@ def pytest_runtest_makereport(
 
 @contextmanager
 def native_nats_server(
-    workdir: Path, *, max_payload: int | None = None, jetstream: bool = False
+    workdir: Path,
+    *,
+    max_payload: int | None = None,
+    jetstream: bool = False,
+    users: Mapping[str, str] | None = None,
 ) -> Iterator[str]:
-    """Run ``nats-server`` on a free local port; yield its URL."""
+    """Run ``nats-server`` on a free local port; yield its URL.
+
+    ``users`` (passwords of ``abi`` and ``module``) makes it log every client in,
+    as deployed brokers do: ``abi`` with every right, ``module`` within
+    ``nats_permissions.MODULE_PERMISSIONS``. Add the login with :func:`login`."""
     binary = nats_server_binary()
     if binary is None:
         raise RuntimeError("nats-server is not installed")
@@ -63,9 +71,14 @@ def native_nats_server(
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     command = [binary, "-a", "127.0.0.1", "-p", str(port)]
-    if max_payload is not None:
+    if max_payload is not None or users is not None:
+        from naas_abi_core.engine.nats_permissions import authorization_config
+
         config = workdir / "nats.conf"
-        config.write_text(f"max_payload: {max_payload}\n")
+        config.write_text(
+            (f"max_payload: {max_payload}\n" if max_payload is not None else "")
+            + (authorization_config(users) if users is not None else "")
+        )
         command += ["-c", str(config)]
     if jetstream:
         command += ["-js", "-sd", str(workdir / "jetstream")]
@@ -87,3 +100,8 @@ def native_nats_server(
     finally:
         process.terminate()
         process.wait(timeout=5)
+
+
+def login(url: str, user: str, password: str) -> str:
+    """``url`` (``nats://host:port``) logged in as ``user``."""
+    return url.replace("nats://", f"nats://{user}:{password}@", 1)
