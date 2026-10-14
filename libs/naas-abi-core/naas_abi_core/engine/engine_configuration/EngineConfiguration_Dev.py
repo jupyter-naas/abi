@@ -3,14 +3,15 @@
 The engine validates the block (so a typo fails at load) and otherwise ignores
 it: it is for the dev CLI, which spawns each enabled module as
 ``python -m <module> <args>`` with the dev broker's settings in its environment
-(``ABI_NATS_URL``, ``NATS_JWT_SECRET``, ``ABI_SERVICE_TOKEN``,
-``ABI_DISCOVERY_PROJECT``, and ``OTEL_EXPORTER_OTLP_ENDPOINT`` with tracing).
-``env`` values may name those as ``${VAR}``.
+(``ABI_NATS_URL``, ``ABI_MODULE_KEY`` and ``ABI_SERVICE_TOKEN`` for its
+``identity``, ``ABI_DISCOVERY_PROJECT``, and ``OTEL_EXPORTER_OTLP_ENDPOINT``
+with tracing). ``env`` values may name those as ``${VAR}``.
 
     dev:
       modules:
         - name: probe-researcher            # process name: logs, pid, --service
           module: operations.projects.nats_probe
+          identity: zen.nats_probe.researcher # its module id (default: name)
           args: [researcher]
           env: {NATS_PROBE_DISCOVERY_PROJECT: "${ABI_DISCOVERY_PROJECT}"}
           restart: on-failure               # or always, never
@@ -31,6 +32,11 @@ class DevModuleConfiguration(BaseModel):
 
     name: str = Field(pattern=r"^[a-z][a-z0-9-]{0,62}$")
     module: str = Field(min_length=1)
+    # The module id it registers as: its token asserts it, and discovery
+    # accepts a registration only for the token's own identity. Default: name.
+    identity: str | None = Field(
+        default=None, pattern=r"^[A-Za-z0-9_][A-Za-z0-9_.:-]{0,255}$"
+    )
     args: list[str] = Field(default_factory=list)
     env: dict[str, str] = Field(default_factory=dict)
     enabled: bool = True
