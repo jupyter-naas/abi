@@ -12,12 +12,17 @@ only land in that run's code. On a timeout, a close or a cancel request:
 An interrupt cannot break a blocking C call (e.g. a socket read without a
 timeout); it fires when that call returns. ``interrupt_grace_seconds=None``
 disables step 2.
+
+The thread runs in a copy of the awaiting task's context, so the handler's
+service calls nest under the run's trace span (contextvars are not inherited
+by a new thread).
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
 import ctypes
 import threading
 from collections.abc import Callable
@@ -69,6 +74,7 @@ class SyncJobRunner:
         loop = asyncio.get_running_loop()
         done: asyncio.Future[Any] = loop.create_future()
         state = _Thread()
+        context = contextvars.copy_context()
 
         def resolve(outcome: tuple[bool, Any]) -> None:
             if done.done():
@@ -85,7 +91,7 @@ class SyncJobRunner:
                 try:
                     with state.lock:
                         state.ident = threading.get_ident()
-                    outcome = (True, self.handler(ctx))
+                    outcome = (True, context.run(self.handler, ctx))
                 except BaseException as exc:  # noqa: BLE001 - handed to the awaiting task
                     outcome = (False, exc)
                 finally:
