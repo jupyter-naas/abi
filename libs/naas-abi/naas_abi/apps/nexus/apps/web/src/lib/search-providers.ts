@@ -173,15 +173,15 @@ const PROVIDERS: Record<string, Provider> = {
   },
 
   maps: async (q, ctx) => {
-    const ranked = rankItems(MAPS_DATASETS, q, m => [m.title, m.description, m.category], ctx.limit);
+    const ranked = rankItems(MAPS_DATASETS, q, m => [m.title, m.description, m.group], ctx.limit);
     return {
       hasMore: ranked.hasMore,
       hits: ranked.items.map(m => ({
         id: m.id,
         title: m.title,
-        subtitle: m.category,
+        subtitle: m.group,
         snippet: m.description,
-        action: href(ws(ctx, `/maps/${encodeURIComponent(m.id)}`)),
+        action: href(ws(ctx, `/maps?layer=${encodeURIComponent(m.id)}`)),
       })),
     };
   },

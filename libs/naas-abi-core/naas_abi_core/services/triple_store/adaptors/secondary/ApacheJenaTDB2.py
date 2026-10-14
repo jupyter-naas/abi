@@ -217,6 +217,19 @@ def _recover_truncated_sparql_results_json(text: str) -> dict[str, Any] | None:
     return {"head": {"vars": vars_}, "results": {"bindings": bindings}}
 
 
+def _rdf_body(response: requests.Response) -> str:
+    """An N-Triples or Turtle body, decoded as UTF-8.
+
+    Both formats are UTF-8 by definition, but Fuseki sends
+    ``application/n-triples`` without a charset, and ``response.text`` then
+    guesses one: "François" came back as "FranÃ§ois".
+    """
+    content = response.content
+    if isinstance(content, bytes):
+        return content.decode("utf-8")
+    return response.text
+
+
 def _parse_sparql_results_json(text: str) -> dict[str, Any]:
     """Parse SPARQL JSON, recovering complete bindings from a truncated body."""
     try:
@@ -376,7 +389,11 @@ class ApacheJenaTDB2(ITripleStorePort):
         """
         if response.status_code < 400:
             return
-        body = (response.text or "").strip()
+        content = response.content
+        if isinstance(content, bytes):
+            body = content.decode("utf-8", errors="replace").strip()
+        else:
+            body = (response.text or "").strip()
         if len(body) > self._MAX_ERROR_BODY:
             body = body[: self._MAX_ERROR_BODY] + "… [truncated]"
         raise Exceptions.RequestError(
@@ -669,7 +686,7 @@ class ApacheJenaTDB2(ITripleStorePort):
             if "n-triples" in content_type or "turtle" in content_type:
                 graph = Graph()
                 format_type = "nt" if "n-triples" in content_type else "turtle"
-                graph.parse(data=response.text, format=format_type)
+                graph.parse(data=_rdf_body(response), format=format_type)
                 return graph  # type: ignore
 
             raise ValueError(f"Unexpected content type: {content_type}")

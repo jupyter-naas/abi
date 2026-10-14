@@ -133,6 +133,7 @@ class FilesService:
         search: str | None = None,
         sort_by: str = "name",
         sort_dir: str = "asc",
+        include_hidden: bool = True,
     ) -> FileListResponseData:
         """List a directory's entries.
 
@@ -152,9 +153,15 @@ class FilesService:
         the sort spans every page rather than just the current one. Sorting by
         name needs no per-entry metadata, so only the returned page is stat-ed;
         sorting by size or modified must stat every entry to compare them.
+
+        ``include_hidden=False`` drops system entries (names starting with
+        ``.``) before paging, so ``total`` counts only what is shown.
         """
         normalized_path = self.normalize_relative_path(path, allow_empty=True)
         entries = self._list_directory(normalized_path)
+
+        if not include_hidden:
+            entries = [entry for entry in entries if not entry.split("/")[-1].startswith(".")]
 
         needle = search.strip().lower() if search else ""
         if needle:
@@ -357,6 +364,44 @@ class FilesService:
             )
         if self._is_directory(normalized_path):
             raise IsDirectoryError("Cannot preview a directory")
+
+        pdf_path = (
+            f"{normalized_path[:-5]}.pdf"
+            if normalized_path.lower().endswith(".pptx")
+            else str(PurePosixPath(normalized_path).with_suffix(".pdf"))
+        )
+        if self._file_exists(pdf_path):
+            try:
+                _deck_size, deck_modified = self._stat_file(normalized_path)
+                _pdf_size, pdf_modified = self._stat_file(pdf_path)
+                pdf_fresh = pdf_modified is not None and (
+                    deck_modified is None
+                    or _modified_sort_key(
+                        FileInfoData(
+                            name="",
+                            path=pdf_path,
+                            type="file",
+                            modified=pdf_modified,
+                        )
+                    )
+                    >= _modified_sort_key(
+                        FileInfoData(
+                            name="",
+                            path=normalized_path,
+                            type="file",
+                            modified=deck_modified,
+                        )
+                    )
+                )
+                if pdf_fresh:
+                    return PdfPreviewData(
+                        content=self._read_bytes(pdf_path),
+                        filename=PurePosixPath(pdf_path).name,
+                    )
+            except Exceptions.ObjectNotFound:
+                pass
+            except Exception:
+                pass
 
         try:
             content_bytes = self._read_bytes(normalized_path)

@@ -43,7 +43,7 @@ class MapsCatalog:
                 "description": layer.description,
                 "icon": layer.icon,
                 "graphUri": layer.graph_uri,
-                "category": "custom",
+                "group": "Custom",
                 "order": n,
                 "runtime": True,
             }

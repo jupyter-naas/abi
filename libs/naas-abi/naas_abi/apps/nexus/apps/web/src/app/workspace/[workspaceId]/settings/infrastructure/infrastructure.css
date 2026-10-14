@@ -49,13 +49,14 @@
 .infrastructure-menu details { position:relative; }
 .infrastructure-menu summary { list-style:none; padding:6px 8px; cursor:pointer; border-radius:0; }
 .infrastructure-menu summary::-webkit-details-marker { display:none; }
-.infrastructure-menu details[open]>summary,.infrastructure-menu summary:hover { background:var(--border-hex); }
+/* Same highlight as every TopNav app menu bar: grey bg-muted, no accent ring. */
+.infrastructure-menu details[open]>summary,.infrastructure-menu summary:hover { background:hsl(var(--muted)); }
 .infrastructure-menu-popup { position:absolute; left:0; top:100%; min-width:200px; padding:4px; border:1px solid var(--border-hex); border-radius:0; background:var(--background-hex); box-shadow:0 8px 24px #00000020; z-index:210; }
 .infrastructure-menu-popup button { width:100%; padding:8px 10px; text-align:left; display:flex; justify-content:space-between; font-size:12px; }
-.infrastructure-menu-popup button:hover { background:var(--border-hex); }
+.infrastructure-menu-popup button:hover,.infrastructure-menu-popup button:focus-visible { background:hsl(var(--muted)); }
 .infrastructure-menu-popup hr { border-color:var(--border-hex); margin:4px 0; }
 .infrastructure-page button,.infrastructure-sidebar button,.infrastructure-menu button,.infrastructure-sidebar summary { cursor:pointer; }
-.infrastructure-page button:focus-visible,.infrastructure-sidebar button:focus-visible,.infrastructure-sidebar input:focus-visible,.infrastructure-menu button:focus-visible,.infrastructure-menu summary:focus-visible { outline:2px solid var(--workspace-accent,var(--color-primary)); outline-offset:2px; }
+.infrastructure-page button:focus-visible,.infrastructure-sidebar button:focus-visible,.infrastructure-sidebar input:focus-visible { outline:2px solid var(--workspace-accent,var(--color-primary)); outline-offset:2px; }
 .infrastructure-mobile-nav { display:none; }
 @media(max-width:767px) { .infrastructure-mobile-nav { display:block; padding:8px 12px; background:var(--background-hex); border-bottom:1px solid var(--border-hex); } .infrastructure-mobile-nav>details { margin-top:8px; font-size:12px; } .infrastructure-mobile-nav>details>.infrastructure-sidebar { max-height:45vh; overflow:auto; padding-top:12px; } .infrastructure-view-heading { padding:12px; } .infrastructure-view-footer { padding:10px 12px; } }
 .infrastructure-view-selector { display:flex; border:1px solid var(--border-hex); padding:2px; border-radius:0; gap:2px; }

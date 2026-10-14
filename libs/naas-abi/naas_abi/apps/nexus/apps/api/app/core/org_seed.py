@@ -83,6 +83,21 @@ _WORKSPACE_FIELDS = (
 )
 
 
+def _apply_workspace_seed_fields(workspace: Any, workspace_cfg: WorkspaceSeedConfig) -> None:
+    """Copy seed branding onto an existing workspace.
+
+    ``background_image_url`` is special: most seeds omit it, and a wallpaper
+    chosen in the app is stored on the workspace drive (``.home``) with only
+    the URL kept here. Writing the seed's empty value on every boot would
+    drop that choice while leaving the file in place.
+    """
+    for field in _WORKSPACE_FIELDS:
+        value = getattr(workspace_cfg, field)
+        if field == "background_image_url" and not value:
+            continue
+        setattr(workspace, field, value)
+
+
 def _normalize_email(email: str) -> str:
     return email.strip().lower()
 
@@ -380,8 +395,7 @@ async def _upsert_workspace(
     else:
         workspace.owner_id = owner.id
         workspace.organization_id = organization.id
-        for field in _WORKSPACE_FIELDS:
-            setattr(workspace, field, getattr(workspace_cfg, field))
+        _apply_workspace_seed_fields(workspace, workspace_cfg)
         workspace.updated_at = now
         logger.info(
             "Updated workspace slug=%s under org=%s",

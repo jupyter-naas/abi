@@ -17,6 +17,7 @@ import { useTenant } from '@/contexts/tenant-context';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { usePublishFeatureResource } from '@/stores/feature-pane';
 import { usePrompt } from '@/components/ui/dialogs';
+import { useDocumentTitleDetail } from '@/contexts/tenant-context';
 import { appEditorPath, appProjectsApi, type AppProject } from '@/lib/app-projects';
 import { AppsMenuBar, type AppsMenuEntry } from '@/components/apps-builder/apps-menu-bar';
 import { ViewBar } from './components/view-bar';
@@ -176,6 +177,8 @@ function EmbedView({
   };
 
   const externalHref = embedUrl || resolveAppExternalUrl(url);
+
+  useDocumentTitleDetail(record.name);
 
   const headerBtn = (active: boolean) =>
     cn(

@@ -283,7 +283,6 @@ Collaborative effort between:
 - **[OpenTeams](https://openteams.com/)** - Open SaaS Infrastructure
 - **[University at Buffalo](https://www.buffalo.edu/)** - Research University
 - **[NCOR](https://ncor.buffalo.edu/)** - National Center for Ontological Research
-- **[Forvis Mazars](https://www.forvismazars.com/)** - Global Audit & Consulting
 
 ## Contributing
 

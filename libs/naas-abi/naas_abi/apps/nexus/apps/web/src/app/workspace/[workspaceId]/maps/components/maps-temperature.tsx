@@ -1,17 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import type { Map as LeafletMap, Marker } from 'leaflet';
-import { Loader2 } from 'lucide-react';
 import { MAPS_PUBLIC_FEEDS } from '../lib/datasets';
-import { observeMapsLeafletSize } from '../lib/leaflet-map';
-import {
-  isMapsDarkMode,
-  MAPS_TILE_ATTR,
-  MAPS_TILE_DARK,
-  MAPS_TILE_LIGHT,
-} from '../lib/leaflet-tiles';
-import './maps-components.css';
+import type { MapsPinMarker } from '../lib/leaflet-map';
+import { temperatureFeedLegend } from '../lib/maps-layer-feed-legends';
+import { MapsFeedCanvas } from './maps-feed-canvas';
 
 interface TempPin {
   lat: number;
@@ -102,164 +94,65 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
+async function loadTemperatureSamples(signal: AbortSignal): Promise<TempPin[]> {
+  const pins: TempPin[] = [];
+  for (const batch of chunk(TEMP_SAMPLE_POINTS, 40)) {
+    const url = new URL(MAPS_PUBLIC_FEEDS.temperature);
+    url.searchParams.set('latitude', batch.map((p) => p.lat).join(','));
+    url.searchParams.set('longitude', batch.map((p) => p.lng).join(','));
+    url.searchParams.set('current', 'temperature_2m');
+    const res = await fetch(url.toString(), { signal });
+    if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
+    const raw = await res.json();
+    const rows = Array.isArray(raw) ? raw : [raw];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i] as {
+        latitude?: number;
+        longitude?: number;
+        current?: { temperature_2m?: number };
+      };
+      const tempC = row.current?.temperature_2m;
+      if (typeof tempC !== 'number' || !Number.isFinite(tempC)) continue;
+      const meta = batch[i];
+      pins.push({
+        lat: row.latitude ?? meta.lat,
+        lng: row.longitude ?? meta.lng,
+        tempC,
+        label: meta.label,
+      });
+    }
+  }
+  return pins;
+}
+
+/** City temperature samples as pins for the combined map. */
+export async function fetchPins(signal: AbortSignal): Promise<MapsPinMarker[]> {
+  const samples = await loadTemperatureSamples(signal);
+  return samples.map((pin) => ({
+    id: pin.label,
+    lat: pin.lat,
+    lng: pin.lng,
+    label: `${pin.label} · ${pin.tempC.toFixed(1)} °C`,
+    detail: 'Open-Meteo 2m air temperature',
+    color: tempColor(pin.tempC),
+  }));
+}
+
 /**
  * Current 2m air temperature samples via Open-Meteo (free, no API key).
- * OpenWeather temperature tiles require an app id, so we plot city samples instead.
  */
 export function MapsTemperature() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<LeafletMap | null>(null);
-  const markersRef = useRef<Marker[]>([]);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [count, setCount] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function setup() {
-      const L = await import('leaflet');
-      await import('leaflet/dist/leaflet.css');
-      if (cancelled || !containerRef.current) return;
-
-      if (!mapRef.current) {
-        const map = L.map(containerRef.current, {
-          zoomControl: true,
-          attributionControl: true,
-        });
-        L.tileLayer(isMapsDarkMode() ? MAPS_TILE_DARK : MAPS_TILE_LIGHT, {
-          className: 'maps-basemap',
-          attribution: `${MAPS_TILE_ATTR} · Open-Meteo`,
-          maxZoom: 18,
-        }).addTo(map);
-        map.setView([20, 0], 2);
-        observeMapsLeafletSize(map);
-        mapRef.current = map;
-      }
-
-      try {
-        const pins: TempPin[] = [];
-        for (const batch of chunk(TEMP_SAMPLE_POINTS, 40)) {
-          const url = new URL(MAPS_PUBLIC_FEEDS.temperature);
-          url.searchParams.set(
-            'latitude',
-            batch.map((p) => p.lat).join(','),
-          );
-          url.searchParams.set(
-            'longitude',
-            batch.map((p) => p.lng).join(','),
-          );
-          url.searchParams.set('current', 'temperature_2m');
-          const res = await fetch(url.toString(), {
-            signal: AbortSignal.timeout(20000),
-          });
-          if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
-          const raw = await res.json();
-          const rows = Array.isArray(raw) ? raw : [raw];
-          for (let i = 0; i < rows.length; i++) {
-            const row = rows[i] as {
-              latitude?: number;
-              longitude?: number;
-              current?: { temperature_2m?: number };
-            };
-            const tempC = row.current?.temperature_2m;
-            if (typeof tempC !== 'number' || !Number.isFinite(tempC)) continue;
-            const meta = batch[i];
-            pins.push({
-              lat: row.latitude ?? meta.lat,
-              lng: row.longitude ?? meta.lng,
-              tempC,
-              label: meta.label,
-            });
-          }
-        }
-
-        if (cancelled || !mapRef.current) return;
-        const map = mapRef.current;
-        markersRef.current.forEach((m) => m.remove());
-        markersRef.current = [];
-
-        for (const pin of pins) {
-          const color = tempColor(pin.tempC);
-          const icon = L.divIcon({
-            className: 'maps-pin-icon',
-            html: `<span style="display:flex;align-items:center;justify-content:center;min-width:2rem;height:1.25rem;padding:0 0.25rem;border:1px solid #fff;background:${color};color:#111;font-size:0.625rem;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.35);border-radius:var(--org-border-radius,0px)">${Math.round(pin.tempC)}°</span>`,
-            iconSize: [32, 20],
-            iconAnchor: [16, 10],
-          });
-          const marker = L.marker([pin.lat, pin.lng], { icon }).addTo(map);
-          marker.bindPopup(
-            `<div class="maps-pin-popup"><strong>${pin.label}</strong><div class="maps-pin-popup__meta">${pin.tempC.toFixed(1)} °C · Open-Meteo</div></div>`,
-          );
-          markersRef.current.push(marker);
-        }
-
-        setCount(pins.length);
-        setStatus('ready');
-      } catch (err) {
-        if (cancelled) return;
-        setError(
-          err instanceof Error ? err.message : 'Failed to load Open-Meteo',
-        );
-        setStatus('error');
-      }
-    }
-
-    void setup();
-    return () => {
-      cancelled = true;
-      markersRef.current.forEach((m) => m.remove());
-      markersRef.current = [];
-      mapRef.current?.remove();
-      mapRef.current = null;
-    };
-  }, []);
-
   return (
-    <div className="maps-canvas">
-      <div className="maps-canvas__toolbar">
-        <span className="maps-canvas__toolbar-title">Temperature</span>
-        {status === 'loading' ? (
-          <span className="maps-status maps-status--row">
-            <Loader2 size={14} className="animate-spin" />
-            Loading Open-Meteo…
-          </span>
-        ) : null}
-        {status === 'ready' ? (
-          <span className="maps-canvas__toolbar-meta">
-            {count} city samples · current 2m air temp · Open-Meteo (no key)
-          </span>
-        ) : null}
-        {status === 'error' ? (
-          <span className="maps-status maps-status--error">
-            {error ?? 'Open-Meteo unavailable'}
-          </span>
-        ) : null}
-      </div>
-      <div className="maps-canvas__stage">
-        <div ref={containerRef} className="maps-leaflet" />
-        {status === 'ready' ? (
-          <div className="maps-legend">
-            <div className="maps-legend__title">°C</div>
-            <div className="maps-legend__row">
-              <span className="maps-legend__dot" style={{ background: '#2563eb' }} />
-              <span>Cold (≤ 0)</span>
-            </div>
-            <div className="maps-legend__row">
-              <span className="maps-legend__dot" style={{ background: '#4ade80' }} />
-              <span>Mild (10-18)</span>
-            </div>
-            <div className="maps-legend__row">
-              <span className="maps-legend__dot" style={{ background: '#f97316' }} />
-              <span>Warm (26-32)</span>
-            </div>
-            <div className="maps-legend__row">
-              <span className="maps-legend__dot" style={{ background: '#dc2626' }} />
-              <span>Hot (&gt; 32)</span>
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </div>
+    <MapsFeedCanvas
+      title="Temperature"
+      loadingLabel="Loading Open-Meteo…"
+      readyMeta={(n) => `${n} city samples · current 2m air temp · Open-Meteo (no key)`}
+      sourceHref="https://open-meteo.com/"
+      sourceLabel="Open-Meteo"
+      fetchPins={fetchPins}
+      fitMaxZoom={4}
+      legendLayerId="temperature"
+      legend={temperatureFeedLegend()}
+    />
   );
 }

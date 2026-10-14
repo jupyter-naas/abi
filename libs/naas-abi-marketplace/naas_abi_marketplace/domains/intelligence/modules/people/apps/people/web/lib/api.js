@@ -1,9 +1,19 @@
 /** Reads. The browser never touches the dataset service directly. */
 
 import { API_BASE } from "./config.js";
+import { isBundledInNexus, nexusAuthHeaders, nexusWorkspaceId } from "./nexus.js";
+
+function apiPath(path) {
+  const joined = `${API_BASE}${path}`;
+  if (!isBundledInNexus()) return joined;
+  const workspaceId = nexusWorkspaceId();
+  if (!workspaceId || joined.includes("workspace_id=")) return joined;
+  const sep = joined.includes("?") ? "&" : "?";
+  return `${joined}${sep}workspace_id=${encodeURIComponent(workspaceId)}`;
+}
 
 async function getJson(path) {
-  const response = await fetch(`${API_BASE}${path}`);
+  const response = await fetch(apiPath(path), { headers: nexusAuthHeaders() });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     const error = new Error(`${path} → ${response.status}`);

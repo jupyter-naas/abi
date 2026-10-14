@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi"
-version = "2.81.0"
+version = "2.86.0"
 description = "Multi-agent orchestrator and knowledge graph management system for AI orchestration, providing comprehensive coordination of specialized AI agents and semantic data management capabilities"
 readme = "README.md"
 authors = [{ name = "Grace Lambert", email = "maxime@naas.ai" },{ name = "Alice Dupont", email = "florent@naas.ai" }, { name = "Emma Petit", email = "jeremy@naas.ai" }]
@@ -64,9 +64,13 @@ naas-abi-marketplace = { path = "../naas-abi-marketplace", editable = true }
 [tool.setuptools]
 include-package-data = true
 
+[tool.setuptools.packages.find]
+include = ["naas_abi*"]
+
 [tool.setuptools.package-data]
 naas_abi = [
     "apps/nexus/apps/api/migrations/*.sql",
+    "apps/nexus/apps/api/app/services/maps/basemaps/assets/*",
     "apps/nexus/apps/api/public/**/*",
     "apps/nexus/assets/**/*",
     "apps/nexus/ontology/**/*",

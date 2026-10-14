@@ -1,0 +1,94 @@
+import { getApiUrl } from '@/lib/config';
+import { useAuthStore } from '@/stores/auth';
+import { fetchFeed as aisPins } from '../components/maps-ais';
+import { fetchPins as conflictPins } from '../components/maps-conflict';
+import { fetchPins as earthquakePins } from '../components/maps-earthquakes';
+import { fetchPins as eonetPins } from '../components/maps-eonet-all';
+import { fetchFeed as flightsPins } from '../components/maps-flights';
+import { fetchPins as gdacsPins } from '../components/maps-gdacs';
+import { fetchPins as gulfStrikesPins } from '../components/maps-gulf-strikes';
+import { fetchPins as issPins } from '../components/maps-iss';
+import { fetchPins as newsPins } from '../components/maps-news';
+import { fetchPins as nwsAlertsPins } from '../components/maps-nws-alerts';
+import { fetchPins as openaqPins } from '../components/maps-openaq';
+import { fetchPins as temperaturePins } from '../components/maps-temperature';
+import { fetchPins as tropicalStormsPins } from '../components/maps-tropical-storms';
+import { fetchPins as volcanoesPins } from '../components/maps-volcanoes';
+import { fetchPins as wildfirePins } from '../components/maps-wildfires';
+import { mapsCustomFeedUrl } from './datasets';
+import type { LayoutEntry } from './layouts';
+import { getImportedMapLayer } from './maps-imported-layers';
+import { feedLayersApi, layoutsApi } from './layouts-api';
+import { fetchMapsFeedPins, normalizeFeedLoad, type MapsFeedResult } from './maps-feed';
+import { sharedFeedLoad } from './shared-feed-loads';
+import type { MapsFeedView } from './maps-view';
+
+/**
+ * Where each combinable layout's pins come from, for the All layouts map.
+ * Built-in feeds reuse the exact fetchers of their own canvases.
+ */
+type Fetcher = (signal: AbortSignal, view?: MapsFeedView) => Promise<unknown>;
+
+const BUILTIN_FETCHERS: Record<string, Fetcher> = {
+  ais: aisPins,
+  conflict: conflictPins,
+  earthquakes: earthquakePins,
+  'eonet-all': eonetPins,
+  flights: flightsPins,
+  gdacs: gdacsPins,
+  'gulf-strikes': gulfStrikesPins,
+  iss: issPins,
+  news: newsPins,
+  'nws-alerts': nwsAlertsPins,
+  openaq: openaqPins,
+  temperature: temperaturePins,
+  'tropical-storms': tropicalStormsPins,
+  volcanoes: volcanoesPins,
+  wildfires: wildfirePins,
+};
+
+function authHeader(): HeadersInit {
+  const token = useAuthStore.getState().token;
+  if (!token) throw new Error('Not authenticated');
+  return { Authorization: `Bearer ${token}` };
+}
+
+export function layoutPinSource(
+  entry: LayoutEntry,
+  workspaceId: string,
+): ((signal: AbortSignal, view?: MapsFeedView) => Promise<MapsFeedResult>) | null {
+  if (!entry.combinable) return null;
+  if (entry.kind === 'imported') {
+    return async () => {
+      const layer = getImportedMapLayer(workspaceId, entry.id);
+      if (!layer) throw new Error(`Imported layer ${entry.id} not found in this browser`);
+      return normalizeFeedLoad(layer.featureCollection);
+    };
+  }
+  const feedId = entry.feedId ?? entry.id;
+  if (entry.kind === 'feed') {
+    // API feed: the authed proxy reads the feed's feed_url from the API.
+    return (signal) => fetchMapsFeedPins(mapsCustomFeedUrl(feedId, workspaceId), signal, authHeader());
+  }
+  if (entry.kind === 'stored') {
+    // The layer's object, every feature: layers sharing it reuse one request and
+    // keep their own feature types (maps-all-layouts filters by classLabels).
+    return (signal) =>
+      sharedFeedLoad(
+        feedLayersApi.dataUrl(workspaceId, entry.id, { all: true }),
+        authHeader(),
+        signal,
+        entry.storagePath ? `${workspaceId}:${entry.storagePath}` : undefined,
+      );
+  }
+  if (entry.kind === 'workspace') {
+    return (signal) => fetchMapsFeedPins(layoutsApi.feedUrl(workspaceId, feedId), signal, authHeader());
+  }
+  if (entry.kind === 'graph') {
+    const url = `${getApiUrl()}/api/maps/layers/${encodeURIComponent(entry.id)}?workspace_id=${encodeURIComponent(workspaceId)}`;
+    return (signal) => fetchMapsFeedPins(url, signal, authHeader());
+  }
+  const builtin = BUILTIN_FETCHERS[entry.id];
+  if (builtin) return async (signal, view) => normalizeFeedLoad(await builtin(signal, view));
+  return null;
+}

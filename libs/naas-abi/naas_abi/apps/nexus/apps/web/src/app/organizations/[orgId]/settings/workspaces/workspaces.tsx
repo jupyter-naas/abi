@@ -128,7 +128,7 @@ export default function OrganizationWorkspacesPage() {
 
               <div className="mt-4 flex gap-2">
                 <Link
-                  href={`/workspace/${workspace.id}/maps/presence`}
+                  href={`/workspace/${workspace.id}/maps`}
                   className="flex-1 border px-3 py-2 text-center text-xs font-medium transition-colors hover:bg-muted"
                 >
                   Open
