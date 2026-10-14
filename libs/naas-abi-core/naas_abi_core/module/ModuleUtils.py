@@ -1,5 +1,26 @@
 import inspect
+import sys
 from pathlib import Path
+
+
+def module_package(class_: type) -> str:
+    """The dotted package of the folder holding ``class_``: where the loaders look
+    for ``agents/``, ``workflows/``, ``models/``... (``find_class_module_root_path``).
+
+    ``pkg`` for a class defined in ``pkg/__init__.py`` and also for one defined in a
+    submodule such as ``pkg/_abi_module.py``, whose ``__module__`` is
+    ``pkg._abi_module``: its components are under ``pkg``, not under that file.
+    """
+    module = sys.modules.get(class_.__module__)
+    package = getattr(module, "__package__", None)
+    if package is None:
+        file = getattr(module, "__file__", "") or ""
+        package = (
+            class_.__module__
+            if Path(file).name == "__init__.py"
+            else class_.__module__.rpartition(".")[0]
+        )
+    return package or class_.__module__
 
 
 def find_class_module_root_path(class_: type) -> Path:

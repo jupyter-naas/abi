@@ -21,7 +21,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from naas_abi_core.models.Model import CanonicalModelId, Model, ModelDefinition
-from naas_abi_core.module.ModuleUtils import find_class_module_root_path
+from naas_abi_core.module.ModuleUtils import (
+    find_class_module_root_path,
+    module_package,
+)
 from naas_abi_core.utils.Logger import logger
 
 if TYPE_CHECKING:
@@ -99,6 +102,7 @@ class ModuleModelLoader:
         logger.debug(f"Loading models from {models_path}")
         include_set = set(include_models) if include_models is not None else None
         top_package = class_.__module__.split(".")[0]
+        package = module_package(class_)
         registered = 0
 
         for dirpath, _dirnames, filenames in os.walk(models_path):
@@ -115,11 +119,11 @@ class ModuleModelLoader:
                 # e.g. models/openai/gpt_5.py →
                 #      naas_abi_marketplace.ai.openrouter.models.openai.gpt_5
                 if rel_dir == ".":
-                    model_module_path = f"{class_.__module__}.models.{file[:-3]}"
+                    model_module_path = f"{package}.models.{file[:-3]}"
                 else:
                     subpackage = rel_dir.replace(os.sep, ".")
                     model_module_path = (
-                        f"{class_.__module__}.models.{subpackage}.{file[:-3]}"
+                        f"{package}.models.{subpackage}.{file[:-3]}"
                     )
 
                 # Honour include_models without paying the import cost: if the
@@ -134,10 +138,8 @@ class ModuleModelLoader:
                         ids, fully_resolved = _static_canonical_ids(source)
                         if fully_resolved and ids and ids.isdisjoint(include_set):
                             logger.debug(
-                                "ModuleModelLoader: skipping %s — canonical id(s) "
-                                "%s not in include_models.",
-                                model_module_path,
-                                sorted(ids),
+                                f"ModuleModelLoader: skipping {model_module_path} — "
+                                f"canonical id(s) {sorted(ids)} not in include_models."
                             )
                             continue
 
@@ -145,9 +147,8 @@ class ModuleModelLoader:
                     model_module = importlib.import_module(model_module_path)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning(
-                        "ModuleModelLoader: failed to import %s: %s — skipping.",
-                        model_module_path,
-                        exc,
+                        f"ModuleModelLoader: failed to import {model_module_path}: "
+                        f"{exc!r} — skipping."
                     )
                     continue
 
@@ -167,11 +168,9 @@ class ModuleModelLoader:
                     model = getattr(value, "model", None)
                     if canonical_id is None or not isinstance(model, Model):
                         logger.warning(
-                            "ModuleModelLoader: %s.%s is a ModelDefinition but is "
-                            "missing CANONICAL_ID or a Model instance on ``model`` "
-                            "— skipped.",
-                            model_module_path,
-                            value.__name__,
+                            f"ModuleModelLoader: {model_module_path}.{value.__name__} "
+                            "is a ModelDefinition but is missing CANONICAL_ID or a "
+                            "Model instance on ``model`` — skipped."
                         )
                         continue
 
@@ -179,20 +178,15 @@ class ModuleModelLoader:
                         registry.register(canonical_id, model)
                         registered += 1
                         logger.debug(
-                            "ModuleModelLoader: registered %s.%s as %r (provider=%s).",
-                            model_module_path,
-                            value.__name__,
-                            str(canonical_id),
-                            model.provider,
+                            f"ModuleModelLoader: registered {model_module_path}."
+                            f"{value.__name__} as {str(canonical_id)!r} "
+                            f"(provider={model.provider})."
                         )
                     except Exception as exc:  # noqa: BLE001
                         logger.warning(
-                            "ModuleModelLoader: registration failed for %s.%s "
-                            "(canonical_id=%r): %s",
-                            model_module_path,
-                            value.__name__,
-                            str(canonical_id),
-                            exc,
+                            f"ModuleModelLoader: registration failed for "
+                            f"{model_module_path}.{value.__name__} "
+                            f"(canonical_id={str(canonical_id)!r}): {exc!r}"
                         )
 
         return registered
