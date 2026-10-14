@@ -102,8 +102,12 @@ class DiscoveryNATS:
                     f"{request.descriptor.module_id!r}: a module registers with a "
                     "token for its own module id",
                 )
+            # A caller's token must be bound to the instance asking: one a
+            # module was sent for another instance (or kept) is refused.
             caller = (
-                verify_service_token(request.caller_token, self.secret)
+                verify_service_token(
+                    request.caller_token, self.secret, audience=request.instance_id
+                )
                 if operation in ("authorize_agent", "authorize_model", "authorize_app")
                 else None
             )

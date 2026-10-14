@@ -1,7 +1,7 @@
 """Local registration at bootstrap; all model reads and inference cross NATS."""
 
 from naas_abi_core.engine import nats_runtime
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_auth import ServiceTokenSource
 from naas_abi_core.engine.nats_naming import connection_name
 from naas_abi_core.models.Model import ChatModel, EmbeddingModel
 from naas_abi_core.services.model_registry.ModelRegistryPort import ModelNotFoundError
@@ -19,7 +19,7 @@ class ModelRegistryNATSClient(ModelRegistryService):
         self.owner = owner
         self.transport = Transport(
             url,
-            lambda: issue_service_token("engine", secret),
+            ServiceTokenSource("engine", secret),
             timeout=120,
             name=connection_name("abi-engine:model_registry"),
         )

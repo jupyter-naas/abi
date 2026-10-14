@@ -152,12 +152,12 @@ def test_authorize_agent_names_the_caller_and_whether_it_is_an_admin():
         service.authorize_agent.return_value = pb.AuthorizeAgentResponse()
         primary = DiscoveryNATS(service, SECRET, "test")
 
-        async def authorize(caller):
+        async def authorize(caller, audience="r-1"):
             msg = SimpleNamespace(
                 data=pb.AuthorizeAgentRequest(
                     instance_id="r-1",
                     agent_name="Researcher",
-                    caller_token=issue_service_token(caller, SECRET),
+                    caller_token=issue_service_token(caller, SECRET, audience=audience),
                 ).SerializeToString(),
                 headers={"Nats-Auth-Token": issue_service_token("research", SECRET)},
                 reply="reply",
@@ -172,6 +172,9 @@ def test_authorize_agent_names_the_caller_and_whether_it_is_an_admin():
         assert (module.caller_identity, module.caller_admin) == ("orchestrator", False)
         api = await authorize("api")
         assert (api.caller_identity, api.caller_admin) == ("api", True)
+        # A token bound to another instance, or to none, is not this caller's.
+        assert (await authorize("api", audience="r-2")).error.code == "UNAUTHENTICATED"
+        assert (await authorize("api", audience=None)).error.code == "UNAUTHENTICATED"
 
     asyncio.run(scenario())
 

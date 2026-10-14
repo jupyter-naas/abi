@@ -3,7 +3,6 @@ import asyncio
 import nats
 import pytest
 from naas_abi_core.engine.nats_auth import (
-    issue_module_token,
     issue_service_token,
     module_key,
 )
@@ -17,9 +16,11 @@ pytestmark = [
 ]
 
 
-def _module_token(module_id: str) -> str:
-    """A module's token: signed with its own key, for its own module id."""
-    return issue_module_token(module_id, module_key(SECRET, module_id))
+def _module_token(module_id: str):
+    """A module's token: signed with its own key, for its own module id. Calls to other modules get tokens bound to them."""
+    from naas_abi_sdk.service_token import ModuleToken
+
+    return ModuleToken(module_id, module_key(SECRET, module_id))
 
 
 def test_registry_auth_expiry_restart_and_sdk_dependency_runner(broker):  # noqa: F811

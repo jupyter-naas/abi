@@ -115,3 +115,50 @@ def test_module_keys_differ_per_identity_and_per_secret():
     assert module_key(SECRET, "a") != module_key(SECRET, "b")
     assert module_key(SECRET, "a") != module_key("another-secret", "a")
     assert module_key(SECRET, "a") == module_key(SECRET, "a")
+
+
+# Audience: a token sent to a module instance is good there only.
+
+
+def test_a_bound_token_is_accepted_only_for_its_audience():
+    from naas_abi_core.engine.nats_auth import ServiceTokenSource
+
+    source = ServiceTokenSource("api", SECRET)
+    bound = source.for_audience("instance-a")
+
+    assert verify_service_token(bound, SECRET, audience="instance-a") == "api"
+    with pytest.raises(InvalidServiceTokenError):
+        verify_service_token(bound, SECRET, audience="instance-b")
+    # The engine's services verify without an audience: a token a module was
+    # sent cannot be replayed there.
+    with pytest.raises(InvalidServiceTokenError):
+        verify_service_token(bound, SECRET)
+
+
+def test_a_call_to_a_module_needs_a_bound_token():
+    with pytest.raises(InvalidServiceTokenError):
+        verify_service_token(issue_service_token("api", SECRET), SECRET, audience="i-1")
+
+
+def test_module_tokens_bind_an_audience_too():
+    key = module_key(SECRET, "acme.research")
+    token = issue_module_token("acme.research", key, audience="i-1")
+
+    assert verify_service_token(token, SECRET, audience="i-1") == "acme.research"
+    with pytest.raises(InvalidServiceTokenError):
+        verify_service_token(token, SECRET)
+
+
+def test_bound_tokens_are_short_and_reused_until_half_their_life():
+    from naas_abi_core.engine.nats_auth import BOUND_TTL, ServiceTokenSource
+
+    now = [1_000_000.0]
+    source = ServiceTokenSource("api", SECRET, clock=lambda: now[0])
+    first = source.for_audience("i-1")
+    claims = jwt.decode(first, options={"verify_signature": False})
+    assert claims["exp"] - claims["iat"] == BOUND_TTL.total_seconds()
+    assert source.for_audience("i-1") == first
+    assert source.for_audience("i-2") != first
+    now[0] += BOUND_TTL.total_seconds() / 2
+    assert source.for_audience("i-1") != first
+    assert "aud" not in jwt.decode(source(), options={"verify_signature": False})

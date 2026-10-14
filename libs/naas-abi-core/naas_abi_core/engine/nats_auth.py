@@ -13,6 +13,11 @@ HS256, one claim: which process holds the token (``sub``). Two kinds of key sign
   can assert only that identity, and never a first-party one (:data:`FIRST_PARTY_IDENTITIES`).
   Its tokens carry the header ``kid: "module"``; the verifier derives the key from ``sub``.
 
+**Audience.** A token sent to a module (its agents, models and apps) is bound to the module
+instance it calls (``aud``, :data:`BOUND_TTL`), so the module cannot replay it anywhere else:
+the engine's services refuse a token with an audience, and discovery accepts one only for the
+instance it names. Tokens for the engine's services carry no audience.
+
 There is still no scope or resource claim: rights between modules are Stage 2 work. Discovery
 binds a registration's module id to the token's identity, and Nexus is the only caller whose
 user ids a module trusts. The secret itself is delivered like any other secret, via
@@ -25,12 +30,16 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import time
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 import jwt
 
 ALGORITHM = "HS256"
 DEFAULT_TTL = timedelta(hours=1)
+# A token bound to one module instance (``aud``): short, so one a module kept is soon useless.
+BOUND_TTL = timedelta(minutes=2)
 # The ``kid`` header of a token signed with a module key.
 MODULE_KEY_ID = "module"
 # The engine's own processes. No module key exists for them, and no module token asserts them.
@@ -47,13 +56,17 @@ def issue_service_token(
     *,
     ttl: timedelta = DEFAULT_TTL,
     now: datetime | None = None,
+    audience: str | None = None,
 ) -> str:
     """Issue a token asserting ``identity`` (e.g. ``"api"``, ``"dagster"``), signed with the
     project secret. Only the engine's own processes hold it; modules use :func:`module_key`.
+    ``audience``: the module instance it is sent to (see the module docstring).
     """
     if not identity:
         raise ValueError("identity must be a non-empty string")
-    return jwt.encode(_claims(identity, ttl, now), secret, algorithm=ALGORITHM)
+    return jwt.encode(
+        _claims(identity, ttl, now, audience), secret, algorithm=ALGORITHM
+    )
 
 
 def module_key(secret: str, identity: str) -> str:
@@ -78,28 +91,86 @@ def issue_module_token(
     *,
     ttl: timedelta = DEFAULT_TTL,
     now: datetime | None = None,
+    audience: str | None = None,
 ) -> str:
     """Issue a token asserting ``identity`` with its module ``key`` (see :func:`module_key`)."""
     if not identity:
         raise ValueError("identity must be a non-empty string")
     return jwt.encode(
-        _claims(identity, ttl, now),
+        _claims(identity, ttl, now, audience),
         key,
         algorithm=ALGORITHM,
         headers={"kid": MODULE_KEY_ID},
     )
 
 
-def _claims(identity: str, ttl: timedelta, now: datetime | None) -> dict:
+def _claims(
+    identity: str, ttl: timedelta, now: datetime | None, audience: str | None = None
+) -> dict:
     issued_at = now or datetime.now(UTC)
-    return {"sub": identity, "iat": issued_at, "exp": issued_at + ttl}
+    claims: dict = {"sub": identity, "iat": issued_at, "exp": issued_at + ttl}
+    if audience is not None:
+        if not audience:
+            raise ValueError("audience must be a non-empty string")
+        claims["aud"] = audience
+    return claims
 
 
-def verify_service_token(token: str, secret: str) -> str:
+class ServiceTokenSource:
+    """Token source for an engine process's ``Transport``: ``source()`` gives a token for
+    the engine's services, ``source.for_audience(instance_id)`` one bound to that module
+    instance (:data:`BOUND_TTL`). Each is reused until half its lifetime."""
+
+    MAX_AUDIENCES = 1024
+
+    def __init__(
+        self,
+        identity: str,
+        secret: str,
+        *,
+        ttl: timedelta = DEFAULT_TTL,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        if not identity:
+            raise ValueError("identity must be a non-empty string")
+        self.identity, self.secret, self.ttl, self.clock = identity, secret, ttl, clock
+        self._tokens: dict[str | None, tuple[float, str]] = {}
+
+    def __call__(self) -> str:
+        return self._token(None, self.ttl)
+
+    def for_audience(self, audience: str) -> str:
+        return self._token(audience, BOUND_TTL)
+
+    def _token(self, audience: str | None, ttl: timedelta) -> str:
+        now = self.clock()
+        cached = self._tokens.get(audience)
+        if cached is not None and now < cached[0]:
+            return cached[1]
+        if len(self._tokens) >= self.MAX_AUDIENCES:
+            self._tokens.clear()
+        token = issue_service_token(
+            self.identity,
+            self.secret,
+            ttl=ttl,
+            now=datetime.fromtimestamp(now, UTC),
+            audience=audience,
+        )
+        self._tokens[audience] = (now + ttl.total_seconds() / 2, token)
+        return token
+
+
+def verify_service_token(
+    token: str, secret: str, *, audience: str | None = None
+) -> str:
     """Verify ``token`` and return the caller identity (the ``sub`` claim).
 
     A module token (``kid: "module"``) is checked against the key of the identity it
     asserts, which is never a first-party one; any other token against the secret.
+
+    ``audience``: the module instance the token must be bound to (a call to that
+    module). Without it, a token bound to an audience is refused: a module cannot
+    replay a token it was sent.
 
     Raises :class:`InvalidServiceTokenError` on a bad signature, malformed token, or an
     expired token — callers should treat all three identically (reject the call), not try
@@ -117,7 +188,13 @@ def verify_service_token(token: str, secret: str) -> str:
                     "a module token cannot assert a first-party identity"
                 )
             key = module_key(secret, claimed)
-        payload = jwt.decode(token, key, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token,
+            key,
+            algorithms=[ALGORITHM],
+            audience=audience,
+            options={"require": ["aud"]} if audience is not None else None,
+        )
     except jwt.InvalidTokenError as exc:
         raise InvalidServiceTokenError(str(exc)) from exc
 
