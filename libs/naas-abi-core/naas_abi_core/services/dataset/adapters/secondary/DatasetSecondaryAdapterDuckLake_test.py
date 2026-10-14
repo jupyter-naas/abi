@@ -436,6 +436,104 @@ def test_postgres_catalog_concurrent_writers_preserve_acknowledged_appends(tmp_p
         assert [row["id"] for row in result.rows] == list(range(8))
 
 
+def _two_tables(adapter: DatasetSecondaryAdapterDuckLake) -> None:
+    for name in ("slow", "busy"):
+        adapter.create(
+            DatasetSpec(
+                name=name,
+                columns=(ColumnSpec(name="id", type="integer"),),
+                primary_key=("id",),
+            )
+        )
+
+
+def _racing_write(
+    catalog: str, data_path: str, *, commit_retries: int
+) -> tuple[int, Exception | None]:
+    """A write to ``slow`` while another writer commits to ``busy``: how many
+    times the slow write's transaction ran, and what it raised."""
+    slow = DatasetSecondaryAdapterDuckLake(
+        catalog=catalog,
+        data_path=data_path,
+        max_retries=0,
+        commit_retries=commit_retries,
+    )
+    busy = DatasetSecondaryAdapterDuckLake(catalog=catalog, data_path=data_path)
+    runs = 0
+
+    def operation(con):
+        nonlocal runs
+        runs += 1
+        con.execute(
+            "INSERT INTO abi_datasets.default.slow VALUES (?)",  # nosec B608
+            [runs],
+        )
+        if runs == 1:  # another writer commits while this one is still open
+            busy.write("busy", [{"id": 1}])
+
+    try:
+        slow._write_transaction(operation)
+    except Exception as exc:  # noqa: BLE001 - returned for the assertion
+        return runs, exc
+    return runs, None
+
+
+def test_commits_on_other_tables_no_longer_fail_a_running_write(tmp_path):
+    adapter = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'datasets.sqlite'}",
+        data_path=str(tmp_path / "datasets"),
+        commit_retries=3,
+    )
+    con = adapter._connect()
+    try:
+        setting = con.execute(
+            "SELECT current_setting('ducklake_max_retry_count')"
+        ).fetchone()
+    finally:
+        con.close()
+    assert int(setting[0]) == 3
+    with pytest.raises(ValueError, match="commit_retries"):
+        DatasetSecondaryAdapterDuckLake(
+            catalog=f"sqlite:{tmp_path / 'datasets.sqlite'}",
+            data_path=str(tmp_path / "datasets"),
+            commit_retries=-1,
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.environ.get("ABI_TEST_DUCKLAKE_POSTGRES") != "1",
+    reason="set ABI_TEST_DUCKLAKE_POSTGRES=1 to run the PostgreSQL catalog test",
+)
+def test_postgres_catalog_write_survives_a_commit_to_another_table(tmp_path):
+    """wise_list_transactions failed with INTERNAL on 2026-10-13: its 46 s write
+    lost every commit race to a writer committing elsewhere once a second."""
+    from testcontainers.postgres import PostgresContainer
+
+    with PostgresContainer(
+        "postgres:16-alpine",
+        username="ducklake",
+        password="ducklake",
+        dbname="ducklake",
+    ) as postgres:
+        catalog = f"postgres:{postgres.get_connection_url(driver=None)}"
+        data_path = str(tmp_path / "datasets")
+        _two_tables(DatasetSecondaryAdapterDuckLake(catalog, data_path))
+
+        # Without DuckLake's own commit retry, the unrelated commit fails it.
+        runs, error = _racing_write(catalog, data_path, commit_retries=0)
+        assert runs == 1
+        assert error is not None and "retry count of 0" in str(error)
+
+        # With it, only the commit is redone: the transaction ran once.
+        runs, error = _racing_write(catalog, data_path, commit_retries=10)
+        assert (runs, error) == (1, None)
+        result = DatasetSecondaryAdapterDuckLake(catalog, data_path).query(
+            "SELECT count(*) AS n FROM slow"
+        )
+        assert result.rows == [{"n": 1}]
+
+
 class TestObjectStoreDataPath:
     """``data_path`` may use S3-compatible storage when explicitly configured."""
 
