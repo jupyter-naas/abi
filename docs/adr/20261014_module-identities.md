@@ -64,15 +64,19 @@ own processes keep it and may assert any identity. Modules never receive it.
 
 ### Tokens sent to a module are bound to it
 A token sent to a module instance (`abi.agent.<project>.<instance>...`,
-`abi.mod.<project>.<instance>...`) carries `aud: <instance id>` and lasts two
+`abi.mod.<project>.<instance>...`) carries `aud: <instance id>` and lasts five
 minutes (`nats_auth.BOUND_TTL`). The SDK's `Transport` asks its token source
 for one (`for_audience`) for every call to such a subject; `ModuleToken` and
-the engine's `nats_auth.ServiceTokenSource` provide it, and a static token
-cannot call a module. Discovery's `authorize_agent`, `authorize_model` and
-`authorize_app` accept a caller's token only when it is bound to the instance
-asking. Every other verifier (the engine's services, discovery's own calls)
-refuses a token with an audience. So a token a module was sent works only
-against that module, for two minutes.
+the engine's `nats_auth.ServiceTokenSource` provide it (one cache,
+`naas_abi_sdk.service_token.TokenCache`), and a static token cannot call a
+module. A bound token is handed out again only in its first 30 seconds, so it
+reaches the module with at least 4.5 minutes left: a module authorizes a call
+once it takes it from its queue, and callers stop waiting long before that
+(65 s for an app request, 120 s for a model). Discovery's `authorize_agent`,
+`authorize_model` and `authorize_app` accept a caller's token only when it is
+bound to the instance asking. Every other verifier (the engine's services,
+discovery's own calls) refuses a token with an audience. So a token a module
+was sent works only against that module, for five minutes.
 
 ### A module registers as itself
 Discovery's NATS adapter accepts a registration only when the token's identity
@@ -91,18 +95,24 @@ The ASGI scope also carries the caller's identity:
 project runs (the Docker `nats.conf`, the one `abi dev` writes). The `module`
 user may not:
 
-- subscribe to `abi.svc.>`, `abi.discovery.>`, `_INBOX.>` or `$KV.>`. Its
-  connections use their own inbox prefix, `_INBOX_MODULES` (the SDK's
-  `Transport` sets it for the user `module`), so the engine's and Nexus's
-  replies, on `_INBOX.>`, never reach a module;
+- subscribe to the subjects the engine serves, where calls carry their callers'
+  unbound tokens: `abi.svc.>`, `abi.discovery.>` and `abi.rpc.>` (RPC
+  overflow: an upload above the broker limit, Nexus's included); nor to
+  `_INBOX.>` or `$KV.>`. Module connections use their own inbox prefix,
+  `_INBOX_MODULES` (`run_module` sets it, and `Transport` for a URL logged in
+  as `module`), so the engine's and Nexus's replies, on `_INBOX.>`, never reach
+  a module;
 - publish to `$KV.>`, or to the JetStream API's stream create, update,
-  delete, message delete, snapshot, restore, peer and leader subjects, its
-  direct get, or its server, meta and account API.
+  delete, message delete, snapshot, restore, peer and leader subjects,
+  consumer delete, direct get, or server, meta and account API.
 
 Modules may not create streams, so the engine creates the ones they use: the
 engine hosting discovery creates the project's jobs stream and the claim-check
-object store at start (`nats_permissions.prepare_module_streams`). The `abi`
-user keeps every right.
+object store at start, before discovery serves
+(`nats_permissions.prepare_module_streams`). SDK modules host jobs only with
+discovery, so that engine is the one their jobs stream belongs to. A module
+that finds a stream missing, or a bus queue's stream that does not exist,
+raises `StreamNotCreated`, which says so. The `abi` user keeps every right.
 
 ## Alternatives considered
 **Issued long-lived tokens.** The operator issues a token per module (no key).
@@ -131,8 +141,10 @@ is where the token is verified, so the identity rule sits next to it.
 
 ## Consequences
 - A module can no longer sign as `api`, `engine` or another module, register
-  under another module id, or name a user to another module's app. A token it
-  is sent is refused by the engine's services and by any other module.
+  under another module id, or name a user to another module's app with its own
+  token. A token it is sent is refused by the engine's services and by any
+  other module, and it cannot listen where the engine's callers send their
+  unbound tokens. What one module can still do to another is listed below.
 - Breaking for existing SDK modules: a module that signed its own tokens from
   `NATS_JWT_SECRET` must sign with its module key, as its module id; an
   identity that is not its module id is refused at registration. A module
@@ -146,7 +158,7 @@ is where the token is verified, so the identity rule sits next to it.
   - subscribe to another module's subjects (`abi.mod.>`, `abi.agent.>`) and
     inbox (`_INBOX_MODULES.>`): it sees the requests and replies sent there,
     and can replay a token sent to that module, to that module only, within
-    its two minutes (a token Nexus sent to that module's app lets it name a
+    its five minutes (a token Nexus sent to that module's app lets it name a
     user there);
   - read any stream through the JetStream consumer API and
     `$JS.API.STREAM.MSG.GET`: the jobs stream (every module's triggers and
@@ -154,8 +166,16 @@ is where the token is verified, so the identity rule sits next to it.
     key-value buckets (`KV_*`, discovery's registry and the key-value
     service's data included);
   - purge any stream (`$JS.API.STREAM.PURGE`), and ack, nak or terminate any
-    message it can fetch (`$JS.ACK.>`).
+    message it can fetch (`$JS.ACK.>`);
+  - take over another module's jobs: fetch from its durable job consumer
+    (taking its triggers), create that consumer again with another
+    configuration (changing what it delivers), and publish triggers or
+    cancels for its jobs straight to `abi.jobs.<project>.trigger|cancel.<hash>`,
+    which carry no token.
 
   Modules must still be trusted code.
+- A call that waits more than about 4.5 minutes in a module's queue before the
+  module takes it is refused (`UNAUTHENTICATED`, its bound token expired). Only
+  uploads hold a module's call slots that long (A11, remote app serving).
 - Rotating `NATS_JWT_SECRET` rotates every module key; there is no way to
   revoke one module's key alone.
