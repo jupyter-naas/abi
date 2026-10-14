@@ -165,6 +165,7 @@ def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa:
                                 deadline_seconds=5,
                             ),
                             pb.SubmitResponse,
+                            instance_id=target.instance_id,
                         )
                 finally:
                     await bad.close()
