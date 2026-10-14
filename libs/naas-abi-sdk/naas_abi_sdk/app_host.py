@@ -27,6 +27,7 @@ from typing import Any
 
 from naas_abi_proto.app.v1 import app_pb2 as pb
 from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
+from nats.errors import Error as NATSError
 
 from naas_abi_sdk import overflow
 from naas_abi_sdk.agent_host import _token_expiry
@@ -113,6 +114,16 @@ def _header(request: pb.HttpRequest, name: str) -> str:
     return next((h.value for h in request.headers if h.name.lower() == name), "")
 
 
+async def _drain_subscription(subscription: Any) -> None:
+    """Drain, or at least unsubscribe; nats-py raises when the connection is
+    closed or draining, or the subscription already gone."""
+    try:
+        await subscription.drain()
+    except NATSError:
+        with contextlib.suppress(NATSError):
+            await subscription.unsubscribe()
+
+
 class AppHost:
     def __init__(
         self,
@@ -147,7 +158,7 @@ class AppHost:
                         app_subject(
                             self.session.client.project, self.session.instance_id, name
                         ),
-                        cb=self.calls.callback(partial(self._handle, name)),
+                        cb=self._receiver(name),
                     )
                 )
             await nc.flush()
@@ -155,32 +166,66 @@ class AppHost:
             await self.close()
             raise
 
+    def _receiver(self, name: str) -> Callable[[Any], Awaitable[None]]:
+        """The subscription callback of app ``name``.
+
+        Once the host drains, a request still queued behind busy calls is
+        refused at once (MODULE_UNAVAILABLE: the app never ran, so Nexus may
+        send it to another instance) rather than waiting for a slot. The
+        subscription's drain waits for its queue to empty, so it ends quickly.
+        """
+        run = self.calls.callback(partial(self._handle, name))
+
+        async def receive(msg: Any) -> None:
+            if not self.closing:
+                await run(msg)
+            elif msg.reply:
+                response = pb.HttpResponse()
+                response.error.code = "MODULE_UNAVAILABLE"
+                response.error.message = "App is draining"
+                with contextlib.suppress(Exception):
+                    await reply(msg, response.SerializeToString())
+
+        return receive
+
     async def drain(self, timeout: float) -> None:
         """Stop taking requests and let those in progress finish, for up to
-        ``timeout`` seconds.
+        ``timeout`` seconds in all.
 
         A request arriving now finds no responder, and Nexus sends it to
         another instance; one cut off mid-call would wait out its timeout
-        (504). close() cancels whatever is still running afterwards.
+        (504). close() cancels whatever is still running afterwards. A NATS
+        connection already closed or draining does not stop the shutdown.
         """
         self.closing = True
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
-        for subscription in self.subscriptions:
-            await subscription.drain()
-        self.subscriptions.clear()
-        idle = asyncio.ensure_future(self.calls.idle())
+
+        def remaining() -> float:
+            return max(0.0, deadline - loop.time())
+
+        subscriptions, self.subscriptions = self.subscriptions, []
+        steps = [
+            asyncio.ensure_future(
+                asyncio.gather(*(_drain_subscription(s) for s in subscriptions))
+            ),
+            asyncio.ensure_future(self.calls.idle()),
+        ]
         try:
-            await asyncio.wait({idle}, timeout=timeout)
+            for step in steps:
+                await asyncio.wait({step}, timeout=remaining())
         finally:
-            idle.cancel()
+            for step in steps:
+                step.cancel()
+            await asyncio.gather(*steps, return_exceptions=True)
         # Answered, but still reading an upload or streaming the response.
-        if self._streams and (remaining := deadline - loop.time()) > 0:
-            await asyncio.wait(set(self._streams), timeout=remaining)
+        if self._streams and remaining() > 0:
+            await asyncio.wait(set(self._streams), timeout=remaining())
 
     async def close(self) -> None:
         for subscription in self.subscriptions:
-            await subscription.unsubscribe()
+            with contextlib.suppress(Exception):
+                await subscription.unsubscribe()
         self.subscriptions.clear()
         await self.calls.cancel()
         for task in list(self._streams):

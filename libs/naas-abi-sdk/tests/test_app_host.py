@@ -371,6 +371,104 @@ def test_draining_gives_up_after_its_timeout(tmp_path):
     asyncio.run(scenario())
 
 
+class _QueuedSubscription:
+    """nats-py's drain: unsubscribe, then wait until the queued messages are
+    handed to the callback, one at a time."""
+
+    def __init__(self, cb, queued):
+        self.cb, self.queued = cb, list(queued)
+        self.unsubscribe = AsyncMock()
+
+    async def drain(self):
+        for msg in self.queued:
+            await self.cb(msg)
+
+
+def test_draining_keeps_to_its_deadline_with_calls_in_flight(tmp_path):
+    """Every slot busy, a request queued behind them: the queued one is refused
+    for another instance at once, and the drain ends at its timeout."""
+
+    async def stuck(scope, receive, send):
+        await asyncio.Event().wait()
+
+    async def scenario():
+        host = AppHost(
+            _session(),
+            {"console": (read_app(_site(tmp_path)), stuck)},
+            max_concurrency=1,
+        )
+        receive = host._receiver("console")
+        await receive(FakeMsg(_request("/x", method="POST")))  # takes the only slot
+        queued = FakeMsg(_request("/y", method="POST"))
+        host.subscriptions.append(_QueuedSubscription(receive, [queued]))
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        await asyncio.wait_for(host.drain(0.3), 5)
+        assert loop.time() - started < 1.0
+        assert host.calls.in_flight == 1  # still running: close() cancels it
+        assert queued.response.error.code == "MODULE_UNAVAILABLE"
+        await host.close()
+
+    asyncio.run(scenario())
+
+
+def test_a_subscription_drain_that_hangs_does_not_outlast_the_timeout(tmp_path):
+    async def scenario():
+        host = _host(tmp_path)
+        host.subscriptions.append(
+            SimpleNamespace(drain=asyncio.Event().wait, unsubscribe=AsyncMock())
+        )
+        await asyncio.wait_for(host.drain(0.1), 2)
+        await host.close()
+
+    asyncio.run(scenario())
+
+
+def test_draining_with_nats_closed_still_waits_for_calls(tmp_path):
+    """nats-py refuses to drain on a closed or draining connection: the host
+    unsubscribes if it can and still lets the call in progress answer."""
+    from nats.errors import ConnectionClosedError
+
+    release = asyncio.Event()
+
+    async def slow(scope, receive, send):
+        await release.wait()
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    async def scenario():
+        host = _host(tmp_path, slow)
+        msg, receive = _in_flight(host, _request("/x"))
+        await receive
+        subscription = host.subscriptions[0]
+        subscription.drain.side_effect = ConnectionClosedError
+        subscription.unsubscribe.side_effect = ConnectionClosedError
+        drain = asyncio.create_task(host.drain(30))
+        await asyncio.sleep(0.05)
+        assert not drain.done()
+        subscription.unsubscribe.assert_awaited()
+        release.set()
+        await asyncio.wait_for(drain, 5)
+        assert msg.response.status == 200
+        await host.close()
+
+    asyncio.run(scenario())
+
+
+def test_one_host_failing_to_drain_does_not_stop_the_others():
+    from naas_abi_sdk.module import _drain_hosts
+
+    async def scenario():
+        app_host = SimpleNamespace(drain=AsyncMock(side_effect=RuntimeError("nats")))
+        agent_host = SimpleNamespace(drain=AsyncMock())
+        job_host = SimpleNamespace(drain=AsyncMock())
+        await _drain_hosts(agent_host, job_host, None, 1.0, app_host)
+        agent_host.drain.assert_awaited_once_with(1.0)
+        job_host.drain.assert_awaited_once_with(1.0)
+
+    asyncio.run(scenario())
+
+
 # -- declaring apps -------------------------------------------------------------------
 
 
