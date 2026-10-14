@@ -57,8 +57,7 @@ class AppSecondaryAdapterPostgres(AppPersistencePort):
     async def get(self, workspace_id: str, app_id: str) -> AppConfigRecord | None:
         result = await self.db.execute(
             select(AppConfigModel).where(
-                (AppConfigModel.workspace_id == workspace_id)
-                & (AppConfigModel.app_id == app_id)
+                (AppConfigModel.workspace_id == workspace_id) & (AppConfigModel.app_id == app_id)
             )
         )
         row = result.scalar_one_or_none()
@@ -81,8 +80,7 @@ class AppSecondaryAdapterPostgres(AppPersistencePort):
     ) -> AppConfigRecord | None:
         result = await self.db.execute(
             select(AppConfigModel).where(
-                (AppConfigModel.workspace_id == workspace_id)
-                & (AppConfigModel.app_id == app_id)
+                (AppConfigModel.workspace_id == workspace_id) & (AppConfigModel.app_id == app_id)
             )
         )
         model = result.scalar_one_or_none()
@@ -97,8 +95,7 @@ class AppSecondaryAdapterPostgres(AppPersistencePort):
     async def delete(self, workspace_id: str, app_id: str) -> bool:
         result = await self.db.execute(
             select(AppConfigModel).where(
-                (AppConfigModel.workspace_id == workspace_id)
-                & (AppConfigModel.app_id == app_id)
+                (AppConfigModel.workspace_id == workspace_id) & (AppConfigModel.app_id == app_id)
             )
         )
         model = result.scalar_one_or_none()

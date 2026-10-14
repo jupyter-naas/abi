@@ -40,13 +40,23 @@ def secret(monkeypatch):
 @pytest.fixture(autouse=True)
 def logged_out(monkeypatch) -> dict[str, datetime]:
     """When each user last logged out (revocation.py reads it from the database)."""
+    from naas_abi.apps.nexus.apps.api.app.services import refresh_token
+
     at: dict[str, datetime] = {}
 
     async def grant_revoked(user_id: str, issued_at: datetime) -> bool:
         return user_id in at and at[user_id] >= issued_at
 
+    async def is_access_token_revoked(jti: str) -> bool:
+        return jti in REVOKED_JTIS
+
     monkeypatch.setattr(http.revocation, "grant_revoked", grant_revoked)
+    monkeypatch.setattr(refresh_token, "is_access_token_revoked", is_access_token_revoked)
+    REVOKED_JTIS.clear()
     return at
+
+
+REVOKED_JTIS: set[str] = set()
 
 
 @pytest.fixture(autouse=True)
@@ -904,3 +914,31 @@ def test_a_stream_stops_when_the_browser_leaves_while_it_is_idle():
         assert closed.is_set() and released == [True]
 
     asyncio.run(scenario())
+
+
+def test_a_logged_out_credential_mints_no_grant(monkeypatch, forwarded, logged_out):
+    """Review round 1: the cookie or token of a logged-out browser cannot open
+    the app again (its grant would postdate the logout)."""
+    from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
+
+    monkeypatch.setattr(auth_service.settings, "secret_key", SECRET)
+    token, jti = auth_service.create_access_token({"sub": "u-7"})
+    client = _client()
+    url = "/app-html/remote/acme.research/console/"
+
+    opened = client.get(url, headers={"Authorization": f"Bearer {token}"}, follow_redirects=False)
+    assert opened.status_code == 307
+
+    logged_out["u-7"] = datetime.now(UTC)  # a logout, here or elsewhere
+    after = client.get(url, headers={"Authorization": f"Bearer {token}"}, follow_redirects=False)
+    assert after.status_code == 401
+    assert "location" not in after.headers
+
+    del logged_out["u-7"]
+    REVOKED_JTIS.add(jti)  # this very token was the one logged out
+    revoked = client.get(url, headers={"Authorization": f"Bearer {token}"}, follow_redirects=False)
+    assert revoked.status_code == 401
+
+    fresh, _ = auth_service.create_access_token({"sub": "u-7"})
+    again = client.get(url, headers={"Authorization": f"Bearer {fresh}"}, follow_redirects=False)
+    assert again.status_code == 307

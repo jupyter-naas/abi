@@ -1,18 +1,20 @@
 """Ending a user's remote app grants before they expire.
 
 A grant is a link: whoever holds it opens the app as its user. Each request it
-makes is checked against the user's revocations, rows of ``revoked_tokens``:
+makes is checked against the user's revocations, rows of ``revoked_tokens``
+(the latest ``revoked_at`` of the user):
 
-* a logout revokes the session token (``AuthService.logout_user``), and ends
-  every grant the user got before it, on every device;
-* ``revoke_remote_app_grants`` ends them on request (``POST
-  /api/apps/remote-grant/revoke``, and a password change).
+* ``revoke_remote_app_grants`` writes one at every logout
+  (``AuthService.logout_user``), at a password change and on request (``POST
+  /api/apps/remote-grant/revoke``): it ends every grant the user got before
+  it, on every device;
+* the session token a logout revokes is a row of its own.
 
-A row lasts as long as the grants it ends can: a logout's as long as the
-session token it revokes (grants never outlive the credential they were
-exchanged for), a revocation's as long as the longest grant. The cleanup job
-then removes it. Answers are cached CACHE_SECONDS per user, so a revocation
-takes effect within that.
+A grant row lasts as long as the longest grant (LONGEST_GRANT), so no grant it
+ended outlives it: the cleanup job removes it after. A credential issued before
+the user's latest revocation (``credential_revoked``) mints no grant either, so
+a logged-out browser's cookie or token cannot open the app again. Answers are
+cached CACHE_SECONDS per user, so a revocation takes effect within that.
 """
 
 from __future__ import annotations
@@ -76,6 +78,23 @@ async def _latest_revocation(user_id: str) -> datetime | None:
         _latest.clear()
     _latest[user_id] = (now, latest)
     return latest
+
+
+async def credential_revoked(user_id: str, claims: dict) -> bool:
+    """Whether a Nexus credential (a session or scoped token) may no longer
+    mint a grant: its ``jti`` is revoked, or it was issued (``iat``) before
+    the user's latest revocation. A token without ``iat`` (minted before it
+    was added) is judged by its ``jti`` only."""
+    from naas_abi.apps.nexus.apps.api.app.services.refresh_token import (
+        is_access_token_revoked,
+    )
+
+    jti, issued = claims.get("jti"), claims.get("iat")
+    if isinstance(jti, str) and jti and await is_access_token_revoked(jti):
+        return True
+    if isinstance(issued, bool) or not isinstance(issued, int | float):
+        return False
+    return await grant_revoked(user_id, datetime.fromtimestamp(issued, UTC))
 
 
 async def grant_revoked(user_id: str, issued_at: datetime) -> bool:

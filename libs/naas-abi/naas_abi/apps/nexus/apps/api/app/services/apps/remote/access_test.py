@@ -56,6 +56,9 @@ async def test_the_named_workspace_must_be_the_users_and_enable_the_app() -> Non
 @pytest.mark.asyncio
 async def test_without_a_workspace_the_first_that_enables_the_app() -> None:
     assert await access.choose_workspace(REGISTRY, "u-1", APP, None) == "ws-b"
+    # The same one whatever order the store lists them in.
+    shuffled = Registry({"u-1": ["ws-c", "ws-a", "ws-b"]}, REGISTRY.enabled)
+    assert await access.choose_workspace(shuffled, "u-1", APP, None) == "ws-b"
     with pytest.raises(HTTPException) as refused:
         await access.choose_workspace(REGISTRY, "u-2", APP, None)
     assert refused.value.status_code == 403
