@@ -34,3 +34,37 @@ def as_engine(url: str) -> str:
     or the engine does in a test, such as deleting a stream."""
     module = f"module:{PASSWORDS['module']}@"
     return url.replace(module, f"abi:{PASSWORDS['abi']}@", 1)
+
+
+def prepare(url: str, kind: str, project: str) -> None:
+    """What the engine does at start in a project with modules: create the jobs
+    stream and the claim-check store, which the module user may not create
+    (naas_abi_core.engine.nats_permissions.prepare_module_streams)."""
+    if kind == "open":
+        return
+    import asyncio
+
+    asyncio.run(prepare_async(url, project))
+
+
+async def prepare_async(url: str, project: str) -> None:
+    """``prepare`` from a running event loop, whatever the broker (idempotent)."""
+    import nats
+
+    permissions = pytest.importorskip("naas_abi_core.engine.nats_permissions")
+    nc = await nats.connect(as_engine(url))
+    try:
+        await permissions.prepare_module_streams(nc, project)
+    finally:
+        await nc.close()
+
+
+async def connect(url: str):
+    """A raw connection as a module makes it: logged in as ``module``, its inbox
+    under ``_INBOX_MODULES`` (``_INBOX.>`` is the engine's), as ``Transport`` does."""
+    import nats
+
+    from naas_abi_sdk.transport import MODULE_INBOX_PREFIX
+
+    options = {"inbox_prefix": MODULE_INBOX_PREFIX} if "nats://module:" in url else {}
+    return await nats.connect(url, **options)
