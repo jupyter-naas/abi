@@ -112,6 +112,7 @@ def module_identity(
         env["PYTHONPATH"] = os.pathsep.join(
             [str(src), *filter(None, [base.get("PYTHONPATH", "")])]
         )
+    hint = f"add `identity: <module_id>` to the dev.modules entry {module.name!r}"
     try:
         result = subprocess.run(
             [sys.executable, "-c", _MODULE_ID, module.module],
@@ -122,14 +123,21 @@ def module_identity(
             timeout=120,
             check=False,
         )
-        lines = result.stdout.strip().splitlines() if result.returncode == 0 else []
-    except (OSError, subprocess.SubprocessError):
-        lines = []
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ValueError(
+            f"dev module {module.name!r}: could not read its module id ({exc}); {hint}"
+        ) from exc
+    if result.returncode != 0:
+        error = (result.stderr.strip().splitlines() or ["no output"])[-1]
+        raise ValueError(
+            f"dev module {module.name!r}: importing {module.module} to read its module "
+            f"id failed: {error}; fix the import, or {hint}"
+        )
+    lines = result.stdout.strip().splitlines()
     if not lines or not lines[-1].strip():
         raise ValueError(
-            f"dev module {module.name!r}: cannot tell the module id it registers as "
-            f"({module.module} exports no ABIModule); add `identity: <module_id>` "
-            "to its dev.modules entry"
+            f"dev module {module.name!r}: {module.module} exports no ABIModule to read "
+            f"its module id from; {hint}"
         )
     return lines[-1].strip()
 
