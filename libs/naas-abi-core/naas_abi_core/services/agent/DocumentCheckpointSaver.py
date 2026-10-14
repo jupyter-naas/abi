@@ -394,20 +394,24 @@ class DocumentCheckpointSaver(BaseCheckpointSaver):
         key = self.schema.checkpoint_key(config)
         return key is not None and self._get(CHECKPOINTS, key) is not None
 
-    def lineage(self, thread_id: str) -> tuple[str, str | None] | None:
-        """The schema 2 head of a thread's root namespace, and the parent its
-        schema 2 history starts from (None for a thread started in schema 2)."""
+    def lineage(self, thread_id: str) -> Iterator[str]:
+        """The checkpoint ids of a thread's root namespace in schema 2, from its
+        head back through each parent, ending with the parent its schema 2
+        history starts from (not stored in schema 2; none for a thread started
+        there); empty for a thread not stored. Read as the caller iterates:
+        one document per step."""
         scope = self.schema.thread_scope(thread_id) | {"checkpoint_ns": ""}
         head = next(self._scan(CHECKPOINTS, scope, page=1), None)
         if head is None:
-            return None
+            return
+        yield str(head.data["checkpoint_id"])
         parent: Any = head.data["parent_id"]
         while parent:
+            yield str(parent)
             data = self._get(CHECKPOINTS, self.schema.key(thread_id, "", parent))
             if data is None:
-                break
+                return
             parent = data["parent_id"]
-        return str(head.data["checkpoint_id"]), parent
 
     # --- async API ------------------------------------------------------------------
 
