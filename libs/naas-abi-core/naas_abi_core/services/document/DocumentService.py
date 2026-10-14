@@ -18,6 +18,12 @@ from naas_abi_core.services.document.DocumentPort import (
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
+def _max_bytes(max_bytes: int | None) -> dict[str, int]:
+    """A byte budget, passed on only when given: an adapter written before
+    the keyword keeps working for every call without one."""
+    return {} if max_bytes is None else {"max_bytes": max_bytes}
+
+
 class DocumentService(ServiceBase):
     """Namespace-bound collections. One document is the unit of atomicity.
 
@@ -156,7 +162,7 @@ class DocumentService(ServiceBase):
             order_by,
             limit,
             cursor,
-            max_bytes=max_bytes,
+            **_max_bytes(max_bytes),
         )
 
     def iterate(
@@ -182,7 +188,7 @@ class DocumentService(ServiceBase):
                 order_by,
                 batch,
                 cursor,
-                max_bytes=max_bytes,
+                **_max_bytes(max_bytes),
             )
             yield from page.items
             cursor = page.cursor

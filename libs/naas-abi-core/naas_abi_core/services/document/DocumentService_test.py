@@ -184,3 +184,21 @@ def test_failed_filter_iteration_does_not_start_bulk_deletion(service, adapter):
         service.delete_many("records", predicates())
     adapter.find.assert_not_called()
     adapter.delete.assert_not_called()
+
+
+def test_an_adapter_written_before_max_bytes_keeps_working(adapter):
+    # 2.x custom adapters: find() without the max_bytes keyword.
+    now = datetime.now(UTC)
+    one = Document("one", {}, now, now, 1)
+
+    class OldAdapter:
+        def find(self, namespace, collection, where, order_by, limit, cursor):
+            return Page([one], None)
+
+    old = DocumentService(OldAdapter(), namespace="my.module")  # type: ignore[arg-type]
+    assert old.find("records").items == [one]
+    assert list(old.iterate("records")) == [one]
+    service = DocumentService(adapter, namespace="my.module")
+    adapter.find.return_value = Page([], None)
+    service.find("records", max_bytes=10)
+    assert adapter.find.call_args.kwargs == {"max_bytes": 10}
