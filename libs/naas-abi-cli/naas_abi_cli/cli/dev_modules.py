@@ -7,10 +7,11 @@ overlay `abi dev up` generates:
 
 - ``ABI_NATS_URL``, logged in as the broker user ``module``, and
   ``ABI_DISCOVERY_PROJECT``;
-- ``ABI_MODULE_KEY``, the module key of its ``identity`` (its module id,
-  default its name), and ``ABI_SERVICE_TOKEN``, a token signed with it, as
-  ``python -m naas_abi_sdk.module_runner`` expects. Never the project secret:
-  a module can sign for its own identity only;
+- ``ABI_MODULE_KEY``, the module key of its module id (its ``identity``, else
+  the ``module_id`` of the ``ABIModule`` its package exports), and
+  ``ABI_SERVICE_TOKEN``, a token signed with it, for modules that read only
+  that. Never the project secret: a module can sign for its own id only, and
+  discovery registers it only under that id;
 - ``OTEL_EXPORTER_OTLP_ENDPOINT`` with ``--with-tracing``;
 - the project's ``src/`` first on ``PYTHONPATH``.
 
@@ -22,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import string
+import subprocess
 import sys
 from collections.abc import Mapping
 from datetime import timedelta
@@ -87,6 +89,51 @@ def read_overlay(path: Path) -> dict:
     return json.loads(body)
 
 
+# Prints the module id of the ABIModule a package exports, as naas-abi-module
+# reads it (module_id, else the class's module), or nothing without one.
+_MODULE_ID = (
+    "import importlib, sys\n"
+    "t = getattr(importlib.import_module(sys.argv[1]), 'ABIModule', None)\n"
+    "print((getattr(t, 'module_id', None) or t.__module__) if t is not None else '')\n"
+)
+
+
+def module_identity(
+    module: DevModuleConfiguration, project_root: Path, base: Mapping[str, str]
+) -> str:
+    """The module id ``module`` registers as: its ``identity``, else read from the
+    ``ABIModule`` its package exports (in a subprocess: the CLI never imports the
+    project's code). Raises ValueError when neither tells it."""
+    if module.identity:
+        return module.identity
+    env = dict(base)
+    src = project_root / "src"
+    if src.is_dir():
+        env["PYTHONPATH"] = os.pathsep.join(
+            [str(src), *filter(None, [base.get("PYTHONPATH", "")])]
+        )
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", _MODULE_ID, module.module],
+            cwd=project_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        lines = result.stdout.strip().splitlines() if result.returncode == 0 else []
+    except (OSError, subprocess.SubprocessError):
+        lines = []
+    if not lines or not lines[-1].strip():
+        raise ValueError(
+            f"dev module {module.name!r}: cannot tell the module id it registers as "
+            f"({module.module} exports no ABIModule); add `identity: <module_id>` "
+            "to its dev.modules entry"
+        )
+    return lines[-1].strip()
+
+
 def module_environment(
     module: DevModuleConfiguration,
     overlay: dict,
@@ -99,7 +146,7 @@ def module_environment(
     from naas_abi_core.engine.nats_auth import issue_module_token, module_key
 
     nats = overlay["nats"]
-    identity = module.identity or module.name
+    identity = module_identity(module, project_root, base)
     key = module_key(nats["jwt_secret"], identity)
     env = dict(base)
     env.pop("NATS_JWT_SECRET", None)  # the engine's, never a module's

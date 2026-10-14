@@ -861,7 +861,9 @@ def _modules(*names: str) -> dict:
     )
 
     return {
-        name: DevModuleConfiguration(name=name, module="probe", args=[name])
+        name: DevModuleConfiguration(
+            name=name, module="probe", identity=f"acme.{name}", args=[name]
+        )
         for name in names
     }
 
@@ -1112,6 +1114,20 @@ def test_a_module_runs_supervised_with_the_dev_broker(monkeypatch, tmp_path) -> 
     assert spawned["env"]["ABI_NATS_URL"] == f"nats://module:{password}@127.0.0.1:13042"
     assert spec.log_relpath == "logs/researcher.log"
     assert (tmp_path / "researcher.pid").read_text() == "4242\n"
+
+
+def test_a_module_whose_id_cannot_be_told_is_refused_with_the_fix(monkeypatch, tmp_path) -> None:
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
+        DevModuleConfiguration,
+    )
+
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    monkeypatch.setattr(dev, "_read_pid", lambda spec: None)
+    monkeypatch.setattr(dev, "_spawn", lambda *a: pytest.fail("must not start"))
+    overlay = {"nats": {"nats_url": "nats://abi:pw@127.0.0.1:13042", "jwt_secret": "s" * 48, "discovery": {"project": "zen"}}}
+
+    with pytest.raises(dev.click.ClickException, match="identity: <module_id>"):
+        dev._start_module(DevModuleConfiguration(name="research", module="no_such_package"), overlay)
 
 
 def test_stopping_a_module_signals_its_group_and_waits(monkeypatch, tmp_path) -> None:

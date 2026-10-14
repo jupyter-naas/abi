@@ -185,13 +185,13 @@ dev:
   modules:
     - name: probe-researcher                # logs, pid, --service name
       module: operations.projects.nats_probe  # run as `python -m <module> <args>`
-      identity: zen.nats_probe.researcher   # its module id (default: name)
+      identity: operations.projects.nats_probe.researcher  # its module id (default: its ABIModule's)
       args: [researcher]
       env: {NATS_PROBE_DISCOVERY_PROJECT: "${ABI_DISCOVERY_PROJECT}"}
       restart: on-failure                   # or always, never
 ```
 
-Each module gets `ABI_NATS_URL`, `ABI_MODULE_KEY` (the key of its `identity`, which must be its module id: discovery registers a module only under its own identity), `ABI_SERVICE_TOKEN` signed with that key (for `python -m naas_abi_sdk.module_runner`), `ABI_DISCOVERY_PROJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT` with tracing, and the project's `src/` on `PYTHONPATH`; `env` values may name them as `${VAR}`. A module is addressed like a service: `abi dev up --service probe-researcher -d` (it joins the running NATS stack and starts no broker of its own), `abi dev logs probe-researcher -f`, `abi dev down --service probe-researcher`. `abi dev down` stops modules before the stack. The engine validates the block and otherwise ignores it.
+Each module gets `ABI_NATS_URL`, `ABI_MODULE_KEY` (the key of its module id, which discovery registers it under: its `identity:`, else the `module_id` of the `ABIModule` its package exports; `abi dev up` refuses a module whose id it cannot tell), `ABI_SERVICE_TOKEN` signed with that key (for modules that read only that; the SDK prefers the key), `ABI_DISCOVERY_PROJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT` with tracing, and the project's `src/` on `PYTHONPATH`; `env` values may name them as `${VAR}`. A module is addressed like a service: `abi dev up --service probe-researcher -d` (it joins the running NATS stack and starts no broker of its own), `abi dev logs probe-researcher -f`, `abi dev down --service probe-researcher`. `abi dev down` stops modules before the stack. The engine validates the block and otherwise ignores it.
 
 ### Deployment
 

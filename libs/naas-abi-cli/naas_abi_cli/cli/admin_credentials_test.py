@@ -162,17 +162,39 @@ def test_a_module_key_is_written_for_compose_and_follows_the_secret(tmp_path):
 
     from naas_abi_cli.cli.admin_credentials import (
         ensure_module_key,
-        ensure_nats_secret,
         module_key_variable,
     )
 
     env_path = tmp_path / ".env"
-    key = ensure_module_key(env_path, "research-bot", "demo.research_bot")
+    env_path.write_text(f"NATS_JWT_SECRET={'s' * 48}\n")
+    key, replaced = ensure_module_key(env_path, "research-bot", "demo.research_bot")
 
     assert module_key_variable("research-bot") == "ABI_MODULE_KEY_RESEARCH_BOT"
-    secret = ensure_nats_secret(env_path)
-    assert key == module_key(secret, "demo.research_bot")
+    assert key == module_key("s" * 48, "demo.research_bot") and not replaced
     assert f"ABI_MODULE_KEY_RESEARCH_BOT={key}" in env_path.read_text().splitlines()
     # Idempotent: the same line, once.
-    ensure_module_key(env_path, "research-bot", "demo.research_bot")
+    assert ensure_module_key(env_path, "research-bot", "demo.research_bot") == (key, False)
     assert env_path.read_text().count("ABI_MODULE_KEY_RESEARCH_BOT=") == 1
+
+
+def test_a_stale_module_key_is_replaced_and_reported(tmp_path):
+    from naas_abi_cli.cli.admin_credentials import ensure_module_key
+
+    env_path = tmp_path / ".env"
+    env_path.write_text(f"NATS_JWT_SECRET={'s' * 48}\nABI_MODULE_KEY_BOT=old\n")
+
+    key, replaced = ensure_module_key(env_path, "bot", "demo.bot")
+
+    assert replaced and f"ABI_MODULE_KEY_BOT={key}" in env_path.read_text()
+
+
+def test_no_module_key_without_the_engines_secret(tmp_path):
+    """A secret made up here would not be the one the engine verifies with."""
+    from naas_abi_cli.cli.admin_credentials import MissingNatsSecret, ensure_module_key
+
+    env_path = tmp_path / ".env"
+    env_path.write_text("OTHER=1\n")
+
+    with pytest.raises(MissingNatsSecret):
+        ensure_module_key(env_path, "bot", "demo.bot")
+    assert env_path.read_text() == "OTHER=1\n"

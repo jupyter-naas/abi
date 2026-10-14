@@ -11,7 +11,7 @@ with tracing). ``env`` values may name those as ``${VAR}``.
       modules:
         - name: probe-researcher            # process name: logs, pid, --service
           module: operations.projects.nats_probe
-          identity: zen.nats_probe.researcher # its module id (default: name)
+          identity: operations.projects.nats_probe.researcher  # its module id (default: its ABIModule's)
           args: [researcher]
           env: {NATS_PROBE_DISCOVERY_PROJECT: "${ABI_DISCOVERY_PROJECT}"}
           restart: on-failure               # or always, never
@@ -33,7 +33,8 @@ class DevModuleConfiguration(BaseModel):
     name: str = Field(pattern=r"^[a-z][a-z0-9-]{0,62}$")
     module: str = Field(min_length=1)
     # The module id it registers as: its token asserts it, and discovery
-    # accepts a registration only for the token's own identity. Default: name.
+    # accepts a registration only for the token's own identity. Default: the
+    # module_id of the ABIModule its package exports (``abi dev up`` reads it).
     identity: str | None = Field(
         default=None, pattern=r"^[A-Za-z0-9_][A-Za-z0-9_.:-]{0,255}$"
     )

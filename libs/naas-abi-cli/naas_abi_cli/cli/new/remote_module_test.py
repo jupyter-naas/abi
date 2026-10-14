@@ -173,6 +173,7 @@ def test_the_module_is_run_by_abi_dev_up_not_loaded_by_the_engine(
 
 def test_the_module_gets_a_compose_service_in_the_override(tmp_path: Path) -> None:
     root = _project(tmp_path)
+    (root / ".env").write_text(f"NATS_JWT_SECRET={'s' * 48}\n")
 
     _invoke(_new_module, root, "research")
 
@@ -204,6 +205,16 @@ def test_the_module_gets_a_compose_service_in_the_override(tmp_path: Path) -> No
     )
     # docker-compose.yml, which --regenerate rewrites, is left alone.
     assert (root / "docker-compose.yml").read_text() == "services: {}\n"
+
+
+def test_without_the_engines_secret_no_key_is_made_up(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+
+    result = _invoke(_new_module, root, "research")
+
+    assert result.exit_code == 0, result.output
+    assert not (root / ".env").exists()
+    assert "abi module key demo.research" in result.output
 
 
 def test_a_second_module_joins_the_first(tmp_path: Path) -> None:

@@ -52,8 +52,10 @@ registry (discovery), and their agents show up in Nexus next to the engine's.
   `.env`; every process of the project must use the same values.
 - Modules never get `NATS_JWT_SECRET`: each signs with its own module key,
   for its module id only (`abi module key <module_id>` prints it). The broker
-  user `module` cannot listen on the engine's service or discovery subjects,
-  nor touch its key-value buckets or delete streams.
+  user `module` cannot listen on the engine's service, discovery or reply
+  subjects, write its key-value buckets, or create or delete streams. All
+  modules share that user, so one can still listen on another's subjects and
+  read or purge any stream: run only trusted modules.
 
 `abi dev up --without-nats` runs the engine in-process instead, without a
 broker or the modules.
