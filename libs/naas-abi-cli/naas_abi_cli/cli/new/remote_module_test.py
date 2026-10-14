@@ -498,3 +498,21 @@ def test_compose_service_merges_into_an_existing_override(tmp_path: Path) -> Non
 
     services = yaml.safe_load((tmp_path / COMPOSE_OVERRIDE).read_text())["services"]
     assert services == {"mine": {"image": "x"}, "research": {"image": "y"}}
+
+
+@pytest.mark.parametrize("standalone", [False, True])
+def test_the_build_context_leaves_secrets_and_caches_out(
+    tmp_path: Path, standalone: bool
+) -> None:
+    """A31: env files, keys, bytecode and local state never reach the builder."""
+    if standalone:
+        result = _invoke(_new_module, tmp_path, "research", "--standalone", "--abi-ref", "v9")
+        ignore = tmp_path / "research" / ".dockerignore"
+    else:
+        root = _project(tmp_path)
+        result = _invoke(_new_module, root, "research")
+        ignore = root / "src" / "research" / ".dockerignore"
+    assert result.exit_code == 0, result.output
+    patterns = set(ignore.read_text().splitlines())
+    for pattern in ("**/.env", "**/.env.*", "**/*.pem", "**/*.key", "**/*.py[cod]", ".venv", "storage/"):
+        assert pattern in patterns, pattern
