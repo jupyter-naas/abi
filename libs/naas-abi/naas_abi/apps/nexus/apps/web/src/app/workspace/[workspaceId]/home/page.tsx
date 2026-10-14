@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { File, Folder, MessageSquare } from 'lucide-react';
 import { appsPath } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
@@ -8,11 +8,16 @@ import { filesBrowsePath } from '@/app/workspace/[workspaceId]/files/lib/files-r
 import { Header } from '@/components/shell/header';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
 import { useFeature } from '@/hooks/use-feature';
+import { useDeskImageUrl } from '@/hooks/use-desk-image-url';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useAppsStore } from '@/stores/apps';
 import { useFilesStore } from '@/stores/files';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { deskSurfaceIcons, resolveDeskImageUrl, wallpaperStyle, type DeskSurfaceId } from './home-desk';
+import { fetchCurrentBackgroundImage, parseBackgroundImageUrl } from '@/lib/home-background';
+import { BackgroundImageDialog } from './components/background-image-dialog';
+import { DeskWallpaper } from './components/desk-wallpaper';
+import { HomeMenuBar } from './components/home-menu-bar';
+import { deskSurfaceIcons, resolveDeskImageUrl, type DeskSurfaceId } from './home-desk';
 
 export default function HomePage() {
   const router = useRouter();
@@ -20,8 +25,39 @@ export default function HomePage() {
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
+  const setKeepPanelClosedOnNextRoute = useWorkspaceStore((s) => s.setKeepPanelClosedOnNextRoute);
   const workspace = workspaces.find((w) => w.id === currentWorkspaceId) || null;
   const theme = workspace?.theme;
+  const applyWorkspaceTheme = useWorkspaceStore((s) => s.applyWorkspaceTheme);
+  const canEditBackground = workspace?.currentUserRole === 'owner' || workspace?.currentUserRole === 'admin';
+  const [backgroundDialogOpen, setBackgroundDialogOpen] = useState(false);
+  const themeBackgroundUrl = resolveDeskImageUrl(theme?.backgroundImageUrl);
+  // The file lives in the workspace drive (.home). The theme URL is only the
+  // pointer, and a restart used to clear it. When it is missing, ask the API
+  // for the committed file and put the pointer back.
+  const [driveBackgroundUrl, setDriveBackgroundUrl] = useState<string | undefined>();
+  useEffect(() => {
+    setDriveBackgroundUrl(undefined);
+    if (!currentWorkspaceId || themeBackgroundUrl) return;
+    let cancelled = false;
+    void fetchCurrentBackgroundImage(currentWorkspaceId)
+      .then((url) => {
+        if (cancelled || !url) return;
+        setDriveBackgroundUrl(url);
+        applyWorkspaceTheme(currentWorkspaceId, { backgroundImageUrl: url });
+      })
+      .catch(() => {
+        // Wallpaper is decoration: the desk colour stays.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentWorkspaceId, themeBackgroundUrl, applyWorkspaceTheme]);
+  const backgroundUrl = themeBackgroundUrl || driveBackgroundUrl;
+  // Framing rides in the URL; the image URL without it stays stable, so
+  // re-framing does not refetch the image.
+  const { imageUrl: backgroundImageUrl, framing: backgroundFraming } = parseBackgroundImageUrl(backgroundUrl);
+  const deskImageUrl = useDeskImageUrl(backgroundImageUrl);
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
 
@@ -48,14 +84,31 @@ export default function HomePage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Header title={workspace?.name || 'Home'} />
+      <Header
+        title={workspace?.name || 'Home'}
+        nav={
+          <HomeMenuBar
+            canEditBackground={canEditBackground}
+            onEditBackground={() => setBackgroundDialogOpen(true)}
+          />
+        }
+      />
+      {currentWorkspaceId && (
+        <BackgroundImageDialog
+          open={backgroundDialogOpen}
+          workspaceId={currentWorkspaceId}
+          currentBackgroundUrl={backgroundUrl}
+          fallbackColor={theme?.backgroundColor}
+          onClose={() => setBackgroundDialogOpen(false)}
+          onSaved={(backgroundImageUrl) => applyWorkspaceTheme(currentWorkspaceId, { backgroundImageUrl })}
+        />
+      )}
       <div className="relative min-h-0 flex-1 overflow-hidden">
-        <div
+        <DeskWallpaper
+          imageUrl={deskImageUrl}
+          framing={backgroundFraming}
+          fallbackColor={theme?.backgroundColor}
           className="absolute inset-0"
-          style={wallpaperStyle(
-            resolveDeskImageUrl(theme?.backgroundImageUrl),
-            theme?.backgroundColor,
-          )}
         />
         <div className="relative z-10 flex h-full w-full content-start flex-wrap items-start gap-x-7 gap-y-8 overflow-auto p-8">
           {surfaceIcons.map((section) => (
@@ -86,7 +139,10 @@ export default function HomePage() {
                 // The dock stays — collapsing it only swaps one panel for a
                 // second identical PanelLeft button in the topnav. `null` keeps
                 // lastActivePanelSection, so reopening restores the section.
+                // The route sync would reopen the Apps column on /apps, so
+                // it is told to keep it closed for this navigation.
                 setActivePanelSection(null);
+                setKeepPanelClosedOnNextRoute(true);
                 router.push(appsPath(currentWorkspaceId, app.app_id));
               }}
               title={app.name}

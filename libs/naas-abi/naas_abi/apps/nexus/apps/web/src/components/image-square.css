@@ -232,7 +232,3 @@
   outline-offset: 2px;
   box-shadow: none;
 }
-.image-square-picker-search:focus-within,
-.image-square-picker-url label:focus-within {
-  border-color: var(--workspace-accent, var(--color-primary));
-}

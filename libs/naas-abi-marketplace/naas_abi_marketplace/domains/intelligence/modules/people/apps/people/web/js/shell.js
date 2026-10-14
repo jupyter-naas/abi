@@ -10,7 +10,7 @@ import { applyBrand, applyTheme, loadAppConfig, logoHtml } from "../lib/config.j
 import { escapeHtml } from "../lib/dom.js";
 import { syncContentAlign, watchContentAlign } from "../lib/layout.js";
 import { mountPage } from "../lib/registry.js";
-import { parseRoute } from "../lib/routes.js";
+import { landingHref, parseRoute } from "../lib/routes.js";
 
 const view = document.getElementById("view");
 const topbar = document.getElementById("topbar");
@@ -112,9 +112,21 @@ document.addEventListener("keydown", (event) => {
 window.addEventListener("hashchange", render);
 window.addEventListener("resize", syncContentAlign);
 
+function syncLandingHash() {
+  const raw = window.location.hash.replace(/^#/, "") || "/";
+  if (raw.split("?")[0].split("/").filter(Boolean).length) return;
+  const target = landingHref(config);
+  if (window.location.hash !== target) {
+    window.location.replace(
+      `${window.location.pathname}${window.location.search}${target}`,
+    );
+  }
+}
+
 (async function start() {
   try {
     config = await loadAppConfig();
+    syncLandingHash();
   } catch (error) {
     view.innerHTML = `<div class="results"><div class="empty-state error-block">
       <h2>This app is not configured</h2>

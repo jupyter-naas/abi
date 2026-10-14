@@ -41,6 +41,7 @@ from naas_abi_marketplace.domains.intelligence.modules.people.utils.portrait_sto
 from pydantic import Field, model_validator
 from rdflib import Graph, URIRef
 
+
 def profile_slug(first_name: str, last_name: str) -> str:
     """'Sébastien Bazin' -> 'sebastien_bazin': the form profile slugs and portrait names take."""
     folded = unicodedata.normalize("NFKD", f"{first_name} {last_name}")

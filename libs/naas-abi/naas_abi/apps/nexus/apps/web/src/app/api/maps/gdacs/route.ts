@@ -1,4 +1,4 @@
-import { mapsJson, mapsUpstreamGet } from '../_lib';
+import { mapsPinResponse, mapsUpstreamGet } from '../_lib';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,10 +20,7 @@ export async function GET() {
       { timeoutMs: 25000 },
     );
     if (!res.ok) {
-      return mapsJson(
-        { error: `GDACS ${res.status}`, pins: [], count: 0 },
-        { status: 502 },
-      );
+      return mapsPinResponse([], { error: `GDACS ${res.status}` }, { status: 502 });
     }
     const data = (await res.json()) as {
       features?: Array<{
@@ -56,14 +53,11 @@ export async function GET() {
       });
       if (pins.length >= 300) break;
     }
-    return mapsJson({ pins, count: pins.length, source: 'gdacs.org' });
+    return mapsPinResponse(pins, { source: 'gdacs.org' });
   } catch (err) {
-    return mapsJson(
-      {
-        error: err instanceof Error ? err.message : 'GDACS fetch failed',
-        pins: [],
-        count: 0,
-      },
+    return mapsPinResponse(
+      [],
+      { error: err instanceof Error ? err.message : 'GDACS fetch failed' },
       { status: 502 },
     );
   }

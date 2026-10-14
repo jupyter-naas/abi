@@ -96,7 +96,7 @@ export function SearchBar({ workspaceId, graphUris, onPick }: SearchBarProps) {
 
   return (
     <div ref={ref} className="relative" data-testid="explore-search">
-      <div className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-1.5 focus-within:ring-1 focus-within:ring-primary">
+      <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5">
         <Search size={14} className="shrink-0 text-muted-foreground" />
         <input
           ref={inputRef}

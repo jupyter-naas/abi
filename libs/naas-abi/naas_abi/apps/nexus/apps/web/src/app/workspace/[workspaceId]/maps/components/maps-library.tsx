@@ -4,8 +4,7 @@ import { MapsDatasetGroups } from './maps-section';
 import './maps-components.css';
 
 /**
- * Desktop / shared library chrome. Mobile list uses MapsSection via the shell;
- * this page mirrors the same Public / Private grouping (Custom hidden when empty).
+ * Desktop / shared library chrome. Mobile list uses MapsSection via the shell.
  */
 export function MapsLibrary() {
   return (
@@ -13,8 +12,8 @@ export function MapsLibrary() {
       <div className="maps-library-intro">
         <h2>Maps</h2>
         <p>
-          Sources mirror Search: Public free layers and Private presence. Custom
-          stays empty upstream so product overlays can inject their own datasets.
+          Switch data layers on in Public (and Custom when configured). Choose
+          the basemap from the control on the map (top-right).
         </p>
       </div>
 

@@ -98,6 +98,22 @@ class TestPages:
 
         fails(tmp_path, mutate, "app.default_page is not one of the pages")
 
+    def test_workspace_default_page_override(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["app"]["default_page"] = "results"
+            raw["app"]["workspace_defaults"] = {"ws-test": {"default_page": "home"}}
+
+        path = write_config(tmp_path, mutate)
+        public = public_config(path, workspace_id="ws-test")
+        assert public["app"]["default_page"] == "home"
+        assert public_config(path, workspace_id="ws-other")["app"]["default_page"] == "results"
+
+    def test_default_results_view_must_be_people_or_network(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["app"]["default_results_view"] = "map"
+
+        fails(tmp_path, mutate, "must be 'people' or 'network'")
+
     def test_home_owns_the_empty_url(self) -> None:
         assert "" not in public_page_urls()
 

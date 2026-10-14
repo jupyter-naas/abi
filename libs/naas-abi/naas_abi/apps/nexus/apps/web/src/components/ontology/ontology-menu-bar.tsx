@@ -12,6 +12,7 @@ import { browserRoute, viewRoute, termTabs, ontologyBrowser } from '@/lib/ontolo
 import { useWorkspaceStore } from '@/stores/workspace';
 import { dashboardRoute } from '@/lib/ontology-dashboard';
 import { ONTOLOGY_SPACING, ontologySpacing, ontologySpacingRoute } from '@/lib/ontology-spacing';
+import { APP_MENU_ROW, APP_MENU_SURFACE, APP_MENU_TRIGGER } from '@/components/shell/app-menu-classes';
 
 export function OntologyMenuBar() {
   const router = useRouter();
@@ -21,9 +22,9 @@ export function OntologyMenuBar() {
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const root = `/workspace/${workspaceId}/ontology`;
-  const row = 'flex cursor-default select-none items-center gap-2 px-3 py-1.5 text-xs outline-none ![border-radius:0] data-[highlighted]:bg-transparent data-[disabled]:opacity-50';
-  const surface = 'z-[300] min-w-[190px] border-0 bg-card p-1 text-foreground !shadow-none outline-none !ring-0 focus:!ring-0 focus-visible:!ring-0 ![border-radius:0]';
-  const trigger = 'flex items-center gap-1 border-0 bg-transparent px-2 py-1 text-xs shadow-none outline-none ring-0 ![border-radius:0] hover:bg-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 active:bg-transparent data-[state=open]:bg-transparent data-[state=open]:shadow-none';
+  const row = APP_MENU_ROW;
+  const surface = APP_MENU_SURFACE;
+  const trigger = APP_MENU_TRIGGER;
   function navigate(view: string) {
     const query = searchParams?.toString() || '';
     router.push(`${root}?${view === 'overview' ? dashboardRoute(query) : viewRoute(query, view)}`, { scroll: false });

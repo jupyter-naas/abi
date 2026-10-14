@@ -47,6 +47,7 @@ def web_root_for(config_path: Path | None = None) -> Path:
 
 
 REGISTERED_PAGE_IDS = frozenset({"home", "results", "profile", "ontology"})
+RESULTS_VIEW_LABELS = frozenset({"people", "network"})
 REGISTERED_SECTION_IDS = (
     "about",
     "experience",
@@ -196,10 +197,78 @@ def _validate_pages(app: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
 
-    default_page = _text(app.get("default_page"), "app.default_page")
-    if default_page not in seen_ids:
-        raise ConfigError(f"app.default_page is not one of the pages: {default_page}")
     return sorted(validated, key=lambda page: page["order"])
+
+
+def _results_view_token(value: Any, path: str) -> str:
+    """Browser ``view`` query value: ``""`` is People, ``network`` is Network."""
+    label = _text(value, path)
+    if label not in RESULTS_VIEW_LABELS:
+        raise ConfigError(f"{path} must be 'people' or 'network'")
+    return "" if label == "people" else "network"
+
+
+def _validate_app_navigation(
+    app: dict[str, Any], page_ids: frozenset[str]
+) -> dict[str, Any]:
+    default_page = _text(app.get("default_page"), "app.default_page")
+    if default_page not in page_ids:
+        raise ConfigError(f"app.default_page is not one of the pages: {default_page}")
+
+    default_results_view = ""
+    if app.get("default_results_view") is not None:
+        default_results_view = _results_view_token(
+            app.get("default_results_view"), "app.default_results_view"
+        )
+
+    workspace_defaults: dict[str, dict[str, Any]] = {}
+    raw_workspace = app.get("workspace_defaults")
+    if raw_workspace is not None:
+        if not isinstance(raw_workspace, dict):
+            raise ConfigError("app.workspace_defaults must be a mapping")
+        for workspace_id, entry in raw_workspace.items():
+            if not isinstance(workspace_id, str) or not workspace_id.strip():
+                raise ConfigError("app.workspace_defaults keys must be workspace ids")
+            ws_key = workspace_id.strip()
+            ws = _mapping(entry, f"app.workspace_defaults[{ws_key}]")
+            override: dict[str, Any] = {}
+            if "default_page" in ws:
+                page = _text(ws["default_page"], f"app.workspace_defaults[{ws_key}].default_page")
+                if page not in page_ids:
+                    raise ConfigError(
+                        f"app.workspace_defaults[{ws_key}].default_page "
+                        f"is not one of the pages: {page}"
+                    )
+                override["default_page"] = page
+            if "default_results_view" in ws:
+                override["default_results_view"] = _results_view_token(
+                    ws["default_results_view"],
+                    f"app.workspace_defaults[{ws_key}].default_results_view",
+                )
+            if not override:
+                raise ConfigError(f"app.workspace_defaults[{ws_key}] is empty")
+            workspace_defaults[ws_key] = override
+
+    return {
+        "default_page": default_page,
+        "default_results_view": default_results_view,
+        "workspace_defaults": workspace_defaults,
+    }
+
+
+def resolved_app_navigation(
+    app: dict[str, Any], workspace_id: str | None = None
+) -> dict[str, str]:
+    """Landing page and results tab for one workspace (after overrides)."""
+    navigation = {
+        "default_page": app["default_page"],
+        "default_results_view": app.get("default_results_view", ""),
+    }
+    if workspace_id:
+        override = (app.get("workspace_defaults") or {}).get(workspace_id)
+        if override:
+            navigation.update(override)
+    return navigation
 
 
 def _validate_sections(profile: dict[str, Any]) -> list[dict[str, Any]]:
@@ -372,6 +441,18 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
         if not IDENTIFIER.match(name):
             raise ConfigError(f"data.tables.{key} must be a SQL identifier: {name!r}")
 
+    backend = data.get("backend") or "dataset"
+    if backend not in (
+        "dataset",
+        "workspace_dataset",
+        "workspace_graphs",
+        "file_graphs",
+    ):
+        raise ConfigError(
+            "data.backend must be dataset, workspace_dataset, workspace_graphs, "
+            "or file_graphs"
+        )
+
     graph_out: dict[str, Any] = {
         "iri": "http://ontology.naas.ai/graph/people",
         "label": "People",
@@ -380,6 +461,13 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
         # instance reads as one graph; ``file`` is the first of them.
         "file": None,
         "files": [],
+        # When backend is workspace_graphs or workspace_dataset, only these
+        # named graph IRIs are read (prefix match), plus ``iri`` itself when the
+        # workspace may read it. Empty means every graph the workspace may read.
+        "include_prefixes": [],
+        # Also keep graphs whose IRI ends with one of these (workspace people
+        # graphs are ``http://ontology.naas.ai/graph/<workspace_id>/people``).
+        "include_suffixes": [],
     }
     graph = data.get("graph")
     if graph not in (None, {}):
@@ -401,6 +489,22 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
                     )
                 graph_out["files"].append(str(resolved))
             graph_out["file"] = graph_out["files"][0]
+        prefixes = graph_map.get("include_prefixes")
+        if prefixes not in (None, []):
+            if not isinstance(prefixes, list):
+                raise ConfigError("data.graph.include_prefixes must be a list")
+            graph_out["include_prefixes"] = [
+                _text(item, f"data.graph.include_prefixes[{index}]")
+                for index, item in enumerate(prefixes)
+            ]
+        suffixes = graph_map.get("include_suffixes")
+        if suffixes not in (None, []):
+            if not isinstance(suffixes, list):
+                raise ConfigError("data.graph.include_suffixes must be a list")
+            graph_out["include_suffixes"] = [
+                _text(item, f"data.graph.include_suffixes[{index}]")
+                for index, item in enumerate(suffixes)
+            ]
 
     # Portraits are stated in the source relative to the module that owns them.
     # This prefix is what comes off the front so the browser is left with a path
@@ -436,6 +540,7 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
         logo_url_prefix = None
 
     return {
+        "backend": backend,
         "namespace": namespace,
         "tables": dict(tables),
         "graph": graph_out,
@@ -460,6 +565,9 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     app = _mapping(config.get("app"), "app")
     profile = _mapping(config.get("profile"), "profile")
     app_root = config_path.resolve().parent
+    pages = _validate_pages(app)
+    page_ids = frozenset(page["page_id"] for page in pages)
+    navigation = _validate_app_navigation(app, page_ids)
 
     return {
         "config_path": str(config_path.resolve()),
@@ -468,8 +576,8 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
             _mapping(config.get("brand"), "brand"), app_root / "web"
         ),
         "app": {
-            "default_page": app["default_page"],
-            "pages": _validate_pages(app),
+            **navigation,
+            "pages": pages,
         },
         "theme": _mapping(config.get("theme"), "theme"),
         "search": _validate_search(_mapping(config.get("search"), "search")),
@@ -483,7 +591,9 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     }
 
 
-def public_config(path: Path | None = None) -> dict[str, Any]:
+def public_config(
+    path: Path | None = None, workspace_id: str | None = None
+) -> dict[str, Any]:
     """The configuration the browser may see.
 
     Table names, the namespace and the privacy rules stay on the server: the
@@ -492,11 +602,15 @@ def public_config(path: Path | None = None) -> dict[str, Any]:
     turning one off is not merely cosmetic.
     """
     config = load_config(path)
+    navigation = resolved_app_navigation(config["app"], workspace_id=workspace_id)
     pages = [
         page
         for page in config["app"]["pages"]
         if page["enabled"] and "public" in page["permissions"]
     ]
+    if navigation["default_page"] not in {page["page_id"] for page in pages}:
+        navigation = dict(navigation)
+        navigation["default_page"] = pages[0]["page_id"] if pages else "home"
     sections = [
         section for section in config["profile"]["sections"] if section["enabled"]
     ]
@@ -506,7 +620,7 @@ def public_config(path: Path | None = None) -> dict[str, Any]:
     return {
         "schema_version": config["schema_version"],
         "brand": config["brand"],
-        "app": {"default_page": config["app"]["default_page"], "pages": pages},
+        "app": {**navigation, "pages": pages},
         "theme": config["theme"],
         "search": search,
         "profile": {"facts": config["profile"]["facts"], "sections": sections},

@@ -78,7 +78,7 @@ ts = TripleStoreService__SecondaryAdaptor__ObjectStorage(
 
 EX = Namespace("http://example.org/")
 g = Graph()
-g.add((EX.alice, EX.knows, EX.bob))
+g.add((EX.alice, EX.knows, EX.carol))
 
 ts.insert(g)
 

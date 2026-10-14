@@ -1,4 +1,4 @@
-import { mapsJson, mapsUpstreamGet } from '../_lib';
+import { mapsPinResponse, mapsUpstreamGet } from '../_lib';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,10 +17,7 @@ export async function GET() {
       },
     );
     if (!res.ok) {
-      return mapsJson(
-        { error: `NWS ${res.status}`, pins: [], count: 0 },
-        { status: 502 },
-      );
+      return mapsPinResponse([], { error: `NWS ${res.status}` }, { status: 502 });
     }
     const data = (await res.json()) as {
       features?: Array<{
@@ -62,14 +59,11 @@ export async function GET() {
       });
     }
 
-    return mapsJson({ pins, source: 'nws', count: pins.length }, { cacheSeconds: 120 });
+    return mapsPinResponse(pins, { source: 'nws' }, { cacheSeconds: 120 });
   } catch (err) {
-    return mapsJson(
-      {
-        error: err instanceof Error ? err.message : 'NWS fetch failed',
-        pins: [],
-        count: 0,
-      },
+    return mapsPinResponse(
+      [],
+      { error: err instanceof Error ? err.message : 'NWS fetch failed' },
       { status: 502 },
     );
   }
