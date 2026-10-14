@@ -490,6 +490,18 @@ def test_a_write_deadline_reaches_only_an_adapter_that_takes_one():
             self.deadlines.append(timeout_seconds)
             super().remove(triples, graph_name)
 
+        def create_graph(self, graph_name, *, timeout_seconds=None):
+            self.deadlines.append(timeout_seconds)
+            super().create_graph(graph_name)
+
+        def clear_graph(self, graph_name=None, *, timeout_seconds=None):
+            self.deadlines.append(timeout_seconds)
+            super().clear_graph(graph_name)
+
+        def drop_graph(self, graph_name, *, timeout_seconds=None):
+            self.deadlines.append(timeout_seconds)
+            super().drop_graph(graph_name)
+
     graph_name = URIRef("http://example.org/graph/billing")
     triples = Graph()
     triples.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
@@ -500,7 +512,9 @@ def test_a_write_deadline_reaches_only_an_adapter_that_takes_one():
     service.insert(triples, graph_name, timeout_seconds=900.0)
     service.remove(triples, graph_name, timeout_seconds=900.0)
     service.insert(triples, graph_name)
-    assert remote.deadlines == [900.0, 900.0, None]
+    for operation in ("create_graph", "clear_graph", "drop_graph"):
+        getattr(service, operation)(graph_name, timeout_seconds=900.0)
+    assert remote.deadlines == [900.0, 900.0, None, 900.0, 900.0, 900.0]
 
     # An in-process store runs to completion: its adapter never sees one.
     local = _FakeTripleStoreAdapter()
@@ -510,3 +524,5 @@ def test_a_write_deadline_reaches_only_an_adapter_that_takes_one():
     service.remove(triples, graph_name, timeout_seconds=900.0)
     assert [name for _, name in local.insert_calls] == [graph_name]
     assert [name for _, name in local.remove_calls] == [graph_name]
+    service.clear_graph(graph_name, timeout_seconds=900.0)
+    assert local.clear_graph_calls == [graph_name]

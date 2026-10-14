@@ -377,11 +377,14 @@ class ITripleStoreService(ABC):
         """
 
     @abstractmethod
-    def create_graph(self, graph_name: URIRef):
+    def create_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ):
         """Create an empty named graph in the underlying store.
 
         Args:
             graph_name (URIRef): URI of the graph to create
+            timeout_seconds: as for ``insert``.
 
         Returns:
             None
@@ -391,11 +394,14 @@ class ITripleStoreService(ABC):
         """
 
     @abstractmethod
-    def clear_graph(self, graph_name: URIRef):
+    def clear_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ):
         """Clear triples from a graph.
 
         Args:
             graph_name (URIRef | None): Target named graph URI. If None, clear default graph.
+            timeout_seconds: as for ``insert``.
 
         Returns:
             None
@@ -405,11 +411,14 @@ class ITripleStoreService(ABC):
         """
 
     @abstractmethod
-    def drop_graph(self, graph_name: URIRef):
+    def drop_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ):
         """Drop a named graph and all its triples.
 
         Args:
             graph_name (URIRef): URI of the graph to drop
+            timeout_seconds: as for ``insert``.
 
         Returns:
             None

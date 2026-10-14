@@ -397,12 +397,15 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             )
             raise
 
-    def create_graph(self, graph_name: URIRef) -> None:
+    def create_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
 
+        method = self.__triple_store_adapter.create_graph
         try:
-            self.__triple_store_adapter.create_graph(graph_name)
+            method(graph_name, **self._deadline(method, timeout_seconds))
         except Exception as exc:
             self.__publish_event(
                 TripleStoreError(
@@ -415,12 +418,15 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
         self.__publish_event(GraphCreated(graph_name=str(graph_name)))
 
-    def clear_graph(self, graph_name: URIRef) -> None:
+    def clear_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
 
+        method = self.__triple_store_adapter.clear_graph
         try:
-            self.__triple_store_adapter.clear_graph(graph_name)
+            method(graph_name, **self._deadline(method, timeout_seconds))
         except Exception as exc:
             self.__publish_event(
                 TripleStoreError(
@@ -433,9 +439,12 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
         self.__publish_event(GraphCleared(graph_name=str(graph_name)))
 
-    def drop_graph(self, graph_name: URIRef) -> None:
+    def drop_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ) -> None:
+        method = self.__triple_store_adapter.drop_graph
         try:
-            self.__triple_store_adapter.drop_graph(graph_name)
+            method(graph_name, **self._deadline(method, timeout_seconds))
         except Exception as exc:
             self.__publish_event(
                 TripleStoreError(

@@ -92,6 +92,33 @@ def test_writes_send_the_callers_deadline(operation, response):
     assert sent == [(900_000, 900.0), (10_000, None)]
 
 
+@pytest.mark.parametrize(
+    "operation, response",
+    [
+        ("create_graph", triple_store_pb2.CreateGraphResponse()),
+        ("clear_graph", triple_store_pb2.ClearGraphResponse()),
+        ("drop_graph", triple_store_pb2.DropGraphResponse()),
+    ],
+)
+def test_graph_writes_send_the_callers_deadline(operation, response):
+    client = TripleStoreSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", JWT_SECRET, "api", timeout_seconds=10.0
+    )
+    sent = []
+
+    def fake_call(subject, request, response_cls, **kwargs):
+        sent.append((request.context.timeout_ms, kwargs.get("timeout_seconds")))
+        return response
+
+    client._call = fake_call  # type: ignore[method-assign]
+    graph_name = URIRef("http://test.example.org/g")
+
+    getattr(client, operation)(graph_name, timeout_seconds=900.0)
+    getattr(client, operation)(graph_name)
+
+    assert sent == [(900_000, 900.0), (10_000, None)]
+
+
 # ---------------------------------------------------------------------------
 # Error-code -> exception mapping. Must stay exactly symmetric with how
 # TripleStorePrimaryAdapterNATS encodes CallError.code.
