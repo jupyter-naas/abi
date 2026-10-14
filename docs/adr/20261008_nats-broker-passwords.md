@@ -85,12 +85,18 @@ This replaces the consequences "Both users have every right" and "Modules that
 receive `NATS_JWT_SECRET` can still sign a token for any identity"
 (`20261014_module-identities.md`):
 
-- The `module` user may not subscribe to `abi.svc.>`, `abi.discovery.>` or
-  `$KV.>`, nor publish to `$KV.>` or the JetStream API's stream delete,
-  message delete, snapshot, restore, peer, leader, meta, server and account
-  subjects (`naas_abi_core.engine.nats_permissions.MODULE_PERMISSIONS`, in the
-  Docker `nats.conf` and in the one `abi dev` writes). `abi` keeps every right.
+- The `module` user may not subscribe to `abi.svc.>`, `abi.discovery.>`,
+  `_INBOX.>` (modules use the inbox prefix `_INBOX_MODULES`) or `$KV.>`, nor
+  publish to `$KV.>` or the JetStream API's stream create, update, delete,
+  message delete, snapshot, restore, peer and leader subjects, its direct get,
+  or its server, meta and account API
+  (`naas_abi_core.engine.nats_permissions.MODULE_PERMISSIONS`, in the Docker
+  `nats.conf` and in the one `abi dev` writes). The engine creates the streams
+  modules use. `abi` keeps every right.
 - Modules receive a key for their own module id instead of the secret, so they
-  can no longer sign for another identity.
-- Modules still share one broker user: one module can listen on another's
-  subjects. Per-module users or auth callout remain the next step.
+  can no longer sign for another identity, and the tokens sent to a module are
+  bound to it.
+- Still open: modules share one broker user, so one module can listen on
+  another's subjects and inbox, and read or purge any stream (the key-value
+  buckets included) through the consumer, message-get and purge API.
+  Per-module users or auth callout remain the next step.
