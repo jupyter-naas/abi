@@ -8,7 +8,7 @@ collision.
 
 Managed services:
   - api         (FastAPI, uvicorn)
-  - dagster     (Dagster dev UI)
+  - dagster     (Dagster dev UI; legacy, needs naas-abi-core[dagster])
   - nexus-web   (Next.js dev server)
 
 Added by a mode or a flag:
@@ -19,8 +19,9 @@ Added by a mode or a flag:
 `nats:` block: it starts nats first and leaves dagster out (module jobs replace
 it, and a second engine would compete for the serving lease). A project
 without one runs in-process, with dagster and without the broker or the
-modules. `--with-nats` and `--without-nats` choose the mode whatever the
-config says. `--with-tracing` starts a
+modules. Dagster is legacy, to be removed in the next major: it starts only
+when the project installs the naas-abi-core[dagster] extra. `--with-nats` and
+`--without-nats` choose the mode whatever the config says. `--with-tracing` starts a
 native Jaeger and has the engine export spans to it. The project config is
 left untouched: a generated overlay (`.abi/dev/dev.overlay.yaml`, via
 ABI_CONFIG_OVERLAY) adds the `nats:` and `telemetry:` blocks, or, with
@@ -468,6 +469,29 @@ def _discovery_project() -> str:
 
 def _project_declares_nats() -> bool:
     return _project_nats() is not None
+
+
+DAGSTER_MISSING = (
+    "dagster: not installed in this project. Dagster is a legacy extra, for "
+    "projects without NATS: add it with `uv add 'naas-abi-core[dagster]'`."
+)
+
+
+def _project_lacks_dagster() -> bool:
+    """Whether the project's environment exists without the `dagster` command.
+
+    naas-abi-core installs Dagster only with its legacy `dagster` extra. A
+    project with no environment yet is not judged: `uv run` creates it.
+    """
+    venv = Path(os.environ.get("UV_PROJECT_ENVIRONMENT") or ".venv")
+    if not venv.is_absolute():
+        venv = _project_root() / venv
+    if not venv.is_dir():
+        return False
+    return not any(
+        (venv / folder / name).exists()
+        for folder, name in (("bin", "dagster"), ("Scripts", "dagster.exe"))
+    )
 
 
 def _jaeger_ports(query_port: int) -> dict[str, int]:
@@ -1927,7 +1951,8 @@ def dev() -> None:
         "then the SDK modules of `dev.modules`; dagster is left out unless "
         "selected with --service. Needs `nats-server` on PATH. "
         "--without-nats runs the engine in-process, as before NATS, even when "
-        "the project config has a `nats:` block. "
+        "the project config has a `nats:` block, with dagster when the project "
+        "installs the legacy naas-abi-core[dagster] extra. "
         "Default: NATS mode when the project config has a `nats:` block, "
         "in-process otherwise."
     ),
@@ -1975,6 +2000,11 @@ def dev_up(
     else:
         selected = _services_for((), with_nats=with_nats, with_tracing=with_tracing)
         to_run = list(modules) if with_nats else []
+    if "dagster" in selected and _project_lacks_dagster():
+        if "dagster" in core:
+            raise click.ClickException(DAGSTER_MISSING)
+        click.echo(f"{DAGSTER_MISSING} Starting without it.")
+        selected.remove("dagster")
     if "nats" in selected:
         _nats_server_binary()  # before anything starts
     # --without-nats on a project whose config enables NATS: turn it off too.

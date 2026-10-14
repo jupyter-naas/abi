@@ -940,6 +940,46 @@ def test_up_stays_in_process_by_default_without_a_nats_block(stack, tmp_path) ->
     assert not (tmp_path / dev.DEV_OVERLAY_FILENAME).exists()
 
 
+def _venv(root: Path, *, dagster: bool) -> None:
+    (root / ".venv" / "bin").mkdir(parents=True)
+    if dagster:
+        (root / ".venv" / "bin" / "dagster").write_text("")
+
+
+def test_in_process_leaves_dagster_out_when_the_project_lacks_it(
+    stack, tmp_path
+) -> None:
+    """Dagster is a legacy extra: a project without it starts the rest."""
+    _venv(tmp_path, dagster=False)
+
+    result = _abi("up", "-d")
+
+    assert result.exit_code == 0, result.output
+    assert [name for _, name in stack] == [
+        name for name in dev.ALL_SERVICES if name != "dagster"
+    ]
+    assert "uv add 'naas-abi-core[dagster]'" in result.output
+
+
+def test_in_process_starts_dagster_when_the_project_has_it(stack, tmp_path) -> None:
+    _venv(tmp_path, dagster=True)
+
+    result = _abi("up", "-d")
+
+    assert result.exit_code == 0, result.output
+    assert [name for _, name in stack] == list(dev.ALL_SERVICES)
+
+
+def test_dagster_asked_for_without_it_installed_is_refused(stack, tmp_path) -> None:
+    _venv(tmp_path, dagster=False)
+
+    result = _abi("up", "--service", "dagster", "-d")
+
+    assert result.exit_code != 0
+    assert "naas-abi-core[dagster]" in result.output
+    assert stack == []
+
+
 def test_without_nats_is_the_in_process_stack(stack, tmp_path) -> None:
     result = _abi("up", "--without-nats", "-d")
 

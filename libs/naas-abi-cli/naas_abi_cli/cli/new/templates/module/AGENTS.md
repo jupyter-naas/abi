@@ -18,7 +18,7 @@ A module is the **unit of composition** in ABI: it bundles agents, integrations,
 ├── integrations/      # typed wrappers over third-party APIs
 ├── workflows/         # multi-step automations
 ├── pipelines/         # data pipelines
-├── orchestrations/    # scheduler / orchestrator definitions
+├── orchestrations/    # Dagster definitions (legacy: projects without NATS only)
 └── ontologies/        # RDF/OWL/TTL schemas this module reasons over
 ```
 
@@ -94,7 +94,7 @@ abi new agent <name>          ./<this-module-path>/agents
 abi new integration <name>    ./<this-module-path>/integrations
 abi new workflow <name>       ./<this-module-path>/workflows
 abi new pipeline <name>       ./<this-module-path>/pipelines
-abi new orchestration <name>  ./<this-module-path>/orchestrations
+abi new orchestration <name>  ./<this-module-path>/orchestrations  # legacy, without NATS
 ```
 
 Each command scaffolds a `PascalCase.py` file from the CLI's templates. After scaffolding, wire the new component into the module:

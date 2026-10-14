@@ -14,7 +14,11 @@ from naas_abi_cli.cli.admin_credentials import (
     ensure_nats_passwords,
     ensure_nats_secret,
 )
-from naas_abi_cli.cli.deploy.local import _build_hosts_from_domain, setup_local_deploy
+from naas_abi_cli.cli.deploy.local import (
+    LEGACY_EXTRAS,
+    _build_hosts_from_domain,
+    setup_local_deploy,
+)
 from naas_abi_cli.cli.utils.Copier import Copier
 
 from .module import new_module
@@ -170,7 +174,9 @@ def _print_next_steps(project_path: str, admin_email: str, nats: bool) -> None:
         "Run the project on NATS (default): kernel services, the bus, jobs and "
         "module discovery go through a NATS broker, and modules can run in "
         "their own process. --without-nats creates the classic in-process "
-        "project (RabbitMQ in docker-compose, no broker for `abi dev`)."
+        "project (RabbitMQ in docker-compose, Dagster, no broker for `abi "
+        "dev`), with the naas-abi-core[dagster,rabbitmq] extras. Dagster and "
+        "RabbitMQ are legacy and will be removed in the next major."
     ),
 )
 @click.option(
@@ -254,8 +260,13 @@ def new_project(
 
     # The project's own module holds the default agent, which the engine loads,
     # so it stays in-engine in both modes. `abi new module` adds remote ones.
+    # Only a classic project gets a Dagster orchestration: NATS ones use jobs.
     new_module(
-        project_name, os.path.join(project_path, "src"), quiet=True, kind="in-engine"
+        project_name,
+        os.path.join(project_path, "src"),
+        quiet=True,
+        kind="in-engine",
+        orchestration=not with_nats,
     )
 
     if with_local_deploy:
@@ -281,12 +292,15 @@ def new_project(
     # one gateway key serves both defaults — Gemma 4 for chat and
     # text-embedding-3-small for embeddings.
     # naas-abi-core[all] includes the nats extra. A NATS project also adds the
-    # SDK with its agent extra, which the remote modules under src/ import.
+    # SDK with its agent extra, which the remote modules under src/ import. A
+    # classic one adds the legacy extras, which [all] leaves out: Dagster and
+    # RabbitMQ.
+    core_extras = ",".join(("all",) if with_nats else ("all", *LEGACY_EXTRAS))
     subprocess.run(
         [
             "uv",
             "add",
-            "naas-abi-core[all]",
+            f"naas-abi-core[{core_extras}]",
             "naas-abi-marketplace[ai-openrouter]",
             "naas-abi",
             "naas-abi-cli",

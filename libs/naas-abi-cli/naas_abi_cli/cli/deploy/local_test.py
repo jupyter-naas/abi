@@ -10,8 +10,11 @@ from pathlib import Path
 import pytest
 import yaml
 
+from naas_abi_cli.cli.deploy import local
 from naas_abi_cli.cli.deploy.local import (
     _build_nexus_api_url,
+    ensure_legacy_extras,
+    legacy_extras_requirement,
     project_uses_nats,
     setup_local_deploy,
 )
@@ -95,6 +98,79 @@ def test_regenerating_a_nats_project_keeps_it_on_nats(tmp_path: Path, capsys) ->
 
     assert "profiles" not in _services(tmp_path / "docker-compose.yml")["nats"]
     assert "migrate-to-nats" not in capsys.readouterr().out
+
+
+def _pyproject(project: Path, *dependencies: str) -> None:
+    listed = "".join(f'    "{d}",\n' for d in dependencies)
+    (project / "pyproject.toml").write_text(
+        f'[project]\nname = "demo"\ndependencies = [\n{listed}]\n',
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.parametrize(
+    ("dependencies", "requirement"),
+    [
+        # A project made before 3.0: [all] used to pull Dagster and pika.
+        (["naas-abi-core[all]>=2.0"], "naas-abi-core[all,dagster,rabbitmq]>=2.0"),
+        (["naas_abi_core [qdrant] >= 2"], "naas-abi-core[dagster,qdrant,rabbitmq]>= 2"),
+        (["naas-abi-core"], "naas-abi-core[dagster,rabbitmq]"),
+        (["naas-abi-core[all,rabbitmq]"], "naas-abi-core[all,dagster,rabbitmq]"),
+        (["naas-abi", "naas-abi-cli"], "naas-abi-core[dagster,rabbitmq]"),
+        (["naas-abi-core[all,dagster,rabbitmq]"], None),
+        (["naas-abi-core[all]", "naas-abi-core[dagster,rabbitmq]"], None),
+        # naas-abi-core-extras is another package.
+        (["naas-abi-core-extras[dagster,rabbitmq]"], "naas-abi-core[dagster,rabbitmq]"),
+    ],
+)
+def test_legacy_extras_requirement(tmp_path: Path, dependencies, requirement) -> None:
+    _pyproject(tmp_path, *dependencies)
+
+    assert legacy_extras_requirement(str(tmp_path)) == requirement
+
+
+def test_no_legacy_extras_without_a_pyproject(tmp_path: Path) -> None:
+    assert legacy_extras_requirement(str(tmp_path)) is None
+
+
+def test_ensure_legacy_extras_adds_them_with_uv(tmp_path: Path, monkeypatch) -> None:
+    _pyproject(tmp_path, "naas-abi-core[all]>=2.0")
+    commands: list = []
+    monkeypatch.setattr(local.shutil, "which", lambda _cmd: "/usr/bin/uv")
+
+    def run(cmd, **kwargs):
+        commands.append((cmd, kwargs["cwd"]))
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(local.subprocess, "run", run)
+
+    ensure_legacy_extras(str(tmp_path))
+
+    assert commands == [
+        (["uv", "add", "naas-abi-core[all,dagster,rabbitmq]>=2.0"], str(tmp_path))
+    ]
+
+
+def test_ensure_legacy_extras_leaves_a_project_that_has_them(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _pyproject(tmp_path, "naas-abi-core[all,dagster,rabbitmq]")
+    monkeypatch.setattr(
+        local.subprocess, "run", lambda *a, **k: pytest.fail("nothing to add")
+    )
+
+    ensure_legacy_extras(str(tmp_path))
+
+
+def test_ensure_legacy_extras_without_uv_prints_the_command(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    _pyproject(tmp_path, "naas-abi-core[all]")
+    monkeypatch.setattr(local.shutil, "which", lambda _cmd: None)
+
+    ensure_legacy_extras(str(tmp_path))
+
+    assert "run `uv add 'naas-abi-core[all,dagster,rabbitmq]'`" in capsys.readouterr().out
 
 
 def test_project_mode_is_read_from_the_compose_config_first(tmp_path: Path) -> None:
