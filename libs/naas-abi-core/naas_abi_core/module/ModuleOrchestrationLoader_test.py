@@ -100,6 +100,22 @@ def test_with_dagster_every_orchestration_loads(tmp_path: Path) -> None:
     assert _names(found) == ["EagerOrchestration", "PlainOrchestration"]
 
 
+def test_with_dagster_a_missing_dagster_submodule_still_fails_the_load(
+    tmp_path: Path,
+) -> None:
+    """Dagster installed, a private import an upgrade removed: a real error, not
+    an orchestration left out for an extra that is there."""
+    pytest.importorskip("dagster")
+    cls = _make_module(
+        tmp_path,
+        "pkg_orch_stale",
+        {"Stale.py": "from dagster._core.removed_in_an_upgrade import thing\n"},
+    )
+
+    with pytest.raises(ModuleNotFoundError, match="removed_in_an_upgrade"):
+        ModuleOrchestrationLoader.load_orchestrations(cls)
+
+
 def test_another_missing_module_still_fails_the_load(tmp_path: Path) -> None:
     cls = _make_module(
         tmp_path,

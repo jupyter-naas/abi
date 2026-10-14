@@ -11,6 +11,7 @@ The code that imports Dagster or pika goes through ``raise_missing_extra`` so a
 missing extra reads as an install hint instead of a bare ``ImportError``.
 """
 
+import importlib.util
 from typing import NoReturn
 
 LEGACY_NOTICE = (
@@ -20,14 +21,29 @@ LEGACY_NOTICE = (
 )
 
 
+# The top-level package each legacy extra installs: the extra is missing when
+# this package is.
+_EXTRA_PACKAGES = {"dagster": "dagster", "rabbitmq": "pika"}
+
+
 def legacy_extra_of(error: ImportError) -> str | None:
-    """The legacy extra that installs the module ``error`` reports missing."""
+    """The legacy extra missing behind ``error``: it reports one of the extra's
+    modules missing and the extra's top-level package is not installed.
+
+    With Dagster installed, a missing ``dagster.*`` submodule (a private import
+    a Dagster upgrade removed) or ``dagster_*`` package is a plain missing
+    module, not a missing extra.
+    """
     root = (getattr(error, "name", None) or "").split(".")[0]
     if root == "dagster" or root.startswith("dagster_"):
-        return "dagster"
-    if root == "pika":
-        return "rabbitmq"
-    return None
+        extra = "dagster"
+    elif root == "pika":
+        extra = "rabbitmq"
+    else:
+        return None
+    if importlib.util.find_spec(_EXTRA_PACKAGES[extra]) is not None:
+        return None
+    return extra
 
 
 def install_hint(extra: str) -> str:
