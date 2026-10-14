@@ -335,8 +335,8 @@ services:
       -c 'while true; do
             sleep "$$COMPACT_INTERVAL_SECONDS";
             echo "[fuseki-compact] triggering TDB2 compaction (deleteOld=true)...";
-            curl -fsS -u "admin:$$ADMIN_PASSWORD" -X POST "http://fuseki:3030/$$/compact/ds?deleteOld=true"
-              || echo "[fuseki-compact] compaction request failed";
+            curl -fsS -u "admin:$$ADMIN_PASSWORD" -X POST "http://fuseki:3030/$$/compact/ds?deleteOld=true" ||
+              echo "[fuseki-compact] compaction request failed";
           done'
     networks:
       - abi-network
@@ -418,7 +418,9 @@ services:
   # MinIO - S3-compatible Object Storage for Dagster Compute Logs
   # -----------------------------------------------------------------------------
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # MinIO stopped publishing public images (quay.io/minio, minio/* on Docker Hub).
+    # pgsty/minio is a community fork built from MinIO source, drop-in compatible.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     pull_policy: always
     restart: unless-stopped
     command: server /data --console-address :9001
@@ -440,7 +442,7 @@ services:
 
   # mc container to initialize the bucket on startup
   minio-init:
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
     pull_policy: always
     depends_on:
       minio:
