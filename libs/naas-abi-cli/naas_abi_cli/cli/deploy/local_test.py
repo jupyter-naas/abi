@@ -570,7 +570,14 @@ def test_the_generated_broker_admits_only_its_users(tmp_path: Path) -> None:
             with pytest.raises(NATSError, match="Authorization Violation"):
                 await connect(credentials)
         for user, key in NATS_USERS.items():
-            nc = await connect(f"{user}:{env[key]}@")
+            # Modules read replies on their own inbox prefix (_INBOX.> is the engine's).
+            options = {"inbox_prefix": "_INBOX_MODULES"} if user == "module" else {}
+            nc = await nats.connect(
+                f"nats://{user}:{env[key]}@127.0.0.1:{port}",
+                allow_reconnect=False,
+                connect_timeout=2,
+                **options,
+            )
             # Both users share the default account, so its JetStream too.
             await nc.jetstream().account_info()
             await nc.close()
