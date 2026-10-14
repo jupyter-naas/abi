@@ -142,7 +142,7 @@ def nats_url():
         from testcontainers.core.container import DockerContainer
 
         with (
-            DockerContainer("nats:2-alpine")
+            DockerContainer("nats:2.14.7-alpine")
             .with_command("-js")
             .with_exposed_ports(4222)
         ) as container:
