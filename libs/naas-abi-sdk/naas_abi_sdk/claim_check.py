@@ -40,6 +40,12 @@ def stream_header_reserve(stream: str) -> int:
     return len(f"Nats-Expected-Stream: {stream}\r\n") + 16
 
 
+async def ensure_bucket(nc: Any) -> Any:
+    """The claim-check object store, created if missing. The engine creates it at
+    start: the broker user ``module`` may not create streams."""
+    return await _bucket(nc)
+
+
 async def _bucket(nc: Any) -> Any:
     store = _buckets.get(nc)
     if store is not None:

@@ -1,6 +1,7 @@
 import json
 
 import pytest
+
 from naas_abi_sdk.service_token import ModuleToken, token_from_env
 
 
@@ -43,9 +44,51 @@ def test_it_is_refreshed_at_half_its_lifetime():
     assert token() != first
 
 
-def test_the_environment_gives_an_issued_token_or_the_module_key():
-    assert token_from_env({"ABI_SERVICE_TOKEN": "t", "ABI_MODULE_KEY": "k"}, "m") == "t"
+def test_the_environment_gives_the_module_key_else_an_issued_token():
+    """The key wins: it signs fresh tokens and binds them to the module called."""
+    both = token_from_env({"ABI_SERVICE_TOKEN": "t", "ABI_MODULE_KEY": "k"}, "m")
+    assert isinstance(both, ModuleToken) and both.identity == "m"
+    assert token_from_env({"ABI_SERVICE_TOKEN": "t"}, "m") == "t"
     source = token_from_env({"ABI_MODULE_KEY": "k"}, "acme.research")
     assert isinstance(source, ModuleToken) and source.identity == "acme.research"
     with pytest.raises(RuntimeError, match="abi module key acme.research"):
         token_from_env({"NATS_JWT_SECRET": "s"}, "acme.research")
+
+
+def test_a_token_bound_to_an_instance_is_short_and_good_there_only():
+    nats_auth = pytest.importorskip("naas_abi_core.engine.nats_auth")
+    secret = "s" * 48
+    token = ModuleToken("acme.research", nats_auth.module_key(secret, "acme.research"))
+    bound = token.for_audience("i-1")
+
+    _, claims = _parts(bound)
+    assert claims["aud"] == "i-1" and claims["exp"] - claims["iat"] == 120
+    assert nats_auth.verify_service_token(bound, secret, audience="i-1") == "acme.research"
+    with pytest.raises(nats_auth.InvalidServiceTokenError):
+        nats_auth.verify_service_token(bound, secret)
+    assert "aud" not in _parts(token())[1]
+
+
+def test_the_transport_binds_calls_to_modules_and_only_those():
+    from naas_abi_sdk.transport import Transport, module_audience
+
+    assert module_audience("abi.agent.acme.i-1.d1.v1.submit") == "i-1"
+    assert module_audience("abi.mod.acme.i-2.app.console.http") == "i-2"
+    assert module_audience("abi.svc.document.v1.get") is None
+    assert module_audience("abi.discovery.acme.v1.register") is None
+    token = ModuleToken("m", "k")
+    transport = Transport("nats://127.0.0.1:4222", token)
+    assert _parts(transport._token("abi.mod.acme.i-2.app.x.http"))[1]["aud"] == "i-2"
+    assert "aud" not in _parts(transport._token("abi.svc.document.v1.get"))[1]
+    with pytest.raises(ValueError, match="bound"):
+        Transport("nats://127.0.0.1:4222", "static")._token("abi.mod.acme.i-2.app.x.http")
+
+
+def test_a_module_login_uses_the_module_inbox_prefix():
+    from naas_abi_sdk.transport import MODULE_INBOX_PREFIX, Transport
+
+    assert (
+        Transport("nats://module:pw@nats:4222", "t").options["inbox_prefix"]
+        == MODULE_INBOX_PREFIX
+    )
+    assert "inbox_prefix" not in Transport("nats://abi:pw@nats:4222", "t").options
