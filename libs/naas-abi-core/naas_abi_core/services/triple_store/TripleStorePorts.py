@@ -281,7 +281,13 @@ class ITripleStoreService(ABC):
     #     pass
 
     @abstractmethod
-    def insert(self, triples: Graph, graph_name: URIRef):
+    def insert(
+        self,
+        triples: Graph,
+        graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
+    ):
         """Insert triples from the provided graph into the store.
 
         This method takes a graph of triples and inserts them into the triple store. The triples
@@ -290,13 +296,23 @@ class ITripleStoreService(ABC):
         Args:
             triples (Graph): The RDF graph containing triples to insert
             graph_name (URIRef): Named graph URI target.
+            timeout_seconds: how long the caller waits when the store is served
+                by another process (a write can queue behind a long one); an
+                in-process store runs to completion. ``None`` keeps the
+                adapter's default.
 
         Returns:
             None
         """
 
     @abstractmethod
-    def remove(self, triples: Graph, graph_name: URIRef):
+    def remove(
+        self,
+        triples: Graph,
+        graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
+    ):
         """Remove triples from the provided graph from the store.
 
         This method takes a graph of triples and removes them from the triple store. The triples
@@ -305,6 +321,7 @@ class ITripleStoreService(ABC):
         Args:
             triples (Graph): The RDF graph containing triples to remove
             graph_name (URIRef): Named graph URI target.
+            timeout_seconds: as for ``insert``.
 
         Returns:
             None
