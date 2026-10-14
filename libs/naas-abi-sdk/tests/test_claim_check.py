@@ -8,6 +8,7 @@ import subprocess
 import time
 
 import nats
+import broker_users
 import pytest
 
 from naas_abi_sdk import claim_check
@@ -21,13 +22,13 @@ pytestmark = pytest.mark.skipif(
 LIMIT = 64 * 1024
 
 
-@pytest.fixture
-def broker(tmp_path):
+@pytest.fixture(params=broker_users.KINDS)
+def broker(request, tmp_path):
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
     config = tmp_path / "nats.conf"
-    config.write_text(f"max_payload: {LIMIT}\n")
+    config.write_text(f"max_payload: {LIMIT}\n" + broker_users.config(request.param))
     process = subprocess.Popen(
         [
             "nats-server",
@@ -51,7 +52,7 @@ def broker(tmp_path):
             break
         except OSError:
             time.sleep(0.05)
-    yield f"nats://127.0.0.1:{port}"
+    yield broker_users.login(f"nats://127.0.0.1:{port}", request.param)
     process.terminate()
     process.wait(timeout=5)
 
