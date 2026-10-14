@@ -602,15 +602,12 @@ def _nats_server_config(passwords: dict[str, str]) -> str:
     address and JetStream stay on the command line (flags override the file),
     so this only carries what has no flag: max_payload, and the broker's users
     with their `passwords` (by .env key), as in the Docker stack. A client
-    without a valid user and password is refused."""
-    users = "\n".join(
-        f"    {{ user: {json.dumps(user)}, password: {json.dumps(passwords[key])} }}"
-        for user, key in NATS_USERS.items()
-    )
-    return (
-        f"max_payload: {NATS_MAX_PAYLOAD}\n\n"
-        f"authorization {{\n  users = [\n{users}\n  ]\n}}\n"
-    )
+    without a valid user and password is refused, and `module` gets the
+    MODULE_PERMISSIONS of the Docker stack (naas_abi_core.engine.nats_permissions)."""
+    from naas_abi_core.engine.nats_permissions import authorization_config
+
+    users = {user: passwords[key] for user, key in NATS_USERS.items()}
+    return f"max_payload: {NATS_MAX_PAYLOAD}\n\n" + authorization_config(users)
 
 
 NATS_SERVER_MISSING = (

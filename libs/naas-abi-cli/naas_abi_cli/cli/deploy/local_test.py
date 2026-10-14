@@ -474,14 +474,38 @@ def test_the_broker_requires_a_password_and_listens_on_localhost(
     for root in (repo_root, tmp_path):
         service = _nats_service(root / "docker-compose.yml")
         conf = (root / ".deploy/docker/nats/nats.conf").read_text(encoding="utf-8")
-        for user, key in NATS_USERS.items():
-            assert f"{{ user: {user}, password: ${key} }}" in conf
+        assert "{ user: abi, password: $NATS_ABI_PASSWORD }" in conf
+        assert (
+            "{ user: module, password: $NATS_MODULE_PASSWORD, "
+            "permissions: $MODULE_PERMISSIONS }" in conf
+        )
+        for key in NATS_USERS.values():
             assert f"{key}=${{{key}:-}}" in service["environment"]
         assert all(port.startswith("127.0.0.1:") for port in service["ports"])
         assert (
             _nats_guard(service)
             .rstrip()
             .endswith("exec nats-server -c /etc/nats/nats.conf -js -sd /data -m 8222")
+        )
+
+
+def test_the_docker_broker_gives_modules_the_engines_module_permissions(
+    tmp_path: Path,
+) -> None:
+    """The nats.conf lists are the ones nats_permissions defines (and abi dev uses)."""
+    from naas_abi_core.engine.nats_permissions import MODULE_PERMISSIONS
+
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+    repo_root = Path(__file__).resolve().parents[5]
+
+    for root in (repo_root, tmp_path):
+        conf = (root / ".deploy/docker/nats/nats.conf").read_text(encoding="utf-8")
+        block = conf[conf.index("MODULE_PERMISSIONS = {") : conf.index("authorization {")]
+        publish = block[block.index("publish:") : block.index("subscribe:")]
+        subscribe = block[block.index("subscribe:") :]
+        assert re.findall(r'"([^"]+)"', publish) == MODULE_PERMISSIONS["publish"]["deny"]
+        assert (
+            re.findall(r'"([^"]+)"', subscribe) == MODULE_PERMISSIONS["subscribe"]["deny"]
         )
 
 
