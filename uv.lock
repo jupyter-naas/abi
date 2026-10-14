@@ -23,7 +23,7 @@ source = { editable = "." }
 dependencies = [
     { name = "naas-abi" },
     { name = "naas-abi-cli" },
-    { name = "naas-abi-core", extra = ["all"] },
+    { name = "naas-abi-core", extra = ["all", "dagster", "rabbitmq"] },
     { name = "naas-abi-marketplace", extra = ["ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-perplexity", "ai-qwen", "applications-algolia", "applications-arxiv", "applications-bodo", "applications-github", "applications-gmail", "applications-googlesearch", "applications-linkedin", "applications-postgres", "applications-powerpoint", "applications-pubmed", "applications-twilio", "applications-x", "applications-yahoofinance", "domains-ontology-engineer"] },
     { name = "openpyxl" },
     { name = "pymupdf" },
@@ -59,7 +59,7 @@ requires-dist = [
     { name = "mkdocs-material", marker = "extra == 'dev'", specifier = ">=9.7.1" },
     { name = "naas-abi", editable = "libs/naas-abi" },
     { name = "naas-abi-cli", editable = "libs/naas-abi-cli" },
-    { name = "naas-abi-core", extras = ["all"], editable = "libs/naas-abi-core" },
+    { name = "naas-abi-core", extras = ["all", "dagster", "rabbitmq"], editable = "libs/naas-abi-core" },
     { name = "naas-abi-marketplace", extras = ["ai-chatgpt"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["ai-claude"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["ai-deepseek"], editable = "libs/naas-abi-marketplace" },
@@ -3614,7 +3614,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "greenlet" },
     { name = "httpx" },
-    { name = "naas-abi-core", extra = ["dagster", "nats"] },
+    { name = "naas-abi-core", extra = ["nats"] },
     { name = "naas-abi-marketplace" },
     { name = "ollama" },
     { name = "openai" },
@@ -3652,7 +3652,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.109.0" },
     { name = "greenlet", specifier = ">=3.0.0" },
     { name = "httpx", specifier = ">=0.26.0" },
-    { name = "naas-abi-core", extras = ["dagster", "nats"], editable = "libs/naas-abi-core" },
+    { name = "naas-abi-core", extras = ["nats"], editable = "libs/naas-abi-core" },
     { name = "naas-abi-marketplace", editable = "libs/naas-abi-marketplace" },
     { name = "ollama", specifier = ">=0.1.0" },
     { name = "openai", specifier = ">=1.10.0" },
@@ -3716,10 +3716,6 @@ version = "2.41.2"
 source = { editable = "libs/naas-abi-core" }
 dependencies = [
     { name = "click" },
-    { name = "dagster" },
-    { name = "dagster-aws" },
-    { name = "dagster-postgres" },
-    { name = "dagster-webserver" },
     { name = "docker" },
     { name = "dotenv" },
     { name = "duckdb" },
@@ -3754,16 +3750,12 @@ dependencies = [
 all = [
     { name = "boto3" },
     { name = "boto3-stubs" },
-    { name = "dagster" },
-    { name = "dagster-postgres" },
-    { name = "dagster-webserver" },
     { name = "langchain-openai" },
     { name = "msal" },
     { name = "naas-abi-proto" },
     { name = "naas-abi-sdk", extra = ["models", "otel"] },
     { name = "nats-py" },
     { name = "paramiko" },
-    { name = "pika" },
     { name = "pyjwt" },
     { name = "qdrant-client" },
     { name = "redis" },
@@ -3772,6 +3764,7 @@ all = [
 ]
 dagster = [
     { name = "dagster" },
+    { name = "dagster-aws" },
     { name = "dagster-postgres" },
     { name = "dagster-webserver" },
 ]
@@ -3784,18 +3777,18 @@ nats = [
 qdrant = [
     { name = "qdrant-client" },
 ]
+rabbitmq = [
+    { name = "pika" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.38.19,<2" },
     { name = "boto3-stubs", marker = "extra == 'aws'", specifier = ">=1.42.19" },
     { name = "click", specifier = ">=8.1.1,<8.2" },
-    { name = "dagster", specifier = ">=1.11.12" },
     { name = "dagster", marker = "extra == 'dagster'", specifier = ">=1.12.13" },
-    { name = "dagster-aws", specifier = ">=0.27.12" },
-    { name = "dagster-postgres", specifier = ">=0.27.12" },
+    { name = "dagster-aws", marker = "extra == 'dagster'", specifier = ">=0.28.14" },
     { name = "dagster-postgres", marker = "extra == 'dagster'", specifier = ">=0.28.14" },
-    { name = "dagster-webserver", specifier = ">=1.11.12" },
     { name = "dagster-webserver", marker = "extra == 'dagster'", specifier = ">=1.12.14" },
     { name = "docker", specifier = ">=7.1.0" },
     { name = "dotenv", specifier = ">=0.9.9" },
@@ -3809,13 +3802,11 @@ requires-dist = [
     { name = "loguru", specifier = ">=0.7.2,<0.8" },
     { name = "msal", marker = "extra == 'microsoft'", specifier = ">=1.37.0" },
     { name = "naas-abi-core", extras = ["aws"], marker = "extra == 'all'" },
-    { name = "naas-abi-core", extras = ["dagster"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["microsoft"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["nats"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["openrouter"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["otel"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["qdrant"], marker = "extra == 'all'" },
-    { name = "naas-abi-core", extras = ["rabbitmq"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["redis"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["sqlite-vec"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["ssh"], marker = "extra == 'all'" },
