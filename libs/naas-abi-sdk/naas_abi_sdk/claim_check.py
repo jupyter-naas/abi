@@ -21,6 +21,7 @@ from nats.js import api
 from nats.js.errors import BadRequestError, NotFoundError
 
 from naas_abi_sdk.messages import message_size
+from naas_abi_sdk.streams import REFUSED, not_created
 
 BUCKET = "abi_claim_checks"
 HEADER = "Abi-Claim-Check"
@@ -64,6 +65,8 @@ async def _bucket(nc: Any) -> Any:
             )
         except BadRequestError:  # created concurrently
             store = await js.object_store(BUCKET)
+        except REFUSED as exc:
+            raise not_created("The claim-check store", BUCKET, exc) from exc
     _buckets[nc] = store
     return store
 

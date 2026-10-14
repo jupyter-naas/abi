@@ -62,7 +62,7 @@ def test_a_token_bound_to_an_instance_is_short_and_good_there_only():
     bound = token.for_audience("i-1")
 
     _, claims = _parts(bound)
-    assert claims["aud"] == "i-1" and claims["exp"] - claims["iat"] == 120
+    assert claims["aud"] == "i-1" and claims["exp"] - claims["iat"] == 300
     assert nats_auth.verify_service_token(bound, secret, audience="i-1") == "acme.research"
     with pytest.raises(nats_auth.InvalidServiceTokenError):
         nats_auth.verify_service_token(bound, secret)
@@ -92,3 +92,16 @@ def test_a_module_login_uses_the_module_inbox_prefix():
         == MODULE_INBOX_PREFIX
     )
     assert "inbox_prefix" not in Transport("nats://abi:pw@nats:4222", "t").options
+
+
+def test_a_bound_token_is_reused_only_while_fresh():
+    from naas_abi_sdk.service_token import BOUND_REUSE_SECONDS
+
+    now = [1000.0]
+    token = ModuleToken("m", "k", clock=lambda: now[0])
+    first = token.for_audience("i-1")
+    now[0] += BOUND_REUSE_SECONDS - 1
+    assert token.for_audience("i-1") == first
+    now[0] += 2
+    fresh = token.for_audience("i-1")
+    assert fresh != first and _parts(fresh)[1]["iat"] == int(now[0])

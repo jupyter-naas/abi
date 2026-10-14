@@ -14,10 +14,10 @@ from collections.abc import Sequence
 from typing import Any
 
 from nats.aio.subscription import Subscription
-from nats.js.client import JetStreamContext
 from nats.js.errors import BadRequestError, NotFoundError
 
 from naas_abi_sdk import claim_check
+from naas_abi_sdk.streams import REFUSED, not_created
 from naas_abi_sdk.transport import Transport
 
 
@@ -106,7 +106,10 @@ class BusClient:
 
         return await asyncio.wait_for(subscribe(), self._transport.timeout)
 
-    async def _stream(self, js: JetStreamContext, topic: str) -> str:
+    async def _stream(self, nc: Any, topic: str) -> str:
+        # Within the caller's deadline, so a create the broker refuses (the user
+        # `module` may not create streams) ends here, as StreamNotCreated.
+        js = nc.jetstream(timeout=max(0.1, self._transport.timeout / 2))
         name = self.stream_name(topic)
         try:
             info = await js.stream_info(name)
@@ -115,6 +118,8 @@ class BusClient:
                 info = await js.add_stream(name=name, subjects=[f"{topic}.>"])
             except BadRequestError:
                 info = await js.stream_info(name)
+            except REFUSED as exc:
+                raise not_created(f"The queue stream of topic {topic!r}", name, exc) from exc
         if info.config.subjects != [f"{topic}.>"]:
             raise ValueError("Existing stream has incompatible subjects")
         return name
@@ -123,7 +128,7 @@ class BusClient:
         nc = await self._transport.connect()
         js = nc.jetstream()
         stream = await asyncio.wait_for(
-            self._stream(js, topic), self._transport.timeout
+            self._stream(nc, topic), self._transport.timeout
         )
         body, headers = await claim_check.prepare(
             nc, payload, reserve=claim_check.stream_header_reserve(stream)
@@ -143,7 +148,7 @@ class BusClient:
         async def subscribe():
             nc = await self._transport.connect()
             js = nc.jetstream()
-            stream = await self._stream(js, topic)
+            stream = await self._stream(nc, topic)
             return ClaimCheckedPullSubscription(
                 nc,
                 await js.pull_subscribe(

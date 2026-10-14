@@ -178,6 +178,25 @@ def test_run_module_names_its_connection_after_the_module(monkeypatch):
     assert calls[1]["name"] == "custom"
 
 
+def test_run_module_reads_replies_on_the_module_inbox_prefix(monkeypatch):
+    """However the module logs in (here a token in the options, no user in the
+    URL): the broker user `module` may not read _INBOX.>."""
+    from naas_abi_sdk.transport import MODULE_INBOX_PREFIX
+
+    calls = []
+    _capturing_client(monkeypatch, calls)
+
+    class Named(BaseModule):
+        module_id = "acme.reports"
+
+        async def run(self):
+            return None
+
+    asyncio.run(run_module(Named, url="nats://nats:4222", token="t", user_credentials="m.creds"))
+
+    assert calls[0]["inbox_prefix"] == MODULE_INBOX_PREFIX
+
+
 def test_run_module_configures_tracing_from_the_environment(monkeypatch):
     calls = []
     _capturing_client(monkeypatch, [])

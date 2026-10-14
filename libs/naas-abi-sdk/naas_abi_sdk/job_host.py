@@ -127,6 +127,8 @@ async def ensure_stream(js: Any, project: str) -> None:
         allow_msg_schedules=True,
         allow_msg_ttl=True,
     )
+    from naas_abi_sdk.streams import REFUSED, not_created
+
     try:
         info = await js.stream_info(name)
     except NotFoundError:
@@ -135,11 +137,16 @@ async def ensure_stream(js: Any, project: str) -> None:
             return
         except BadRequestError:
             info = await js.stream_info(name)
+        except REFUSED as exc:
+            raise not_created("The jobs stream", name, exc) from exc
     current = info.config
     if not (current.allow_msg_schedules and current.allow_msg_ttl):
         current.allow_msg_schedules = True
         current.allow_msg_ttl = True
-        await js.update_stream(current)
+        try:
+            await js.update_stream(current)
+        except REFUSED as exc:
+            raise not_created("The jobs stream", name, exc) from exc
 
 
 class JobHost:
