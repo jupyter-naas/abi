@@ -93,7 +93,8 @@ class BodySource:
         self._last: pb.BodyChunk | None = None
         self._subscription: Any = None
         self._watchdog: asyncio.Task | None = None
-        self._pulls: set[asyncio.Task] = set()
+        # The pull being served: one at a time (a reader waits for each reply).
+        self._serving: asyncio.Task | None = None
         self._last_pull = 0.0
         self._lock = asyncio.Lock()
 
@@ -115,11 +116,14 @@ class BodySource:
 
     def abort(self, code: str, message: str) -> None:
         """End the body with an error now, dropping the chunk not pulled yet:
-        the reader's next pull gets the error instead of a clean end."""
+        the reader's next pull gets the error instead of a clean end. A body
+        whose end is already queued (all of it was taken) stays whole."""
         if self.done.is_set() or self.gone.is_set():
             return
         while not self.queue.empty():
-            self.queue.get_nowait()
+            if self.queue.get_nowait() is _END:
+                self.queue.put_nowait(_END)
+                return
         self.queue.put_nowait(RPCError(code, message))
 
     async def settled(self) -> None:
@@ -149,9 +153,9 @@ class BodySource:
             self._watchdog.cancel()
             await asyncio.gather(self._watchdog, return_exceptions=True)
             self._watchdog = None
-        for task in list(self._pulls):
-            task.cancel()
-        await asyncio.gather(*self._pulls, return_exceptions=True)
+        if self._serving is not None:
+            self._serving.cancel()
+            await asyncio.gather(self._serving, return_exceptions=True)
         if self._subscription is not None:
             with contextlib.suppress(Exception):
                 await self._subscription.unsubscribe()
@@ -184,9 +188,13 @@ class BodySource:
         if pull.cancel:
             self.gone.set()
             return None
-        task = asyncio.create_task(self._serve(msg, pull))
-        self._pulls.add(task)
-        task.add_done_callback(self._pulls.discard)
+        if self._serving is not None and not self._serving.done():
+            # A reader sends its next pull once answered: another one now is
+            # out of turn, and is not queued (no backlog of waiting pulls).
+            return await self._answer(
+                msg, _error("INVALID_ARGUMENT", "A pull is already waiting")
+            )
+        self._serving = asyncio.create_task(self._serve(msg, pull))
         return None
 
     async def _serve(self, msg: Any, pull: pb.BodyPull) -> None:

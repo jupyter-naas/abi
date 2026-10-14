@@ -232,14 +232,20 @@ class AppHost:
     async def _nc(self) -> Any:
         return await self.session.client.transport.connect()
 
-    async def _fits_inline(self, size: int) -> bool:
-        """Whether a body of ``size`` bytes is answered inline: it fits one
-        broker message with its envelope, under INLINE_BYTES."""
-        if size <= chunk_bytes(0):  # the smallest chunk fits any broker
+    async def _fits_inline(
+        self, size: int, headers: Iterable[tuple[str, str]] = ()
+    ) -> bool:
+        """Whether a body of ``size`` bytes is answered inline: up to
+        INLINE_BYTES, and fitting one broker message with its headers and
+        envelope. Else it streams (a stream's first message holds only the
+        headers)."""
+        if size > INLINE_BYTES:
+            return False
+        total = size + sum(len(k) + len(v) + 8 for k, v in headers)
+        if total <= chunk_bytes(0):  # the smallest chunk fits any broker
             return True
         nc = await self._nc()
-        limit = chunk_bytes(getattr(nc, "max_payload", 1024 * 1024))
-        return size <= min(INLINE_BYTES, limit)
+        return total <= chunk_bytes(getattr(nc, "max_payload", 1024 * 1024))
 
     async def _source(self) -> BodySource:
         """A new response body, closed with the host."""
@@ -252,11 +258,20 @@ class AppHost:
     async def _settle(self, source: BodySource) -> None:
         """Wait until the reader took the body's end, or left; the source then
         lingers for a repeated last pull on its own. While the host closes,
-        the reader has CLOSE_SECONDS."""
-        with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
+        the reader has CLOSE_SECONDS to take it (the error ``close`` put in),
+        even when this wait is cancelled; the cancellation then goes on."""
+        try:
             await asyncio.wait_for(
                 source.settled(), CLOSE_SECONDS if self.closing else None
             )
+        except asyncio.TimeoutError:
+            pass
+        except asyncio.CancelledError:
+            if self.closing:  # close() cancels; its error is still to be served
+                with contextlib.suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(source.settled(), CLOSE_SECONDS)
+            await source.close()
+            raise
         if self.closing or not source.done.is_set():
             await source.close()
 
@@ -465,7 +480,7 @@ class AppHost:
         headers.append(("content-length", str(stat.st_size)))
         if request.method.upper() == "HEAD":
             return _Answer(200, headers)
-        if await self._fits_inline(stat.st_size):
+        if await self._fits_inline(stat.st_size, headers):
             return _Answer(200, headers, path.read_bytes())
         if len(self._streams) >= MAX_STREAMS:
             raise RPCError("MODULE_UNAVAILABLE", "Too many responses streaming")
@@ -700,7 +715,7 @@ class _AsgiCall:
                 # caller sent too much, which is what it is told.
                 self.ready.set_result(_text(413, "Request body too large"))
                 return
-            if not more and await self.host._fits_inline(len(body)):
+            if not more and await self.host._fits_inline(len(body), self.headers):
                 # The whole response at once, small: inline.
                 self.ready.set_result(_Answer(self.status, self.headers, body))
                 return

@@ -166,6 +166,13 @@ def _app():
     async def whole(size: int):
         return fastapi.Response(b"w" * size, media_type="application/octet-stream")
 
+    @api.get("/api/headers")
+    async def headers():
+        """A body under the inline size whose headers fill the message."""
+        return fastapi.Response(
+            b"h" * 40960, headers={"x-padding": "p" * 30000}, media_type="text/plain"
+        )
+
     @api.get("/api/ping")
     async def ping():
         return {"pong": True}
@@ -664,5 +671,80 @@ def test_leaving_an_idle_stream_stops_the_app_at_once(broker, tmp_path, monkeypa
             await host.close()
             await nexus.close()
             await host.session.client.transport.close()
+
+    asyncio.run(scenario())
+
+
+# -- review round 1 of #108 -------------------------------------------------------
+
+
+def test_headers_count_toward_what_travels_inline(small_broker, tmp_path):
+    """A 40 KiB body fits a 64 KiB message alone, not with 30 KiB of headers:
+    it streams instead of failing to send (APP_ERROR)."""
+
+    async def scenario():
+        api, _ = _app()
+        host = await _module(small_broker, tmp_path, api)
+        nexus = Transport(small_broker, NexusToken(), timeout=10)
+        try:
+            response = await call_app(nexus, "acme", "i-1", _request("/api/headers"))
+            assert response.status == 200 and response.body_follows, response.error
+            assert {h.name: h.value for h in response.headers}[
+                "x-padding"
+            ] == "p" * 30000
+            assert await _body(nexus, response) == b"h" * 40960
+        finally:
+            await host.close()
+            await nexus.close()
+            await host.session.client.transport.close()
+
+    asyncio.run(scenario())
+
+
+def test_one_pull_waits_at_a_time(broker, monkeypatch):
+    """A pull sent while another waits for the next chunk is refused at once,
+    not queued behind it (no backlog of waiting pulls)."""
+    monkeypatch.setattr(app_streams, "KEEPALIVE_SECONDS", 1.0)
+
+    async def scenario():
+        nexus = Transport(broker, NexusToken(), timeout=60)
+        try:
+            nc = await nexus.connect()
+            source = BodySource(nc)
+            await source.start()
+            pull = pb.BodyPull(sequence=0).SerializeToString()
+            waiting = asyncio.create_task(nc.request(source.inbox, pull, timeout=5))
+            await asyncio.sleep(0.1)
+            started = time.monotonic()
+            second = pb.BodyChunk.FromString(
+                (await nc.request(source.inbox, pull, timeout=5)).data
+            )
+            assert second.error.code == "INVALID_ARGUMENT"
+            assert time.monotonic() - started < 0.5
+            first = pb.BodyChunk.FromString((await waiting).data)
+            assert (first.sequence, first.data, first.error.code) == (0, b"", "")
+            await source.close()
+        finally:
+            await nexus.close()
+
+    asyncio.run(scenario())
+
+
+def test_an_abort_after_the_whole_body_keeps_its_end(broker):
+    """Stopping the module while the reader has yet to take the end of a whole
+    body: the reader gets the clean end, not an error."""
+
+    async def scenario():
+        nexus = Transport(broker, NexusToken(), timeout=60)
+        try:
+            nc = await nexus.connect()
+            source = BodySource(nc)
+            await source.start()
+            await source.finish()
+            source.abort("MODULE_UNAVAILABLE", "The module stopped")
+            assert [chunk async for chunk in pull_body(nc, source.inbox)] == []
+            await source.close()
+        finally:
+            await nexus.close()
 
     asyncio.run(scenario())

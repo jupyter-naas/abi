@@ -592,3 +592,34 @@ def test_a_finished_body_outlasts_the_readers_retry_of_its_last_pull():
     from naas_abi_sdk import app_streams
 
     assert app_streams.LINGER_SECONDS > app_streams.PULL_TIMEOUT_SECONDS
+
+
+def test_closing_lets_the_reader_take_the_error_and_keeps_the_cancel(tmp_path):
+    """Review round 1: close() cancels a stream task already waiting for its
+    reader. The reader still gets CLOSE_SECONDS to take the error close() put
+    in (else its pull waits for its timeout), and the task ends cancelled."""
+
+    class Source:
+        def __init__(self):
+            self.done, self.closed = asyncio.Event(), False
+
+        async def settled(self):
+            await self.done.wait()
+
+        async def close(self):
+            self.closed = True
+
+    async def scenario():
+        host, source = _host(tmp_path), Source()
+        task = asyncio.create_task(host._settle(source))
+        await asyncio.sleep(0.05)
+        host.closing = True  # as close() does, before cancelling
+        task.cancel()
+        await asyncio.sleep(0.1)
+        assert not source.closed  # the reader is taking the error
+        source.done.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert source.closed
+
+    asyncio.run(scenario())
