@@ -5,7 +5,8 @@ description = "A remote ABI module: runs in its own process, reaches the engine 
 readme = "README.md"
 requires-python = ">=3.12"
 # naas-abi-proto and naas-abi-sdk are not on PyPI yet: both come from the ABI
-# repository, at the same ref. Bump the ref to upgrade, and move to plain
+# repository, at the same ref (by default the release tag of the naas-abi-cli
+# that created this module). Bump the ref to upgrade, and move to plain
 # version pins once they are published.
 dependencies = [
     "naas-abi-proto @ git+{{abi_git_url}}@{{abi_git_ref}}#subdirectory=libs/naas-abi-proto",

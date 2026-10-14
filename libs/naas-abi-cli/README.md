@@ -67,8 +67,9 @@ token signer, an app scaffold and offline tests.
   module logs `READY`.
 - **`--standalone`** (the default outside a project) creates a repository of
   its own: `pyproject.toml` (`naas-abi-sdk[agent,otel]` and `naas-abi-proto`
-  from git at `--abi-ref`, default `main`), `Dockerfile`, `README.md`,
-  `AGENTS.md`, ready for `git init`.
+  from git at `--abi-ref`, by default this CLI's release tag
+  `naas-abi-cli-v<version>`, so they match the CLI and never move),
+  `Dockerfile`, `README.md`, `AGENTS.md`, ready for `git init`.
 - **`--in-engine`** (alias `--local`) creates the classic module the engine
   loads (agents, integrations, pipelines, workflows, orchestrations,
   ontologies); add it under `modules:`.
