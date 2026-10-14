@@ -550,10 +550,14 @@ app runs in the module's process with `root_path` set to the Nexus path, and its
 lifespan (startup and shutdown) runs with the module. Nexus checks the user's
 access, then forwards the request without the user's credential.
 
-`request.scope["abi"]` holds `user_id` and `caller`, the service identity that
-sent the request. Only Nexus (`api`) may send a `user_id`: a request from any
-other caller that names a user is refused (`PERMISSION_DENIED`) before the app
-sees it, so another module can call an app, but never on behalf of a user.
+`request.scope["abi"]` holds `user_id`, `workspace_id` (the Nexus workspace
+the user opened the app from, one where it is enabled) and `caller`, the
+service identity that sent the request. Only Nexus (`api`) may send a
+`user_id` or a `workspace_id`: a request from any other caller that names one
+is refused (`PERMISSION_DENIED`) before the app sees it, so another module can
+call an app, but never on behalf of a user. Keep each workspace's data apart
+with `workspace_id`. A lifespan's state (`yield {...}`) reaches each request
+(`request.state`).
 
 The page runs sandboxed, in an opaque origin, apart from the Nexus session. The
 grant in its URL is its only credential:
@@ -578,9 +582,16 @@ async def upload(name: str, request: Request):
 ```
 
 A `StreamingResponse` (a download, server-sent events) leaves as the app sends
-it; when the browser leaves, the app is cancelled. Nexus refuses uploads above
-the app's `max_upload_bytes` (manifest; default 1 GiB). An app that neither
-reads nor answers for 60 s gets 504; there is no total limit. Multipart forms
+it; when the browser leaves, the app is cancelled, even while it waits for its
+next event. Set `Content-Length` when you know it: Nexus forwards it, and a
+browser then tells a cut download from a whole one (a stream that fails is
+aborted either way). When the module stops, a stream still open ends with an
+error. Nexus refuses uploads above the app's `max_upload_bytes` (manifest;
+default 1 GiB), and the module stops reading there too. Uploads run 16 at
+once per module process (`AppHost(max_uploads=)`), apart from other requests.
+An app that neither reads nor answers for 60 s gets 504; there is no total
+limit. An exception the app raises, an `RPCError` of a service it called
+included, is a 502 for the browser. Multipart forms
 work, but FastAPI's `UploadFile` spools each file (to disk above 1 MB): send a
 very large file as the raw body instead. No WebSockets yet. Declare `apps = (AppDescriptor(...),)` on the class instead
 of the folder for an app without files.
