@@ -26,9 +26,24 @@ from .utils import to_pascal_case, to_snake_case
 TEMPLATES = Path(naas_abi_cli.__file__).parent / "cli/new/templates"
 COMPOSE_OVERRIDE = "docker-compose.override.yml"
 ABI_GIT_URL = "https://github.com/jupyter-naas/abi.git"
-# The ABI ref standalone modules install naas-abi-proto and naas-abi-sdk from,
-# until both are on PyPI. `--abi-ref` picks another branch, tag or commit.
-DEFAULT_ABI_GIT_REF = "main"
+# Standalone modules install naas-abi-proto and naas-abi-sdk from the ABI
+# repository until both are on PyPI, pinned by default to the release tag of
+# this CLI (semantic-release's tag_format), so they match the CLI that created
+# the module and never move. `--abi-ref` picks another branch, tag or commit.
+CLI_TAG_FORMAT = "naas-abi-cli-v{version}"
+
+
+def default_abi_git_ref() -> str:
+    """The release tag of the installed CLI: ``naas-abi-cli-v<version>``."""
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return CLI_TAG_FORMAT.format(version=version("naas-abi-cli"))
+    except PackageNotFoundError as exc:
+        raise click.ClickException(
+            "Cannot tell which naas-abi-cli release this is; pass --abi-ref "
+            "with the ABI tag or commit to install naas-abi-sdk from."
+        ) from exc
 # A dev module's name (EngineConfiguration_Dev.DevModuleConfiguration.name).
 _DEV_MODULE_NAME = re.compile(r"^[a-z][a-z0-9-]{0,62}$")
 # What reading a project config can raise: the file, its Jinja, its YAML, or

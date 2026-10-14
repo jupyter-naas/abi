@@ -15,7 +15,7 @@ from .new import new
 from .orchestration import new_orchestration
 from .pipeline import new_pipeline
 from .remote_module import (
-    DEFAULT_ABI_GIT_REF,
+    default_abi_git_ref,
     create_in_project,
     create_standalone,
     default_package_dir,
@@ -54,11 +54,11 @@ ModuleKind = Literal["remote", "in-engine"]
 )
 @click.option(
     "--abi-ref",
-    default=DEFAULT_ABI_GIT_REF,
-    show_default=True,
+    default=None,
     help=(
         "With --standalone: the ABI branch, tag or commit naas-abi-sdk and "
-        "naas-abi-proto install from (they are not on PyPI yet)."
+        "naas-abi-proto install from (they are not on PyPI yet). Default: this "
+        "CLI's release tag, naas-abi-cli-v<version>."
     ),
 )
 def _new_module(
@@ -66,7 +66,7 @@ def _new_module(
     module_path: str = ".",
     in_engine: bool = False,
     standalone: bool = False,
-    abi_ref: str = DEFAULT_ABI_GIT_REF,
+    abi_ref: str | None = None,
 ):
     """Create a module. By default a remote module: it runs in its own process
     and reaches the engine only through NATS, with naas-abi-sdk.
@@ -102,7 +102,7 @@ def new_module(
     quiet: bool = False,
     kind: ModuleKind = "remote",
     standalone: bool = False,
-    abi_ref: str = DEFAULT_ABI_GIT_REF,
+    abi_ref: str | None = None,
 ):
     """``kind="remote"``: an SDK module, in the enclosing project's ``src/``
     or, outside a project or with ``standalone``, as a repository of its own.
@@ -120,7 +120,7 @@ def new_module(
             base = os.getcwd() if module_path == "." else module_path
             repository = Path(base).resolve() / module_name
             _empty_destination(str(repository))
-            create_standalone(module_name, repository, abi_ref)
+            create_standalone(module_name, repository, abi_ref or default_abi_git_ref())
         else:
             package = default_package_dir(
                 project, module_path, to_snake_case(module_name)

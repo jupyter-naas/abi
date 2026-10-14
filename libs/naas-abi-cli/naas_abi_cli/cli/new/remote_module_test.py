@@ -309,6 +309,27 @@ def test_outside_a_project_a_remote_module_is_standalone(tmp_path: Path) -> None
     assert (tmp_path / "research" / "pyproject.toml").is_file()
 
 
+def test_standalone_pins_the_sdk_to_this_cli_release_by_default(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Never a moving branch: the SDK the module installs matches the CLI."""
+    import importlib.metadata
+
+    monkeypatch.setattr(
+        importlib.metadata,
+        "version",
+        lambda name: "3.0.0" if name == "naas-abi-cli" else "0",
+    )
+
+    result = _invoke(_new_module, tmp_path, "research", "--standalone")
+
+    assert result.exit_code == 0, result.output
+    project = tomllib.loads((tmp_path / "research" / "pyproject.toml").read_text())
+    for dependency in project["project"]["dependencies"]:
+        assert "@ git+https://github.com/jupyter-naas/abi.git@naas-abi-cli-v3.0.0#" in dependency
+        assert "@main" not in dependency
+
+
 def test_standalone_and_in_engine_exclude_each_other(tmp_path: Path) -> None:
     result = _invoke(_new_module, tmp_path, "x", "--standalone", "--in-engine")
 
