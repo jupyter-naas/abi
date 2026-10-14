@@ -3,7 +3,7 @@
 ## Status
 Accepted.
 
-Amended five times since; see the amendments at the end. The text above
+Amended six times since; see the amendments at the end. The text above
 them is the decision as accepted on 2026-10-12.
 
 ## Date
@@ -262,3 +262,63 @@ Not covered: modules share one broker user, so a module that subscribes to
 another module's app subjects sees Nexus's requests there, and can replay the
 token of one of them to that same module, within its five minutes, naming a
 user (see the module identities ADR, "Still open").
+
+## Amendment (2026-10-14): workspaces, revocation, and what survives the hops
+From the review findings of 2026-10-13 (A5 to A32) and the grant review.
+
+**Grants.** A grant names a workspace (`ws`) that the user can open and where
+the app is enabled, as the catalog shows it; the module gets it with each
+request, `request.scope["abi"]["workspace_id"]` (`HttpRequest.workspace_id`),
+under the same rule as `user_id`: only Nexus may name one.
+`POST /api/apps/remote-grant` takes `workspace_id`. The catalog URL takes
+`?workspace_id=`, and without it opens the first of the user's workspaces that
+enables the app, so old links still work. A grant never outlives the session
+token it was asked with (the Apps page opens the app again under a fresh one
+before it expires), and it ends when the user logs out, changes their password
+or calls `POST /api/apps/remote-grant/revoke`: each request checks the user's
+revocations (`revoked_tokens`, cached 5 s) against the grant's issue time
+(`iat`). A logout ends the user's grants on every device.
+
+**The catalog URL** takes every method: a user's request is redirected with a
+307, which keeps the method and body; an `ABI_API_KEY` caller (a script, no
+user) is answered directly, with no user and no workspace. nexus-web forwards
+`/app-html/remote/` to the API and points the redirect at the API's public
+origin (`NEXUS_API_URL`); a remote app still never runs on the Nexus web
+origin. The local Caddyfile sends `/app-html/remote/*` through nexus-web for
+that reason. This replaces "nexus-web does not proxy `/app-html/remote/`".
+
+**Headers.** Responses also pass the app's `x-` headers (not `X-Accel-*`,
+`X-Sendfile`, `X-Lighttpd-Send-File`, `X-Forwarded-*`, `X-Real-IP`,
+`X-Frame-Options` or `X-Content-Type-Options`), `Retry-After`,
+`WWW-Authenticate`, `Link` and `Content-Length`, with
+`Access-Control-Expose-Headers: *`. A value HTTP cannot carry (outside
+latin-1, a line break or another control byte) is dropped. A `Set-Cookie`
+pair is cut at its first `;` and needs a valid name. A `Location` whose
+resolved path holds `%2e` is dropped, the request's own path included. The
+query reaches the module as the browser sent it, without `token`.
+
+**Bodies.** A response that breaks off after it started raises in Nexus, so
+the server aborts the connection and the browser sees a failed download, not a
+short one; the app's `Content-Length` is forwarded (and a HEAD's). A body
+that does not fit one broker message streams instead of failing to send, and
+an answer that cannot be sent is followed by an error, so Nexus never waits
+for its timeout. A stream stops when the browser leaves, even while idle, and
+the module hears of it at once. When the module stops (SIGTERM), a response
+still streaming ends with an error and the host waits 3 s at most for its
+reader. A finished body lingers past the reader's pull timeout, so the retry
+of a lost last reply is answered.
+
+**Limits.** The module stops reading an upload at its app's
+`max_upload_bytes` (default 1 GiB) whatever the request says. Uploads run on
+16 slots of their own in the module (one more is refused at once, and Nexus
+tries another instance), so slow uploads never hold the slots of other
+requests. An upload the browser drops ends with an error the module gets at
+once. Nexus caps the responses streaming from one module per worker (256).
+An app's own `RPCError` is an app error (502), never retried on another
+instance.
+
+**Still as before.** A module caches an authorization for 5 s (discovery's
+own snapshot adds up to 1 s), as the agent and model hosts do, never past
+the caller token's expiry: an instance that loses READY may serve a request
+within that window. A draining module refuses requests on its own. Asking
+discovery on every request would double each request's round trips.
