@@ -561,12 +561,21 @@ def test_a_chunked_upload_above_the_apps_limit_is_refused(monkeypatch):
 
 def test_only_the_nexus_token_leaves_the_query(forwarded):
     response = _client().get(
-        f"{ROOT}/x?token=jwt&token=own&flag&q=a%2Bb+c",
+        f"{ROOT}/x?token=jwt&token=own&token={GRANT}&flag&q=a%2Bb+c",
         headers={"Authorization": "Bearer jwt"},
     )
 
     assert response.status_code == 200
     assert forwarded[0].query == "token=own&flag&q=a%2Bb+c"
+
+
+def test_the_apps_own_token_stays_without_an_authorization_header(forwarded):
+    """A sandboxed page sends no Authorization: the grant in the path is its
+    credential, and a token in its query is the app's."""
+    response = _client().get(f"{ROOT}/x?token=own&q=1")
+
+    assert response.status_code == 200
+    assert forwarded[0].query == "token=own&q=1"
 
 
 def test_a_nexus_token_leaves_the_query_whatever_authenticated_the_request(monkeypatch, forwarded):
