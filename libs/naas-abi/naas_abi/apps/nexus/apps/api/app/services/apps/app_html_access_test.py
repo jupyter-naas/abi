@@ -56,15 +56,8 @@ def test_validate_scoped_path_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
         path_prefix="/app-html/axi/devops/",
     )
     assert expires_in == 600
-    assert app_html_access.validate_app_html_jwt(
-        token, _request("/app-html/axi/devops/host/")
-    )
-    assert (
-        app_html_access.validate_app_html_jwt(
-            token, _request("/app-html/osint/osint/")
-        )
-        is False
-    )
+    assert app_html_access.validate_app_html_jwt(token, _request("/app-html/axi/devops/host/"))
+    assert app_html_access.validate_app_html_jwt(token, _request("/app-html/osint/osint/")) is False
 
 
 def test_mint_rejects_invalid_path_prefix() -> None:

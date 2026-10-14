@@ -33,7 +33,8 @@ async def choose_workspace(
     registry: Any, user_id: str, app_id: str, workspace_id: str | None
 ) -> str:
     """``workspace_id`` when the user can open it and it enables the app; with
-    none named (an old link), the first of the user's workspaces that does."""
+    none named (an old link), the first of the user's workspaces that does, by
+    slug (then id), so a link always opens the same one."""
     if workspace_id:
         try:
             await registry.workspaces.require_workspace_access(
@@ -47,7 +48,8 @@ async def choose_workspace(
         if workspace is not None and await enabled_in(registry, workspace, app_id):
             return workspace.id
         raise HTTPException(status_code=403, detail="This app is not enabled in this workspace")
-    for workspace in await registry.workspaces.list_workspaces(user_id):
+    workspaces = await registry.workspaces.list_workspaces(user_id)
+    for workspace in sorted(workspaces, key=lambda w: (getattr(w, "slug", "") or "", w.id)):
         if await enabled_in(registry, workspace, app_id):
             return workspace.id
     raise HTTPException(status_code=403, detail="This app is not enabled in any of your workspaces")

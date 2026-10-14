@@ -10,7 +10,7 @@ import {
   AppWindow, ExternalLink, RefreshCw, AlertTriangle, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { appIframeSandbox, isBundledAppHtmlUrl, remoteAppGrantUrl, remoteAppParts, resolveAppEmbedUrl, resolveAppExternalUrl, appHtmlPathPrefix, pagesSsoAudience, withAppHtmlAccessToken, withPagesSsoToken, withRemoteAppWorkspace } from '@/lib/app-html';
+import { appIframeSandbox, isBundledAppHtmlUrl, remoteAppGrantUrl, remoteAppParts, resolveAppEmbedUrl, resolveAppExternalUrl, appHtmlPathPrefix, pagesSsoAudience, withAppHtmlAccessToken, withPagesSsoToken, withRemoteAppWorkspace, remoteGrantRenewDelayMs } from '@/lib/app-html';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
@@ -111,8 +111,8 @@ function EmbedView({
     const remote = remoteAppParts(url);
     if (remote) {
       // A remote module's app runs from the API origin under a grant, sandboxed,
-      // in this workspace. The grant ends with the session token it was asked
-      // with: the app is opened again under a fresh one just before.
+      // in this workspace. The grant lasts hours (a logout ends it sooner): the
+      // app is opened again under a fresh one shortly before it expires.
       let renew: ReturnType<typeof setTimeout> | undefined;
       (async () => {
         try {
@@ -131,9 +131,9 @@ function EmbedView({
           }
           if (!cancelled) {
             setEmbedUrl(remoteAppGrantUrl(getApiUrl(), path, remote.rest));
-            const seconds = Number(data.expires_in);
-            if (Number.isFinite(seconds) && seconds > 0) {
-              renew = setTimeout(() => setReloadKey((k) => k + 1), Math.max(seconds - 5, 5) * 1000);
+            const delay = remoteGrantRenewDelayMs(data.expires_in);
+            if (delay !== null) {
+              renew = setTimeout(() => setReloadKey((k) => k + 1), delay);
             }
           }
         } catch (err) {

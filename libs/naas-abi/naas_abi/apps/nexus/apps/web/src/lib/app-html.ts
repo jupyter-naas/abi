@@ -66,6 +66,21 @@ export function remoteAppGrantUrl(apiBase: string, grantPath: string, rest: stri
   return `${apiBase.replace(/\/+$/, '')}${grantPath}${rest.replace(/^\/+/, '')}`;
 }
 
+/** Reopen a remote app this long before its grant expires... */
+const REMOTE_GRANT_RENEW_MARGIN_MS = 60_000;
+/** ...but never sooner than this after opening it: a reload loses the page's state. */
+const REMOTE_GRANT_RENEW_FLOOR_MS = 5 * 60_000;
+
+/**
+ * When to reopen a remote app under a fresh grant, given the grant's
+ * ``expires_in`` (seconds); null when the answer gives none.
+ */
+export function remoteGrantRenewDelayMs(expiresIn: unknown): number | null {
+  const seconds = Number(expiresIn);
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  return Math.max(seconds * 1000 - REMOTE_GRANT_RENEW_MARGIN_MS, REMOTE_GRANT_RENEW_FLOOR_MS);
+}
+
 /**
  * A remote app's catalog URL opening it in ``workspaceId`` (``?workspace_id=``):
  * the API grants it there when the app is enabled in it. Other URLs unchanged.

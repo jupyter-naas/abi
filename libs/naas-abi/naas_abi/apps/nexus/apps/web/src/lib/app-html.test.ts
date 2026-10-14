@@ -10,6 +10,7 @@ import {
   withAppHtmlAccessToken,
   withPagesSsoToken,
   withRemoteAppWorkspace,
+  remoteGrantRenewDelayMs,
 } from './app-html';
 
 describe('app-html helpers', () => {
@@ -123,5 +124,22 @@ describe('remote app links name their workspace', () => {
     expect(withRemoteAppWorkspace('/app-html/remote/acme.research/console/', '')).toBe(
       '/app-html/remote/acme.research/console/',
     );
+  });
+});
+
+describe('remote app grant renewal', () => {
+  it('reopens the app a minute before its grant expires', () => {
+    expect(remoteGrantRenewDelayMs(8 * 3600)).toBe(8 * 3600 * 1000 - 60_000);
+  });
+
+  it('never reloads a live app within five minutes of opening it', () => {
+    expect(remoteGrantRenewDelayMs(40)).toBe(5 * 60_000);
+    expect(remoteGrantRenewDelayMs(300)).toBe(5 * 60_000);
+  });
+
+  it('schedules nothing without a lifetime', () => {
+    expect(remoteGrantRenewDelayMs(undefined)).toBeNull();
+    expect(remoteGrantRenewDelayMs(0)).toBeNull();
+    expect(remoteGrantRenewDelayMs('soon')).toBeNull();
   });
 });

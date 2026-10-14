@@ -489,33 +489,29 @@ async def create_remote_app_grant(
 ) -> RemoteAppGrantResponse:
     """The app's root under a grant: the page runs sandboxed, from the API
     origin, and the grant in its path is its only credential. The user must
-    be able to open the workspace, and the app be enabled in it; the grant
-    ends with the session token it was asked with, or at the user's logout."""
-    from datetime import UTC, datetime
+    be able to open the workspace, and the app be enabled in it.
 
+    The grant lasts ``remote_app_grant_expire_minutes``, not as long as the
+    access token it was asked with (minutes, refreshed in the background): it
+    is bound to the session by revocation instead. A logout, a password change
+    or ``/remote-grant/revoke`` ends it, and a token issued before one of
+    those mints none (401: the page refreshes its token and asks again)."""
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote import access
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
-        presented_credential_expiry,
+        refuse_revoked_credential,
         remote_app_grant_url,
     )
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import RemoteApp
 
+    await refuse_revoked_credential(current_user.id, request)
     workspace_id = await access.remote_app_workspace(
         current_user.id, RemoteApp(body.module_id, body.app).app_id, body.workspace_id
     )
-    expires = presented_credential_expiry(request)
-    lifetime = nexus_config.settings.remote_app_grant_expire_minutes * 60
-    if expires is not None:
-        lifetime = min(lifetime, max(0, int((expires - datetime.now(UTC)).total_seconds())))
     return RemoteAppGrantResponse(
         path=remote_app_grant_url(
-            current_user.id,
-            body.module_id,
-            body.app,
-            not_after=expires,
-            workspace_id=workspace_id,
+            current_user.id, body.module_id, body.app, workspace_id=workspace_id
         ),
-        expires_in=lifetime,
+        expires_in=nexus_config.settings.remote_app_grant_expire_minutes * 60,
     )
 
 

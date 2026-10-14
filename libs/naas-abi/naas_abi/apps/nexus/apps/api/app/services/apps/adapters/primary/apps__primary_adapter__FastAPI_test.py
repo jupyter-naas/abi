@@ -76,17 +76,19 @@ def test_a_discovery_outage_still_lists_the_local_apps(monkeypatch: pytest.Monke
     assert asyncio.run(adapter._remote_apps_catalog()) == ()
 
 
-def _granting(monkeypatch: pytest.MonkeyPatch, minutes_left: float, enabled: set[str]):
-    """The grant endpoint's collaborators: the session token presented (its
-    expiry) and the workspaces enabling the app (access.py)."""
-    from datetime import UTC, datetime, timedelta
-
+def _granting(monkeypatch: pytest.MonkeyPatch, enabled: set[str], revoked: bool = False):
+    """The grant endpoint's collaborators: the credential's revocation check
+    and the workspaces enabling the app (access.py)."""
     from fastapi import HTTPException
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote import access, http_routes
 
     monkeypatch.setattr(http_routes, "current_secret_key", lambda: "s3cret")
-    expires = datetime.now(UTC) + timedelta(minutes=minutes_left)
-    monkeypatch.setattr(http_routes, "_presented_user", lambda request: ("u-1", expires))
+
+    async def refuse_revoked_credential(user_id, request):
+        if revoked:
+            raise HTTPException(status_code=401, detail="Sign in again to open this app")
+
+    monkeypatch.setattr(http_routes, "refuse_revoked_credential", refuse_revoked_credential)
     asked = []
 
     async def remote_app_workspace(user_id, app_id, workspace_id):
@@ -96,7 +98,7 @@ def _granting(monkeypatch: pytest.MonkeyPatch, minutes_left: float, enabled: set
         return workspace_id
 
     monkeypatch.setattr(access, "remote_app_workspace", remote_app_workspace)
-    return expires, asked
+    return asked
 
 
 def test_a_remote_app_opens_under_a_grant_for_the_user(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -105,7 +107,7 @@ def test_a_remote_app_opens_under_a_grant_for_the_user(monkeypatch: pytest.Monke
 
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import read_remote_app_grant
 
-    _, asked = _granting(monkeypatch, minutes_left=600, enabled={"ws-1"})
+    asked = _granting(monkeypatch, enabled={"ws-1"})
     body = adapter.RemoteAppGrantRequest(
         module_id="acme.research", app="console", workspace_id="ws-1"
     )
@@ -128,16 +130,21 @@ def test_a_remote_app_opens_under_a_grant_for_the_user(monkeypatch: pytest.Monke
     assert answer.expires_in == adapter.nexus_config.settings.remote_app_grant_expire_minutes * 60
 
 
-def test_a_remote_app_grant_never_outlives_the_session_token(
+def test_a_grant_lasts_its_own_lifetime_not_the_access_tokens(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """#48 review: a 30-minute session token no longer buys an 8-hour grant."""
+    """Review round 1: an access token about to be refreshed must not make the
+    Apps page reload the app; revocation binds the grant to the session."""
     import asyncio
+    from datetime import UTC, datetime
     from types import SimpleNamespace
 
     from jose import jwt
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import http_routes
 
-    expires, _ = _granting(monkeypatch, minutes_left=10, enabled={"ws-1"})
+    _granting(monkeypatch, enabled={"ws-1"})
+    expires = datetime.now(UTC).timestamp() + 40  # the token has 40 s left
+    monkeypatch.setattr(http_routes, "_presented_user", lambda request: ("u-1", expires))
     body = adapter.RemoteAppGrantRequest(
         module_id="acme.research", app="console", workspace_id="ws-1"
     )
@@ -146,9 +153,29 @@ def test_a_remote_app_grant_never_outlives_the_session_token(
         adapter.create_remote_app_grant(body, SimpleNamespace(), SimpleNamespace(id="u-1"))
     )
 
+    minutes = adapter.nexus_config.settings.remote_app_grant_expire_minutes
+    assert answer.expires_in == minutes * 60
     claims = jwt.get_unverified_claims(answer.path.split("/")[2])
-    assert claims["exp"] <= int(expires.timestamp())
-    assert 9 * 60 <= answer.expires_in <= 10 * 60
+    assert claims["exp"] >= datetime.now(UTC).timestamp() + minutes * 60 - 5
+
+
+def test_a_logged_out_session_token_mints_no_grant(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+
+    _granting(monkeypatch, enabled={"ws-1"}, revoked=True)
+    body = adapter.RemoteAppGrantRequest(
+        module_id="acme.research", app="console", workspace_id="ws-1"
+    )
+
+    with pytest.raises(HTTPException) as refused:
+        asyncio.run(
+            adapter.create_remote_app_grant(body, SimpleNamespace(), SimpleNamespace(id="u-1"))
+        )
+
+    assert refused.value.status_code == 401  # authFetch refreshes and asks again
 
 
 def test_a_remote_app_opens_only_in_a_workspace_that_enables_it(
@@ -160,7 +187,7 @@ def test_a_remote_app_opens_only_in_a_workspace_that_enables_it(
 
     from fastapi import HTTPException
 
-    _granting(monkeypatch, minutes_left=600, enabled={"ws-1"})
+    _granting(monkeypatch, enabled={"ws-1"})
     body = adapter.RemoteAppGrantRequest(
         module_id="acme.research", app="console", workspace_id="ws-2"
     )

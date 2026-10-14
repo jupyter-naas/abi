@@ -135,9 +135,23 @@ def _presented_user(request: Request) -> tuple[str, datetime | None]:
     return (subject if isinstance(subject, str) else ""), expires
 
 
-def presented_credential_expiry(request: Request) -> datetime | None:
-    """When the credential of ``request`` expires (a grant never outlives it)."""
-    return _presented_user(request)[1]
+def _presented_claims(request: Request) -> dict:
+    """The claims of the Nexus credential behind the request; none for an
+    ABI_API_KEY caller."""
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import decode_token
+
+    token = extract_abi_api_token(request)
+    payload = decode_token(token) if token else None
+    return payload if isinstance(payload, dict) else {}
+
+
+async def refuse_revoked_credential(user_id: str, request: Request) -> None:
+    """401 when the credential was revoked or predates the user's latest
+    logout: a logged-out browser's token or cookie mints no grant."""
+    if await revocation.credential_revoked(user_id, _presented_claims(request)):
+        raise HTTPException(
+            status_code=401, detail="Sign in again to open this app", headers=SECURITY_HEADERS
+        )
 
 
 def _is_forwarded(name: str) -> bool:
@@ -526,6 +540,8 @@ async def open_remote_app(module_id: str, app: str, request: Request, path: str 
     if not is_segment(module_id, app):
         raise HTTPException(status_code=404, detail="Not Found")
     user_id, expires = _presented_user(request)
+    if user_id:
+        await refuse_revoked_credential(user_id, request)
     if not user_id:
         return await _forward(
             module_id,
