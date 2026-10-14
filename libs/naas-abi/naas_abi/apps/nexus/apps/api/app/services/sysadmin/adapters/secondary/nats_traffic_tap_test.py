@@ -158,7 +158,7 @@ def test_subscribes_to_abi_subjects_and_replies_and_cleans_up():
 
     subscribed = asyncio.run(scenario())
 
-    assert subscribed == {*TAP_SUBJECTS, "_INBOX.>"}
+    assert subscribed == {*TAP_SUBJECTS, "_INBOX.>", "_INBOX_MODULES.>"}
     assert not any("transfer" in s for s in subscribed)
     assert nc.subs == {}
 

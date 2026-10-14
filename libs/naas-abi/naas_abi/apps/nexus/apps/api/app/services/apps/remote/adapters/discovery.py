@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import random
 import weakref
 from collections.abc import AsyncIterator, Callable
@@ -26,6 +27,8 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
     RemoteApp,
     RemoteAppUnavailable,
 )
+
+_log = logging.getLogger(__name__)
 
 CONTRACT_MAJOR = 1
 # Discovery is read at most this often: the catalog and every request share it.
@@ -123,12 +126,13 @@ class DiscoveryRemoteAppDirectory:
                 )
             except Exception as exc:
                 client.failed_at = self._now()
-                reason = (
-                    "Module discovery did not answer in time"
-                    if isinstance(exc, TimeoutError)
-                    else f"Module discovery failed: {exc}"
-                )
-                raise RemoteAppUnavailable(503, reason) from exc
+                if isinstance(exc, TimeoutError):
+                    raise RemoteAppUnavailable(
+                        503, "Module discovery did not answer in time"
+                    ) from exc
+                # The cause stays in the log; the browser gets no internals.
+                _log.warning("Reading module discovery failed", exc_info=True)
+                raise RemoteAppUnavailable(503, "Module discovery is unavailable") from exc
             client.failed_at = None
             return client.snapshot
 
@@ -258,10 +262,12 @@ class DiscoveryRemoteAppDirectory:
             raise RemoteAppUnavailable(504, "The app did not answer in time") from exc
 
     async def _answer(self, client: _Client, response: Any) -> AppResponse:
+        from naas_abi_sdk.transport import is_inbox
+
         headers = tuple((h.name, h.value) for h in response.headers)
         if not response.body_follows:
             return AppResponse(response.status or 200, headers, response.body)
-        if not response.body_inbox.startswith("_INBOX."):
+        if not is_inbox(response.body_inbox):
             raise RemoteAppUnavailable(502, "The app answered with an invalid body inbox")
         nc = await client.transport.connect()
         return AppResponse(

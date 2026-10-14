@@ -95,12 +95,12 @@ class _UnavailableTap:
 
 
 def _transport(nats: Any, name: str) -> Any:
-    from naas_abi_core.engine.nats_auth import issue_service_token
+    from naas_abi_core.engine.nats_auth import ServiceTokenSource
     from naas_abi_sdk.transport import Transport
 
     return Transport(
         nats.nats_url,
-        lambda: issue_service_token(CALLER_IDENTITY, nats.jwt_secret),
+        ServiceTokenSource(CALLER_IDENTITY, nats.jwt_secret),
         timeout=10,
         name=name,
         connect_timeout=2,
