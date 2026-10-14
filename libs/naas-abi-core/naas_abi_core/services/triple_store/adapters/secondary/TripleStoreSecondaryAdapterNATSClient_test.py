@@ -700,3 +700,47 @@ def test_a_write_behind_a_long_one_waits_for_its_own_deadline(nats_url):
     finally:
         client.close()
         server.stop()
+
+
+@pytest.mark.integration
+def test_a_fuseki_update_without_an_answer_reaches_the_caller_as_a_request_error(
+    nats_url,
+):
+    """Not as RuntimeError("triple_store NATS RPC failed (INTERNAL)"): the caller
+    can tell a timeout behind another writer from a rejected update."""
+    from unittest.mock import MagicMock, patch
+
+    import requests
+    from naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2 import (
+        ApacheJenaTDB2,
+    )
+
+    session = MagicMock()
+    session.get.return_value = MagicMock(status_code=200)
+    with patch(
+        "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.requests.Session",
+        return_value=session,
+    ):
+        fuseki = ApacheJenaTDB2(jena_tdb2_url="http://fuseki:3030/ds", timeout=60)
+    session.post.side_effect = requests.ReadTimeout("Read timed out. (read timeout=60)")
+
+    server = _PrimaryAdapterServer(nats_url, JWT_SECRET, fuseki)
+    server.start()
+    client = TripleStoreSecondaryAdapterNATSClient(
+        nats_url=nats_url,
+        jwt_secret=JWT_SECRET,
+        service_identity="engine",
+        timeout_seconds=10.0,
+    )
+    triples = Graph()
+    triples.add(
+        (URIRef("http://test.example.org/m"), URIRef("http://test.example.org/p"), URIRef("http://test.example.org/o"))
+    )
+    try:
+        with pytest.raises(Exceptions.RequestError) as exc_info:
+            client.insert(triples, URIRef("http://test.example.org/chat"))
+        assert exc_info.value.operation == "update"
+        assert "ReadTimeout" in str(exc_info.value)
+    finally:
+        client.close()
+        server.stop()
