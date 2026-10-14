@@ -341,3 +341,46 @@ def test_feeds_start_enabled_only_when_the_workspace_config_lists_them(service) 
 
 def test_without_workspace_config_nothing_is_decided(service) -> None:
     assert asyncio.run(service.list("ws-1")).hidden_feeds == set()
+
+
+def test_object_storage_feeds_need_no_query_and_keep_a_logo_path(service) -> None:
+    feed = _layout(
+        id="acme",
+        query="",
+        feed_type="object_storage",
+        logo_path="intelligence/organizations/Acme/logos/Acme.ico",
+    )
+    saved = asyncio.run(service.save("ws-1", feed, user_id="u"))
+    assert saved.query == "" and saved.graphs == ()
+    assert MapsLayout.from_dict(saved.to_dict()).logo_path == feed.logo_path
+
+
+@pytest.mark.parametrize("logo_path", ["../Acme.ico", "/abs/Acme.ico", "intelligence/Acme.geojson"])
+def test_unsafe_logo_paths_are_refused(service, logo_path) -> None:
+    feed = _layout(id="acme", query="", feed_type="object_storage", logo_path=logo_path)
+    with pytest.raises(MapsLayoutValidationError, match="logo_path"):
+        asyncio.run(service.save("ws-1", feed, user_id="u"))
+
+
+def test_editing_a_seeded_feed_keeps_its_data_source(service) -> None:
+    seed = _feed(
+        feed_type="object_storage", feed_url="", logo_url="", logo_path="orgs/Acme/logos/Acme.ico"
+    )
+    asyncio.run(service.list("ws-1", seeds=[seed]))
+    # The Settings form sends metadata only (default feed type, no logo_path).
+    asyncio.run(
+        service.save(
+            "ws-1",
+            MapsLayout(
+                id="acme-facilities", title="Acme sites", query="SELECT ?label ?lat ?lng WHERE {}"
+            ),
+            user_id="u",
+        )
+    )
+    [stored] = asyncio.run(service.list("ws-1", seeds=[seed])).layouts
+    assert (stored.title, stored.feed_type, stored.logo_path, stored.query) == (
+        "Acme sites",
+        "object_storage",
+        "orgs/Acme/logos/Acme.ico",
+        "",
+    )

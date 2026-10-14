@@ -12,7 +12,8 @@ basemaps in its FastAPI hook::
 
 Seeds are copied into a workspace the first time its catalog is listed and are
 then managed from Settings → Maps (renamed, recolored, hidden; never deleted).
-A seed changed in code does not overwrite the workspace's copy.
+A seed changed in code does not overwrite the workspace's copy unless its
+revision goes up: the system copy is then replaced (a deployment migration).
 
 Which feeds and custom basemaps a workspace starts with is not a seed: it is
 the workspace's ``maps`` block in ``config.*.yaml`` (see workspace_config.py).
@@ -46,6 +47,8 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.service import valid
 class MapsBasemapSeed:
     basemap: MapsBasemap
     preview: MapsBasemapPreview | None = None
+    # Manifest version (registered as the seed revision).
+    version: int = 1
 
 
 @dataclass
@@ -53,7 +56,7 @@ class MapsSeedRegistry:
     layouts: dict[str, MapsLayout] = field(default_factory=dict)
     basemaps: dict[str, MapsBasemapSeed] = field(default_factory=dict)
     feed_layers: dict[str, MapsFeedLayer] = field(default_factory=dict)
-    # Seed revision per "layout:<id>" / "layer:<id>" (default 1). Raising it
+    # Seed revision per "layout:<id>" / "layer:<id>" / "basemap:<id>" (default 1). Raising it
     # re-applies the seed to the workspaces' system copy: a data migration.
     revisions: dict[str, int] = field(default_factory=dict)
 
@@ -62,6 +65,9 @@ class MapsSeedRegistry:
 
     def feed_layer_revisions(self) -> dict[str, int]:
         return {i: self.revisions.get(f"layer:{i}", 1) for i in self.feed_layers}
+
+    def basemap_revisions(self) -> dict[str, int]:
+        return {i: self.revisions.get(f"basemap:{i}", 1) for i in self.basemaps}
 
     def add_layout(self, layout: MapsLayout) -> None:
         errors = validate_layout(layout)
@@ -116,7 +122,7 @@ def register_maps_seeds(
     basemaps: Iterable[MapsBasemapSeed] = (),
     revision: int = 1,
 ) -> None:
-    """``revision`` applies to the feeds and layers passed: bump it to migrate them."""
+    """``revision`` applies to the feeds, layers and basemaps passed: bump it to migrate them."""
     registry = maps_seed_registry(app)
     for layout in layouts:
         registry.add_layout(layout)
@@ -126,3 +132,4 @@ def register_maps_seeds(
         registry.revisions[f"layer:{layer.id}"] = revision
     for seed in basemaps:
         registry.add_basemap(seed)
+        registry.revisions[f"basemap:{seed.basemap.id}"] = revision

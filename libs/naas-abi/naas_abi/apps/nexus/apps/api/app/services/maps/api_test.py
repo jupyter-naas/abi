@@ -100,3 +100,12 @@ def test_http_allowed_layer_uses_scoped_store_and_no_cache(boundary):
             assert body["features"][0]["id"] == "one"
             assert client.get("/api/maps/layers/unknown?workspace_id=ws").status_code == 404
         provider.assert_called_once_with(scoped._get_triple_store.return_value)
+
+
+def test_layers_route_is_mounted_once_even_without_graph_layers(boundary):
+    api, _, _, _ = boundary
+    app = FastAPI()
+    catalog = api.install_maps_layers(app)
+    assert api.install_maps_layers(app) is catalog
+    assert [r.path for r in app.routes].count("/api/maps/layers") == 1
+    assert catalog.layers == {}

@@ -32,6 +32,13 @@ RENDERER_KINDS = (RENDERER_TILE, RENDERER_COUNTRIES, RENDERER_GEOJSON)
 
 PREVIEW_CONTENT_TYPES = frozenset({"image/png", "image/jpeg", "image/webp", "image/svg+xml"})
 PALETTE_KEYS = ("fill", "stroke", "background")
+# Region overlay on a vector basemap: labels, map view and member countries.
+REGION_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,47}$")
+MAX_REGIONS = 24
+MAX_REGION_COUNTRIES = 300
+REGION_KEYS = frozenset(
+    {"id", "name", "color", "label_x", "label_y", "latitude", "longitude", "zoom", "countries"}
+)
 
 
 @dataclass(frozen=True)
@@ -123,6 +130,63 @@ def _validate_palette(palette: Any, errors: list[str]) -> None:
             errors.append(f"renderer.palette.{key} must be a #rrggbb hex value")
 
 
+def _validate_regions(regions: Any, errors: list[str]) -> None:
+    """``renderer.regions``: named groups of countries drawn as labels on the map."""
+    if regions is None:
+        return
+    if not isinstance(regions, list) or not 0 < len(regions) <= MAX_REGIONS:
+        errors.append(f"renderer.regions must be a list of 1 to {MAX_REGIONS} regions")
+        return
+    ids: set[str] = set()
+    owner: dict[str, str] = {}
+    for index, region in enumerate(regions):
+        where = f"renderer.regions[{index}]"
+        if not isinstance(region, dict):
+            errors.append(f"{where} must be an object")
+            continue
+        unknown = set(region) - REGION_KEYS
+        if unknown:
+            errors.append(f"{where}: {', '.join(sorted(unknown))} not supported")
+        region_id = region.get("id")
+        if not isinstance(region_id, str) or not REGION_ID_PATTERN.match(region_id):
+            errors.append(f"{where}.id must be lowercase letters, digits, - or _ (max 48)")
+        elif region_id in ids:
+            errors.append(f"{where}.id {region_id!r} is used twice")
+        else:
+            ids.add(region_id)
+        name = region.get("name")
+        if not isinstance(name, str) or not name.strip() or len(name) > MAX_TITLE_LENGTH:
+            errors.append(f"{where}.name is required (max {MAX_TITLE_LENGTH})")
+        color = region.get("color")
+        if not isinstance(color, str) or not COLOR_PATTERN.match(color):
+            errors.append(f"{where}.color must be a #rrggbb hex value")
+        for key in ("label_x", "label_y"):
+            value = region.get(key)
+            if not _number(value) or not 0 <= value <= 1:
+                errors.append(f"{where}.{key} must be between 0 and 1 (share of the map)")
+        for key, low, high in (("latitude", -90, 90), ("longitude", -180, 180), ("zoom", 0, 22)):
+            value = region.get(key)
+            if value is not None and (not _number(value) or not low <= value <= high):
+                errors.append(f"{where}.{key} must be between {low} and {high}")
+        countries = region.get("countries")
+        if (
+            not isinstance(countries, list)
+            or len(countries) > MAX_REGION_COUNTRIES
+            or not all(isinstance(c, str) and c.strip() for c in countries)
+        ):
+            errors.append(f"{where}.countries must be a list of country names")
+            continue
+        for country in countries:
+            if country in owner:
+                errors.append(f"{where}: {country!r} is already in region {owner[country]!r}")
+            else:
+                owner[country] = str(region_id)
+
+
+def _number(value: Any) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
 def validate_renderer(renderer: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     kind = renderer.get("kind")
@@ -148,11 +212,13 @@ def validate_renderer(renderer: dict[str, Any]) -> list[str]:
             errors.append("renderer.max_zoom must be between 1 and 22")
     elif kind == RENDERER_COUNTRIES:
         _validate_palette(renderer.get("palette"), errors)
+        _validate_regions(renderer.get("regions"), errors)
         width = renderer.get("stroke_width")
         if width is not None and (not isinstance(width, int | float) or not 0 <= width <= 5):
             errors.append("renderer.stroke_width must be between 0 and 5")
     else:
         _validate_palette(renderer.get("palette"), errors)
+        _validate_regions(renderer.get("regions"), errors)
         collection = renderer.get("feature_collection")
         if (
             not isinstance(collection, dict)

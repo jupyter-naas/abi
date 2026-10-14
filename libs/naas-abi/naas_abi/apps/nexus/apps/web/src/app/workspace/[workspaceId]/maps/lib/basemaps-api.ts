@@ -16,6 +16,21 @@ export interface BasemapPalette {
   background?: string;
 }
 
+/** A named group of countries labelled on a vector basemap (counts per region). */
+export interface BasemapRegion {
+  id: string;
+  name: string;
+  color: string;
+  /** Label anchor, as a share of the map width / height. */
+  label_x: number;
+  label_y: number;
+  /** Map view when the region is selected. */
+  latitude?: number;
+  longitude?: number;
+  zoom?: number;
+  countries: string[];
+}
+
 export type BasemapRenderer =
   | {
       kind: 'tile';
@@ -25,11 +40,12 @@ export type BasemapRenderer =
       attribution?: string;
       max_zoom?: number;
     }
-  | { kind: 'countries'; palette?: BasemapPalette; stroke_width?: number }
+  | { kind: 'countries'; palette?: BasemapPalette; stroke_width?: number; regions?: BasemapRegion[] }
   | {
       kind: 'geojson';
       feature_collection: GeoJSON.FeatureCollection;
       palette?: BasemapPalette;
+      regions?: BasemapRegion[];
     };
 
 /** A basemap as the API returns it. */

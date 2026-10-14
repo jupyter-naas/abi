@@ -45,6 +45,15 @@ describe('styleLayerPin', () => {
       '/api/organizations/logos/EDF/EDF.ico',
     );
   });
+
+  it('draws the feed logo (stored feeds) instead of the feature one', () => {
+    const logo = 'blob:http://localhost:3000/edf-logo';
+    expect(styleLayerPin(pin('2'), { id: 'edf', color: '#001a70', icon: 'Zap', logoUrl: logo }).markerLogoUrl).toBe(logo);
+    expect(
+      styleLayerPin(pin('2'), { id: 'edf-solar', color: '#e85130', icon: 'Sun', ownIcon: true, logoUrl: logo })
+        .markerLogoUrl,
+    ).toBeUndefined();
+  });
 });
 
 describe('collectClassLabels', () => {

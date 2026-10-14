@@ -12,6 +12,11 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from naas_abi.apps.nexus.apps.api.app.services.maps.storage_keys import (
+    DATA_EXTENSIONS,
+    is_storage_key,
+)
+
 LAYER_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,47}$")
 COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
 ICON_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9]{0,47}$")
@@ -33,6 +38,9 @@ class MapsFeedLayer:
     order: int = 100
     # Feature types kept (pin classLabel); empty = every feature of the feed.
     class_labels: tuple[str, ...] = field(default_factory=tuple)
+    # Object storage key of the layer's GeoJSON (feeds of type object_storage),
+    # relative to the platform prefix; layers may share one object.
+    storage_path: str = ""
     # Seeded with a deployment feed: editable and hideable, never deleted.
     system: bool = False
     # Owning workspace when the feed is shared with this one (read-only here).
@@ -54,6 +62,7 @@ class MapsFeedLayer:
             description=str(data.get("description", "") or ""),
             order=int(data.get("order", 100)),
             class_labels=tuple(str(v) for v in data.get("class_labels", []) or []),
+            storage_path=str(data.get("storage_path", "") or ""),
             system=bool(data.get("system", False)),
             shared_from=str(data.get("shared_from", "") or ""),
         )
@@ -98,4 +107,8 @@ def validate_feed_layer(
         errors.append(f"at most {MAX_CLASS_LABELS} feature types per layer")
     elif any(not v.strip() or len(v) > MAX_CLASS_LABEL_LENGTH for v in layer.class_labels):
         errors.append(f"feature types must be 1-{MAX_CLASS_LABEL_LENGTH} characters")
+    if layer.storage_path and not is_storage_key(layer.storage_path, DATA_EXTENSIONS):
+        errors.append(
+            "storage_path must be a relative object storage key ending in .geojson or .json"
+        )
     return errors

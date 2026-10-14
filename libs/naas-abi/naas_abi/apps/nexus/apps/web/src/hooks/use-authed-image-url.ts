@@ -11,7 +11,8 @@ import { authFetch } from '@/stores/auth';
  */
 const cache = new Map<string, Promise<string | undefined>>();
 
-function load(url: string): Promise<string | undefined> {
+/** The shared object URL for `url` (fetched once with the member token). */
+export function loadAuthedImageUrl(url: string): Promise<string | undefined> {
   let pending = cache.get(url);
   if (!pending) {
     pending = authFetch(url)
@@ -34,7 +35,7 @@ export function useAuthedImageUrl(url: string | null | undefined): string | unde
       return;
     }
     let cancelled = false;
-    void load(url).then((value) => {
+    void loadAuthedImageUrl(url).then((value) => {
       if (!cancelled) setObjectUrl(value);
     });
     return () => {

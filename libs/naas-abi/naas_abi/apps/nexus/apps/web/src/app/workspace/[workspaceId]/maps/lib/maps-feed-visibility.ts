@@ -6,7 +6,7 @@
 
 import { groupLayerEntries, type LayoutEntry } from './layouts';
 
-export type FeedSource = 'Built-in' | 'API feed' | 'SPARQL feed' | 'Graph';
+export type FeedSource = 'Built-in' | 'API feed' | 'Stored feed' | 'SPARQL feed' | 'Graph';
 
 export interface FeedVisibilityRow {
   id: string;
@@ -22,6 +22,7 @@ export interface FeedVisibilityRow {
 const SOURCE: Partial<Record<LayoutEntry['kind'], FeedSource>> = {
   builtin: 'Built-in',
   feed: 'API feed',
+  stored: 'Stored feed',
   workspace: 'SPARQL feed',
   graph: 'Graph',
 };

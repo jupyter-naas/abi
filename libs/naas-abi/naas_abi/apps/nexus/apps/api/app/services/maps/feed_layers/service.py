@@ -23,7 +23,10 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.feed_layers__sch
 from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.port import (
     MapsFeedLayerStorePort,
 )
-from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.layouts__schema import MapsLayout
+from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.layouts__schema import (
+    FEED_OBJECT_STORAGE,
+    MapsLayout,
+)
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.service import MapsLayoutService
 from naas_abi.apps.nexus.apps.api.app.services.maps.settings.port import MapsSettingsStorePort
 from naas_abi.apps.nexus.apps.api.app.services.maps.settings.settings__schema import (
@@ -168,6 +171,16 @@ class MapsFeedLayerService:
                 return layer
         raise MapsFeedLayerNotFoundError(f"Map layer {layer_id!r} not found")
 
+    async def data_source(
+        self, workspace_id: str, layer_id: str
+    ) -> tuple[MapsFeedLayer, MapsLayout]:
+        """A layer the workspace may use and its feed, when its data is a stored object."""
+        layer = await self.get(workspace_id, layer_id)
+        feed = await self._feeds.get(workspace_id, layer.feed_id)
+        if feed.feed_type != FEED_OBJECT_STORAGE or not layer.storage_path:
+            raise MapsFeedLayerNotFoundError(f"Map layer {layer_id!r} has no stored data")
+        return layer, feed
+
     async def _own(self, workspace_id: str, layer_id: str) -> MapsFeedLayer | None:
         try:
             layer = await self.get(workspace_id, layer_id)
@@ -212,6 +225,18 @@ class MapsFeedLayerService:
         if existing is not None and existing.feed_id != layer.feed_id:
             raise MapsFeedLayerValidationError(["a layer cannot move to another feed"])
         layer = replace(layer, system=bool(existing and existing.system))
+        if existing is not None and existing.system:
+            # A seeded layer's object belongs to the seed (Settings edits metadata only).
+            layer = replace(layer, storage_path=existing.storage_path)
+        elif not layer.storage_path and feed.feed_type == FEED_OBJECT_STORAGE:
+            # A layer added to a stored feed reads the feed's object, filtered by its types.
+            siblings = [
+                s for s in await self.list(workspace_id) if s.feed_id == feed.id and s.storage_path
+            ]
+            if siblings:
+                layer = replace(
+                    layer, storage_path=min(siblings, key=lambda s: s.order).storage_path
+                )
         await self._store.save(workspace_id, layer, user_id=user_id)
         return layer
 

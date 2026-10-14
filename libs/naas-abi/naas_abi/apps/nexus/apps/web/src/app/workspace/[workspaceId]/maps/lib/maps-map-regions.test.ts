@@ -3,7 +3,7 @@ import { buildCountryCenterIndex } from './maps-country-centers';
 import type { CountryCenterRow } from '@/app/api/maps/country-centers/centers';
 import {
   facilityCountsByRegionAndFeed,
-  parseMapRegionOverlay,
+  basemapRegionOverlay,
   regionForCountry,
   showMapRegionLabelsAtZoom,
 } from './maps-map-regions';
@@ -31,16 +31,23 @@ describe('showMapRegionLabelsAtZoom', () => {
   });
 });
 
-describe('parseMapRegionOverlay', () => {
-  it('reads mapRegions from a feed payload', () => {
-    const overlay = parseMapRegionOverlay({
-      feedId: 'alpha-facilities',
-      basemapId: 'alpha-countries',
-      regions: [{ id: 'europe', name: 'Europe', labelX: 0.4, labelY: 0.1, color: '#171c8f' }],
-      countryToRegion: { France: 'europe' },
+describe('basemapRegionOverlay', () => {
+  it('reads the regions and their countries from a basemap renderer', () => {
+    const overlay = basemapRegionOverlay({
+      kind: 'countries',
+      regions: [
+        { id: 'europe', name: 'Europe', label_x: 0.4, label_y: 0.1, color: '#171c8f', countries: ['France'] },
+        { id: 'americas', name: 'Americas', label_x: 0.1, label_y: 0.4, color: '#0072ce', countries: ['Peru'] },
+      ],
     });
-    expect(overlay?.feedId).toBe('alpha-facilities');
-    expect(overlay?.regions).toHaveLength(1);
+    expect(overlay?.regions.map((r) => [r.id, r.labelX])).toEqual([['europe', 0.4], ['americas', 0.1]]);
+    expect(overlay?.countryToRegion).toEqual(countryToRegion);
+  });
+
+  it('is undefined for a basemap without regions', () => {
+    expect(basemapRegionOverlay({ kind: 'countries' })).toBeUndefined();
+    expect(basemapRegionOverlay({ kind: 'tile', url: 'https://t/{z}/{x}/{y}.png' })).toBeUndefined();
+    expect(basemapRegionOverlay(undefined)).toBeUndefined();
   });
 });
 

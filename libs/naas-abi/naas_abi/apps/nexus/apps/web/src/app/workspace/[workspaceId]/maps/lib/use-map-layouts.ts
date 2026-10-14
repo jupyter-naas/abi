@@ -5,6 +5,7 @@ import { useMapsStore, workspaceLayoutsOf } from '@/stores/maps';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { MAPS_DATASETS } from './datasets';
 import { buildLayoutEntries, visibleEntries, type LayoutEntry } from './layouts';
+import { useStoredLogoUrls } from './use-stored-logo-urls';
 import { layoutsApi } from './layouts-api';
 import {
   loadImportedMapLayers,
@@ -76,10 +77,12 @@ export function useMapLayers() {
     ).then(() => loadLayouts(workspaceId, true));
   }, [workspaceId, storeLoading, catalogLoaded, workspace.canEdit, workspace.layouts, loadLayouts]);
 
+  const logoUrls = useStoredLogoUrls(workspaceId, workspace.layouts, workspace.hiddenFeeds);
   const all = useMemo(
     () =>
       buildLayoutEntries(MAPS_DATASETS, graphLayers.layers, workspace.layouts, {
         colors: workspace.colors,
+        logoUrls,
         // The API gives every feed a layer; fall back to one per feed until it has.
         feedLayers: workspace.feedLayers.length ? workspace.feedLayers : undefined,
         importedLayers: importedLayers.map((layer) => ({
@@ -87,7 +90,7 @@ export function useMapLayers() {
           group: layer.group ?? DEFAULT_LAYER_GROUP,
         })),
       }),
-    [graphLayers.layers, workspace.layouts, workspace.feedLayers, workspace.colors, importedLayers],
+    [graphLayers.layers, workspace.layouts, workspace.feedLayers, workspace.colors, importedLayers, logoUrls],
   );
   const entries = useMemo(
     () => visibleEntries(all, workspace.hidden, workspace.hiddenFeeds),

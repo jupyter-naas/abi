@@ -33,7 +33,10 @@ LEGACY_GROUP_LABELS = {
 FEED_SPARQL = "sparql"
 # Pins / GeoJSON served by an endpoint on the Nexus API (e.g. a module router).
 FEED_GEOJSON_URL = "geojson_url"
-FEED_TYPES = frozenset({FEED_SPARQL, FEED_GEOJSON_URL})
+# GeoJSON objects in the platform's object storage, one per layer
+# (``MapsFeedLayer.storage_path``), served by ``/api/maps/feed-layers/{id}/data``.
+FEED_OBJECT_STORAGE = "object_storage"
+FEED_TYPES = frozenset({FEED_SPARQL, FEED_GEOJSON_URL, FEED_OBJECT_STORAGE})
 
 
 # Built-in layouts drawn by the web app (web/src/app/workspace/[workspaceId]/maps/lib/datasets.ts).
@@ -86,6 +89,9 @@ class MapsLayout:
     group: str = DEFAULT_GROUP
     # Sidebar / pin logo: HTTPS URL or a Nexus API path (/api/organizations/logos/...).
     logo_url: str = ""
+    # Logo in object storage (key relative to the platform prefix), served by
+    # ``/api/maps/layouts/{id}/logo``; preferred over ``logo_url``.
+    logo_path: str = ""
     basemap_id: str = ""
     meta_label: str = ""
     fit_max_zoom: int | None = None
@@ -115,6 +121,7 @@ class MapsLayout:
             feed_url=str(data.get("feed_url", "") or ""),
             group=group_from_record(data),
             logo_url=str(data.get("logo_url", "") or ""),
+            logo_path=str(data.get("logo_path", "") or ""),
             basemap_id=str(data.get("basemap_id", "") or ""),
             meta_label=str(data.get("meta_label", "") or ""),
             fit_max_zoom=int(fit) if isinstance(fit, int | float) else None,

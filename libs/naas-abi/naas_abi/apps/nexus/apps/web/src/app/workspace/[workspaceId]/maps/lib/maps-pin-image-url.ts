@@ -6,6 +6,8 @@ export function mapsPinImageUrl(value: unknown): string | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
   if (trimmed.startsWith('/api/') && !trimmed.startsWith('//')) return trimmed;
+  // Object URL of a logo loaded with the member's token (stored feed logos).
+  if (/^blob:https?:\/\//.test(trimmed)) return trimmed;
   try {
     return new URL(trimmed).protocol === 'https:' ? trimmed : undefined;
   } catch {
@@ -20,7 +22,7 @@ export function mapsPinImageUrl(value: unknown): string | undefined {
 export function resolveMapsPinImageUrl(value: unknown): string | undefined {
   const path = mapsPinImageUrl(value);
   if (!path) return undefined;
-  if (path.startsWith('https://')) return path;
+  if (path.startsWith('https://') || path.startsWith('blob:')) return path;
   if (path.startsWith('/api/')) {
     if (typeof window === 'undefined') return path;
     return `${getApiUrl().replace(/\/$/, '')}${path}`;

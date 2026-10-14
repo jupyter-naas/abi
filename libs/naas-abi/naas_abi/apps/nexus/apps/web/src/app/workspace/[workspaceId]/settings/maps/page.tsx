@@ -26,7 +26,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useMapsStore } from '@/stores/maps';
 import {
-  isFeedLayout, type WorkspaceFeedLayer, type WorkspaceMapLayout,
+  hasFeatureTypes, isFeedLayout, isStoredFeed, type WorkspaceFeedLayer, type WorkspaceMapLayout,
 } from '@/app/workspace/[workspaceId]/maps/lib/layouts';
 import {
   LayoutApiError, feedLayerDraft, feedLayersApi, layoutsApi,
@@ -65,6 +65,7 @@ function errorText(error: unknown, fallback: string): string {
 }
 
 function feedTypeLabel(feed: WorkspaceMapLayout): FeedSource {
+  if (isStoredFeed(feed)) return 'Stored feed';
   return isFeedLayout(feed) ? 'API feed' : 'SPARQL feed';
 }
 
@@ -769,7 +770,7 @@ function FeedPage({
             </table>
           </div>
 
-          {canEdit && !shared && isFeedLayout(feed) && uncovered.length > 0 ? (
+          {canEdit && !shared && hasFeatureTypes(feed) && uncovered.length > 0 ? (
             <div className="mt-4 space-y-2">
               <p className="text-sm text-muted-foreground">
                 Feature types in this feed with no layer of their own

@@ -59,26 +59,12 @@ const EMPTY: WorkspaceLayouts = {
   canEdit: false,
 };
 
+const pendingCatalogs = new Map<string, Promise<void>>();
+
 export const useMapsStore = create<MapsState>()(
   persist(
-    (set, get) => ({
-      basemapId: FALLBACK_BASEMAP_ID,
-      // Normalized against the workspace catalog where it is drawn.
-      setBasemap: (basemapId) => set({ basemapId: basemapId || FALLBACK_BASEMAP_ID }),
-      layerCounts: {},
-      setLayerCounts: (counts) => {
-        const current = get().layerCounts;
-        if (Object.entries(counts).every(([id, n]) => current[id] === n)) return;
-        set({ layerCounts: { ...current, ...counts } });
-      },
-      groupBy: 'feed',
-      setGroupBy: (groupBy) => set({ groupBy }),
-
-      byWorkspace: {},
-      loading: false,
-      error: null,
-      loadLayouts: async (workspaceId, force = false) => {
-        if (!force && get().byWorkspace[workspaceId]) return;
+    (set, get) => {
+      const fetchCatalog = async (workspaceId: string): Promise<void> => {
         set({ loading: true, error: null });
         try {
           const data = await mapsCatalogApi.get(workspaceId);
@@ -103,15 +89,41 @@ export const useMapsStore = create<MapsState>()(
         } catch (error) {
           set({ loading: false, error: error instanceof Error ? error.message : 'Could not load map layers' });
         }
-      },
-      applyLayouts: (workspaceId, update) =>
-        set((state) => ({
-          byWorkspace: {
-            ...state.byWorkspace,
-            [workspaceId]: { ...(state.byWorkspace[workspaceId] ?? EMPTY), ...update },
-          },
-        })),
-    }),
+      };
+      return {
+        basemapId: FALLBACK_BASEMAP_ID,
+        // Normalized against the workspace catalog where it is drawn.
+        setBasemap: (basemapId) => set({ basemapId: basemapId || FALLBACK_BASEMAP_ID }),
+        layerCounts: {},
+        setLayerCounts: (counts) => {
+          const current = get().layerCounts;
+          if (Object.entries(counts).every(([id, n]) => current[id] === n)) return;
+          set({ layerCounts: { ...current, ...counts } });
+        },
+        groupBy: 'feed',
+        setGroupBy: (groupBy) => set({ groupBy }),
+
+        byWorkspace: {},
+        loading: false,
+        error: null,
+        loadLayouts: (workspaceId, force = false) => {
+          if (!force && get().byWorkspace[workspaceId]) return Promise.resolve();
+          // Every component on the page asks at mount: one request per workspace.
+          const pending = pendingCatalogs.get(workspaceId);
+          if (pending) return pending;
+          const load = fetchCatalog(workspaceId).finally(() => pendingCatalogs.delete(workspaceId));
+          pendingCatalogs.set(workspaceId, load);
+          return load;
+        },
+        applyLayouts: (workspaceId, update) =>
+          set((state) => ({
+            byWorkspace: {
+              ...state.byWorkspace,
+              [workspaceId]: { ...(state.byWorkspace[workspaceId] ?? EMPTY), ...update },
+            },
+          })),
+      };
+    },
     {
       name: 'nexus-maps',
       partialize: (state) => ({

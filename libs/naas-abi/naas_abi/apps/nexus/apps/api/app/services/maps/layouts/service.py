@@ -32,6 +32,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.layouts__schema impo
     BUILTIN_LAYOUT_IDS,
     COLOR_PATTERN,
     FEED_GEOJSON_URL,
+    FEED_OBJECT_STORAGE,
     FEED_SPARQL,
     FEED_TYPES,
     LAYOUT_ID_PATTERN,
@@ -63,6 +64,10 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.settings.settings__schema im
     FEED_INIT,
     MapsWorkspaceSettings,
     applied_revision,
+)
+from naas_abi.apps.nexus.apps.api.app.services.maps.storage_keys import (
+    IMAGE_EXTENSIONS,
+    is_storage_key,
 )
 from rdflib.plugins.sparql import prepareQuery
 
@@ -111,6 +116,11 @@ def validate_layout(
         errors.append(f"group must be 1-{MAX_GROUP_LENGTH} printable characters")
     if layout.logo_url and not _is_logo_url(layout.logo_url):
         errors.append("logo_url must be an https:// URL or a path starting with /")
+    if layout.logo_path and not is_storage_key(layout.logo_path, IMAGE_EXTENSIONS):
+        errors.append(
+            "logo_path must be a relative object storage key to an image "
+            "(" + ", ".join(IMAGE_EXTENSIONS) + ")"
+        )
     if layout.basemap_id and not LAYOUT_ID_PATTERN.match(layout.basemap_id):
         errors.append("basemap_id must be a basemap id")
     if layout.fit_max_zoom is not None and not 1 <= layout.fit_max_zoom <= 19:
@@ -122,6 +132,8 @@ def validate_layout(
         if not is_nexus_api_path(layout.feed_url):
             errors.append("feed_url must be a Nexus API path starting with /api/ (no host, no ..)")
         return errors
+    if layout.feed_type == FEED_OBJECT_STORAGE:
+        return errors  # each layer names its object (MapsFeedLayer.storage_path)
     query = layout.query.strip()
     if not query:
         errors.append("query is required")
@@ -408,9 +420,22 @@ class MapsLayoutService:
         ):
             # A deployment layer this workspace may not use any more: keep the id reserved.
             raise MapsLayoutValidationError([f"id {layout.id!r} is taken by a deployment layer"])
-        # The system flag belongs to the seed, never to the request.
+        # The system flag belongs to the seed, never to the request; so does a
+        # seeded feed's data source (Settings edits its metadata only).
         layout = replace(layout, system=bool(existing and existing.system), shared_from="")
-        if layout.feed_type == FEED_GEOJSON_URL:
+        if existing is not None and existing.system:
+            layout = replace(
+                layout,
+                feed_type=existing.feed_type,
+                feed_url=existing.feed_url,
+                logo_path=existing.logo_path,
+                **(
+                    {}
+                    if existing.feed_type == FEED_SPARQL
+                    else {"query": existing.query, "graphs": existing.graphs}
+                ),
+            )
+        if layout.feed_type in (FEED_GEOJSON_URL, FEED_OBJECT_STORAGE):
             layout = replace(layout, query="", graphs=())
         errors = validate_layout(layout, reserved=reserved)
         if errors:

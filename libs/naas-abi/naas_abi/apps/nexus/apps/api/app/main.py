@@ -350,12 +350,27 @@ async def _startup(app: FastAPI) -> None:
     finally:
         event_triggered_via.reset(via)
 
-    # Config Maps ids (workspaces[].maps) that no module provides: an error in the
-    # logs, never a failed start. Modules registered their seeds before startup.
+    # Maps feeds, layers and basemaps declared by modules (artifacts/maps/{layers/**,basemaps/*}/manifest.json),
+    # then config Maps ids (workspaces[].maps) that nothing provides. Both only
+    # log errors, never fail the start.
     from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.workspace_defaults import (  # noqa: E501
         report_unknown_workspace_map_ids,
     )
+    from naas_abi.apps.nexus.apps.api.app.services.maps.manifests import (
+        register_module_manifests,
+    )
 
+    try:
+        from naas_abi import ABIModule
+
+        abi_module = ABIModule.get_instance()
+        modules = [
+            abi_module,
+            *(m for m in abi_module.engine.modules.values() if m is not abi_module),
+        ]
+    except Exception:  # noqa: BLE001 - standalone Nexus: no ABI engine, no module manifests
+        modules = []
+    register_module_manifests(app, modules)
     report_unknown_workspace_map_ids(app)
 
     # An ABI restart clears the settings pages' 24h API cache (after seeds, which
@@ -666,6 +681,16 @@ async def serve_provider_logo(provider_id: str) -> FileResponse:
 def _register_routes(app: FastAPI) -> None:
     # Include API router
     app.include_router(api_router, prefix="/api")
+    # Graph map layers: always mounted (empty until a module registers one), so
+    # the web's request is a list, not a 404. Needs the ABI engine.
+    try:
+        from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.fastapi import (
+            install_maps_layers,
+        )
+
+        install_maps_layers(app)
+    except ValueError:
+        logging.getLogger(__name__).info("Maps graph layers: no ABI engine, not mounted")
 
     app.add_api_route("/health", health_check, methods=["GET"])
     from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (

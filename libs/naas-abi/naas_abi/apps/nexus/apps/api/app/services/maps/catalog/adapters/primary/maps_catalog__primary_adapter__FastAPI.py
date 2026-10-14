@@ -22,6 +22,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.workspace_d
     maps_workspace_defaults,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.basemaps.adapters.primary.maps_basemaps__primary_adapter__FastAPI import (  # noqa: E501
+    basemap_seed_revisions,
     basemap_seeds,
     get_maps_basemap_service,
 )
@@ -74,7 +75,10 @@ async def get_catalog(
         revisions=feed_layer_seed_revisions(request),
     )
     listed_basemaps = await basemaps.list(
-        workspace_id, seeds=basemap_seeds(request), enabled_custom=defaults.custom_basemaps
+        workspace_id,
+        seeds=basemap_seeds(request),
+        revisions=basemap_seed_revisions(request),
+        enabled_custom=defaults.custom_basemaps,
     )
     role = await get_workspace_role(current_user.id, workspace_id)
     return {

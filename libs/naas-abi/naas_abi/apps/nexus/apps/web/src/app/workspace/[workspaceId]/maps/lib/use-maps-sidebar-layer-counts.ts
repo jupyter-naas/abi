@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useMapsStore } from '@/stores/maps';
 import { layoutPinSource } from './layout-sources';
 import type { LayoutEntry } from './layouts';
 import { combinableFeedKeys, layerCountsForFeedLoad } from './maps-layer-counts';
 
-const MAX_CONCURRENT = 8;
+// Kept low: each load is an API request; loads are shared with the map (sharedFeedLoad).
+const MAX_CONCURRENT = 4;
 
 async function forEachConcurrent<T>(
   items: readonly T[],
@@ -33,9 +34,14 @@ export function useMapsSidebarLayerCounts(
   loading: boolean,
 ) {
   const setLayerCounts = useMapsStore((s) => s.setLayerCounts);
+  // Reload when the layers change, not when the same layers are rebuilt (logos,
+  // colors): restarting would re-request every feed.
   const entryKey = entries.map((e) => e.id).join('\0');
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
 
   useEffect(() => {
+    const entries = entriesRef.current;
     if (!workspaceId || loading || entries.length === 0) return;
     const feedKeys = combinableFeedKeys(entries);
     if (!feedKeys.length) return;
@@ -49,7 +55,6 @@ export function useMapsSidebarLayerCounts(
 
     const ac = new AbortController();
     void (async () => {
-      const merged: Record<string, number> = {};
       await forEachConcurrent(feedKeys, MAX_CONCURRENT, async (feedKey) => {
         const sample = sampleByFeed.get(feedKey);
         if (!sample) return;
@@ -58,16 +63,14 @@ export function useMapsSidebarLayerCounts(
         try {
           const loaded = await source(ac.signal);
           if (ac.signal.aborted) return;
-          Object.assign(merged, layerCountsForFeedLoad(entries, feedKey, loaded.pins));
+          // Each feed's counts show as soon as they are known.
+          setLayerCounts(layerCountsForFeedLoad(entries, feedKey, loaded.pins));
         } catch {
           // Leave counts undefined for feeds that failed (offline, auth, etc.).
         }
       });
-      if (!ac.signal.aborted && Object.keys(merged).length > 0) {
-        setLayerCounts(merged);
-      }
     })();
 
     return () => ac.abort();
-  }, [workspaceId, loading, entryKey, entries, setLayerCounts]);
+  }, [workspaceId, loading, entryKey, setLayerCounts]);
 }

@@ -9,7 +9,7 @@ or shared basemap is decided by ``services/maps/permissions``.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 
 from naas_abi.apps.nexus.apps.api.app.services.maps.basemaps.basemaps__schema import (
@@ -38,7 +38,11 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.service import (
     MapsPolicy,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.settings.port import MapsSettingsStorePort
-from naas_abi.apps.nexus.apps.api.app.services.maps.settings.settings__schema import BASEMAP_INIT
+from naas_abi.apps.nexus.apps.api.app.services.maps.settings.settings__schema import (
+    BASEMAP_INIT,
+    MapsWorkspaceSettings,
+    applied_revision,
+)
 
 # Built-in basemaps: always enabled at first, never decided by the workspace config.
 BUILTIN_BASEMAP_IDS = frozenset(basemap.id for basemap in CORE_BASEMAPS)
@@ -64,20 +68,39 @@ class MapsBasemapService:
         self._access = access or MapsAccess(InMemoryMapsGrantStore())
         self._seed_locks: dict[str, asyncio.Lock] = {}
 
-    async def ensure_seeded(self, workspace_id: str, seeds: Sequence[SeedLike]) -> None:
-        """Copy basemap seeds the workspace has never received (once per seed id)."""
-        settings = await self._settings.get(workspace_id)
-        if not any(basemap.id not in settings.seeded_basemaps for basemap, _ in seeds):
+    async def ensure_seeded(
+        self,
+        workspace_id: str,
+        seeds: Sequence[SeedLike],
+        revisions: Mapping[str, int] | None = None,
+    ) -> None:
+        """Copy basemap seeds into the workspace; re-apply those whose revision went up.
+
+        A new seed creates its record; a higher revision overwrites the
+        workspace's system copy (a deployment migration). A custom basemap that
+        took the same id is never touched.
+        """
+        revisions = revisions or {}
+
+        def pending_of(settings: MapsWorkspaceSettings) -> list[SeedLike]:
+            return [
+                (basemap, preview)
+                for basemap, preview in seeds
+                if revisions.get(basemap.id, 1) > applied_revision(settings, "basemap", basemap.id)
+            ]
+
+        if not pending_of(await self._settings.get(workspace_id)):
             return
         lock = self._seed_locks.setdefault(workspace_id, asyncio.Lock())
         async with lock:
             settings = await self._settings.get(workspace_id)
-            pending = [(b, p) for b, p in seeds if b.id not in settings.seeded_basemaps]
+            pending = pending_of(settings)
             if not pending:
                 return
-            stored = {basemap.id for basemap in await self._store.list(workspace_id)}
+            stored = {basemap.id: basemap for basemap in await self._store.list(workspace_id)}
             for basemap, preview in pending:
-                if basemap.id in stored:
+                existing = stored.get(basemap.id)
+                if existing is not None and not existing.system:
                     continue
                 await self._store.save(workspace_id, replace(basemap, system=True), user_id=None)
                 if preview is not None:
@@ -85,7 +108,11 @@ class MapsBasemapService:
             await self._settings.save(
                 workspace_id,
                 settings.with_(
-                    seeded_basemaps=settings.seeded_basemaps | {b.id for b, _ in pending}
+                    seeded_basemaps=settings.seeded_basemaps | {b.id for b, _ in pending},
+                    seed_revisions={
+                        **settings.seed_revisions,
+                        **{f"basemap:{b.id}": revisions.get(b.id, 1) for b, _ in pending},
+                    },
                 ),
                 user_id=None,
             )
@@ -149,6 +176,7 @@ class MapsBasemapService:
         workspace_id: str,
         *,
         seeds: Sequence[SeedLike] = (),
+        revisions: Mapping[str, int] | None = None,
         enabled_custom: frozenset[str] | None = None,
     ) -> MapsBasemapList:
         """The workspace's basemaps; ``enabled_custom`` is the config's custom list
@@ -156,7 +184,7 @@ class MapsBasemapService:
         policy = await self._access.policy(KIND_BASEMAP)
         allowed = [(b, p) for b, p in seeds if policy.allows(b.id, DEPLOYMENT, workspace_id)]
         if allowed:
-            await self.ensure_seeded(workspace_id, allowed)
+            await self.ensure_seeded(workspace_id, allowed, revisions)
         basemaps = sorted(await self._visible(workspace_id, policy), key=_order_key)
         if enabled_custom is not None:
             await self.ensure_initial_basemaps(

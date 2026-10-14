@@ -5,17 +5,21 @@ deleting, hiding, recoloring and previewing layouts needs a workspace owner or
 admin. Every SPARQL query runs through the workspace-scoped graph store,
 narrowed to the layout's graphs, so a layout only ever reads what the
 workspace may read. Feed layers (``feed_type=geojson_url``) are fetched by the
-web proxy at ``/api/maps/custom/{id}``, which reads the record from here; the
-module route serving their data guards itself with ``require_feed_access``.
+web proxy at ``/api/maps/custom/{id}``, which reads the record from here.
+Stored feeds (``object_storage``) are served by ``/api/maps/feed-layers/{id}/data``;
+their logo by ``/{id}/logo`` here.
 """
 
 from __future__ import annotations
 
+from datetime import timedelta
+from hashlib import sha256
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
+    get_current_user_released,
     get_workspace_role,
     require_workspace_access,
     require_workspace_admin,
@@ -30,10 +34,15 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.secondary.gr
     GraphQueryTripleStoreAdapter,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import IGraphQueryStore
+from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.objects import (
+    get_maps_cache,
+    get_maps_objects,
+)
 from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.workspace_defaults import (
     graph_feed_ids,
     maps_workspace_defaults,
 )
+from naas_abi.apps.nexus.apps.api.app.services.maps.cache import MapsCache
 from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.dependencies import (
     get_maps_feed_layer_service,
 )
@@ -45,7 +54,6 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.adapters.secondary.p
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.layouts__schema import (
     BUILTIN_LAYOUT_IDS,
-    FEED_GEOJSON_URL,
     FEED_SPARQL,
     MapsLayout,
     MapsLayoutNotFoundError,
@@ -54,6 +62,11 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.layouts__schema impo
     legacy_group_label,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.service import MapsLayoutService
+from naas_abi.apps.nexus.apps.api.app.services.maps.objects import (
+    MAX_LOGO_BYTES,
+    MapsObjectMissingError,
+    MapsObjectStorePort,
+)
 from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.factory import (
     postgres_maps_access,
 )
@@ -61,10 +74,15 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.seeds import maps_seed_regis
 from naas_abi.apps.nexus.apps.api.app.services.maps.settings.adapters.secondary.postgres import (
     PostgresMapsSettingsStore,
 )
+from naas_abi.apps.nexus.apps.api.app.services.maps.storage_keys import image_content_type
 from naas_abi.apps.nexus.apps.api.app.services.maps.workspace_config import WorkspaceMapsDefaults
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 router = APIRouter()
+
+# The logo key a (workspace, feed) resolves to: logos load on every map view.
+LOGO_PATH_TTL = timedelta(seconds=60)
 
 _service = MapsLayoutService(
     PostgresMapsLayoutStore(), PostgresMapsSettingsStore(), postgres_maps_access()
@@ -74,26 +92,6 @@ PREVIEW_PINS = 50
 
 def get_maps_layout_service() -> MapsLayoutService:
     return _service
-
-
-async def require_feed_access(
-    request: Request,
-    workspace_id: str = Query(..., min_length=1),
-    current_user=Depends(get_current_user_required),
-    service: MapsLayoutService = Depends(get_maps_layout_service),
-) -> MapsLayout:
-    """Guard for a module route serving feed data (``feed_type=geojson_url``).
-
-    The caller must be a member of the workspace, and the workspace must be able
-    to use (own, or be granted) a feed record whose ``feed_url`` is this route.
-    Otherwise the data is a 404, as if the route did not exist.
-    """
-    await require_workspace_access(current_user.id, workspace_id)
-    path = request.url.path
-    for layout in await service.visible(workspace_id):
-        if layout.feed_type == FEED_GEOJSON_URL and layout.feed_url.split("?", 1)[0] == path:
-            return layout
-    raise HTTPException(status_code=404, detail="Map feed not found")
 
 
 class LayoutIn(BaseModel):
@@ -275,6 +273,52 @@ async def set_feeds_visibility(
     except Exception as exc:
         raise _http_error(exc) from exc
     return {"hidden_feeds": sorted(hidden)}
+
+
+@router.get("/{layout_id}/logo")
+async def layout_logo(
+    layout_id: str,
+    request: Request,
+    workspace_id: str = Query(..., min_length=1),
+    current_user=Depends(get_current_user_released),
+    service: MapsLayoutService = Depends(get_maps_layout_service),
+    objects: MapsObjectStorePort = Depends(get_maps_objects),
+    cache: MapsCache = Depends(get_maps_cache),
+) -> Response:
+    """The feed's logo, read from object storage at the key its record names."""
+
+    await cache.member(
+        current_user.id,
+        workspace_id,
+        lambda: require_workspace_access(current_user.id, workspace_id),
+    )
+
+    async def resolve() -> dict[str, str]:
+        return {"logo_path": (await service.get(workspace_id, layout_id)).logo_path}
+
+    try:
+        resolved = await cache.json_or_load(
+            f"nexus:maps:logo:{workspace_id}:{layout_id}", LOGO_PATH_TTL, resolve
+        )
+    except Exception as exc:
+        raise _http_error(exc) from exc
+    logo_path = resolved["logo_path"]
+    content_type = image_content_type(logo_path) if logo_path else None
+    if not content_type:
+        raise HTTPException(status_code=404, detail="This feed has no stored logo")
+    try:
+        content = await run_in_threadpool(objects.read, logo_path)
+    except MapsObjectMissingError as exc:
+        raise HTTPException(status_code=404, detail="Logo not published") from exc
+    if len(content) > MAX_LOGO_BYTES:
+        raise HTTPException(status_code=502, detail="Logo is too large")
+    headers = {
+        "Cache-Control": "private, max-age=3600",
+        "ETag": f'"{sha256(content).hexdigest()[:32]}"',
+    }
+    if request.headers.get("if-none-match") == headers["ETag"]:
+        return Response(status_code=304, headers=headers)
+    return Response(content=content, media_type=content_type, headers=headers)
 
 
 @router.get("/{layout_id}/feed")

@@ -15,7 +15,14 @@ import {
   feedLayersApi,
   type FeedLayerDraft,
 } from '../lib/layouts-api';
-import { isFeedLayout, type WorkspaceFeedLayer, type WorkspaceMapLayout } from '../lib/layouts';
+import {
+  hasFeatureTypes,
+  isFeedLayout,
+  isStoredFeed,
+  type WorkspaceFeedLayer,
+  type WorkspaceMapLayout,
+} from '../lib/layouts';
+import { useMapsStore, workspaceLayoutsOf } from '@/stores/maps';
 import { fetchMapsFeedPins } from '../lib/maps-feed';
 import { collectClassLabels } from '../lib/maps-layer-class-styles';
 import { MapsIconGallery } from './maps-icon-gallery';
@@ -41,16 +48,30 @@ export function useFeedTypes(workspaceId: string, feed: WorkspaceMapLayout | nul
   const [state, setState] = useState<{ types: { label: string; count: number }[] | null; error: string | null }>(
     { types: null, error: null },
   );
-  const feedId = feed && isFeedLayout(feed) ? feed.id : null;
+  // Stored feeds: read one of the feed's objects whole (`all`); API feeds: the feed.
+  const storedLayerId = useMapsStore((s) => {
+    if (!feed || !isStoredFeed(feed)) return null;
+    const layers = workspaceLayoutsOf(s, workspaceId).feedLayers.filter(
+      (layer) => layer.feed_id === feed.id && layer.storage_path,
+    );
+    return layers.sort((a, b) => a.order - b.order)[0]?.id ?? null;
+  });
+  const url = !feed || !workspaceId
+    ? null
+    : isFeedLayout(feed)
+      ? mapsCustomFeedUrl(feed.id, workspaceId)
+      : storedLayerId
+        ? feedLayersApi.dataUrl(workspaceId, storedLayerId, { all: true })
+        : null;
   useEffect(() => {
-    if (!feedId || !workspaceId) {
+    if (!url) {
       setState({ types: [], error: null });
       return;
     }
     const controller = new AbortController();
     setState({ types: null, error: null });
     const token = useAuthStore.getState().token;
-    fetchMapsFeedPins(mapsCustomFeedUrl(feedId, workspaceId), controller.signal, {
+    fetchMapsFeedPins(url, controller.signal, {
       Authorization: `Bearer ${token ?? ''}`,
     })
       .then((result) => setState({ types: collectClassLabels(result.pins), error: null }))
@@ -60,7 +81,7 @@ export function useFeedTypes(workspaceId: string, feed: WorkspaceMapLayout | nul
         }
       });
     return () => controller.abort();
-  }, [feedId, workspaceId]);
+  }, [url]);
   return state;
 }
 
@@ -223,7 +244,7 @@ export function MapsFeedLayerForm({
         <span className="maps-new-layer-form__hint-block">
           The feed&apos;s features this layer shows (their <code>classLabel</code>). None ticked: every feature.
         </span>
-        {feed && !isFeedLayout(feed) ? (
+        {feed && !hasFeatureTypes(feed) ? (
           <p className="text-xs text-muted-foreground">SPARQL feeds have no feature types: this layer shows every pin.</p>
         ) : types === null ? (
           <p className="text-xs text-muted-foreground">

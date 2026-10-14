@@ -44,6 +44,40 @@ describe('buildLayoutEntries', () => {
   });
 });
 
+describe('stored feeds (object storage)', () => {
+  const key = 'intelligence/organizations/Acme/maps/acme.geojson';
+  const feed: WorkspaceMapLayout = {
+    ...workspaceLayer('acme'),
+    feed_type: 'object_storage',
+    logo_path: 'intelligence/organizations/Acme/logos/Acme.ico',
+    logo_url: '/api/organizations/logos/Acme/Acme.ico',
+  };
+  const layers = [
+    { id: 'acme', feed_id: 'acme', title: 'All', description: '', color: '#111111', icon: '', order: 1, class_labels: [], system: true, storage_path: key },
+    { id: 'acme-hq', feed_id: 'acme', title: 'HQ', description: '', color: '#222222', icon: 'Landmark', order: 2, class_labels: ['Headquarters'], system: true, storage_path: key },
+  ];
+
+  it('makes one stored entry per layer with its object and the stored logo', () => {
+    const entries = buildLayoutEntries([], [], [feed], {
+      feedLayers: layers,
+      logoUrls: { acme: 'blob:http://localhost/logo' },
+    });
+    expect(entries.map((e) => [e.id, e.kind, e.storagePath])).toEqual([
+      ['acme', 'stored', key],
+      ['acme-hq', 'stored', key],
+    ]);
+    // logo_path wins over logo_url; a layer with its own icon keeps it on pins.
+    expect(entries[0].feedLogoUrl).toBe('blob:http://localhost/logo');
+    expect(entries[0].layerLogoUrl).toBe('blob:http://localhost/logo');
+    expect(entries[1].layerLogoUrl).toBeUndefined();
+  });
+
+  it('shows no logo until the stored logo is loaded', () => {
+    const [entry] = buildLayoutEntries([], [], [feed], { feedLayers: layers.slice(0, 1) });
+    expect(entry.feedLogoUrl).toBeUndefined();
+  });
+});
+
 describe('defaultLayerOn', () => {
   const [gdacs, news] = buildLayoutEntries(
     [ds('gdacs', 'Environment'), ds('news', 'Situation')],

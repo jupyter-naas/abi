@@ -18,8 +18,9 @@ import { fetchPins as wildfirePins } from '../components/maps-wildfires';
 import { mapsCustomFeedUrl } from './datasets';
 import type { LayoutEntry } from './layouts';
 import { getImportedMapLayer } from './maps-imported-layers';
-import { layoutsApi } from './layouts-api';
+import { feedLayersApi, layoutsApi } from './layouts-api';
 import { fetchMapsFeedPins, normalizeFeedLoad, type MapsFeedResult } from './maps-feed';
+import { sharedFeedLoad } from './shared-feed-loads';
 import type { MapsFeedView } from './maps-view';
 
 /**
@@ -68,6 +69,17 @@ export function layoutPinSource(
   if (entry.kind === 'feed') {
     // API feed: the authed proxy reads the feed's feed_url from the API.
     return (signal) => fetchMapsFeedPins(mapsCustomFeedUrl(feedId, workspaceId), signal, authHeader());
+  }
+  if (entry.kind === 'stored') {
+    // The layer's object, every feature: layers sharing it reuse one request and
+    // keep their own feature types (maps-all-layouts filters by classLabels).
+    return (signal) =>
+      sharedFeedLoad(
+        feedLayersApi.dataUrl(workspaceId, entry.id, { all: true }),
+        authHeader(),
+        signal,
+        entry.storagePath ? `${workspaceId}:${entry.storagePath}` : undefined,
+      );
   }
   if (entry.kind === 'workspace') {
     return (signal) => fetchMapsFeedPins(layoutsApi.feedUrl(workspaceId, feedId), signal, authHeader());

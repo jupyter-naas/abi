@@ -27,6 +27,8 @@ export function styleLayerPin(
     color: string;
     icon: string;
     ownIcon?: boolean;
+    /** The feed's logo (stored feeds): wins over each feature's `markerLogoUrl`. */
+    logoUrl?: string;
     feed?: { id: string; color: string; title: string };
   },
 ): MapsPinMarker {
@@ -41,7 +43,11 @@ export function styleLayerPin(
     feedTitle: layer.feed?.title,
     color: layer.color,
     markerIcon: layer.icon,
-    ...(layer.ownIcon ? { markerLogoUrl: undefined } : {}),
+    ...(layer.ownIcon
+      ? { markerLogoUrl: undefined }
+      : layer.logoUrl
+        ? { markerLogoUrl: layer.logoUrl }
+        : {}),
   };
 }
 

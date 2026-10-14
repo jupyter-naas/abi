@@ -61,6 +61,10 @@ def get_maps_basemap_service() -> MapsBasemapService:
     return _service
 
 
+def basemap_seed_revisions(request: Request) -> dict[str, int]:
+    return maps_seed_registry(request.app).basemap_revisions()
+
+
 def basemap_seeds(request: Request) -> list[SeedLike]:
     return [
         (seed.basemap, seed.preview) for seed in maps_seed_registry(request.app).basemaps.values()
@@ -102,7 +106,10 @@ async def list_basemaps(
     await require_workspace_access(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
     listed = await service.list(
-        workspace_id, seeds=basemap_seeds(request), enabled_custom=defaults.custom_basemaps
+        workspace_id,
+        seeds=basemap_seeds(request),
+        revisions=basemap_seed_revisions(request),
+        enabled_custom=defaults.custom_basemaps,
     )
     role = await get_workspace_role(current_user.id, workspace_id)
     return {

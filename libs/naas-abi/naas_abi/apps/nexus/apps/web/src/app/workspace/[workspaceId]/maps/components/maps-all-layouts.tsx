@@ -8,7 +8,6 @@ import { layerCountsForFeedLoad } from '../lib/maps-layer-counts';
 import { layoutPinSource } from '../lib/layout-sources';
 import type { LayoutEntry } from '../lib/layouts';
 import type { MapsFeedResult } from '../lib/maps-feed';
-import type { MapRegionOverlay } from '../lib/maps-map-regions';
 import type { MapsFeedView } from '../lib/maps-view';
 import { useMapLayers } from '../lib/use-map-layouts';
 import type { LayerLegendStatus } from './maps-active-layers-legend';
@@ -76,7 +75,8 @@ export function MapsAllLayers({ layerIds }: { layerIds: string[] }) {
     const loads = new Map<string, Promise<MapsFeedResult>>();
     const results = await Promise.allSettled(
       layers.map(async (entry) => {
-        const key = entry.feedId ?? entry.id;
+        // Stored layers read their object; others their feed.
+        const key = entry.storagePath ?? entry.feedId ?? entry.id;
         let load = loads.get(key);
         if (!load) {
           const source = workspaceId ? layoutPinSource(entry, workspaceId) : null;
@@ -87,15 +87,11 @@ export function MapsAllLayers({ layerIds }: { layerIds: string[] }) {
       }),
     );
     const pins: MapsPinMarker[] = [];
-    let mapRegions: MapRegionOverlay | undefined;
     const next: Record<string, LayerLegendStatus> = {};
     results.forEach((result, index) => {
       const entry = layers[index];
       const color = layerPinColor(entry);
       if (result.status === 'fulfilled') {
-        if (!mapRegions && result.value.mapRegions) {
-          mapRegions = result.value.mapRegions;
-        }
         const layerPins = layerFeedPins(result.value.pins, entry.classLabels);
         const fetchedAt = new Date().toISOString();
         const layerStyle = {
@@ -103,6 +99,7 @@ export function MapsAllLayers({ layerIds }: { layerIds: string[] }) {
           color,
           icon: entry.icon,
           ownIcon: entry.ownIcon,
+          logoUrl: entry.kind === 'stored' ? entry.feedLogoUrl : undefined,
           feed: entry.feedId
             ? { id: entry.feedId, color: entry.feedColor ?? color, title: entry.feedTitle ?? entry.feedId }
             : { id: entry.id, color, title: entry.title },
@@ -140,7 +137,7 @@ export function MapsAllLayers({ layerIds }: { layerIds: string[] }) {
     }
     setLayerCounts(counts);
     signal.throwIfAborted();
-    return { pins, empty: pins.length === 0, mapRegions };
+    return { pins, empty: pins.length === 0 };
   };
 
   const noLayers = onEntries.length === 0;

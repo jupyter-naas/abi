@@ -16,3 +16,11 @@ describe('resolveMapsPinImageUrl', () => {
     expect(resolveMapsPinImageUrl('https://example.com/a.png')).toBe('https://example.com/a.png');
   });
 });
+
+describe('stored logos', () => {
+  it('accepts object URLs of logos loaded with the member token', () => {
+    expect(mapsPinImageUrl('blob:http://localhost:3000/1234')).toBe('blob:http://localhost:3000/1234');
+    expect(resolveMapsPinImageUrl('blob:http://localhost:3000/1234')).toBe('blob:http://localhost:3000/1234');
+    expect(mapsPinImageUrl('blob:javascript:alert(1)')).toBeUndefined();
+  });
+});

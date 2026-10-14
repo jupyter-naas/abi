@@ -85,4 +85,5 @@ def applied_revision(settings: MapsWorkspaceSettings, kind: str, item_id: str) -
     key = f"{kind}:{item_id}"
     if key in settings.seed_revisions:
         return settings.seed_revisions[key]
-    return 1 if kind == "layout" and item_id in settings.seeded_layouts else 0
+    seeded = {"layout": settings.seeded_layouts, "basemap": settings.seeded_basemaps}
+    return 1 if item_id in seeded.get(kind, ()) else 0

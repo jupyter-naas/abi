@@ -102,12 +102,19 @@ export const layoutsApi = {
   preview: (workspaceId: string, draft: LayoutDraft) =>
     request<LayoutPreview>(`${base()}/preview`, json('POST', { ...draft, workspace_id: workspaceId })),
   feedUrl: (workspaceId: string, id: string) => `${base()}/${encodeURIComponent(id)}/feed?${ws(workspaceId)}`,
+  /** A stored feed logo (`logo_path`); authenticated, load through an object URL. */
+  logoUrl: (workspaceId: string, id: string) => `${base()}/${encodeURIComponent(id)}/logo?${ws(workspaceId)}`,
 };
 
 export type FeedLayerDraft = Omit<WorkspaceFeedLayer, 'id' | 'system' | 'shared_from'>;
 
 /** Map layers: views on a feed (`/api/maps/feed-layers`). Hide them with layoutsApi.setHidden. */
 export const feedLayersApi = {
+  /** A stored layer's GeoJSON; `all` skips its feature types (shared object, type picker). */
+  dataUrl: (workspaceId: string, id: string, options: { all?: boolean } = {}) =>
+    `${getApiUrl()}/api/maps/feed-layers/${encodeURIComponent(id)}/data?${ws(workspaceId)}${
+      options.all ? '&all=true' : ''
+    }`,
   save: (workspaceId: string, id: string, draft: FeedLayerDraft) =>
     request<WorkspaceFeedLayer>(
       `${getApiUrl()}/api/maps/feed-layers/${encodeURIComponent(id)}?${ws(workspaceId)}`,

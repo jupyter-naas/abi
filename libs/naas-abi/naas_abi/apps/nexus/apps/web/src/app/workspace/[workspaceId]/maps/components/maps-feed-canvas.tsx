@@ -58,8 +58,8 @@ import {
   distinctMapFeedIds,
   facilityCountsByRegionAndFeed,
   pinCountriesInMapRegion,
+  basemapRegionOverlay,
   showMapRegionLabelsAtZoom,
-  type MapRegionOverlay,
 } from '../lib/maps-map-regions';
 import './maps-components.css';
 
@@ -211,7 +211,6 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   const pendingFocusRef = useRef<MapsPinMarker|null>(null);
   const returnViewRef = useRef<MapsCamera|null>(null);
   const [feedMeta,setFeedMeta] = useState<MapsFeedMeta|null>(null);
-  const [mapRegionOverlay, setMapRegionOverlay] = useState<MapRegionOverlay | null>(null);
   const [emptyDetail,setEmptyDetail] = useState<string|null>(null);
   const [selected,setSelected] = useState<MapsPinMarker|null>(null);
   // Country / continent marker whose locations the panel lists.
@@ -271,11 +270,11 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     [activePins, countryCenters],
   );
   const canRegionFilter = continents.length > 0;
+  // Regions belong to the basemap drawn (its renderer), not to the layers on it.
   const activeRegionOverlay = useMemo(() => {
-    if (!mapRegionOverlay || view !== 'addresses') return null;
-    if (mapRegionOverlay.basemapId && mapRegionOverlay.basemapId !== basemap) return null;
-    return mapRegionOverlay;
-  }, [mapRegionOverlay, basemap, view]);
+    if (view !== 'addresses') return null;
+    return basemapRegionOverlay(basemapDefs.find((def) => def.id === basemap)?.renderer) ?? null;
+  }, [basemapDefs, basemap, view]);
   const regionFacilityCountsByFeed = useMemo(() => {
     if (!activeRegionOverlay) return new Map();
     return facilityCountsByRegionAndFeed(
@@ -478,7 +477,6 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
         // A rebuilt map must redraw even when a static feed reuses its array.
         setPins([...loaded.pins]);
         setCoveragePins([...cities]);
-        setMapRegionOverlay(loaded.mapRegions ?? null);
         if (!cities.length) setView('addresses');
         setFeedMeta({
           source: loaded.source,
@@ -508,7 +506,6 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
         if (cancelled || active !== controller) return;
         setPins([]);
         setCoveragePins([]);
-        setMapRegionOverlay(null);
         setView('addresses');
         setSelected(null);
         setFeedMeta(null);
@@ -759,7 +756,6 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
             regions={activeRegionOverlay.regions}
             countsByFeed={regionFacilityCountsByFeed}
             multiFeed={regionLabelsMultiFeed}
-            countLabel={activeRegionOverlay.countLabel ?? 'facility'}
             onSelectRegion={selectMapRegion}
           />
         ) : null}

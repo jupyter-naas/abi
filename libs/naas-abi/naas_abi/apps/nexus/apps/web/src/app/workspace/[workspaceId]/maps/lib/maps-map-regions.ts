@@ -1,4 +1,5 @@
 import type { MapsPinMarker } from './leaflet-map';
+import type { BasemapRenderer } from './basemaps-api';
 import { findCountryCenter, type CountryCenterIndex } from './maps-country-centers';
 
 export interface MapRegionDefinition {
@@ -19,57 +20,29 @@ export function showMapRegionLabelsAtZoom(zoom: number): boolean {
   return zoom < MAPS_REGION_LABELS_MAX_ZOOM;
 }
 
-/** Region KPI overlay shipped on a GeoJSON facility feed (`mapRegions` on the payload). */
+/** Region labels drawn over a basemap that declares regions (`renderer.regions`). */
 export interface MapRegionOverlay {
-  basemapId?: string;
-  feedId: string;
-  countLabel?: string;
   regions: MapRegionDefinition[];
   countryToRegion: Record<string, string>;
 }
 
-export function parseMapRegionOverlay(raw: unknown): MapRegionOverlay | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const data = raw as Record<string, unknown>;
-  const feedId = typeof data.feedId === 'string' ? data.feedId.trim() : '';
-  const regionsRaw = data.regions;
-  const countryToRegion = data.countryToRegion;
-  if (!feedId || !Array.isArray(regionsRaw) || !countryToRegion || typeof countryToRegion !== 'object') {
-    return undefined;
-  }
-  const regions: MapRegionDefinition[] = [];
-  for (const item of regionsRaw) {
-    if (!item || typeof item !== 'object') continue;
-    const row = item as Record<string, unknown>;
-    const id = typeof row.id === 'string' ? row.id : '';
-    const name = typeof row.name === 'string' ? row.name : '';
-    const labelX = typeof row.labelX === 'number' ? row.labelX : undefined;
-    const labelY = typeof row.labelY === 'number' ? row.labelY : undefined;
-    const color = typeof row.color === 'string' ? row.color : '';
-    if (!id || !name || labelX == null || labelY == null || !color) continue;
-    regions.push({
-      id,
-      name,
-      labelX,
-      labelY,
-      color,
-      latitude: typeof row.latitude === 'number' ? row.latitude : undefined,
-      longitude: typeof row.longitude === 'number' ? row.longitude : undefined,
-      zoom: typeof row.zoom === 'number' ? row.zoom : undefined,
-    });
-  }
-  if (!regions.length) return undefined;
-  const mapping: Record<string, string> = {};
-  for (const [country, regionId] of Object.entries(countryToRegion as Record<string, unknown>)) {
-    if (typeof regionId === 'string' && regionId.trim()) mapping[country] = regionId;
-  }
-  return {
-    basemapId: typeof data.basemapId === 'string' ? data.basemapId : undefined,
-    feedId,
-    countLabel: typeof data.countLabel === 'string' ? data.countLabel : undefined,
-    regions,
-    countryToRegion: mapping,
-  };
+export function basemapRegionOverlay(renderer: BasemapRenderer | undefined): MapRegionOverlay | undefined {
+  if (!renderer || renderer.kind === 'tile' || !renderer.regions?.length) return undefined;
+  const countryToRegion: Record<string, string> = {};
+  const regions = renderer.regions.map((region) => {
+    for (const country of region.countries) countryToRegion[country] = region.id;
+    return {
+      id: region.id,
+      name: region.name,
+      labelX: region.label_x,
+      labelY: region.label_y,
+      color: region.color,
+      latitude: region.latitude,
+      longitude: region.longitude,
+      zoom: region.zoom,
+    };
+  });
+  return { regions, countryToRegion };
 }
 
 export function regionForCountry(

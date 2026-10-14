@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.adapters.secondary.memory import (
@@ -258,3 +259,42 @@ def test_seeds_replace_the_automatic_default_layer(env) -> None:
     layers = env.list("ws-1", seeds=EDF_LAYERS)
     assert {layer.id for layer in layers} == {"edf-solar", "edf-hydro"}
     assert "edf" not in asyncio.run(env.settings.get("ws-1")).hidden_layouts
+
+
+def test_layer_storage_path_is_validated_and_kept() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.feed_layers__schema import (
+        validate_feed_layer,
+    )
+
+    key = "intelligence/organizations/Acme/maps/acme.geojson"
+    layer = MapsFeedLayer(id="acme-offices", feed_id="acme", title="Offices", storage_path=key)
+    assert validate_feed_layer(layer) == []
+    assert MapsFeedLayer.from_dict(layer.to_dict()).storage_path == key
+    bad = MapsFeedLayer(id="acme-x", feed_id="acme", title="X", storage_path="../acme.geojson")
+    assert any("storage_path" in e for e in validate_feed_layer(bad))
+
+
+def test_editing_a_seeded_layer_keeps_its_storage_path(env) -> None:
+    key = "intelligence/organizations/Edf/maps/edf.geojson"
+    seeds = [replace(layer, storage_path=key) for layer in EDF_LAYERS]
+    env.list("ws-1", seeds=seeds)
+    edited = MapsFeedLayer(id="edf-solar", feed_id="edf", title="Sun", color="#e85130")
+    asyncio.run(env.layers.save("ws-1", edited, user_id="u"))
+    solar = next(layer for layer in env.list("ws-1", seeds=seeds) if layer.id == "edf-solar")
+    assert (solar.title, solar.storage_path) == ("Sun", key)
+
+
+def test_a_new_layer_on_a_stored_feed_reads_the_feed_object(env) -> None:
+    key = "intelligence/organizations/Acme/maps/acme.geojson"
+    feed = _feed("acme", feed_type="object_storage", feed_url="")
+    seeded = MapsFeedLayer(id="acme", feed_id="acme", title="All", storage_path=key)
+    asyncio.run(env.feeds.list("ws-1", seeds=[feed]))
+    env.list("ws-1", seeds=[seeded])
+    added = asyncio.run(
+        env.layers.save(
+            "ws-1",
+            MapsFeedLayer(id="acme-hq", feed_id="acme", title="HQ", class_labels=("Headquarters",)),
+            user_id="u",
+        )
+    )
+    assert added.storage_path == key

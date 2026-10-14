@@ -20,9 +20,9 @@ export const ALL_LAYERS_ID = 'all';
 /** @deprecated use ALL_LAYERS_ID */
 export const ALL_LAYOUTS_ID = ALL_LAYERS_ID;
 
-export type LayoutKind = 'builtin' | 'graph' | 'workspace' | 'feed' | 'imported';
+export type LayoutKind = 'builtin' | 'graph' | 'workspace' | 'feed' | 'stored' | 'imported';
 
-export type LayoutFeedType = 'sparql' | 'geojson_url';
+export type LayoutFeedType = 'sparql' | 'geojson_url' | 'object_storage';
 
 /** GeoJSON layer stored in the browser (File → New layer). */
 export interface ImportedLayerMeta {
@@ -54,6 +54,8 @@ export interface WorkspaceMapLayout {
   /** Pre-`group` slug from older API responses (read through layoutGroup). */
   category?: string;
   logo_url?: string;
+  /** Logo in object storage, served by `/api/maps/layouts/{id}/logo` (wins over logo_url). */
+  logo_path?: string;
   basemap_id?: string;
   meta_label?: string;
   fit_max_zoom?: number | null;
@@ -75,6 +77,8 @@ export interface WorkspaceFeedLayer {
   order: number;
   /** Feature types kept (pin classLabel); empty = every feature of the feed. */
   class_labels: string[];
+  /** Stored feeds: object storage key of the layer's GeoJSON (`/feed-layers/{id}/data`). */
+  storage_path?: string;
   system: boolean;
   shared_from?: string;
 }
@@ -97,6 +101,16 @@ export function defaultFeedLayer(feed: WorkspaceMapLayout): WorkspaceFeedLayer {
 
 export function isFeedLayout(layout: Pick<WorkspaceMapLayout, 'feed_type'>): boolean {
   return layout.feed_type === 'geojson_url';
+}
+
+/** Feed whose layers each read a GeoJSON object from the platform's object storage. */
+export function isStoredFeed(layout: Pick<WorkspaceMapLayout, 'feed_type'>): boolean {
+  return layout.feed_type === 'object_storage';
+}
+
+/** Feeds with feature types (pin classLabel): API feeds and stored feeds. */
+export function hasFeatureTypes(layout: Pick<WorkspaceMapLayout, 'feed_type'>): boolean {
+  return isFeedLayout(layout) || isStoredFeed(layout);
 }
 
 export interface LayoutEntry extends MapsDataset {
@@ -122,6 +136,8 @@ export interface LayoutEntry extends MapsDataset {
   feedColor?: string;
   /** Feature types kept from the feed (pin classLabel); empty = all. */
   classLabels?: string[];
+  /** Stored feeds: the layer's object storage key. */
+  storagePath?: string;
   /** The layer has its own icon: drawn instead of the feed's logo on pins. */
   ownIcon?: boolean;
 }
@@ -137,6 +153,8 @@ export function buildLayoutEntries(
     colors?: Readonly<Record<string, string>>;
     /** Layers of the feeds; when absent each feed is one layer (its default). */
     feedLayers?: readonly WorkspaceFeedLayer[];
+    /** Object URLs of stored feed logos (`logo_path`), by feed id, once loaded. */
+    logoUrls?: Readonly<Record<string, string>>;
   } = {},
 ): LayoutEntry[] {
   const colors = _options.colors ?? {};
@@ -177,28 +195,35 @@ export function buildLayoutEntries(
     const feed = feedsById.get(layer.feed_id);
     if (!feed) continue;
     const apiFeed = isFeedLayout(feed);
+    const stored = isStoredFeed(feed);
+    const feedLogo = feed.logo_path
+      ? mapsPinImageUrl(_options.logoUrls?.[feed.id])
+      : mapsPinImageUrl(feed.logo_url);
     add({
       id: layer.id,
       title: layer.title,
       description:
-        layer.description || feed.description || (apiFeed ? 'Feed layer' : 'Workspace layer (SPARQL)'),
+        layer.description
+        || feed.description
+        || (stored ? 'Stored layer' : apiFeed ? 'Feed layer' : 'Workspace layer (SPARQL)'),
       icon: layer.icon || feed.icon || 'MapPin',
       group: layoutGroup(feed),
       order: layer.order,
-      kind: apiFeed ? 'feed' : 'workspace',
+      kind: stored ? 'stored' : apiFeed ? 'feed' : 'workspace',
       combinable: true,
       color: layer.color,
       // A layer with its own icon shows it; otherwise the feed's logo.
-      layerLogoUrl: layer.icon ? undefined : mapsPinImageUrl(feed.logo_url),
+      layerLogoUrl: layer.icon ? undefined : feedLogo,
       basemapId: feed.basemap_id || undefined,
       metaLabel: feed.meta_label || undefined,
       system: layer.system,
       sharedFrom: layer.shared_from || feed.shared_from || undefined,
       feedId: feed.id,
       feedTitle: feed.title,
-      feedLogoUrl: mapsPinImageUrl(feed.logo_url),
+      feedLogoUrl: feedLogo,
       feedColor: feed.color,
       classLabels: layer.class_labels,
+      storagePath: stored ? layer.storage_path || undefined : undefined,
       ownIcon: Boolean(layer.icon),
     });
   }
