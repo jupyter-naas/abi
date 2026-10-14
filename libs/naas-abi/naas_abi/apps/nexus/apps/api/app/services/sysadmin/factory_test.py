@@ -231,6 +231,7 @@ def test_job_owners_include_kernel_dataset_jobs_in_nats_mode():
     assert "naas_abi_core.dataset" in owners
     assert {j.name for j in owners["naas_abi_core.dataset"].jobs} == {
         "dataset_compaction",
+        "dataset_cleanup",
         "dataset_catalog_monitor",
     }
     no_nats = NS(
