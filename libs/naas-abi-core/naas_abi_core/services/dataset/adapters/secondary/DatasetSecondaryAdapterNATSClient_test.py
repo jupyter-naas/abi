@@ -91,6 +91,24 @@ def test_long_operations_send_the_callers_deadline(operation, response):
     assert sent == [(3_600_000, 3600.0), (10_000, None)]
 
 
+def test_write_sends_the_callers_deadline():
+    client = DatasetSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", JWT_SECRET, "api", timeout_seconds=10.0
+    )
+    sent = []
+
+    def fake_call(subject, request, response_cls, **kwargs):
+        sent.append((request.context.timeout_ms, kwargs.get("timeout_seconds")))
+        return dataset_pb2.WriteResponse(info=dataset_pb2.DatasetInfo(name="events"))
+
+    client._call = fake_call  # type: ignore[method-assign]
+
+    client.write("events", [{"id": 1}], timeout_seconds=600.0)
+    client.write("events", [{"id": 1}])
+
+    assert sent == [(600_000, 600.0), (10_000, None)]
+
+
 # ---------------------------------------------------------------------------
 # Error-code -> exception mapping. Must stay exactly symmetric with how
 # DatasetPrimaryAdapterNATS encodes DatasetError.
@@ -471,6 +489,97 @@ def test_query_stream_reads_rows_over_transfer_frames(nats_url, tmp_path, monkey
             next(iter(early.rows))  # leaving early releases the session
         with client.query_stream("SELECT count(*) AS n FROM events") as counted:
             assert [int(row["n"]) for row in counted.rows] == [30_000]
+    finally:
+        client.close()
+        server.stop()
+
+
+def _slow_writer(seconds: float):
+    """A backend whose writes take ``seconds``, like a DuckLake write reading
+    and rewriting a table's files."""
+    from unittest.mock import Mock
+
+    from naas_abi_core.services.dataset.DatasetPort import DatasetInfo, IDatasetPort
+
+    info = DatasetInfo(
+        name="events",
+        namespace="default",
+        columns=(),
+        partitions=(),
+        primary_key=(),
+        snapshot_id=7,
+        location="",
+    )
+    backend = Mock(spec=IDatasetPort)
+    backend.inlined_row_count.return_value = 0
+
+    def write(name, rows, **_):
+        time.sleep(seconds)
+        return info
+
+    def write_stream(name, rows, **_):
+        list(rows)
+        time.sleep(seconds)
+        return info
+
+    backend.write.side_effect = write
+    backend.write_stream.side_effect = write_stream
+    return backend
+
+
+@pytest.mark.integration
+def test_a_long_write_waits_for_its_own_deadline(nats_url):
+    """Signal pulls failed with a bare TimeoutError on 2026-10-13: their writes
+    took 10-46 s and waited the client's default deadline."""
+    from naas_abi_core.services.dataset.DatasetService import DatasetService
+
+    backend = _slow_writer(0.8)
+    server = _PrimaryAdapterServer(nats_url, JWT_SECRET, DatasetService(backend))
+    server.start()
+    client = DatasetSecondaryAdapterNATSClient(
+        nats_url=nats_url,
+        jwt_secret=JWT_SECRET,
+        service_identity="engine",
+        timeout_seconds=0.3,
+    )
+    service = DatasetService(client)
+    try:
+        assert client.inlined_row_count("events") == 0  # warm the connection
+        with pytest.raises(TimeoutError):
+            service.write("events", [{"id": 1}])
+        info = service.write("events", [{"id": 1}], timeout_seconds=10.0)
+        assert info.snapshot_id == 7
+    finally:
+        client.close()
+        server.stop()
+
+
+@pytest.mark.integration
+def test_a_streamed_write_is_bounded_by_its_deadline(nats_url):
+    from naas_abi_core.services.dataset.DatasetService import DatasetService
+
+    backend = _slow_writer(1.0)
+    server = _PrimaryAdapterServer(nats_url, JWT_SECRET, DatasetService(backend))
+    server.start()
+    client = DatasetSecondaryAdapterNATSClient(
+        nats_url=nats_url,
+        jwt_secret=JWT_SECRET,
+        service_identity="engine",
+        timeout_seconds=5.0,
+    )
+    service = DatasetService(client)
+    rows = [{"id": n} for n in range(100)]
+    try:
+        started = time.monotonic()
+        with pytest.raises(TimeoutError):
+            service.write_stream("events", iter(rows), timeout_seconds=0.3)
+        assert time.monotonic() - started < 1.0  # gave up at the deadline
+
+        # Without one, the stream waits for the commit, however long it takes.
+        assert service.write_stream("events", iter(rows)).snapshot_id == 7
+        assert service.write_stream(
+            "events", iter(rows), timeout_seconds=10.0
+        ).snapshot_id == 7
     finally:
         client.close()
         server.stop()
