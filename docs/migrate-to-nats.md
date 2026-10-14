@@ -293,11 +293,14 @@ from `identity: <module_id>`, and refuses an entry it cannot tell. The tokens
 a module sends to another module are bound to the instance called and last five
 minutes; only a key (or the engine's `ServiceTokenSource`) can bind them, so a
 module holding only a static `ABI_SERVICE_TOKEN` cannot call other modules.
+Code that calls a module subject through `Transport.call` passes the instance
+id it calls (`instance_id=`); discovery refuses an instance id that is not one
+subject token (letters, digits, `_`, `-`).
 Apps receive a `user_id` from Nexus only: `request.scope["abi"]["caller"]` names
 who called.
 
 The broker user `module` may not subscribe to `abi.svc.>`, `abi.discovery.>`,
-`abi.rpc.>`, `_INBOX.>` or `$KV.>`, nor write `$KV.>`, create or update streams,
+`abi.rpc.>`, `_INBOX.>`, `$JS.>` or `$KV.>`, nor write `$KV.>`, create or update streams,
 delete consumers, or use the
 JetStream direct get (`naas_abi_core.engine.nats_permissions`). Update the
 project's `.deploy/docker/nats/nats.conf` (`abi deploy local --regenerate`
@@ -356,8 +359,8 @@ version and running `abi deploy local --regenerate` again.
   with keys for their own module id, the tokens they are sent are bound to
   them, and the `module` user stays off the engine's subjects and replies. But
   all modules share that user: one module can listen on another module's
-  subjects and inbox, and replay a token sent to that module, to it, for five
-  minutes; through the JetStream consumer and message-get API it can read any
+  subjects and inbox, replay a token sent to that module, to it, for five
+  minutes, and race forged answers to that module's callers; through the JetStream consumer and message-get API it can read any
   stream (the engine's key-value buckets, the jobs stream and the claim-check
   store included), and it can purge any stream; and it can take over another
   module's jobs (fetch from or reconfigure its job consumer, publish triggers or
