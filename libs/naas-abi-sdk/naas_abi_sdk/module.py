@@ -318,8 +318,10 @@ async def _drain_hosts(
         waits.append(asyncio.create_task(agent_host.drain(timeout)))
     if job_host is not None:
         waits.append(asyncio.create_task(job_host.drain(timeout)))
-    if waits:
-        await asyncio.gather(*waits)
+    # One host failing to drain does not cut the others' wait short.
+    for result in await asyncio.gather(*waits, return_exceptions=True):
+        if isinstance(result, Exception):
+            logging.getLogger(__name__).warning("Draining failed", exc_info=result)
 
 
 async def _host_jobs(job_host, module) -> None:
