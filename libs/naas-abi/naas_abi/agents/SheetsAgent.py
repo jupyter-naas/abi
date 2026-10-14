@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from langchain_core.embeddings import Embeddings
 from naas_abi.agents.sheets import (
     bind_sheets_reasoning,
@@ -7,6 +5,10 @@ from naas_abi.agents.sheets import (
     load_sheets_chat_model,
     resolve_sheets_llm_model,
     sheets_research_tools,
+)
+from naas_abi.agents.sheets.skill_catalog import (
+    make_read_sheets_skill_tool,
+    sheets_skill_catalog_block,
 )
 from naas_abi_core.services.agent.context import SHEETS_RECURSION_LIMIT
 from naas_abi_core.services.agent.IntentAgent import (
@@ -26,9 +28,6 @@ class _NoopEmbeddings(Embeddings):
     def embed_query(self, text: str) -> list[float]:
         del text
         return [0.0]
-
-
-SHEETS_SKILL = (Path(__file__).parent / "sheets/skills/nexus-sheets/SKILL.md").read_text(encoding="utf-8")
 
 
 SHEETS_GUIDELINES = """- When the user asks for a spreadsheet or workbook and none is open, call create_sheets_project first with a short title from their brief (and template_id when known), then edit via write_sheets_workbook only as needed.
@@ -118,7 +117,7 @@ Your step budget is finite ({SHEETS_RECURSION_LIMIT} graph steps). Plan, then wr
 </sheets_output_quality>
 
 <spreadsheet_skill>
-{SHEETS_SKILL}
+{sheets_skill_catalog_block()}
 </spreadsheet_skill>
 
 <tools>
@@ -180,7 +179,7 @@ Your step budget is finite ({SHEETS_RECURSION_LIMIT} graph steps). Plan, then wr
     @staticmethod
     def get_tools() -> list:
         """Workbook writes plus the search stack the research gate depends on."""
-        tools: list = []
+        tools: list = [make_read_sheets_skill_tool()]
         try:
             from naas_abi.tools.sheets_tools import sheets_tools
 

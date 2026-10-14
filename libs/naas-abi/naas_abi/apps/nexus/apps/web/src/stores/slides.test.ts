@@ -6,6 +6,7 @@ describe('slides sidebar filmstrip', () => {
     useSlidesStore.setState({
       sidebarView: 'decks',
       selectedIndex: 0,
+      selectedElement: null,
       filmstrip: null,
       reorderOpenDeck: null,
     });
@@ -20,6 +21,14 @@ describe('slides sidebar filmstrip', () => {
   it('keeps the open-deck selection for the filmstrip and preview', () => {
     useSlidesStore.getState().setSelectedIndex(3);
     expect(useSlidesStore.getState().selectedIndex).toBe(3);
+  });
+
+  it('drops the clicked element when the user moves to another slide', () => {
+    useSlidesStore.getState().setSelectedElement({ path: '2:h1:0', text: 'Hello' });
+    expect(useSlidesStore.getState().selectedIndex).toBe(2);
+    expect(useSlidesStore.getState().selectedElement?.path).toBe('2:h1:0');
+    useSlidesStore.getState().setSelectedIndex(1);
+    expect(useSlidesStore.getState().selectedElement).toBeNull();
   });
 
   it('publishes the open deck for the sidebar strip', () => {

@@ -84,6 +84,9 @@ def _install_fakes(monkeypatch: pytest.MonkeyPatch, capture: _Capture) -> None:
         def _inject_chat_vector_context(self, provider_messages, **_kwargs):
             return provider_messages, []
 
+        async def expand_invoked_skill_messages(self, messages, *_args, **_kwargs):
+            return messages
+
         async def build_system_prompt(self, **_kwargs) -> str:
             return "system"
 

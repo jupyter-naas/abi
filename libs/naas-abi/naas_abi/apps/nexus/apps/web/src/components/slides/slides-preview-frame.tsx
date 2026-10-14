@@ -43,6 +43,7 @@ export interface SlidesPreviewFrameProps {
   onSelectedIndexChange?: (index: number) => void;
   manualEdit?: boolean;
   onManualEditCommit?: (edits: SlidesTextEdit[]) => void;
+  onElementSelect?: (selection: { path: string; text: string } | null) => void;
 }
 
 /**
@@ -76,6 +77,7 @@ export const SlidesPreviewFrame = forwardRef<
     onSelectedIndexChange,
     manualEdit = false,
     onManualEditCommit,
+    onElementSelect,
   },
   ref,
 ) {
@@ -83,6 +85,7 @@ export const SlidesPreviewFrame = forwardRef<
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const manualEditRef = useRef(manualEdit);
   const onManualEditCommitRef = useRef(onManualEditCommit);
+  const onElementSelectRef = useRef(onElementSelect);
   const acceptEditsUntilRef = useRef(0);
   const slideCountRef = useRef(1);
   const [scale, setScale] = useState(1);
@@ -93,6 +96,7 @@ export const SlidesPreviewFrame = forwardRef<
 
   manualEditRef.current = manualEdit;
   onManualEditCommitRef.current = onManualEditCommit;
+  onElementSelectRef.current = onElementSelect;
 
   const stageHeightForCount = (count: number) =>
     Math.max(1, count) * SLIDES_STAGE_HEIGHT;
@@ -187,6 +191,11 @@ export const SlidesPreviewFrame = forwardRef<
       if (event.data.type === 'edit-commit') {
         if (!manualEditRef.current && Date.now() > acceptEditsUntilRef.current) return;
         onManualEditCommitRef.current?.(event.data.edits);
+        return;
+      }
+      if (event.data.type === 'element-select') {
+        const path = event.data.path.trim();
+        onElementSelectRef.current?.(path ? { path, text: event.data.text } : null);
         return;
       }
       if (

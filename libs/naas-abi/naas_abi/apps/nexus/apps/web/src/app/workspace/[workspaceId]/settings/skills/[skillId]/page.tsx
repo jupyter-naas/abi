@@ -2,19 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Input, Select, Textarea } from '@/components/ui/input';
-import {
-  SettingsField,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsSection,
-} from '@/components/settings/settings-ui';
-import { useSkillsStore, type SkillScope } from '@/stores/skills';
+import { SettingsLoading } from '@/components/settings/settings-ui';
+import { canModifySkill, useSkillsStore, type SkillScope } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
+import { SkillRecordView } from '../skill-record-view';
 
 export default function SkillEditorPage() {
   const params = useParams();
@@ -40,6 +33,8 @@ export default function SkillEditorPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [pickedFile, setPickedFile] = useState<string | null>(null);
+  const [selectedFileText, setSelectedFileText] = useState<string | null>(null);
 
   useEffect(() => {
     if (workspaceId) void fetchSkills(workspaceId, true);
@@ -58,7 +53,65 @@ export default function SkillEditorPage() {
     }
   }, [skill, loadedId]);
 
-  const canModify = skill ? skill.scope !== 'user' || skill.userId === currentUserId : false;
+  const canModify = skill ? canModifySkill(skill, currentUserId) : false;
+  const packageFiles = skill?.files ?? [];
+  const selectedFile =
+    pickedFile && packageFiles.includes(pickedFile)
+      ? pickedFile
+      : packageFiles.includes('SKILL.md')
+        ? 'SKILL.md'
+        : (packageFiles[0] ?? null);
+
+  useEffect(() => {
+    if (!skill || !selectedFile) {
+      setSelectedFileText(null);
+      return;
+    }
+    let cancelled = false;
+    setSelectedFileText(null);
+    void (async () => {
+      try {
+        const { authFetch } = await import('@/stores/auth');
+        const { getApiUrl } = await import('@/lib/config');
+        const response = await authFetch(
+          `${getApiUrl()}/api/skills/${encodeURIComponent(skill.id)}/files/${selectedFile
+            .split('/')
+            .map(encodeURIComponent)
+            .join('/')}`,
+        );
+        if (!response.ok) {
+          if (!cancelled) setSelectedFileText('Could not read this file.');
+          return;
+        }
+        const payload = (await response.json()) as { content?: string };
+        if (!cancelled) setSelectedFileText(payload.content ?? '');
+      } catch {
+        if (!cancelled) setSelectedFileText(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [skill, selectedFile]);
+
+  // Module catalog rows disclose metadata; load instructions only on this detail page.
+  useEffect(() => {
+    if (skill?.source !== 'module') return;
+    let cancelled = false;
+    void (async () => {
+      const { authFetch } = await import('@/stores/auth');
+      const { getApiUrl } = await import('@/lib/config');
+      try {
+        const response = await authFetch(`${getApiUrl()}/api/skills/${encodeURIComponent(skill.id)}`);
+        if (!response.ok) throw new Error('Could not load skill instructions.');
+        const loaded = await response.json();
+        if (!cancelled) setPrompt(loaded.prompt ?? '');
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load skill instructions.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [skill?.id, skill?.source]);
 
   const handleSave = async () => {
     if (!skill) return;
@@ -88,82 +141,39 @@ export default function SkillEditorPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <SettingsPageHeader
-        leading={
-          <Button
-            variant="secondary"
-            size="icon"
-            className="h-9 w-9"
-            onClick={() => router.push(`/workspace/${workspaceId}/settings/skills`)}
-            title="Back to skills"
-          >
-            <ArrowLeft size={16} />
-          </Button>
-        }
-        title={skill.name}
-        description={<span className="font-mono text-primary">/{skill.slug}</span>}
-        actions={
-          <Button onClick={handleSave} disabled={saving || !canModify}>
-            {saving && <Loader2 size={14} className="animate-spin" />}
-            {saved ? 'Saved' : 'Save'}
-          </Button>
-        }
-      />
-
-      {!canModify && <SettingsNotice>Only the creator can modify this private skill.</SettingsNotice>}
-      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
-
-      <SettingsSection>
-        <div className="grid gap-4">
-          <div className="grid grid-cols-2 gap-4">
-            <SettingsField label="Name">
-              <Input type="text" value={name} onChange={(e) => setName(e.target.value)} disabled={!canModify} />
-            </SettingsField>
-            <SettingsField label="Slug">
-              <Input
-                type="text"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                disabled={!canModify}
-                className="font-mono"
-              />
-            </SettingsField>
-          </div>
-          <SettingsField label="Description">
-            <Input
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={!canModify}
-            />
-          </SettingsField>
-          <SettingsField label="Prompt">
-            <Textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} disabled={!canModify} rows={12} />
-          </SettingsField>
-          <div className="flex items-end gap-6">
-            <SettingsField label="Visibility">
-              <Select
-                value={scope}
-                onChange={(e) => setScope(e.target.value as SkillScope)}
-                disabled={!canModify}
-                className="w-auto"
-              >
-                <option value="user">Private (only me)</option>
-                <option value="workspace">Workspace</option>
-                <option value="organization">Organization</option>
-              </Select>
-            </SettingsField>
-            <Checkbox
-              checked={enabled}
-              onCheckedChange={setEnabled}
-              disabled={!canModify}
-              label="Enabled"
-              className="h-9"
-            />
-          </div>
-        </div>
-      </SettingsSection>
-    </div>
+    <SkillRecordView
+      title={skill.name}
+      subtitle={<span className="font-mono text-primary">/{skill.slug}{skill.catalogRef ? ` · ${skill.catalogRef}` : ''}</span>}
+      onBack={() => router.push(`/workspace/${workspaceId}/settings/skills`)}
+      actions={
+        <Button onClick={handleSave} disabled={saving || !canModify}>
+          {saving && <Loader2 size={14} className="animate-spin" />}
+          {saved ? 'Saved' : 'Save'}
+        </Button>
+      }
+      builtin={skill.builtin}
+      builtinSlug={skill.slug}
+      canModify={canModify}
+      error={error}
+      name={name}
+      onNameChange={setName}
+      slug={slug}
+      onSlugChange={setSlug}
+      description={description}
+      onDescriptionChange={setDescription}
+      scope={scope}
+      onScopeChange={setScope}
+      enabled={enabled}
+      onEnabledChange={setEnabled}
+      files={packageFiles}
+      selectedPath={selectedFile}
+      selectedText={selectedFileText}
+      onSelectFile={(path) => {
+        setPickedFile(path);
+        setSelectedFileText(null);
+      }}
+      prompt={prompt}
+      onPromptChange={setPrompt}
+    />
   );
 }

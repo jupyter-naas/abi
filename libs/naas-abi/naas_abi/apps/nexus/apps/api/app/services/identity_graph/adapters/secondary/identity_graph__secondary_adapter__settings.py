@@ -126,6 +126,7 @@ class PlatformConfigurationSourceSettings(PlatformConfigurationSourcePort):
                         agents=list(workspace.get("agents") or []),
                         apps=list(workspace.get("apps") or []),
                         ontologies=list(workspace.get("ontologies") or []),
+                        skills=list(workspace.get("skills") or []),
                     )
 
         return PlatformSnapshot(

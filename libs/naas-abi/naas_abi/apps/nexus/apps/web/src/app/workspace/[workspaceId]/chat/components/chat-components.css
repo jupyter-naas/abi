@@ -110,11 +110,6 @@
   font-size: 10px;
 }
 
-.chat-list-row-skill-slug {
-  margin-left: var(--space-1);
-  color: var(--muted-foreground-hex);
-}
-
 .chat-list-row-menu-trigger {
   flex-shrink: 0;
   padding: 2px;

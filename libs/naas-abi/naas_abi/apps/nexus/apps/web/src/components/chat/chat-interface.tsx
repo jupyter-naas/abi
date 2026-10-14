@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
+import { Send, Bot, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
@@ -77,8 +77,12 @@ import { firstUserPrompt } from '@/lib/office-auto-title';
 import { openDocumentBranch, openDocumentPath } from '@/lib/documents-pane-conversation';
 import { autoTitleOpenDeckIfNeeded } from '@/lib/slides-project-actions';
 import { slidesOpenDeckBranch, slidesOpenDeckPath } from '@/lib/slides-pane-conversation';
+import { slidesSelectedElementFields } from '@/components/slides/slides-preview-fit';
 import { sheetsOpenWorkbookBranch, sheetsOpenWorkbookPath } from '@/lib/sheets-pane-conversation';
 import { ContextUsageMeter } from './context-usage-meter';
+import { ComposerPlusButton } from './composer-plus-button';
+import { chatComposerPlaceholder, composerTextWithSkill } from './composer-plus-menu';
+import { composerSlashSuggestions } from './composer-slash';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { getLogoUrl } from '@/lib/logo-url';
 import { activeSuggestions, type ChatSuggestion } from '@/lib/suggestion-row';
@@ -98,19 +102,6 @@ const URL_REGEX = /https?:\/\/[^\s<>\]\)]+?(?=[\s<>\]\)]|$)/g;
 
 // "/command optional args" at the start of a message
 const SLASH_COMMAND_RE = /^\/([a-zA-Z0-9][a-zA-Z0-9_-]*)\s*([\s\S]*)$/;
-
-const BUILTIN_SLASH_COMMANDS = [
-  {
-    slug: 'skills',
-    name: 'List skills',
-    description: 'Show all skills available in this workspace',
-  },
-  {
-    slug: 'create-skill',
-    name: 'Create a skill',
-    description: 'Hand the task to the Skills agent, which writes and saves it',
-  },
-];
 
 function formatSkillListing(skills: Skill[]): string {
   const enabled = skills.filter((s) => s.enabled);
@@ -823,6 +814,7 @@ export function ChatInterface({
   const slidesMode = useSlidesStore((s) => s.editorMode);
   const slidesSelectedIndex = useSlidesStore((s) => s.selectedIndex);
   const slidesSlideCount = useSlidesStore((s) => s.slideCount);
+  const slidesSelectedElement = useSlidesStore((s) => s.selectedElement);
   const slidesChatContext = useMemo(() => {
     const onSlides = officeSurfaceFromPath(pathname).onSlides && Boolean(slidesSlug);
     if (!onSlides || !slidesSlug) return null;
@@ -837,6 +829,7 @@ export function ChatInterface({
         // 0-based, same index space as the slides tools (section_index).
         selected_index: slidesSlideCount > 0 ? slidesSelectedIndex : undefined,
         slide_count: slidesSlideCount > 0 ? slidesSlideCount : undefined,
+        ...slidesSelectedElementFields(slidesSelectedElement),
       },
     };
   }, [
@@ -847,6 +840,7 @@ export function ChatInterface({
     currentWorkspaceId,
     slidesSelectedIndex,
     slidesSlideCount,
+    slidesSelectedElement,
   ]);
 
   const documentsSlug = useDocumentsStore((s) => s.selectedSlug);
@@ -1001,41 +995,25 @@ export function ChatInterface({
     focusChatInput();
   }, [pendingComposerText, mounted, focusChatInput, isPane, setInput]);
 
-  // ---------- Slash-command autocomplete ----------
-  const [slashIndex, setSlashIndex] = useState(0);
+  // Compact slug + name rows while the input is a slash token. Empty chat stays quiet.
   const [slashDismissed, setSlashDismissed] = useState(false);
+  const [slashActiveIndex, setSlashActiveIndex] = useState(0);
   const workspaceSkills = useSkillsStore((s) =>
     currentWorkspaceId ? (s.skillsByWorkspace[currentWorkspaceId] ?? null) : null
   );
 
-  // Active while the input is only "/partial-command" (no space typed yet).
-  const slashQuery = useMemo(() => {
-    const m = input.match(/^\/([a-zA-Z0-9_-]*)$/);
-    return m ? m[1].toLowerCase() : null;
-  }, [input]);
-
-  const slashOptions = useMemo(() => {
-    if (slashQuery === null) return [];
-    const skills = workspaceSkills ?? [];
-    const skillOptions = skills
-      .filter((s) => s.enabled && s.slug.toLowerCase().includes(slashQuery))
-      .sort((a, b) => {
-        const ta = a.lastUsedAt ? new Date(a.lastUsedAt).getTime() : 0;
-        const tb = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0;
-        if (ta !== tb) return tb - ta;
-        return a.slug.localeCompare(b.slug);
-      })
-      .map((s) => ({ slug: s.slug, name: s.name, description: s.description }));
-    const builtinOptions = BUILTIN_SLASH_COMMANDS.filter((c) => c.slug.includes(slashQuery));
-    return [...skillOptions, ...builtinOptions].slice(0, 8);
-  }, [slashQuery, workspaceSkills]);
+  const slashSuggestions = useMemo(
+    () => composerSlashSuggestions(input, workspaceSkills),
+    [input, workspaceSkills],
+  );
 
   useEffect(() => {
-    setSlashIndex(0);
     setSlashDismissed(false);
-  }, [slashQuery]);
+    setSlashActiveIndex(0);
+  }, [input]);
 
-  const showSlashMenu = slashOptions.length > 0 && !slashDismissed;
+  const showSlashSuggestions = slashSuggestions.length > 0 && !slashDismissed;
+  const slashActive = Math.min(slashActiveIndex, Math.max(slashSuggestions.length - 1, 0));
 
   const applySlashOption = useCallback(
     (slug: string) => {
@@ -3224,38 +3202,35 @@ export function ChatInterface({
               
               {/* Row 1: Textarea */}
               <div className="relative px-4 pt-3 pb-1">
-                {/* Slash-command autocomplete */}
-                {showSlashMenu && (
-                  <div className="absolute bottom-full left-2 right-2 z-50 mb-2 max-h-64 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg">
-                    {slashOptions.map((option, index) => (
-                      <button
-                        key={option.slug}
-                        type="button"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          applySlashOption(option.slug);
-                        }}
-                        onMouseEnter={() => setSlashIndex(index)}
-                        className={cn(
-                          'flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
-                          index === slashIndex ? 'bg-workspace-accent-10' : ''
-                        )}
-                      >
-                        <span className="pt-0.5 font-mono text-xs text-workspace-accent">
-                          /{option.slug}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-xs font-medium text-foreground">
-                            {option.name}
-                          </span>
-                          {option.description && (
-                            <span className="block truncate text-[11px] text-muted-foreground">
-                              {option.description}
-                            </span>
+                {showSlashSuggestions && (
+                  <div
+                    className="mb-1 max-h-40 overflow-y-auto"
+                    role="listbox"
+                    aria-label="Skills"
+                  >
+                    {slashSuggestions.map((row, index) => {
+                      const active = index === slashActive;
+                      return (
+                        <button
+                          key={row.slug}
+                          type="button"
+                          role="option"
+                          aria-selected={active}
+                          className={cn(
+                            'flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left text-xs',
+                            active ? 'bg-muted' : 'hover:bg-muted/70',
                           )}
-                        </span>
-                      </button>
-                    ))}
+                          onMouseEnter={() => setSlashActiveIndex(index)}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            applySlashOption(row.slug);
+                          }}
+                        >
+                          <span className="shrink-0 font-mono">/{row.slug}</span>
+                          <span className="min-w-0 truncate text-muted-foreground">{row.name}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
                 <textarea
@@ -3264,30 +3239,33 @@ export function ChatInterface({
                   onFocus={handleComposerFocus}
                   onChange={(e) => handleInputChange(e.target.value)}
                   onKeyDown={(e) => {
-                    if (showSlashMenu) {
-                      if (e.key === 'ArrowDown') {
+                    if (showSlashSuggestions) {
+                      const typedSlug = input.startsWith('/') ? input.slice(1).toLowerCase() : '';
+                      const finished = slashSuggestions.some(
+                        (row) => row.slug.toLowerCase() === typedSlug,
+                      );
+                      const activeRow = slashSuggestions[slashActive];
+                      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                         e.preventDefault();
-                        setSlashIndex((i) => (i + 1) % slashOptions.length);
+                        const count = slashSuggestions.length;
+                        setSlashActiveIndex((current) => {
+                          const step = e.key === 'ArrowDown' ? 1 : -1;
+                          return (current + step + count) % count;
+                        });
                         return;
-                      }
-                      if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        setSlashIndex((i) => (i - 1 + slashOptions.length) % slashOptions.length);
-                        return;
-                      }
-                      if (e.key === 'Tab' || e.key === 'Enter') {
-                        const selected = slashOptions[slashIndex] ?? slashOptions[0];
-                        // Enter on a fully-typed command submits it; otherwise
-                        // Enter/Tab completes the highlighted option.
-                        if (!(e.key === 'Enter' && selected.slug === slashQuery)) {
-                          e.preventDefault();
-                          applySlashOption(selected.slug);
-                          return;
-                        }
                       }
                       if (e.key === 'Escape') {
                         e.preventDefault();
                         setSlashDismissed(true);
+                        return;
+                      }
+                      if (
+                        activeRow &&
+                        !e.shiftKey &&
+                        (e.key === 'Tab' || (e.key === 'Enter' && !finished))
+                      ) {
+                        e.preventDefault();
+                        applySlashOption(activeRow.slug);
                         return;
                       }
                     }
@@ -3296,17 +3274,12 @@ export function ChatInterface({
                       handleSubmit(e);
                     }
                   }}
-                  placeholder={
-                    attachedImages.length > 0
-                      ? 'Ask about the image...'
-                      : pendingFileAttachments.length > 0
-                        ? 'Ask about the file...'
-                        : officeSurfaceFromPath(pathname).onSlides
-                          ? 'Describe the deck: topic, audience, how many slides...'
-                          : officeSurfaceFromPath(pathname).onDocuments
-                            ? 'Describe the document: topic, audience...'
-                            : 'Send a message...'
-                  }
+                  placeholder={chatComposerPlaceholder({
+                    hasImages: attachedImages.length > 0,
+                    hasFiles: pendingFileAttachments.length > 0,
+                    onSlides: officeSurfaceFromPath(pathname).onSlides,
+                    onDocuments: officeSurfaceFromPath(pathname).onDocuments,
+                  })}
                   // placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
                   className="chat-composer-input max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
                   rows={1}
@@ -3319,18 +3292,16 @@ export function ChatInterface({
                   <div className="chat-composer-toolbar-start">
                     <ChatAgentSelector source={isPane ? 'pane' : 'chat'} />
 
-                    {/* Attach (plus) */}
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className={cn(
-                        'chat-composer-action',
-                        (attachedImages.length > 0 || pendingFileAttachments.length > 0) && 'is-active'
-                      )}
-                      title="Attach image or document"
-                    >
-                      <Plus size={20} />
-                    </button>
+                    <ComposerPlusButton
+                      active={attachedImages.length > 0 || pendingFileAttachments.length > 0}
+                      workspaceId={currentWorkspaceId}
+                      skills={workspaceSkills}
+                      onAddFiles={() => fileInputRef.current?.click()}
+                      onInsertSkill={(slug) => {
+                        setInput(composerTextWithSkill(input, slug));
+                        focusChatInput();
+                      }}
+                    />
 
                     <ContextUsageMeter snapshot={contextUsage} />
 

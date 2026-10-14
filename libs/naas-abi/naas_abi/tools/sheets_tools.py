@@ -15,6 +15,7 @@ from naas_abi_core.services.agent.context import (
 )
 
 from naas_abi.agents.sheets import resolve_workbook_title
+from naas_abi.agents.sheets.skill_catalog import reject_workbook_tool_without_skill
 from naas_abi.agents.sheets.template_resolve import (
     qualify_sheets_template_id,
     resolve_sheets_template_id,
@@ -62,6 +63,9 @@ def sheets_tools() -> list[BaseTool]:
         (or omit it and the server infers from the title/brief). Default blank
         is ``grid-light-v1``.
         """
+        blocked = reject_workbook_tool_without_skill()
+        if blocked:
+            return blocked
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
         denied = store.require_agent_access(write=True)
@@ -119,6 +123,9 @@ def sheets_tools() -> list[BaseTool]:
     @tool
     def read_sheets_workbook(slug: str = "") -> dict[str, Any]:
         """Read the JSON sheet model (tabs, rows). Omit slug when a workbook is open."""
+        blocked = reject_workbook_tool_without_skill()
+        if blocked:
+            return blocked
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
         resolved = store.resolve_slug(slug)
@@ -142,6 +149,9 @@ def sheets_tools() -> list[BaseTool]:
         message: str = "feat(sheets): update workbook model",
     ) -> dict[str, Any]:
         """Replace the workbook JSON model. Prefer update_sheets_cells for bounded edits."""
+        blocked = reject_workbook_tool_without_skill()
+        if blocked:
+            return blocked
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
         resolved = store.resolve_slug(slug)
@@ -168,6 +178,9 @@ def sheets_tools() -> list[BaseTool]:
         """Edit explicit A1 cells without replacing other data. cells_json: {"B2": 42, "C2": "=B2*2"}."""
         from naas_abi.apps.nexus.sheets.cell_edits import update_cells
 
+        blocked = reject_workbook_tool_without_skill()
+        if blocked:
+            return blocked
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
         resolved = store.resolve_slug(slug)
@@ -195,6 +208,9 @@ def sheets_tools() -> list[BaseTool]:
     @tool
     def evaluate_sheets_formulas(slug: str = "") -> dict[str, Any]:
         """Evaluate ``=`` formulas for a sanity check. Does not overwrite formula cells."""
+        blocked = reject_workbook_tool_without_skill()
+        if blocked:
+            return blocked
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
         resolved = store.resolve_slug(slug)
@@ -240,6 +256,9 @@ def sheets_tools() -> list[BaseTool]:
         slug: str = "",
     ) -> dict[str, Any]:
         """Live connector: pull rows from a Nexus dataset into the open workbook."""
+        blocked = reject_workbook_tool_without_skill()
+        if blocked:
+            return blocked
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
         resolved = store.resolve_slug(slug)

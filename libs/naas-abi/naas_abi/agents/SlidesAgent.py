@@ -50,6 +50,7 @@ SLIDES_GUIDELINES = """- When the user asks for a deck, presentation, or slides 
 - Use write_slides_section only for one targeted slide after the deck already has real copy. Keep .deck / .slide 1280x720, cover h1, and theme CSS variables.
 - Use insert_slide, delete_slide, duplicate_slide, and reorder_slides for structure (add, remove, copy, move). They return {ok, section_index, section_count, ids} and never HTML. Do not dump deck HTML into chat.
 - The system prompt carries selected_slide_index (0-based) when a deck is open: the slide the user is looking at. "This slide", "here", "the current slide", or a slide edit with no number means that index. Never ask which slide.
+- The system prompt carries selected_element_path (slideIndex:tag:nth) and selected_element_text when the user has clicked an element in Preview. Pass that path as element_path on replace_in_slides_deck so only that node changes. Do not ask which element.
 - insert_slide(after_index=-1) appends. Pass selected_slide_index as after_index to insert after the current slide. layout is cover, section-divider, or content: clones a skeleton from the open deck when one exists.
 - delete_slide refuses when only one slide remains.
 - Avoid read_slides_deck with include_assets=true. Default reads return an outline (titles, counts), not the HTML.

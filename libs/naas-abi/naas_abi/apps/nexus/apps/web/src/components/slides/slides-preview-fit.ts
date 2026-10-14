@@ -59,6 +59,12 @@ export type SlidesPreviewToParentMessage =
       source: typeof SLIDES_PREVIEW_MESSAGE_SOURCE;
       type: 'edit-commit';
       edits: SlidesTextEdit[];
+    }
+  | {
+      source: typeof SLIDES_PREVIEW_MESSAGE_SOURCE;
+      type: 'element-select';
+      path: string;
+      text: string;
     };
 
 export type SlidesPreviewFromParentMessage =
@@ -99,6 +105,26 @@ export const SLIDES_EDITABLE_TAGS = [
 const SLIDES_EDITABLE_TAG_SET = new Set<string>(SLIDES_EDITABLE_TAGS);
 
 const SLIDES_EDIT_PATH_RE = /^(\d+):([a-z][a-z0-9]*):(\d+)$/;
+
+/** Snippet length shared with the open-deck context. */
+export const SLIDES_ELEMENT_TEXT_MAX = 120;
+
+export function slidesElementSnippet(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().slice(0, SLIDES_ELEMENT_TEXT_MAX);
+}
+
+/** Fields the chat client sends when the user has clicked a preview node. */
+export function slidesSelectedElementFields(
+  element: { path?: string | null; text?: string | null } | null | undefined,
+): { selected_element_path?: string; selected_element_text?: string } {
+  const path = (element?.path || '').trim();
+  if (!SLIDES_EDIT_PATH_RE.test(path)) return {};
+  const text = slidesElementSnippet(element?.text || '');
+  return {
+    selected_element_path: path,
+    ...(text ? { selected_element_text: text } : {}),
+  };
+}
 
 /** Phrasing tags kept when applying a Manual edit. Scripts and handlers are dropped. */
 const SLIDES_EDIT_HTML_ALLOWED = new Set([
@@ -196,7 +222,41 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
       })
     );
   }
+  var TEXT_MAX = ${SLIDES_ELEMENT_TEXT_MAX};
+  function elementSnippet(text) {
+    return String(text || '').replace(/\\s+/g, ' ').trim().slice(0, TEXT_MAX);
+  }
+  function postElementSelect(el) {
+    var nodes = tagEditTargets();
+    nodes.forEach(function (node) {
+      node.removeAttribute('data-nexus-selected');
+    });
+    if (!el) {
+      parent.postMessage(
+        { source: SOURCE, type: 'element-select', path: '', text: '' },
+        '*'
+      );
+      return;
+    }
+    el.setAttribute('data-nexus-selected', 'true');
+    parent.postMessage(
+      {
+        source: SOURCE,
+        type: 'element-select',
+        path: el.getAttribute(EDIT_ATTR) || '',
+        text: elementSnippet(el.textContent || ''),
+      },
+      '*'
+    );
+  }
+  document.addEventListener('click', function (event) {
+    var target = event.target;
+    if (!target || !target.closest) return;
+    tagEditTargets();
+    postElementSelect(target.closest('[data-nexus-edit]'));
+  });
   function onReady() {
+    tagEditTargets();
     parent.postMessage(
       { source: SOURCE, type: 'ready', height: STAGE_HEIGHT },
       '*'
@@ -541,6 +601,10 @@ export function prepareSlidesPreviewHtml(html: string): string {
     outline: 2px solid rgba(37, 99, 235, 0.75);
     outline-offset: 2px;
   }
+  [data-nexus-selected="true"] {
+    outline: 2px solid rgba(37, 99, 235, 0.9);
+    outline-offset: 2px;
+  }
 ${SLIDES_PREVIEW_PRINT_CSS}
 </style>`;
     if (next.includes('</head>')) {
@@ -587,6 +651,10 @@ export function isSlidesPreviewMessage(
   }
   if (msg.type === 'edit-commit') {
     return Array.isArray(msg.edits) && msg.edits.every(isSlidesTextEdit);
+  }
+  if (msg.type === 'element-select') {
+    const row = data as { path?: unknown; text?: unknown };
+    return typeof row.path === 'string' && typeof row.text === 'string';
   }
   return true;
 }

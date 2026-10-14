@@ -11,6 +11,7 @@
 | File | Role |
 |---|---|
 | `Module.py` | `BaseModule` lists and lifecycle |
+| `ModuleSkillLoader.py` | `skills/<slug>/SKILL.md` → module-owned package entry points |
 | `ModuleAgentLoader.py` | `agents/*.py` → `Expose` subclasses |
 | `ModuleOrchestrationLoader.py` | `orchestrations/*.py` |
 | `ModuleModelLoader.py` | `models/` → model registry |
@@ -38,3 +39,10 @@ A class that needs constructor config we cannot supply is skipped and logged. Th
 uv run pytest libs/naas-abi-core/naas_abi_core/module/ModuleComponentLoader_test.py -v
 uv run pytest libs/naas-abi-core/naas_abi_core/module/ModuleModelLoader_test.py -v
 ```
+
+## Skills
+
+`BaseModule.on_load` discovers `skills/<slug>/SKILL.md` without executing package
+scripts. `module.skills` exposes those entry points. Nexus selects module packages
+using workspace `skills: [module:slug]` configuration. Private skills created in
+Nexus remain database-owned; they are not added to a module's catalog.

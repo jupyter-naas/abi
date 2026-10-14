@@ -5,6 +5,8 @@ import {
   slidesPreviewScrollTop,
   applySlidesTextEdits,
   collectSlidesTextEdits,
+  slidesElementSnippet,
+  slidesSelectedElementFields,
   countSlideSections,
   coverHeroCss,
   deckBufferHasCover,
@@ -76,6 +78,8 @@ describe('prepareSlidesPreviewHtml', () => {
     expect(once).toContain('set-manual-edit');
     expect(once).toContain('edit-commit');
     expect(once).toContain('contenteditable');
+    expect(once).toContain("type: 'element-select'");
+    expect(once).toContain('data-nexus-selected');
     expect(once).toContain('deck-menubar');
     expect(once).toContain('export-pdf');
     expect(once).toContain('window.print');
@@ -277,6 +281,39 @@ describe('isSlidesPreviewMessage', () => {
         height: 720,
       }),
     ).toBe(true);
+    expect(
+      isSlidesPreviewMessage({
+        source: SLIDES_PREVIEW_MESSAGE_SOURCE,
+        type: 'element-select',
+        path: '0:h1:0',
+        text: 'Cover Title',
+      }),
+    ).toBe(true);
+    expect(
+      isSlidesPreviewMessage({
+        source: SLIDES_PREVIEW_MESSAGE_SOURCE,
+        type: 'element-select',
+        path: 1,
+        text: 'Cover Title',
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('slidesSelectedElementFields', () => {
+  it('sends the preview path and a short snippet', () => {
+    expect(
+      slidesSelectedElementFields({
+        path: '1:h1:0',
+        text: '  Q3\nroadmap  ',
+      }),
+    ).toEqual({
+      selected_element_path: '1:h1:0',
+      selected_element_text: 'Q3 roadmap',
+    });
+    expect(slidesElementSnippet('x'.repeat(200)).length).toBe(120);
+    expect(slidesSelectedElementFields(null)).toEqual({});
+    expect(slidesSelectedElementFields({ path: 'nope', text: 'x' })).toEqual({});
   });
 });
 

@@ -1,0 +1,124 @@
+/* Composer "+" menu. Same chrome as chat context menus, opening upward. */
+
+.composer-plus-anchor {
+  position: relative;
+}
+
+.composer-plus-menu {
+  position: absolute;
+  z-index: 60;
+  bottom: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  min-width: 220px;
+  max-width: min(280px, calc(100vw - 24px));
+  flex-direction: column;
+  padding: var(--space-1);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, var(--radius-md));
+  background: var(--card-hex);
+  box-shadow: var(--glass-shadow, 0 8px 32px rgb(0 0 0 / 0.12));
+}
+
+.composer-plus-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-2);
+  border: none;
+  border-radius: var(--org-border-radius, var(--radius-sm));
+  background: transparent;
+  font-size: var(--font-size-xs);
+  color: var(--foreground-hex);
+  text-align: left;
+  cursor: pointer;
+}
+
+.composer-plus-menu-item:hover:not(:disabled),
+.composer-plus-menu-item.is-open {
+  background: var(--muted-bg-hex);
+}
+
+.composer-plus-menu-item:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.composer-plus-menu-item-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.composer-plus-menu-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-plus-menu-item-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground-hex);
+}
+
+.composer-plus-chevron {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--muted-foreground-hex);
+  transition: transform 0.15s ease;
+}
+
+@media (max-width: 767px) {
+  .composer-plus-chevron.is-open {
+    transform: rotate(90deg);
+  }
+}
+
+.composer-plus-submenu-wrap {
+  position: relative;
+}
+
+.composer-plus-submenu {
+  position: absolute;
+  z-index: 61;
+  bottom: 0;
+  left: calc(100% + 4px);
+  display: flex;
+  width: 220px;
+  max-height: min(280px, 50vh);
+  flex-direction: column;
+  overflow-y: auto;
+  padding: var(--space-1);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, var(--radius-md));
+  background: var(--card-hex);
+  box-shadow: var(--glass-shadow, 0 8px 32px rgb(0 0 0 / 0.12));
+}
+
+.composer-plus-skill-slug {
+  margin-left: 6px;
+  color: var(--muted-foreground-hex);
+}
+
+.composer-plus-submenu-rule {
+  margin: 2px var(--space-2);
+  border-top: 1px solid var(--border-hex);
+}
+
+@media (max-width: 767px) {
+  .composer-plus-submenu {
+    position: static;
+    left: auto;
+    width: auto;
+    margin-top: 2px;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    padding: 0 0 0 var(--space-2);
+  }
+}

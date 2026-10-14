@@ -292,6 +292,9 @@ def bind_sheets_research_policy(
     client_context: dict | None,
 ) -> bool:
     """Set request-scoped research gates. Returns whether search is required."""
+    from naas_abi.agents.sheets.skill_catalog import reset_sheets_skill_loaded
+
+    reset_sheets_skill_loaded()
     # Sheets tools name a new (or still untitled) workbook after this brief.
     sheets_brief.set((message or "").strip())
     slug = open_sheets_slug(client_context) or (sheets_active_slug.get() or "").strip()
