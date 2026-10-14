@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import re
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar, cast
@@ -39,14 +40,30 @@ def is_inbox(subject: str) -> bool:
     return subject.startswith(INBOX_PREFIXES)
 
 
-def module_audience(subject: str) -> str | None:
-    """The module instance a call goes to (``abi.agent.<project>.<instance>...``,
-    ``abi.mod.<project>.<instance>...``), else None: the token sent with it is bound
-    to that instance (naas_abi_core.engine.nats_auth, "Audience")."""
+# A module instance id: one subject token, as discovery accepts it at registration
+# (discovery_service._instance_id). An id with a dot could put another instance's id
+# where module_audience reads it.
+INSTANCE_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
+
+
+def is_module_subject(subject: str) -> bool:
+    """Whether ``subject`` addresses a module instance (``abi.agent.<project>.
+    <instance>...``, ``abi.mod.<project>.<instance>...``): the token sent there is
+    bound to that instance (naas_abi_core.engine.nats_auth, "Audience")."""
+    parts = subject.split(".", 2)
+    return len(parts) == 3 and parts[0] == "abi" and parts[1] in ("agent", "mod")
+
+
+def module_audience(subject: str, instance_id: str) -> str:
+    """``instance_id``, the instance the caller means to call, once checked against
+    ``subject``: a valid instance id, and the subject's whole instance token. The
+    audience is the caller's, never a segment read from the subject."""
+    if not INSTANCE_ID.fullmatch(instance_id):
+        raise ValueError(f"Not a module instance id: {instance_id!r}")
     parts = subject.split(".")
-    if len(parts) > 4 and parts[0] == "abi" and parts[1] in ("agent", "mod"):
-        return parts[3] or None
-    return None
+    if len(parts) < 5 or parts[3] != instance_id:
+        raise ValueError(f"{subject} does not address instance {instance_id}")
+    return instance_id
 
 
 class RPCError(RuntimeError):
@@ -124,10 +141,17 @@ class Transport:
                 else:
                     await self.connection.close()
 
-    def _token(self, subject: str) -> str:
-        audience = module_audience(subject)
-        if audience is None:
+    def _token(self, subject: str, instance_id: str | None = None) -> str:
+        if not is_module_subject(subject):
+            if instance_id is not None:
+                raise ValueError(f"{subject} addresses no module instance")
             return self.token() if callable(self.token) else self.token
+        if instance_id is None:
+            raise ValueError(
+                f"A call to a module ({subject}) names the instance it calls "
+                "(instance_id): its token is bound to it"
+            )
+        audience = module_audience(subject, instance_id)
         bind = getattr(self.token, "for_audience", None)
         if bind is None:
             raise ValueError(
@@ -145,7 +169,10 @@ class Transport:
         response_type: type[Response],
         *,
         transfer: TransferTrace | None = None,
+        instance_id: str | None = None,
     ) -> Response:
+        """One exchange. ``instance_id``: the module instance a call to a module
+        subject goes to, which its token is bound to (required there)."""
         # Copy so concurrent calls never mutate a caller-owned request.
         outgoing = type(request)()
         outgoing.CopyFrom(request)
@@ -153,7 +180,7 @@ class Transport:
         if not context.trace_id:
             context.trace_id = str(uuid.uuid4())
         context.timeout_ms = int(self.timeout * 1000)
-        token = self._token(subject)
+        token = self._token(subject, instance_id)
         if not token or "\r" in token or "\n" in token:
             raise ValueError("A nonempty service token without newlines is required")
         headers = {"Nats-Auth-Token": token}

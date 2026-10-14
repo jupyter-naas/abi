@@ -70,18 +70,36 @@ def test_a_token_bound_to_an_instance_is_short_and_good_there_only():
 
 
 def test_the_transport_binds_calls_to_modules_and_only_those():
-    from naas_abi_sdk.transport import Transport, module_audience
+    from naas_abi_sdk.transport import Transport, is_module_subject
 
-    assert module_audience("abi.agent.acme.i-1.d1.v1.submit") == "i-1"
-    assert module_audience("abi.mod.acme.i-2.app.console.http") == "i-2"
-    assert module_audience("abi.svc.document.v1.get") is None
-    assert module_audience("abi.discovery.acme.v1.register") is None
+    assert is_module_subject("abi.agent.acme.i-1.d1.v1.submit")
+    assert is_module_subject("abi.mod.acme.i-2.app.console.http")
+    assert not is_module_subject("abi.svc.document.v1.get")
+    assert not is_module_subject("abi.discovery.acme.v1.register")
     token = ModuleToken("m", "k")
     transport = Transport("nats://127.0.0.1:4222", token)
-    assert _parts(transport._token("abi.mod.acme.i-2.app.x.http"))[1]["aud"] == "i-2"
+    bound = transport._token("abi.mod.acme.i-2.app.x.http", "i-2")
+    assert _parts(bound)[1]["aud"] == "i-2"
     assert "aud" not in _parts(transport._token("abi.svc.document.v1.get"))[1]
     with pytest.raises(ValueError, match="bound"):
-        Transport("nats://127.0.0.1:4222", "static")._token("abi.mod.acme.i-2.app.x.http")
+        Transport("nats://127.0.0.1:4222", "static")._token(
+            "abi.mod.acme.i-2.app.x.http", "i-2"
+        )
+    # The caller names the instance: a call to a module without it is refused.
+    with pytest.raises(ValueError, match="instance_id"):
+        transport._token("abi.mod.acme.i-2.app.x.http")
+
+
+def test_a_dotted_instance_id_cannot_borrow_another_instances_audience():
+    """An instance registered as ``<B>.x`` would put B's id where the subject's
+    instance token is: the token must stay bound to the id the caller passed."""
+    from naas_abi_sdk.transport import Transport
+
+    transport = Transport("nats://127.0.0.1:4222", ModuleToken("m", "k"))
+    with pytest.raises(ValueError):
+        transport._token("abi.mod.acme.instance-b.x.app.console.http", "instance-b.x")
+    with pytest.raises(ValueError, match="does not address"):
+        transport._token("abi.mod.acme.instance-b.x.app.console.http", "x")
 
 
 def test_a_module_login_uses_the_module_inbox_prefix():

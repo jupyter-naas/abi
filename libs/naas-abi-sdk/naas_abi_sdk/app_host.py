@@ -92,7 +92,10 @@ async def call_app(
     The reply comes once the app starts its response: give ``transport`` a
     timeout above the longest upload (the module stops an idle app itself)."""
     return await transport.call(
-        app_subject(project, instance_id, request.app), request, pb.HttpResponse
+        app_subject(project, instance_id, request.app),
+        request,
+        pb.HttpResponse,
+        instance_id=instance_id,
     )
 
 

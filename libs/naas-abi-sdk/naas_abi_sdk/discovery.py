@@ -231,6 +231,7 @@ class ModuleProxy:
                 ModuleModelClient(
                     self.client.transport,
                     model_subject(self.client.project, target.instance_id, name),
+                    target.instance_id,
                 )
             ),
             ref=ref,
