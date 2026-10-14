@@ -240,3 +240,18 @@ def test_discovery_is_read_at_most_every_10_seconds():
 
     asyncio.run(scenario())
     assert discovery.reads == 2
+
+
+def test_a_discovery_failure_is_a_generic_503_and_its_cause_is_logged(caplog):
+    class Broken(FakeDiscovery):
+        async def list_modules(self, *, limit, after_instance_id):
+            raise RuntimeError("discovery internals: KV revision 42 conflict")
+
+    directory = DiscoveryRemoteAppDirectory(lambda: (Broken([]), object(), object(), "acme"))
+
+    with caplog.at_level("WARNING"), pytest.raises(RemoteAppUnavailable) as raised:
+        asyncio.run(directory.list_apps())
+
+    assert (raised.value.status, raised.value.reason) == (503, "Module discovery is unavailable")
+    assert "KV revision 42" in caplog.text  # the operator still sees the cause
+    assert "KV revision 42" not in raised.value.reason

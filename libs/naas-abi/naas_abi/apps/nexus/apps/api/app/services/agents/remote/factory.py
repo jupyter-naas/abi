@@ -25,13 +25,14 @@ def build_remote_agent_directory(nats: Any | None) -> RemoteAgentDirectory:
         return InMemoryRemoteAgentDirectory()
 
     def discovery_client() -> Any:
-        from naas_abi_core.engine.nats_auth import issue_service_token
+        from naas_abi_core.engine.nats_auth import ServiceTokenSource
         from naas_abi_sdk.discovery import DiscoveryClient
         from naas_abi_sdk.transport import Transport
 
+        # Calls to a module's agents carry a token bound to its instance.
         transport = Transport(
             nats.nats_url,
-            lambda: issue_service_token(CALLER_IDENTITY, nats.jwt_secret),
+            ServiceTokenSource(CALLER_IDENTITY, nats.jwt_secret),
             timeout=30,
         )
         return DiscoveryClient(transport, nats.discovery.project)
