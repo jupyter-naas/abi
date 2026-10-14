@@ -282,8 +282,10 @@ def compose_service(
         "environment": [
             "ABI_NATS_URL=nats://module:${NATS_MODULE_PASSWORD}@nats:4222",
             # Its own key, never the project's NATS_JWT_SECRET.
-            f"ABI_MODULE_KEY=${{{variable}:?{variable} is not in .env: "
-            f"abi module key {module_id}}}",
+            (
+                f"ABI_MODULE_KEY=${{{variable}:?{variable} is not in .env: "
+                f"abi module key {module_id}}}"
+            ),
             f"ABI_DISCOVERY_PROJECT={discovery_project}",
             "LOG_LEVEL=${LOG_LEVEL:-INFO}",
         ],
