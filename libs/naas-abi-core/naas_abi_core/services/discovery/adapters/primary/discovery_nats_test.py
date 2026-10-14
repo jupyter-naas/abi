@@ -17,7 +17,9 @@ def test_authentication_precedes_domain_mutations_and_binds_caller():
         primary = DiscoveryNATS(service, SECRET, "test")
         service.register.return_value = pb.RegisterResponse()
         msg = SimpleNamespace(
-            data=pb.RegisterRequest().SerializeToString(),
+            data=pb.RegisterRequest(
+                descriptor=pb.ModuleDescriptor(module_id="caller")
+            ).SerializeToString(),
             headers={},
             reply="reply",
             respond=AsyncMock(),
@@ -34,6 +36,52 @@ def test_authentication_precedes_domain_mutations_and_binds_caller():
         msg.headers = {"Nats-Auth-Token": issue_service_token("caller", SECRET)}
         await primary._handle("register", msg)
         assert service.register.call_args.args[1] == "caller"
+
+    asyncio.run(scenario())
+
+
+def _register_as(primary, identity, module_id, *, module_token=False):
+    from naas_abi_core.engine.nats_auth import issue_module_token, module_key
+
+    token = (
+        issue_module_token(identity, module_key(SECRET, identity))
+        if module_token
+        else issue_service_token(identity, SECRET)
+    )
+    msg = SimpleNamespace(
+        data=pb.RegisterRequest(
+            descriptor=pb.ModuleDescriptor(module_id=module_id, contract_major=1),
+            instance_id=f"{module_id}-1",
+            lease_token="t" * 32,
+        ).SerializeToString(),
+        headers={"Nats-Auth-Token": token},
+        reply="reply",
+        respond=AsyncMock(),
+        _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
+    )
+
+    async def send():
+        await primary._handle("register", msg)
+        return pb.RegisterResponse.FromString(msg._client.publish.call_args.args[1])
+
+    return send()
+
+
+def test_a_module_registers_only_under_its_own_identity():
+    """Another module cannot claim a module id, and so its app routes (A7)."""
+    from naas_abi_core.services.discovery.discovery_service import DiscoveryService
+    from naas_abi_core.services.discovery.discovery_service_test import MemoryRegistry
+
+    async def scenario():
+        primary = DiscoveryNATS(DiscoveryService(MemoryRegistry()), SECRET, "test")
+        refused = await _register_as(primary, "acme.intruder", "acme.research", module_token=True)
+        assert refused.error.code == "PERMISSION_DENIED"
+        assert "acme.intruder" in refused.error.message
+        # First-party identities do not register modules either.
+        assert (await _register_as(primary, "api", "acme.research")).error.code == "PERMISSION_DENIED"
+        accepted = await _register_as(primary, "acme.research", "acme.research", module_token=True)
+        assert accepted.error.code == ""
+        assert accepted.instance.descriptor.module_id == "acme.research"
 
     asyncio.run(scenario())
 

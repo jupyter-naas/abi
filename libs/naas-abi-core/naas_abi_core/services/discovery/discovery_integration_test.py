@@ -2,7 +2,11 @@ import asyncio
 
 import nats
 import pytest
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_auth import (
+    issue_module_token,
+    issue_service_token,
+    module_key,
+)
 from naas_abi_core.engine.nats_rpc_integration_test import SECRET, broker  # noqa: F401
 from naas_abi_core.services.discovery.discovery_factory import start_discovery
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
@@ -11,6 +15,11 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.parametrize("broker", [8 * 1024 * 1024], indirect=True),
 ]
+
+
+def _module_token(module_id: str) -> str:
+    """A module's token: signed with its own key, for its own module id."""
+    return issue_module_token(module_id, module_key(SECRET, module_id))
 
 
 def test_registry_auth_expiry_restart_and_sdk_dependency_runner(broker):  # noqa: F811
@@ -69,7 +78,7 @@ def test_registry_auth_expiry_restart_and_sdk_dependency_runner(broker):  # noqa
                 run_module(
                     Consumer,
                     url=url,
-                    token=transport.token,
+                    token=_module_token("consumer"),
                     timeout=0.5,
                     discovery=config,
                 )
@@ -80,7 +89,7 @@ def test_registry_auth_expiry_restart_and_sdk_dependency_runner(broker):  # noqa
                 run_module(
                     Provider,
                     url=url,
-                    token=transport.token,
+                    token=_module_token("research"),
                     timeout=0.5,
                     discovery=config,
                 )
@@ -120,7 +129,11 @@ def test_registry_auth_expiry_restart_and_sdk_dependency_runner(broker):  # noqa
                 instance_id="orphan",
                 lease_token="x" * 32,
             )
-            await client._call("register", req, pb.RegisterResponse)
+            orphan = DiscoveryClient(Transport(url, _module_token("orphan"), timeout=0.5))
+            try:
+                await orphan._call("register", req, pb.RegisterResponse)
+            finally:
+                await orphan.transport.close()
             await asyncio.sleep(1.1)
             with pytest.raises(RPCError, match="MODULE_NOT_FOUND"):
                 await client.get_module("orphan")
@@ -146,7 +159,7 @@ def test_two_registry_owners_do_not_duplicate_mutations(broker):  # noqa: F811
         primaries = [await start_discovery(nc, SECRET) for _ in range(2)]
         for primary in primaries:
             primary.service.register = AsyncMock(wraps=primary.service.register)
-        transport = Transport(broker[0], issue_service_token("test", SECRET))
+        transport = Transport(broker[0], _module_token("replicated"))
         try:
             for _ in range(4):
                 await transport.call(
@@ -233,7 +246,7 @@ def test_concurrent_registrations_through_two_owners_all_succeed(broker):  # noq
     async def scenario():
         nc = await nats.connect(broker[0])
         primaries = [await start_discovery(nc, SECRET) for _ in range(2)]
-        transport = Transport(broker[0], issue_service_token("test", SECRET))
+        transport = Transport(broker[0], _module_token("crowd"))
         try:
             responses = await asyncio.gather(
                 *(
