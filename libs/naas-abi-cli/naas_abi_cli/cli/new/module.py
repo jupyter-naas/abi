@@ -44,6 +44,16 @@ ModuleKind = Literal["remote", "in-engine"]
     ),
 )
 @click.option(
+    "--remote",
+    "remote",
+    is_flag=True,
+    default=False,
+    help=(
+        "Create a remote module in a project without NATS too (the default in "
+        "a NATS project). It runs once the project is on NATS."
+    ),
+)
+@click.option(
     "--standalone",
     is_flag=True,
     default=False,
@@ -66,6 +76,7 @@ def _new_module(
     module_name: str,
     module_path: str = ".",
     in_engine: bool = False,
+    remote: bool = False,
     standalone: bool = False,
     abi_ref: str | None = None,
 ):
@@ -74,16 +85,18 @@ def _new_module(
 
     Inside a project it goes to src/<name>/, and `abi dev up` and `abi start`
     run it (dev.modules, docker-compose.override.yml). It registers itself
-    through discovery, so it is not added to `modules:`.
+    through discovery, so it is not added to `modules:`. In a project without
+    a `nats:` block the default is an in-engine module (--remote overrides).
     """
-    if in_engine and standalone:
+    if in_engine and (standalone or remote):
         raise click.UsageError(
-            "--standalone creates a remote module: drop --in-engine."
+            f"{'--standalone' if standalone else '--remote'} creates a remote "
+            "module: drop --in-engine."
         )
     new_module(
         module_name,
         module_path,
-        kind="in-engine" if in_engine else "remote",
+        kind="in-engine" if in_engine else "remote" if remote or standalone else None,
         standalone=standalone,
         abi_ref=abi_ref,
     )
@@ -101,19 +114,29 @@ def new_module(
     module_name: str,
     module_path: str = ".",
     quiet: bool = False,
-    kind: ModuleKind = "remote",
+    kind: ModuleKind | None = None,
     standalone: bool = False,
     abi_ref: str | None = None,
     orchestration: bool | None = None,
 ):
     """``kind="remote"``: an SDK module, in the enclosing project's ``src/``
     or, outside a project or with ``standalone``, as a repository of its own.
-    ``kind="in-engine"``: the classic module the engine loads.
+    ``kind="in-engine"``: the classic module the engine loads. None: in-engine
+    in a project without NATS, where nothing would run a remote one, else
+    remote.
 
     ``orchestration``: whether an in-engine module gets a Dagster orchestration
     (legacy). None: only in a project without NATS, or outside any project."""
     module_name = to_kebab_case(module_name)
     project = find_project(Path(os.getcwd()))
+    if kind is None:
+        classic = project is not None and not standalone and not project.nats()
+        kind = "in-engine" if classic else "remote"
+        if classic:
+            click.echo(
+                "This project's config has no `nats:` block: creating an in-engine "
+                "module (--remote for one that runs once the project is on NATS)."
+            )
 
     if kind == "remote":
         if standalone or project is None:
