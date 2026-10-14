@@ -27,11 +27,36 @@ DAGSTER_APP = "naas_abi_core.apps.dagster.dagster"
         (None, None),
     ],
 )
-def test_legacy_extra_of(name, extra) -> None:
+def test_legacy_extra_of_when_the_extra_is_missing(monkeypatch, name, extra) -> None:
+    monkeypatch.setitem(sys.modules, "dagster", None)
+    monkeypatch.setitem(sys.modules, "pika", None)
+
     assert legacy_extra_of(ModuleNotFoundError("missing", name=name)) == extra
 
 
-def test_a_missing_legacy_module_reads_as_an_install_hint() -> None:
+@pytest.mark.parametrize(
+    "name",
+    ["dagster._core.definitions.removed_in_an_upgrade", "dagster_something"],
+)
+def test_with_dagster_installed_a_missing_dagster_module_is_no_missing_extra(
+    name,
+) -> None:
+    """A stale private import or a package of the user's own fails as itself,
+    instead of asking to install an extra that is there."""
+    pytest.importorskip("dagster")
+
+    assert legacy_extra_of(ModuleNotFoundError("missing", name=name)) is None
+
+
+def test_with_pika_installed_pika_is_no_missing_extra() -> None:
+    pytest.importorskip("pika")
+
+    assert legacy_extra_of(ModuleNotFoundError("missing", name="pika.spec")) is None
+
+
+def test_a_missing_legacy_module_reads_as_an_install_hint(monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "pika", None)
+
     with pytest.raises(MissingLegacyExtra) as raised:
         raise_missing_extra(ModuleNotFoundError("no", name="pika"), "The thing")
 
