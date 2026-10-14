@@ -164,9 +164,6 @@
   outline: none;
 }
 
-.files-browse-toolbar-search-input:focus {
-  box-shadow: var(--shadow-focus);
-}
 
 @keyframes files-browse-spin {
   from {

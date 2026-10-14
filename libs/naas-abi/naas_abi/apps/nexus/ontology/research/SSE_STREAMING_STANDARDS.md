@@ -137,7 +137,7 @@ data: {"type":"message_stop"}
 
 ---
 
-## 4. ABI Server (Forvis Mazars) - Current Issue
+## 4. ABI Server - Current Issue
 
 ### Format (What we discovered)
 
