@@ -16,7 +16,7 @@ from naas_abi_core.services.event.tests.event__secondary_adapter__generic_test i
 
 def _ts(offset_seconds: int = 0) -> str:
     return (
-        datetime.datetime(2026, 1, 1, 0, 0, 0)  # noqa: DTZ001
+        datetime.datetime(2026, 1, 1, 0, 0, 0)
         + datetime.timedelta(seconds=offset_seconds)
     ).isoformat()
 

@@ -44,8 +44,8 @@ def test_namespace_is_bound_for_collection_and_document_operations(service, adap
 @pytest.mark.parametrize(
     "value",
     [
-        datetime(2026, 1, 1),  # noqa: DTZ001 - exercise rejection of naive datetimes
-        {"a": [datetime(2026, 1, 1)]},  # noqa: DTZ001 - exercise nested validation
+        datetime(2026, 1, 1),
+        {"a": [datetime(2026, 1, 1)]},
         Decimal("1.2"),
         float("nan"),
         float("inf"),
