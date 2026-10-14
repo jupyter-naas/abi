@@ -177,3 +177,36 @@ def test_without_a_grace_period_the_runner_never_interrupts_but_still_waits():
 
 def test_job_interrupted_is_not_caught_by_except_exception():
     assert not issubclass(JobInterrupted, Exception)
+
+
+def test_service_calls_from_the_handler_join_the_run_trace(monkeypatch):
+    pytest.importorskip("opentelemetry.sdk")
+    from naas_abi_sdk import telemetry
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(telemetry, "_tracer", lambda: provider.get_tracer("test"))
+
+    def handler(ctx):
+        with telemetry.client_span("abi.svc.dataset.v1.write", {}):
+            return "written"
+
+    async def scenario():
+        # The job host runs each delivery inside its CONSUMER span.
+        with telemetry.server_span(
+            "abi.jobs.p.trigger.m.j", {}, kind="consumer", name="job write"
+        ):
+            return await SyncJobRunner(handler, interrupt_grace_seconds=1)(_ctx())
+
+    assert asyncio.run(scenario()) == "written"
+
+    by_name = {span.name: span for span in exporter.get_finished_spans()}
+    run, call = by_name["job write"], by_name["dataset/write"]
+    assert call.context.trace_id == run.context.trace_id
+    assert call.parent is not None and call.parent.span_id == run.context.span_id
