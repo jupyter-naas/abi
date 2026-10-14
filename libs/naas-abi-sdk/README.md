@@ -137,12 +137,14 @@ signs and refreshes the token; `token_from_env(os.environ, module_id)` reads
 
 A call to another module (its agents, models, apps) carries a token bound to the
 instance called, for five minutes and sent with at least 4.5 of them left:
-`Transport` asks the token source for it (`ModuleToken.for_audience`), so that
-module cannot replay it elsewhere. A static token cannot call a module.
+`Transport` asks the token source for it (`ModuleToken.for_audience`), bound to
+the instance id the caller passes (`call(..., instance_id=...)`), so that module
+cannot replay it elsewhere. A static token cannot call a module. An instance id
+is one subject token: letters, digits, `_` and `-`.
 
 Logged in as the broker user `module`, a module may not subscribe to the
-engine's service, discovery, RPC overflow or reply subjects (`_INBOX.>`), nor
-create streams (docs/adr/20261014_module-identities.md). `run_module` connects
+engine's service, discovery, RPC overflow, reply (`_INBOX.>`) or JetStream
+(`$JS.>`) subjects, nor create streams (docs/adr/20261014_module-identities.md). `run_module` connects
 with the inbox prefix `_INBOX_MODULES`, and so does `Transport` for a URL logged
 in as `module`; pass `inbox_prefix="_INBOX_MODULES"` to any other connection a
 module opens. The engine creates the jobs stream and the claim-check store;

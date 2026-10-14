@@ -37,11 +37,13 @@ def model_subject(project: str, instance_id: str, name: str) -> str:
 class ModuleModelClient:
     """Unary chat client for one model on one module instance."""
 
-    def __init__(self, transport: Any, subject: str) -> None:
-        self._transport, self.subject = transport, subject
+    def __init__(self, transport: Any, subject: str, instance_id: str) -> None:
+        self._transport, self.subject, self.instance_id = transport, subject, instance_id
 
     async def chat(self, request: pb.ChatRequest) -> pb.ChatResponse:
-        return await self._transport.call(self.subject, request, pb.ChatResponse)
+        return await self._transport.call(
+            self.subject, request, pb.ChatResponse, instance_id=self.instance_id
+        )
 
 
 class ModelHost:

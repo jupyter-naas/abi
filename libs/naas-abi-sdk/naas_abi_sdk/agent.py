@@ -282,6 +282,7 @@ class AgentProxy:
                 ),
                 request,
                 response_type,
+                instance_id=target.instance_id,
             )
         except (NATSError, asyncio.TimeoutError, OSError, RPCError):
             self._instances = (0.0, ())
