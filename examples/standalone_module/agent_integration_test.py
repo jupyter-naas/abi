@@ -9,7 +9,11 @@ from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_auth import (
+    issue_module_token,
+    issue_service_token,
+    module_key,
+)
 from naas_abi_core.engine.nats_rpc_integration_test import SECRET, broker  # noqa: F401
 from naas_abi_core.services.agent.Agent import Agent
 from naas_abi_core.services.agent.IntentAgent import IntentAgent
@@ -24,6 +28,11 @@ pytestmark = [
     pytest.mark.parametrize("broker", [8 * 1024 * 1024], indirect=True),
 ]
 
+
+
+def _module_token(module_id: str) -> str:
+    """A module registers with a token for its own module id, signed with its key."""
+    return issue_module_token(module_id, module_key(SECRET, module_id))
 
 def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa: F811
     from naas_abi_proto.agent.v1 import agent_pb2 as pb
@@ -41,7 +50,6 @@ def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa:
         nc = await nats.connect(document_host)
         registry = await start_discovery(nc, SECRET)
         stop = asyncio.Event()
-        token = issue_service_token("agent-test", SECRET)
 
         class Provider(BaseModule):
             module_id = "test.agents"
@@ -154,7 +162,7 @@ def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa:
             run_module(
                 Provider,
                 url=document_host,
-                token=token,
+                token=_module_token(Provider.module_id),
                 discovery=DiscoveryConfiguration(),
             )
         )
@@ -163,7 +171,7 @@ def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa:
                 run_module(
                     Consumer,
                     url=document_host,
-                    token=token,
+                    token=_module_token(Consumer.module_id),
                     discovery=DiscoveryConfiguration(refresh_seconds=0.05),
                 ),
                 30,
@@ -193,7 +201,6 @@ def test_a_run_stays_reachable_after_its_owner_loses_the_lease(document_host):  
         # A 2 s lease: the provider renews every half second.
         registry = await start_discovery(nc, SECRET, lease_seconds=2)
         stop = asyncio.Event()
-        token = issue_service_token("agent-test", SECRET)
         admin_transport = Transport(
             document_host, issue_service_token("api", SECRET), timeout=2
         )
@@ -267,7 +274,7 @@ def test_a_run_stays_reachable_after_its_owner_loses_the_lease(document_host):  
             run_module(
                 Provider,
                 url=document_host,
-                token=token,
+                token=_module_token(Provider.module_id),
                 discovery=DiscoveryConfiguration(),
             )
         )
@@ -276,7 +283,7 @@ def test_a_run_stays_reachable_after_its_owner_loses_the_lease(document_host):  
                 run_module(
                     Consumer,
                     url=document_host,
-                    token=token,
+                    token=_module_token(Consumer.module_id),
                     discovery=DiscoveryConfiguration(refresh_seconds=0.05),
                 ),
                 30,

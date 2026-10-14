@@ -93,6 +93,15 @@ class DiscoveryNATS:
                     "PAYLOAD_TOO_LARGE", "Discovery request exceeds limit"
                 )
             request = request_type.FromString(msg.data)
+            if operation == "register" and request.descriptor.module_id != owner:
+                # A module registers as itself (docs/adr/20261014_module-identities.md):
+                # no other identity can take over its agents, jobs, models or apps.
+                raise DiscoveryError(
+                    "PERMISSION_DENIED",
+                    f"Identity {owner!r} cannot register module "
+                    f"{request.descriptor.module_id!r}: a module registers with a "
+                    "token for its own module id",
+                )
             caller = (
                 verify_service_token(request.caller_token, self.secret)
                 if operation in ("authorize_agent", "authorize_model", "authorize_app")
