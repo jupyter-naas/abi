@@ -27,6 +27,9 @@ message HttpRequest {
   bool body_follows = 10;
   string body_inbox = 11;
   uint64 max_body_bytes = 12;
+  // The Nexus workspace the user opened the app from (one where it is
+  // enabled); empty without a user_id.
+  string workspace_id = 13;
 }
 // Sent once the app starts its response. A small body travels inline; a larger
 // or streamed one (downloads, server-sent events) follows: Nexus pulls it from
