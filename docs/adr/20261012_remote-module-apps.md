@@ -3,6 +3,9 @@
 ## Status
 Accepted.
 
+Amended four times since; see the amendments at the end. The text above
+them is the decision as accepted on 2026-10-12.
+
 ## Date
 2026-10-12
 
@@ -83,34 +86,9 @@ message HttpResponse {
 ```
 
 Requests go to `abi.mod.<project>.<instance_id>.app.<name>.http`, the
-instance-addressed shape model hosts use.
-
-### Streamed bodies
-Bodies up to 256 KiB travel inline. Larger ones stream, in both directions:
-
-- **Uploads.** Nexus sends the request with `body_follows` and a random
-  `_INBOX` subject, `body_inbox`. The module pulls the body with `BodyPull`, one
-  `BodyChunk` at a time, as its app reads `receive()` (`request.stream()` in
-  FastAPI). Nothing is read from the browser faster than the app consumes it,
-  so memory holds about one chunk in Nexus and in the module, and the app can
-  pass the stream on, for example into object storage
-  (`put_object_stream(prefix, key, request.stream())`). Nexus answers 413
-  above the app's `max_upload_bytes` (manifest; default 1 GiB).
-- **Responses.** A response sent in parts, or larger than 256 KiB, is answered
-  with `body_follows`: Nexus pulls it as the browser reads it. This serves
-  downloads, large files and server-sent events. A pull with nothing new is
-  answered empty after 15 s, which keeps an idle stream alive; when the
-  browser leaves, Nexus cancels the pull and the module cancels the app.
-- **Timeouts are idle limits**, not totals: an app that neither reads nor
-  answers for 60 s gets 504; a holder nobody pulls from for 60 s stops.
-- **Retries.** A request moves to another instance only while none of its
-  body was delivered; after that it is tied to the instance reading it.
-
-Pulls are per chunk (256 KiB, or less under a smaller broker limit), so
-throughput is bounded by round trips; measured locally at about 20 MB/s up
-and 30 MB/s down. Every byte crosses NATS twice (browser to Nexus to module),
-the price of keeping the module the owner of its data. WebSockets remain later
-work.
+instance-addressed shape model hosts use. A request body is at most 1 MiB and
+a response at most 6 MiB, below the 8 MB broker limit. Larger answers return
+502 with a clear message; streaming and WebSockets are later work.
 
 ### SDK
 - `BaseModule` finds `apps/<name>/manifest.json` next to the module's package
@@ -124,13 +102,13 @@ work.
   `self.expose_app(name, asgi_app)` in `on_initialized`, else answers 404.
 - The ASGI app is called in process, without an HTTP server: FastAPI or
   Starlette routes work as they are. `root_path` is set, so generated URLs
-  point back through Nexus. `request.scope["abi"]["user_id"]` holds the Nexus
+  point back through Nexus. `request.scope["abi.user_id"]` holds the Nexus
   user.
 
 ### Nexus
 - The catalog adds the apps of READY remote instances, read from discovery and
   cached for 10 seconds, not for the life of the process. Their id is
-  `remote/<module_id>:<app>` and their URL
+  `remote/<module_id>/<app>` and their URL
   `/app-html/remote/<module_id>/<app>/<entry>`.
 - `/app-html/remote/<module_id>/<app>/{path}` accepts every method, behind the
   same `/app-html/` access check. It picks a READY instance, forwards the
@@ -165,8 +143,50 @@ TLS, and its own check of Nexus tokens. Rejected: a module must only need NATS.
   only trusted modules should be run.
 - The user id a module receives is asserted by Nexus. It is as trustworthy as
   the service-token boundary (Stage 1: a secret shared by the project).
-- Not covered yet: WebSockets. Uploads and downloads are bounded by round
-  trips per chunk; prefetching chunks would raise throughput.
+- Not covered yet: responses above 6 MiB, streaming responses, WebSockets.
+
+## Amendment (2026-10-12): names as built
+Two names in the decision changed when it was built:
+
+- A remote app's catalog id is `remote/<module_id>:<app>`, not
+  `remote/<module_id>/<app>`: like every catalog app, `<module path>:<app>`.
+  Its URL is unchanged.
+- The Nexus user is in `request.scope["abi"]["user_id"]`, not
+  `request.scope["abi.user_id"]`: one `abi` key holds what ABI adds to the
+  ASGI scope.
+
+## Amendment (2026-10-12): streamed bodies
+This replaces the size limits under "Requests" (a request body at most 1 MiB, a
+response at most 6 MiB, 502 above) and the consequence "Not covered yet:
+responses above 6 MiB, streaming responses, WebSockets".
+
+Bodies up to 256 KiB travel inline. Larger ones stream, in both directions:
+
+- **Uploads.** Nexus sends the request with `body_follows` and a random
+  `_INBOX` subject, `body_inbox`. The module pulls the body with `BodyPull`, one
+  `BodyChunk` at a time, as its app reads `receive()` (`request.stream()` in
+  FastAPI). Nothing is read from the browser faster than the app consumes it,
+  so memory holds about one chunk in Nexus and in the module, and the app can
+  pass the stream on, for example into object storage
+  (`put_object_stream(prefix, key, request.stream())`). Nexus answers 413
+  above the app's `max_upload_bytes` (manifest; default 1 GiB).
+- **Responses.** A response sent in parts, or larger than 256 KiB, is answered
+  with `body_follows`: Nexus pulls it as the browser reads it. This serves
+  downloads, large files and server-sent events. A pull with nothing new is
+  answered empty after 15 s, which keeps an idle stream alive; when the
+  browser leaves, Nexus cancels the pull and the module cancels the app.
+- **Timeouts are idle limits**, not totals: an app that neither reads nor
+  answers for 60 s gets 504; a holder nobody pulls from for 60 s stops.
+- **Retries.** A request moves to another instance only while none of its
+  body was delivered; after that it is tied to the instance reading it.
+
+Pulls are per chunk (256 KiB, or less under a smaller broker limit), so
+throughput is bounded by round trips; measured locally at about 20 MB/s up
+and 30 MB/s down. Every byte crosses NATS twice (browser to Nexus to module),
+the price of keeping the module the owner of its data.
+
+Not covered yet: WebSockets. Uploads and downloads are bounded by round trips
+per chunk; prefetching chunks would raise throughput.
 
 ## Amendment (2026-10-13): apps run sandboxed, under a grant
 Served from the Nexus origin with `allow-same-origin`, a module's page could
@@ -183,14 +203,11 @@ cookie" for remote modules.
   it no `SameSite=Lax` cookie.
 - **The grant** is the only credential, so relative URLs carry it. It is signed
   with a key derived from the API secret and carries no `sub`, so it is never a
-  session token. It opens one app as one user, never anonymously, for 8 hours
+  session token. It opens one app as one user for 8 hours
   (`remote_app_grant_expire_minutes`). The Apps page mints it
   (`POST /api/apps/remote-grant`). The catalog URL
   `/app-html/remote/<module_id>/<app>/<path>` runs the usual access check and
-  redirects to a fresh grant that expires no later than the credential
-  presented (a share link stays as short as it was). nexus-web does not proxy
-  `/app-html/remote/`. Logs, activity events and traces show
-  `/app-remote/[grant]/...`. Only the Nexus origins may frame the page.
+  redirects to a fresh grant. nexus-web does not proxy `/app-html/remote/`.
 - **The app** gets the grant URL as `root_path`, so URLs it builds keep the
   grant. Its page's `fetch()` calls are cross-origin: Nexus answers them, and
   their preflights, with `Access-Control-Allow-Origin: *`.
@@ -203,10 +220,24 @@ cookie" for remote modules.
   cookies.
 - **Cookies.** A module's `Set-Cookie` is kept only with a `Path` under the
   app's root and no `Domain`. It is renamed `abi_app.<name>` in the browser,
-  and only those cookies come back to the module, under their own names. A
-  `Location` or cookie `Path` that a browser could read as a dot segment
-  (`%2e`, `\`) is dropped. From the sandbox, `fetch()` sends no cookie at all;
-  navigations and forms in the frame send only `SameSite=None; Secure` ones,
-  for as long as the grant URL lasts. Apps keep no session in cookies.
+  and only those cookies come back to the module, under their own names. From
+  the sandbox the browser sends only `SameSite=None; Secure` cookies, and they
+  last as long as the grant URL.
 - **Scoped JWTs** (`scope`, as `app-html` link tokens have) no longer
   authenticate `/api/*` or the WebSocket.
+
+## Amendment (2026-10-13): grants stay narrow and short
+Changes to the previous amendment, from its security review:
+
+- A grant opens one app as one user, never anonymously.
+- The grant the catalog URL redirects to expires no later than the credential
+  presented, so a share link stays as short as it was.
+- Logs, activity events and traces show `/app-remote/[grant]/...`, never the
+  grant itself.
+- Only the Nexus origins may frame the page.
+- A `Location` or cookie `Path` that a browser could read as a dot segment
+  (`%2e`, `\`) is dropped.
+- Cookies: from the sandbox, `fetch()` sends no cookie at all; navigations and
+  forms in the frame send only `SameSite=None; Secure` ones, for as long as the
+  grant URL lasts. Apps keep no session in cookies. (The previous amendment
+  said the sandbox sends only `SameSite=None; Secure` cookies.)
