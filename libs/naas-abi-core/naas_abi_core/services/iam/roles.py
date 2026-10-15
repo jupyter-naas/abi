@@ -373,6 +373,13 @@ def transitional_module_policy() -> Policy:
                 resources=("*",),
                 sid="TransitionalKernelServices",
             ),
+            # Evicting another module's registration is the platform's.
+            Statement(
+                effect="Deny",
+                actions=("discovery:Evict",),
+                resources=("*",),
+                sid="TransitionalNoEviction",
+            ),
         ],
     )
 

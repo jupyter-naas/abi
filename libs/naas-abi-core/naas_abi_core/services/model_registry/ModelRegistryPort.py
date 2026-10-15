@@ -16,6 +16,7 @@ the registry knows which provider's factory to route through.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any, Literal
 
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -27,6 +28,10 @@ from naas_abi_core.models.Model import (
     Model,
     ModelProviderLike,
 )
+
+# What a caller does with a model (the model_registry catalog's actions).
+UseAction = Literal["Chat", "ChatStream", "Embed"]
+ModelAction = Literal["Resolve", "Chat", "ChatStream", "Embed"]
 
 ChatProviderFactory = Callable[[str], BaseChatModel]
 EmbeddingProviderFactory = Callable[[str], Embeddings]
@@ -178,4 +183,25 @@ class IModelRegistry:
 
     def list_registered_models(self) -> list[tuple[str, Model]]:
         """Return catalog entries with their canonical identifiers."""
+        raise NotImplementedError
+
+    # ------------------------------------------------------------------ authorization
+
+    def authorize_use(self, canonical_id: str, action: UseAction) -> dict[str, Any]:
+        """Require ``model_registry:<action>`` (``Chat``, ``ChatStream`` or
+        ``Embed``) on the model for the current caller. Returns the run
+        configuration to invoke the model with, marking it authorized."""
+        raise NotImplementedError
+
+    def resolve_ref(
+        self,
+        canonical_id: str,
+        *,
+        kind: str = "",
+        provider: str | None = None,
+        model_id: str = "",
+        action: ModelAction = "Resolve",
+    ) -> tuple[Model, dict[str, Any] | None]:
+        """A model reference as a remote caller names it, checked with the
+        operation's action; for a use, the run configuration to invoke it with."""
         raise NotImplementedError

@@ -81,6 +81,58 @@ def _default_documents(transport: Any, module_id: str) -> Any:
     return DocumentService(DocumentClient(transport).for_namespace(module_id))
 
 
+def job_authorizer(iam: Any, secret: str, project: str, module_id: str) -> Any:
+    """An engine job host's authorizer: the check discovery runs for a module's
+    host (``discovery_service.require_job``), in process.
+
+    The caller is the one the trigger or cancel message names (its token, as of
+    when the trigger was stored, and its on-behalf-of user), verified with the
+    engine's secret. A refusal is an ``RPCError`` the host records; IAM is asked
+    off the jobs loop.
+    """
+    from naas_abi_core.engine.call_context import ON_BEHALF_OF_HEADER, use_call_context
+    from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
+    from naas_abi_core.services.discovery.caller import caller_of
+    from naas_abi_core.services.discovery.discovery_service import require_job
+    from naas_abi_core.services.discovery.iam_catalog import CATALOG
+    from naas_abi_core.services.iam.guard import ServiceGuard
+    from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+    from naas_abi_sdk.transport import RPCError
+
+    guard = ServiceGuard(CATALOG, lambda: iam)
+
+    def check(operation, job, run_id, headers, stored_at) -> None:
+        try:
+            caller = caller_of(
+                headers.get("Nats-Auth-Token", ""),
+                headers.get(ON_BEHALF_OF_HEADER, ""),
+                secret,
+                at=stored_at.timestamp() if stored_at is not None else None,
+            )
+        except InvalidServiceTokenError as exc:
+            raise RPCError("UNAUTHENTICATED", str(exc)) from exc
+        try:
+            with use_call_context(caller):
+                require_job(guard, project, module_id, job, operation, run_id)
+        except PermissionDeniedError as exc:
+            raise RPCError("PERMISSION_DENIED", str(exc)) from exc
+
+    async def authorize(operation, job, run_id, headers, stored_at) -> None:
+        await asyncio.to_thread(check, operation, job, run_id, headers, stored_at)
+
+    return authorize
+
+
+def _module_iam(modules: Mapping[str, Any]) -> Any:
+    """The engine's IAM, as its modules are wired with it."""
+    for module in modules.values():
+        services = getattr(getattr(module, "engine", None), "services", None)
+        available = getattr(services, "iam_available", None)
+        if callable(available) and available():
+            return getattr(services, "iam", None)
+    return None
+
+
 def _default_host(*args: Any, **kwargs: Any) -> Any:
     from naas_abi_sdk.job_host import JobHost
 
@@ -95,7 +147,11 @@ class EngineJobLoader:
         documents_factory: Callable[[Any, str], Any] = _default_documents,
         host_factory: Callable[..., Any] = _default_host,
         host_options: Mapping[str, Any] | None = None,
+        iam: Any = None,
     ) -> None:
+        """``iam``: authorizes manual triggers and cancels (discovery:TriggerJob,
+        CancelJobRun); by default the one the modules are wired with."""
+        self.iam = iam
         self.configuration = configuration
         self.documents_factory = documents_factory
         self.host_factory = host_factory
@@ -137,6 +193,8 @@ class EngineJobLoader:
                 "Engine jobs need the document service for their run records"
             )
 
+        if self.iam is None:
+            self.iam = _module_iam(modules)
         self._loop = LoopThread()
         try:
             for module_id, module in with_jobs.items():
@@ -182,6 +240,18 @@ class EngineJobLoader:
                 for j in module.jobs
             },
             instance_id=f"engine-{uuid.uuid4().hex[:12]}",
+            **(
+                {}
+                if self.iam is None
+                else {
+                    "authorize": job_authorizer(
+                        self.iam,
+                        self.configuration.jwt_secret,
+                        self.project,
+                        module_id,
+                    )
+                }
+            ),
             **{
                 "retention": self.configuration.jobs.retention.to_retention(),
                 **self.host_options,

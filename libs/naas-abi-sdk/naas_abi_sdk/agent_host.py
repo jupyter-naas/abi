@@ -21,6 +21,7 @@ from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 
 from naas_abi_sdk import overflow
 from naas_abi_sdk.agent import TERMINAL, agent_subject
+from naas_abi_sdk.call_context import ON_BEHALF_OF_HEADER
 from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
@@ -138,8 +139,9 @@ class AgentHost:
         self.events_collection = agent_events_collection(session.client.project)
         self._membership = (0.0, set())
         self._membership_lock = asyncio.Lock()
-        # (caller token, agent) -> (reuse until, caller identity, caller admin)
-        self._authorized: dict[tuple[str, str], tuple[float, str, bool]] = {}
+        # (token, on-behalf-of, agent, operation, invocation, run owner) ->
+        # (reuse until, caller identity, whether discovery decided on the run)
+        self._authorized: dict[tuple, tuple[float, str, bool]] = {}
         self.runs: dict[str, _Run] = {}
         self.subscriptions = []
         self._bound_to = ""  # the instance id the subscriptions serve
@@ -192,13 +194,23 @@ class AgentHost:
             await sub.drain()
 
     async def _authorize(
-        self, name: str, token: str, new_invocation: bool
+        self,
+        name: str,
+        headers: dict,
+        operation: str,
+        invocation_id: str = "",
+        run_owner: str = "",
     ) -> tuple[str, bool]:
-        """The caller's identity, and whether it is a platform administrator
-        (discovery's admin identities), as discovery vouches for both."""
+        """Discovery's answer for this caller: who owns the runs it starts, and
+        whether discovery decided on the run asked about (status, event,
+        cancel). Discovery verifies the caller's token and the user it acts
+        for, and asks IAM (discovery:InvokeAgent, GetAgentRun, CancelAgentRun)."""
+        token = headers.get("Nats-Auth-Token", "")
+        on_behalf_of = headers.get(ON_BEHALF_OF_HEADER, "")
+        key = (token, on_behalf_of, name, operation, invocation_id, run_owner)
         now = asyncio.get_running_loop().time()
-        cached = self._authorized.get((token, name))
-        if not new_invocation and cached is not None and now < cached[0]:
+        cached = self._authorized.get(key)
+        if operation != "submit" and cached is not None and now < cached[0]:
             return cached[1], cached[2]
         response = await self.session.client._call(
             "authorize_agent",
@@ -207,26 +219,30 @@ class AgentHost:
                 lease_token=self.session.lease_token,
                 agent_name=name,
                 caller_token=token,
-                new_invocation=new_invocation,
+                caller_on_behalf_of=on_behalf_of,
+                new_invocation=operation == "submit",
+                operation=operation,
+                invocation_id=invocation_id,
+                run_owner=run_owner,
             ),
             discovery_pb.AuthorizeAgentResponse,
         )
-        self._remember(token, name, response.caller_identity, response.caller_admin)
-        return response.caller_identity, response.caller_admin
+        self._remember(key, token, response.caller_identity, response.run_authorized)
+        return response.caller_identity, response.run_authorized
 
-    def _remember(self, token: str, name: str, identity: str, admin: bool) -> None:
+    def _remember(self, key: tuple, token: str, identity: str, decided: bool) -> None:
         lifetime = min(AUTHORIZATION_SECONDS, _token_expiry(token) - time.time())
         if lifetime <= 0:
             return
         now = asyncio.get_running_loop().time()
-        self._authorized.pop((token, name), None)
+        self._authorized.pop(key, None)
         if len(self._authorized) >= MAX_AUTHORIZATIONS:
             self._authorized = {
-                key: value for key, value in self._authorized.items() if value[0] > now
+                k: value for k, value in self._authorized.items() if value[0] > now
             }
         while len(self._authorized) >= MAX_AUTHORIZATIONS:  # oldest first
             del self._authorized[next(iter(self._authorized))]
-        self._authorized[(token, name)] = (now + lifetime, identity, admin)
+        self._authorized[key] = (now + lifetime, identity, decided)
 
     async def _handle(self, name: str, operation: str, msg) -> None:
         # Runs started by a submit inherit this span (their task copies the context).
@@ -246,29 +262,30 @@ class AgentHost:
             req = cls.FromString(msg.data)
             if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", req.invocation_id):
                 raise _error("INVALID_ARGUMENT", "Invalid invocation ID")
-            caller, admin = await self._authorize(
-                name,
-                (msg.headers or {}).get("Nats-Auth-Token", ""),
-                operation == "submit",
-            )
+            headers = msg.headers or {}
+            key = _hash(name, req.invocation_id)
+            if operation == "submit":
+                caller, _ = await self._authorize(name, headers, operation)
+            else:
+                # The run's recorded owner is part of what discovery decides on:
+                # an unknown invocation and a run the caller may not see are
+                # the same INVOCATION_NOT_FOUND.
+                doc = await self.documents.get(self.runs_collection, key)
+                caller, decided = await self._authorize(
+                    name, headers, operation, req.invocation_id, doc.data["caller"]
+                )
+                # Without IAM's decision (a discovery wired with none), only
+                # the run's owner reaches it.
+                if not decided and doc.data["caller"] != caller:
+                    raise _error("INVOCATION_NOT_FOUND", "Invocation not found")
             if operation != "event" and req.output_format != 2:
                 raise _error(
                     "UPGRADE_REQUIRED",
                     "Agent output requires an SDK supporting output_format=2",
                 )
-            key = _hash(name, req.invocation_id)
             if operation == "submit":
                 doc = await self._submit(name, key, caller, req)
             else:
-                doc = await self.documents.get(self.runs_collection, key)
-                # Platform administrators may stop any run (the System app),
-                # never read another caller's output.
-                if doc.data["caller"] != caller and not (
-                    admin and operation == "cancel"
-                ):
-                    raise _error(
-                        "PERMISSION_DENIED", "Invocation belongs to another caller"
-                    )
                 if operation == "event":
                     last = doc.data.get(
                         "last_sequence", len(doc.data.get("events", []))

@@ -39,6 +39,7 @@ from naas_abi_sdk.app_streams import (
     pull_body,
 )
 from naas_abi_sdk.apps import AppDescriptor
+from naas_abi_sdk.call_context import ON_BEHALF_OF_HEADER
 from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.transport import RPCError
@@ -123,7 +124,8 @@ class AppHost:
         self.closing = False
         self.idle_seconds = idle_seconds
         self.calls = ConcurrentCalls(max_concurrency)
-        self._authorized: dict[tuple[str, str], tuple[float, str]] = {}
+        # (token, on-behalf-of, app) -> (reuse until, the verified caller's user)
+        self._authorized: dict[tuple[str, str, str], tuple[float, str]] = {}
         self._etags: dict[Path, tuple[float, int, str]] = {}
         self._lifespans: list[_Lifespan] = []
         # Requests whose app still runs: reading an upload, or streaming its answer.
@@ -184,7 +186,8 @@ class AppHost:
                 raise RPCError("MODULE_UNAVAILABLE", "App is draining")
             if request.app not in ("", name):
                 raise RPCError("INVALID_ARGUMENT", "App request names another app")
-            await self._authorize(name, (msg.headers or {}).get("Nats-Auth-Token", ""))
+            # The user is the one discovery verified, never the request's field.
+            request.user_id = await self._authorize(name, msg.headers or {})
             answer = await self._answer(name, request)
             response.status = answer.status
             for key, value in answer.headers:
@@ -203,9 +206,14 @@ class AppHost:
         if msg.reply:
             await reply(msg, response.SerializeToString())
 
-    async def _authorize(self, name: str, token: str) -> str:
+    async def _authorize(self, name: str, headers: dict) -> str:
+        """The user the verified caller acts for ("" for none), once discovery
+        allows it to open this app (discovery:OpenApp)."""
+        token = headers.get("Nats-Auth-Token", "")
+        on_behalf_of = headers.get(ON_BEHALF_OF_HEADER, "")
+        key = (token, on_behalf_of, name)
         now = asyncio.get_running_loop().time()
-        cached = self._authorized.get((token, name))
+        cached = self._authorized.get(key)
         if cached is not None and now < cached[0]:
             return cached[1]
         response = await self.session.client._call(
@@ -215,6 +223,7 @@ class AppHost:
                 lease_token=self.session.lease_token,
                 app_name=name,
                 caller_token=token,
+                caller_on_behalf_of=on_behalf_of,
             ),
             discovery_pb.AuthorizeAppResponse,
         )
@@ -226,8 +235,8 @@ class AppHost:
                 }
                 while len(self._authorized) >= MAX_AUTHORIZATIONS:
                     del self._authorized[next(iter(self._authorized))]
-            self._authorized[(token, name)] = (now + lifetime, response.caller_identity)
-        return response.caller_identity
+            self._authorized[key] = (now + lifetime, response.caller_user_id)
+        return response.caller_user_id
 
     async def _answer(self, name: str, request: pb.HttpRequest) -> _Answer:
         if len(request.body) > MAX_INLINE_REQUEST_BODY:
@@ -432,7 +441,7 @@ class _AsgiCall:
             ],
             "client": None,
             "server": None,
-            # Who asked, as Nexus vouches for it: request.scope["abi"]["user_id"].
+            # Who asked, as discovery verified it: request.scope["abi"]["user_id"].
             "abi": {"user_id": request.user_id},
         }
 

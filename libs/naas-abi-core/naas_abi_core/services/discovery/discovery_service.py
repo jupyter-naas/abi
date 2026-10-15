@@ -14,10 +14,15 @@ from typing import Any, TypeVar
 
 Result = TypeVar("Result")
 
+from naas_abi_core.engine.call_context import CallContext, use_call_context
+from naas_abi_core.services.discovery.caller import run_owner
 from naas_abi_core.services.discovery.discovery_ports import (
     RegistryPort,
     RevisionConflict,
 )
+from naas_abi_core.services.discovery.iam_catalog import CATALOG
+from naas_abi_core.services.iam.guard import ServiceGuard
+from naas_abi_core.services.iam.IAMPorts import IIAMService
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
 
@@ -69,9 +74,15 @@ def _depends_on_itself(
 
 JOB_TRIGGER_KINDS = ("cron", "every", "event")
 
-# Service identities allowed to evict registrations: the Nexus API (System app)
-# and the engine. Stage 1 tokens name first-party processes (see nats_auth).
-DEFAULT_ADMIN_IDENTITIES = ("api", "engine")
+# The service-account name form of a module (RFC §2): once IAM records module
+# accounts (#60), a module registers only under its own name.
+MODULE_ACCOUNT_PREFIX = "module/"
+AGENT_OPERATIONS = ("submit", "status", "event", "cancel")
+JOB_OPERATIONS = ("trigger", "cancel")
+
+
+def _error(code: str, message: str) -> Callable[[], DiscoveryError]:
+    return lambda: DiscoveryError(code, message)
 
 
 def _valid_job(job: pb.JobDescriptor) -> bool:
@@ -128,24 +139,37 @@ def _valid_app(app: pb.AppDescriptor) -> bool:
 
 
 class DiscoveryService:
+    """Registrations, readiness, and who may use what a module serves.
+
+    Wired with IAM (``iam``), every operation is authorized in the caller's
+    ``CallContext`` with the ``discovery`` catalog: the provider's for
+    registration, the forwarded caller's for ``authorize_*``. Without IAM (unit
+    tests of the registry alone) nothing is authorized, as for any unwired
+    domain service.
+    """
+
     def __init__(
         self,
         registry: RegistryPort,
         *,
         lease_seconds: float = 20,
         clock: Callable[[], float] = time.time,
-        admin_identities: Iterable[str] = DEFAULT_ADMIN_IDENTITIES,
         snapshot_seconds: float = 1.0,
+        project: str = "default",
+        iam: IIAMService | None = None,
+        admin_identities: Iterable[str] = (),
     ):
+        """``admin_identities`` is accepted and ignored: evicting is
+        ``discovery:Evict``, a policy, not a hard-coded identity."""
         if not math.isfinite(lease_seconds) or lease_seconds < 1:
             raise ValueError("lease_seconds must be finite and at least 1")
         if not math.isfinite(snapshot_seconds) or snapshot_seconds < 0:
             raise ValueError("snapshot_seconds must be finite and not negative")
-        admins = frozenset(admin_identities)
-        if not all(admins) or not all(isinstance(a, str) for a in admins):
-            raise ValueError("admin identities must be non-empty names")
+        del admin_identities
         self.registry, self.lease_seconds, self.clock = registry, lease_seconds, clock
-        self.admin_identities = admins
+        self.project = project
+        self.iam = iam
+        self.guard = ServiceGuard(CATALOG, lambda: self.iam)
         # The registry as this replica last read or wrote it, and when. Agent
         # polls are allowed from it for snapshot_seconds (see authorize_agent).
         self.snapshot_seconds = snapshot_seconds
@@ -155,6 +179,99 @@ class DiscoveryService:
         # side, and concurrent writes would exhaust each other's CAS retries.
         self._mutations = asyncio.Lock()
         self._pending: list[tuple[Callable[[pb.RegistryState], Any], Any]] = []
+
+    # -- authorization ------------------------------------------------------------
+
+    def _parts(self, module_id: str, *rest: str) -> list[str]:
+        return [self.project, module_id, *rest]
+
+    async def _require(
+        self,
+        action: str,
+        type: str,
+        parts: list[str],
+        not_found: Callable[[], BaseException],
+        caller: CallContext | None = None,
+    ) -> None:
+        """IAM's decision for the current caller, or ``caller``; off the loop."""
+        if not self.guard.enforcing:
+            return
+
+        def check() -> None:
+            if caller is None:
+                self.guard.require(action, type, parts, not_found=not_found)
+                return
+            with use_call_context(caller):
+                self.guard.require(action, type, parts, not_found=not_found)
+
+        await asyncio.to_thread(check)
+
+    async def _filter_instances(
+        self, instances: list[pb.Instance]
+    ) -> list[pb.Instance]:
+        """The instances of the modules the caller may list, each showing only
+        the agents, apps and jobs it may list (RFC §6.4)."""
+        if not self.guard.enforcing or not instances:
+            return instances
+
+        def visible() -> list[pb.Instance]:
+            kept = self.guard.filter(
+                "ListModules",
+                "module",
+                instances,
+                lambda i: self._parts(i.descriptor.module_id),
+            )
+            shown = []
+            for instance in kept:
+                copy = pb.Instance()
+                copy.CopyFrom(instance)
+                descriptor, module_id = copy.descriptor, copy.descriptor.module_id
+                for field, action, type in (
+                    ("agents", "ListAgents", "agent"),
+                    ("apps", "ListApps", "app"),
+                    ("jobs", "ListJobs", "job"),
+                ):
+                    items = list(getattr(descriptor, field))
+
+                    def parts(item: Any, module_id: str = module_id) -> list[str]:
+                        return self._parts(module_id, item.name)
+
+                    allowed = self.guard.filter(action, type, items, parts)
+                    if len(allowed) != len(items):
+                        del getattr(descriptor, field)[:]
+                        getattr(descriptor, field).extend(allowed)
+                shown.append(copy)
+            return shown
+
+        return await asyncio.to_thread(visible)
+
+    def _bind_module(
+        self, req: pb.RegisterRequest, owner: str, state: pb.RegistryState
+    ) -> None:
+        """A module id is held by one principal at a time (RFC §6.4, Register).
+
+        A module account (``module/<project>/<module_id>``, recorded by IAM from
+        #60 on) registers only its own module. Until then a module's token names
+        it freely, so a module id is bound to the principal of its live
+        instances: nobody else can join them, and so nobody can take requests
+        meant for a running module.
+        """
+        module_id = req.descriptor.module_id
+        if owner.startswith(MODULE_ACCOUNT_PREFIX):
+            _require(
+                owner == f"{MODULE_ACCOUNT_PREFIX}{self.project}/{module_id}",
+                "PERMISSION_DENIED",
+                "A module registers only under its own service account",
+            )
+        _require(
+            all(
+                record.owner == owner
+                for record in state.records
+                if record.instance.descriptor.module_id == module_id
+            ),
+            "PERMISSION_DENIED",
+            f"Module {module_id} is registered by another principal",
+        )
 
     async def _read(self) -> tuple[pb.RegistryState, int]:
         data, revision = await self.registry.read()
@@ -584,8 +701,17 @@ class DiscoveryService:
     async def register(
         self, req: pb.RegisterRequest, owner: str
     ) -> pb.RegisterResponse:
+        if _name(req.descriptor.module_id):
+            await self._require(
+                "Register",
+                "module",
+                self._parts(req.descriptor.module_id),
+                _error("PERMISSION_DENIED", "Registering this module is not allowed"),
+            )
+
         def apply(state):
             self._validate(req, state)
+            self._bind_module(req, owner, state)
             record = next(
                 (r for r in state.records if r.instance.instance_id == req.instance_id),
                 None,
@@ -626,7 +752,32 @@ class DiscoveryService:
 
         return await self._mutate(apply)
 
+    async def _require_on_instance(
+        self, action: str, instance_id: str, not_found: Callable[[], BaseException]
+    ) -> None:
+        """``action`` on the module of a live instance; nothing when it is gone
+        (the operation then fails as it always did)."""
+        if not self.guard.enforcing:
+            return
+        state, _ = await self._read()
+        record = next(
+            (r for r in state.records if r.instance.instance_id == instance_id), None
+        )
+        if record is not None:
+            await self._require(
+                action,
+                "module",
+                self._parts(record.instance.descriptor.module_id),
+                not_found,
+            )
+
     async def renew(self, req: pb.RenewRequest, owner: str) -> pb.RenewResponse:
+        await self._require_on_instance(
+            "Renew",
+            req.instance_id,
+            _error("LEASE_EXPIRED", "Register a fresh instance after lease loss"),
+        )
+
         def apply(state):
             record = next(
                 (r for r in state.records if r.instance.instance_id == req.instance_id),
@@ -653,6 +804,10 @@ class DiscoveryService:
     async def unregister(
         self, req: pb.UnregisterRequest, owner: str
     ) -> pb.UnregisterResponse:
+        await self._require_on_instance(
+            "Unregister", req.instance_id, _error("INSTANCE_NOT_FOUND", req.instance_id)
+        )
+
         def apply(state):
             for i, record in enumerate(state.records):
                 if record.instance.instance_id == req.instance_id:
@@ -664,19 +819,18 @@ class DiscoveryService:
         return await self._mutate(apply)
 
     async def evict(self, req: pb.EvictRequest, owner: str) -> pb.EvictResponse:
-        """Remove a registration whatever its lease. Admin identities only.
+        """Remove a registration whatever its lease: ``discovery:Evict`` on its module.
 
         The evicted owner's next renewal fails with LEASE_EXPIRED; the SDK then
         registers a fresh instance, so evicting a live process only restarts its
         membership. It is meant for crashed or stuck registrations.
         """
-        _require(
-            owner in self.admin_identities,
-            "PERMISSION_DENIED",
-            "Only platform administrators can evict registrations",
-        )
+        del owner  # who may evict is IAM's decision, in the caller's context
         _require(
             _name(req.instance_id), "INVALID_ARGUMENT", "Invalid instance identity"
+        )
+        await self._require_on_instance(
+            "Evict", req.instance_id, _error("INSTANCE_NOT_FOUND", req.instance_id)
         )
 
         def apply(state):
@@ -698,6 +852,12 @@ class DiscoveryService:
             "INVALID_ARGUMENT",
             "Module identity and contract required",
         )
+        await self._require(
+            "GetModule",
+            "module",
+            self._parts(req.module_id),
+            _error("MODULE_NOT_FOUND", req.module_id),
+        )
         state, _ = await self._read()
         self._ready(state)
         records = [
@@ -711,19 +871,21 @@ class DiscoveryService:
         ]
         _require(bool(matches), "INCOMPATIBLE_MODULE", req.module_id)
         ordered: list[pb.Instance] = sorted(matches, key=lambda r: r.instance_id)
-        return pb.GetModuleResponse(instances=ordered)
+        return pb.GetModuleResponse(instances=await self._filter_instances(ordered))
 
     async def list_modules(self, req: pb.ListModulesRequest) -> pb.ListModulesResponse:
         _require(1 <= req.limit <= 100, "INVALID_ARGUMENT", "Page size must be 1..100")
         state, _ = await self._read()
         self._ready(state)
-        records = sorted(
-            (
-                r.instance
-                for r in state.records
-                if r.instance.instance_id > req.after_instance_id
-            ),
-            key=lambda r: r.instance_id,
+        records = await self._filter_instances(
+            sorted(
+                (
+                    r.instance
+                    for r in state.records
+                    if r.instance.instance_id > req.after_instance_id
+                ),
+                key=lambda r: r.instance_id,
+            )
         )
         page = records[: req.limit]
         return pb.ListModulesResponse(
@@ -734,8 +896,28 @@ class DiscoveryService:
         )
 
     async def authorize_agent(
-        self, req: pb.AuthorizeAgentRequest, owner: str
+        self,
+        req: pb.AuthorizeAgentRequest,
+        owner: str,
+        caller: CallContext | None = None,
     ) -> pb.AuthorizeAgentResponse:
+        """The provider's lease, then the caller's policy (RFC §6.4).
+
+        ``caller``: the provider's caller, verified from the token and the
+        on-behalf-of user it forwarded. A submit needs ``InvokeAgent`` on the
+        agent; status and event polls need ``GetAgentRun``, a cancel
+        ``CancelAgentRun``, on ``run/<owner>/<project>/<invocation>``. The
+        response names the owner of the runs this caller starts.
+        """
+        operation = req.operation or ("submit" if req.new_invocation else "")
+        _require(
+            operation in ("", *AGENT_OPERATIONS)
+            and (operation != "submit" or req.new_invocation)
+            and (operation in ("", "submit") or not req.new_invocation),
+            "INVALID_ARGUMENT",
+            "Unknown agent operation",
+        )
+        record: pb.RegistryRecord | None = None
         if not req.new_invocation:
             # Status, event and cancel polls are allowed from a recent snapshot
             # instead of a full registry read. A submit (which needs READY), or
@@ -743,14 +925,46 @@ class DiscoveryService:
             recent = self._recent_record(req.instance_id)
             if recent is not None:
                 with contextlib.suppress(DiscoveryError):
-                    return self._authorize_agent(recent, req, owner)
-        state, _ = await self._read()
-        self._ready(state)
-        record = next(
-            (r for r in state.records if r.instance.instance_id == req.instance_id),
-            None,
-        )
-        return self._authorize_agent(record, req, owner)
+                    self._authorize_agent(recent, req, owner)
+                    record = recent
+        if record is None:
+            state, _ = await self._read()
+            self._ready(state)
+            record = next(
+                (r for r in state.records if r.instance.instance_id == req.instance_id),
+                None,
+            )
+            self._authorize_agent(record, req, owner)
+        assert record is not None
+        response = pb.AuthorizeAgentResponse()
+        if caller is None:
+            return response
+        module_id = record.instance.descriptor.module_id
+        if operation in ("submit", ""):
+            # An older provider's poll: it checks the run's owner itself.
+            await self._require(
+                "InvokeAgent",
+                "agent",
+                self._parts(module_id, req.agent_name),
+                _error("AGENT_NOT_FOUND", req.agent_name),
+                caller,
+            )
+        else:
+            _require(
+                bool(req.run_owner) and _name(req.invocation_id),
+                "INVALID_ARGUMENT",
+                "A run poll names the run and its owner",
+            )
+            await self._require(
+                "CancelAgentRun" if operation == "cancel" else "GetAgentRun",
+                "run",
+                [req.run_owner, self.project, req.invocation_id],
+                _error("INVOCATION_NOT_FOUND", "Invocation not found"),
+                caller,
+            )
+            response.run_authorized = self.guard.enforcing
+        response.caller_identity = run_owner(caller)
+        return response
 
     def _recent_record(self, instance_id: str) -> pb.RegistryRecord | None:
         """The instance's live record in a snapshot under snapshot_seconds old."""
@@ -774,7 +988,7 @@ class DiscoveryService:
         record: pb.RegistryRecord | None,
         req: pb.AuthorizeAgentRequest,
         owner: str,
-    ) -> pb.AuthorizeAgentResponse:
+    ) -> None:
         if record is None:
             raise DiscoveryError("LEASE_EXPIRED", "Provider registration expired")
         self._authorize(record, req.lease_token, owner)
@@ -792,19 +1006,26 @@ class DiscoveryService:
                 "MODULE_UNAVAILABLE",
                 "Provider is not ready",
             )
-        return pb.AuthorizeAgentResponse()
 
-    async def authorize_model(
-        self, req: pb.AuthorizeModelRequest, owner: str
-    ) -> pb.AuthorizeModelResponse:
+    async def _live_record(self, instance_id: str) -> pb.RegistryRecord:
         state, _ = await self._read()
         self._ready(state)
         record = next(
-            (r for r in state.records if r.instance.instance_id == req.instance_id),
+            (r for r in state.records if r.instance.instance_id == instance_id),
             None,
         )
         if record is None:
             raise DiscoveryError("LEASE_EXPIRED", "Provider registration expired")
+        return record
+
+    async def authorize_model(
+        self,
+        req: pb.AuthorizeModelRequest,
+        owner: str,
+        caller: CallContext | None = None,
+    ) -> pb.AuthorizeModelResponse:
+        """The provider's lease, then ``ChatModel`` for the caller."""
+        record = await self._live_record(req.instance_id)
         self._authorize(record, req.lease_token, owner)
         _require(
             any(
@@ -819,31 +1040,62 @@ class DiscoveryService:
             "MODULE_UNAVAILABLE",
             "Provider is not ready",
         )
-        return pb.AuthorizeModelResponse()
+        response = pb.AuthorizeModelResponse()
+        if caller is not None:
+            await self._require(
+                "ChatModel",
+                "model",
+                self._parts(record.instance.descriptor.module_id, req.model_name),
+                _error("MODEL_NOT_FOUND", req.model_name),
+                caller,
+            )
+            response.caller_identity = run_owner(caller)
+        return response
 
     async def authorize_app(
-        self, req: pb.AuthorizeAppRequest, owner: str
+        self,
+        req: pb.AuthorizeAppRequest,
+        owner: str,
+        caller: CallContext | None = None,
     ) -> pb.AuthorizeAppResponse:
-        """Every app request is authorized (the SDK caches the answer briefly),
-        so a recent snapshot serves it when it already shows the app READY."""
+        """The provider's lease, then ``OpenApp`` for the caller. Every app
+        request is authorized (the SDK caches the answer briefly), so a recent
+        snapshot serves it when it already shows the app READY."""
+        record: pb.RegistryRecord | None = None
         recent = self._recent_record(req.instance_id)
         if recent is not None:
             with contextlib.suppress(DiscoveryError):
-                return self._authorize_app(recent, req, owner)
-        state, _ = await self._read()
-        self._ready(state)
-        record = next(
-            (r for r in state.records if r.instance.instance_id == req.instance_id),
-            None,
-        )
-        return self._authorize_app(record, req, owner)
+                self._authorize_app(recent, req, owner)
+                record = recent
+        if record is None:
+            state, _ = await self._read()
+            self._ready(state)
+            record = next(
+                (r for r in state.records if r.instance.instance_id == req.instance_id),
+                None,
+            )
+            self._authorize_app(record, req, owner)
+        assert record is not None
+        response = pb.AuthorizeAppResponse()
+        if caller is not None:
+            await self._require(
+                "OpenApp",
+                "app",
+                self._parts(record.instance.descriptor.module_id, req.app_name),
+                _error("APP_NOT_FOUND", req.app_name),
+                caller,
+            )
+            response.caller_identity = run_owner(caller)
+            served = caller.user
+            response.caller_user_id = served.id if served is not None else ""
+        return response
 
     def _authorize_app(
         self,
         record: pb.RegistryRecord | None,
         req: pb.AuthorizeAppRequest,
         owner: str,
-    ) -> pb.AuthorizeAppResponse:
+    ) -> None:
         if record is None:
             raise DiscoveryError("LEASE_EXPIRED", "Provider registration expired")
         self._authorize(record, req.lease_token, owner)
@@ -857,4 +1109,84 @@ class DiscoveryService:
             "MODULE_UNAVAILABLE",
             "Provider is not ready",
         )
-        return pb.AuthorizeAppResponse()
+
+    async def authorize_job(
+        self,
+        req: pb.AuthorizeJobRequest,
+        owner: str,
+        caller: CallContext | None = None,
+    ) -> pb.AuthorizeJobResponse:
+        """The host's lease, then ``TriggerJob`` or ``CancelJobRun`` for the
+        caller whose token came with the trigger or the cancel."""
+        _require(
+            req.operation in JOB_OPERATIONS
+            and (req.operation != "cancel" or _name(req.run_id)),
+            "INVALID_ARGUMENT",
+            "A job authorization names trigger, or cancel and a run",
+        )
+        record = await self._live_record(req.instance_id)
+        self._authorize(record, req.lease_token, owner)
+        _require(
+            any(j.name == req.job_name for j in record.instance.descriptor.jobs),
+            "JOB_NOT_FOUND",
+            req.job_name,
+        )
+        response = pb.AuthorizeJobResponse()
+        if caller is not None:
+            await self.require_job(
+                record.instance.descriptor.module_id,
+                req.job_name,
+                req.operation,
+                req.run_id,
+                caller,
+            )
+            response.caller_identity = run_owner(caller)
+        return response
+
+    async def require_job(
+        self,
+        module_id: str,
+        job_name: str,
+        operation: str,
+        run_id: str,
+        caller: CallContext,
+    ) -> None:
+        """``TriggerJob`` on ``job/…``, or ``CancelJobRun`` on ``job_run/…``."""
+        if not self.guard.enforcing:
+            return
+
+        def check() -> None:
+            with use_call_context(caller):
+                require_job(
+                    self.guard, self.project, module_id, job_name, operation, run_id
+                )
+
+        await asyncio.to_thread(check)
+
+
+def require_job(
+    guard: ServiceGuard,
+    project: str,
+    module_id: str,
+    job_name: str,
+    operation: str,
+    run_id: str = "",
+) -> None:
+    """Whether the current caller may trigger a module's job, or cancel one of
+    its runs (RFC §6.4); the job's or the run's not-found when it cannot see it.
+    Discovery asks it for a module's job host, the engine for its own."""
+    if operation == "trigger":
+        guard.require(
+            "TriggerJob",
+            "job",
+            [project, module_id, job_name],
+            not_found=_error("JOB_NOT_FOUND", job_name),
+        )
+        return
+    _require(operation == "cancel", "INVALID_ARGUMENT", "Unknown job operation")
+    guard.require(
+        "CancelJobRun",
+        "job_run",
+        [project, module_id, job_name, run_id],
+        not_found=_error("RUN_NOT_FOUND", run_id),
+    )

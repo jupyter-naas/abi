@@ -372,7 +372,10 @@ class Engine(IEngine):
             )
 
     def __start_jobs(self) -> None:
-        self.__job_loader = EngineJobLoader(self.__configuration.nats)
+        self.__job_loader = EngineJobLoader(
+            self.__configuration.nats,
+            iam=self.__services.iam if self.__services.iam_available() else None,
+        )
         self.__job_loader.start(
             self.job_owners(), document_available=self.__services.document_available()
         )

@@ -25,6 +25,7 @@ from naas_abi_sdk.discovery import (
     DiscoverySession,
     ModelDescriptor,
     ModulesProxy,
+    discovery_job_authorizer,
     module_descriptor,
     validate_rollout_id,
 )
@@ -510,6 +511,7 @@ async def run_module(
                     discovery.project,
                     {j.name: (j, module._job_handlers[j.name]) for j in module.jobs},
                     instance_id=registration.instance_id,
+                    authorize=discovery_job_authorizer(registration),
                 )
                 if not registration.rollout_id:
                     await _host_jobs(job_host, module)

@@ -11,18 +11,51 @@ package. The JetStream adapter stores an opaque protobuf snapshot using CAS.
 
 ## Adapters and factory
 NATS primary authenticates issued service tokens; mutations bind to verified
-caller identity plus a lease token. Stage 1 does not authorize logical module IDs.
-Each handler runs under the caller's `CallContext` (`engine/nats_identity.py`,
-`engine/call_context.py`).
+caller identity plus a lease token. Each handler runs under the caller's
+`CallContext` (`engine/nats_identity.py`, `engine/call_context.py`).
 `discovery_factory.py` composes the service. Engine exposure is explicit opt-in;
 replicas use a project queue group and share the same JetStream CAS snapshot. No silent in-memory fallback.
 
+## Authorization (`iam_catalog.py`, RFC §6.4)
+`start_discovery(..., iam=)` wires IAM (the serving engine passes its own); every
+operation is then checked in the domain service with the `discovery` catalog.
+Without IAM (unit tests of the registry) nothing is authorized. Names are
+platform-level: `module/<project>/<module_id>`, `agent|model|app|job/<project>/<module_id>/<name>`,
+`run/<owner>/<project>/<invocation>`, `job_run/<project>/<module_id>/<job>/<run id>`.
+
+- **Registration**: `Register`, `Renew`, `Unregister` on the module, in the
+  provider's context. A module id is held by one principal at a time: another
+  principal cannot register it while live instances of it exist (so nobody can
+  join a running module and take its requests). A module account
+  (`module/<project>/<module_id>`, from #60) registers only its own module.
+- **Listing**: `list_modules` and `get_module` show the modules the caller may
+  list (`ListModules`, `GetModule`, not found otherwise), each with only the
+  agents, apps and jobs it may list (`ListAgents`, `ListApps`, `ListJobs`).
+- **Use**: `authorize_agent`, `authorize_model`, `authorize_app` and
+  `authorize_job` are a lease check by the hosting module and the check of its
+  **caller**. The host forwards the caller's token and `Abi-On-Behalf-Of` header
+  (`caller_token`, `caller_on_behalf_of`); `caller.py` verifies them as a kernel
+  endpoint does (the header only from `api` or `engine`). Then: `InvokeAgent` on
+  the agent for a submit, `GetAgentRun` / `CancelAgentRun` on the run for a poll
+  or a cancel (the host names the run and its recorded owner), `ChatModel`,
+  `OpenApp`, `TriggerJob` on the job, `CancelJobRun` on the job run. An invisible
+  target gets its own not-found code (`AGENT_NOT_FOUND`, `INVOCATION_NOT_FOUND`,
+  `MODEL_NOT_FOUND`, `APP_NOT_FOUND`, `JOB_NOT_FOUND`, `RUN_NOT_FOUND`), a visible
+  one `PERMISSION_DENIED`. `caller_identity` is the owner of the runs this caller
+  starts: the user it acts for, else itself. `caller_admin` is always false.
+- **Jobs**: a trigger is a stored message: its token (`JobProxy.trigger` adds the
+  transport's credentials) is checked as of `stored_at`, when JetStream stored
+  it. The SDK job host asks before it runs a manual trigger (refused: the run is
+  recorded FAILED and the message terminated) or honours a cancel. Engine-hosted
+  jobs have no lease: `EngineJobLoader.job_authorizer` runs the same check
+  (`require_job`) in process. Scheduled and event triggers are the host's own:
+  until broker permissions (#60) restrict who may publish on a trigger subject,
+  their kind header is trusted.
+
 ## Eviction (platform administration)
-`evict` removes a registration whatever its lease. Only `admin_identities`
-(default `api` and `engine`, the Nexus System app and the engine) may call it;
-any other caller gets PERMISSION_DENIED. Identities are Stage 1 service names,
-so this is hygiene between first-party processes, not a security boundary
-against holders of the shared secret. A live owner's next renewal fails with
+`evict` removes a registration whatever its lease: `discovery:Evict` on its
+module, a policy, not a hard-coded identity. A caller who can see the module
+gets PERMISSION_DENIED, anyone else INSTANCE_NOT_FOUND. A live owner's next renewal fails with
 LEASE_EXPIRED and the SDK session registers again under the same instance id
 with a fresh lease token, so eviction clears crashed or stuck registrations;
 stopping a module means stopping its process. Registering an instance id whose
@@ -64,5 +97,8 @@ compare-and-swaps on the one registry document would exhaust their five retries
 
 ## Tests
 Use `uv run pytest .../services/discovery --import-mode=importlib`. Unit tests inject
-a clock and a fake port; integration tests use native nats-server. Add port
+a clock and a fake port; integration tests use native nats-server.
+`discovery_authorization_test.py` pins the caller checks (no policy, granted,
+denied) for agents, models, apps and jobs, run ownership per user, module-name
+binding and list filtering; `caller_test.py` the forwarded caller. Add port
 implementations by implementing both read and compare-and-swap methods.

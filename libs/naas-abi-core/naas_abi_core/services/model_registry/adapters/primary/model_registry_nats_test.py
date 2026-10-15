@@ -211,7 +211,11 @@ def _registry_primary(fail=False):
         ),
     }
     primary = ModelRegistryNATS(Mock(), "test")
-    primary._resolve = lambda ref: (ref.canonical_id, models[ref.canonical_id])
+    primary._resolve = lambda ref, action="Resolve": (
+        ref.canonical_id,
+        models[ref.canonical_id],
+        None,
+    )
     return primary
 
 

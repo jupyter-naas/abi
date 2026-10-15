@@ -35,6 +35,7 @@ from typing import Any, ClassVar
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
 from naas_abi_sdk import event_filter
+from naas_abi_sdk.call_context import ON_BEHALF_OF_HEADER
 from naas_abi_sdk.telemetry import client_span
 
 JOB_CONTRACT_MAJOR = 1
@@ -539,6 +540,18 @@ class JobContext:
 # --- caller side ----------------------------------------------------------------------
 
 
+def _credentials(transport: Any, *, on_behalf_of: bool = True) -> dict[str, str]:
+    """The caller's token (and user) a job host authorizes a trigger or a
+    cancel with. Stored with a trigger, so it is checked as of that moment."""
+    auth_headers = getattr(transport, "auth_headers", None)
+    if auth_headers is None:
+        return {}
+    headers = dict(auth_headers())
+    if not on_behalf_of:
+        headers.pop(ON_BEHALF_OF_HEADER, None)
+    return headers
+
+
 class JobRun:
     """A triggered run: read its record, wait for it, or ask its host to cancel it."""
 
@@ -591,11 +604,13 @@ class JobRun:
         return await asyncio.wait_for(poll(), timeout)
 
     async def cancel(self) -> None:
-        """Cooperative: the host running it sets ``ctx.cancelled``."""
+        """Cooperative: the host running it sets ``ctx.cancelled``, once the
+        caller this transport names may cancel it (discovery:CancelJobRun)."""
         nc = await self.transport.connect()
         await nc.publish(
             job_subjects(self.project, self.module_id, self.job).cancel,
             self.run_id.encode(),
+            headers=_credentials(self.transport),
         )
 
 
@@ -622,16 +637,25 @@ class JobProxy:
         payload: dict[str, Any] | None = None,
         *,
         idempotency_key: str | None = None,
+        on_behalf_of: bool = True,
     ) -> JobRun:
-        """Store a trigger; the run starts when a host takes it. A repeated
-        ``idempotency_key`` within the stream's duplicate window (2 minutes) is
-        the same run (JetStream message-id dedup)."""
+        """Store a trigger; the run starts when a host takes it, once the caller
+        this transport names may trigger the job (discovery:TriggerJob). A
+        repeated ``idempotency_key`` within the stream's duplicate window
+        (2 minutes) is the same run (JetStream message-id dedup).
+
+        ``on_behalf_of``: also name the current call's user, when the transport
+        forwards users. A module triggering its own job does so as itself."""
         from naas_abi_sdk import claim_check  # needs nats; keep jobs.py nats-free
 
         nc = await self.transport.connect()
         subject = job_subjects(self.project, self.module_id, self.name).trigger
         stream = stream_name(self.project)
-        headers = {TRIGGER_HEADER: "manual", "Nats-TTL": "168h"}
+        headers = {
+            TRIGGER_HEADER: "manual",
+            "Nats-TTL": "168h",
+            **_credentials(self.transport, on_behalf_of=on_behalf_of),
+        }
         if idempotency_key:
             headers["Nats-Msg-Id"] = _hash(subject, idempotency_key)
         # The run continues this trace (the host reads traceparent off the message).

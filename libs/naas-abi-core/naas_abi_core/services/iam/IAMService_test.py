@@ -190,6 +190,13 @@ def test_a_nexus_user_holds_the_transitional_kernel_grant(h):
         ).allowed
 
 
+def test_a_remote_module_cannot_evict_registrations(h):
+    """TRANSITIONAL: a module holds the kernel services, never eviction."""
+    module = "abi:-:-:discovery:module/default/other"
+    assert h.allowed("discovery:Register", module, actor="some-module")
+    assert not h.allowed("discovery:Evict", module, actor="some-module")
+
+
 def test_an_iam_user_holds_no_transitional_grant(h):
     bob = h.user()
     assert not h.allowed(

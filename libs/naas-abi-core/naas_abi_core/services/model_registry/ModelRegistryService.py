@@ -8,9 +8,21 @@ Lifecycle:
    ``register_embedding_provider`` for the providers it owns.
 3. After all modules have loaded, the engine calls ``validate_defaults()`` —
    hard-fails if the configured defaults can't be resolved.
+
+Authorization (``model_registry:*``, RFC §6.4): wired with IAM, resolving a
+model needs ``Resolve`` and listing filters by ``ListModels``. Every chat
+invocation of a model this registry hands out needs ``Chat`` in the context of
+the call that invokes it: a callback on the model checks it. The NATS endpoint
+asks ``authorize_use`` for ``Chat``, ``ChatStream`` or ``Embed`` before it runs
+a model. Registering models is boot work and is not checked.
 """
 
 from __future__ import annotations
+
+from typing import Any
+from uuid import UUID
+
+from langchain_core.callbacks import BaseCallbackHandler
 
 from naas_abi_core.models.Model import (
     CanonicalModelIdLike,
@@ -20,15 +32,52 @@ from naas_abi_core.models.Model import (
     ModelProviderLike,
     ModelType,
 )
+from naas_abi_core.services.iam.guard import ServiceGuard
+from naas_abi_core.services.model_registry.iam_catalog import CATALOG
 from naas_abi_core.services.model_registry.ModelRegistryPort import (
     ChatProviderFactory,
     DefaultModelNotResolvedError,
     EmbeddingProviderFactory,
     IModelRegistry,
+    ModelAction,
     ModelNotFoundError,
     ProviderNotConfiguredError,
+    UseAction,
 )
 from naas_abi_core.services.ServiceBase import ServiceBase
+
+# Run metadata naming the model a caller was already authorized to use
+# (``authorize_use``): its chat callback does not ask again. Remote callers
+# never pass run configuration, so they cannot set it.
+AUTHORIZED_METADATA_KEY = "abi_model_registry_authorized"
+
+
+def _not_found(canonical_id: str):
+    return lambda: ModelNotFoundError(f"Model {canonical_id!r} is not registered")
+
+
+class _ChatGate(BaseCallbackHandler):
+    """``model_registry:Chat`` on every invocation of a model, in the context
+    of the call invoking it. Raised errors stop the invocation."""
+
+    raise_error = True
+    run_inline = True
+
+    def __init__(self, registry: ModelRegistryService, canonical_id: str) -> None:
+        self.registry, self.canonical_id = registry, canonical_id
+
+    def on_chat_model_start(
+        self,
+        serialized: dict[str, Any],
+        messages: list[list[Any]],
+        *,
+        run_id: UUID,
+        **kwargs: Any,
+    ) -> None:
+        metadata = kwargs.get("metadata") or {}
+        if metadata.get(AUTHORIZED_METADATA_KEY) == self.canonical_id:
+            return
+        self.registry._require("Chat", self.canonical_id)
 
 
 def _norm(value: CanonicalModelIdLike | ModelProviderLike | None) -> str | None:
@@ -58,6 +107,52 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
         self._models: dict[str, dict[str, list[Model]]] = {}
         self._chat_providers: dict[str, ChatProviderFactory] = {}
         self._embedding_providers: dict[str, EmbeddingProviderFactory] = {}
+        self._guard = ServiceGuard.of(CATALOG, self)
+
+    # ------------------------------------------------------------------ authorization
+
+    def _require(self, action: str, canonical_id: str) -> None:
+        self._guard.require(
+            action, "model", canonical_id, not_found=_not_found(canonical_id)
+        )
+
+    def authorize_use(self, canonical_id: str, action: UseAction) -> dict[str, Any]:
+        """Require ``action`` (``Chat``, ``ChatStream`` or ``Embed``) on the model
+        for the current caller; the run configuration that tells the model's
+        chat callback this invocation is already authorized."""
+        self._require(action, canonical_id)
+        return {"metadata": {AUTHORIZED_METADATA_KEY: canonical_id}}
+
+    def _gated(self, canonical_id: str, model: ChatModel) -> ChatModel:
+        """Attach the chat gate to the model, once per registry and model."""
+        base = model.model
+        if not hasattr(base, "callbacks"):
+            return model
+        callbacks = base.callbacks
+        handlers = (
+            callbacks
+            if isinstance(callbacks, list)
+            else getattr(callbacks, "handlers", None)
+            if callbacks is not None
+            else []
+        )
+        if handlers is None:
+            return model
+        if any(
+            isinstance(h, _ChatGate)
+            and h.registry is self
+            and h.canonical_id == canonical_id
+            for h in handlers
+        ):
+            return model
+        gate = _ChatGate(self, canonical_id)
+        if callbacks is None:
+            base.callbacks = [gate]
+        elif isinstance(callbacks, list):
+            base.callbacks = [*callbacks, gate]
+        else:
+            callbacks.add_handler(gate, inherit=False)
+        return model
 
     # ------------------------------------------------------------------ register
 
@@ -120,8 +215,10 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
     ) -> Model:
         cid = _norm(canonical_id)
         assert cid is not None
-        prov = _norm(provider)
+        self._require("Resolve", cid)
+        return self._get(cid, _norm(provider))
 
+    def _get(self, cid: str, prov: str | None) -> Model:
         if (
             prov is not None
             and prov not in self._chat_providers
@@ -140,11 +237,11 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
 
         hit = self._lookup_registered(cid, prov)
         if hit is not None:
-            return hit
+            return self._gated(cid, hit) if isinstance(hit, ChatModel) else hit
 
         # Off-catalog: route through default provider's chat factory.
         # (``get`` without a model type defaults to chat.)
-        return self._build_off_catalog_chat(cid, prov)
+        return self._gated(cid, self._build_off_catalog_chat(cid, prov))
 
     def get_chat_model(
         self,
@@ -153,8 +250,10 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
     ) -> ChatModel:
         cid = _norm(canonical_id)
         assert cid is not None
-        prov = _norm(provider)
+        self._require("Resolve", cid)
+        return self._get_chat_model(cid, _norm(provider))
 
+    def _get_chat_model(self, cid: str, prov: str | None) -> ChatModel:
         hit = self._lookup_registered(cid, prov)
         if hit is not None:
             if not isinstance(hit, ChatModel):
@@ -162,9 +261,9 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
                     f"Registered model for canonical_id={cid!r} provider={hit.provider!r} "
                     f"is not a ChatModel (got {type(hit).__name__})"
                 )
-            return hit
+            return self._gated(cid, hit)
 
-        return self._build_off_catalog_chat(cid, prov)
+        return self._gated(cid, self._build_off_catalog_chat(cid, prov))
 
     def get_embedding_model(
         self,
@@ -173,8 +272,10 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
     ) -> EmbeddingModel:
         cid = _norm(canonical_id)
         assert cid is not None
-        prov = _norm(provider)
+        self._require("Resolve", cid)
+        return self._get_embedding_model(cid, _norm(provider))
 
+    def _get_embedding_model(self, cid: str, prov: str | None) -> EmbeddingModel:
         hit = self._lookup_registered(cid, prov)
         if hit is not None:
             if not isinstance(hit, EmbeddingModel):
@@ -185,6 +286,57 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
             return hit
 
         return self._build_off_catalog_embedding(cid, prov)
+
+    def resolve_ref(
+        self,
+        canonical_id: str,
+        *,
+        kind: str = "",
+        provider: str | None = None,
+        model_id: str = "",
+        action: ModelAction = "Resolve",
+    ) -> tuple[Model, dict[str, Any] | None]:
+        """A model reference as a remote caller names it, checked with the
+        operation's own action: ``Resolve`` to describe it, ``Chat``,
+        ``ChatStream`` or ``Embed`` to use it. For a use, the run configuration
+        to invoke the model with comes back too.
+
+        ``model_id`` pins one registered variant (provider and provider id).
+        """
+        if kind not in ("", "chat", "embedding"):
+            raise ValueError("Model kind must be chat or embedding")
+        config = (
+            None if action == "Resolve" else self.authorize_use(canonical_id, action)
+        )
+        if action == "Resolve":
+            self._require("Resolve", canonical_id)
+        if model_id:
+            for cid, candidate in self._entries():
+                if (
+                    cid == canonical_id
+                    and candidate.provider == provider
+                    and candidate.model_id == model_id
+                ):
+                    if (kind == "chat" and not isinstance(candidate, ChatModel)) or (
+                        kind == "embedding"
+                        and not isinstance(candidate, EmbeddingModel)
+                    ):
+                        raise ModelNotFoundError()
+                    return self._gate_chat(canonical_id, candidate), config
+        lookup = {
+            "chat": self._get_chat_model,
+            "embedding": self._get_embedding_model,
+            "": self._get,
+        }[kind]
+        model = lookup(canonical_id, provider or None)
+        if model_id and (model.model_id != model_id or str(model.provider) != provider):
+            raise ModelNotFoundError()
+        return model, config
+
+    def _gate_chat(self, canonical_id: str, model: Model) -> Model:
+        return (
+            self._gated(canonical_id, model) if isinstance(model, ChatModel) else model
+        )
 
     # ------------------------------------------------------------------ off-catalog
 
@@ -329,16 +481,19 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
     # ------------------------------------------------------------------ introspection
 
     def list_models(self) -> list[Model]:
-        out: list[Model] = []
-        for bucket in self._models.values():
-            for entries in bucket.values():
-                out.extend(entries)
-        return out
+        return [model for _, model in self.list_registered_models()]
 
     def list_canonical_ids(self) -> list[str]:
-        return list(self._models.keys())
+        return self._guard.filter(
+            "ListModels", "model", list(self._models.keys()), lambda cid: cid
+        )
 
     def list_registered_models(self) -> list[tuple[str, Model]]:
+        return self._guard.filter(
+            "ListModels", "model", self._entries(), lambda entry: entry[0]
+        )
+
+    def _entries(self) -> list[tuple[str, Model]]:
         return [
             (cid, model)
             for cid, bucket in self._models.items()

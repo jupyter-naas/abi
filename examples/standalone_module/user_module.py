@@ -152,9 +152,12 @@ class ABIModule(BaseModule):
                 attributes={"ok": True},
             )
         )
-        assert (await services.activity_log.query("sdk:ergonomic"))[
-            0
-        ].event_type == "demo.facade"
+        # The actor is the caller (this module's identity), never the event's
+        # actor_id field.
+        assert any(
+            e.event_type == "demo.facade"
+            for e in await services.activity_log.query("standalone-demo")
+        )
         await services.events.publish(
             Event("urn:demo:Ergonomic", {"value": "recorded"})
         )

@@ -1646,3 +1646,113 @@ def test_a_long_completion_outage_is_logged_as_an_error(caplog):
     levels = [r.levelname for r in caplog.records if "ingest:7" in r.getMessage()]
     assert levels[0] == "WARNING" and levels[-1] == "ERROR"
     assert msg.calls[-1] == ("ack",)
+
+
+# -- who may trigger and cancel ----------------------------------------------------
+
+
+class _Authorizer:
+    """Discovery's answer for a caller: refuse, or fail, as told."""
+
+    def __init__(self, error=None, only=None):
+        self.error, self.only, self.calls = error, only, []
+
+    async def __call__(self, operation, job, run_id, headers, stored_at):
+        self.calls.append((operation, job, run_id, dict(headers)))
+        if self.error is not None and self.only in (None, operation):
+            raise self.error
+
+
+def test_a_manual_trigger_runs_once_its_caller_is_authorized():
+    docs, authorize = Documents(), _Authorizer()
+    msg = Msg()
+    msg.headers["Nats-Auth-Token"] = "caller-token"
+
+    async def handler(ctx):
+        return "done"
+
+    _run(_host(docs, authorize=authorize), JobDescriptor("ingest"), handler, msg)
+    assert docs.run("ingest:7")["status"] == "SUCCEEDED"
+    operation, job, run_id, headers = authorize.calls[0]
+    assert (operation, job, run_id) == ("trigger", "ingest", "ingest:7")
+    assert headers["Nats-Auth-Token"] == "caller-token"
+
+
+def test_a_trigger_from_a_caller_without_a_policy_is_refused_and_never_runs():
+    from naas_abi_sdk.transport import RPCError
+
+    docs = Documents()
+    authorize = _Authorizer(RPCError("JOB_NOT_FOUND", "ingest"))
+    ran = []
+
+    async def handler(ctx):
+        ran.append(ctx)
+
+    msg = Msg()
+    _run(_host(docs, authorize=authorize), JobDescriptor("ingest"), handler, msg)
+    run = docs.run("ingest:7")
+    assert (run["status"], run["attempt"]) == ("FAILED", 0)
+    assert "JOB_NOT_FOUND" in run["error"]
+    assert ran == [] and msg.calls == [("term",)]
+
+
+def test_a_trigger_discovery_could_not_answer_for_is_retried_later():
+    from naas_abi_sdk.transport import RPCError
+
+    docs = Documents()
+    msg = Msg()
+    host = _host(docs, authorize=_Authorizer(RPCError("UNAVAILABLE", "down")))
+
+    async def handler(ctx):
+        raise AssertionError("must not run")
+
+    _run(host, JobDescriptor("ingest"), handler, msg)
+    assert msg.calls[0][0] == "nak"
+    assert (runs_collection(PROJECT), "ingest:7") not in docs.data
+
+
+def test_scheduled_triggers_are_the_hosts_own():
+    authorize = _Authorizer(AssertionError("not asked"))
+    docs = Documents()
+
+    async def handler(ctx):
+        return "tick"
+
+    _run(
+        _host(docs, authorize=authorize),
+        JobDescriptor("ingest"),
+        handler,
+        Msg(trigger="cron"),
+    )
+    assert docs.run("ingest:7")["status"] == "SUCCEEDED" and authorize.calls == []
+
+
+def test_a_cancel_needs_its_callers_policy():
+    from naas_abi_sdk.transport import RPCError
+
+    docs = Documents()
+    authorize = _Authorizer(RPCError("RUN_NOT_FOUND", "long:7"), only="cancel")
+    host = _host(docs, authorize=authorize)
+    host.handlers = {"long": (JobDescriptor("long"), None)}
+    started = asyncio.Event()
+
+    async def handler(ctx):
+        started.set()
+        await ctx.cancelled.wait()
+
+    async def scenario():
+        msg = Msg()
+        task = asyncio.create_task(host.handle(JobDescriptor("long"), handler, msg))
+        await started.wait()
+        cancel = SimpleNamespace(data=b"long:7", headers={"Nats-Auth-Token": "t"})
+        await host._on_cancel(cancel)
+        assert not task.done()
+        authorize.error = None
+        await host._on_cancel(cancel)
+        await task
+
+    asyncio.run(scenario())
+    assert docs.run("long:7")["status"] == "CANCELLED"
+    assert [call[:3] for call in authorize.calls if call[0] == "cancel"] == [
+        ("cancel", "long", "long:7")
+    ] * 2

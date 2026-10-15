@@ -12,8 +12,10 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.remote.adapters.in_memory 
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import RemoteAgentDirectory
 
-# Discovery binds invocation status/events/cancel to the caller identity; every
-# API worker shares this one so any worker can follow a run another started.
+# Nexus calls remote agents and apps as ``api`` on behalf of the signed-in user
+# (the Abi-On-Behalf-Of header, until delegated tokens replace it): discovery
+# checks the user's policy (discovery:InvokeAgent, OpenApp) and makes the user
+# the owner of the runs it starts, so any API worker can follow them.
 CALLER_IDENTITY = "api"
 
 _directory: RemoteAgentDirectory | None = None
@@ -33,6 +35,7 @@ def build_remote_agent_directory(nats: Any | None) -> RemoteAgentDirectory:
             nats.nats_url,
             lambda: issue_service_token(CALLER_IDENTITY, nats.jwt_secret),
             timeout=30,
+            forward_user=True,
         )
         return DiscoveryClient(transport, nats.discovery.project)
 

@@ -2,7 +2,7 @@
 
 Ids are ``<module_id>`` and ``<module_id>/<instance_id>`` (neither may contain
 ``/``). Reading an instance shows its descriptor as JSON. Deleting evicts the
-registration (``DiscoveryClient.evict``, admin identities only): a live module
+registration (``DiscoveryClient.evict``, ``discovery:Evict``): a live module
 registers again under the same instance id on its next heartbeat, so eviction is
 for crashed or stuck registrations. Nothing is written here: modules register
 themselves.
@@ -269,7 +269,7 @@ class DiscoveryResources:
             if code == "PERMISSION_DENIED":
                 raise SourceUnavailable(
                     SERVICE,
-                    "discovery refused the eviction: this API's identity is not one "
-                    "of its admin identities",
+                    "discovery refused the eviction: the signed-in user may not "
+                    "evict this module (discovery:Evict)",
                 ) from exc
             raise _unavailable(exc) from exc

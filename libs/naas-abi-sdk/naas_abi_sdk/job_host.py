@@ -18,6 +18,7 @@ import contextlib
 import hashlib
 import json
 import logging
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -142,6 +143,27 @@ async def ensure_stream(js: Any, project: str) -> None:
         await js.update_stream(current)
 
 
+# (operation "trigger" | "cancel", job, run id, headers, stored at or None):
+# raises RPCError when the caller may not. Scheduled ("cron", "every") and
+# "event" triggers are the host's own and are not asked about: until broker
+# permissions (#60) restrict who may publish on a trigger subject, their kind
+# header is trusted.
+JobAuthorizer = Callable[
+    [str, str, str, Mapping[str, str], "datetime | None"], Awaitable[None]
+]
+# Codes that refuse a trigger for good; anything else is retried later.
+REFUSALS = frozenset(
+    {
+        "PERMISSION_DENIED",
+        "UNAUTHENTICATED",
+        "NOT_FOUND",
+        "JOB_NOT_FOUND",
+        "RUN_NOT_FOUND",
+        "INVALID_ARGUMENT",
+    }
+)
+
+
 class JobHost:
     def __init__(
         self,
@@ -162,7 +184,13 @@ class JobHost:
         retention: JobRetention | None = DEFAULT_RETENTION,
         lost_after_seconds: float = 300.0,
         completion_error_after_seconds: float = 60.0,
+        authorize: JobAuthorizer | None = None,
     ):
+        """``authorize``: asks whether the caller named by a manual trigger or a
+        cancel may trigger the job or cancel the run (discovery:TriggerJob,
+        CancelJobRun). Every host the SDK and the engine start has one; without
+        it (tests of the host alone) nothing is authorized."""
+        self.authorize = authorize
         self.transport, self.documents = transport, documents
         self.module_id, self.project = module_id, project
         self.handlers, self.instance_id = handlers, instance_id
@@ -501,9 +529,10 @@ class JobHost:
         if name not in self.handlers:
             raise ValueError(f"Module {self.module_id} has no job named {name!r}")
         descriptor = self.handlers[name][0]
+        # The module's own trigger: as the module (or the engine), for no user.
         return await JobProxy(
             self.transport, self.project, self.module_id, descriptor, self.documents
-        ).trigger(payload, idempotency_key=idempotency_key)
+        ).trigger(payload, idempotency_key=idempotency_key, on_behalf_of=False)
 
     # --- upkeep: lost runs and retention ---------------------------------------------------
 
@@ -659,7 +688,17 @@ class JobHost:
         return deleted
 
     async def _on_cancel(self, msg: Any) -> None:
-        self.cancel(msg.data.decode(errors="replace"))
+        run_id = msg.data.decode(errors="replace")
+        job = run_id.rpartition(":")[0]
+        if run_id not in self._running or job not in self.handlers:
+            return
+        if self.authorize is not None:
+            try:
+                await self.authorize("cancel", job, run_id, msg.headers or {}, None)
+            except Exception as exc:  # noqa: BLE001 - a refused cancel changes nothing
+                logger.warning("Job cancel of %s refused: %s", run_id, exc)
+                return
+        self.cancel(run_id)
 
     # --- running one trigger ---------------------------------------------------------------
 
@@ -828,6 +867,41 @@ class JobHost:
         await msg.nak(delay=delay)
         return "DEFERRED"
 
+    async def _refuse(
+        self,
+        msg: Any,
+        run_id: str,
+        descriptor: JobDescriptor,
+        trigger: dict[str, str],
+        error: Exception,
+    ) -> str:
+        """A trigger whose caller may not trigger the job: recorded as failed,
+        never run, never redelivered."""
+        logger.warning("Job trigger %s refused: %s", run_id, error)
+        try:
+            await self._save(
+                run_id,
+                {
+                    "job": descriptor.name,
+                    "run_id": run_id,
+                    "module_id": self.module_id,
+                    "status": "FAILED",
+                    "attempt": 0,
+                    "max_attempts": descriptor.max_attempts,
+                    "trigger": trigger,
+                    "instance": self.instance_id,
+                    "sequence": msg.metadata.sequence.stream,
+                    "fired_at": _fired_at(msg),
+                    "finished_at": _now(),
+                    "error": f"Trigger refused: {getattr(error, 'code', '') or error}",
+                },
+                replace=True,
+            )
+        except Exception as exc:  # noqa: BLE001 - logged and redelivered by _defer
+            return await self._defer(msg, run_id, msg.metadata.num_delivered, exc)
+        await msg.term()
+        return "FAILED"
+
     async def _handle_delivery(
         self, descriptor: JobDescriptor, handler: Any, msg: Any
     ) -> str:
@@ -865,6 +939,15 @@ class JobHost:
         trigger = {"kind": headers.get(TRIGGER_HEADER, "manual")}
         if headers.get("Nats-Scheduler"):
             trigger["scheduler"] = headers["Nats-Scheduler"]
+        if attempt == 1 and trigger["kind"] == "manual" and self.authorize is not None:
+            try:
+                await self.authorize(
+                    "trigger", descriptor.name, run_id, headers, _stored_at(msg)
+                )
+            except Exception as exc:  # noqa: BLE001 - refused, or retried below
+                if getattr(exc, "code", "") not in REFUSALS:
+                    return await self._defer(msg, run_id, delivery, exc)
+                return await self._refuse(msg, run_id, descriptor, trigger, exc)
         try:
             payload = await self._payload(msg)
             await self._save(

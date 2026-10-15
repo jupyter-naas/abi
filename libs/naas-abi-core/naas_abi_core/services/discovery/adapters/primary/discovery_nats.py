@@ -6,17 +6,16 @@ from typing import Any
 from google.protobuf.message import DecodeError
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import use_call_context
-from naas_abi_core.engine.nats_auth import (
-    InvalidServiceTokenError,
-    verify_service_token,
-)
+from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
 from naas_abi_core.engine.nats_dispatch import max_concurrent_requests
 from naas_abi_core.engine.nats_identity import caller_context, for_request, refusal
 from naas_abi_core.engine.nats_sessions import stop_delivery
+from naas_abi_core.services.discovery.caller import caller_of
 from naas_abi_core.services.discovery.discovery_service import (
     DiscoveryError,
     DiscoveryService,
 )
+from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 from naas_abi_sdk import overflow
 from naas_abi_sdk.concurrency import ConcurrentCalls
@@ -29,10 +28,11 @@ OPERATIONS: dict[str, tuple[Any, Any, bool]] = {
     "authorize_agent": (pb.AuthorizeAgentRequest, pb.AuthorizeAgentResponse, True),
     "authorize_model": (pb.AuthorizeModelRequest, pb.AuthorizeModelResponse, True),
     "authorize_app": (pb.AuthorizeAppRequest, pb.AuthorizeAppResponse, True),
+    "authorize_job": (pb.AuthorizeJobRequest, pb.AuthorizeJobResponse, True),
     "register": (pb.RegisterRequest, pb.RegisterResponse, True),
     "renew": (pb.RenewRequest, pb.RenewResponse, True),
     "unregister": (pb.UnregisterRequest, pb.UnregisterResponse, True),
-    # Admin identities only (DiscoveryService.admin_identities).
+    # discovery:Evict on the instance's module.
     "evict": (pb.EvictRequest, pb.EvictResponse, True),
     "get_module": (pb.GetModuleRequest, pb.GetModuleResponse, False),
     "list_modules": (pb.ListModulesRequest, pb.ListModulesResponse, False),
@@ -94,21 +94,26 @@ class DiscoveryNATS:
                     "PAYLOAD_TOO_LARGE", "Discovery request exceeds limit"
                 )
             request = request_type.FromString(msg.data)
-            caller = (
-                verify_service_token(request.caller_token, self.secret)
-                if operation in ("authorize_agent", "authorize_model", "authorize_app")
+            # The caller a hosting module vouches for: its token and the user
+            # it acts for, verified here as a kernel endpoint verifies its own.
+            forwarded = (
+                caller_of(
+                    request.caller_token,
+                    request.caller_on_behalf_of,
+                    self.secret,
+                    at=getattr(request, "stored_at", 0.0),
+                )
+                if operation.startswith("authorize_")
                 else None
             )
             with use_call_context(for_request(context, request)):
                 handler = getattr(self.service, operation)
-                response = (
-                    await handler(request, owner)
-                    if mutation
-                    else await handler(request)
-                )
-            if caller is not None:
-                response.caller_identity = caller
-                response.caller_admin = caller in self.service.admin_identities
+                if forwarded is not None:
+                    response = await handler(request, owner, forwarded)
+                elif mutation:
+                    response = await handler(request, owner)
+                else:
+                    response = await handler(request)
         except InvalidServiceTokenError as exc:
             response.error.code, response.error.message = (
                 "UNAUTHENTICATED",
@@ -121,6 +126,11 @@ class DiscoveryNATS:
             )
         except DiscoveryError as exc:
             response.error.code, response.error.message = exc.code, str(exc)
+        except PermissionDeniedError as exc:
+            response.error.code, response.error.message = (
+                "PERMISSION_DENIED",
+                str(exc),
+            )
         except Exception:  # noqa: BLE001 - translate adapter failures at the RPC boundary
             logger.exception("Discovery request failed")
             response.error.code, response.error.message = (

@@ -37,8 +37,14 @@ def build_remote_app_directory(nats: Any | None) -> RemoteAppDirectory:
         def token() -> str:
             return issue_service_token(CALLER_IDENTITY, nats.jwt_secret)
 
-        transport = Transport(nats.nats_url, token, timeout=REQUEST_TIMEOUT_SECONDS)
-        uploads = Transport(nats.nats_url, token, timeout=UPLOAD_TIMEOUT_SECONDS)
+        # On behalf of the signed-in user: the app host learns the user from
+        # discovery, which verifies it (never from HttpRequest.user_id).
+        transport = Transport(
+            nats.nats_url, token, timeout=REQUEST_TIMEOUT_SECONDS, forward_user=True
+        )
+        uploads = Transport(
+            nats.nats_url, token, timeout=UPLOAD_TIMEOUT_SECONDS, forward_user=True
+        )
         project = nats.discovery.project
         return DiscoveryClient(transport, project), transport, uploads, project
 

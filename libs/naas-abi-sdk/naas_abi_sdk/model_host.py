@@ -18,6 +18,7 @@ from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 from naas_abi_proto.model_registry.v1 import model_registry_pb2 as pb
 
 from naas_abi_sdk import overflow
+from naas_abi_sdk.call_context import ON_BEHALF_OF_HEADER
 from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.model_codec import decode_json, decode_message, encode_message
@@ -98,6 +99,9 @@ class ModelHost:
                     lease_token=self.session.lease_token,
                     model_name=name,
                     caller_token=(msg.headers or {}).get("Nats-Auth-Token", ""),
+                    caller_on_behalf_of=(msg.headers or {}).get(
+                        ON_BEHALF_OF_HEADER, ""
+                    ),
                 ),
                 discovery_pb.AuthorizeModelResponse,
             )

@@ -41,7 +41,8 @@ attached or implicit, each named TRANSITIONAL in the code, in its description an
    - It allows every action of the kernel services a module can declare (object storage, key-value, secret,
      cache, vector store, triple store, event, activity log, email, model registry, discovery, source control,
      coding environment), on any resource. Its declared services are not visible to the engine, so it gets
-     all of them.
+     all of them. Subtask 5 denies it `discovery:Evict`: evicting another module's registration is the
+     platform's.
    - It allows nothing on `iam:*`.
    - Once IAM records the account (subtask 6 creates it), the implicit policy stops: the account holds what
      is attached to it.

@@ -107,6 +107,17 @@ class Transport:
                 else:
                     await self.connection.close()
 
+    def auth_headers(self) -> dict[str, str]:
+        """This transport's credentials for a message it sends itself: its
+        token, and the current call's user when it forwards users."""
+        token = self.token() if callable(self.token) else self.token
+        if not token or "\r" in token or "\n" in token:
+            raise ValueError("A nonempty service token without newlines is required")
+        headers = {"Nats-Auth-Token": token}
+        if self.forward_user:
+            headers.update(on_behalf_of_header(current_call_context()))
+        return headers
+
     async def call(
         self,
         subject: str,
@@ -125,12 +136,7 @@ class Transport:
         if not context.workspace_id and current.workspace_id:
             context.workspace_id = current.workspace_id
         context.timeout_ms = int(self.timeout * 1000)
-        token = self.token() if callable(self.token) else self.token
-        if not token or "\r" in token or "\n" in token:
-            raise ValueError("A nonempty service token without newlines is required")
-        headers = {"Nats-Auth-Token": token}
-        if self.forward_user:
-            headers.update(on_behalf_of_header(current))
+        headers = self.auth_headers()
         payload = outgoing.SerializeToString()
         # The span covers the whole exchange; the trace travels in the headers.
         with client_span(

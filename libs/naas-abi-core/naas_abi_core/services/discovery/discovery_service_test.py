@@ -340,29 +340,36 @@ def test_platform_admins_evict_and_the_owner_must_register_again():
     asyncio.run(scenario())
 
 
-def test_only_admin_identities_evict():
+def test_evicting_is_a_policy_not_an_identity():
+    from naas_abi_core.engine.call_context import as_service_account
+    from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+    from naas_abi_core.services.iam.tests.authorization_contract import (
+        contract_iam,
+    )
+    from naas_abi_core.services.iam.tests.iam_harness import IAMHarness, statement
+
     async def scenario():
-        service = DiscoveryService(
-            MemoryRegistry(), clock=lambda: 0.0, admin_identities=("ops",)
+        iam = contract_iam()
+        h = IAMHarness(iam)
+        ops, viewer = h.service_account("ops"), h.service_account("viewer")
+        h.grant(
+            ops.id,
+            statement("Allow", ["discovery:Evict"], ["abi:-:-:discovery:module/*"]),
         )
-        await service.register(registration("research", "r-1"), "research")
-
-        for caller in ("research", "api", "engine"):
-            with pytest.raises(DiscoveryError, match="PERMISSION_DENIED"):
-                await service.evict(pb.EvictRequest(instance_id="r-1"), caller)
-        await service.evict(pb.EvictRequest(instance_id="r-1"), "ops")
-
-    asyncio.run(scenario())
-
-
-def test_default_admins_are_the_api_and_the_engine():
-    async def scenario():
-        service = DiscoveryService(MemoryRegistry(), clock=lambda: 0.0)
-        for i, caller in enumerate(("api", "engine")):
-            await service.register(registration("m", f"m-{i}"), "m")
-            await service.evict(pb.EvictRequest(instance_id=f"m-{i}"), caller)
-        with pytest.raises(DiscoveryError, match="PERMISSION_DENIED"):
-            await service.evict(pb.EvictRequest(instance_id="m-0"), "m")
+        h.grant(
+            viewer.id,
+            statement("Allow", ["discovery:GetModule"], ["abi:-:-:discovery:module/*"]),
+        )
+        service = DiscoveryService(MemoryRegistry(), clock=lambda: 0.0, iam=iam)
+        with as_service_account("engine"):
+            await service.register(registration("research", "r-1"), "research")
+        # Can see the module, may not evict: denied. Cannot see it: not found.
+        with h.as_(viewer), pytest.raises(PermissionDeniedError):
+            await service.evict(pb.EvictRequest(instance_id="r-1"), "viewer")
+        with h.as_(h.user()), pytest.raises(DiscoveryError, match="INSTANCE_NOT_FOUND"):
+            await service.evict(pb.EvictRequest(instance_id="r-1"), "someone")
+        with h.as_(ops):
+            await service.evict(pb.EvictRequest(instance_id="r-1"), "ops")
 
     asyncio.run(scenario())
 
@@ -382,11 +389,6 @@ def test_evicting_an_unknown_or_malformed_instance_is_refused(instance_id, code)
             await service.evict(pb.EvictRequest(instance_id=instance_id), "api")
 
     asyncio.run(scenario())
-
-
-def test_admin_identities_must_be_named():
-    with pytest.raises(ValueError):
-        DiscoveryService(MemoryRegistry(), admin_identities=("",))
 
 
 def test_rollout_waits_for_the_cohort_then_drains_the_previous_generation():

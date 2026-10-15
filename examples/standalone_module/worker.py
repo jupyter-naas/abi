@@ -196,11 +196,13 @@ class ABIModule(BaseModule):
                 "attributes": {"source": "worker"},
             },
         )
+        # Recorded under the caller's identity (the token's), not "demo".
         events = (
-            await self.call("activity_log", "query", actor_id="demo")
+            await self.call("activity_log", "query", actor_id="standalone-demo")
         ).events.events
         assert any(e.event_type == "exercise" for e in events)
-        assert "demo" in (await self.call("activity_log", "list_actors")).actors.actors
+        actors = (await self.call("activity_log", "list_actors")).actors.actors
+        assert "standalone-demo" in actors
         await self.call("activity_log", "shutdown")
 
     async def event(self):

@@ -484,7 +484,7 @@ def _rpc(owner, operation, message):
     return msg, sent
 
 
-def test_platform_admins_may_cancel_another_callers_run():
+def test_discovery_decides_who_may_poll_or_cancel_a_run():
     from naas_abi_sdk.agent_host import _hash
 
     async def scenario():
@@ -494,13 +494,15 @@ def test_platform_admins_may_cancel_another_callers_run():
         await owner._submit("agent", key, "caller", request())
         cancel = pb.CancelRequest(invocation_id="id", output_format=2)
 
-        # Another caller is refused.
+        # Without discovery's decision on the run, another caller cannot see it.
         owner._authorize = AsyncMock(return_value=("someone", False))
         msg, sent = _rpc(owner, "cancel", cancel)
         await owner._handle_operation("agent", "cancel", msg)
-        assert pb.CancelResponse.FromString(sent[0]).error.code == "PERMISSION_DENIED"
+        assert (
+            pb.CancelResponse.FromString(sent[0]).error.code == "INVOCATION_NOT_FOUND"
+        )
 
-        # A platform admin (discovery's admin identities) may cancel it.
+        # Discovery allowed this caller to cancel it (discovery:CancelAgentRun).
         task = owner.runs[key].task
         owner._authorize = AsyncMock(return_value=("api", True))
         msg, sent = _rpc(owner, "cancel", cancel)
@@ -511,12 +513,8 @@ def test_platform_admins_may_cancel_another_callers_run():
         assert (await docs.get(owner.runs_collection, key)).data[
             "status"
         ] == "CANCELLED"
-
-        # Admin rights cover cancelling only, not reading someone's output.
-        status = pb.StatusRequest(invocation_id="id", output_format=2)
-        msg, sent = _rpc(owner, "status", status)
-        await owner._handle_operation("agent", "status", msg)
-        assert pb.StatusResponse.FromString(sent[0]).error.code == "PERMISSION_DENIED"
+        # The run's recorded owner went to discovery with the poll.
+        assert owner._authorize.call_args.args[2:] == ("cancel", "id", "caller")
 
     asyncio.run(scenario())
 
@@ -532,7 +530,7 @@ def _token(identity="caller", expires_in=3600.0):
     return f"header.{body.decode()}.signature"
 
 
-def authorizing(identity="caller", admin=False):
+def authorizing(identity="caller", decided=False):
     """A host whose discovery authorizes every call, counting them."""
     from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 
@@ -540,29 +538,43 @@ def authorizing(identity="caller", admin=False):
     owner.session.lease_token = "l" * 32
     owner.session.client._call = AsyncMock(
         return_value=discovery_pb.AuthorizeAgentResponse(
-            caller_identity=identity, caller_admin=admin
+            caller_identity=identity, run_authorized=decided
         )
     )
     return owner
 
 
+def _ask(owner, agent, token, submit, on_behalf_of=""):
+    headers = {"Nats-Auth-Token": token}
+    if on_behalf_of:
+        headers["Abi-On-Behalf-Of"] = on_behalf_of
+    if submit:
+        return owner._authorize(agent, headers, "submit")
+    return owner._authorize(agent, headers, "status", "id", "caller")
+
+
 def test_polls_reuse_discovery_authorization_and_submits_always_ask():
     async def scenario():
-        owner = authorizing(admin=True)
+        owner = authorizing(decided=True)
         token = _token()
         for _ in range(5):  # status and event polls
-            assert await owner._authorize("agent", token, False) == ("caller", True)
+            assert await _ask(owner, "agent", token, False) == ("caller", True)
         assert owner.session.client._call.await_count == 1
         # Every submit asks discovery (it checks the provider is READY).
-        await owner._authorize("agent", token, True)
-        await owner._authorize("agent", token, True)
+        await _ask(owner, "agent", token, True)
+        await _ask(owner, "agent", token, True)
         assert owner.session.client._call.await_count == 3
         # Per caller token and agent.
-        await owner._authorize("other-agent", token, False)
-        await owner._authorize("agent", _token(expires_in=60), False)
+        await _ask(owner, "other-agent", token, False)
+        await _ask(owner, "agent", _token(expires_in=60), False)
         assert owner.session.client._call.await_count == 5
-        await owner._authorize("agent", token, False)
+        await _ask(owner, "agent", token, False)
         assert owner.session.client._call.await_count == 5
+        # Per user the caller acts for.
+        await _ask(owner, "agent", token, False, on_behalf_of="user-1")
+        assert owner.session.client._call.await_count == 6
+        sent = owner.session.client._call.call_args.args[1]
+        assert (sent.caller_on_behalf_of, sent.run_owner) == ("user-1", "caller")
 
     asyncio.run(scenario())
 
@@ -571,11 +583,11 @@ def test_an_authorization_ends_when_the_token_expires():
     async def scenario():
         owner = authorizing()
         expiring = _token(expires_in=0.05)
-        await owner._authorize("agent", expiring, False)
-        await owner._authorize("agent", expiring, False)
+        await _ask(owner, "agent", expiring, False)
+        await _ask(owner, "agent", expiring, False)
         assert owner.session.client._call.await_count == 1
         await asyncio.sleep(0.1)  # well within the reuse window
-        await owner._authorize("agent", expiring, False)
+        await _ask(owner, "agent", expiring, False)
         assert owner.session.client._call.await_count == 2
 
     asyncio.run(scenario())
@@ -587,11 +599,11 @@ def test_an_authorization_is_reused_for_a_short_window(monkeypatch):
     async def scenario():
         owner = authorizing()
         lasting = _token()
-        await owner._authorize("agent", lasting, False)
-        await owner._authorize("agent", lasting, False)
+        await _ask(owner, "agent", lasting, False)
+        await _ask(owner, "agent", lasting, False)
         assert owner.session.client._call.await_count == 1
         await asyncio.sleep(0.1)
-        await owner._authorize("agent", lasting, False)
+        await _ask(owner, "agent", lasting, False)
         assert owner.session.client._call.await_count == 2
 
     asyncio.run(scenario())
@@ -603,13 +615,13 @@ def test_refusals_and_unreadable_tokens_are_never_reused():
         owner.session.client._call.side_effect = RPCError("UNAUTHENTICATED", "bad")
         for _ in range(2):
             with pytest.raises(RPCError, match="UNAUTHENTICATED"):
-                await owner._authorize("agent", _token(), False)
+                await _ask(owner, "agent", _token(), False)
         assert owner.session.client._call.await_count == 2
 
         owner = authorizing()
         for token in ("opaque", "a.bm90IGpzb24.c", _token(expires_in=-1)):
-            await owner._authorize("agent", token, False)
-            await owner._authorize("agent", token, False)
+            await _ask(owner, "agent", token, False)
+            await _ask(owner, "agent", token, False)
         assert owner.session.client._call.await_count == 6
 
     asyncio.run(scenario())
@@ -622,10 +634,10 @@ def test_remembered_authorizations_are_bounded(monkeypatch):
         owner = authorizing()
         tokens = [_token(f"caller-{i}") for i in range(5)]
         for token in tokens:
-            await owner._authorize("agent", token, False)
+            await _ask(owner, "agent", token, False)
         assert len(owner._authorized) == 3
         # The most recent ones are kept.
-        await owner._authorize("agent", tokens[-1], False)
+        await _ask(owner, "agent", tokens[-1], False)
         assert owner.session.client._call.await_count == 5
 
     asyncio.run(scenario())

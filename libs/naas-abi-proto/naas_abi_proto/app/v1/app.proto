@@ -20,7 +20,9 @@ message HttpRequest {
   bytes body = 7;
   // Where Nexus mounts the app, e.g. /app-html/remote/<module_id>/<app>.
   string root_path = 8;
-  // The signed-in Nexus user; empty for an ABI_API_KEY caller.
+  // Request data, never identity: the app host replaces it with the user the
+  // caller's verified credentials act for (discovery's AuthorizeApp), empty
+  // for a caller acting for nobody.
   string user_id = 9;
   // The body continues after `body` (its first bytes): pull the rest from
   // body_inbox. The total is at most max_body_bytes.

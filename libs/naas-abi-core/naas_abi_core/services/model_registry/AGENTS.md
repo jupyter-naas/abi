@@ -81,6 +81,28 @@ Covers registration, provider pinning, fallback, off-catalog routing, defaults, 
 - **Off-catalog** model (provider knows how to build it on demand): call `register_chat_provider(provider, factory)` (or `register_embedding_provider`). The factory receives the canonical/model ID string and returns the live instance.
 - Always call `validate_defaults()` at startup if you set defaults via `InMemory(default_chat_model=..., default_embedding_model=...)`.
 
+## Authorization (`iam_catalog.py`, RFC §6.4)
+
+Wired with IAM (the engine's owner always is; the NATS client never is), every
+operation is checked in the domain service, on `model/<canonical id>`
+(platform-level). An invisible model is `ModelNotFoundError` (`MODEL_NOT_FOUND`).
+
+- `get`, `get_chat_model`, `get_embedding_model` (and the defaults): `Resolve`.
+- `list_models`, `list_canonical_ids`, `list_registered_models`: filtered by
+  `ListModels`.
+- Every invocation of a chat model the registry hands out needs `Chat`, in the
+  context of the call that invokes it: a LangChain callback attached once per
+  model (`_ChatGate`). Agents built once, at boot, as the engine are still
+  checked for each user that chats.
+- The NATS endpoint resolves a reference with `resolve_ref(..., action=)`, which
+  checks only that operation's action (`Resolve`, `Chat`, `ChatStream`, `Embed`)
+  and returns the run configuration marking the invocation as authorized, so
+  the callback does not ask for `Chat` again. Remote callers never pass run
+  configuration, so they cannot set that mark.
+- In process, an embedding model is used directly once resolved: its use is
+  checked as `Resolve`; `Embed` is checked over NATS.
+- Registering models is boot work and is not checked.
+
 ## Remote registry and inference
 
 `adapters/primary/model_registry_nats.py` wraps the owning IModelRegistry and

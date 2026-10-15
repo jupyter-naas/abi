@@ -2,8 +2,10 @@
 
 from naas_abi_core.engine import nats_runtime
 from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_identity import ON_BEHALF_OF_IDENTITIES
 from naas_abi_core.engine.nats_naming import connection_name
 from naas_abi_core.models.Model import ChatModel, EmbeddingModel
+from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_core.services.model_registry.ModelRegistryPort import ModelNotFoundError
 from naas_abi_core.services.model_registry.ModelRegistryService import (
     ModelRegistryService,
@@ -14,15 +16,26 @@ from naas_abi_sdk.transport import RPCError, Transport
 
 
 class ModelRegistryNATSClient(ModelRegistryService):
-    def __init__(self, owner: ModelRegistryService, url: str, secret: str):
+    """Never wired with IAM: the serving engine's registry authorizes each call,
+    as ``engine`` acting for the current call's user."""
+
+    def __init__(
+        self,
+        owner: ModelRegistryService,
+        url: str,
+        secret: str,
+        identity: str = "engine",
+    ):
         super().__init__()
         self.owner = owner
         self.transport = Transport(
             url,
-            lambda: issue_service_token("engine", secret),
+            lambda: issue_service_token(identity, secret),
             timeout=120,
-            forward_user=True,  # the registry is a kernel service; engine is trusted
-            name=connection_name("abi-engine:model_registry"),
+            # The registry is a kernel service; engine and api are trusted to
+            # name the user they act for.
+            forward_user=identity in ON_BEHALF_OF_IDENTITIES,
+            name=connection_name(f"abi-{identity}:model_registry"),
         )
         self.remote = RemoteRegistry(ModelRegistryClient(self.transport))
 
@@ -32,6 +45,8 @@ class ModelRegistryNATSClient(ModelRegistryService):
         except RPCError as exc:
             if exc.code == "MODEL_NOT_FOUND":
                 raise ModelNotFoundError(str(exc)) from exc
+            if exc.code == "PERMISSION_DENIED":
+                raise PermissionDeniedError(message=str(exc)) from exc
             raise
 
     @staticmethod

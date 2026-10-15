@@ -27,7 +27,8 @@ from naas_abi_core.engine.nats_transfer import (
     same_caller,
     stream_thread,
 )
-from naas_abi_core.models.Model import ChatModel, EmbeddingModel
+from naas_abi_core.models.Model import EmbeddingModel
+from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_core.services.model_registry.ModelRegistryPort import (
     DefaultModelNotResolvedError,
     IModelRegistry,
@@ -310,6 +311,8 @@ class ModelRegistryNATS(SessionHost):
                 "DEADLINE_EXCEEDED",
                 "Model request timed out; it was not replayed",
             )
+        except PermissionDeniedError as exc:
+            response.error.code, response.error.message = "PERMISSION_DENIED", str(exc)
         except PermissionError:
             response.error.code, response.error.message = (
                 "PERMISSION_DENIED",
@@ -339,9 +342,9 @@ class ModelRegistryNATS(SessionHost):
         if msg.reply:
             await reply(msg, payload)
 
-    def _resolve(self, ref):
-        if ref.kind not in ("", "chat", "embedding"):
-            raise ValueError("Model kind must be chat or embedding")
+    def _resolve(self, ref, action="Resolve"):
+        """``(canonical id, model, run configuration)`` of a reference, checked
+        in the domain service with this operation's ``action``."""
         if len(ref.canonical_id) > 512 or len(ref.provider) > 128:
             raise ValueError("Model identifier is too long")
         canonical = ref.canonical_id
@@ -352,32 +355,14 @@ class ModelRegistryNATS(SessionHost):
                 canonical = self.registry.default_embedding_model_id
             if not canonical:
                 raise DefaultModelNotResolvedError()
-        lookup = {
-            "chat": self.registry.get_chat_model,
-            "embedding": self.registry.get_embedding_model,
-            "": self.registry.get,
-        }[ref.kind]
-        if ref.model_id:
-            for cid, candidate in self.registry.list_registered_models():
-                if (
-                    cid == canonical
-                    and candidate.provider == ref.provider
-                    and candidate.model_id == ref.model_id
-                ):
-                    if (
-                        ref.kind == "chat" and not isinstance(candidate, ChatModel)
-                    ) or (
-                        ref.kind == "embedding"
-                        and not isinstance(candidate, EmbeddingModel)
-                    ):
-                        raise ModelNotFoundError()
-                    return canonical, candidate
-        model = lookup(canonical, ref.provider or None)
-        if ref.model_id and (
-            model.model_id != ref.model_id or str(model.provider) != ref.provider
-        ):
-            raise ModelNotFoundError()
-        return canonical, model
+        model, config = self.registry.resolve_ref(
+            canonical,
+            kind=ref.kind,
+            provider=ref.provider or None,
+            model_id=ref.model_id,
+            action=action,
+        )
+        return canonical, model, config
 
     def _descriptor(self, canonical, model):
         metadata = {
@@ -402,7 +387,7 @@ class ModelRegistryNATS(SessionHost):
             metadata_json=encode_json(metadata),
         )
 
-    async def _chat(self, request):
+    async def _chat(self, request, action="Chat"):
         if request.ref.kind != "chat" or not request.messages:
             raise ValueError("Chat requires a chat reference and messages")
         messages = [decode_message(message) for message in request.messages]
@@ -430,7 +415,9 @@ class ModelRegistryNATS(SessionHost):
             or any(k.startswith("_") for k in (*options, *tool_options))
         ):
             raise ValueError("Runtime configuration is not a generation option")
-        canonical, wrapper = await asyncio.to_thread(self._resolve, request.ref)
+        canonical, wrapper, config = await asyncio.to_thread(
+            self._resolve, request.ref, action
+        )
         model = wrapper.model
         if request.tools_json:
             tools = [decode_json(tool) for tool in request.tools_json]
@@ -439,7 +426,7 @@ class ModelRegistryNATS(SessionHost):
             model = model.bind_tools(tools, **tool_options)
         elif tool_options:
             raise ValueError("Tool options require tool definitions")
-        options = {**options, "stop": list(request.stop) or None}
+        options = {**options, "stop": list(request.stop) or None, "config": config}
         return canonical, wrapper, model, messages, options
 
     async def _produce(self, stream, model, messages, options):
@@ -472,6 +459,8 @@ class ModelRegistryNATS(SessionHost):
 
     @staticmethod
     def _transfer_error(exc):
+        if isinstance(exc, PermissionDeniedError):
+            return "PERMISSION_DENIED", str(exc)
         if isinstance(
             exc,
             (
@@ -497,7 +486,9 @@ class ModelRegistryNATS(SessionHost):
             response = await self._execute(operation, request, "")
             yield response.SerializeToString()
             return
-        canonical, wrapper, model, messages, options = await self._chat(request)
+        canonical, wrapper, model, messages, options = await self._chat(
+            request, "ChatStream"
+        )
         with _model_span("stream", canonical, wrapper, len(messages)) as span:
             usage: dict[str, int] = {}
             iterator = model.astream(messages, **options)
@@ -533,7 +524,7 @@ class ModelRegistryNATS(SessionHost):
                 or "",
             )
         if operation == "resolve":
-            cid, model = await asyncio.to_thread(self._resolve, request.ref)
+            cid, model, _ = await asyncio.to_thread(self._resolve, request.ref)
             return pb.ResolveResponse(model=self._descriptor(cid, model))
         if operation == "stream_close":
             stream = self.streams.get(request.stream_id)
@@ -586,7 +577,9 @@ class ModelRegistryNATS(SessionHost):
                     or (request.query and len(request.texts) != 1)
                 ):
                     raise ValueError("Embedding requires 1..1024 texts (one for query)")
-                canonical, wrapper = await asyncio.to_thread(self._resolve, request.ref)
+                canonical, wrapper, _ = await asyncio.to_thread(
+                    self._resolve, request.ref, "Embed"
+                )
                 with _model_span("embed", canonical, wrapper, len(request.texts)):
                     vectors = (
                         [await wrapper.model.aembed_query(request.texts[0])]
@@ -601,7 +594,8 @@ class ModelRegistryNATS(SessionHost):
                     vectors=[pb.Vector(values=vector) for vector in vectors]
                 )
             canonical, wrapper, model, messages, options = await self._chat(
-                request.chat if operation == "stream_open" else request
+                request.chat if operation == "stream_open" else request,
+                "ChatStream" if operation == "stream_open" else "Chat",
             )
             if operation == "chat":
                 with _model_span("chat", canonical, wrapper, len(messages)) as span:

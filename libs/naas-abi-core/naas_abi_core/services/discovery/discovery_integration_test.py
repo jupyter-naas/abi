@@ -178,13 +178,39 @@ def test_two_registry_owners_do_not_duplicate_mutations(broker):  # noqa: F811
 
 
 def test_admins_evict_a_live_instance_which_registers_again(broker):  # noqa: F811
+    """Evicting is discovery:Evict, a policy: api holds it, a module whose
+    policy covers only its own registration does not."""
     discovery = pytest.importorskip("naas_abi_sdk.discovery")
     transport_module = pytest.importorskip("naas_abi_sdk.transport")
+    from naas_abi_core.services.iam.tests.authorization_contract import (
+        contract_iam,
+    )
+    from naas_abi_core.services.iam.tests.iam_harness import IAMHarness, statement
+
+    iam = contract_iam()
+    harness = IAMHarness(iam)
+    research = harness.service_account("research")
+    harness.grant(
+        research.id,
+        statement(
+            "Allow",
+            [
+                "discovery:Register",
+                "discovery:Renew",
+                "discovery:Unregister",
+                "discovery:GetModule",
+                "discovery:ListModules",
+            ],
+            ["abi:-:-:discovery:module/evict/research"],
+        ),
+    )
 
     async def scenario():
         url, _ = broker
         nc = await nats.connect(url)
-        primary = await start_discovery(nc, SECRET, project="evict", lease_seconds=2)
+        primary = await start_discovery(
+            nc, SECRET, project="evict", lease_seconds=2, iam=iam
+        )
         module = transport_module.Transport(
             url, issue_service_token("research", SECRET), timeout=2
         )

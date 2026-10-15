@@ -38,7 +38,8 @@ def test_authentication_precedes_domain_mutations_and_binds_caller():
     asyncio.run(scenario())
 
 
-def test_evict_is_an_authenticated_admin_mutation():
+def test_evict_is_an_authenticated_mutation_decided_by_iam():
+    from naas_abi_core.engine.call_context import as_service_account
     from naas_abi_core.services.discovery.adapters.primary.discovery_nats import (
         OPERATIONS,
     )
@@ -47,10 +48,18 @@ def test_evict_is_an_authenticated_admin_mutation():
         MemoryRegistry,
         registration,
     )
+    from naas_abi_core.services.iam.tests.authorization_contract import (
+        contract_iam,
+    )
+    from naas_abi_core.services.iam.tests.iam_harness import IAMHarness
 
     async def scenario():
-        service = DiscoveryService(MemoryRegistry())
-        await service.register(registration("research", "r-1"), "research")
+        iam = contract_iam()
+        # Recorded, holding no policy: it may not evict, nor see the module.
+        IAMHarness(iam).service_account("research")
+        service = DiscoveryService(MemoryRegistry(), project="test", iam=iam)
+        with as_service_account("engine"):
+            await service.register(registration("research", "r-1"), "research")
         primary = DiscoveryNATS(service, SECRET, "test")
 
         async def evict_as(identity):
@@ -65,7 +74,7 @@ def test_evict_is_an_authenticated_admin_mutation():
             return pb.EvictResponse.FromString(msg._client.publish.call_args.args[1])
 
         assert OPERATIONS["evict"][2] is True
-        assert (await evict_as("research")).error.code == "PERMISSION_DENIED"
+        assert (await evict_as("research")).error.code == "INSTANCE_NOT_FOUND"
         evicted = await evict_as("api")
         assert evicted.error.code == ""
         assert evicted.instance.instance_id == "r-1"
@@ -97,19 +106,19 @@ def test_an_overflow_uploaded_request_is_refused_as_too_large():
     asyncio.run(scenario())
 
 
-def test_authorize_agent_names_the_caller_and_whether_it_is_an_admin():
+def test_authorize_agent_verifies_the_forwarded_caller_and_its_user():
     async def scenario():
         service = AsyncMock()
-        service.admin_identities = frozenset({"api", "engine"})
         service.authorize_agent.return_value = pb.AuthorizeAgentResponse()
         primary = DiscoveryNATS(service, SECRET, "test")
 
-        async def authorize(caller):
+        async def authorize(caller, on_behalf_of=""):
             msg = SimpleNamespace(
                 data=pb.AuthorizeAgentRequest(
                     instance_id="r-1",
                     agent_name="Researcher",
                     caller_token=issue_service_token(caller, SECRET),
+                    caller_on_behalf_of=on_behalf_of,
                 ).SerializeToString(),
                 headers={"Nats-Auth-Token": issue_service_token("research", SECRET)},
                 reply="reply",
@@ -120,10 +129,20 @@ def test_authorize_agent_names_the_caller_and_whether_it_is_an_admin():
                 msg._client.publish.call_args.args[1]
             )
 
-        module = await authorize("orchestrator")
-        assert (module.caller_identity, module.caller_admin) == ("orchestrator", False)
-        api = await authorize("api")
-        assert (api.caller_identity, api.caller_admin) == ("api", True)
+        await authorize("orchestrator")
+        _, owner, caller = service.authorize_agent.call_args.args
+        assert (owner, caller.principal.id, caller.on_behalf_of) == (
+            "research",
+            "orchestrator",
+            None,
+        )
+        await authorize("api", "user-1")
+        caller = service.authorize_agent.call_args.args[2]
+        assert (caller.principal.id, caller.user.id) == ("api", "user-1")
+        # Only a trusted identity names the user it acts for.
+        refused = await authorize("orchestrator", "user-1")
+        assert refused.error.code == "UNAUTHENTICATED"
+        assert service.authorize_agent.await_count == 2
 
     asyncio.run(scenario())
 

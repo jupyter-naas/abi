@@ -268,44 +268,56 @@ class RegistryState(_message.Message):
     def __init__(self, records: _Optional[_Iterable[_Union[RegistryRecord, _Mapping]]] = ...) -> None: ...
 
 class AuthorizeAgentRequest(_message.Message):
-    __slots__ = ("context", "instance_id", "lease_token", "agent_name", "caller_token", "new_invocation")
+    __slots__ = ("context", "instance_id", "lease_token", "agent_name", "caller_token", "new_invocation", "caller_on_behalf_of", "operation", "invocation_id", "run_owner")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
     LEASE_TOKEN_FIELD_NUMBER: _ClassVar[int]
     AGENT_NAME_FIELD_NUMBER: _ClassVar[int]
     CALLER_TOKEN_FIELD_NUMBER: _ClassVar[int]
     NEW_INVOCATION_FIELD_NUMBER: _ClassVar[int]
+    CALLER_ON_BEHALF_OF_FIELD_NUMBER: _ClassVar[int]
+    OPERATION_FIELD_NUMBER: _ClassVar[int]
+    INVOCATION_ID_FIELD_NUMBER: _ClassVar[int]
+    RUN_OWNER_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     instance_id: str
     lease_token: str
     agent_name: str
     caller_token: str
     new_invocation: bool
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., instance_id: _Optional[str] = ..., lease_token: _Optional[str] = ..., agent_name: _Optional[str] = ..., caller_token: _Optional[str] = ..., new_invocation: bool = ...) -> None: ...
+    caller_on_behalf_of: str
+    operation: str
+    invocation_id: str
+    run_owner: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., instance_id: _Optional[str] = ..., lease_token: _Optional[str] = ..., agent_name: _Optional[str] = ..., caller_token: _Optional[str] = ..., new_invocation: bool = ..., caller_on_behalf_of: _Optional[str] = ..., operation: _Optional[str] = ..., invocation_id: _Optional[str] = ..., run_owner: _Optional[str] = ...) -> None: ...
 
 class AuthorizeAgentResponse(_message.Message):
-    __slots__ = ("error", "caller_identity", "caller_admin")
+    __slots__ = ("error", "caller_identity", "caller_admin", "run_authorized")
     ERROR_FIELD_NUMBER: _ClassVar[int]
     CALLER_IDENTITY_FIELD_NUMBER: _ClassVar[int]
     CALLER_ADMIN_FIELD_NUMBER: _ClassVar[int]
+    RUN_AUTHORIZED_FIELD_NUMBER: _ClassVar[int]
     error: _common_pb2.CallError
     caller_identity: str
     caller_admin: bool
-    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., caller_identity: _Optional[str] = ..., caller_admin: bool = ...) -> None: ...
+    run_authorized: bool
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., caller_identity: _Optional[str] = ..., caller_admin: bool = ..., run_authorized: bool = ...) -> None: ...
 
 class AuthorizeModelRequest(_message.Message):
-    __slots__ = ("context", "instance_id", "lease_token", "model_name", "caller_token")
+    __slots__ = ("context", "instance_id", "lease_token", "model_name", "caller_token", "caller_on_behalf_of")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
     LEASE_TOKEN_FIELD_NUMBER: _ClassVar[int]
     MODEL_NAME_FIELD_NUMBER: _ClassVar[int]
     CALLER_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    CALLER_ON_BEHALF_OF_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     instance_id: str
     lease_token: str
     model_name: str
     caller_token: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., instance_id: _Optional[str] = ..., lease_token: _Optional[str] = ..., model_name: _Optional[str] = ..., caller_token: _Optional[str] = ...) -> None: ...
+    caller_on_behalf_of: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., instance_id: _Optional[str] = ..., lease_token: _Optional[str] = ..., model_name: _Optional[str] = ..., caller_token: _Optional[str] = ..., caller_on_behalf_of: _Optional[str] = ...) -> None: ...
 
 class AuthorizeModelResponse(_message.Message):
     __slots__ = ("error", "caller_identity", "caller_admin")
@@ -318,25 +330,59 @@ class AuthorizeModelResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., caller_identity: _Optional[str] = ..., caller_admin: bool = ...) -> None: ...
 
 class AuthorizeAppRequest(_message.Message):
-    __slots__ = ("context", "instance_id", "lease_token", "app_name", "caller_token")
+    __slots__ = ("context", "instance_id", "lease_token", "app_name", "caller_token", "caller_on_behalf_of")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
     LEASE_TOKEN_FIELD_NUMBER: _ClassVar[int]
     APP_NAME_FIELD_NUMBER: _ClassVar[int]
     CALLER_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    CALLER_ON_BEHALF_OF_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     instance_id: str
     lease_token: str
     app_name: str
     caller_token: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., instance_id: _Optional[str] = ..., lease_token: _Optional[str] = ..., app_name: _Optional[str] = ..., caller_token: _Optional[str] = ...) -> None: ...
+    caller_on_behalf_of: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., instance_id: _Optional[str] = ..., lease_token: _Optional[str] = ..., app_name: _Optional[str] = ..., caller_token: _Optional[str] = ..., caller_on_behalf_of: _Optional[str] = ...) -> None: ...
 
 class AuthorizeAppResponse(_message.Message):
-    __slots__ = ("error", "caller_identity", "caller_admin")
+    __slots__ = ("error", "caller_identity", "caller_admin", "caller_user_id")
     ERROR_FIELD_NUMBER: _ClassVar[int]
     CALLER_IDENTITY_FIELD_NUMBER: _ClassVar[int]
     CALLER_ADMIN_FIELD_NUMBER: _ClassVar[int]
+    CALLER_USER_ID_FIELD_NUMBER: _ClassVar[int]
     error: _common_pb2.CallError
     caller_identity: str
     caller_admin: bool
-    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., caller_identity: _Optional[str] = ..., caller_admin: bool = ...) -> None: ...
+    caller_user_id: str
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., caller_identity: _Optional[str] = ..., caller_admin: bool = ..., caller_user_id: _Optional[str] = ...) -> None: ...
+
+class AuthorizeJobRequest(_message.Message):
+    __slots__ = ("context", "instance_id", "lease_token", "job_name", "operation", "run_id", "caller_token", "caller_on_behalf_of", "stored_at")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
+    LEASE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    JOB_NAME_FIELD_NUMBER: _ClassVar[int]
+    OPERATION_FIELD_NUMBER: _ClassVar[int]
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    CALLER_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    CALLER_ON_BEHALF_OF_FIELD_NUMBER: _ClassVar[int]
+    STORED_AT_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    instance_id: str
+    lease_token: str
+    job_name: str
+    operation: str
+    run_id: str
+    caller_token: str
+    caller_on_behalf_of: str
+    stored_at: float
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., instance_id: _Optional[str] = ..., lease_token: _Optional[str] = ..., job_name: _Optional[str] = ..., operation: _Optional[str] = ..., run_id: _Optional[str] = ..., caller_token: _Optional[str] = ..., caller_on_behalf_of: _Optional[str] = ..., stored_at: _Optional[float] = ...) -> None: ...
+
+class AuthorizeJobResponse(_message.Message):
+    __slots__ = ("error", "caller_identity")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    CALLER_IDENTITY_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    caller_identity: str
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., caller_identity: _Optional[str] = ...) -> None: ...

@@ -58,7 +58,9 @@ class FakeMsg:
 
 def _session():
     call = AsyncMock(
-        return_value=discovery_pb.AuthorizeAppResponse(caller_identity="api")
+        return_value=discovery_pb.AuthorizeAppResponse(
+            caller_identity="u-7", caller_user_id="u-7"
+        )
     )
     return SimpleNamespace(
         instance_id="i-1",
@@ -171,8 +173,9 @@ def test_a_fastapi_backend_answers_other_paths(tmp_path):
 
     async def scenario():
         host = _host(tmp_path, app)
+        # The request's user_id is data: the app sees the user discovery verified.
         response = await _send(
-            host, _request("/api/whoami", query="q=1", user_id="u-7")
+            host, _request("/api/whoami", query="q=1", user_id="forged")
         )
         assert response.status == 200, response.body
         body = json.loads(response.body)

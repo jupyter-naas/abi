@@ -181,6 +181,8 @@ class EngineNATSLoader:
                         nats_config.jwt_secret,
                         nats_config.discovery.project,
                         nats_config.discovery.lease_seconds,
+                        # Every registration and use is authorized in process.
+                        iam=services.iam if services.iam_available() else None,
                     )
                 )
             )

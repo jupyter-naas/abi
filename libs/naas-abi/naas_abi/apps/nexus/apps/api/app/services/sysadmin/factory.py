@@ -94,7 +94,7 @@ class _UnavailableTap:
         return None
 
 
-def _transport(nats: Any, name: str) -> Any:
+def _transport(nats: Any, name: str, *, forward_user: bool = False) -> Any:
     from naas_abi_core.engine.nats_auth import issue_service_token
     from naas_abi_sdk.transport import Transport
 
@@ -104,6 +104,7 @@ def _transport(nats: Any, name: str) -> Any:
         timeout=10,
         name=name,
         connect_timeout=2,
+        forward_user=forward_user,
     )
 
 
@@ -390,7 +391,11 @@ def build_jobs_admin(engine: Any, audit_engine: Callable[[], Any]) -> Any:
         control: Any = SourceUnavailable("jobs", off)
         queue: Any = SourceUnavailable("queue", off)
     else:
-        transports = _PerLoop(lambda: _transport(nats, JOBS_CONNECTION_NAME))
+        # On behalf of the signed-in admin: a manual trigger or cancel carries
+        # the user, whose policy the job's host checks (discovery:TriggerJob).
+        transports = _PerLoop(
+            lambda: _transport(nats, JOBS_CONNECTION_NAME, forward_user=True)
+        )
 
         async def connect() -> Any:
             return await transports.get().connect()
