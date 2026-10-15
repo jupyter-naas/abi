@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import logging
 import math
 import os
@@ -180,6 +181,10 @@ class BaseModule(JobsMixin, Generic[Config]):
     # Web apps it serves over NATS. None: one per apps/<name>/manifest.json
     # next to the module's package (naas_abi_sdk.apps.discover_apps).
     apps: tuple[AppDescriptor, ...] | None = None
+    # The permission manifest an admin approves (naas_abi_sdk.permissions):
+    # a policy document. None: permissions.yaml beside the module, else the
+    # defaults of ``dependencies``.
+    permissions: dict[str, Any] | None = None
 
     def __init__(self, engine: EngineProxy, configuration: Config):
         if not isinstance(configuration, self.Configuration):
@@ -385,6 +390,86 @@ def _health_bind(port: int | None, host: str) -> tuple[str, int] | None:
     return bind_host, port
 
 
+# How often a module waiting for its manifest's approval asks again.
+APPROVAL_POLL_SECONDS = 5.0
+
+
+async def _await_approval(
+    client: ABIClient, module_type: type[BaseModule], identity: str
+) -> None:
+    """Submit the module's permission manifest and wait until it is approved.
+
+    Only for a module running on a service key of a module account
+    (``module/<project>/<module_id>``). An approval that lands after this
+    connection opened reconnects it: the broker computes the new
+    connection's subjects from the approved policy (RFC §8.4).
+    """
+    from naas_abi_proto.iam.v1 import iam_pb2
+
+    from naas_abi_sdk.credentials import ServiceKey, module_account
+    from naas_abi_sdk.permissions import module_manifest
+
+    transport = client._transport
+    credentials = getattr(transport, "credentials", None)
+    if not isinstance(credentials, ServiceKey):
+        return  # a process of the engine, with its own tokens
+    await transport.access_token()  # the exchange names the account
+    account = module_account(credentials.name)
+    if account is None:
+        return  # a script's or CI's account: its policies are attached directly
+    project, module_id = account
+    if module_id != identity:
+        raise ValueError(
+            f"This module is {identity!r}, but its service key belongs to "
+            f"{credentials.name}: run it with that module's key"
+        )
+    document = json.dumps(module_manifest(module_type), sort_keys=True)
+    log = logging.getLogger(__name__)
+    waited = False
+    while True:
+        submitted = await client.iam.submit_manifest(
+            iam_pb2.SubmitManifestRequest(
+                module_id=module_id, project=project, document_json=document
+            )
+        )
+        if submitted.HasField("error") and submitted.error.code:
+            raise RuntimeError(
+                f"Manifest refused ({submitted.error.code}): {submitted.error.message}"
+            )
+        status = submitted.manifest.status
+        if status == "rejected":
+            raise RuntimeError(
+                f"The permission manifest of {credentials.name} was rejected"
+                + (
+                    f": {submitted.manifest.reason}"
+                    if submitted.manifest.reason
+                    else ""
+                )
+            )
+        if status == "approved" or submitted.in_force:
+            if status != "approved":
+                log.warning(
+                    "%s runs on its approved permissions; a new manifest %s waits "
+                    "for approval (abi iam module approve %s)",
+                    identity,
+                    submitted.manifest.sha256[:12],
+                    credentials.name,
+                )
+            if submitted.approved_now or waited:
+                await transport.reconnect()
+            return
+        if not waited:
+            log.warning(
+                "%s waits for the approval of its permission manifest %s: "
+                "abi iam module approve %s",
+                identity,
+                submitted.manifest.sha256[:12],
+                credentials.name,
+            )
+        waited = True
+        await asyncio.sleep(APPROVAL_POLL_SECONDS)
+
+
 async def run_module(
     module_type: type[BaseModule],
     *,
@@ -414,6 +499,8 @@ async def run_module(
         ABIClient(url, token, timeout=timeout, **connection_options) as client,
         lifeline.stopping_on_loss(),
     ):
+        # Before anything else: an unapproved module can call nothing.
+        await _await_approval(client, module_type, identity)
         dependencies = module_type.get_dependencies()
         discovery_client = (
             DiscoveryClient(client._transport, discovery.project) if discovery else None
@@ -504,6 +591,7 @@ async def run_module(
                     raise ValueError(
                         "Job hosting requires discovery and a document service dependency"
                     )
+                from naas_abi_sdk.broker_control import for_transport
                 from naas_abi_sdk.job_host import JobHost
 
                 job_host = JobHost(
@@ -514,6 +602,7 @@ async def run_module(
                     {j.name: (j, module._job_handlers[j.name]) for j in module.jobs},
                     instance_id=registration.instance_id,
                     authorize=discovery_job_authorizer(registration),
+                    control=for_transport(client._transport),
                 )
                 if not registration.rollout_id:
                     await _host_jobs(job_host, module)

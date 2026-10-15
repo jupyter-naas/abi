@@ -96,9 +96,16 @@ sequence-checked handles; never retry inference or cursor reads automatically.
 `messages.py` sizes messages as the broker does (body and header block) and
 `reply()` answers without echoing the request's headers; use it instead of
 `Msg.respond`. `claim_check.py` carries published, queued and job-trigger
-messages above the broker limit through a JetStream object store
-(docs/adr/20261003_nats-claim-check.md); `BusClient` subscriptions resolve them
-in place. Every raw NATS send is listed in core's
+messages above the broker limit through the stream `ABI_CLAIM_CHECKS`, under
+the scope of their topic or job (docs/adr/20261003_nats-claim-check.md);
+`BusClient` subscriptions resolve them in place. Behind the broker's auth
+callout a module creates no stream or consumer and writes nothing into the
+jobs stream: `broker_control.py` asks the engine (`abi.broker.v1.<operation>`)
+to create them, to store its triggers, schedules and cancels (sealed by the
+engine: the job host takes no unsealed one, `verify_trigger`) and to read
+claim checks (`claim_check.ThroughEngine`), and falls back to doing it itself
+when no engine answers. Every responder answers only
+`_INBOX.` reply subjects (`messages.reply_allowed`). Every raw NATS send is listed in core's
 `engine/nats_send_sites_test.py`: a new one must go through these helpers.
 `overflow.py` is the client side of RPC overflow (payloads above the broker
 limit as transfer/v1 frames, docs/adr/20261003_nats-rpc-overflow.md), used by

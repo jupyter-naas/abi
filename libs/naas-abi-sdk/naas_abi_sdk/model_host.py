@@ -31,8 +31,10 @@ MAX_TOOLS = 128
 MAX_REQUEST_BYTES = 512 * 1024
 
 
-def model_subject(project: str, instance_id: str, name: str) -> str:
-    return f"abi.mod.{project}.{instance_id}.model.{name}.chat"
+def model_subject(
+    project: str, service_account: str, instance_id: str, name: str
+) -> str:
+    return f"abi.mod.{project}.{service_account or '-'}.{instance_id}.model.{name}.chat"
 
 
 class ModuleModelClient:
@@ -67,10 +69,13 @@ class ModelHost:
                     await nc.subscribe(
                         model_subject(
                             self.session.client.project,
+                            self.session.service_account,
                             self.session.instance_id,
                             name,
                         ),
-                        cb=self.calls.callback(partial(self._handle, name)),
+                        cb=self.calls.callback(
+                            partial(self._handle, name), requests=True
+                        ),
                     )
                 )
             await nc.flush()

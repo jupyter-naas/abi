@@ -21,7 +21,7 @@ from typing import Any
 from naas_abi_proto.app.v1 import app_pb2 as pb
 from nats.errors import TimeoutError as NATSTimeoutError
 
-from naas_abi_sdk.messages import reply
+from naas_abi_sdk.messages import reply, reply_allowed
 from naas_abi_sdk.transport import RPCError
 
 logger = logging.getLogger(__name__)
@@ -152,10 +152,16 @@ class BodySource:
             try:
                 pull = pb.BodyPull.FromString(msg.data)
             except Exception:  # noqa: BLE001 - a malformed pull gets an error
-                return await self._answer(msg, _error("INVALID_ARGUMENT", "Bad pull"))
-            if pull.cancel:
-                self.gone.set()
+                pull = None
+            if pull is not None and pull.cancel:
+                self.gone.set()  # needs no answer
                 return None
+            if not reply_allowed(msg.reply):
+                return (
+                    None  # answered on an inbox only: the reply subject is the puller's
+                )
+            if pull is None:
+                return await self._answer(msg, _error("INVALID_ARGUMENT", "Bad pull"))
             last = self._last
             if last is not None and pull.sequence == last.sequence:
                 return await self._answer(msg, last)  # its reply was lost

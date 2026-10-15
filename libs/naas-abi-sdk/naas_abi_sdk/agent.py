@@ -25,9 +25,14 @@ DEFAULT_DEADLINE_SECONDS = 300
 QUIET_SECONDS = 5.0
 
 
-def agent_subject(project: str, instance_id: str, name: str, operation: str) -> str:
+def agent_subject(
+    project: str, service_account: str, instance_id: str, name: str, operation: str
+) -> str:
+    """``service_account``: the instance's, from its discovery record. The
+    broker lets a module subscribe to its own only (RFC §8.4)."""
     digest = hashlib.sha256(name.encode()).hexdigest()
-    return f"abi.agent.{project}.{instance_id}.{digest}.v1.{operation}"
+    sa = service_account or "-"
+    return f"abi.agent.{project}.{sa}.{instance_id}.{digest}.v1.{operation}"
 
 
 @dataclass
@@ -278,7 +283,11 @@ class AgentProxy:
         try:
             return await self.module.client.transport.call(
                 agent_subject(
-                    self.module.client.project, target.instance_id, self.name, operation
+                    self.module.client.project,
+                    target.service_account,
+                    target.instance_id,
+                    self.name,
+                    operation,
                 ),
                 request,
                 response_type,

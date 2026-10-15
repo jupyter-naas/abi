@@ -233,3 +233,66 @@ class IamClient:
         return await self._transport.call(
             "abi.iam.v1.register_catalog", request, pb.RegisterCatalogResponse
         )
+
+    async def token(self, request: pb.TokenRequest) -> pb.TokenResponse:
+        return await self._transport.call("abi.iam.v1.token", request, pb.TokenResponse)
+
+    async def jwks(self, request: pb.JwksRequest) -> pb.JwksResponse:
+        return await self._transport.call("abi.iam.v1.jwks", request, pb.JwksResponse)
+
+    async def find_service_account(
+        self, request: pb.FindServiceAccountRequest
+    ) -> pb.FindServiceAccountResponse:
+        return await self._transport.call(
+            "abi.iam.v1.find_service_account", request, pb.FindServiceAccountResponse
+        )
+
+    async def create_key(self, request: pb.CreateKeyRequest) -> pb.CreateKeyResponse:
+        return await self._transport.call(
+            "abi.iam.v1.create_key", request, pb.CreateKeyResponse
+        )
+
+    async def list_keys(self, request: pb.ListKeysRequest) -> pb.ListKeysResponse:
+        return await self._transport.call(
+            "abi.iam.v1.list_keys", request, pb.ListKeysResponse
+        )
+
+    async def revoke_key(self, request: pb.RevokeKeyRequest) -> pb.RevokeKeyResponse:
+        return await self._transport.call(
+            "abi.iam.v1.revoke_key", request, pb.RevokeKeyResponse
+        )
+
+    async def submit_manifest(
+        self, request: pb.SubmitManifestRequest
+    ) -> pb.SubmitManifestResponse:
+        return await self._transport.call(
+            "abi.iam.v1.submit_manifest", request, pb.SubmitManifestResponse
+        )
+
+    async def get_manifest(
+        self, request: pb.GetManifestRequest
+    ) -> pb.GetManifestResponse:
+        return await self._transport.call(
+            "abi.iam.v1.get_manifest", request, pb.GetManifestResponse
+        )
+
+    async def list_manifests(
+        self, request: pb.ListManifestsRequest
+    ) -> pb.ListManifestsResponse:
+        return await self._transport.call(
+            "abi.iam.v1.list_manifests", request, pb.ListManifestsResponse
+        )
+
+    async def approve_manifest(
+        self, request: pb.ApproveManifestRequest
+    ) -> pb.ApproveManifestResponse:
+        return await self._transport.call(
+            "abi.iam.v1.approve_manifest", request, pb.ApproveManifestResponse
+        )
+
+    async def reject_manifest(
+        self, request: pb.RejectManifestRequest
+    ) -> pb.RejectManifestResponse:
+        return await self._transport.call(
+            "abi.iam.v1.reject_manifest", request, pb.RejectManifestResponse
+        )

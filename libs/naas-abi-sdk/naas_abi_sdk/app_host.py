@@ -74,8 +74,8 @@ HOP_BY_HOP = frozenset(
 ASGIApp = Callable[[dict, Callable[[], Awaitable[dict]], Callable[[dict], Awaitable[None]]], Awaitable[None]]  # fmt: skip
 
 
-def app_subject(project: str, instance_id: str, name: str) -> str:
-    return f"abi.mod.{project}.{instance_id}.app.{name}.http"
+def app_subject(project: str, service_account: str, instance_id: str, name: str) -> str:
+    return f"abi.mod.{project}.{service_account or '-'}.{instance_id}.app.{name}.http"
 
 
 async def call_app(
@@ -83,13 +83,17 @@ async def call_app(
     project: str,
     instance_id: str,
     request: pb.HttpRequest,
+    *,
+    service_account: str,
 ) -> pb.HttpResponse:
     """Send ``request`` to the app ``request.app`` of one module instance
     (what Nexus does for each browser request); RPCError on an error reply.
     The reply comes once the app starts its response: give ``transport`` a
     timeout above the longest upload (the module stops an idle app itself)."""
     return await transport.call(
-        app_subject(project, instance_id, request.app), request, pb.HttpResponse
+        app_subject(project, service_account, instance_id, request.app),
+        request,
+        pb.HttpResponse,
     )
 
 
@@ -143,9 +147,14 @@ class AppHost:
                 self.subscriptions.append(
                     await nc.subscribe(
                         app_subject(
-                            self.session.client.project, self.session.instance_id, name
+                            self.session.client.project,
+                            self.session.service_account,
+                            self.session.instance_id,
+                            name,
                         ),
-                        cb=self.calls.callback(partial(self._handle, name)),
+                        cb=self.calls.callback(
+                            partial(self._handle, name), requests=True
+                        ),
                     )
                 )
             await nc.flush()

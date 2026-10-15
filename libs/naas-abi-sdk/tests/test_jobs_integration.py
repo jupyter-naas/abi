@@ -169,6 +169,11 @@ def test_manual_trigger_runs_once_and_reports(broker):
     assert record["status"] == "SUCCEEDED"
     assert record["result"] == {"echo": {"x": 1}}
     assert record["logs"] == ["hello"] and record["trigger"]["kind"] == "manual"
+    # When its trigger leaves the stream: stored time + its 168 h Nats-TTL.
+    lifetime = datetime.fromisoformat(record["trigger_expires_at"]) - (
+        datetime.fromisoformat(record["fired_at"])
+    )
+    assert lifetime == timedelta(hours=168)
     assert len(docs.runs("echo")) == 1
 
 
@@ -333,17 +338,20 @@ def test_events_trigger_runs(broker):
     assert record["result"] == {"subject": "evt.itest.e-1", "data": {"key": "a.csv"}}
 
 
-def test_restart_with_fewer_triggers_purges_the_stale_schedule(broker):
+def test_restart_with_fewer_triggers_removes_the_stale_schedule(broker):
     async def handler(ctx):
         return None
 
-    async def schedules_on(js, descriptor):
+    async def schedules_on(js, descriptor, *, any_message=False):
         subjects = job_subjects(PROJECT, MODULE, descriptor.name)
         found = []
         for index in range(3):
             with contextlib.suppress(NotFoundError):
-                await js.get_last_msg(stream_name(PROJECT), subjects.schedule(index))
-                found.append(index)
+                msg = await js.get_last_msg(
+                    stream_name(PROJECT), subjects.schedule(index)
+                )
+                if any_message or (msg.headers or {}).get("Nats-Schedule"):
+                    found.append(index)
         return found
 
     async def scenario():
@@ -360,12 +368,17 @@ def test_restart_with_fewer_triggers_purges_the_stale_schedule(broker):
         host = _host(broker, Documents(), [(one, handler)])
         await host.start()
         await host.close()
-        return before, await schedules_on(js, one)
+        after = await schedules_on(js, one)
+        # Rolled up by a message that expires in a second (no purge: a host
+        # writes only its own subjects).
+        await asyncio.sleep(2.5)
+        return before, after, await schedules_on(js, one, any_message=True)
 
-    before, after = asyncio.run(scenario())
+    before, after, left = asyncio.run(scenario())
 
     assert before == [0, 1]
     assert after == [0]
+    assert left == [0]
 
 
 def test_long_timeout_is_not_hit_by_fast_jobs(broker):
@@ -790,6 +803,11 @@ def test_the_reaper_fails_retries_whose_trigger_left_the_stream(broker):
         expiring = await _publish_trigger(broker, "sync", "1s")
         kept = await _publish_trigger(broker, "sync", "1h")
         due = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+        # As the host records them when it takes a trigger (stored time + TTL).
+        expires = {
+            expiring: datetime.now(timezone.utc) + timedelta(seconds=1),
+            kept: datetime.now(timezone.utc) + timedelta(hours=1),
+        }
         for sequence in (expiring, kept):
             await docs.put(
                 runs_collection(PROJECT),
@@ -803,6 +821,7 @@ def test_the_reaper_fails_retries_whose_trigger_left_the_stream(broker):
                     "sequence": sequence,
                     "heartbeat_at": due,
                     "retry_at": due,
+                    "trigger_expires_at": expires[sequence].isoformat(),
                 },
             )
         await asyncio.sleep(2.5)  # the 1 s trigger expires

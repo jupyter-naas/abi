@@ -84,6 +84,11 @@ class _Connection:
 
 
 class _Transport:
+    timeout = 1.0
+
+    async def access_token(self):
+        return "token"
+
     async def connect(self):
         return _Connection()
 
@@ -252,16 +257,18 @@ class JetStream:
         self.last[subject] = SimpleNamespace(seq=len(self.published), headers=headers)
         return SimpleNamespace(seq=len(self.published))
 
-    async def get_last_msg(self, stream, subject):
+    async def purge_stream(self, name, subject=None):
+        if subject in self.last:
+            self.purged.append(subject)
+        self.last.pop(subject, None)
+
+    async def get_last_msg(self, stream, subject, direct=False):
         from nats.js.errors import NotFoundError
 
+        assert direct, "a host reads its schedules by subject (direct get)"
         if subject not in self.last:
             raise NotFoundError(code=404, err_code=10037)
         return self.last[subject]
-
-    async def purge_stream(self, name, subject=None):
-        self.purged.append(subject)
-        self.last.pop(subject, None)
 
 
 def test_schedules_follow_the_declared_triggers():
@@ -286,7 +293,62 @@ def test_schedules_follow_the_declared_triggers():
     assert first[TRIGGER_HEADER] == "schedule"
     assert first["Nats-Schedule-TTL"] == "3600s"  # unprocessed ticks expire
     assert js.published[1][2]["Nats-Schedule"] == "@every 1h"
-    assert js.purged == [subjects.schedule(i) for i in range(2, 16)]
+    assert js.purged == []  # no schedule beyond those to remove
+
+
+def test_a_schedule_no_longer_declared_is_purged():
+    js = JetStream()
+    subjects = job_subjects(PROJECT, MODULE, "ingest")
+    two = JobDescriptor("ingest", triggers=(Every("1h"), Every("2h")))
+    asyncio.run(_host().reconcile_schedules(js, two))
+    one = JobDescriptor("ingest", triggers=(Every("1h"),))
+    asyncio.run(_host().reconcile_schedules(js, one))
+    assert js.purged == [subjects.schedule(1)]
+    assert subjects.schedule(0) in js.last
+
+
+class Control:
+    """The engine's broker control, as a module behind the auth callout sees it."""
+
+    def __init__(self):
+        self.requests = []
+
+    async def request(self, operation, **fields):
+        self.requests.append((operation, fields))
+        return True
+
+
+def test_behind_the_callout_the_engine_creates_consumers_and_writes_schedules():
+    js = JetStream()  # no add_consumer, no update_stream: nothing local
+    control = Control()
+    host = _host(control=control)
+    one = JobDescriptor("ingest", triggers=(Every("1h"),), max_concurrency=3)
+    asyncio.run(host._ensure_consumer(js, one, update=True))
+    asyncio.run(host.reconcile_schedules(js, one))
+    assert control.requests == [
+        (
+            "ensure_job",
+            {
+                "project": PROJECT,
+                "job": "ingest",
+                "max_concurrency": 3,
+                "ack_wait_seconds": host.ack_wait_seconds,
+                "update": True,
+            },
+        ),
+        (
+            "set_schedules",
+            {
+                "project": PROJECT,
+                "job": "ingest",
+                "schedules": [
+                    {"Nats-Schedule": "@every 1h", "Nats-Schedule-TTL": "3600s"}
+                ],
+            },
+        ),
+    ]
+    # It wrote nothing into the jobs stream itself.
+    assert js.published == [] and js.purged == []
 
 
 def test_a_restart_leaves_unchanged_schedules_alone():
@@ -473,12 +535,22 @@ def test_manual_triggers_carry_the_callers_trace(monkeypatch):
             return SimpleNamespace(seq=3)
 
     class _NC:
+        async def request(self, *args, **kwargs):  # no engine answers
+            from nats.errors import NoRespondersError
+
+            raise NoRespondersError
+
         max_payload = 1024 * 1024
 
         def jetstream(self):
             return _JS()
 
     class _Transport:
+        timeout = 1.0
+
+        async def access_token(self):
+            return "token"
+
         async def connect(self):
             return _NC()
 
@@ -598,12 +670,22 @@ class _DedupJetStream:
 
 def _publishing_host(js, docs=None):
     class _NC:
+        async def request(self, *args, **kwargs):  # no engine answers
+            from nats.errors import NoRespondersError
+
+            raise NoRespondersError
+
         max_payload = 1024 * 1024
 
         def jetstream(self):
             return js
 
     class _T:
+        timeout = 1.0
+
+        async def access_token(self):
+            return "token"
+
         async def connect(self):
             return _NC()
 
@@ -813,7 +895,14 @@ def test_a_run_records_its_heartbeats():
 
 
 def _seed_running(
-    docs, n, last_seen, *, attempt=1, max_attempts=1, field="heartbeat_at"
+    docs,
+    n,
+    last_seen,
+    *,
+    attempt=1,
+    max_attempts=1,
+    field="heartbeat_at",
+    trigger_expires=None,
 ):
     run_id = f"sync:{n}"
     docs.data[(runs_collection(PROJECT), run_id)] = Document(
@@ -826,6 +915,11 @@ def _seed_running(
             "max_attempts": max_attempts,
             "started_at": last_seen.isoformat(),
             field: last_seen.isoformat(),
+            **(
+                {"trigger_expires_at": trigger_expires.isoformat()}
+                if trigger_expires
+                else {}
+            ),
         },
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -844,7 +938,7 @@ def test_a_run_lost_with_its_host_on_its_last_attempt_is_failed():
     _seed_running(docs, 4, now - timedelta(minutes=30), field="started_at")
     _seed_running(docs, 5, now - timedelta(minutes=30))  # running on this host
     host = JobHost(
-        _stream_transport(3)[0],  # sync:3's trigger is still in the stream
+        None,  # the reaper reads no stream
         docs,
         MODULE,
         PROJECT,
@@ -1311,38 +1405,9 @@ def test_a_trigger_alive_after_its_backoff_is_retried_with_a_retry_time():
     assert run["sequence"] == 7
 
 
-class _Stream:
-    """The jobs stream as the reaper sees it: trigger messages by sequence."""
-
-    def __init__(self, messages):
-        self.messages = messages
-
-    async def get_msg(self, stream_name, seq=None, **kwargs):
-        from nats.js.errors import NotFoundError
-
-        if seq not in self.messages:
-            raise NotFoundError(code=404, err_code=10037)
-        return self.messages[seq]
-
-
-def _stream_transport(*sequences, job="sync"):
-    trigger = job_subjects(PROJECT, MODULE, job).trigger
-    stream = _Stream({n: SimpleNamespace(subject=trigger) for n in sequences})
-
-    class _NC:
-        max_payload = 1024 * 1024
-
-        def jetstream(self):
-            return stream
-
-    class _T:
-        async def connect(self):
-            return _NC()
-
-    return _T(), stream
-
-
-def _seed_retrying(docs, n, retry_at, *, with_retry_at=True):
+def _seed_retrying(
+    docs, n, retry_at, *, with_retry_at=True, trigger_expires=None, fired=None
+):
     run_id = f"sync:{n}"
     docs.data[(runs_collection(PROJECT), run_id)] = Document(
         id=run_id,
@@ -1355,6 +1420,16 @@ def _seed_retrying(docs, n, retry_at, *, with_retry_at=True):
             "started_at": (retry_at - timedelta(seconds=30)).isoformat(),
             "heartbeat_at": (retry_at - timedelta(seconds=5)).isoformat(),
             **({"retry_at": retry_at.isoformat()} if with_retry_at else {}),
+            **(
+                {"trigger_expires_at": trigger_expires.isoformat()}
+                if trigger_expires
+                else {}
+            ),
+            **(
+                {"fired_at": fired.isoformat(), "trigger": {"kind": "event"}}
+                if fired
+                else {}
+            ),
         },
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -1366,25 +1441,26 @@ def test_runs_whose_trigger_expired_before_redelivery_are_failed():
     docs = QueryDocuments()
     now = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
     stale, fresh = now - timedelta(minutes=30), now - timedelta(minutes=1)
+    gone, there = now - timedelta(seconds=1), now + timedelta(hours=1)
     # RETRYING past its retry time: redelivered while its trigger exists.
-    _seed_retrying(docs, 1, now - timedelta(minutes=2))  # trigger gone: failed
-    _seed_retrying(docs, 2, now - timedelta(minutes=2))  # trigger still there
-    _seed_retrying(docs, 3, now + timedelta(minutes=2))  # not due yet
+    _seed_retrying(docs, 1, now - timedelta(minutes=2), trigger_expires=gone)
+    _seed_retrying(docs, 2, now - timedelta(minutes=2), trigger_expires=there)
+    _seed_retrying(docs, 3, now + timedelta(minutes=2), trigger_expires=gone)
     # Recorded before retry_at: its last heartbeat stands in.
-    _seed_retrying(docs, 5, now - timedelta(minutes=2), with_retry_at=False)
-    # RUNNING with attempts left: its host stopped, nothing redelivers it.
-    _seed_running(docs, 4, stale, max_attempts=3)  # trigger gone: failed
-    _seed_running(docs, 6, fresh, max_attempts=3)  # alive
-    _seed_running(docs, 7, stale, max_attempts=3)  # trigger there: redelivered
-    _seed_running(docs, 8, stale, max_attempts=3)  # running on this host
-    transport, stream = _stream_transport(2, 7)
-    # A recreated stream reused sequence 9 for another job: not this trigger.
-    stream.messages[9] = SimpleNamespace(
-        subject=job_subjects(PROJECT, MODULE, "other").trigger
+    _seed_retrying(
+        docs, 5, now - timedelta(minutes=2), with_retry_at=False, trigger_expires=gone
     )
-    _seed_retrying(docs, 9, now - timedelta(minutes=2))
+    # RUNNING with attempts left: its host stopped, nothing redelivers it.
+    _seed_running(docs, 4, stale, max_attempts=3, trigger_expires=gone)
+    _seed_running(docs, 6, fresh, max_attempts=3, trigger_expires=gone)  # alive
+    _seed_running(docs, 7, stale, max_attempts=3, trigger_expires=there)
+    _seed_running(docs, 8, stale, max_attempts=3, trigger_expires=gone)  # here
+    # Recorded before trigger_expires_at: its kind's longest TTL (an event's
+    # trigger lives 24 hours) from when it fired.
+    _seed_retrying(docs, 9, now - timedelta(minutes=2), fired=now - timedelta(days=2))
+    _seed_retrying(docs, 10, now - timedelta(minutes=2), fired=now - timedelta(hours=2))
     host = JobHost(
-        transport,
+        None,  # read from the runs, never from the stream
         docs,
         MODULE,
         PROJECT,
@@ -1402,8 +1478,8 @@ def test_runs_whose_trigger_expired_before_redelivery_are_failed():
     run = docs.run("sync:4")
     assert run["status"] == "FAILED"
     assert "no heartbeat since" in run["error"] and "expired" in run["error"]
-    assert docs.run("sync:2")["status"] == "RETRYING"
-    assert docs.run("sync:3")["status"] == "RETRYING"
+    for waiting in ("sync:2", "sync:3", "sync:10"):
+        assert docs.run(waiting)["status"] == "RETRYING"
     for alive in ("sync:6", "sync:7", "sync:8"):
         assert docs.run(alive)["status"] == "RUNNING"
 
@@ -1520,13 +1596,18 @@ def test_consumers_leave_attempts_to_the_host():
     class _JS:
         async def stream_info(self, name):
             return SimpleNamespace(
-                config=SimpleNamespace(allow_msg_schedules=True, allow_msg_ttl=True)
+                config=SimpleNamespace(
+                    allow_msg_schedules=True,
+                    allow_msg_ttl=True,
+                    allow_direct=True,
+                    allow_rollup_hdrs=False,
+                )
             )
 
         async def add_consumer(self, stream, config):
             added.append(config)
 
-        async def get_last_msg(self, stream, subject):
+        async def get_last_msg(self, stream, subject, direct=False):
             from nats.js.errors import NotFoundError
 
             raise NotFoundError(code=404, err_code=10037)
@@ -1541,6 +1622,11 @@ def test_consumers_leave_attempts_to_the_host():
             return SimpleNamespace()
 
     class _NC:
+        async def request(self, *args, **kwargs):  # no engine answers
+            from nats.errors import NoRespondersError
+
+            raise NoRespondersError
+
         def jetstream(self):
             return _JS()
 
@@ -1548,6 +1634,11 @@ def test_consumers_leave_attempts_to_the_host():
             return SimpleNamespace(unsubscribe=lambda: asyncio.sleep(0))
 
     class _T:
+        timeout = 1.0
+
+        async def access_token(self):
+            return "token"
+
         async def connect(self):
             return _NC()
 
@@ -1581,7 +1672,12 @@ def test_prepare_only_creates_the_consumers_that_are_missing():
     class _JS:
         async def stream_info(self, name):
             return SimpleNamespace(
-                config=SimpleNamespace(allow_msg_schedules=True, allow_msg_ttl=True)
+                config=SimpleNamespace(
+                    allow_msg_schedules=True,
+                    allow_msg_ttl=True,
+                    allow_direct=True,
+                    allow_rollup_hdrs=False,
+                )
             )
 
         async def consumer_info(self, stream, consumer):
@@ -1599,10 +1695,20 @@ def test_prepare_only_creates_the_consumers_that_are_missing():
             raise AssertionError(f"prepare must not call {name}")
 
     class _NC:
+        async def request(self, *args, **kwargs):  # no engine answers
+            from nats.errors import NoRespondersError
+
+            raise NoRespondersError
+
         def jetstream(self):
             return _JS()
 
     class _T:
+        timeout = 1.0
+
+        async def access_token(self):
+            return "token"
+
         async def connect(self):
             return _NC()
 
@@ -1756,3 +1862,35 @@ def test_a_cancel_needs_its_callers_policy():
     assert [call[:3] for call in authorize.calls if call[0] == "cancel"] == [
         ("cancel", "long", "long:7")
     ] * 2
+
+
+def test_a_trigger_fired_by_another_modules_schedule_is_dropped():
+    # Any module may aim its own schedule at this trigger subject; the server
+    # names the schedule that fired it (Nats-Scheduler), which a client cannot set.
+    docs = Documents()
+
+    async def handler(ctx):
+        pytest.fail("A foreign schedule must not run the job")
+
+    msg = Msg(trigger="schedule")
+    msg.headers["Nats-Scheduler"] = job_subjects(PROJECT, "other", "x").schedule(0)
+    _run(_host(docs), JobDescriptor("ingest"), handler, msg)
+
+    assert msg.calls == [("term",)]
+    assert docs.data == {}
+
+
+def test_its_own_schedule_runs_and_a_claimed_schedule_kind_is_manual():
+    docs = Documents()
+
+    async def handler(ctx):
+        return None
+
+    own = Msg(sequence=1, trigger="schedule")
+    own.headers["Nats-Scheduler"] = job_subjects(PROJECT, MODULE, "ingest").schedule(0)
+    _run(_host(docs), JobDescriptor("ingest"), handler, own)
+    claimed = Msg(sequence=2, trigger="schedule")  # published, not fired
+    _run(_host(docs), JobDescriptor("ingest"), handler, claimed)
+
+    assert docs.run("ingest:1")["trigger"]["kind"] == "schedule"
+    assert docs.run("ingest:2")["trigger"]["kind"] == "manual"

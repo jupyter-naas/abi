@@ -64,6 +64,7 @@ def _session():
     )
     return SimpleNamespace(
         instance_id="i-1",
+        service_account="sa1",
         lease_token="l" * 32,
         client=SimpleNamespace(_call=call, project="acme"),
     )
@@ -95,7 +96,10 @@ def _headers(response) -> dict[str, str]:
 
 
 def test_the_subject_is_instance_addressed():
-    assert app_subject("acme", "i-1", "console") == "abi.mod.acme.i-1.app.console.http"
+    assert (
+        app_subject("acme", "sa1", "i-1", "console")
+        == "abi.mod.acme.sa1.i-1.app.console.http"
+    )
 
 
 # -- static files -------------------------------------------------------------------
@@ -250,7 +254,7 @@ def test_lifespan_runs_startup_and_shutdown(tmp_path):
             connect=AsyncMock(return_value=nc)
         )
         await host.start()
-        assert nc.subscribe.await_args.args[0] == "abi.mod.acme.i-1.app.console.http"
+        assert nc.subscribe.await_args.args[0] == "abi.mod.acme.sa1.i-1.app.console.http"
         await host.close()
 
     asyncio.run(scenario())

@@ -19,6 +19,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 LIMIT = 64 * 1024
+SCOPE = claim_check.topic_scope("tests")
 
 
 @pytest.fixture
@@ -60,7 +61,9 @@ def test_a_message_that_fits_is_sent_unchanged(broker):
     async def scenario():
         nc = await nats.connect(broker)
         try:
-            body, headers = await claim_check.prepare(nc, b"small", {"A": "b"})
+            body, headers = await claim_check.prepare(
+                nc, b"small", {"A": "b"}, scope=SCOPE
+            )
             assert (body, headers) == (b"small", {"A": "b"})
         finally:
             await nc.close()
@@ -74,11 +77,35 @@ def test_a_message_above_the_limit_is_stored_and_resolved(broker):
     async def scenario():
         nc = await nats.connect(broker)
         try:
-            body, headers = await claim_check.prepare(nc, payload, {"A": "b"})
+            body, headers = await claim_check.prepare(
+                nc, payload, {"A": "b"}, scope=SCOPE
+            )
             assert body == b"" and headers["A"] == "b"
-            assert claim_check.HEADER in headers
+            assert headers[claim_check.HEADER].startswith(f"abi.cc.{SCOPE}.")
+            assert int(headers[claim_check.CHUNKS_HEADER]) > 1
             message = type("Msg", (), {"data": body, "headers": headers})()
             assert await claim_check.resolve(nc, message) == payload
+        finally:
+            await nc.close()
+
+    asyncio.run(scenario())
+
+
+def test_a_stored_payload_replaced_under_its_reference_is_refused(broker):
+    payload = os.urandom(2 * LIMIT)
+
+    async def scenario():
+        nc = await nats.connect(broker)
+        try:
+            body, headers = await claim_check.prepare(nc, payload, scope=SCOPE)
+            reference = headers[claim_check.HEADER]
+            # Someone writing to the scope appends another first chunk.
+            await nc.jetstream().publish(
+                f"{reference}.0", b"forged", stream=claim_check.STREAM
+            )
+            message = type("Msg", (), {"data": body, "headers": headers})()
+            with pytest.raises(claim_check.ClaimCheckInvalid):
+                await claim_check.resolve(nc, message)
         finally:
             await nc.close()
 
@@ -92,7 +119,7 @@ def test_values_above_the_cap_are_refused(broker, monkeypatch):
         nc = await nats.connect(broker)
         try:
             with pytest.raises(claim_check.ClaimCheckTooLarge):
-                await claim_check.prepare(nc, b"x" * (3 * LIMIT))
+                await claim_check.prepare(nc, b"x" * (3 * LIMIT), scope=SCOPE)
         finally:
             await nc.close()
 

@@ -110,6 +110,7 @@ async def _module(url, tmp_path, app, **kwargs):
     transport = Transport(url, "module-token")
     session = SimpleNamespace(
         instance_id="i-1",
+        service_account="sa1",
         lease_token="l" * 32,
         client=SimpleNamespace(
             transport=transport,
@@ -177,6 +178,7 @@ def test_a_large_upload_streams_through_the_app(broker, tmp_path):
                     body_inbox=source.inbox,
                     max_body_bytes=100 * MB,
                 ),
+                service_account="sa1",
             )
             await producer
             await source.close()
@@ -219,6 +221,7 @@ def test_an_upload_above_its_limit_is_413(broker, tmp_path):
                     body_inbox=source.inbox,
                     max_body_bytes=MB,
                 ),
+                service_account="sa1",
             )
             producer.cancel()
             await asyncio.gather(producer, return_exceptions=True)
@@ -239,11 +242,15 @@ def test_a_large_download_and_a_large_file_stream_back(broker, tmp_path):
         nexus = Transport(broker, "nexus-token", timeout=60)
         try:
             download = await call_app(
-                nexus, "acme", "i-1", _request("/api/download", query=f"size={5 * MB}")
+                nexus,
+                "acme",
+                "i-1",
+                _request("/api/download", query=f"size={5 * MB}"),
+                service_account="sa1",
             )
             assert download.status == 200 and download.body_follows
             assert await _body(nexus, download) == b"d" * (5 * MB)
-            static = await call_app(nexus, "acme", "i-1", _request("/big.js"))
+            static = await call_app(nexus, "acme", "i-1", _request("/big.js"), service_account="sa1")
             assert static.body_follows
             assert await _body(nexus, static) == b"j" * (3 * MB + 17)
         finally:
@@ -260,7 +267,7 @@ def test_leaving_an_endless_stream_stops_the_app(broker, tmp_path):
         host = await _module(broker, tmp_path, api)
         nexus = Transport(broker, "nexus-token", timeout=60)
         try:
-            response = await call_app(nexus, "acme", "i-1", _request("/api/events"))
+            response = await call_app(nexus, "acme", "i-1", _request("/api/events"), service_account="sa1")
             assert response.body_follows
             stream = pull_body(await nexus.connect(), response.body_inbox)
             assert await stream.__anext__() == b"data: 1\n\n"
@@ -285,7 +292,7 @@ def test_an_idle_app_is_504(broker, tmp_path):
         host = await _module(broker, tmp_path, api, idle_seconds=0.5)
         nexus = Transport(broker, "nexus-token", timeout=60)
         try:
-            response = await call_app(nexus, "acme", "i-1", _request("/api/stall"))
+            response = await call_app(nexus, "acme", "i-1", _request("/api/stall"), service_account="sa1")
             assert response.status == 504
         finally:
             await host.close()

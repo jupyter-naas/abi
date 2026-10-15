@@ -14,6 +14,7 @@ from nats.errors import MaxPayloadError, NoRespondersError
 
 from naas_abi_sdk import no_responders, overflow
 from naas_abi_sdk.call_context import current_call_context, on_behalf_of_header
+from naas_abi_sdk.credentials import SERVICE_KEY_PREFIX, ServiceKey
 from naas_abi_sdk.lifeline import Lifeline
 from naas_abi_sdk.messages import message_size
 from naas_abi_sdk.telemetry import (
@@ -37,12 +38,18 @@ class RPCError(RuntimeError):
 
 
 class Transport:
-    """Async transport owned by one client/event loop; accepts issued tokens only."""
+    """Async transport owned by one client/event loop.
+
+    ``token`` is a service key (``abi_sk_...``, or a ``ServiceKey``): the
+    connection logs in with it and calls carry the tokens it is exchanged
+    for. A process of the engine passes its own tokens instead: a string,
+    or a callable returning one.
+    """
 
     def __init__(
         self,
         url: str,
-        token: str | Callable[[], str],
+        token: str | Callable[[], str] | ServiceKey,
         timeout: float = 10.0,
         *,
         forward_user: bool = False,
@@ -54,6 +61,12 @@ class Transport:
         refuse the header from anyone else, and no module host needs it."""
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("timeout must be finite and positive")
+        if isinstance(token, str) and token.startswith(SERVICE_KEY_PREFIX):
+            token = ServiceKey(token)
+        self.credentials = token if isinstance(token, ServiceKey) else None
+        if self.credentials is not None and "@" not in url.split("//", 1)[-1]:
+            for option, value in self.credentials.connect_options().items():
+                connection_options.setdefault(option, value)
         self.url, self.token, self.timeout = url, token, timeout
         self.forward_user = forward_user
         self.options = connection_options
@@ -98,6 +111,31 @@ class Transport:
 
         return closed
 
+    async def access_token(self) -> str:
+        """The token calls carry: the key's, exchanged as needed, else the
+        one this transport was given."""
+        if self.credentials is not None:
+            return await self.credentials.access_token(self)
+        token = self.token() if callable(self.token) else self.token
+        return cast(str, token)
+
+    async def reconnect(self) -> None:
+        """Replace the connection: the broker computes the new one's
+        permissions again (after a manifest approval). Subscriptions of the
+        old connection are not carried over."""
+        async with self._lock:
+            if self._closed:
+                raise RuntimeError("Client is closed")
+            old, watched = self.connection, self._lifeline
+            connected = self._connected
+            self.connection, self._connected, self._lifeline = Client(), False, None
+        if connected:
+            if watched is not None:
+                await watched.close(old)
+            else:
+                await old.close()
+        await self.connect()
+
     async def close(self) -> None:
         async with self._lock:
             self._closed = True
@@ -107,15 +145,20 @@ class Transport:
                 else:
                     await self.connection.close()
 
-    def auth_headers(self) -> dict[str, str]:
+    async def auth_headers(self, current: Any = None) -> dict[str, str]:
         """This transport's credentials for a message it sends itself: its
-        token, and the current call's user when it forwards users."""
-        token = self.token() if callable(self.token) else self.token
+        token (a service key's, exchanged as needed), and the current call's
+        user when it forwards users."""
+        token = await self.access_token()
         if not token or "\r" in token or "\n" in token:
             raise ValueError("A nonempty service token without newlines is required")
         headers = {"Nats-Auth-Token": token}
         if self.forward_user:
-            headers.update(on_behalf_of_header(current_call_context()))
+            headers.update(
+                on_behalf_of_header(
+                    current if current is not None else current_call_context()
+                )
+            )
         return headers
 
     async def call(
@@ -136,7 +179,7 @@ class Transport:
         if not context.workspace_id and current.workspace_id:
             context.workspace_id = current.workspace_id
         context.timeout_ms = int(self.timeout * 1000)
-        headers = self.auth_headers()
+        headers = await self.auth_headers(current)
         payload = outgoing.SerializeToString()
         # The span covers the whole exchange; the trace travels in the headers.
         with client_span(

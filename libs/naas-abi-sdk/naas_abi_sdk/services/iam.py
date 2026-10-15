@@ -278,3 +278,79 @@ class IAMService(ServiceProxy):
     async def register_catalog(self, catalog: Mapping[str, Any]) -> bool:
         """Register a service's action catalog (RFC §6.2 format, as a mapping)."""
         return await self._request("register_catalog", catalog=dict(catalog))
+
+    # -- tokens, service accounts, keys and manifests (RFC §8, §9) ---------------------
+
+    async def token(self, key: str) -> dict[str, Any]:
+        """A service key for an access token. Transports exchange their own key
+        themselves (``naas_abi_sdk.credentials``): this is for tooling."""
+        return await self._request("token", key=key)
+
+    async def jwks(self) -> dict[str, Any]:
+        """The engine's public signing keys and their issuer."""
+        return json.loads(await self._request("jwks"))
+
+    async def find_service_account(self, name: str) -> dict[str, Any]:
+        return await self._request("find_service_account", name=name)
+
+    async def create_key(
+        self, principal_id: str, *, description: str = ""
+    ) -> dict[str, Any]:
+        """``{"key": {...}, "value": "abi_sk_..."}``: the value is shown once."""
+        return await self._request(
+            "create_key", principal_id=principal_id, description=description
+        )
+
+    async def list_keys(self, principal_id: str) -> list[dict[str, Any]]:
+        return await self._request("list_keys", principal_id=principal_id)
+
+    async def revoke_key(self, principal_id: str, key_id: str) -> dict[str, Any]:
+        return await self._request(
+            "revoke_key", principal_id=principal_id, key_id=key_id
+        )
+
+    async def submit_manifest(
+        self, module_id: str, project: str, document: Mapping[str, Any] | str
+    ) -> dict[str, Any]:
+        """This module's permission manifest (``run_module`` submits it)."""
+        return await self._request(
+            "submit_manifest",
+            module_id=module_id,
+            project=project,
+            document_json=_document(document),
+        )
+
+    async def get_manifest(
+        self, principal_id: str, sha256: str | None = None
+    ) -> dict[str, Any]:
+        return await self._request(
+            "get_manifest", principal_id=principal_id, sha256=sha256
+        )
+
+    async def list_manifests(
+        self, *, principal_id: str | None = None, status: str | None = None
+    ) -> list[dict[str, Any]]:
+        return await self._request(
+            "list_manifests", principal_id=principal_id, status=status
+        )
+
+    async def approve_manifest(
+        self,
+        principal_id: str,
+        sha256: str | None = None,
+        *,
+        document: Mapping[str, Any] | str | None = None,
+    ) -> dict[str, Any]:
+        return await self._request(
+            "approve_manifest",
+            principal_id=principal_id,
+            sha256=sha256,
+            document_json=_document(document) if document is not None else None,
+        )
+
+    async def reject_manifest(
+        self, principal_id: str, sha256: str | None = None, *, reason: str = ""
+    ) -> dict[str, Any]:
+        return await self._request(
+            "reject_manifest", principal_id=principal_id, sha256=sha256, reason=reason
+        )

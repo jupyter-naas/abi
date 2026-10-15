@@ -173,12 +173,13 @@ class AgentHost:
                         await nc.subscribe(
                             agent_subject(
                                 self.session.client.project,
+                                self.session.service_account,
                                 self.session.instance_id,
                                 name,
                                 operation,
                             ),
                             cb=self.calls.callback(
-                                partial(self._handle, name, operation)
+                                partial(self._handle, name, operation), requests=True
                             ),
                         )
                     )

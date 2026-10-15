@@ -18,6 +18,8 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from naas_abi_sdk.messages import reply_allowed
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_LIMIT = 64
@@ -37,10 +39,22 @@ class ConcurrentCalls:
         self._idle = asyncio.Event()
         self._idle.set()
 
-    def callback(self, cb: Callback) -> Callback:
-        """``cb`` as a subscription callback: each message runs in its own task."""
+    def callback(self, cb: Callback, *, requests: bool = False) -> Callback:
+        """``cb`` as a subscription callback: each message runs in its own task.
+
+        ``requests``: the messages are requests, answered on their reply
+        subject. One whose reply subject is not an inbox is dropped before it
+        runs: the sender chose it, and the answer would act there with this
+        process's rights (``messages.reply_allowed``)."""
 
         async def receive(msg: Any) -> None:
+            if requests and not reply_allowed(getattr(msg, "reply", None)):
+                logger.warning(
+                    "Dropped a request on %s asking for a reply on %r",
+                    getattr(msg, "subject", "?"),
+                    getattr(msg, "reply", None),
+                )
+                return
             # Counted at once: idle() waits for a call still waiting for a slot.
             self._started()
             try:

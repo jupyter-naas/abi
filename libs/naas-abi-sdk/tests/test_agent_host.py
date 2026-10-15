@@ -65,6 +65,7 @@ def host(documents, handler, owner="owner", live=None):
     listed = (owner,) if live is None else live
     session = SimpleNamespace(
         instance_id=owner,
+        service_account="sa1",
         descriptor=SimpleNamespace(module_id="provider", contract_major=1),
         client=SimpleNamespace(
             project="default",
@@ -815,7 +816,9 @@ def test_calls_run_side_by_side_and_close_answers_them_first():
             await asyncio.wait_for(
                 callbacks["status"](
                     SimpleNamespace(
-                        subject="abi.agent.default.owner.agent.v1.status", headers={}
+                        subject="abi.agent.default.owner.agent.v1.status",
+                        headers={},
+                        reply="_INBOX.caller.1",
                     )
                 ),
                 timeout=1,

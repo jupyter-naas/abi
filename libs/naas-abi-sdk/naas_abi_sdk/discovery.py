@@ -52,6 +52,9 @@ class ModuleInstance:
     dependencies: tuple[tuple[str, int], ...] = ()
     models: tuple[ModelDescriptor, ...] = ()
     apps: tuple[Any, ...] = ()  # naas_abi_sdk.apps.AppDescriptor, without root
+    # The registering service account as one subject token, set by discovery:
+    # every hosting subject of the instance carries it (agent_subject, ...).
+    service_account: str = ""
 
 
 def _instance(value: pb.Instance) -> ModuleInstance:
@@ -73,6 +76,7 @@ def _instance(value: pb.Instance) -> ModuleInstance:
         tuple((x.module_id, x.contract_major) for x in d.dependencies),
         tuple(ModelDescriptor(m.name, m.description, m.kind) for m in d.models),
         _apps(d),
+        value.service_account,
     )
 
 
@@ -233,7 +237,12 @@ class ModuleProxy:
             connection=UnaryModelConnection(
                 ModuleModelClient(
                     self.client.transport,
-                    model_subject(self.client.project, target.instance_id, name),
+                    model_subject(
+                        self.client.project,
+                        target.service_account,
+                        target.instance_id,
+                        name,
+                    ),
                 )
             ),
             ref=ref,
@@ -327,6 +336,9 @@ class DiscoverySession:
         self.rollout_id = rollout_id
         self.rollout_modules = tuple(rollout_modules)
         self.instance_id, self.lease_token = str(uuid4()), uuid4().hex
+        # Discovery's subject token for this process's service account: its
+        # hosting subjects carry it. Known once registered.
+        self.service_account = ""
         self.initialized, self.draining = False, False
         self.lease_seconds, self.confirmed_until = 20.0, 0.0
         self._lock = asyncio.Lock()
@@ -357,6 +369,7 @@ class DiscoverySession:
         self.lease_seconds = result.lease_seconds
         self.confirmed_until = started + result.lease_seconds
         self.status = result.instance.status
+        self.service_account = result.instance.service_account
         self._bound = self.on_registered is None
         if self.on_registered is not None:
             await self.on_registered()

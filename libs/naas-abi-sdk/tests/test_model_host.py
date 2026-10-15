@@ -104,6 +104,7 @@ def test_module_proxy_invokes_the_serving_instance():
             0.0,
             (),
             models=(descriptor,),
+            service_account="sa1",
         )
         response = pb.ChatResponse(message=encode_message(AIMessage("hello")))
         transport = SimpleNamespace(call=AsyncMock(return_value=response))
@@ -119,7 +120,7 @@ def test_module_proxy_invokes_the_serving_instance():
         result = await model.model.ainvoke("Explain this")
         assert result.content == "hello"
         subject, request = transport.call.await_args.args[:2]
-        assert subject == "abi.mod.default.instance-1.model.writer.chat"
+        assert subject == "abi.mod.default.sa1.instance-1.model.writer.chat"
         assert decode_message(request.messages[0]).content == "Explain this"
 
     asyncio.run(scenario())
@@ -154,6 +155,7 @@ def _serving(model):
     nc = SimpleNamespace(subscribe=subscribe, flush=AsyncMock())
     session = SimpleNamespace(
         instance_id="i-1",
+        service_account="sa1",
         lease_token="lease",
         client=SimpleNamespace(
             project="default",
