@@ -43,6 +43,7 @@ from naas_abi_core.services.activity_log.adapters.activity_log_stream_codec impo
     event_to_pb,
     pb_to_event,
 )
+from naas_abi_core.services.iam.guard import raise_authorization_error
 
 
 def _query_to_pb(query: ActivityLogQuery) -> activity_log_pb2.ActivityLogQueryFilter:
@@ -67,10 +68,12 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     """Raise the exception matching ``error.code``.
 
     Must stay exactly symmetric with how ``ActivityLogPrimaryAdapterNATS``
-    encodes errors. ``IActivityLogAdapter`` declares no domain-specific
-    exceptions, so every error code -- including "INTERNAL" -- surfaces as a
-    plain ``RuntimeError`` here; there is nothing more specific to raise.
+    encodes errors. ``PERMISSION_DENIED`` and ``NOT_FOUND`` map back to IAM's
+    errors; ``IActivityLogAdapter`` declares no domain-specific exceptions, so
+    every other code -- including "INTERNAL" -- surfaces as a plain
+    ``RuntimeError``.
     """
+    raise_authorization_error(error.code, error.message)
     raise RuntimeError(f"activity_log NATS RPC failed ({error.code}): {error.message}")
 
 

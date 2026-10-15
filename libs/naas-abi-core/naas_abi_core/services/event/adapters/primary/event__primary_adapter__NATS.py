@@ -69,6 +69,11 @@ from naas_abi_core.services.event.EventPort import (
     InvalidEventError,
 )
 from naas_abi_core.services.event.EventService import EventService
+from naas_abi_core.services.iam.guard import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 
 __all__ = [
     "AUTH_HEADER",
@@ -260,6 +265,15 @@ class EventPrimaryAdapterNATS(ServiceWithTransfers):
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
             response = await self._dispatch.call(call, parsed_request, caller)
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
+            )
+            return
         except EventNotFoundError as exc:
             await self._respond_error(
                 request, response_cls, "EVENT_NOT_FOUND", str(exc), retryable=False
@@ -358,7 +372,10 @@ class EventPrimaryAdapterNATS(ServiceWithTransfers):
     def _transfer_error(exc: Exception) -> tuple[str, str] | None:
         if isinstance(exc, FilterError):
             return "INVALID_FILTER", str(exc)
-        return None
+        if isinstance(exc, EventNotFoundError):
+            return "EVENT_NOT_FOUND", str(exc)
+        code = authorization_error_code(exc)
+        return (code, str(exc)) if code is not None else None
 
     async def _handle_max_seq(self, request: Request) -> None:
         await self._handle(

@@ -13,13 +13,15 @@ activity_log/
 ├── ActivityLogFactory.py
 ├── ActivityLogPort.py             # IActivityLogAdapter, IActivityLogDomain, DTOs
 ├── ActivityLogService.py          # public service
+├── iam_catalog.py                 # the activity_log:* actions (RFC §6.4)
 ├── adapters/activity_log_stream_codec.py   # event <-> protobuf, stream frames
 ├── adapters/secondary/
 │   ├── ActivityLogDocumentAdapter.py   # default: the engine's Document Service
 │   ├── ActivityLogSqliteAdapter.py
 │   └── ActivityLogSqliteCopy.py        # job: copy SQLite logs into documents
 └── tests/
-    └── activity_log__secondary_adapter__generic_test.py   # generic contract tests
+    ├── activity_log__secondary_adapter__generic_test.py   # generic contract tests
+    └── activity_log_authorization_test.py                 # IAM: in process and over NATS
 ```
 
 ## Port (`ActivityLogPort.py`)
@@ -65,6 +67,36 @@ sessions on `abi.svc.activity_log.v1.transfer` (operation `query`, metadata a
 `QueryRequest`, frames `ActivityEvents` batches of about 256 KiB built in
 `adapters/activity_log_stream_codec.py`); the core client and the SDK facade
 pin the snapshot before opening and have no unary fallback.
+
+## Authorization
+
+`ActivityLogService` checks every operation with IAM when it is wired with it
+(an owner); a facade over NATS is not, and the owner it calls checks, as the
+request's verified caller. An actor's log is the personal resource
+`actor/<principal id>`.
+
+| Operation | Action | Resource |
+|---|---|---|
+| `record` | `activity_log:Record` | `actor/<the call's actor>` |
+| `query` | `activity_log:Query` | `actor/<actor_id>` |
+| `query_stream` | `activity_log:QueryStream` | `actor/<actor_id>` |
+| `list_actors` | `activity_log:ListActors` | each actor listed |
+| `shutdown` | `activity_log:Shutdown` | `service/-` |
+
+- **The actor is the call's**, never the event's `actor_id`: the call's user,
+  else the calling service account's name (`call_actor()`). The recorded event's
+  `actor_id` is overwritten with it. An anonymous call records nothing.
+- `record` still never raises: a denied or anonymous record is logged and dropped.
+- Every user reads and records their own log through `builtin.self`.
+- A caller who cannot see an actor gets `ResourceNotFoundError` (`NOT_FOUND`);
+  one who can see it but not perform the action gets `PermissionDeniedError`
+  (`PERMISSION_DENIED`).
+- Over NATS, a streamed query first pins its snapshot with `query`, so it also
+  needs `Query`.
+- Nexus records one `http.request` per request inside the request's context
+  (`api` on behalf of the signed-in user), so its actor is the user's id. A
+  request with no signed-in user is recorded as `api`, with `anonymous: true`.
+  Logs written earlier name actors `user:<id>` and `anonymous`.
 
 ## Available Adapters
 
@@ -125,6 +157,7 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/activity_log/adapters/se
 uv run pytest libs/naas-abi-core/naas_abi_core/services/activity_log/adapters/secondary/ActivityLogDocumentAdapter_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/activity_log/adapters/secondary/ActivityLogSqliteCopy_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/activity_log/tests/activity_log__secondary_adapter__generic_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/activity_log/tests/activity_log_authorization_test.py --import-mode=importlib
 ```
 
 ## Adding a new adapter

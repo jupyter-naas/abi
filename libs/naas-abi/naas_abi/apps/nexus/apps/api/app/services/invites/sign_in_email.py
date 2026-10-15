@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService, MagicLinkChallenge
+from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.email.EmailPorts import EmailAttachment
 from naas_abi_core.services.email.EmailService import EmailService
 
@@ -285,15 +286,18 @@ async def send_invite_sign_in_email(
         magic_link_url=magic_link_url,
         otp_code=challenge.otp_code,
     )
-    email_service.send(
-        to_email=to_email,
-        subject=subject,
-        text_body=text_body,
-        html_body=html_body,
-        from_email=str(settings.email_from_address),
-        from_name=settings.email_from_name,
-        attachments=attachments or None,
-    )
+    # Nexus's own mail, sent as its account (RFC §7: mail is sent by api,
+    # engine and idp): a sign-in request has no signed-in user to act for.
+    with as_service_account("api"):
+        email_service.send(
+            to_email=to_email,
+            subject=subject,
+            text_body=text_body,
+            html_body=html_body,
+            from_email=str(settings.email_from_address),
+            from_name=settings.email_from_name,
+            attachments=attachments or None,
+        )
     return True
 
 

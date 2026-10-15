@@ -17,6 +17,7 @@ Subscribers do **not** automatically replay history; for catch-up use `query` / 
 event/
 ├── EventPort.py            # IEventAdapter, IEventService, StoredEvent, exceptions
 ├── EventService.py         # main service
+├── iam_catalog.py          # the event:* actions and resource types (RFC §6.4)
 ├── EventFactory.py         # EventSQLite_find_storage
 ├── EventCodec.py           # to_event_dict / serialize / from_event_dict / deserialize
 ├── EventFilter.py          # build_where (SQL pushdown) + matches (in-memory eval)
@@ -28,6 +29,7 @@ event/
 │   ├── EventPostgreSQLAdapter.py    # shared by every engine
 │   └── EventPostgreSQLArchive.py    # hourly job: events older than 7 days -> Dataset Service
 ├── tests/event__secondary_adapter__generic_test.py   # contracts: every adapter, every store
+├── tests/event_authorization_test.py   # IAM: in process and over NATS
 └── ontologies/
     ├── modules/EventOntology.{ttl,py}    # RDFEntity, Process, LogProcess (canonical bases)
     └── classes/                          # auto-generated event classes
@@ -105,6 +107,40 @@ context with a ContextVar-like `get`/`set`/`reset`; setting the user sets
 The Nexus System app (Data tab) browses the log read-only through these: event
 types as folders, events newest first. The log is append-only by design.
 
+## Authorization
+
+`EventService` checks every operation with IAM when it is wired with it (an
+owner); a facade over NATS is not, and the owner it calls checks, as the
+request's verified caller. The catalog is `iam_catalog.py`, registered at boot.
+
+| Operation | Action | Resource |
+|---|---|---|
+| `publish`, `append_stored` | `event:Append` | `event_type/<class IRI>` |
+| `query`, `query_stored`, `iter_query`, `get_stored`, `subscribe` | `event:Query` | the type; with no type, only the types the caller may Query |
+| `query_stream`, `query_stored_stream` | `event:QueryStream` | as `Query` |
+| `max_seq(type)` | `event:MaxSeq` | the type |
+| `max_seq()` | `event:MaxSeq` | the newest seq of the types the caller may ask, 0 for none |
+| `event_types()` | `event:ListEventTypes` | each type listed |
+| `get_cursor`, `set_cursor` | `event:GetCursor`, `event:SetCursor` | `cursor/<consumer>/<type>` |
+| `query_for_consumer`, `query_stored_for_consumer`, `iter_query_for_consumer` | `event:QueryForConsumer` | the type and the cursor |
+| `seek_consumer_to_end` | `GetCursor`, `SetCursor`, `MaxSeq` | the cursor, the type |
+
+- A type is placed by prefix (`iam:PutPlacement`); unplaced, it is platform-level.
+- A caller who cannot see a type gets `EventNotFoundError` (`EVENT_NOT_FOUND`),
+  as if it held no events; one who can see it but not perform the action gets
+  `PermissionDeniedError` (`PERMISSION_DENIED`). `get_stored` of an invisible
+  type's row and of a missing seq fail the same way.
+- A read with no type filters per type (RFC §6.3). `limit` applies after
+  filtering; a type first appended after the types were listed is left out.
+- `subscribe` is checked once, when subscribing; live events are not checked one
+  by one.
+- Over NATS, a streamed read first pins its snapshot with `max_seq`, so it also
+  needs `MaxSeq` (every role grants both).
+- `emit(event)` is how a kernel service records its own audit event: stamped
+  with the call's user, appended as the engine (the caller was authorized for
+  the operation, not for the log), never raising. Kernel services emit through
+  it, never through `publish`.
+
 ## Filter DSL
 
 EventBridge-style: `eq`, `prefix`, `suffix`, `contains`, `in`, `gt`, `gte`, `lt`, `lte`. Supports JSON-path keys. See `EventFilter.py`. The SQLite adapter pushes filters down via `build_where`; the rest is evaluated in-process via `matches`.
@@ -163,6 +199,7 @@ EventFactory.EventServicePostgreSQL(dsn, schema="abi_event", bus=None) -> EventS
 
 ```bash
 uv run pytest libs/naas-abi-core/naas_abi_core/services/event/EventService_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/event/tests/event_authorization_test.py --import-mode=importlib
 uv run pytest libs/naas-abi-core/naas_abi_core/services/event/adapters/secondary/EventSQLiteAdapter_test.py
 # PostgreSQL (EVENT_TEST_POSTGRES_DSN), with the activity log on PostgreSQL documents:
 EVENT_TEST_POSTGRES_DSN=... DOCUMENT_TEST_POSTGRES_DSN=... make test-event-core

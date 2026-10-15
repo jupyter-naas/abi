@@ -66,6 +66,11 @@ from naas_abi_core.services.activity_log.adapters.activity_log_stream_codec impo
     event_to_pb,
     pb_to_event,
 )
+from naas_abi_core.services.iam.guard import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from nats.micro.request import Request
 
 __all__ = [
@@ -90,6 +95,12 @@ def _pb_to_query(pb: activity_log_pb2.ActivityLogQueryFilter) -> ActivityLogQuer
         before_seq=pb.before_seq if pb.HasField("before_seq") else None,
         after_seq=pb.after_seq if pb.HasField("after_seq") else None,
     )
+
+
+def _transfer_error(exc: Exception) -> tuple[str, str] | None:
+    """A streamed query refused like the one-shot one."""
+    code = authorization_error_code(exc)
+    return (code, str(exc)) if code is not None else None
 
 
 class ActivityLogPrimaryAdapterNATS(ServiceWithTransfers):
@@ -132,6 +143,7 @@ class ActivityLogPrimaryAdapterNATS(ServiceWithTransfers):
             self._transfer_frames,
             operations=("query",),
             chunk_bytes=1024 * 1024,
+            error_mapper=_transfer_error,
         )
 
     async def start(self, nc: nats.NATS) -> None:
@@ -213,6 +225,15 @@ class ActivityLogPrimaryAdapterNATS(ServiceWithTransfers):
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
             response = await self._dispatch.call(call, parsed_request, caller)
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
+            )
+            return
         except Exception:  # noqa: BLE001 - a handler must never crash the service
             logger.opt(exception=True).error(
                 f"ActivityLogPrimaryAdapterNATS: unexpected error handling {request.subject!r}"

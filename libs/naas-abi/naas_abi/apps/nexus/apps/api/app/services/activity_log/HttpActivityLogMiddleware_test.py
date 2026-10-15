@@ -8,6 +8,9 @@ from naas_abi.apps.nexus.apps.api.app.services.activity_log.HttpActivityLogMiddl
     REDACTED,
     HttpActivityLogMiddleware,
 )
+from naas_abi.apps.nexus.apps.api.app.services.identity_events.middleware import (
+    RequestIdentityMiddleware,
+)
 from naas_abi_core.services.activity_log.ActivityLogFactory import ActivityLogFactory
 
 
@@ -16,6 +19,8 @@ def _build_app(tmp_path, **mw_kwargs):
     app = FastAPI()
     app.state.activity_log_service = service
     app.add_middleware(HttpActivityLogMiddleware, **mw_kwargs)
+    # Outside it, as in main.py: the request's caller is set first.
+    app.add_middleware(RequestIdentityMiddleware)
 
     @app.get("/hello")
     def _hello():
@@ -61,9 +66,11 @@ def test_anonymous_request_is_recorded(app_with_middleware):
     response = client.get("/hello")
     assert response.status_code == 200
 
-    events = service.query("anonymous")
+    # Recorded as Nexus's own account, never under a name the request gives.
+    events = service.query("api")
     assert len(events) == 1
     event = events[0]
+    assert event.attributes["anonymous"] is True
     assert event.event_type == "http.request"
     assert event.attributes["method"] == "GET"
     assert event.attributes["path"] == "/hello"
@@ -76,15 +83,19 @@ def test_authenticated_request_is_recorded_under_user_actor(app_with_middleware)
     app, service = app_with_middleware
     client = TestClient(app)
 
+    async def verified(headers):
+        return "user-123"
+
     with patch(
-        "naas_abi.apps.nexus.apps.api.app.services.auth.service.decode_token",
-        return_value={"sub": "user-123"},
+        "naas_abi.apps.nexus.apps.api.app.services.identity_events.middleware.verified_user_id",
+        verified,
     ):
         response = client.get("/hello", headers={"Authorization": "Bearer fake"})
 
     assert response.status_code == 200
-    events = service.query("user:user-123")
+    events = service.query("user-123")
     assert len(events) == 1
+    assert "anonymous" not in events[0].attributes
     assert events[0].attributes["has_auth_header"] is True
     # The token must never appear anywhere in the stored attributes.
     flat = repr(events[0].attributes)
@@ -95,14 +106,17 @@ def test_invalid_bearer_token_falls_back_to_anonymous(app_with_middleware):
     app, service = app_with_middleware
     client = TestClient(app)
 
+    async def unverified(headers):
+        return None
+
     with patch(
-        "naas_abi.apps.nexus.apps.api.app.services.auth.service.decode_token",
-        return_value=None,
+        "naas_abi.apps.nexus.apps.api.app.services.identity_events.middleware.verified_user_id",
+        unverified,
     ):
         response = client.get("/hello", headers={"Authorization": "Bearer bad"})
 
     assert response.status_code == 200
-    assert len(service.query("anonymous")) == 1
+    assert len(service.query("api")) == 1
 
 
 def test_missing_activity_log_service_does_not_break_requests(tmp_path):
@@ -124,7 +138,7 @@ def test_failing_request_is_still_recorded(app_with_middleware):
     response = client.get("/boom")
     assert response.status_code == 500
 
-    events = service.query("anonymous")
+    events = service.query("api")
     assert len(events) == 1
     assert events[0].attributes["status_code"] == 500
     assert events[0].attributes["path"] == "/boom"
@@ -136,7 +150,7 @@ def test_correlation_id_is_captured_from_header(app_with_middleware):
     response = client.get("/hello", headers={"X-Request-Id": "req-xyz"})
     assert response.status_code == 200
 
-    events = service.query("anonymous")
+    events = service.query("api")
     assert len(events) == 1
     assert events[0].correlation_id == "req-xyz"
 
@@ -149,7 +163,7 @@ def test_json_body_is_captured_and_handler_still_receives_it(app_with_middleware
     assert response.status_code == 200
     assert response.json() == {"echoed": payload}
 
-    events = service.query("anonymous")
+    events = service.query("api")
     assert len(events) == 1
     body = events[0].attributes["request_body"]
     assert body == payload
@@ -164,7 +178,7 @@ def test_sensitive_keys_are_redacted_at_top_level(app_with_middleware):
         json={"username": "alice", "password": "hunter2", "api_key": "abc"},
     )
 
-    body = service.query("anonymous")[0].attributes["request_body"]
+    body = service.query("api")[0].attributes["request_body"]
     assert body["username"] == "alice"
     assert body["password"] == REDACTED
     assert body["api_key"] == REDACTED
@@ -181,7 +195,7 @@ def test_sensitive_keys_are_redacted_nested_and_in_lists(app_with_middleware):
         },
     )
 
-    body = service.query("anonymous")[0].attributes["request_body"]
+    body = service.query("api")[0].attributes["request_body"]
     assert body["user"]["name"] == "alice"
     assert body["user"]["token"] == REDACTED
     assert body["items"][0]["secret"] == REDACTED
@@ -194,7 +208,7 @@ def test_query_params_are_captured_and_redacted(app_with_middleware):
     response = client.get("/hello?q=hi&token=secret&page=2")
     assert response.status_code == 200
 
-    qp = service.query("anonymous")[0].attributes["query_params"]
+    qp = service.query("api")[0].attributes["query_params"]
     assert qp["q"] == "hi"
     assert qp["page"] == "2"
     assert qp["token"] == REDACTED
@@ -207,7 +221,7 @@ def test_body_truncated_when_over_cap(tmp_path):
         big = "x" * 1024
         client.post("/echo", json={"data": big})
 
-        event = service.query("anonymous")[0]
+        event = service.query("api")[0]
         assert event.attributes["request_body_truncated"] is True
         assert event.attributes["request_body_size"] > 128
     finally:
@@ -219,7 +233,7 @@ def test_auth_path_skips_body_capture(app_with_middleware):
     client = TestClient(app)
     client.post("/api/auth/token", json={"password": "hunter2"})
 
-    body = service.query("anonymous")[0].attributes["request_body"]
+    body = service.query("api")[0].attributes["request_body"]
     assert isinstance(body, str)
     assert body.startswith("[PATH_SKIPPED")
 
@@ -234,10 +248,10 @@ def test_system_app_data_writes_skip_body_capture(app_with_middleware):
         headers={"Content-Type": "text/plain"},
     )
 
-    body = service.query("anonymous")[0].attributes["request_body"]
+    body = service.query("api")[0].attributes["request_body"]
     assert isinstance(body, str)
     assert body.startswith("[PATH_SKIPPED")
-    assert "sk-not-for-the-log" not in repr(service.query("anonymous")[0].attributes)
+    assert "sk-not-for-the-log" not in repr(service.query("api")[0].attributes)
 
 
 def test_multipart_body_is_not_captured(app_with_middleware):
@@ -248,7 +262,7 @@ def test_multipart_body_is_not_captured(app_with_middleware):
         files={"f": ("hello.txt", b"hello world", "text/plain")},
     )
 
-    body = service.query("anonymous")[0].attributes["request_body"]
+    body = service.query("api")[0].attributes["request_body"]
     assert isinstance(body, str)
     assert body.startswith("[MULTIPART")
 
@@ -265,7 +279,7 @@ def test_binary_body_is_stored_as_base64(app_with_middleware):
     )
     assert response.status_code == 200
 
-    body = service.query("anonymous")[0].attributes["request_body"]
+    body = service.query("api")[0].attributes["request_body"]
     assert isinstance(body, dict)
     assert "_b64" in body
     assert base64.b64decode(body["_b64"]) == raw
@@ -277,7 +291,7 @@ def test_capture_request_body_can_be_disabled(tmp_path):
         client = TestClient(app)
         client.post("/echo", json={"foo": "bar"})
 
-        body = service.query("anonymous")[0].attributes["request_body"]
+        body = service.query("api")[0].attributes["request_body"]
         assert isinstance(body, str)
         assert body.startswith("[DISABLED")
     finally:
@@ -292,7 +306,7 @@ def test_form_urlencoded_body_is_parsed_and_redacted(app_with_middleware):
         data={"username": "alice", "password": "hunter2"},
     )
 
-    body = service.query("anonymous")[0].attributes["request_body"]
+    body = service.query("api")[0].attributes["request_body"]
     assert body == {"username": "alice", "password": REDACTED}
 
 
@@ -301,7 +315,7 @@ def test_authorization_header_value_is_never_stored(app_with_middleware):
     client = TestClient(app)
     client.get("/hello", headers={"Authorization": "Bearer supersecret"})
 
-    flat = repr(service.query("anonymous")[0].attributes)
+    flat = repr(service.query("api")[0].attributes)
     assert "supersecret" not in flat
 
 
@@ -311,6 +325,6 @@ def test_a_remote_app_grant_never_reaches_the_log(app_with_middleware):
 
     TestClient(app).get("/app-remote/GRANT-SECRET/acme.research/console/index.html")
 
-    (event,) = service.query("anonymous")
+    (event,) = service.query("api")
     assert event.attributes["path"] == "/app-remote/[grant]/acme.research/console/index.html"
     assert "GRANT-SECRET" not in str(event.attributes)

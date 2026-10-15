@@ -16,6 +16,7 @@ import datetime
 import hashlib
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from itertools import islice
 from threading import Thread
 from typing import Any
 
@@ -31,7 +32,9 @@ from naas_abi_core.services.event.EventPort import (
     InvalidEventError,
     StoredEvent,
 )
+from naas_abi_core.services.event.iam_catalog import CATALOG
 from naas_abi_core.services.event.ontologies.modules.EventOntology import LogProcess
+from naas_abi_core.services.iam.guard import ServiceGuard
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
@@ -72,10 +75,31 @@ def _stamp(event: Any) -> None:
             setattr(event, field_name, value)
 
 
+def _type_not_found(event_type: str) -> Callable[[], EventNotFoundError]:
+    return lambda: EventNotFoundError(f"No events of type {event_type}")
+
+
+def _cursor_not_found(consumer_id: str, event_type: str) -> Callable[[], Exception]:
+    return lambda: EventNotFoundError(
+        f"No cursor of consumer {consumer_id} for {event_type}"
+    )
+
+
 class EventService(ServiceBase, IEventService):
+    """The durable event log and its live broadcast, each operation authorized.
+
+    Wired with IAM (an owner), it checks every call against the ``event``
+    catalog: ``Append`` and ``Query`` on ``event_type/<class IRI>``, cursors on
+    ``cursor/<consumer>/<type>``. A read with no event type returns only the
+    types the caller may read (RFC §6.3). A facade over NATS is not wired, and
+    the owner it calls checks. ``emit`` appends a kernel service's own audit
+    event as the engine.
+    """
+
     def __init__(self, adapter: IEventAdapter, bus: BusService | None = None):
         super().__init__()
         self._adapter = adapter
+        self._guard = ServiceGuard.of(CATALOG, self)
         # `bus` may be passed explicitly (e.g. by EventFactory or in tests) or
         # left None and resolved lazily via wire_services() — the engine sets
         # `self._services`, from which we can pick up `services.bus`.
@@ -125,6 +149,7 @@ class EventService(ServiceBase, IEventService):
 
         payload = EventCodec.serialize(event)
 
+        self._require("Append", event_type)
         stored = self._adapter.append(event_id, event_type, timestamp, payload)
 
         if self._bus is not None:
@@ -192,7 +217,8 @@ class EventService(ServiceBase, IEventService):
         payload (keys and values).
         """
         event_type = str(event_class._class_uri) if event_class is not None else None
-        rows = self._adapter.query(
+        rows = self._rows(
+            "Query",
             event_type=event_type,
             since_seq=since_seq,
             until_seq=until_seq,
@@ -222,7 +248,8 @@ class EventService(ServiceBase, IEventService):
         block (docs/adr/20261003_nats-streamed-results.md). Events appended
         after the block opened are not included."""
         event_type = str(event_class._class_uri) if event_class is not None else None
-        with self._adapter.query_stream(
+        with self._row_stream(
+            "QueryStream",
             event_type=event_type,
             since_seq=since_seq,
             until_seq=until_seq,
@@ -236,7 +263,13 @@ class EventService(ServiceBase, IEventService):
             yield (self._reconstruct(row, event_class) for row in rows)
 
     def event_types(self) -> list[EventTypeSummary]:
-        return self._adapter.list_event_types()
+        """The event types present that the caller may list."""
+        return self._guard.filter(
+            "ListEventTypes",
+            "event_type",
+            self._adapter.list_event_types(),
+            lambda summary: summary.event_type,
+        )
 
     def query_stored(
         self,
@@ -251,7 +284,8 @@ class EventService(ServiceBase, IEventService):
         until_timestamp: str | None = None,
         filter: dict | None = None,
     ) -> list[StoredEvent]:
-        return self._adapter.query(
+        return self._rows(
+            "Query",
             event_type=event_type,
             since_seq=since_seq,
             until_seq=until_seq,
@@ -277,7 +311,8 @@ class EventService(ServiceBase, IEventService):
         until_timestamp: str | None = None,
         filter: dict | None = None,
     ) -> Iterator[Iterator[StoredEvent]]:
-        with self._adapter.query_stream(
+        with self._row_stream(
+            "QueryStream",
             event_type=event_type,
             since_seq=since_seq,
             until_seq=until_seq,
@@ -298,6 +333,7 @@ class EventService(ServiceBase, IEventService):
     def append_stored(
         self, event_id: str, event_type: str, timestamp: str, payload: bytes
     ) -> StoredEvent:
+        self._require("Append", event_type)
         return self._adapter.append(
             event_id=event_id,
             event_type=event_type,
@@ -306,12 +342,22 @@ class EventService(ServiceBase, IEventService):
         )
 
     def max_seq(self, event_type: str | None = None) -> int:
-        return self._adapter.max_seq(event_type=event_type)
+        """The newest ``seq`` of a type; with no type, the newest of the types
+        the caller may ask (0 when none), so it reveals no other type."""
+        if event_type is not None:
+            self._require("MaxSeq", event_type)
+            return self._adapter.max_seq(event_type=event_type)
+        allowed = self._allowed_types("MaxSeq")
+        if allowed is None or allowed[0]:
+            return self._adapter.max_seq(event_type=None)
+        return max((self._adapter.max_seq(event_type=t) for t in allowed[1]), default=0)
 
     def get_cursor(self, consumer_id: str, event_type: str) -> int:
+        self._require_cursor("GetCursor", consumer_id, event_type)
         return self._adapter.get_cursor(consumer_id, event_type)
 
     def set_cursor(self, consumer_id: str, event_type: str, last_seq: int) -> None:
+        self._require_cursor("SetCursor", consumer_id, event_type)
         self._adapter.set_cursor(consumer_id, event_type, last_seq)
 
     def query_stored_for_consumer(
@@ -321,6 +367,7 @@ class EventService(ServiceBase, IEventService):
         limit: int | None = None,
         filter: dict | None = None,
     ) -> list[StoredEvent]:
+        self._require_consumer(consumer_id, event_type)
         return self._adapter.query_for_consumer(
             consumer_id=consumer_id,
             event_type=event_type,
@@ -329,9 +376,16 @@ class EventService(ServiceBase, IEventService):
         )
 
     def get_stored(self, seq: int) -> StoredEvent:
+        def not_found() -> EventNotFoundError:
+            return EventNotFoundError(f"No event with seq {seq}")
+
         rows = self._adapter.query(since_seq=seq - 1, until_seq=seq, limit=1)
         if not rows or rows[0].seq != seq:
-            raise EventNotFoundError(f"No event with seq {seq}")
+            raise not_found()
+        # Invisible and missing look the same (RFC §5.4).
+        self._guard.require(
+            "Query", "event_type", rows[0].event_type, not_found=not_found
+        )
         return rows[0]
 
     def iter_query(
@@ -351,14 +405,37 @@ class EventService(ServiceBase, IEventService):
         during iteration are not included.
 
         `limit` caps the total number of events yielded. `batch_size` is the
-        SQL fetch size per round-trip.
+        SQL fetch size per round-trip. Authorized when called, like ``query``.
         """
         if batch_size <= 0:
             raise ValueError("batch_size must be > 0")
+        event_type = str(event_class._class_uri) if event_class is not None else None
+        if event_type is not None:
+            self._require("Query", event_type)
+        return self._iter_query(
+            event_class,
+            event_type,
+            since_seq,
+            since_timestamp,
+            until_timestamp,
+            filter,
+            limit,
+            batch_size,
+        )
+
+    def _iter_query(
+        self,
+        event_class: type[LogProcess] | None,
+        event_type: str | None,
+        since_seq: int | None,
+        since_timestamp: str | None,
+        until_timestamp: str | None,
+        filter: dict | None,
+        limit: int | None,
+        batch_size: int,
+    ) -> Iterator[Any]:
         if limit is not None and limit <= 0:
             return
-
-        event_type = str(event_class._class_uri) if event_class is not None else None
         snapshot_max = self._adapter.max_seq(event_type=event_type)
         cursor = since_seq if since_seq is not None else 0
         yielded = 0
@@ -369,7 +446,8 @@ class EventService(ServiceBase, IEventService):
                 fetch_size = min(batch_size, limit - yielded)
                 if fetch_size <= 0:
                     return
-            rows = self._adapter.query(
+            rows = self._rows(
+                "Query",
                 event_type=event_type,
                 since_seq=cursor,
                 until_seq=snapshot_max,
@@ -394,6 +472,7 @@ class EventService(ServiceBase, IEventService):
         limit: int | None = None,
         filter: dict | None = None,
     ) -> list[Any]:
+        self._require_consumer(consumer_id, str(event_class._class_uri))
         rows = self._adapter.query_for_consumer(
             consumer_id=consumer_id,
             event_type=str(event_class._class_uri),
@@ -412,6 +491,9 @@ class EventService(ServiceBase, IEventService):
         ``cursor_after`` so callers can log how far the seek jumped.
         """
         event_type = str(event_class._class_uri)
+        self._require_cursor("GetCursor", consumer_id, event_type)
+        self._require_cursor("SetCursor", consumer_id, event_type)
+        self._require("MaxSeq", event_type)
         before = self._adapter.get_cursor(consumer_id, event_type)
         mx = self._adapter.max_seq(event_type)
         if before != mx:
@@ -435,14 +517,27 @@ class EventService(ServiceBase, IEventService):
 
         `limit` caps the total number of events yielded (and the cursor only
         advances over events actually read). `batch_size` is the per-round-trip
-        fetch size.
+        fetch size. Authorized when called, like ``query_for_consumer``.
         """
         if batch_size <= 0:
             raise ValueError("batch_size must be > 0")
+        event_type = str(event_class._class_uri)
+        self._require_consumer(consumer_id, event_type)
+        return self._drain_for_consumer(
+            consumer_id, event_class, event_type, limit, batch_size, filter
+        )
+
+    def _drain_for_consumer(
+        self,
+        consumer_id: str,
+        event_class: type[LogProcess],
+        event_type: str,
+        limit: int | None,
+        batch_size: int,
+        filter: dict | None,
+    ) -> Iterator[Any]:
         if limit is not None and limit <= 0:
             return
-
-        event_type = str(event_class._class_uri)
         yielded = 0
         while True:
             fetch_size = batch_size
@@ -463,6 +558,82 @@ class EventService(ServiceBase, IEventService):
                 yielded += 1
                 if limit is not None and yielded >= limit:
                     return
+
+    # ------------------------------------------------------------------
+    # authorization (RFC §6.4 "event")
+    # ------------------------------------------------------------------
+
+    def _require(self, action: str, event_type: str) -> None:
+        self._guard.require(
+            action, "event_type", event_type, not_found=_type_not_found(event_type)
+        )
+
+    def _require_cursor(self, action: str, consumer_id: str, event_type: str) -> None:
+        self._guard.require(
+            action,
+            "cursor",
+            (consumer_id, event_type),
+            not_found=_cursor_not_found(consumer_id, event_type),
+        )
+
+    def _require_consumer(self, consumer_id: str, event_type: str) -> None:
+        """A consumer read: the type and the consumer's cursor on it."""
+        self._require("QueryForConsumer", event_type)
+        self._require_cursor("QueryForConsumer", consumer_id, event_type)
+
+    def _allowed_types(self, action: str) -> tuple[bool, set[str]] | None:
+        """For a read with no event type: whether every type present is
+        allowed, and the allowed ones; None when this service checks nothing."""
+        if not self._guard.enforcing:
+            return None
+        present = [s.event_type for s in self._adapter.list_event_types()]
+        allowed = self._guard.filter(action, "event_type", present, lambda t: t)
+        return len(allowed) == len(present), set(allowed)
+
+    def _rows(
+        self, action: str, *, event_type: str | None, **query: Any
+    ) -> list[StoredEvent]:
+        """Stored rows of one type, or of every type the caller may read
+        (RFC §6.3); ``limit`` applies after filtering."""
+        if event_type is not None:
+            self._require(action, event_type)
+            return self._adapter.query(event_type=event_type, **query)
+        allowed = self._allowed_types(action)
+        if allowed is None:
+            return self._adapter.query(**query)
+        everything, types = allowed
+        if everything:
+            # A type first appended after the types were listed stays out.
+            return [r for r in self._adapter.query(**query) if r.event_type in types]
+        rows = [
+            row
+            for t in sorted(types)
+            for row in self._adapter.query(event_type=t, **query)
+        ]
+        rows.sort(key=lambda row: row.seq, reverse=bool(query.get("newest_first")))
+        limit = query.get("limit")
+        return rows if limit is None else rows[:limit]
+
+    @contextmanager
+    def _row_stream(
+        self, action: str, *, event_type: str | None, **query: Any
+    ) -> Iterator[Iterator[StoredEvent]]:
+        """``_rows``, read as the caller iterates."""
+        if event_type is not None:
+            self._require(action, event_type)
+            with self._adapter.query_stream(event_type=event_type, **query) as rows:
+                yield rows
+            return
+        allowed = self._allowed_types(action)
+        if allowed is None:
+            with self._adapter.query_stream(**query) as rows:
+                yield rows
+            return
+        everything, types = allowed
+        limit = None if everything else query.pop("limit", None)
+        with self._adapter.query_stream(**query) as rows:
+            kept = (row for row in rows if row.event_type in types)
+            yield kept if limit is None else islice(kept, limit)
 
     # ------------------------------------------------------------------
     # subscribe
@@ -488,6 +659,8 @@ class EventService(ServiceBase, IEventService):
         """
         if self._bus is None:
             raise RuntimeError("EventService.subscribe requires a BusService")
+        # Checked once, for the subscriber: live events are not checked one by one.
+        self._require("Query", str(event_class._class_uri))
 
         topic = class_iri_to_topic(str(event_class._class_uri))
 

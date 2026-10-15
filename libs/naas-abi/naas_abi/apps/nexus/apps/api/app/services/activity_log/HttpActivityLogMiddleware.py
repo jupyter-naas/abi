@@ -6,10 +6,14 @@ Wraps the downstream ASGI app to:
 - record one ``http.request`` ActivityEvent per request,
 without disrupting the downstream handler.
 
-Lives in Nexus rather than naas-abi-core because it bridges two
-domains core knows nothing about:
-- "what is a user?" (Nexus auth JWT → ``actor_id``)
-- "what is an HTTP request?" (ASGI)
+Lives in Nexus rather than naas-abi-core because it knows what an HTTP
+request is (ASGI); core knows nothing about it.
+
+The actor is never read from the request: it is the request's verified
+caller, set by ``RequestIdentityMiddleware`` around this one (``api`` on
+behalf of the signed-in user), and the activity log records under the call's
+user. A request with no signed-in user is recorded as Nexus's own ``api``
+account, with ``anonymous: true``, so failed sign-ins stay on the record.
 """
 
 from __future__ import annotations
@@ -22,8 +26,12 @@ from typing import Any
 from urllib.parse import parse_qsl
 
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import redact_grant_path
+from naas_abi_core.engine.call_context import as_service_account, current_call_context
 from naas_abi_core.services.activity_log.ActivityLogPort import ActivityEvent
-from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
+from naas_abi_core.services.activity_log.ActivityLogService import (
+    ActivityLogService,
+    call_actor,
+)
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -106,28 +114,8 @@ def _decode_body(raw: bytes, content_type: str) -> Any:
         return {"_b64": base64.b64encode(raw).decode("ascii")}
 
 
-def _resolve_actor_id_from_headers(headers: Headers) -> str:
-    auth = headers.get("authorization")
-    if not auth:
-        return "anonymous"
-    parts = auth.split(" ", 1)
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        return "anonymous"
-    token = parts[1].strip()
-    if not token:
-        return "anonymous"
-    try:
-        from naas_abi.apps.nexus.apps.api.app.services.auth.service import decode_token
-
-        payload = decode_token(token)
-    except Exception:
-        return "anonymous"
-    if not payload:
-        return "anonymous"
-    sub = payload.get("sub")
-    if not sub:
-        return "anonymous"
-    return f"user:{sub}"
+# The account an anonymous request is recorded under: Nexus's own.
+ANONYMOUS_REQUEST_ACCOUNT = "api"
 
 
 class HttpActivityLogMiddleware:
@@ -210,7 +198,6 @@ class HttpActivityLogMiddleware:
             try:
                 service = self._resolve_service(scope)
                 if service is not None:
-                    actor_id = _resolve_actor_id_from_headers(headers)
                     attrs = self._build_attributes(
                         scope=scope,
                         headers=headers,
@@ -225,18 +212,33 @@ class HttpActivityLogMiddleware:
                     )
                     if exc is not None:
                         attrs["error"] = type(exc).__name__
-
-                    service.record(
-                        ActivityEvent(
-                            actor_id=actor_id,
-                            event_type="http.request",
-                            correlation_id=headers.get("x-request-id"),
-                            attributes=attrs,
-                        )
-                    )
+                    self._record(service, headers, attrs)
             except Exception:
                 # Activity logging must never break the request path.
                 pass
+
+    @staticmethod
+    def _record(
+        service: ActivityLogService, headers: Headers, attrs: dict[str, Any]
+    ) -> None:
+        def record() -> None:
+            # The service names the actor from the call; this is its fallback
+            # for a log not wired with IAM.
+            service.record(
+                ActivityEvent(
+                    actor_id=call_actor() or ANONYMOUS_REQUEST_ACCOUNT,
+                    event_type="http.request",
+                    correlation_id=headers.get("x-request-id"),
+                    attributes=attrs,
+                )
+            )
+
+        if current_call_context().principal.kind != "anonymous":
+            record()
+            return
+        attrs["anonymous"] = True
+        with as_service_account(ANONYMOUS_REQUEST_ACCOUNT):
+            record()
 
     @staticmethod
     def _resolve_service(scope: Scope) -> ActivityLogService | None:

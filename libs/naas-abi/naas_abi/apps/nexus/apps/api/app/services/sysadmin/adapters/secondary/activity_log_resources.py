@@ -9,8 +9,11 @@ Ids: an actor is its id, percent-encoded (``/`` and all); an event is
 
 For a request log: an actor carries its kind (``user``, ``service``,
 ``anonymous``), its last activity (one newest-event query per actor on the page)
-and, for ``user:<id>`` actors, a display name and email from ``actor_names`` (one
-query for the page). An HTTP request is named by its path and carries method,
+and, for user actors, a display name and email from ``actor_names`` (one query
+for the page). An actor is the principal id of the call that recorded it: a
+Nexus user id (``user-…``), an IAM user id (``usr_…``) or a service account's
+name. Logs written before IAM name users ``user:<id>`` and anonymous requests
+``anonymous``; both still read. An HTTP request is named by its path and carries method,
 status, duration and client as attributes.
 """
 
@@ -19,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
+import re
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 from urllib.parse import quote, unquote
@@ -40,7 +44,9 @@ from naas_abi_core.services.activity_log.ActivityLogPort import ActivityLogQuery
 
 SERVICE = "activity_log"
 EVENT_ACTIONS: tuple[Action, ...] = ("read", "download")
-USER_PREFIX = "user:"
+USER_PREFIX = "user:"  # actors recorded before IAM: user:<Nexus user id>
+# A user's principal id: a Nexus user id, or an IAM user id.
+_USER_ID = re.compile(r"^(user-[0-9A-Za-z_-]+|usr_[0-9a-z]{26})$")
 
 # ``{user id: (name, email)}`` for the ``user:<id>`` actors on a page.
 ActorNames = Callable[[list[str]], Awaitable[Mapping[str, tuple[str, str]]]]
@@ -50,11 +56,22 @@ def _actor_id(actor: str) -> str:
     return quote(actor, safe="")
 
 
+def actor_user_id(actor: str) -> str | None:
+    """The user an actor names, or None for a service account or anonymous."""
+    if actor.startswith(USER_PREFIX):
+        return actor[len(USER_PREFIX) :] or None
+    return actor if _USER_ID.match(actor) else None
+
+
 def actor_kind(actor: str) -> str:
     if actor == "anonymous":
         return "anonymous"
+    if actor_user_id(actor) is not None:
+        return "user"
     head, sep, _ = actor.partition(":")
-    return head if sep and head else "other"
+    if sep:
+        return head or "other"
+    return "service"
 
 
 def _request_summary(attributes: Mapping[str, Any]) -> str:
@@ -241,9 +258,9 @@ class ActivityLogResources:
     async def _named(self, entries: tuple[ResourceEntry, ...]) -> tuple[ResourceEntry, ...]:
         """Users shown by name, their id and email underneath. Best effort."""
         users = [
-            e.attributes["actor"][len(USER_PREFIX) :]
+            user_id
             for e in entries
-            if e.attributes["actor"].startswith(USER_PREFIX)
+            if (user_id := actor_user_id(e.attributes["actor"])) is not None
         ]
         try:
             names = await self._actor_names(users) if users and self._actor_names else {}
@@ -252,7 +269,7 @@ class ActivityLogResources:
         out = []
         for entry in entries:
             actor = entry.attributes["actor"]
-            name, email = names.get(actor[len(USER_PREFIX) :], ("", ""))
+            name, email = names.get(actor_user_id(actor) or "", ("", ""))
             if not (name or email):
                 out.append(entry)
                 continue

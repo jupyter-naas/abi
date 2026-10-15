@@ -55,6 +55,7 @@ from naas_abi_core.services.event.EventPort import (
     InvalidEventError,
     StoredEvent,
 )
+from naas_abi_core.services.iam.guard import raise_authorization_error
 
 
 # mypy --follow-untyped-imports can't resolve google.protobuf's
@@ -113,7 +114,11 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     ``INVALID_EVENT`` are mapped defensively -- unlikely to actually
     round-trip from a real adapter -- and everything else, including
     ``INTERNAL``/``UNAUTHENTICATED``, surfaces as a ``RuntimeError``.
+    ``PERMISSION_DENIED`` and ``NOT_FOUND`` map back to IAM's errors, and the
+    service's own not-found for a type the caller cannot see is
+    ``EVENT_NOT_FOUND``.
     """
+    raise_authorization_error(error.code, error.message)
     if error.code == "EVENT_NOT_FOUND":
         raise EventNotFoundError(error.message)
     if error.code == "INVALID_EVENT":
