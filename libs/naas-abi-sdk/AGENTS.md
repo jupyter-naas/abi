@@ -60,8 +60,10 @@ starts the job host only once discovery reports the instance `READY` or
 job consumers (`JobHost.prepare`: no fetch, no schedule, no change to an
 existing consumer), so a trigger for a new job sent after the cutover waits
 for the host. `SIGTERM` and `SIGINT` drain the
-process: new agent submits, job fetches and model chats stop, accepted runs and
-jobs finish, then the process unregisters. A live run keeps its claim until it
+process: new agent submits, job fetches, model chats and app requests stop,
+accepted runs, jobs and app requests finish, then the process unregisters. A
+streamed app response may finish too, unless it is server-sent events or idle
+for a second: those end with an error, and their readers reconnect elsewhere. A live run keeps its claim until it
 finishes. See the discovery ADR, section "Rollouts and draining (2026-10-05)".
 
 `ABI_HEALTH_PORT` (or `run_module(..., health_port=)`) opens a standard-library

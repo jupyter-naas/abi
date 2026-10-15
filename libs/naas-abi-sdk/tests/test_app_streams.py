@@ -463,6 +463,46 @@ def test_closing_ends_an_open_stream_with_an_error(broker, tmp_path):
     asyncio.run(scenario())
 
 
+def test_draining_ends_event_streams_and_lets_a_download_finish(broker, tmp_path):
+    """SIGTERM drains: server-sent events, which never end, end with an error
+    at once (their readers reconnect elsewhere); a download in progress is
+    read to its end. The drain is over long before its timeout."""
+
+    async def scenario():
+        api, seen = _app()
+        host = await _module(broker, tmp_path, api)
+        nexus = Transport(broker, NexusToken(), timeout=60)
+        try:
+            events = await call_app(nexus, "acme", "i-1", _request("/api/events"))
+            quiet = await call_app(nexus, "acme", "i-1", _request("/api/quiet"))
+            download = await call_app(
+                nexus, "acme", "i-1", _request("/api/download", query=f"size={8 * MB}")
+            )
+            nc = await nexus.connect()
+
+            async def read(response):
+                return b"".join([c async for c in pull_body(nc, response.body_inbox)])
+
+            readers = [asyncio.create_task(read(r)) for r in (events, quiet)]
+            downloaded = asyncio.create_task(read(download))
+            await asyncio.sleep(0.8)
+            started = time.monotonic()
+            await asyncio.wait_for(host.drain(30), app_host.CLOSE_SECONDS + 10)
+            assert time.monotonic() - started < app_host.CLOSE_SECONDS + 5
+            for reader in readers:
+                with pytest.raises(RPCError) as raised:
+                    await asyncio.wait_for(reader, 5)
+                assert raised.value.code == "MODULE_UNAVAILABLE"
+            assert seen.cancelled
+            assert len(await asyncio.wait_for(downloaded, 10)) == 8 * MB
+        finally:
+            await host.close()
+            await nexus.close()
+            await host.session.client.transport.close()
+
+    asyncio.run(scenario())
+
+
 def test_an_app_failing_mid_stream_is_an_error_to_the_reader(broker, tmp_path):
     """A6, the module's half: the reader learns the body is cut."""
 

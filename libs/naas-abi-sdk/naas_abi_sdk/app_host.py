@@ -62,6 +62,10 @@ MAX_UPLOADS = 16
 # When the host closes, a response still streaming ends with an error, which
 # its reader has this long to take.
 CLOSE_SECONDS = 3.0
+# While the host drains, a response stream whose app sent nothing for this long
+# ends with an error: an idle stream (server-sent events, a long poll) never
+# ends by itself. Server-sent events end at once.
+DRAIN_IDLE_SECONDS = 1.0
 AUTHORIZATION_SECONDS = 5.0
 MAX_AUTHORIZATIONS = 1024
 # Callers whose user ids an app trusts: Nexus's API, the one process that
@@ -193,6 +197,8 @@ class AppHost:
         self._streams: set[asyncio.Task] = set()
         # Response bodies not over yet, lingering ones included.
         self._sources: set[BodySource] = set()
+        # ASGI calls whose response streams: a drain ends the idle ones.
+        self._responding: set[_AsgiCall] = set()
 
     async def start(self) -> None:
         try:
@@ -223,10 +229,14 @@ class AppHost:
 
         A request arriving now finds no responder, and Nexus sends it to
         another instance; one cut off mid-call would wait out its timeout
-        (504). close() cancels whatever is still running afterwards. A NATS
-        connection already closed or draining does not stop the shutdown.
+        (504). A response still streaming may finish, unless it is idle
+        (DRAIN_IDLE_SECONDS) or server-sent events: those end with an error,
+        and their readers reconnect to another instance. close() cancels
+        whatever is still running afterwards. A NATS connection already
+        closed or draining does not stop the shutdown.
         """
         self.closing = True
+        self._end_idle_streams()
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
 
@@ -250,8 +260,25 @@ class AppHost:
                 step.cancel()
             await asyncio.gather(*steps, return_exceptions=True)
         # Answered, but still reading an upload or streaming the response.
-        if self._streams and remaining() > 0:
-            await asyncio.wait(set(self._streams), timeout=remaining())
+        while self._streams and remaining() > 0:
+            self._end_idle_streams()
+            await asyncio.wait(
+                set(self._streams), timeout=min(remaining(), DRAIN_IDLE_SECONDS / 4)
+            )
+
+    def _end_idle_streams(self) -> None:
+        """End, with an error, the streamed responses a drain need not wait
+        for: server-sent events, and those whose app went quiet."""
+        now = asyncio.get_running_loop().time()
+        for call in list(self._responding):
+            if call.event_stream or (
+                not call.sending and now - call.activity >= DRAIN_IDLE_SECONDS
+            ):
+                self._responding.discard(call)
+                if call.source is not None:
+                    call.source.abort("MODULE_UNAVAILABLE", "The module is stopping")
+                if call.task is not None:
+                    call.task.cancel()
 
     async def close(self) -> None:
         """Stop serving. A response still streaming (a download, server-sent
@@ -623,6 +650,9 @@ class _AsgiCall:
         self.task: asyncio.Task | None = None
         self.timed_out = False
         self._watcher: asyncio.Task | None = None
+        # Inside send(): a body chunk waits for its reader, which is no idling.
+        self.sending = False
+        self.event_stream = False
 
     def _touch(self) -> None:
         self.activity = asyncio.get_running_loop().time()
@@ -661,6 +691,7 @@ class _AsgiCall:
                         await self.source.fail("APP_ERROR", "App failed")
         finally:
             self.done.set()
+            self.host._responding.discard(self)
             if self.body is not None:
                 with contextlib.suppress(Exception):
                     await self.body.aclose()  # stop pulling an unread upload
@@ -779,14 +810,25 @@ class _AsgiCall:
                 return
             self.source = await self.host._source()
             self._watcher = asyncio.create_task(self._stop_when_reader_gone())
+            self.event_stream = any(
+                k.lower() == "content-type"
+                and v.split(";")[0].strip().lower() == "text/event-stream"
+                for k, v in self.headers
+            )
+            self.host._responding.add(self)
             self.ready.set_result(
                 _Answer(self.status, self.headers, stream=self.source)
             )
         size = chunk_bytes(getattr(self.source.nc, "max_payload", 1024 * 1024))
-        for start in range(0, len(body), size):
-            await self.source.put(body[start : start + size])
-        if not more:
-            await self.source.finish()
+        self.sending = True
+        try:
+            for start in range(0, len(body), size):
+                await self.source.put(body[start : start + size])
+            if not more:
+                await self.source.finish()
+        finally:
+            self.sending = False
+            self._touch()
 
 
 class _Lifespan:
