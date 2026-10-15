@@ -62,6 +62,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     new_id,
 )
 from naas_abi_core.services.iam.names import (
+    ALL_ORGS,
     ALL_WORKSPACES,
     NONE,
     resource_name,
@@ -97,16 +98,24 @@ def policy_resource(policy_id: str) -> str:
 
 
 def attachment_resource(policy_id: str, principal_id: str, scope: str | None) -> str:
-    """Named at the attachment's scope (§6.4).
+    """Named at the attachment's scope (§6.4), so no ``${scope}`` grant reaches
+    past its scope.
 
-    An org-wide one (``abi:<org>:*``) is named in workspace ``%2A``
-    (``ALL_WORKSPACES``): an ``abi:<org>:*`` grant reaches it, an org-level
-    ``abi:<org>:-`` one does not, so an org admin cannot widen itself to every
-    workspace.
+    * An org-wide one (``abi:<org>:*``) is in workspace ``%2A``
+      (``ALL_WORKSPACES``): an ``abi:<org>:*`` grant reaches it, an org-level
+      ``abi:<org>:-`` one does not, so an org admin cannot widen itself to every
+      workspace.
+    * An unscoped one is ``abi:%2A:%2A:…`` (``ALL_ORGS``): no ``${scope}``
+      expands to it, the platform scope ``abi:-:-`` included, so only grants
+      written for every org (the platform admin's) attach or detach policies
+      that apply everywhere.
     """
-    org, workspace = scope_fields(scope) if scope else (NONE, NONE)
-    if workspace == "*":
-        workspace = ALL_WORKSPACES
+    if scope is None:
+        org, workspace = ALL_ORGS, ALL_WORKSPACES
+    else:
+        org, workspace = scope_fields(scope)
+        if workspace == "*":
+            workspace = ALL_WORKSPACES
     return resource_name(
         "iam",
         "attachment",

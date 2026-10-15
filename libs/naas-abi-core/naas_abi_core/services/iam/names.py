@@ -26,6 +26,12 @@ NONE = "-"
 # which no workspace id can be. Only org-wide attachments are named with it, so
 # "abi:<org>:*" patterns reach them and "abi:<org>:-:" ones never do.
 ALL_WORKSPACES = "%2A"
+# The org field of what spans every org: only unscoped attachments, named
+# abi:%2A:%2A:iam:attachment/... No ${scope} expands to it (no org id is "%2A"),
+# so attaching at any scope, the platform's abi:-:- included, never reaches
+# them: only grants written for every org ("*", "abi:*:...") do.
+ALL_ORGS = "%2A"
+# The only resource type the two markers above may name.
 ORG_WIDE_TYPE = ("iam", "attachment")
 PREFIX = "abi:"
 PLATFORM_SCOPE = "abi:-:-"
@@ -110,11 +116,11 @@ def resource_name(
     workspace: str = NONE,
 ) -> str:
     """Build a canonical name, platform-level unless ``org``/``workspace`` say otherwise."""
-    _check_scope_id(org, "org")
     if not _SERVICE.match(service):
         raise ValueError(f"Invalid service name {service!r}")
     if not _SERVICE.match(type):
         raise ValueError(f"Invalid resource type {type!r}")
+    _check_org(org, workspace, service, type)
     _check_workspace(workspace, org, service, type)
     return f"abi:{org}:{workspace}:{service}:{type}/{encode_id(parts, kind)}"
 
@@ -130,11 +136,11 @@ def parse_resource_name(name: str) -> ResourceName:
     type_, slash, id_ = rest.partition("/")
     if not slash or not id_:
         raise ValueError(f"A resource name ends with <type>/<id>: {name!r}")
-    _check_scope_id(org, "org")
     if not _SERVICE.match(service):
         raise ValueError(f"Invalid service in {name!r}")
     if not _SERVICE.match(type_):
         raise ValueError(f"Invalid resource type in {name!r}")
+    _check_org(org, workspace, service, type_)
     _check_workspace(workspace, org, service, type_)
     if id_ != NONE and not _ID.match(id_):
         raise ValueError(f"The id of {name!r} is not canonically encoded")
@@ -169,6 +175,18 @@ def scope_fields(scope: str) -> tuple[str, str]:
     """The ``(org, workspace)`` of a valid scope (``workspace`` may be ``*``)."""
     org, workspace = validate_scope(scope)[len(PREFIX) :].split(":")
     return org, workspace
+
+
+def _check_org(org: str, workspace: str, service: str, type: str) -> None:
+    if org == ALL_ORGS:
+        # Only unscoped attachments span every org.
+        if (service, type) != ORG_WIDE_TYPE or workspace != ALL_WORKSPACES:
+            raise ValueError(
+                f"Org {ALL_ORGS} names unscoped attachments only, "
+                f"abi:{ALL_ORGS}:{ALL_WORKSPACES}:iam:attachment/..."
+            )
+        return
+    _check_scope_id(org, "org")
 
 
 def _check_workspace(workspace: str, org: str, service: str, type: str) -> None:

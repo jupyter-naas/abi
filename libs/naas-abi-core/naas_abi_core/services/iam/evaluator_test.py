@@ -748,3 +748,44 @@ def test_a_deny_keeps_a_policy_confined_and_still_narrows(h):
     h.attach(policy.id, bob.id, scope)
     assert h.allowed(QUERY, graph("sales", org="acme", workspace="ws1"), bob)
     assert not h.allowed(QUERY, graph("hr", org="acme", workspace="ws1"), bob)
+
+
+# -- security review: the platform scope does not reach unscoped attachments ---------
+
+
+def test_an_owner_at_the_platform_scope_cannot_attach_unscoped(h):
+    owner = h.user("platform-owner")
+    h.attach("builtin.owner", owner.id, "abi:-:-")
+    for policy_id in ("builtin.platform_admin", "builtin.engine", "builtin.api"):
+        with h.as_(owner), pytest.raises((IAMNotFoundError, PermissionDeniedError)):
+            h.iam.attach_policy(policy_id, owner.id)
+    assert not h.allowed("iam:CreatePolicy", "abi:-:-:iam:policy/p", owner)
+    assert not h.allowed("triple_store:DropGraph", graph("g"), owner)
+    # Within its scope it still manages platform-scope attachments.
+    bob = h.user("bob")
+    with h.as_(owner):
+        h.iam.attach_policy("builtin.viewer", bob.id, "abi:-:-")
+
+
+def test_an_owner_at_the_platform_scope_cannot_detach_unscoped(h):
+    owner, root = h.user("platform-owner"), h.user("root")
+    h.attach("builtin.owner", owner.id, "abi:-:-")
+    h.attach("builtin.platform_admin", root.id)
+    engine = h.iam.store.find_service_account("engine")
+    with h.as_(owner):
+        with pytest.raises((IAMNotFoundError, PermissionDeniedError)):
+            h.iam.detach_policy("builtin.engine", engine.id)
+        with pytest.raises((IAMNotFoundError, PermissionDeniedError)):
+            h.iam.detach_policy("builtin.platform_admin", root.id)
+    assert h.allowed("triple_store:DropGraph", graph("g"), actor="engine")
+    assert h.allowed("triple_store:DropGraph", graph("g"), root)
+
+
+def test_a_platform_admin_attaches_and_detaches_unscoped(h):
+    root, bob = h.user("root"), h.user("bob")
+    h.attach("builtin.platform_admin", root.id)
+    with h.as_(root):
+        h.iam.attach_policy("builtin.platform_admin", bob.id)
+        assert h.allowed("iam:CreatePolicy", "abi:-:-:iam:policy/p", bob)
+        assert h.iam.detach_policy("builtin.platform_admin", bob.id) is True
+    assert not h.allowed("iam:CreatePolicy", "abi:-:-:iam:policy/p", bob)

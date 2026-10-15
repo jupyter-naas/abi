@@ -270,7 +270,7 @@ def test_attachment_names_sit_at_their_scope():
         attachment_resource("p", "u", "abi:org-1:*")
         == "abi:org-1:%2A:iam:attachment/p/u"
     )
-    assert attachment_resource("p", "u", None) == "abi:-:-:iam:attachment/p/u"
+    assert attachment_resource("p", "u", None) == "abi:%2A:%2A:iam:attachment/p/u"
 
 
 def test_list_attachments_is_filtered(h):

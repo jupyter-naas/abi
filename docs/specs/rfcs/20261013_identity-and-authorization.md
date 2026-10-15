@@ -239,7 +239,7 @@ whose policies are being evaluated, `X` in `principal_decision(X)` (§5.3): the 
 
 ```abnf
 resource-name = "abi:" org ":" workspace ":" service ":" type "/" id
-org           = scope-id / "-"
+org           = scope-id / "-" / "%2A"                    ; %2A: every org, unscoped attachments only
 workspace     = scope-id / "-" / "%2A"                    ; %2A: every workspace, org-wide attachments only
 scope-id      = 1*64( %x61-7A / DIGIT / "-" / "_" )   ; lowercase id, never exactly "-"
 service       = %x61-7A *( %x61-7A / DIGIT / "_" )     ; catalog name
@@ -253,7 +253,8 @@ pct-encoded   = "%" 2HEXDIG                              ; uppercase hex
 - `org` and `workspace` are the stable Nexus ids (`org-<12 hex>`, `ws-<12 hex>`), never slugs. Renames
   change no names.
 - `-` in `org` or `workspace` means "none".
-- `%2A` as the `workspace` means every workspace of the org. Only org-wide attachments are named with it (§6.4).
+- `%2A` as the `workspace` means every workspace of the org, and `%2A` as both `org` and `workspace` means
+  every org. Only org-wide and unscoped attachments are named with them (§6.4).
 - `-` as the whole `id` names a singleton (§4.3).
 
 #### 4.2 Levels
@@ -979,7 +980,10 @@ Resource types:
 - `attachment/<policy id>/<principal id>`, at the attachment's scope (§3.4). An org-wide attachment
   (`abi:<org>:*`) is named in workspace `%2A`, the encoded `*` that no workspace id can be:
   `abi:<org>:%2A:iam:attachment/…`. An `abi:<org>:*` grant reaches it and an org-level `abi:<org>:-` grant
-  does not, so an org admin cannot attach itself to every workspace.
+  does not, so an org admin cannot attach itself to every workspace. An unscoped attachment is named
+  `abi:%2A:%2A:iam:attachment/…`: no `${scope}` expands to it, the platform scope `abi:-:-` included, so
+  only grants written for every org (`*`, `abi:*:…`: the platform admin's) attach or detach policies that
+  apply everywhere.
 - `key/<principal id>/<key id>`, `personal: true` for personal keys
 - `manifest/<service account id>`
 - `placement/<service>/<id-key>`

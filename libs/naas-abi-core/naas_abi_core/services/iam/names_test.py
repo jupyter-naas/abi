@@ -150,3 +150,29 @@ def test_every_workspace_is_refused_outside_iam_attachments():
             resource_name(service, type_, "x", org="acme", workspace=ALL_WORKSPACES)
         with pytest.raises(ValueError):
             parse_resource_name(f"abi:acme:%2A:{service}:{type_}/x")
+
+
+def test_every_org_is_a_name_for_unscoped_attachments_only():
+    from naas_abi_core.services.iam.names import ALL_ORGS, ALL_WORKSPACES
+
+    name = resource_name(
+        "iam",
+        "attachment",
+        ["p", "u"],
+        kind="path",
+        org=ALL_ORGS,
+        workspace=ALL_WORKSPACES,
+    )
+    assert name == "abi:%2A:%2A:iam:attachment/p/u"
+    assert parse_resource_name(name).org == ALL_ORGS
+    # No ${scope} expansion reaches it; only grants for every org do.
+    for scope in ("abi:-:-", "abi:acme:-", "abi:acme:*", "abi:acme:ws1"):
+        assert not matches(f"{scope}:iam:attachment/*", name)
+    assert matches("*", name) and matches("abi:*:iam:attachment/*", name)
+    for org, workspace, type_ in (
+        (ALL_ORGS, "-", "attachment"),
+        (ALL_ORGS, "ws1", "attachment"),
+        (ALL_ORGS, ALL_WORKSPACES, "scope"),
+    ):
+        with pytest.raises(ValueError):
+            resource_name("iam", type_, "x", org=org, workspace=workspace)

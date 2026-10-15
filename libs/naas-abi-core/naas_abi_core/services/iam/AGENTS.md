@@ -112,7 +112,9 @@ version wins; refuses dropping an action a policy names).
 Lists page after filtering. Names: `principal_resource`, `group_resource`,
 `policy_resource`, `attachment_resource` (at the attachment's scope; an org-wide
 one in workspace `%2A`, `names.ALL_WORKSPACES`, which `abi:<org>:*` grants reach
-and org-level `abi:<org>:-` ones do not; no other resource may use `%2A`), `placement_resource`, `scope_resource`,
+and org-level `abi:<org>:-` ones do not; an unscoped one is `abi:%2A:%2A:…`,
+`names.ALL_ORGS`, which no `${scope}` expands to, `abi:-:-` included, so only
+the platform admin's grants reach it; no other resource may use `%2A`), `placement_resource`, `scope_resource`,
 `catalog_resource`.
 
 **Caching.** Effective statements per principal, policies and placements are
