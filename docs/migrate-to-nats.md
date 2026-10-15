@@ -6,8 +6,9 @@ own process. This guide is for **existing projects**: ones created before
 NATS became the default, or with `abi new project --without-nats`.
 
 A deployment runs in NATS mode when its config has a top-level `nats:` block.
-Without that block, the engine keeps its in-process wiring and behaves as
-before, even on a version that ships NATS support. `abi deploy local
+Without that block, the engine keeps its in-process wiring, and agent memory,
+the activity log, the bus and Dagster stay as they were; the other changes of
+3.0 are listed in [`breaking-changes-3.0.md`](breaking-changes-3.0.md). `abi deploy local
 --regenerate` follows the config: it does not move a project without the block
 to NATS, and points here instead.
 
@@ -16,7 +17,7 @@ This guide moves an existing project, such as one created with
 Stop after any phase and the deployment still works.
 
 1. Upgrade the code, with NATS off.
-2. Turn NATS on for the engines you already run.
+2. Turn NATS on: one engine serves over NATS, and module jobs replace Dagster.
 3. Optionally, move a service or a module into its own process.
 
 Design background: the [distributed modules RFC](specs/rfcs/20260910_distributed-modules-nats-jetstream.md)
@@ -42,62 +43,96 @@ and the ADRs under [`docs/adr/`](adr/) whose names contain `nats`.
 
 ## Before you start
 
-- **Install from source.** The `nats` extra of `naas-abi-core` depends on
-  `naas-abi-proto` and `naas-abi-sdk`. Until those two packages are published to
-  PyPI, install ABI from the repository through the project's `.abi` submodule.
-- **Replicas must share their data.** If two engines own the same service, they
-  must use the same backend (Postgres, S3 or MinIO, Redis, Fuseki). With `fs` or
-  SQLite backends, each engine would answer from its own copy. Nothing detects
-  this.
+- **Read the breaking changes.** [`breaking-changes-3.0.md`](breaking-changes-3.0.md)
+  lists everything that changes between 2.x and 3.0, with NATS off and on.
+  This guide covers the steps; that list covers what your own code, scripts
+  and API clients may need.
+- **Install from source.** `naas-abi-core` and `naas-abi` depend on
+  `naas-abi-proto` and `naas-abi-sdk`. Until those two packages are published
+  to PyPI, install ABI from the repository through the project's `.abi`
+  submodule, as projects made by `abi new project` do.
+- **Replicas must share their data.** In NATS mode one engine serves the
+  kernel services at a time, and a deploy hands over to the next one. With
+  `fs` or SQLite backends, the next engine would answer from another copy.
+  Use PostgreSQL, S3 or MinIO, Redis and Fuseki (what `abi deploy local`
+  configures) for anything that must survive a handover.
 - **Drain the old bus.** Messages still waiting in RabbitMQ or `python_queue`
-  are not moved to NATS. Let workers empty the queues before you switch.
-- **Take a snapshot.** Run `abi stack snapshot create` if your CLI provides it.
-  NATS stores its own data in the `nats_data` volume, which that snapshot does
-  not include.
+  are not moved to NATS. Let workers empty the queues before phase 2.
+- **Take a snapshot.** With a Docker stack, run `abi stack snapshot create`.
+  It archives the data volumes and the project's `storage/` folder (the SQLite
+  activity log, the dataset files of `abi deploy local`), not the `nats_data`
+  volume where NATS keeps its own data. Without a Docker stack, copy
+  `storage/`.
 
 ## Phase 1: upgrade with NATS off
 
-This phase changes code only. Behaviour should stay the same.
+This phase changes code only. Agent memory, the activity log, the bus and
+Dagster stay where they are.
 
 1. Point the `.abi` submodule at the release or branch that contains NATS
    support, then run `uv sync`.
-2. Regenerate the deployment files:
+2. With a Docker stack, regenerate the deployment files:
 
    ```bash
    abi deploy local --regenerate
    ```
 
    This backs up and re-renders `docker-compose.yml` and `.deploy/`, and keeps
-   `.env`. The NATS-related additions are:
+   `.env`. For a project without a `nats:` block it keeps the classic stack
+   (Dagster, RabbitMQ) and adds:
    - a `nats` service in `docker-compose.yml`, under the Compose profile `nats`,
-     so it does not start by default;
-   - `.deploy/docker/nats/nats.conf`, which raises the broker's message size
-     limit to 8 MB.
-3. Rebuild and restart the stack, then try the usual flows: sign-in, chat with
-   agents, knowledge graph ingestion, Dagster jobs, file upload and download.
+     so it does not start;
+   - `.deploy/docker/nats/nats.conf`, and the broker's passwords in `.env`
+     (`NATS_ABI_PASSWORD`, `NATS_MODULE_PASSWORD`);
+   - the legacy extras the classic stack needs: it runs
+     `uv add 'naas-abi-core[...,dagster,rabbitmq]'`, which updates
+     `pyproject.toml` and `uv.lock`. Commit them.
 
-Two small behaviour changes apply even with NATS off:
+   If it stops with `.env is not writable by this user`, a 2.x container
+   rewrote `.env` as root: run the `sudo chown` it prints, then run it again.
 
-- A cache tier with `adapter: object_storage` or `adapter: keyvalue` now loads
-  the service it depends on automatically.
-- `remove()` on the `dotenv` secret adapter now deletes the key from `.env`.
-  Before, it only cleared the process environment, so the key came back on the
-  next start.
+   Without a Docker stack, add the extras yourself, keeping the ones you have:
+   `uv add 'naas-abi-core[all,dagster,rabbitmq]'`. `naas-abi-core[all]` no
+   longer includes Dagster or RabbitMQ; without them, `abi dev up` leaves
+   Dagster out (it says so) and a `rabbitmq` bus fails to load.
+3. Restart every process on the new code:
+   - Docker: `docker compose up -d --build --force-recreate`. Without
+     `--force-recreate`, containers whose definition did not change (the
+     `abi` service, whose code comes from the bind mount) keep running 2.x.
+   - Natively: `abi dev down`, then `abi dev up`.
+4. Try the usual flows: sign-in, chat with agents and their earlier
+   conversations, knowledge graph, datasets, file upload and download, Dagster
+   jobs.
+
+What changes even with NATS off is listed in
+[`breaking-changes-3.0.md`](breaking-changes-3.0.md) (section "With NATS off").
+The ones you are most likely to see:
+
+- A cache tier with `adapter: object_storage` or `adapter: keyvalue` loads the
+  service it depends on.
+- `remove()` on the `dotenv` secret adapter deletes the key from `.env`.
+- Dataset writes refuse NaN and infinities, and timestamps that carry an
+  offset are stored in UTC.
+- A graph export in Turtle is `@prefix` lines followed by one triple per line.
+- `abi new module` in this project still creates an in-engine module;
+  `--remote` creates one that runs once the project is on NATS.
 
 ## Phase 2: turn NATS on
 
-In this phase every engine keeps its services and adds NATS on top.
+In this phase the engine serves its services over NATS, and Dagster gives way
+to module jobs.
 
-1. **Add the NATS packages.** In the project's `pyproject.toml`, depend on
-   `naas-abi-core[nats]` and add both new packages to `[tool.uv.sources]`, next
-   to the existing ABI entries:
+1. **Add the NATS packages.** `naas-abi-core[all]` and `naas-abi` already
+   depend on `naas-abi-core[nats]`; depend on it yourself if you list narrower
+   extras. Add both new packages to `[tool.uv.sources]`, next to the existing
+   ABI entries:
 
    ```toml
    naas-abi-proto = { path = ".abi/libs/naas-abi-proto", editable = true }
    naas-abi-sdk = { path = ".abi/libs/naas-abi-sdk", editable = true }
    ```
 
-   Run `uv sync`, then rebuild the image.
+   Run `uv sync`.
 
 2. **Create the signing secret.** Add a random value of at least 32 bytes to
    `.env`. Shorter keys trigger a warning.
@@ -106,15 +141,14 @@ In this phase every engine keeps its services and adds NATS on top.
    echo "NATS_JWT_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" >> .env
    ```
 
-   Every process that talks to NATS must use this same value.
+   Every process that talks to NATS must use this same value. The broker's
+   passwords, `NATS_ABI_PASSWORD` for the engine and `NATS_MODULE_PASSWORD`
+   for SDK modules, are already in `.env` after phase 1's
+   `abi deploy local`; `abi dev up` writes them when they are missing.
 
-   `abi deploy local` also writes the broker's passwords to `.env`:
-   `NATS_ABI_PASSWORD` for the engine's process and `NATS_MODULE_PASSWORD` for
-   SDK modules. The `nats` service refuses to start without both. Run
-   `abi deploy local --regenerate` if your `.env` predates them.
-
-3. **Add the `nats:` block** at the top level of `config.yaml`, next to `api:`,
-   not under `services:`:
+3. **Add the `nats:` block** at the top level of the config the engine reads
+   (`config.local.yaml` for the Docker stack, `config.yaml` for `abi dev
+   up`), next to `api:`, not under `services:`:
 
    ```yaml
    nats:
@@ -123,23 +157,17 @@ In this phase every engine keeps its services and adds NATS on top.
      jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
    ```
 
-   Use `nats://abi:{{ secret.NATS_ABI_PASSWORD }}@127.0.0.1:4222` when the
-   engine runs outside Docker on the same machine (the port listens on
-   127.0.0.1 only). SDK modules log in as `module`:
+   Use `nats://abi:{{ secret.NATS_ABI_PASSWORD }}@127.0.0.1:4222` in
+   `config.yaml`: `abi dev up` runs its own broker and points the engine at it
+   through its overlay (`.abi/dev/dev.overlay.yaml`), with discovery on. SDK
+   modules log in as `module`:
    `ABI_NATS_URL=nats://module:<NATS_MODULE_PASSWORD>@nats:4222`.
-   `abi dev up` runs its own broker on 127.0.0.1 with the same two users and
-   passwords (NATS mode is its default once the config has the block;
-   `--without-nats` turns it off, `--with-nats` turns it on for a project
-   without one): its overlay logs the engine in as `abi`, and the
-   `dev.modules` it starts as `module`. It needs `nats-server` 2.14 or later
-   on `PATH` (module job schedules use JetStream message schedules), and
-   refuses an older one.
 
-4. **Remove the `bus:` section** from `services:`. Configs created by
-   `abi new project` declare one: `rabbitmq` in `config.local.yaml`,
-   `python_queue` in `config.yaml`. In NATS mode the engine refuses to start
-   with any bus adapter other than `nats_jetstream`. To keep a `bus:` block, for
-   example for `emit_message_events`, it must read:
+4. **Remove the whole `bus:` section** from `services:`, with every line of
+   its `config:`. Configs created by `abi new project` declare one: `rabbitmq`
+   in `config.local.yaml`, `python_queue` in `config.yaml`. In NATS mode the
+   engine refuses any bus adapter other than `nats_jetstream`. To keep a `bus:`
+   block, for example for `emit_message_events`, it must read:
 
    ```yaml
      bus:
@@ -154,54 +182,70 @@ In this phase every engine keeps its services and adds NATS on top.
 5. **Check the cache tiers.** Either all tiers are local or all are `nats_rpc`.
    The engine refuses a mix.
 
-6. **Start the broker and restart:**
+6. **Restart on NATS.** One engine serves the kernel services per NATS
+   account: a second one that tries fails with `EngineAlreadyServing`. The
+   classic stack runs two engines (the API and Dagster), so do not start its
+   `nats` profile; render the NATS stack instead. Move Dagster orchestrations
+   to module jobs first: the engine's own dataset maintenance already runs as
+   jobs in NATS mode.
+   - Docker:
 
-   ```bash
-   docker compose --profile nats up -d
-   ```
+     ```bash
+     abi deploy local --regenerate
+     docker compose up -d --force-recreate --remove-orphans
+     docker compose stop rabbitmq
+     ```
 
-   Once `config.local.yaml` has the `nats:` block, `abi deploy local
-   --regenerate` renders the NATS stack instead: `nats` starts without a
-   profile and the engine waits for it, RabbitMQ moves behind the `rabbitmq`
-   profile, and Dagster is left out (move its schedules to module jobs first,
-   or restore the previous `docker-compose.yml` from the backup it writes).
+     With the `nats:` block in `config.local.yaml`, the stack has a `nats`
+     service the engine waits for, no `dagster` service (`--remove-orphans`
+     removes its container), and RabbitMQ behind the `rabbitmq` profile.
+   - Natively: `abi dev down`, then `abi dev up`. It needs `nats-server` 2.14
+     or later on `PATH` (module job schedules use JetStream message
+     schedules), refuses an older one, and leaves Dagster out.
 
 7. **Verify:**
-   - `curl -s http://localhost:8222/healthz` returns `ok`.
-   - `curl -s http://localhost:8222/connz` lists the engine connections. The API
-     and Dagster each open several (one per service client), so a count of zero
-     means an engine did not connect.
+   - The broker answers: `curl -s http://localhost:8222/healthz` returns
+     `{"status":"ok"}` (natively, the `nats` monitoring port that
+     `abi dev up` prints).
+   - `curl -s http://localhost:8222/connz` lists the engine's connections, one
+     per service client. A count of zero means the engine did not connect.
    - With the [NATS CLI](https://github.com/nats-io/natscli), `nats micro list`
      shows the kernel services. The model registry and discovery do not appear
      there.
    - With the log level at `DEBUG`, the engine logs an
      `EngineNATSLoader: exposed <service> over NATS` line for each service it
      serves.
-   - Run the same flows as in phase 1.
+   - The Nexus System app's **Jobs** tab lists the engine's jobs, among them
+     `agent_memory_migrate` and `activity_log_migrate`.
 
-The API and Dagster both start an engine from the same `config.yaml`, so both
-serve every service. That is safe with the shared backends of `abi deploy local`.
+Then copy agent memory and the activity log (next section) before users
+chat, and run the same flows as in phase 1.
 
 ### Right after the restart: copy agent memory and activity logs
 
 In NATS mode, engine agents keep their conversation memory in the Document
 Service, and the activity log is there by default too. Earlier data stays where
-it was until you copy it. Do it right after the restart, as a super admin, in
-the Nexus System app: **Jobs** tab, **Run now** with a JSON payload. Each run is
-audited, and its report is the run's result.
+it was until you copy it. Do it right after the restart, before users chat, as
+a super admin, in the Nexus System app: **Jobs** tab, **Run now** with a JSON
+payload. Each run is audited, and its report is the run's result. A script can
+do the same with `POST /api/admin/system/jobs/<module>/<job>/trigger` and the
+body `{"payload": {...}}`, signed in as a super admin.
 
 1. **Agent memory** (`naas_abi_core.agent_memory`, job `agent_memory_migrate`).
    Until it runs, users' earlier conversations have no memory.
    - Run it with `{}`. This is a dry run against the `POSTGRES_URL` database:
      check `threads`, `missing` and `diverged`.
    - Run it with `{"apply": true}`. Running it again copies nothing.
-   - A thread listed in `diverged` was continued before the copy, so its newer
-     messages hide the copied history. Keeping the window short avoids this.
+   - A thread listed in `diverged` was continued before the copy. The copy
+     still runs, but the thread's newer messages hide the copied history, and
+     nothing brings it back: keep the window short.
    - Memory that an older release kept in documents (schema 1) copies with
      `{"from": "documents-v1"}`. `"threads": [...]` limits a run to some
      threads.
    - The engine reads `POSTGRES_URL` from its secrets or environment. Never put
      a connection string in the payload: payloads are shown in the UI.
+   - A project that ran natively without `POSTGRES_URL` kept agent memory in
+     the process only: there is nothing to copy, and the job says so.
 2. **Activity log** (`naas_abi_core.activity_log`, job `activity_log_migrate`),
    if you need the history recorded before the switch:
    - Run it with `{"data_dir": "storage/activity_log"}`, the old adapter's
@@ -212,8 +256,9 @@ audited, and its report is the run's result.
 
 From then on, `agent_memory_prune` runs daily and keeps each thread's newest
 20 checkpoints; the conversation stays whole in them. Without NATS mode no
-engine hosts jobs: stop the engines and run `abi agent migrate-memory` (a dry
-run, then `--apply`).
+engine hosts jobs, and agent memory stays in `POSTGRES_URL`: to move it to the
+Document Service ahead of the switch, stop the engines and run
+`abi agent migrate-memory` (a dry run, then `--apply`).
 
 ### Tuning
 
@@ -330,11 +375,10 @@ nats:
     lease_seconds: 20
 ```
 
-Because the API and Dagster read the same `config.yaml`, adding this block turns
-discovery on in both. Discovery is designed for a single owner, so give the
-second process a config without the `discovery:` block, or drop Dagster once
-module jobs replace its schedules, as projects created with `abi new project`
-do. The registry holds at most 256 live module instances per project.
+Discovery runs in the engine that serves the kernel services, so it has a
+single owner even when other engines (the CLI's, a client engine) read the same
+config. `abi dev up` turns it on in its overlay. The registry holds at most 256
+live module instances per project.
 
 To add a module that runs in its own process, run `abi new module <name>` in
 the project: it scaffolds an SDK module under `src/`, adds it to `dev.modules`
@@ -344,12 +388,22 @@ outlive an engine restart.
 ## Roll back
 
 1. Remove the `nats:` block and restore the previous `bus:` section.
-2. Restart the engines. They go back to in-process wiring.
-3. Stop the broker with `docker compose --profile nats stop nats`.
+2. Docker: run `abi deploy local --regenerate` (the classic stack, with
+   Dagster and RabbitMQ, and the legacy extras), then
+   `docker compose up -d --force-recreate --remove-orphans`. The `nats`
+   service is left behind its profile; `docker compose stop nats` stops it.
+   Natively: `abi dev down`, then `abi dev up`.
+3. The engines go back to in-process wiring, with agent memory in
+   `POSTGRES_URL` and the activity log in `storage/activity_log`, as before
+   phase 2. What users did on NATS stays in the Document Service: agents do
+   not remember conversations continued since, and the activity log does not
+   show their events.
 
 Messages still in the NATS bus stay in the `nats_data` volume and are not
 copied back to the old bus. Undo phase 1 by pointing `.abi` back at the previous
-version and running `abi deploy local --regenerate` again.
+version, running `uv sync` and `abi deploy local --regenerate` again, and
+restarting with `--force-recreate`. To go back to the data of before the
+upgrade, restore the snapshot (`abi stack snapshot restore`).
 
 ## Known limits
 
