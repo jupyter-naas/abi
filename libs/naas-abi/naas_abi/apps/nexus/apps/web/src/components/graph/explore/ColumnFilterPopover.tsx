@@ -127,7 +127,7 @@ export function ColumnFilterPopover({
       ref={ref}
       data-testid={`column-filter-popover-${columnId}`}
       style={{ position: 'fixed', left, top: anchor.top, width: POPOVER_WIDTH, maxHeight }}
-      className="z-50 flex flex-col overflow-y-auto rounded-md border bg-background text-foreground shadow-lg"
+      className="z-50 flex flex-col overflow-y-auto border bg-background text-foreground shadow-lg"
     >
       <div className="flex items-center justify-between border-b px-3 py-2">
         <span className="truncate text-xs font-semibold" title={label}>
@@ -137,7 +137,7 @@ export function ColumnFilterPopover({
           <button
             onClick={onClear}
             data-testid={`column-filter-clear-${columnId}`}
-            className="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] text-muted-foreground hover:bg-muted"
+            className="flex items-center gap-1 px-1 py-0.5 text-[10px] text-muted-foreground hover:bg-muted"
           >
             <X size={10} /> Clear
           </button>
@@ -157,7 +157,7 @@ export function ColumnFilterPopover({
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search values…"
                 data-testid={`column-filter-search-${columnId}`}
-                className="w-full rounded border bg-background py-1 pl-7 pr-2 text-xs outline-none focus:ring-1 focus:ring-primary"
+                className="w-full border bg-background py-1 pl-7 pr-2 text-xs outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
           </div>
@@ -204,7 +204,7 @@ export function ColumnFilterPopover({
             <button
               onClick={() => setCombinator('and')}
               className={cn(
-                'rounded px-1.5 py-0.5',
+                'px-1.5 py-0.5',
                 combinator === 'and' ? 'bg-workspace-accent-10 text-workspace-accent' : 'hover:bg-muted',
               )}
             >
@@ -213,7 +213,7 @@ export function ColumnFilterPopover({
             <button
               onClick={() => setCombinator('or')}
               className={cn(
-                'rounded px-1.5 py-0.5',
+                'px-1.5 py-0.5',
                 combinator === 'or' ? 'bg-workspace-accent-10 text-workspace-accent' : 'hover:bg-muted',
               )}
             >
@@ -233,7 +233,7 @@ export function ColumnFilterPopover({
                   value={c.operator}
                   onChange={(e) => setRowOperator(i, e.target.value as Operator)}
                   data-testid={`column-filter-operator-${columnId}-${i}`}
-                  className="flex-1 rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
+                  className="flex-1 border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
                 >
                   {conditionOps.map((op) => (
                     <option key={op} value={op}>
@@ -244,7 +244,7 @@ export function ColumnFilterPopover({
                 <button
                   onClick={() => removeCondition(i)}
                   data-testid={`column-filter-remove-condition-${columnId}-${i}`}
-                  className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive"
+                  className="shrink-0 p-1 text-muted-foreground hover:text-destructive"
                   title="Remove condition"
                 >
                   <X size={12} />
@@ -257,7 +257,7 @@ export function ColumnFilterPopover({
                   onChange={(e) => setRowValue(i, e.target.value)}
                   placeholder="Value…"
                   data-testid={`column-filter-value-${columnId}-${i}`}
-                  className="w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
                 />
               )}
               {showValueInput && isRange && (
@@ -267,7 +267,7 @@ export function ColumnFilterPopover({
                     onChange={(e) => setRowValue(i, [e.target.value, Array.isArray(c.value) ? c.value[1] ?? '' : ''])}
                     placeholder="From"
                     data-testid={`column-filter-from-${columnId}-${i}`}
-                    className="w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
                   />
                   <span className="text-xs text-muted-foreground">–</span>
                   <input
@@ -275,7 +275,7 @@ export function ColumnFilterPopover({
                     onChange={(e) => setRowValue(i, [Array.isArray(c.value) ? c.value[0] ?? '' : '', e.target.value])}
                     placeholder="To"
                     data-testid={`column-filter-to-${columnId}-${i}`}
-                    className="w-full rounded border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
               )}

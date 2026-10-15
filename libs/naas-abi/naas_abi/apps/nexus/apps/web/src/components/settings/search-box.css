@@ -1,0 +1,54 @@
+/* Search box shared by the settings tables (components/settings/search-box.tsx). */
+.settings-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: calc(-1 * var(--space-4));
+  padding: 8px 12px;
+  border: 1px solid var(--border-hex);
+  background-color: var(--card-hex);
+  color: var(--muted-foreground-hex);
+}
+
+/* No focus colour on the box or the input: same opt-out as the other search fields in globals.css. */
+.settings-search:focus-within {
+  border-color: var(--border-hex);
+  box-shadow: none;
+}
+
+.settings-search :focus-visible,
+.settings-search input:focus {
+  outline: none;
+  box-shadow: none;
+  --tw-ring-width: 0px;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+}
+
+.settings-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: var(--font-size-sm);
+  color: var(--foreground-hex);
+  outline: none;
+}
+
+.settings-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.settings-search-clear {
+  display: inline-flex;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+}
+
+.settings-search-clear:hover {
+  color: var(--foreground-hex);
+}
+

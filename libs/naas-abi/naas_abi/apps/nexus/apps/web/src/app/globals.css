@@ -433,6 +433,14 @@ aside.glass :focus-visible {
   background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 20%, transparent);
 }
 
+.bg-workspace-accent-30 {
+  background-color: color-mix(
+    in srgb,
+    var(--workspace-accent, var(--workspace-primary, #22c55e)) 30%,
+    transparent
+  );
+}
+
 /* Border with workspace accent color */
 .border-workspace-accent {
   border-color: var(--workspace-accent, #22c55e);

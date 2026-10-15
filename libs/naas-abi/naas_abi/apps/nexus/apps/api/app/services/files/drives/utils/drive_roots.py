@@ -16,6 +16,7 @@ row.
 
 from __future__ import annotations
 
+import re
 from pathlib import PurePosixPath
 
 MODULE_ROOT = "naas_abi"
@@ -50,3 +51,15 @@ def platform_drive_root() -> str:
 
 def system_drive_root() -> str:
     return SYSTEM_DRIVE_ROOT
+
+
+_SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+
+
+def is_safe_drive_id(value: str) -> bool:
+    """True for a plain user or workspace id, safe to build a drive path from.
+
+    Public routes (pictures, logos) take the id from the URL: anything else
+    (``..``, dots, separators) could escape the drive on a filesystem backend.
+    """
+    return bool(_SAFE_ID.match(value))

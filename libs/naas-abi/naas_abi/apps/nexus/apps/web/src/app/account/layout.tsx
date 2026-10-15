@@ -7,6 +7,7 @@ import { ArrowLeft, ChevronRight } from 'lucide-react';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
 import { useIsMobile } from '@/hooks/use-is-mobile';
+import { useMounted } from '@/hooks/use-mounted';
 import { accountSettingsNavVisible, type AccountSettingsNavItem } from './lib/nav';
 import { parseAccountRoute } from './lib/account-route';
 import './account-layout.css';
@@ -53,6 +54,8 @@ export default function AccountLayout({
   const showMobileDetail = isMobile && isDetail;
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
   const user = useAuthStore((state) => state.user);
+  // The saved login only exists in the browser: show the name after hydration.
+  const mounted = useMounted();
   const [orgBorderRadius, setOrgBorderRadius] = useState('0');
 
   useEffect(() => {
@@ -109,7 +112,7 @@ export default function AccountLayout({
 
   const headerTitle = showMobileDetail
     ? sectionLabel ?? 'Account'
-    : user?.name || 'Account';
+    : (mounted && user?.name) || 'Account';
 
   const showNav = !showMobileDetail;
   const showMain = !showMobileList;

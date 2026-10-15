@@ -20,7 +20,7 @@ export function OrgSettingsPageHeader({
         <div className="flex items-center gap-2">
           <h2 className="org-settings-page-header-title">{title}</h2>
           {badge !== undefined && badge !== null ? (
-            <span className="inline-flex items-center bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+            <span className="org-settings-page-header-badge inline-flex items-center bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
               {badge}
             </span>
           ) : null}

@@ -108,6 +108,18 @@ class OrganizationMemberModel(Base):
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String, nullable=False, default="member")  # owner, admin, member
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    # Profile in this organization, set by its admins. NULL falls back to the
+    # account value on users.* (see organizations postgres adapter).
+    name = Column(String(200), nullable=True)
+    avatar = Column(String, nullable=True)
+    # Column "organization" (was company, migration 0055). The attribute name differs
+    # because `organization` is the relationship to the OrganizationModel row.
+    organization_name = Column("organization", String(200), nullable=True)
+    service_line = Column(String(200), nullable=True)
+    country = Column(String(100), nullable=True)
+    interest = Column(String(1000), nullable=True)
+    job_title = Column(String(100), nullable=True)
+    bio = Column(String(2000), nullable=True)
 
     __table_args__ = (UniqueConstraint("organization_id", "user_id", name="uq_organization_user"),)
 
@@ -151,8 +163,8 @@ class UserModel(Base):
     name = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
     avatar = Column(String, nullable=True)
-    company = Column(String, nullable=True)
-    role = Column(String, nullable=True)
+    organization = Column(String, nullable=True)  # was company (migration 0053)
+    job_title = Column(String, nullable=True)  # was role (migration 0054)
     bio = Column(String, nullable=True)
     is_superadmin = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
@@ -246,6 +258,10 @@ class WorkspaceModel(Base):
     background_image_url = Column(Text, nullable=True)  # Desktop wallpaper URL
     sidebar_color = Column(String, nullable=True)  # Custom sidebar background color (hex)
     font_family = Column(String, nullable=True)  # Custom font family name
+    description = Column(Text, nullable=True)  # Settings → General
+    workspace_group = Column(String(100), nullable=True)  # workspace lists ("Others" if empty)
+    # JSON {feature: bool} saved in Organization Settings; NULL = config overrides.
+    feature_overrides = Column(Text, nullable=True)
 
     # Drive-scope feature flags
     platform_drive_enabled = Column(Boolean, nullable=False, default=False)

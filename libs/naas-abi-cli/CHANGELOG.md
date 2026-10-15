@@ -18,6 +18,9 @@
 - Guide: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
   Every change: [Breaking changes in 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/breaking-changes-3.md).
 
+## v2.28.0 (2026-10-15)
+
+
 ## v2.27.1 (2026-10-14)
 
 ### Bug Fixes

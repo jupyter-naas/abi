@@ -2,12 +2,14 @@
 Apply config-driven provisioning on startup.
 
 This provisions:
-- users (create by email if missing)
-- organizations (upsert by slug)
-- organization members
-- workspaces (upsert by slug)
-- workspace members
+- bootstrap users (create by email if missing; ``is_superadmin`` only promotes)
+- organizations (upsert by slug) and their owner membership
+- workspaces (upsert by slug) and their owner membership
 - workspace app enable rows from ``WorkspaceSeedConfig.apps``
+
+People are managed in the platform (Org > Users, workspace Members, Admin >
+Users). Config ``members`` lists are deprecated and ignored: existing rows are
+kept, and ``core.users_import`` replays a snapshot without overwriting roles.
 
 It can also mirror configured user credentials into the Secret service.
 """
@@ -84,18 +86,17 @@ _WORKSPACE_FIELDS = (
 
 
 def _apply_workspace_seed_fields(workspace: Any, workspace_cfg: WorkspaceSeedConfig) -> None:
-    """Copy seed branding onto an existing workspace.
+    """Fill the seed's name and branding into an existing workspace, bootstrap only.
 
-    ``background_image_url`` is special: most seeds omit it, and a wallpaper
-    chosen in the app is stored on the workspace drive (``.home``) with only
-    the URL kept here. Writing the seed's empty value on every boot would
-    drop that choice while leaving the file in place.
+    A field is written only when the workspace has no value for it yet, so a
+    name, logo, colour or wallpaper changed in the app survives restarts (logos
+    and wallpapers chosen in the app live in the workspace drive and only their
+    URL is kept here). To force a config value, clear the field in the app.
     """
     for field in _WORKSPACE_FIELDS:
         value = getattr(workspace_cfg, field)
-        if field == "background_image_url" and not value:
-            continue
-        setattr(workspace, field, value)
+        if value and not getattr(workspace, field, None):
+            setattr(workspace, field, value)
 
 
 def _normalize_email(email: str) -> str:
@@ -261,8 +262,8 @@ async def _upsert_users(
                 name=user_cfg.name,
                 hashed_password=_hash_password(password_to_use),
                 avatar=user_cfg.avatar,
-                company=user_cfg.company,
-                role=user_cfg.role,
+                organization=user_cfg.organization,
+                job_title=user_cfg.job_title,
                 bio=user_cfg.bio,
                 is_superadmin=user_cfg.is_superadmin,
                 created_at=now,
@@ -292,17 +293,13 @@ async def _upsert_users(
                 "User email=%s already exists; skipping config-driven updates",
                 normalized_email,
             )
-            # is_superadmin is the one config-driven field we always
-            # reconcile, so an admin can promote/demote users via config.yaml
-            # without recreating the account.
-            if bool(user.is_superadmin) != bool(user_cfg.is_superadmin):
-                user.is_superadmin = user_cfg.is_superadmin
+            # Config only promotes: superadmins are managed in Platform
+            # Settings > Users, and listing an operator here keeps them from
+            # being locked out.
+            if user_cfg.is_superadmin and not user.is_superadmin:
+                user.is_superadmin = True
                 user.updated_at = now
-                logger.info(
-                    "Reconciled is_superadmin=%s for email=%s from config",
-                    user_cfg.is_superadmin,
-                    normalized_email,
-                )
+                logger.info("Promoted email=%s to superadmin from config", normalized_email)
             if _has_shipped_default_password(user.hashed_password):
                 rotated = _generate_password()
                 user.hashed_password = _hash_password(rotated)
@@ -348,6 +345,18 @@ async def _resolve_user(
     return user
 
 
+def _warn_ignored_members(kind: str, slug: str, count: int) -> None:
+    if count:
+        logger.warning(
+            "Ignoring %d config members of %s slug=%s: members are managed in the "
+            "platform now (existing memberships are kept). Remove the list from the "
+            "config; replay a snapshot with core.users_import if needed.",
+            count,
+            kind,
+            slug,
+        )
+
+
 async def _upsert_workspace(
     session: AsyncSession,
     workspace_cfg: WorkspaceSeedConfig,
@@ -384,8 +393,11 @@ async def _upsert_workspace(
             organization_id=organization.id,
             created_at=now,
             updated_at=now,
+            workspace_group=workspace_cfg.group,
             **{field: getattr(workspace_cfg, field) for field in _WORKSPACE_FIELDS},
         )
+        # The name is managed in the app (config.workspaces.yaml snapshot).
+        workspace.name = workspace_cfg.name or workspace_cfg.slug
         session.add(workspace)
         logger.info(
             "Created workspace slug=%s under org=%s",
@@ -393,9 +405,15 @@ async def _upsert_workspace(
             organization.slug,
         )
     else:
-        workspace.owner_id = owner.id
-        workspace.organization_id = organization.id
+        # Bootstrap only, like the branding below: an owner or organization
+        # changed in the app is kept, the config only fills a missing one.
+        if not workspace.owner_id:
+            workspace.owner_id = owner.id
+        if not workspace.organization_id:
+            workspace.organization_id = organization.id
         _apply_workspace_seed_fields(workspace, workspace_cfg)
+        if workspace_cfg.group and not getattr(workspace, "workspace_group", None):
+            workspace.workspace_group = workspace_cfg.group
         workspace.updated_at = now
         logger.info(
             "Updated workspace slug=%s under org=%s",
@@ -403,18 +421,8 @@ async def _upsert_workspace(
             organization.slug,
         )
 
-    await _ensure_workspace_member(session, workspace.id, owner.id, "owner")
-    for membership in workspace_cfg.members:
-        member = await _resolve_user(session, users_by_email, str(membership.email))
-        if member is None:
-            logger.warning(
-                "Skipping workspace member email=%s in workspace slug=%s because user does not exist",
-                membership.email,
-                workspace_cfg.slug,
-            )
-            continue
-        member_role = "owner" if member.id == owner.id else membership.role
-        await _ensure_workspace_member(session, workspace.id, member.id, member_role)
+    await _ensure_workspace_member(session, workspace.id, workspace.owner_id, "owner")
+    _warn_ignored_members("workspace", workspace_cfg.slug, len(workspace_cfg.members))
 
     await _seed_workspace_apps(session, workspace.id, workspace_cfg.apps)
 
@@ -434,8 +442,7 @@ async def _seed_workspace_apps(
             continue
         result = await session.execute(
             select(AppConfigModel).where(
-                (AppConfigModel.workspace_id == workspace_id)
-                & (AppConfigModel.app_id == app_id)
+                (AppConfigModel.workspace_id == workspace_id) & (AppConfigModel.app_id == app_id)
             )
         )
         row = result.scalar_one_or_none()
@@ -503,17 +510,7 @@ async def _upsert_organization(
     if owner is not None:
         await _ensure_org_member(session, organization.id, owner.id, "owner")
 
-    for membership in org_cfg.members:
-        member = await _resolve_user(session, users_by_email, str(membership.email))
-        if member is None:
-            logger.warning(
-                "Skipping org member email=%s in org slug=%s because user does not exist",
-                membership.email,
-                org_cfg.slug,
-            )
-            continue
-        member_role = "owner" if owner is not None and member.id == owner.id else membership.role
-        await _ensure_org_member(session, organization.id, member.id, member_role)
+    _warn_ignored_members("organization", org_cfg.slug, len(org_cfg.members))
 
     for workspace_cfg in org_cfg.workspaces:
         await _upsert_workspace(session, workspace_cfg, organization, users_by_email)

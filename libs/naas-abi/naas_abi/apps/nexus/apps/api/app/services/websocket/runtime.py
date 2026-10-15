@@ -324,8 +324,8 @@ async def cursor_position(sid, data):
 async def join_admin_events(sid, data=None):
     """Subscribe a connected client to the platform admin event stream.
 
-    Membership is gated by ``user.is_superadmin`` (set via the ``users``
-    section of ``config.yaml``); non-superadmins receive an error and are
+    Membership is gated by ``user.is_superadmin`` (managed with PATCH /api/admin/users/{id},
+    bootstrapped from config ``users``); non-superadmins receive an error and are
     not added to the room. Once joined, the client receives every
     ``platform_event`` emitted by the EventService relay.
     """

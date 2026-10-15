@@ -16,4 +16,17 @@ describe('org settings nav', () => {
       'users'
     );
   });
+
+  it('shows branding to admins and hides domains, servers, services, and billing', () => {
+    expect(orgSettingsNavForRole('owner').map((item) => item.slug)).toEqual([
+      'general',
+      'branding',
+      'workspaces',
+      'users',
+      'roles',
+    ]);
+    expect(orgSettingsNavForRole('admin').map((item) => item.slug)).not.toContain(
+      'secrets'
+    );
+  });
 });

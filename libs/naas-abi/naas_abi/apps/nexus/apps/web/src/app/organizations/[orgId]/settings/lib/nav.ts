@@ -7,6 +7,8 @@ import {
   FolderKanban,
   CreditCard,
   Shield,
+  Server,
+  Boxes,
 } from 'lucide-react';
 
 export type OrgSettingsNavItem = {
@@ -14,16 +16,20 @@ export type OrgSettingsNavItem = {
   label: string;
   icon: LucideIcon;
   adminOnly?: boolean;
+  /** Kept for deep-link labels; omitted from the settings sidebar. */
+  hidden?: boolean;
 };
 
 export const orgSettingsNav: OrgSettingsNavItem[] = [
   { slug: 'general', label: 'General', icon: Building2 },
-  { slug: 'workspaces', label: 'Workspaces', icon: FolderKanban },
   { slug: 'branding', label: 'Branding', icon: Paintbrush, adminOnly: true },
+  { slug: 'workspaces', label: 'Workspaces', icon: FolderKanban },
   { slug: 'users', label: 'Users', icon: Users, adminOnly: true },
   { slug: 'roles', label: 'Roles', icon: Shield, adminOnly: true },
-  { slug: 'domains', label: 'Domains', icon: Globe, adminOnly: true },
-  { slug: 'billing', label: 'Billing', icon: CreditCard, adminOnly: true },
+  { slug: 'domains', label: 'Domains', icon: Globe, adminOnly: true, hidden: true },
+  { slug: 'servers', label: 'Servers', icon: Server, adminOnly: true, hidden: true },
+  { slug: 'services', label: 'Services', icon: Boxes, adminOnly: true, hidden: true },
+  { slug: 'billing', label: 'Billing', icon: CreditCard, adminOnly: true, hidden: true },
 ];
 
 export function isOrgAdminRole(role: string | null | undefined): boolean {
@@ -33,8 +39,9 @@ export function isOrgAdminRole(role: string | null | undefined): boolean {
 export function orgSettingsNavForRole(
   role: string | null | undefined
 ): OrgSettingsNavItem[] {
-  if (isOrgAdminRole(role)) return orgSettingsNav;
-  return orgSettingsNav.filter((item) => !item.adminOnly);
+  const visible = orgSettingsNav.filter((item) => !item.hidden);
+  if (isOrgAdminRole(role)) return visible;
+  return visible.filter((item) => !item.adminOnly);
 }
 
 export function orgSettingsIndexPath(orgId: string): string {

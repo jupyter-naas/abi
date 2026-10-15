@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import {
   Server,
   Plus,
@@ -40,7 +40,6 @@ import {
   serverTypeLabels,
   serverTypeDescriptions,
 } from '@/stores/servers';
-import { useWorkspaceStore } from '@/stores/workspace';
 
 const serverTypeOptions: { id: ServerTypeEnum; label: string; description: string }[] = [
   { id: 'ollama', label: 'Ollama', description: 'Run open-source models locally' },
@@ -64,7 +63,17 @@ const statusLabels: Record<ServerType['status'], string> = {
   unknown: 'Unknown',
 };
 
-export function ServersPanel() {
+/**
+ * Inference servers of one workspace (servers are stored per workspace). Shown in
+ * Organization Settings > Servers, where `workspacePicker` switches the workspace.
+ */
+export function ServersPanel({
+  workspaceId,
+  workspacePicker,
+}: {
+  workspaceId: string | null;
+  workspacePicker?: ReactNode;
+}) {
   const {
     servers,
     loading,
@@ -77,8 +86,6 @@ export function ServersPanel() {
     checkAllServers,
     setCurrentWorkspace,
   } = useServersStore();
-
-  const { currentWorkspaceId } = useWorkspaceStore();
 
   const [mounted, setMounted] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -118,11 +125,11 @@ export function ServersPanel() {
 
   // Fetch servers when workspace changes
   useEffect(() => {
-    if (mounted && currentWorkspaceId) {
-      setCurrentWorkspace(currentWorkspaceId);
-      fetchServers(currentWorkspaceId);
+    if (mounted && workspaceId) {
+      setCurrentWorkspace(workspaceId);
+      fetchServers(workspaceId);
     }
-  }, [mounted, currentWorkspaceId, fetchServers, setCurrentWorkspace]);
+  }, [mounted, workspaceId, fetchServers, setCurrentWorkspace]);
 
   // Check all servers after fetching
   const firstServerId = servers.length > 0 ? servers[0]?.id : null;
@@ -293,6 +300,7 @@ export function ServersPanel() {
         description="Configure inference servers for running AI models"
         actions={
           <>
+            {workspacePicker}
             <Button variant="secondary" onClick={handleCheckAll} disabled={checkingAll || servers.length === 0}>
               <RefreshCw size={16} className={cn(checkingAll && 'animate-spin')} />
               Check All

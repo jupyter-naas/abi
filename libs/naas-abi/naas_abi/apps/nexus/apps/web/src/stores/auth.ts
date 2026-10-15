@@ -14,8 +14,8 @@ export interface User {
   email: string;
   name: string;
   avatar?: string;
-  company?: string;
-  role?: string;
+  organization?: string;
+  job_title?: string;
   bio?: string;
   is_superadmin?: boolean;
   createdAt: Date;
