@@ -71,6 +71,11 @@ the upgrade test met is in this list.
   `pyproject.toml` and `uv.lock`. A project pinning SQLAlchemy 2.1 or later
   cannot install the `dagster` extra. Both extras are removed in the next
   major.
+- **Marketplace:** the orchestrations of the X, PubMed and Document
+  (`domains/operations`) modules import Dagster, and no
+  `naas-abi-marketplace` extra pulls it. In a classic project that runs them,
+  add the `dagster` extra as above; without it, the loader leaves those
+  orchestrations out and the modules' other parts load.
 
 ### The NATS packages are installed in every mode
 - **What changed:** `naas-abi-core[all]` includes the `nats` and `otel`
