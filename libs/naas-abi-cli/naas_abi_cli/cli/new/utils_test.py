@@ -86,3 +86,33 @@ def test_module_package_name_without_an_abi_module(tmp_path: Path) -> None:
     plain = _package(tmp_path / "src" / "plain")
     assert module_package_name(plain / "agents") == "plain"
     assert module_package_name(tmp_path / "loose") is None
+
+
+def test_only_a_class_definition_makes_a_module(tmp_path: Path) -> None:
+    research = _package(
+        tmp_path / "src" / "research", "class ABIModule(BaseModule):\n    pass\n"
+    )
+    support = _package(
+        research / "support",
+        '"""class ABIModule lives in the parent."""\n'
+        "# class ABIModule\n"
+        "class ABIModuleConfiguration:\n    pass\n",
+    )
+
+    assert module_package_name(support / "agents") == "research"
+
+
+def test_an_unreadable_package_above_the_project_is_passed_over(tmp_path: Path) -> None:
+    # No package defines ABIModule, so the walk reads every __init__.py up.
+    (tmp_path / "__init__.py").write_bytes(b"\xff\xfe not utf-8")
+    plain = _package(tmp_path / "src" / "plain")
+
+    assert module_package_name(plain / "apps") == "plain"
+
+
+def test_the_name_starts_below_src_even_when_src_is_a_package(tmp_path: Path) -> None:
+    src = _package(tmp_path / "src")
+    core = _package(src / "core")
+    research = _package(core / "research", "class ABIModule:\n    pass\n")
+
+    assert module_package_name(research / "agents") == "core.research"
