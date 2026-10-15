@@ -350,6 +350,9 @@ class FeatureFlagsConfig(BaseModel):
             ],
         }
     )
+    # Deprecated: workspace feature overrides are managed in Organization
+    # Settings > Workspaces (workspaces.feature_overrides). Still read as a
+    # fallback for workspaces that never saved any.
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
     # Per-organization role_baseline overlays. Does not replace deployment
     # role_baseline; keyed by organization id.
@@ -364,15 +367,15 @@ class UserSeedConfig(BaseModel):
     email: EmailStr
     name: str
     avatar: str | None = None
-    company: str | None = None
-    role: str | None = None
+    organization: str | None = None
+    job_title: str | None = None
     bio: str | None = None
     is_superadmin: bool = False
     store_credentials_in_secrets: bool = True
 
 
 class OrganizationMemberSeedConfig(BaseModel):
-    """Organization member assignment."""
+    """Deprecated: organization members are managed in the platform."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -381,7 +384,7 @@ class OrganizationMemberSeedConfig(BaseModel):
 
 
 class WorkspaceMemberSeedConfig(BaseModel):
-    """Workspace member assignment."""
+    """Deprecated: workspace members are managed in the platform."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -394,9 +397,15 @@ class WorkspaceSeedConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str
     slug: str
+    # Name, owner, group and branding are managed in the app; config.workspaces.yaml
+    # snapshots them (core/workspaces_import replays it). Still accepted here,
+    # bootstrap only; a workspace created without a name is named after its slug.
+    name: str | None = None
+    # Defaults to the organization owner. Org owners and admins reach every
+    # workspace of their org without a membership row.
     owner_email: EmailStr | None = None
+    # Deprecated and ignored by the seed (kept so older configs still load).
     members: list[WorkspaceMemberSeedConfig] = Field(default_factory=list)
 
     logo_url: str | None = None
@@ -407,6 +416,9 @@ class WorkspaceSeedConfig(BaseModel):
     background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    # Group in the workspace lists ("Others" when empty). Bootstrap only: applied
+    # when the workspace has no group yet, so a group changed in the UI stays.
+    group: str | None = Field(default=None, max_length=100)
     default_agent: str | None = None
     agents: list[str] | None = None
     apps: list[str] | None = None
@@ -429,6 +441,7 @@ class OrganizationSeedConfig(BaseModel):
     name: str
     slug: str
     owner_email: EmailStr | None = None
+    # Deprecated and ignored by the seed (kept so older configs still load).
     members: list[OrganizationMemberSeedConfig] = Field(default_factory=list)
     workspaces: list[WorkspaceSeedConfig] = Field(default_factory=list)
 
@@ -488,7 +501,9 @@ class Settings(BaseSettings):
     documents_hidden_template_ids: list[str] = Field(default_factory=list)
     sheets_template_sources: list[SheetsTemplateSourceConfig] = Field(default_factory=list)
 
-    # User seed configs (upserted by email on startup)
+    # Bootstrap users (created by email on startup). Keep this to platform
+    # operators: everyone else is invited from the platform. is_superadmin
+    # only promotes; demote with PATCH /api/admin/users/{id}.
     users: list[UserSeedConfig] = Field(default_factory=list)
 
     # Organization seed configs (upserted by slug on startup)

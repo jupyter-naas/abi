@@ -1,5 +1,11 @@
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
-from naas_abi.apps.nexus.apps.api.app.core.feature_flags import build_feature_flags
+from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
+    build_feature_flags,
+    dump_feature_overrides,
+    effective_workspace_overrides,
+    parse_feature_overrides,
+    workspace_features,
+)
 
 
 class TestBuildFeatureFlags:
@@ -144,3 +150,62 @@ class TestBuildFeatureFlags:
         assert flags["files"] is False
         assert flags["skills"] is False
         assert flags["slides"] is False
+
+
+class TestWorkspaceOverrideFromTheApp:
+    CONFIG = FeatureFlagsConfig(workspace_overrides={"axa": {"maps": False, "graph": True}})
+
+    def test_a_saved_override_replaces_the_config_entry(self) -> None:
+        flags = build_feature_flags(
+            role="member",
+            feature_flags_config=self.CONFIG,
+            workspace_slug="axa",
+            workspace_id="ws-1",
+            workspace_override={"search": True},
+        )
+
+        # The config's maps: false and graph: true no longer apply.
+        assert (flags["maps"], flags["graph"], flags["search"]) == (True, False, True)
+
+    def test_an_empty_saved_override_falls_back_to_the_role_baseline(self) -> None:
+        flags = build_feature_flags(
+            role="member",
+            feature_flags_config=self.CONFIG,
+            workspace_slug="axa",
+            workspace_id="ws-1",
+            workspace_override={},
+        )
+
+        assert (flags["maps"], flags["graph"]) == (True, False)
+
+    def test_effective_overrides_report_their_source(self) -> None:
+        def effective(override):
+            return effective_workspace_overrides(
+                self.CONFIG, workspace_slug="axa", workspace_id="ws-1", workspace_override=override
+            )
+
+        assert effective(None) == ({"maps": False, "graph": True}, "deployment")
+        assert effective({"maps": True}) == ({"maps": True}, "database")
+        assert effective_workspace_overrides(
+            self.CONFIG, workspace_slug="other", workspace_id="ws-2", workspace_override=None
+        ) == ({}, None)
+
+    def test_workspace_features_are_the_union_over_roles(self) -> None:
+        features = workspace_features(
+            roles=("owner", "member"),
+            feature_flags_config=self.CONFIG,
+            workspace_slug="axa",
+            workspace_id="ws-1",
+        )
+
+        assert "maps" not in features
+        assert "graph" in features
+        assert features[0] == "chat"
+
+    def test_overrides_round_trip_through_json_and_drop_unknown_keys(self) -> None:
+        raw = dump_feature_overrides({"maps": False, "graph": True})
+
+        assert parse_feature_overrides(raw) == {"graph": True, "maps": False}
+        assert parse_feature_overrides('{"nope": true, "chat": "yes"}') == {}
+        assert parse_feature_overrides(None) is None
+        assert parse_feature_overrides("not json") is None

@@ -61,7 +61,7 @@ describe('getFeatureForWorkspacePath', () => {
       'datasets',
     );
     expect(getFeatureForWorkspacePath('/workspace/ws1/settings/agents')).toBe('agents');
-    expect(getFeatureForWorkspacePath('/workspace/ws1/settings/theme')).toBe('settings.workspace');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/settings/general')).toBe('settings.workspace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/settings/infrastructure')).toBe('settings.workspace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/organization')).toBe('settings.organization');
     expect(getFeatureForWorkspacePath('/workspace/ws1/organization/billing')).toBe('settings.organization');
@@ -239,7 +239,7 @@ describe('pathNeedsAgentCatalog', () => {
   it('is false on apps and other sections', () => {
     expect(pathNeedsAgentCatalog('/workspace/ws1/apps')).toBe(false);
     expect(pathNeedsAgentCatalog('/workspace/ws1/files')).toBe(false);
-    expect(pathNeedsAgentCatalog('/workspace/ws1/settings/theme')).toBe(false);
+    expect(pathNeedsAgentCatalog('/workspace/ws1/settings/general')).toBe(false);
   });
 });
 

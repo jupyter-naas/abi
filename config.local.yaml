@@ -112,38 +112,26 @@ modules:
             name: "Local Member"
 
         # Q: How is the organization structured into workspaces and roles?
-        # A: Define orgs, their workspaces, and who belongs to each with what role.
-        #    role: owner | admin | member | viewer
+        # A: Define orgs and their workspaces here; people are invited and given
+        #    roles in the platform (Organization > Users, workspace Members).
+        #    Org owners/admins reach every workspace of the org.
         organizations:
           - name: "ABI"
             slug: "abi"
             owner_email: "admin@example.com"
             primary_color: "#34D399"
             accent_color: "#34D399"
-            members:
-              - email: "admin@example.com"
-                role: "owner"
             workspaces:
               - name: "Primary"
                 slug: "primary"
                 owner_email: "admin@example.com"
                 primary_color: "#34D399"
                 accent_color: "#34D399"
-                members:
-                  - email: "admin@example.com"
-                    role: "owner"
-                  - email: "member@example.com"
-                    role: "admin"
               - name: "Secondary"
                 slug: "secondary"
                 owner_email: "admin@example.com"
                 primary_color: "#34D399"
                 accent_color: "#34D399"
-                members:
-                  - email: "admin@example.com"
-                    role: "owner"
-                  - email: "member@example.com"
-                    role: "member"
 
   # Q: How do I add ChatGPT (OpenAI) as an AI provider?
   # A: Enable the module and give it your OpenAI API key.

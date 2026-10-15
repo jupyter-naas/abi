@@ -310,7 +310,8 @@ class _Builder:
         self.add(Person(_uri=str(person), label=user.name, full_name=user.name))
         profile = {
             "avatar_url": user.avatar,
-            "company": user.company,
+            # Account "Organization" field (users.organization), on nexus:company.
+            "company": user.organization,
             "job_title": user.job_title,
             "bio": user.bio,
         }

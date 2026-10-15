@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from naas_abi.apps.nexus.apps.api.app.services.iam.adapters.secondary import postgres
 from naas_abi.apps.nexus.apps.api.app.services.iam.adapters.secondary.postgres import (
     IAMSecondaryAdapterPostgres,
 )
@@ -16,65 +17,29 @@ def _scalar_result(single=None):
 
 
 @pytest.mark.asyncio
-async def test_get_workspace_role_returns_member_role() -> None:
+async def test_role_lookups_delegate_to_the_shared_resolver(monkeypatch) -> None:
+    """Role logic (org inheritance included) lives in core.workspace_access."""
     db = AsyncMock()
-    db.execute = AsyncMock(
-        side_effect=[
-            _scalar_result(single="member"),
-        ]
-    )
+    calls: list[tuple] = []
+
+    async def fake_workspace_role(session, user_id, workspace_id):
+        calls.append(("workspace", session, user_id, workspace_id))
+        return "admin"
+
+    async def fake_org_role(session, user_id, org_id):
+        calls.append(("organization", session, user_id, org_id))
+        return "owner"
+
+    monkeypatch.setattr(postgres, "resolve_workspace_role", fake_workspace_role)
+    monkeypatch.setattr(postgres, "resolve_organization_role", fake_org_role)
     adapter = IAMSecondaryAdapterPostgres(db=db)
 
-    role = await adapter.get_workspace_role("user-1", "ws-1")
-
-    assert role == "member"
-
-
-@pytest.mark.asyncio
-async def test_get_workspace_role_returns_owner_fallback() -> None:
-    db = AsyncMock()
-    db.execute = AsyncMock(
-        side_effect=[
-            _scalar_result(single=None),
-            _scalar_result(single="user-1"),
-        ]
-    )
-    adapter = IAMSecondaryAdapterPostgres(db=db)
-
-    role = await adapter.get_workspace_role("user-1", "ws-1")
-
-    assert role == "owner"
-
-
-@pytest.mark.asyncio
-async def test_get_workspace_role_returns_none_when_missing() -> None:
-    db = AsyncMock()
-    db.execute = AsyncMock(
-        side_effect=[
-            _scalar_result(single=None),
-            _scalar_result(single="user-2"),
-        ]
-    )
-    adapter = IAMSecondaryAdapterPostgres(db=db)
-
-    role = await adapter.get_workspace_role("user-1", "ws-1")
-
-    assert role is None
-
-
-@pytest.mark.asyncio
-async def test_get_organization_role_returns_member_role() -> None:
-    db = AsyncMock()
-    db.execute = AsyncMock(
-        side_effect=[
-            _scalar_result(single="admin"),
-        ]
-    )
-    adapter = IAMSecondaryAdapterPostgres(db=db)
-
-    role = await adapter.get_organization_role("user-1", "org-1")
-
-    assert role == "admin"
+    assert await adapter.get_workspace_role("user-1", "ws-1") == "admin"
+    assert await adapter.get_organization_role("user-1", "org-1") == "owner"
+    assert calls == [
+        ("workspace", db, "user-1", "ws-1"),
+        ("organization", db, "user-1", "org-1"),
+    ]
 
 
 @pytest.mark.asyncio

@@ -55,16 +55,10 @@ modules:
           - name: "Dev"
             slug: "dev"
             owner_email: "admin@example.com"
-            members:
-              - email: "admin@example.com"
-                role: "owner"
             workspaces:
               - name: "Default"
                 slug: "default"
                 owner_email: "admin@example.com"
-                members:
-                  - email: "admin@example.com"
-                    role: "owner"
 
   # OpenRouter — the only AI provider enabled by default. One gateway key
   # serves both the default chat model (Gemma 4 26B-A4B) and the default

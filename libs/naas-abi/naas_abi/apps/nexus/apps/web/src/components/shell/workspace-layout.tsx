@@ -25,6 +25,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { PresenceIndicator } from '@/components/presence-indicator';
 import { getWorkspacePath } from './sidebar/utils';
 import { pathNeedsAgentCatalog } from '@/lib/feature-access';
+import { rememberWorkspacePath } from '@/lib/workspace-return-path';
 import { OfficeCreateOverlay } from '@/components/office/office-create-overlay';
 
 const AIPane = dynamic(() => import('./ai-pane').then((m) => m.AIPane), { ssr: false });
@@ -253,6 +254,11 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   const { isChatRoute, isThread } = chatRoute;
   const { isFilesRoute, isBrowse: isFilesBrowse } = parseFilesRoute(pathname);
   const searchParams = useSearchParams();
+  // Settings pages (Organization, Platform) send the user back to this page.
+  const searchKey = searchParams?.toString() ?? '';
+  useEffect(() => {
+    if (pathname) rememberWorkspacePath(searchKey ? `${pathname}?${searchKey}` : pathname);
+  }, [pathname, searchKey]);
   const mapsRoute = parseMapsRoute(pathname, searchParams);
   const { isMapsRoute, isMapView: isMapsDataset } = mapsRoute;
   const { isDatasetsRoute, isTable: isDatasetsTable } = parseDatasetsRoute(pathname);

@@ -33,7 +33,10 @@ async def caller_feature_flags(db: object, workspace_id: str, role: str | None) 
     user is offered match the sections they can open. Callers that own a
     session pass it; the HTTP adapter opens one of its own.
     """
-    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import build_feature_flags
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
+        build_feature_flags,
+        parse_feature_overrides,
+    )
     from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
     from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
     from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
@@ -43,13 +46,16 @@ async def caller_feature_flags(db: object, workspace_id: str, role: str | None) 
     from sqlalchemy import select
 
     result = await db.execute(  # type: ignore[attr-defined]
-        select(WorkspaceModel.slug, WorkspaceModel.organization_id).where(
-            WorkspaceModel.id == workspace_id
-        )
+        select(
+            WorkspaceModel.slug,
+            WorkspaceModel.organization_id,
+            WorkspaceModel.feature_overrides,
+        ).where(WorkspaceModel.id == workspace_id)
     )
     row = result.one_or_none()
     slug = row[0] if row else None
     organization_id = row[1] if row else None
+    workspace_override = parse_feature_overrides(row[2]) if row else None
 
     override = None
     if organization_id:
@@ -64,6 +70,7 @@ async def caller_feature_flags(db: object, workspace_id: str, role: str | None) 
         workspace_id=workspace_id,
         organization_id=organization_id,
         organization_override=override,
+        workspace_override=workspace_override,
     )
 
 

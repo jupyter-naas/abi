@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 
 from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+from naas_abi.apps.nexus.apps.api.app.core.workspace_access import accessible_workspace_ids
 from naas_abi.apps.nexus.apps.api.app.models import (
     MapsGrantModel,
-    WorkspaceMemberModel,
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.permissions__schema import (
@@ -68,11 +68,8 @@ class PostgresWorkspaceDirectory(WorkspaceDirectoryPort):
     async def administered(self, user_id: str, *, superadmin: bool) -> list[WorkspaceRef]:
         query = select(WorkspaceModel.id, WorkspaceModel.name)
         if not superadmin:
-            query = query.join(
-                WorkspaceMemberModel, WorkspaceMemberModel.workspace_id == WorkspaceModel.id
-            ).where(
-                (WorkspaceMemberModel.user_id == user_id)
-                & (WorkspaceMemberModel.role.in_(("owner", "admin")))
+            query = query.where(
+                WorkspaceModel.id.in_(accessible_workspace_ids(user_id, min_role="admin"))
             )
         async with AsyncSessionLocal() as db:
             rows = (await db.execute(query.order_by(WorkspaceModel.name))).all()

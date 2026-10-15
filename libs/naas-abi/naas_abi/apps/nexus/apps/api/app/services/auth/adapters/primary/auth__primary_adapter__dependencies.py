@@ -29,8 +29,8 @@ def to_user_schema(user: AuthUserRecord) -> User:
         email=user.email,
         name=user.name,
         avatar=user.avatar,
-        company=user.company,
-        role=user.role,
+        organization=user.organization,
+        job_title=user.job_title,
         bio=user.bio,
         is_superadmin=user.is_superadmin,
         created_at=user.created_at,
@@ -153,10 +153,10 @@ async def require_superadmin(
 ) -> User:
     """Authorize platform-level admin access.
 
-    The ``is_superadmin`` flag is set on the user record (from
-    ``settings.users[].is_superadmin`` in ``config.yaml``, applied by the
-    startup seeder). Used for cross-workspace diagnostic surfaces like the
-    live platform event stream.
+    The ``is_superadmin`` flag is set on the user record: managed in Admin >
+    Users, and promoted on boot for operators listed in config ``users``.
+    Used for cross-workspace diagnostic surfaces like the live platform event
+    stream.
     """
     if not current_user.is_superadmin:
         raise HTTPException(

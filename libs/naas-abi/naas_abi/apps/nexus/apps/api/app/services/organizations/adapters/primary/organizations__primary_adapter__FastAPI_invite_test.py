@@ -14,6 +14,9 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_auth_service,
 )
+from naas_abi.apps.nexus.apps.api.app.services.auth.avatar_store_test import (
+    MemoryStorage as _MemoryStorage,
+)
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.primary import (
     organizations__primary_adapter__FastAPI as org_api,
 )
@@ -57,6 +60,9 @@ def _client(members: list[OrganizationMemberRecord]) -> TestClient:
     app.dependency_overrides[org_api.get_workspace_service_for_org_invite] = lambda: AsyncMock()
     app.dependency_overrides[get_auth_service] = lambda: auth_service
     app.dependency_overrides[org_api._get_email_service] = lambda: None
+    # The drive sync (best effort) gets a storage and no database here.
+    app.dependency_overrides[org_api._get_object_storage] = lambda: _MemoryStorage()
+    app.dependency_overrides[org_api.get_db] = lambda: _NoDb()
     return TestClient(app)
 
 
@@ -114,7 +120,94 @@ def test_send_failure_propagates_so_the_challenge_is_not_left_live(monkeypatch) 
     send.assert_awaited_once()
 
 
+def test_invite_refuses_owner_role(monkeypatch) -> None:
+    """Owners come from the config only, so the API accepts admin or member."""
+    send = AsyncMock(return_value=True)
+    monkeypatch.setattr(org_api, "issue_and_send_invite_sign_in", send)
+
+    client = _client([])
+    resp = client.post(
+        "/organizations/org-1/members/invite",
+        json={"email": "new@example.com", "role": "owner"},
+    )
+
+    assert resp.status_code == 422
+    send.assert_not_called()
+
+
 def test_already_exists_error_carries_the_user_id() -> None:
     """_find_org_member relies on this to locate the row it should resend to."""
     exc = OrganizationMemberAlreadyExistsError(org_id="org-1", user_id="user-2")
     assert exc.user_id == "user-2"
+
+
+class _NoDb:
+    """Stands in for the session: flush works, the drive sync then fails and is logged."""
+
+    async def flush(self) -> None:
+        return None
+
+
+
+def test_create_user_sets_the_member_profile(monkeypatch) -> None:
+    monkeypatch.setattr(org_api, "issue_and_send_invite_sign_in", AsyncMock(return_value=True))
+    created = OrganizationMemberRecord(
+        id="orgmem-9",
+        organization_id="org-1",
+        user_id="user-9",
+        role="member",
+        email="new@example.com",
+        name="New Person",
+        created_at=datetime(2026, 10, 14),
+    )
+    adapter = SimpleNamespace(
+        get_organization_role=AsyncMock(return_value="admin"),
+        get_user_by_email=AsyncMock(return_value=SimpleNamespace(id="user-9")),
+        is_organization_member=AsyncMock(return_value=False),
+        add_organization_member=AsyncMock(return_value=created),
+        update_organization_member_profile=AsyncMock(
+            return_value=OrganizationMemberRecord(
+                **{**created.__dict__, "organization": "Forvis Mazars", "country": "France"}
+            )
+        ),
+    )
+    auth_service = AsyncMock()
+    auth_service.ensure_user_for_invite.return_value = (SimpleNamespace(id="user-9"), True)
+    app = FastAPI()
+    app.include_router(org_api.router, prefix="/organizations")
+    app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
+        id="user-1", email="admin@example.com", name="Admin"
+    )
+    app.dependency_overrides[org_api.get_organization_service] = lambda: OrganizationService(
+        adapter=adapter
+    )
+    app.dependency_overrides[org_api.get_workspace_service_for_org_invite] = lambda: AsyncMock()
+    app.dependency_overrides[get_auth_service] = lambda: auth_service
+    app.dependency_overrides[org_api._get_email_service] = lambda: None
+    app.dependency_overrides[org_api._get_object_storage] = lambda: _MemoryStorage()
+    app.dependency_overrides[org_api.get_db] = lambda: _NoDb()
+
+    resp = TestClient(app).post(
+        "/organizations/org-1/members/invite",
+        json={
+            "email": "new@example.com",
+            "name": "New Person",
+            "role": "member",
+            "organization": "Forvis Mazars",
+            "country": "France",
+        },
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["user_created"] is True
+    assert (body["organization"], body["country"]) == ("Forvis Mazars", "France")
+    auth_service.ensure_user_for_invite.assert_awaited_once_with(
+        "new@example.com", name="New Person"
+    )
+    kwargs = adapter.update_organization_member_profile.await_args.kwargs
+    assert (kwargs["organization"], kwargs["country"], kwargs["name"]) == (
+        "Forvis Mazars",
+        "France",
+        None,
+    )
