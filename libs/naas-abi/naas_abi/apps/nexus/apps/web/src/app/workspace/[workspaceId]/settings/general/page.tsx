@@ -408,7 +408,6 @@ export default function GeneralSettingsPage() {
               open
               workspaceId={currentWorkspaceId}
               currentBackgroundUrl={currentBackgroundUrl}
-              fallbackColor={theme.backgroundColor}
               onClose={() => setWallpaperEditorKey((key) => key + 1)}
               onSaved={(backgroundImageUrl) =>
                 applyWorkspaceTheme(currentWorkspaceId, { backgroundImageUrl })

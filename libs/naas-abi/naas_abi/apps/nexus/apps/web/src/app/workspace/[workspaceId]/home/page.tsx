@@ -166,7 +166,6 @@ export default function HomePage() {
           open={backgroundDialogOpen}
           workspaceId={currentWorkspaceId}
           currentBackgroundUrl={backgroundUrl}
-          fallbackColor={theme?.backgroundColor}
           onClose={() => setBackgroundDialogOpen(false)}
           onSaved={(backgroundImageUrl) => applyWorkspaceTheme(currentWorkspaceId, { backgroundImageUrl })}
           onRemoved={() => applyWorkspaceTheme(currentWorkspaceId, { backgroundImageUrl: '' })}
@@ -176,7 +175,6 @@ export default function HomePage() {
         <DeskWallpaper
           imageUrl={deskImageUrl}
           framing={backgroundFraming}
-          fallbackColor={theme?.backgroundColor}
           className="absolute inset-0"
         />
         <div className="relative z-10 flex h-full w-full content-start flex-wrap items-start gap-x-7 gap-y-8 overflow-auto p-8">

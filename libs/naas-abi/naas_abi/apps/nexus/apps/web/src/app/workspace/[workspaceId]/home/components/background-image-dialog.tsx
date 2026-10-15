@@ -9,7 +9,6 @@ export function BackgroundImageDialog({
   open,
   workspaceId,
   currentBackgroundUrl,
-  fallbackColor,
   onClose,
   onSaved,
   onRemoved,
@@ -18,7 +17,6 @@ export function BackgroundImageDialog({
   workspaceId: string;
   /** The workspace's `background_image_url`, if any. */
   currentBackgroundUrl?: string;
-  fallbackColor?: string;
   onClose: () => void;
   /** The workspace's new `background_image_url`, as the API returned it. */
   onSaved: (backgroundImageUrl: string) => void;
@@ -44,7 +42,6 @@ export function BackgroundImageDialog({
           open={open}
           workspaceId={workspaceId}
           currentBackgroundUrl={currentBackgroundUrl}
-          fallbackColor={fallbackColor}
           onClose={onClose}
           onSaved={onSaved}
           onRemoved={onRemoved}

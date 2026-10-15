@@ -40,7 +40,6 @@ export function BackgroundImageEditor({
   open,
   workspaceId,
   currentBackgroundUrl,
-  fallbackColor,
   onClose,
   onSaved,
   onRemoved,
@@ -52,7 +51,6 @@ export function BackgroundImageEditor({
   workspaceId: string;
   /** The workspace's `background_image_url`, if any. */
   currentBackgroundUrl?: string;
-  fallbackColor?: string;
   /** After Save or Cancel: close the dialog, or reload the inline editor. */
   onClose: () => void;
   /** The workspace's new `background_image_url`, as the API returned it. */
@@ -373,7 +371,7 @@ export function BackgroundImageEditor({
           }}
         >
           {previewUrl ? (
-            <DeskWallpaper imageUrl={previewUrl} framing={framing} fallbackColor={fallbackColor} className="absolute inset-0" />
+            <DeskWallpaper imageUrl={previewUrl} framing={framing} className="absolute inset-0" />
           ) : null}
           {busy === 'load' ? (
             <div className="absolute inset-0 flex items-center justify-center bg-background/40">
