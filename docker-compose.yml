@@ -159,9 +159,11 @@ services:
         condition: service_healthy
     command:
       ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.mcp.mcp_server"]
-    # The repository, as the abi service mounts it (it is healthy first).
+    # The repository and the venv the abi service synced (it is healthy first),
+    # as the abi service mounts them: the host's .venv stays out of the container.
     volumes:
       - .:/app
+      - venv_cache:/app/.venv
     environment:
       - ABI_API_BASE=http://abi:9879
       - ABI_API_KEY=abi
