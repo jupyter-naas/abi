@@ -1,14 +1,20 @@
 """Set who and which workspace every API request acts for.
 
-Pure ASGI, so the ContextVars are set in the request's own context: async
-endpoints, sync endpoints (Starlette copies the context into the threadpool)
-and everything they await see them. ``EventService.publish()`` stamps them on
-every event, and identity event capture uses them for ``created_by``.
+Each request runs with a ``CallContext`` (``naas_abi_core.engine.call_context``):
+the ``api`` service account acting on behalf of the signed-in user. Every
+kernel call Nexus makes for the request carries it: in process directly, over
+NATS as the ``Abi-On-Behalf-Of`` header.
 
-The user is the bearer token's ``sub``. The workspace is the ``/workspaces/{id}``
-path segment, else a ``workspace_id`` query parameter. Handlers that learn the
-workspace from the body (chat) set ``agent_workspace_id`` themselves — it is
-the same ContextVar.
+Pure ASGI, so the context is set in the request's own context: async
+endpoints, sync endpoints (Starlette copies the context into the threadpool)
+and everything they await see it. ``EventService.publish()`` stamps the user
+and workspace on every event, and identity event capture uses the user for
+``created_by``.
+
+The user is the verified bearer token's ``sub``. The workspace is the
+``/workspaces/{id}`` path segment, else a ``workspace_id`` query parameter.
+Handlers that learn the workspace from the body (chat) set
+``agent_workspace_id`` themselves — a view of the same context.
 """
 
 from __future__ import annotations
@@ -17,15 +23,18 @@ import re
 from typing import Any
 from urllib.parse import parse_qs
 
-from naas_abi_core.services.event.context import (
-    event_actor_user_id,
-    event_actor_workspace_id,
-    event_triggered_via,
+from naas_abi_core.engine.call_context import (
+    CallContext,
+    service_account,
+    use_call_context,
+    user,
 )
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 _WORKSPACE_PATH = re.compile(r"/workspaces/([^/?#]+)")
+# The service account Nexus serves its requests as.
+NEXUS_IDENTITY = "api"
 
 
 def _decode_token(token: str) -> dict[str, Any] | None:
@@ -63,14 +72,18 @@ class RequestIdentityMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        user_token = event_actor_user_id.set(user_id_from_headers(Headers(scope=scope)))
-        workspace_token = event_actor_workspace_id.set(
-            workspace_id_from_request(scope.get("path", ""), scope.get("query_string", b""))
-        )
-        via_token = event_triggered_via.set("api")
-        try:
+        with use_call_context(request_call_context(scope)):
             await self.app(scope, receive, send)
-        finally:
-            event_triggered_via.reset(via_token)
-            event_actor_workspace_id.reset(workspace_token)
-            event_actor_user_id.reset(user_token)
+
+
+def request_call_context(scope: Scope) -> CallContext:
+    """``api`` on behalf of the request's signed-in user, if any."""
+    user_id = user_id_from_headers(Headers(scope=scope))
+    return CallContext(
+        principal=service_account(NEXUS_IDENTITY),
+        on_behalf_of=user(user_id) if user_id else None,
+        workspace_id=workspace_id_from_request(
+            scope.get("path", ""), scope.get("query_string", b"")
+        ),
+        triggered_via="api",
+    )

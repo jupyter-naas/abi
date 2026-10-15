@@ -26,10 +26,14 @@ from uuid import uuid4
 
 from google.protobuf.message import DecodeError
 from naas_abi_core import logger
-from naas_abi_core.engine.nats_auth import (
-    InvalidServiceTokenError,
-    verify_service_token,
+from naas_abi_core.engine.call_context import (
+    ANONYMOUS,
+    CallContext,
+    service_account,
+    use_call_context,
 )
+from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
+from naas_abi_core.engine.nats_identity import caller_context, for_request, refusal
 from naas_abi_core.engine.nats_sessions import (
     ServicePrimary,
     SessionHost,
@@ -72,6 +76,16 @@ class TransferSession:
     touched: float = 0
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     trace: ServedTransfer = field(default_factory=ServedTransfer)
+    # Who opened it: the handler runs as this caller.
+    context: CallContext = ANONYMOUS
+
+
+def same_caller(first: CallContext, second: CallContext) -> bool:
+    """Whether two calls come from the same actor acting for the same user."""
+    return (first.principal, first.on_behalf_of) == (
+        second.principal,
+        second.on_behalf_of,
+    )
 
 
 async def stream_thread(function, *args):
@@ -345,7 +359,7 @@ class TransferHost(SessionHost):
         if isinstance(exc, TransferError):
             return exc.code, str(exc)
         if isinstance(exc, InvalidServiceTokenError):
-            return "UNAUTHENTICATED", "Invalid service token"
+            return "UNAUTHENTICATED", refusal(exc, "Invalid service token")
         if isinstance(exc, asyncio.TimeoutError):
             return "DEADLINE_EXCEEDED", "Configured operation deadline exceeded"
         if self.error_mapper:
@@ -361,15 +375,16 @@ class TransferHost(SessionHost):
         response = OPERATIONS[operation][1]()
         caller = request = None
         try:
-            caller = verify_service_token(
-                (msg.headers or {}).get("Nats-Auth-Token", ""), self.secret
-            )
+            context = caller_context(msg.headers, self.secret)
+            caller = context.principal.id
             if len(msg.data) > self.packet_bytes:
                 raise TransferError(
                     "PAYLOAD_TOO_LARGE", "Transfer packet exceeds broker limit"
                 )
             request = OPERATIONS[operation][0].FromString(msg.data)
-            response = await self._execute(operation, request, caller, msg.headers)
+            response = await self._execute(
+                operation, request, caller, msg.headers, context
+            )
         except Exception as exc:  # noqa: BLE001 - sanitize errors at transport boundary
             response.error.code, response.error.message = self._error(exc)
             # A failed chunk of the session's own caller fails its span (once:
@@ -399,9 +414,10 @@ class TransferHost(SessionHost):
             finally:
                 await iterator.aclose()
 
-        # The handler's spans nest under the session's; asyncio.to_thread (and
-        # so stream_thread) copies this context into its worker thread.
-        with session.trace.activate():
+        # The handler's spans nest under the session's, and it runs as the
+        # session's caller; asyncio.to_thread (and so stream_thread) and
+        # thread_frames copy this context into their worker threads.
+        with session.trace.activate(), use_call_context(session.context):
             try:
                 if self.total_seconds is None:
                     await consume()
@@ -413,8 +429,13 @@ class TransferHost(SessionHost):
                 session.trace.fail(exc, code, message)
                 session.error = TransferError(code, message)
 
-    async def _execute(self, operation, request, caller, headers=None):
+    async def _execute(self, operation, request, caller, headers=None, context=None):
+        """``context``: the verified caller; by default ``caller`` acting for nobody."""
         now = asyncio.get_running_loop().time()
+        if context is None:
+            context = (
+                CallContext(principal=service_account(caller)) if caller else ANONYMOUS
+            )
         if operation == "open":
             if (
                 request.operation not in self.operations
@@ -446,6 +467,7 @@ class TransferHost(SessionHost):
                 size,
                 touched=now,
                 trace=trace,
+                context=for_request(context, request),
             )
             return pb.OpenResponse(id=key, chunk_bytes=size)
         session = self.sessions.get(request.id)
@@ -453,7 +475,9 @@ class TransferHost(SessionHost):
             if operation == "close":
                 return pb.CloseResponse()
             raise TransferError("NOT_FOUND", "Transfer expired or closed")
-        if session.caller != caller:
+        # The session runs as its opener, user included: only the same actor
+        # acting for the same user may go on with it.
+        if session.caller != caller or not same_caller(session.context, context):
             raise TransferError(
                 "PERMISSION_DENIED", "Transfer belongs to another caller"
             )

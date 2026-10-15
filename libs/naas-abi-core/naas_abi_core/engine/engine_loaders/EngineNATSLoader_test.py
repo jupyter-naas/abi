@@ -55,6 +55,7 @@ from naas_abi_core.services.event.adapters.primary.event__primary_adapter__NATS 
 from naas_abi_core.services.event.adapters.secondary.EventSecondaryAdapterNATSClient import (
     EventSecondaryAdapterNATSClient,
 )
+from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.adapters.primary.keyvalue__primary_adapter__NATS import (
     KeyValuePrimaryAdapterNATS,
 )
@@ -91,13 +92,13 @@ from naas_abi_core.services.vector_store.adapters.primary.vector_store__primary_
 from naas_abi_core.services.vector_store.adapters.secondary.VectorStoreSecondaryAdapterNATSClient import (
     VectorStoreSecondaryAdapterNATSClient,
 )
+from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 
 # (available_flag, primary_class, client_class, wraps_raw_adapter)
-# wraps_raw_adapter=True means the primary is constructed from
-# services.<x>.adapter (event, vector_store -- no richer domain-level
-# behaviour to preserve at that port boundary); False means it's
-# constructed from services.<x> itself, the domain service (everyone else
-# -- preserves event publishing / derived behaviour for remote callers).
+# wraps_raw_adapter=True would mean the primary is constructed from
+# services.<x>.adapter; every primary is now constructed from services.<x>
+# itself, the domain service, so every call reaches it (and whatever it
+# checks) and its event publishing holds for remote callers.
 _WIRED_SERVICES = [
     ("document", DocumentPrimaryAdapterNATS, DocumentSecondaryAdapterNATSClient, False),
     (
@@ -121,7 +122,7 @@ _WIRED_SERVICES = [
         CodingEnvironmentSecondaryAdapterNATSClient,
         False,
     ),
-    ("events", EventPrimaryAdapterNATS, EventSecondaryAdapterNATSClient, True),
+    ("events", EventPrimaryAdapterNATS, EventSecondaryAdapterNATSClient, False),
     (
         "source_control",
         SourceControlPrimaryAdapterNATS,
@@ -132,7 +133,7 @@ _WIRED_SERVICES = [
         "vector_store",
         VectorStorePrimaryAdapterNATS,
         VectorStoreSecondaryAdapterNATSClient,
-        True,
+        False,
     ),
     (
         "triple_store",
@@ -161,6 +162,9 @@ def _services(available: dict[str, object] | None = None) -> MagicMock:
     """
     available = available or {}
     services = MagicMock()
+    # Primaries that also accept a bare port tell the service by its type.
+    services.events = MagicMock(spec=EventService)
+    services.vector_store = MagicMock(spec=VectorStoreService)
     for flag in _ALL_FLAGS:
         getattr(services, f"{flag}_available").return_value = flag in available
         value = available.get(flag)
@@ -359,6 +363,7 @@ def test_cache_exposes_cold_tier_and_skips_remote_proxy(monkeypatch, remote):
     from naas_abi_core.services.cache.adapters.secondary.CacheSecondaryAdapterNATSClient import (
         CacheSecondaryAdapterNATSClient,
     )
+    from naas_abi_core.services.cache.CacheService import SingleTierCacheService
 
     loader = EngineNATSLoader(
         SimpleNamespace(nats=NATSConfiguration(jwt_secret="x" * 32))
@@ -369,6 +374,7 @@ def test_cache_exposes_cold_tier_and_skips_remote_proxy(monkeypatch, remote):
     )
     services = _services()
     services.cache_available.return_value = True
+    services.cache.cold = MagicMock(spec=SingleTierCacheService)
     adapter = MagicMock(spec=CacheSecondaryAdapterNATSClient) if remote else MagicMock()
     services.cache.cold.adapter = adapter
     started = loader.expose_services(services)
@@ -377,7 +383,8 @@ def test_cache_exposes_cold_tier_and_skips_remote_proxy(monkeypatch, remote):
     else:
         assert len(started) == 1
         assert isinstance(started[0], CachePrimaryAdapterNATS)
-        assert started[0]._adapter is adapter
+        # The CacheService's view of its cold tier, not the bare adapter.
+        assert started[0]._adapter is services.cache.cold
 
 
 def test_expose_model_registry_owner(monkeypatch):

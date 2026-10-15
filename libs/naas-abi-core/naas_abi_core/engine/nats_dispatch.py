@@ -12,6 +12,9 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import TypeVar
 
+from naas_abi_core.engine.call_context import CallContext, set_call_context
+from naas_abi_core.engine.nats_identity import for_request
+
 Request = TypeVar("Request")
 Response = TypeVar("Response")
 
@@ -42,8 +45,17 @@ class DomainRPCDispatcher:
         self._executor: ThreadPoolExecutor | None = None
 
     async def call(
-        self, function: Callable[[Request], Response], request: Request
+        self,
+        function: Callable[[Request], Response],
+        request: Request,
+        caller: CallContext | None = None,
     ) -> Response:
+        """Run ``function(request)`` on a worker, in a copy of this context.
+
+        ``caller``, the verified caller (``nats_identity.authenticated``), is
+        that copy's ``CallContext``, with the request's trace and workspace; it
+        ends with the call. Without it the worker inherits the current one.
+        """
         # Called only on the primary's event loop. A distinct pool per primary
         # prevents waiting parents from consuming their dependencies' capacity.
         if self._executor is None:
@@ -51,6 +63,8 @@ class DomainRPCDispatcher:
                 max_workers=self.max_workers, thread_name_prefix=f"nats-{self.name}"
             )
         context = contextvars.copy_context()
+        if caller is not None:
+            context.run(set_call_context, for_request(caller, request))
         return await asyncio.get_running_loop().run_in_executor(
             self._executor, context.run, function, request
         )

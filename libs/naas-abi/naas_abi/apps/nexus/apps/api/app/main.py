@@ -342,13 +342,16 @@ async def _startup(app: FastAPI) -> None:
     _install_identity_event_capture()
     # Also before seeds, so users and workspaces the configuration creates get their drives set up.
     _install_drive_writers()
+    from naas_abi_core.engine.call_context import as_service_account
     from naas_abi_core.services.event.context import event_triggered_via
 
-    via = event_triggered_via.set("configuration")
-    try:
-        await apply_configuration_seeds(getattr(app.state, "secret_service", None))
-    finally:
-        event_triggered_via.reset(via)
+    # Housekeeping for no user: Nexus's own service account.
+    with as_service_account("api"):
+        via = event_triggered_via.set("configuration")
+        try:
+            await apply_configuration_seeds(getattr(app.state, "secret_service", None))
+        finally:
+            event_triggered_via.reset(via)
 
     # An ABI restart clears the settings pages' 24h API cache (after seeds, which
     # may have changed users, workspaces and organizations).

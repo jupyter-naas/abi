@@ -11,11 +11,17 @@ from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
 from nats.errors import NoRespondersError
 from overflow_fakes import OWNER, FakeHost
 
+from naas_abi_sdk.call_context import (
+    CallContext,
+    service_account,
+    use_call_context,
+    user,
+)
 from naas_abi_sdk.transport import RPCError, Transport
 
 
-def transport(reply=b"", headers=None):
-    rpc = Transport("nats://unused", "issued-token", timeout=0.02)
+def transport(reply=b"", headers=None, **options):
+    rpc = Transport("nats://unused", "issued-token", timeout=0.02, **options)
     nc = SimpleNamespace(
         max_payload=8 * 1024 * 1024,
         request=AsyncMock(return_value=SimpleNamespace(data=reply, headers=headers)),
@@ -36,6 +42,49 @@ def test_roundtrip_preserves_bytes_and_does_not_mutate_request():
         "Nats-Auth-Token": "issued-token",
         "Abi-Overflow": "1",  # can read a reply above the broker limit
     }
+
+
+def test_the_current_calls_user_trace_and_workspace_travel_with_the_call():
+    rpc, nc = transport(kv.GetResponse().SerializeToString(), forward_user=True)
+    caller = CallContext(
+        principal=service_account("api"),
+        on_behalf_of=user("usr-ada"),
+        workspace_id="ws-1",
+        trace_id="trace-1",
+    )
+    with use_call_context(caller):
+        asyncio.run(
+            rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
+        )
+    sent = kv.GetRequest.FromString(nc.request.call_args.args[1])
+    assert (sent.context.trace_id, sent.context.workspace_id) == ("trace-1", "ws-1")
+    # Identity travels only in headers, never in the request body.
+    assert not sent.context.principal_id and not sent.context.tenant_id
+    assert nc.request.call_args.kwargs["headers"]["Abi-On-Behalf-Of"] == "usr-ada"
+
+
+def test_a_transport_names_no_user_unless_asked_to():
+    """A module's transport calls as the module: the kernel refuses the
+    header from it, and module hosts have no use for the user id."""
+    rpc, nc = transport(kv.GetResponse().SerializeToString())
+    caller = CallContext(principal=service_account("api"), on_behalf_of=user("u"))
+    with use_call_context(caller):
+        asyncio.run(rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse))
+    assert "Abi-On-Behalf-Of" not in nc.request.call_args.kwargs["headers"]
+
+
+def test_a_request_keeps_its_own_trace_and_workspace():
+    rpc, nc = transport(kv.GetResponse().SerializeToString())
+    request = kv.GetRequest(
+        context=common_pb2.CallContext(trace_id="mine", workspace_id="ws-2")
+    )
+    with use_call_context(
+        CallContext(principal=service_account("api"), workspace_id="ws-1")
+    ):
+        asyncio.run(rpc.call("abi.svc.keyvalue.v1.get", request, kv.GetResponse))
+    sent = kv.GetRequest.FromString(nc.request.call_args.args[1])
+    assert (sent.context.trace_id, sent.context.workspace_id) == ("mine", "ws-2")
+    assert "Abi-On-Behalf-Of" not in nc.request.call_args.kwargs["headers"]
 
 
 @pytest.mark.parametrize("error", [TimeoutError(), ConnectionError("lost")])

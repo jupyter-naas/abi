@@ -7,6 +7,7 @@ from naas_abi.apps.nexus.apps.api.app.services.identity_events.middleware import
     RequestIdentityMiddleware,
     workspace_id_from_request,
 )
+from naas_abi_core.engine.call_context import ANONYMOUS, current_call_context
 from naas_abi_core.services.event.context import (
     event_actor_user_id,
     event_actor_workspace_id,
@@ -19,10 +20,13 @@ def _app() -> FastAPI:
     app.add_middleware(RequestIdentityMiddleware)
 
     def seen() -> dict:
+        context = current_call_context()
         return {
             "user": event_actor_user_id.get(),
             "workspace": event_actor_workspace_id.get(),
             "via": event_triggered_via.get(),
+            "principal": context.principal.id,
+            "on_behalf_of": context.on_behalf_of.id if context.on_behalf_of else None,
         }
 
     @app.get("/api/workspaces/{workspace_id}/members")
@@ -46,9 +50,17 @@ def test_identity_is_set_for_the_request_and_cleared_after(monkeypatch) -> None:
         "/api/workspaces/ws-1/members", headers={"Authorization": "Bearer good"}
     ).json()
 
-    assert body == {"user": "usr-1", "workspace": "ws-1", "via": "api"}
+    # Nexus calls as ``api`` on behalf of the signed-in user.
+    assert body == {
+        "user": "usr-1",
+        "workspace": "ws-1",
+        "via": "api",
+        "principal": "api",
+        "on_behalf_of": "usr-1",
+    }
     assert event_actor_user_id.get() is None
     assert event_actor_workspace_id.get() is None
+    assert current_call_context() == ANONYMOUS
 
 
 def test_sync_endpoints_see_it_too_and_query_workspace_works(monkeypatch) -> None:
@@ -57,7 +69,8 @@ def test_sync_endpoints_see_it_too_and_query_workspace_works(monkeypatch) -> Non
 
     body = client.get("/api/files?workspace_id=ws-9", headers={"Authorization": "Bearer t"}).json()
 
-    assert body == {"user": "usr-1", "workspace": "ws-9", "via": "api"}
+    assert body["user"] == "usr-1" and body["workspace"] == "ws-9"
+    assert (body["principal"], body["on_behalf_of"]) == ("api", "usr-1")
 
 
 def test_anonymous_requests_have_no_actor(monkeypatch) -> None:
@@ -65,7 +78,13 @@ def test_anonymous_requests_have_no_actor(monkeypatch) -> None:
     client = TestClient(_app())
 
     assert client.get("/api/files", headers={"Authorization": "Bearer bad"}).json()["user"] is None
-    assert client.get("/api/files").json() == {"user": None, "workspace": None, "via": "api"}
+    assert client.get("/api/files").json() == {
+        "user": None,
+        "workspace": None,
+        "via": "api",
+        "principal": "api",
+        "on_behalf_of": None,
+    }
 
 
 def test_workspace_id_extraction() -> None:

@@ -12,10 +12,9 @@ from uuid import uuid4
 from google.protobuf.message import DecodeError
 from langchain_core.messages import AIMessage, AIMessageChunk
 from naas_abi_core import logger
-from naas_abi_core.engine.nats_auth import (
-    InvalidServiceTokenError,
-    verify_service_token,
-)
+from naas_abi_core.engine.call_context import use_call_context
+from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
+from naas_abi_core.engine.nats_identity import caller_context, for_request, refusal
 from naas_abi_core.engine.nats_sessions import SessionHost, session_owner, until
 from naas_abi_core.engine.nats_transfer import (
     TransferHost,
@@ -248,9 +247,8 @@ class ModelRegistryNATS(SessionHost):
         request_type, response_type = OPERATIONS[operation]
         response = response_type()
         try:
-            caller = verify_service_token(
-                (msg.headers or {}).get("Nats-Auth-Token", ""), self.secret
-            )
+            context = caller_context(msg.headers, self.secret)
+            caller = context.principal.id
             # An overflow upload is above the broker limit, so above this cap too.
             if len(msg.data) > self.max_payload or overflow.REQUEST_HEADER in (
                 msg.headers or {}
@@ -261,13 +259,14 @@ class ModelRegistryNATS(SessionHost):
                 self.deadline or float("inf"),
                 max(0.001, request.context.timeout_ms / 1000),
             )
-            response = await asyncio.wait_for(
-                self._execute(operation, request, caller), timeout
-            )
-        except InvalidServiceTokenError:
+            with use_call_context(for_request(context, request)):
+                response = await asyncio.wait_for(
+                    self._execute(operation, request, caller), timeout
+                )
+        except InvalidServiceTokenError as exc:
             response.error.code, response.error.message = (
                 "UNAUTHENTICATED",
-                "Invalid service token",
+                refusal(exc, "Invalid service token"),
             )
         except (
             ModelNotFoundError,

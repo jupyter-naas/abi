@@ -275,6 +275,25 @@ class SingleTierCacheService:
         self._run_mutation("delete", key, lambda: self.adapter.delete(key))
         self._emit(CacheDeleted(key=key, tier=self._tier_name))
 
+    def put_entry(self, key: str, cached: CachedData) -> None:
+        """Store an entry as is, already serialized (a remote tier's ``set``)."""
+        self._run_mutation("set", key, lambda: self.adapter.set(key, cached))
+        self._emit_cache_set(key, cached)
+
+    def put_entry_if_absent(self, key: str, cached: CachedData) -> bool:
+        """Store an entry as is unless the key exists; ``True`` if written.
+
+        The adapter's own ``set_if_absent``, with no fallback: an adapter that
+        cannot do it atomically raises ``NotImplementedError``, and the caller
+        decides (``SingleTierCacheService`` falls back on its side).
+        """
+        wrote = self._run_mutation(
+            "set_if_absent", key, lambda: self.adapter.set_if_absent(key, cached)
+        )
+        if wrote:
+            self._emit_cache_set(key, cached)
+        return wrote
+
     def _emit_cache_set(self, key: str, cached: CachedData) -> None:
         self._emit(
             CacheSet(

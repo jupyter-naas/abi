@@ -99,7 +99,6 @@ from naas_abi_core.services.secret.adaptors.secondary.SecretSecondaryAdapterNATS
     SecretSecondaryAdapterNATSClient,
 )
 from naas_abi_core.services.secret.Secret import Secret
-from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.source_control.adapters.primary.source_control__primary_adapter__NATS import (
     SourceControlPrimaryAdapterNATS,
 )
@@ -118,11 +117,6 @@ from naas_abi_core.services.vector_store.adapters.primary.vector_store__primary_
 from naas_abi_core.services.vector_store.adapters.secondary.VectorStoreSecondaryAdapterNATSClient import (
     VectorStoreSecondaryAdapterNATSClient,
 )
-
-
-def _publish_owner_event(service: ServiceBase, event: object) -> None:
-    if service.services_wired and service.services.events_available():
-        service.services.events.publish(event)
 
 
 class EngineNATSLoader:
@@ -314,12 +308,11 @@ class EngineNATSLoader:
         if services.events_available() and not isinstance(
             services.events.adapter, EventSecondaryAdapterNATSClient
         ):
-            # Wraps the raw IEventAdapter, not the EventService domain object
-            # -- EventService's extra behaviour (bus broadcasting) lives
-            # above this port entirely, so there's no richer object to
-            # prefer here the way object_storage prefers its domain service.
+            # Wraps the domain SERVICE: every call reaches EventService (and
+            # whatever it checks), through its stored-level operations, which
+            # never broadcast -- the remote publisher already did.
             primary_events = EventPrimaryAdapterNATS(
-                services.events.adapter, nats_config.jwt_secret
+                services.events, nats_config.jwt_secret
             )
             nats_runtime.run_coro(primary_events.start(nc))
             started.append(primary_events)
@@ -348,15 +341,10 @@ class EngineNATSLoader:
         if services.vector_store_available() and not isinstance(
             services.vector_store.adapter, VectorStoreSecondaryAdapterNATSClient
         ):
-            # The port owns persistence; the primary records mutation audit events
-            # through the owner's injected event service for every caller.
+            # Wraps the domain SERVICE: it initializes its adapter and emits
+            # the mutation audit events, once, for every caller.
             primary_vector_store = VectorStorePrimaryAdapterNATS(
-                services.vector_store.adapter,
-                nats_config.jwt_secret,
-                event_publisher=lambda event: _publish_owner_event(
-                    services.vector_store, event
-                ),
-                prepare=services.vector_store.initialize,
+                services.vector_store, nats_config.jwt_secret
             )
             nats_runtime.run_coro(primary_vector_store.start(nc))
             started.append(primary_vector_store)
@@ -390,22 +378,13 @@ class EngineNATSLoader:
         if services.cache_available() and not isinstance(
             services.cache.cold.adapter, CacheSecondaryAdapterNATSClient
         ):
-            # v1 exposes one adapter. Use the canonical cold tier for remote callers.
+            # v1 exposes one tier: the canonical cold one. Each endpoint goes
+            # through the CacheService's view of its tier, which emits the
+            # mutation audit events, once, for every caller.
             primary_cache = CachePrimaryAdapterNATS(
-                services.cache.cold.adapter,
+                services.cache.cold,
                 nats_config.jwt_secret,
-                tiers=tuple(tier for tier, _ in services.cache.adapters),
-                event_publisher=lambda event: _publish_owner_event(
-                    services.cache, event
-                ),
-                tier_name=next(
-                    (
-                        tier
-                        for tier, adapter in services.cache.adapters
-                        if adapter is services.cache.cold.adapter
-                    ),
-                    "cold",
-                ),
+                tiers=services.cache.tier_names,
             )
             nats_runtime.run_coro(primary_cache.start(nc))
             started.append(primary_cache)
@@ -415,13 +394,9 @@ class EngineNATSLoader:
                 if isinstance(adapter, CacheSecondaryAdapterNATSClient):
                     continue
                 primary_tier = CachePrimaryAdapterNATS(
-                    adapter,
+                    services.cache.tier(tier),
                     nats_config.jwt_secret,
                     subject_prefix=f"abi.svc.cache.v1.tier.{index}",
-                    event_publisher=lambda event: _publish_owner_event(
-                        services.cache, event
-                    ),
-                    tier_name=tier,
                 )
                 nats_runtime.run_coro(primary_tier.start(nc))
                 started.append(primary_tier)

@@ -34,6 +34,44 @@ def test_nested_domains_progress_with_one_shared_worker_and_keep_context():
     asyncio.run(exercise())
 
 
+def test_the_worker_runs_as_the_caller_given_and_only_for_that_call():
+    from naas_abi_core.engine.call_context import (
+        ANONYMOUS,
+        CallContext,
+        current_call_context,
+        service_account,
+        user,
+    )
+    from naas_abi_proto.common.v1 import common_pb2
+    from naas_abi_proto.keyvalue.v1 import keyvalue_pb2
+
+    caller = CallContext(principal=service_account("api"), on_behalf_of=user("usr-1"))
+    request = keyvalue_pb2.GetRequest(
+        context=common_pb2.CallContext(trace_id="trace-1", workspace_id="ws-1")
+    )
+
+    async def exercise():
+        dispatcher = DomainRPCDispatcher("keyvalue", max_workers=1)
+        try:
+            seen = await dispatcher.call(
+                lambda _: current_call_context(), request, caller
+            )
+            after = await dispatcher.call(lambda _: current_call_context(), request)
+            return seen, after, current_call_context()
+        finally:
+            dispatcher.close()
+
+    seen, after, outside = asyncio.run(exercise())
+    assert seen == CallContext(
+        principal=service_account("api"),
+        on_behalf_of=user("usr-1"),
+        workspace_id="ws-1",
+        trace_id="trace-1",
+    )
+    # Neither the worker thread nor the event loop keeps it afterwards.
+    assert after == ANONYMOUS and outside == ANONYMOUS
+
+
 @pytest.fixture
 def default_capacity():
     yield

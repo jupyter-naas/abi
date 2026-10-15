@@ -267,12 +267,17 @@ class IEventService(ABC):
         limit: int | None = None,
         newest_first: bool = False,
         search: str | None = None,
+        *,
+        since_timestamp: str | None = None,
+        until_timestamp: str | None = None,
+        filter: dict | None = None,
     ) -> list[StoredEvent]:
         """Raw stored records, filtered by type IRI (no event class needed).
 
         For admin views and tools that must read any type, including ones
-        whose Python class is not importable here. Same ordering and bounds as
-        :meth:`query` (``since_seq`` exclusive, ``until_seq`` inclusive).
+        whose Python class is not importable here, and for the NATS endpoint.
+        Same ordering, bounds and filters as :meth:`query` (``since_seq``
+        exclusive, ``until_seq`` inclusive).
         """
 
     @abstractmethod
@@ -284,8 +289,45 @@ class IEventService(ABC):
         limit: int | None = None,
         newest_first: bool = False,
         search: str | None = None,
+        *,
+        since_timestamp: str | None = None,
+        until_timestamp: str | None = None,
+        filter: dict | None = None,
     ) -> AbstractContextManager[Iterator[StoredEvent]]:
         """:meth:`query_stored`, read as the caller iterates, inside the block."""
+
+    @abstractmethod
+    def append_stored(
+        self, event_id: str, event_type: str, timestamp: str, payload: bytes
+    ) -> StoredEvent:
+        """Append an event already serialized by a remote ``publish``.
+
+        Its publisher stamped it and broadcasts it on its own bus, so this
+        only makes it durable: nothing is broadcast here.
+        """
+
+    @abstractmethod
+    def max_seq(self, event_type: str | None = None) -> int:
+        """The highest ``seq`` in the log, of ``event_type`` if given; 0 if none."""
+
+    @abstractmethod
+    def get_cursor(self, consumer_id: str, event_type: str) -> int:
+        """The last ``seq`` ``consumer_id`` read of ``event_type``; 0 if none."""
+
+    @abstractmethod
+    def set_cursor(self, consumer_id: str, event_type: str, last_seq: int) -> None:
+        """Move ``consumer_id``'s cursor on ``event_type`` to ``last_seq``."""
+
+    @abstractmethod
+    def query_stored_for_consumer(
+        self,
+        consumer_id: str,
+        event_type: str,
+        limit: int | None = None,
+        filter: dict | None = None,
+    ) -> list[StoredEvent]:
+        """Raw records of ``event_type`` after the consumer's cursor, advancing it
+        (``IEventAdapter.query_for_consumer``)."""
 
     @abstractmethod
     def get_stored(self, seq: int) -> StoredEvent:

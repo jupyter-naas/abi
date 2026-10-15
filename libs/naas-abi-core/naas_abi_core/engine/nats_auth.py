@@ -7,11 +7,10 @@ Stage 1 has no extracted or untrusted module: every NATS client is first-party i
 already under this deployment's control (the API process, Dagster). These tokens exist to give
 a NATS primary adapter a real, checkable caller identity instead of trusting "anyone who can
 reach the NATS server" — but there is deliberately no per-module claim, scope, or resource ARN
-here yet, because Stage 1 has nothing to scope *between*. That richer model (ARN-style resource
-scopes, checked in the domain rather than the transport, propagated via a shared context
-variable) is Stage 2 work — see the RFC's "Agents: the sub-agent composition problem" /
-"Decisions locked in" for the target shape. Don't grow this module toward that design before
-Stage 2 actually needs it.
+here yet, because Stage 1 has nothing to scope *between*. The verified ``sub`` reaches domain
+services as the actor of the call's ``CallContext`` (``naas_abi_core.engine.call_context``,
+built by ``nats_identity``). The token itself stays this minimal until ES256 engine tokens
+replace it (docs/specs/rfcs/20261013_identity-and-authorization.md, §9).
 
 One shared secret, HS256, one claim: which known first-party process issued/holds the token
 (``"api"``, ``"dagster"``, ...). The secret itself is delivered exactly like any other secret

@@ -21,6 +21,7 @@ class ModelRegistryNATSClient(ModelRegistryService):
             url,
             lambda: issue_service_token("engine", secret),
             timeout=120,
+            forward_user=True,  # the registry is a kernel service; engine is trusted
             name=connection_name("abi-engine:model_registry"),
         )
         self.remote = RemoteRegistry(ModelRegistryClient(self.transport))

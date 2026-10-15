@@ -1,6 +1,6 @@
 """NATS RPC primary adapter for the event kernel domain.
 
-Exposes a real ``IEventAdapter`` as a NATS micro-service (see
+Exposes the ``EventService`` durable log as a NATS micro-service (see
 ``naas_abi_core/proto/event/v1/event.proto`` for the wire contract and
 ``naas_abi_core/proto/README.md`` for why it lives there). This is the
 server side; the matching client is ``EventSecondaryAdapterNATSClient``.
@@ -12,15 +12,13 @@ incoming request must carry a valid token in the ``Nats-Auth-Token`` header
 neutral module neither adapter owns, so this file and the client's don't
 depend on each other; see that module's docstring for why).
 
-Scope note: this wraps a raw ``IEventAdapter`` -- the durable-log secondary
-port -- not the domain ``EventService``. There is no richer domain behaviour
-to preserve at this port boundary: ``EventService``'s extra behaviour (bus
-broadcasting on ``publish``, live ``subscribe``, generator-based
-``iter_query``/``iter_query_for_consumer``, class<->IRI resolution) is
-layered *above* this port, in ``EventService`` itself, wherever it is
-constructed -- not something this adapter needs to replicate. Consequently
-this primary adapter has no bus access and registers endpoints only for
-``IEventAdapter``'s methods.
+Scope note: the wire contract is the durable-log port's (``IEventAdapter``):
+a remote ``EventService`` backed by ``EventSecondaryAdapterNATSClient``
+serializes, stamps and broadcasts its own events, and only stores them here.
+Every endpoint still goes through this engine's ``EventService`` -- its
+stored-level operations (``append_stored``, ``query_stored``, ``max_seq``,
+cursors) -- so a check in the domain service covers remote callers too. None
+of them broadcasts: the publisher already did, so each event goes out once.
 """
 
 from __future__ import annotations
@@ -36,13 +34,10 @@ from google.protobuf.message import DecodeError, Message
 from nats.micro.request import Request
 
 from naas_abi_core import logger
-from naas_abi_core.engine.nats_auth import (
-    InvalidServiceTokenError,
-    verify_service_token,
-)
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
+    authenticate_request,
     request_payload,
     respond_protobuf,
 )
@@ -70,8 +65,10 @@ from naas_abi_core.services.event.EventPort import (
     EventNotFoundError,
     EventTypeSummary,
     IEventAdapter,
+    IEventService,
     InvalidEventError,
 )
+from naas_abi_core.services.event.EventService import EventService
 
 __all__ = [
     "AUTH_HEADER",
@@ -120,7 +117,7 @@ def _struct_to_json_filter(
 
 
 def _query_arguments(req: event_pb2.QueryRequest) -> dict[str, Any]:
-    """``IEventAdapter.query`` arguments from a wire ``QueryRequest``."""
+    """``EventService.query_stored`` arguments from a wire ``QueryRequest``."""
     return {
         "event_type": req.event_type if req.HasField("event_type") else None,
         "since_seq": req.since_seq if req.HasField("since_seq") else None,
@@ -131,9 +128,7 @@ def _query_arguments(req: event_pb2.QueryRequest) -> dict[str, Any]:
         "until_timestamp": (
             req.until_timestamp if req.HasField("until_timestamp") else None
         ),
-        "json_filter": _struct_to_json_filter(
-            req.HasField("json_filter"), req.json_filter
-        ),
+        "filter": _struct_to_json_filter(req.HasField("json_filter"), req.json_filter),
         "limit": req.limit if req.HasField("limit") else None,
         "newest_first": req.newest_first,
         "search": req.search if req.HasField("search") else None,
@@ -141,26 +136,23 @@ def _query_arguments(req: event_pb2.QueryRequest) -> dict[str, Any]:
 
 
 class EventPrimaryAdapterNATS(ServiceWithTransfers):
-    """Serves the event durable-log port over NATS RPC (request/reply).
+    """Serves the event durable log over NATS RPC (request/reply).
 
-    Wraps a real ``IEventAdapter`` and registers one NATS micro-service
-    endpoint per port method. Each endpoint authenticates the caller via
-    ``Nats-Auth-Token`` before doing anything else, then decodes the
-    Protobuf request, calls straight through to the wrapped adapter, and
-    encodes a Protobuf response. Errors -- auth failures, unexpected
-    exceptions -- are always reported as a normal response carrying a
-    populated ``CallError``, never as a crashed handler or a raw NATS-level
-    error.
-
-    Accepts a bare ``IEventAdapter`` -- there is no richer domain object to
-    prefer here (unlike ``object_storage``'s primary adapter, which prefers
-    the domain service to preserve its event-publishing side effects):
-    ``EventService``'s extra behaviour lives above this port entirely, so
-    wrapping the adapter is the only correct choice, not a shortcut.
+    Wraps the domain ``EventService`` and registers one NATS micro-service
+    endpoint per durable-log operation. Each endpoint authenticates the
+    caller via ``Nats-Auth-Token`` before doing anything else, then decodes
+    the Protobuf request, calls the service as that caller (its
+    ``CallContext``), and encodes a Protobuf response. Errors -- auth
+    failures, unexpected exceptions -- are always reported as a normal
+    response carrying a populated ``CallError``, never as a crashed handler
+    or a raw NATS-level error.
     """
 
-    def __init__(self, adapter: IEventAdapter, jwt_secret: str) -> None:
-        self._adapter = adapter
+    def __init__(self, service: IEventService | IEventAdapter, jwt_secret: str) -> None:
+        # A bare log (tests) is served through an EventService of its own.
+        self._adapter = (
+            service if isinstance(service, IEventService) else EventService(service)
+        )
         self._jwt_secret = jwt_secret
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
@@ -239,14 +231,8 @@ class EventPrimaryAdapterNATS(ServiceWithTransfers):
         response_cls: Callable[..., _ResponseT],
         call: Callable[[_RequestT], _ResponseT],
     ) -> None:
-        if not self._is_authenticated(request):
-            await self._respond_error(
-                request,
-                response_cls,
-                "UNAUTHENTICATED",
-                "missing or invalid auth token",
-                retryable=False,
-            )
+        caller = await authenticate_request(request, self._jwt_secret, response_cls)
+        if caller is None:
             return
 
         parsed_request = request_cls()
@@ -273,7 +259,7 @@ class EventPrimaryAdapterNATS(ServiceWithTransfers):
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await self._dispatch.call(call, parsed_request)
+            response = await self._dispatch.call(call, parsed_request, caller)
         except EventNotFoundError as exc:
             await self._respond_error(
                 request, response_cls, "EVENT_NOT_FOUND", str(exc), retryable=False
@@ -300,17 +286,6 @@ class EventPrimaryAdapterNATS(ServiceWithTransfers):
 
         await respond_protobuf(request, response, response_cls)
 
-    def _is_authenticated(self, request: Request) -> bool:
-        headers = request.headers or {}
-        token = headers.get(AUTH_HEADER)
-        if not token:
-            return False
-        try:
-            verify_service_token(token, self._jwt_secret)
-        except InvalidServiceTokenError:
-            return False
-        return True
-
     @staticmethod
     async def _respond_error(
         request: Request,
@@ -326,7 +301,7 @@ class EventPrimaryAdapterNATS(ServiceWithTransfers):
         await respond_protobuf(request, response, response_cls)
 
     # ------------------------------------------------------------------
-    # Endpoint handlers -- one per IEventAdapter method.
+    # Endpoint handlers -- one per durable-log operation.
     # ------------------------------------------------------------------
 
     async def _handle_append(self, request: Request) -> None:
@@ -338,7 +313,7 @@ class EventPrimaryAdapterNATS(ServiceWithTransfers):
         )
 
     def _call_append(self, req: event_pb2.AppendRequest) -> event_pb2.AppendResponse:
-        stored = self._adapter.append(
+        stored = self._adapter.append_stored(
             event_id=req.event_id,
             event_type=req.event_type,
             timestamp=req.timestamp,
@@ -355,7 +330,7 @@ class EventPrimaryAdapterNATS(ServiceWithTransfers):
         )
 
     def _call_query(self, req: event_pb2.QueryRequest) -> event_pb2.QueryResponse:
-        rows = self._adapter.query(**_query_arguments(req))
+        rows = self._adapter.query_stored(**_query_arguments(req))
         return event_pb2.QueryResponse(
             events=event_pb2.StoredEvents(events=[event_to_pb(row) for row in rows])
         )
@@ -374,7 +349,7 @@ class EventPrimaryAdapterNATS(ServiceWithTransfers):
     def _produce_query(
         self, request: event_pb2.QueryRequest, emit: Callable[[bytes], bool]
     ) -> None:
-        with self._adapter.query_stream(**_query_arguments(request)) as events:
+        with self._adapter.query_stored_stream(**_query_arguments(request)) as events:
             for frame in event_frames(events):
                 if not emit(frame):
                     return
@@ -438,13 +413,11 @@ class EventPrimaryAdapterNATS(ServiceWithTransfers):
     def _call_query_for_consumer(
         self, req: event_pb2.QueryForConsumerRequest
     ) -> event_pb2.QueryForConsumerResponse:
-        rows = self._adapter.query_for_consumer(
+        rows = self._adapter.query_stored_for_consumer(
             consumer_id=req.consumer_id,
             event_type=req.event_type,
             limit=req.limit if req.HasField("limit") else None,
-            json_filter=_struct_to_json_filter(
-                req.HasField("json_filter"), req.json_filter
-            ),
+            filter=_struct_to_json_filter(req.HasField("json_filter"), req.json_filter),
         )
         return event_pb2.QueryForConsumerResponse(
             events=event_pb2.StoredEvents(events=[event_to_pb(row) for row in rows])
@@ -461,7 +434,7 @@ class EventPrimaryAdapterNATS(ServiceWithTransfers):
     def _call_list_event_types(
         self, req: event_pb2.ListEventTypesRequest
     ) -> event_pb2.ListEventTypesResponse:
-        summaries = self._adapter.list_event_types()
+        summaries = self._adapter.event_types()
         return event_pb2.ListEventTypesResponse(
             types=event_pb2.EventTypeSummaries(
                 types=[_type_to_pb(s) for s in summaries]

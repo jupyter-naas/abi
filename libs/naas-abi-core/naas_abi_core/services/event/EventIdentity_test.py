@@ -1,7 +1,8 @@
 """Every published event carries who triggered it, and in which workspace.
 
-Identity comes from request-scoped ContextVars set at the API boundary, so no
-service that publishes events has to plumb it through.
+Identity comes from the call's ``CallContext``, set at the API boundary (or by
+the NATS primary adapter), so no service that publishes events has to plumb
+it through.
 """
 
 from __future__ import annotations
@@ -9,6 +10,14 @@ from __future__ import annotations
 import json
 from typing import ClassVar
 
+from naas_abi_core.engine.call_context import (
+    ANONYMOUS,
+    CallContext,
+    current_call_context,
+    service_account,
+    use_call_context,
+    user,
+)
 from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
 from naas_abi_core.services.event import EventCodec
 from naas_abi_core.services.event.adapters.secondary.EventSQLiteAdapter import (
@@ -76,6 +85,79 @@ def test_caller_supplied_identity_wins_over_context(tmp_path) -> None:
 
     [stored] = service.query()
     assert stored.actor_user_id == "usr-explicit"
+
+
+def test_the_actor_and_workspace_come_from_the_call_context(tmp_path) -> None:
+    service = _service(tmp_path)
+    caller = CallContext(
+        principal=service_account("api"),
+        on_behalf_of=user("usr-1"),
+        workspace_id="ws-1",
+        triggered_via="api",
+    )
+    with use_call_context(caller):
+        assert event_actor_user_id.get() == "usr-1"
+        assert event_actor_workspace_id.get() == "ws-1"
+        assert event_triggered_via.get() == "api"
+        service.publish(ObjectStored(key="a.txt"))
+    # A service account acting for nobody is no user.
+    with use_call_context(CallContext(principal=service_account("engine"))):
+        service.publish(ObjectStored(key="b.txt"))
+
+    first, second = service.query()
+    assert (first.actor_user_id, first.actor_workspace_id, first.triggered_via) == (
+        "usr-1",
+        "ws-1",
+        "api",
+    )
+    assert second.actor_user_id is None
+
+
+def test_setting_the_actor_sets_whom_the_call_acts_for() -> None:
+    with use_call_context(CallContext(principal=service_account("api"))):
+        token = event_actor_user_id.set("usr-2")
+        assert current_call_context().on_behalf_of == user("usr-2")
+        assert current_call_context().principal == service_account("api")
+        event_actor_user_id.reset(token)
+        assert current_call_context().on_behalf_of is None
+
+
+def test_a_user_actor_stays_the_calls_user_when_the_actor_is_cleared() -> None:
+    with use_call_context(CallContext(principal=user("usr-actor"))):
+        assert event_actor_user_id.get() == "usr-actor"
+        token = event_actor_user_id.set("usr-other")
+        assert event_actor_user_id.get() == "usr-other"
+        cleared = event_actor_user_id.set(None)
+        # Only on_behalf_of is cleared: the actor is a user, so it is the user.
+        assert event_actor_user_id.get() == "usr-actor"
+        event_actor_user_id.reset(cleared)
+        event_actor_user_id.reset(token)
+        assert current_call_context() == CallContext(principal=user("usr-actor"))
+
+
+def test_a_reset_restores_its_field_only() -> None:
+    user_token = event_actor_user_id.set("usr-1")
+    event_actor_workspace_id.set("ws-1")
+    event_actor_user_id.reset(user_token)
+    # The workspace set after the user stays: a reset is not a ContextVar's.
+    assert (event_actor_user_id.get(), event_actor_workspace_id.get()) == (None, "ws-1")
+    event_actor_workspace_id.set(None)
+
+
+def test_resets_in_any_order_restore_each_field() -> None:
+    user_token = event_actor_user_id.set("usr-1")
+    workspace_token = event_actor_workspace_id.set("ws-1")
+    via_token = event_triggered_via.set("cli")
+
+    event_actor_user_id.reset(user_token)
+    assert (event_actor_workspace_id.get(), event_triggered_via.get()) == (
+        "ws-1",
+        "cli",
+    )
+    event_triggered_via.reset(via_token)
+    event_actor_workspace_id.reset(workspace_token)
+
+    assert current_call_context() == ANONYMOUS
 
 
 def test_agent_context_vars_are_the_same_identity() -> None:

@@ -20,10 +20,21 @@ from typing import Any, Self, TypeVar, cast
 from google.protobuf.message import Message
 from naas_abi_core import logger
 from naas_abi_core.engine import nats_overflow
+from naas_abi_core.engine.call_context import (
+    CallContext,
+    current_call_context,
+    on_behalf_of_header,
+)
 from naas_abi_core.engine.nats_auth import (
     DEFAULT_TTL,
     InvalidServiceTokenError,
     issue_service_token,
+)
+from naas_abi_core.engine.nats_identity import (
+    ON_BEHALF_OF_IDENTITIES,
+    caller_context,
+    refusal,
+    request_envelope,
 )
 from naas_abi_core.engine.nats_naming import connection_name, rpc_client_role
 from naas_abi_core.engine.nats_transfer import TransferError
@@ -104,6 +115,26 @@ async def request_payload(request: Request) -> bytes:
         raise RequestPayloadError(
             "DEADLINE_EXCEEDED", "Reading the overflowed request timed out"
         ) from exc
+
+
+async def authenticate_request(
+    request: Request, secret: str, response_cls: Callable[..., Message]
+) -> CallContext | None:
+    """The verified caller of a ``nats.micro`` request (``nats_identity``).
+
+    A refused caller is answered here, UNAUTHENTICATED and not retryable, and
+    ``None`` comes back: the primary has nothing left to do.
+    """
+    try:
+        return caller_context(request.headers, secret)
+    except InvalidServiceTokenError as exc:
+        message = refusal(exc, "missing or invalid auth token")
+    response = response_cls()
+    _call_error(response).CopyFrom(
+        common_pb2.CallError(code="UNAUTHENTICATED", message=message, retryable=False)
+    )
+    await respond_protobuf(request, response, response_cls)
+    return None
 
 
 def _call_error(response: Message) -> common_pb2.CallError:
@@ -405,11 +436,28 @@ class NatsRPCClient:
     # ------------------------------------------------------------------
 
     def _context(self, timeout_seconds: float | None = None) -> common_pb2.CallContext:
-        """The call's context; ``timeout_seconds`` as passed to ``_call``."""
+        """The call's context; ``timeout_seconds`` as passed to ``_call``.
+
+        The trace and the target workspace are the current call's. Identity
+        never travels here: the server reads it from the headers (``_call``).
+        """
+        current = current_call_context()
         return common_pb2.CallContext(
-            trace_id=str(uuid.uuid4()),
+            trace_id=current.trace_id or str(uuid.uuid4()),
             timeout_ms=int(self._deadline(timeout_seconds) * 1000),
+            workspace_id=current.workspace_id or "",
         )
+
+    def _on_behalf_of(self) -> dict[str, str]:
+        """The current call's user, for an identity trusted to name it.
+
+        Read when the call is made, in the caller's thread. Any other identity
+        sends nothing and calls as itself, as before (the server would refuse
+        the header).
+        """
+        if self._service_identity not in ON_BEHALF_OF_IDENTITIES:
+            return {}
+        return on_behalf_of_header()
 
     def _deadline(self, timeout_seconds: float | None) -> float:
         return self._timeout_seconds if timeout_seconds is None else timeout_seconds
@@ -429,7 +477,7 @@ class NatsRPCClient:
         payload = request.SerializeToString()
         with self._call_lock:
             token = self._current_token()
-        headers = {self._auth_header: token}
+        headers = {self._auth_header: token, **self._on_behalf_of()}
         # The span starts in the calling thread, whose context holds the parent
         # (e.g. a request handler); the trace travels in the headers.
         with client_span(
@@ -450,7 +498,11 @@ class NatsRPCClient:
                 )
             headers[overflow.ACCEPT_HEADER] = "1"
             trace = TransferTrace(span)
-            chunk = self._chunk_call(token, trace)
+            chunk = self._chunk_call(
+                {self._auth_header: token, **self._on_behalf_of()},
+                self._chunk_envelope(request),
+                trace,
+            )
             upload = None
             try:
                 try:
@@ -537,13 +589,28 @@ class NatsRPCClient:
     # (naas_abi_sdk.overflow, docs/adr/20261003_nats-rpc-overflow.md).
     # ------------------------------------------------------------------
 
-    def _chunk_call(self, token: str, trace: TransferTrace) -> overflow.Call:
-        """One overflow exchange, counted on the call's span (``trace``)."""
+    def _chunk_envelope(self, request: Message) -> common_pb2.CallContext:
+        """The overflow chunks' ``context``: the call's own trace and workspace."""
+        envelope = self._context()
+        sent = request_envelope(request)
+        if sent is not None:
+            envelope.trace_id = sent.trace_id or envelope.trace_id
+            envelope.workspace_id = sent.workspace_id or envelope.workspace_id
+        return envelope
+
+    def _chunk_call(
+        self,
+        call_headers: dict[str, str],
+        envelope: common_pb2.CallContext,
+        trace: TransferTrace,
+    ) -> overflow.Call:
+        """One overflow exchange, counted on the call's span (``trace``), sent
+        as the call it belongs to: its token, its user, its trace and workspace."""
 
         async def call(subject: str, request: Any, response_cls: Any) -> Any:
-            request.context.CopyFrom(self._context())
+            request.context.CopyFrom(envelope)
             payload = request.SerializeToString()
-            headers = {self._auth_header: token}
+            headers = dict(call_headers)
             with client_span(subject, headers, size=len(payload), transfer=trace):
                 msg = await asyncio.wait_for(
                     self._do_request_async(
@@ -620,10 +687,11 @@ class NatsRPCClient:
         # One span for the whole stream (totals as attributes), not one per frame.
         with transfer_span(prefix, operation) as trace:
             nc = self._run_coro(self._ensure_connection_async())
+            envelope = self._context()  # one trace for the whole stream
 
             def exchange(request: Any, response_cls: Any) -> Any:
                 name = type(request).__name__.removesuffix("Request").lower()
-                request.context.CopyFrom(self._context())
+                request.context.CopyFrom(envelope)
                 response = self._call(
                     transfer_subject(prefix, name, getattr(request, "id", "")),
                     request,

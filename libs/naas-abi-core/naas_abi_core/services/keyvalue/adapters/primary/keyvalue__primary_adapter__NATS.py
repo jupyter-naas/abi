@@ -30,13 +30,10 @@ import nats
 import nats.micro
 from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
-from naas_abi_core.engine.nats_auth import (
-    InvalidServiceTokenError,
-    verify_service_token,
-)
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
+    authenticate_request,
     request_payload,
     respond_protobuf,
 )
@@ -180,14 +177,8 @@ class KeyValuePrimaryAdapterNATS(ServicePrimary):
         response_cls: Callable[..., _ResponseT],
         call: Callable[[_RequestT], _ResponseT],
     ) -> None:
-        if not self._is_authenticated(request):
-            await self._respond_error(
-                request,
-                response_cls,
-                "UNAUTHENTICATED",
-                "missing or invalid auth token",
-                retryable=False,
-            )
+        caller = await authenticate_request(request, self._jwt_secret, response_cls)
+        if caller is None:
             return
 
         parsed_request = request_cls()
@@ -214,7 +205,7 @@ class KeyValuePrimaryAdapterNATS(ServicePrimary):
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await self._dispatch.call(call, parsed_request)
+            response = await self._dispatch.call(call, parsed_request, caller)
         except KVNotFoundError as exc:
             await self._respond_error(
                 request, response_cls, "KV_NOT_FOUND", str(exc), retryable=False
@@ -248,17 +239,6 @@ class KeyValuePrimaryAdapterNATS(ServicePrimary):
             return
 
         await respond_protobuf(request, response, response_cls)
-
-    def _is_authenticated(self, request: Request) -> bool:
-        headers = request.headers or {}
-        token = headers.get(AUTH_HEADER)
-        if not token:
-            return False
-        try:
-            verify_service_token(token, self._jwt_secret)
-        except InvalidServiceTokenError:
-            return False
-        return True
 
     @staticmethod
     async def _respond_error(

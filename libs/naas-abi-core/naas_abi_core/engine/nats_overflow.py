@@ -16,7 +16,8 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
-from naas_abi_core.engine.nats_auth import verify_service_token
+from naas_abi_core.engine.call_context import ON_BEHALF_OF_HEADER
+from naas_abi_core.engine.nats_identity import caller_context
 from naas_abi_core.engine.nats_transfer import (
     TransferError,
     TransferHost,
@@ -90,7 +91,8 @@ class OverflowHost(TransferHost):
 
     async def park(self, headers: Mapping[str, str], data: bytes) -> str:
         """Hold a reply for the request's caller; return its transfer id."""
-        caller = verify_service_token(headers.get(AUTH_HEADER, ""), self.secret)
+        context = caller_context(headers, self.secret)
+        caller = context.principal.id
         if len(data) > self.max_value_bytes:
             raise TransferError(
                 "PAYLOAD_TOO_LARGE", "Reply exceeds the overflow value limit"
@@ -117,6 +119,7 @@ class OverflowHost(TransferHost):
             touched=asyncio.get_running_loop().time(),
             trace=trace,
             parked=len(data),
+            context=context,
         )
         self.parked_bytes += len(data)
         self.sessions[key] = session
@@ -136,7 +139,14 @@ class OverflowHost(TransferHost):
         through a queue group. The caller's token keeps the session binding.
         """
         forwarded = {AUTH_HEADER: headers.get(AUTH_HEADER, "")}
-        forwarded.update({k: headers[k] for k in _TRACE_HEADERS if k in headers})
+        # The caller's user too: the upload belongs to the actor and its user.
+        forwarded.update(
+            {
+                k: headers[k]
+                for k in (*_TRACE_HEADERS, ON_BEHALF_OF_HEADER)
+                if k in headers
+            }
+        )
 
         async def call(subject: str, request: Any, response_type: Any) -> Any:
             request.context.timeout_ms = int(_FETCH_TIMEOUT_SECONDS * 1000)

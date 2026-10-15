@@ -81,6 +81,8 @@ storage/*
 storage/datastore/*
 storage/triplestore/*
 storage/vectorstore/*
+# Package-level runtime state (tests and tools run from a package directory)
+/libs/*/storage/
 
 # Ignore data files globally
 *.csv

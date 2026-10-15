@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
 import ctypes
 import threading
 from collections.abc import Callable
@@ -96,8 +97,13 @@ class SyncJobRunner:
             with contextlib.suppress(RuntimeError):  # loop closed on shutdown
                 loop.call_soon_threadsafe(resolve, outcome)
 
+        # The handler runs as the job's caller (its CallContext, its trace).
+        context = contextvars.copy_context()
         thread = threading.Thread(
-            target=target, name=f"abi-job-{ctx.run_id}", daemon=True
+            target=context.run,
+            args=(target,),
+            name=f"abi-job-{ctx.run_id}",
+            daemon=True,
         )
         thread.start()
 

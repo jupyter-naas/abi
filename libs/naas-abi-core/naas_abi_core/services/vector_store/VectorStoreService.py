@@ -93,6 +93,25 @@ class VectorStoreService(ServiceBase):
 
         self.__publish_event(CollectionEnsured(collection_name=collection_name))
 
+    def create_collection(
+        self, collection_name: str, dimension: int, distance_metric: str = "cosine"
+    ) -> None:
+        """Create a collection without checking for it first (the port's
+        ``create_collection``); ``ensure_collection`` is the idempotent one."""
+        self.initialize()
+        try:
+            self.adapter.create_collection(collection_name, dimension, distance_metric)
+        except Exception as exc:
+            self.__publish_event(
+                VectorStoreError(
+                    collection_name=collection_name,
+                    operation="ensure_collection",
+                    message=str(exc),
+                )
+            )
+            raise
+        self.__publish_event(CollectionEnsured(collection_name=collection_name))
+
     def add_documents(
         self,
         collection_name: str,
@@ -124,7 +143,13 @@ class VectorStoreService(ServiceBase):
                 payload=payloads[i] if payloads else None
             )
             documents.append(doc)
+        self.store_documents(collection_name, documents)
 
+    def store_documents(
+        self, collection_name: str, documents: list[VectorDocument]
+    ) -> None:
+        """Store documents as given (the port's ``store_vectors``)."""
+        self.initialize()
         try:
             self.adapter.store_vectors(collection_name, documents)
         except Exception as exc:
@@ -155,18 +180,16 @@ class VectorStoreService(ServiceBase):
         include_vectors: bool = False,
         include_metadata: bool = True
     ) -> list[SearchResult]:
-        self.initialize()
-
         if k <= 0:
             raise ValueError("k must be a positive integer")
 
-        results = self.adapter.search(
-            collection_name=collection_name,
-            query_vector=query_vector,
+        results = self.search(
+            collection_name,
+            query_vector,
             k=k,
             filter=filter,
             include_vectors=include_vectors,
-            include_metadata=include_metadata
+            include_metadata=include_metadata,
         )
 
         if score_threshold is not None:
@@ -174,6 +197,26 @@ class VectorStoreService(ServiceBase):
 
         logger.debug(f"Found {len(results)} similar vectors in {collection_name}")
         return results
+
+    def search(
+        self,
+        collection_name: str,
+        query_vector: np.ndarray,
+        k: int = 10,
+        filter: dict[str, Any] | None = None,
+        include_vectors: bool = False,
+        include_metadata: bool = True,
+    ) -> list[SearchResult]:
+        """The port's ``search``, as given; ``search_similar`` validates first."""
+        self.initialize()
+        return self.adapter.search(
+            collection_name=collection_name,
+            query_vector=query_vector,
+            k=k,
+            filter=filter,
+            include_vectors=include_vectors,
+            include_metadata=include_metadata,
+        )
 
     def get_document(
         self,
@@ -194,11 +237,20 @@ class VectorStoreService(ServiceBase):
         metadata: dict[str, Any] | None = None,
         payload: dict[str, Any] | None = None
     ) -> None:
-        self.initialize()
-
         if vector is None and metadata is None and payload is None:
             raise ValueError("At least one of vector, metadata, or payload must be provided")
+        self.update_vector(collection_name, document_id, vector, metadata, payload)
 
+    def update_vector(
+        self,
+        collection_name: str,
+        document_id: str,
+        vector: np.ndarray | None = None,
+        metadata: dict[str, Any] | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        """The port's ``update_vector``, as given; ``update_document`` validates first."""
+        self.initialize()
         try:
             self.adapter.update_vector(
                 collection_name, document_id, vector, metadata, payload
@@ -226,11 +278,13 @@ class VectorStoreService(ServiceBase):
         collection_name: str,
         document_ids: list[str]
     ) -> None:
-        self.initialize()
-
         if not document_ids:
             raise ValueError("Document IDs cannot be empty")
+        self.delete_vectors(collection_name, document_ids)
 
+    def delete_vectors(self, collection_name: str, document_ids: list[str]) -> None:
+        """The port's ``delete_vectors``, as given; ``delete_documents`` validates first."""
+        self.initialize()
         try:
             self.adapter.delete_vectors(collection_name, document_ids)
         except Exception as exc:
@@ -268,9 +322,22 @@ class VectorStoreService(ServiceBase):
         include_vectors: bool = False,
     ) -> VectorPage:
         """Page through a collection in a stable order; pass ``next_cursor`` back."""
-        self.initialize()
         if not 0 < limit <= MAX_PAGE_SIZE:
             raise ValueError(f"limit must be between 1 and {MAX_PAGE_SIZE}")
+        return self.list_vectors(
+            collection_name, limit=limit, cursor=cursor, include_vectors=include_vectors
+        )
+
+    def list_vectors(
+        self,
+        collection_name: str,
+        *,
+        limit: int = 100,
+        cursor: str | None = None,
+        include_vectors: bool = False,
+    ) -> VectorPage:
+        """The port's ``list_vectors``, as given; ``list_documents`` validates first."""
+        self.initialize()
         return self.adapter.list_vectors(
             collection_name, limit=limit, cursor=cursor, include_vectors=include_vectors
         )

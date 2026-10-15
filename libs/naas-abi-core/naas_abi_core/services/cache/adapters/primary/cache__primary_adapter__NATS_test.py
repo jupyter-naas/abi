@@ -25,6 +25,10 @@ from naas_abi_core.services.cache.CachePort import (
     ICacheAdapter,
     paginate_keys,
 )
+from naas_abi_core.services.cache.CacheService import (
+    CacheService,
+    SingleTierCacheService,
+)
 
 SECRET = "test-shared-secret"
 
@@ -399,9 +403,12 @@ def test_owner_emits_mutation_events_once_and_only_when_written():
         CacheSet,
     )
 
-    events = []
+    events: list = []
     primary = CachePrimaryAdapterNATS(
-        _StubAdapter(), SECRET, event_publisher=events.append, tier_name="hot"
+        SingleTierCacheService(
+            _StubAdapter(), tier_name="hot", event_publisher=events.append
+        ),
+        SECRET,
     )
     req = cache_pb2.SetIfAbsentRequest(
         key="key",
@@ -414,6 +421,54 @@ def test_owner_emits_mutation_events_once_and_only_when_written():
     primary._call_delete(cache_pb2.DeleteRequest(key="key"))
     assert [type(event) for event in events] == [CacheSet, CacheDeleted]
     assert all(event.tier == "hot" for event in events)
+
+
+def test_remote_calls_reach_the_cache_service_and_audit_once():
+    """Each tier endpoint goes through the CacheService's view of that tier:
+    its events reach the engine's EventService once, a failure once."""
+    from types import SimpleNamespace
+
+    from naas_abi_core.services.cache.ontologies.modules.CacheEventOntology import (
+        CacheDeleted,
+        CacheError,
+        CacheSet,
+    )
+
+    class _FailingDelete(_StubAdapter):
+        def delete(self, key: str) -> None:
+            raise RuntimeError("disk gone")
+
+    events: list = []
+    cache = CacheService([("hot", _FailingDelete())])
+    cache.set_services(
+        SimpleNamespace(
+            events_available=lambda: True,
+            events=SimpleNamespace(publish=events.append),
+        )
+    )
+    primary = CachePrimaryAdapterNATS(cache.tier("hot"), SECRET)
+    value = cache_pb2.CachedData(key="k", data="v", data_type=cache_pb2.DATA_TYPE_TEXT)
+
+    def call(handler, message) -> bytes:
+        request = _FakeRequest(
+            data=message.SerializeToString(), headers={AUTH_HEADER: _valid_token()}
+        )
+        asyncio.run(handler(request))
+        return request.responses[0]
+
+    call(primary._handle_set, cache_pb2.SetRequest(key="k", value=value))
+    got = cache_pb2.GetResponse.FromString(
+        call(primary._handle_get, cache_pb2.GetRequest(key="k"))
+    )
+    failed = cache_pb2.DeleteResponse.FromString(
+        call(primary._handle_delete, cache_pb2.DeleteRequest(key="k"))
+    )
+
+    assert got.value.data == "v"
+    assert failed.error.code == "INTERNAL"
+    assert [type(event) for event in events] == [CacheSet, CacheError]
+    assert all(event.tier == "hot" for event in events)
+    assert not any(isinstance(event, CacheDeleted) for event in events)
 
 
 def _list_keys(

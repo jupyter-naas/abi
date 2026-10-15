@@ -5,11 +5,13 @@ from typing import Any
 
 from google.protobuf.message import DecodeError
 from naas_abi_core import logger
+from naas_abi_core.engine.call_context import use_call_context
 from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
 from naas_abi_core.engine.nats_dispatch import max_concurrent_requests
+from naas_abi_core.engine.nats_identity import caller_context, for_request, refusal
 from naas_abi_core.engine.nats_sessions import stop_delivery
 from naas_abi_core.services.discovery.discovery_service import (
     DiscoveryError,
@@ -82,9 +84,8 @@ class DiscoveryNATS:
         request_type, response_type, mutation = OPERATIONS[operation]
         response = response_type()
         try:
-            owner = verify_service_token(
-                (msg.headers or {}).get("Nats-Auth-Token", ""), self.secret
-            )
+            context = caller_context(msg.headers, self.secret)
+            owner = context.principal.id
             # An overflow upload is above the broker limit, so above this cap too.
             if len(msg.data) > self.max_payload or overflow.REQUEST_HEADER in (
                 msg.headers or {}
@@ -98,17 +99,20 @@ class DiscoveryNATS:
                 if operation in ("authorize_agent", "authorize_model", "authorize_app")
                 else None
             )
-            handler = getattr(self.service, operation)
-            response = (
-                await handler(request, owner) if mutation else await handler(request)
-            )
+            with use_call_context(for_request(context, request)):
+                handler = getattr(self.service, operation)
+                response = (
+                    await handler(request, owner)
+                    if mutation
+                    else await handler(request)
+                )
             if caller is not None:
                 response.caller_identity = caller
                 response.caller_admin = caller in self.service.admin_identities
-        except InvalidServiceTokenError:
+        except InvalidServiceTokenError as exc:
             response.error.code, response.error.message = (
                 "UNAUTHENTICATED",
-                "Missing or invalid service token",
+                refusal(exc, "Missing or invalid service token"),
             )
         except DecodeError:
             response.error.code, response.error.message = (

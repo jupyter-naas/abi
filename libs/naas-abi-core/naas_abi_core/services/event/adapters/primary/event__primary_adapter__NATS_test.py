@@ -405,6 +405,77 @@ def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():
 # ---------------------------------------------------------------------------
 
 
+def test_every_endpoint_goes_through_the_event_service_and_never_broadcasts():
+    """A remote EventService publishes and broadcasts on its side; here the
+    engine's EventService only stores, so each event goes out once."""
+    from unittest.mock import MagicMock
+
+    from naas_abi_core.services.event.EventService import EventService
+
+    bus = MagicMock()
+    stub = _StubAdapter()
+    service = EventService(stub, bus=bus)
+    calls: list[str] = []
+    for name in (
+        "append_stored",
+        "query_stored",
+        "max_seq",
+        "get_cursor",
+        "set_cursor",
+        "query_stored_for_consumer",
+        "event_types",
+    ):
+        original = getattr(service, name)
+
+        def record(*args, _name=name, _original=original, **kwargs):
+            calls.append(_name)
+            return _original(*args, **kwargs)
+
+        setattr(service, name, record)
+    adapter = EventPrimaryAdapterNATS(service, SECRET)
+
+    def call(handler, message) -> None:
+        request = _FakeRequest(
+            data=message.SerializeToString(), headers={AUTH_HEADER: _valid_token()}
+        )
+        asyncio.run(handler(request))
+        assert request.responses, handler
+
+    call(
+        adapter._handle_append,
+        event_pb2.AppendRequest(
+            event_id="e1", event_type="t", timestamp="2026-01-01", payload=b"x"
+        ),
+    )
+    call(adapter._handle_query, event_pb2.QueryRequest(event_type="t"))
+    call(adapter._handle_max_seq, event_pb2.MaxSeqRequest())
+    call(
+        adapter._handle_set_cursor,
+        event_pb2.SetCursorRequest(consumer_id="c", event_type="t", last_seq=0),
+    )
+    call(
+        adapter._handle_get_cursor,
+        event_pb2.GetCursorRequest(consumer_id="c", event_type="t"),
+    )
+    call(
+        adapter._handle_query_for_consumer,
+        event_pb2.QueryForConsumerRequest(consumer_id="c", event_type="t"),
+    )
+    call(adapter._handle_list_event_types, event_pb2.ListEventTypesRequest())
+
+    assert calls == [
+        "append_stored",
+        "query_stored",
+        "max_seq",
+        "set_cursor",
+        "get_cursor",
+        "query_stored_for_consumer",
+        "event_types",
+    ]
+    assert stub.max_seq() == 1
+    bus.publish.assert_not_called()
+
+
 def test_stop_without_start_is_a_noop():
     adapter = EventPrimaryAdapterNATS(_StubAdapter(), SECRET)
     asyncio.run(adapter.stop())  # must not raise

@@ -41,6 +41,18 @@ def as_async_handler(
     return SyncJobRunner(handler, interrupt_grace_seconds=interrupt_grace_seconds)
 
 
+def as_engine(handler: Callable[..., Any]) -> Callable[..., Any]:
+    """``handler``, run as the engine's service account: a job runs for no
+    caller (``naas_abi_core.engine.call_context.as_service_account``)."""
+    from naas_abi_core.engine.call_context import as_service_account
+
+    async def run(ctx: Any) -> Any:
+        with as_service_account(ENGINE_IDENTITY):
+            return await handler(ctx)
+
+    return run
+
+
 class LoopThread:
     """An event loop on its own daemon thread, for engine work that must not
     wait behind ``nats_runtime``'s loop."""
@@ -149,6 +161,7 @@ class EngineJobLoader:
                 self.configuration.nats_url,
                 lambda: issue_service_token(ENGINE_IDENTITY, secret),
                 name=connection_name("abi-engine:jobs"),
+                forward_user=True,  # kernel calls, as the trusted engine identity
             )
         handlers = module._job_handlers
         host = self.host_factory(
@@ -159,9 +172,11 @@ class EngineJobLoader:
             {
                 j.name: (
                     j,
-                    as_async_handler(
-                        handlers[j.name],
-                        interrupt_grace_seconds=self.configuration.jobs.interrupt_grace_seconds,
+                    as_engine(
+                        as_async_handler(
+                            handlers[j.name],
+                            interrupt_grace_seconds=self.configuration.jobs.interrupt_grace_seconds,
+                        )
                     ),
                 )
                 for j in module.jobs

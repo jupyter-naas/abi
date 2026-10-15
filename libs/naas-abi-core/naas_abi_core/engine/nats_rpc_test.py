@@ -159,9 +159,6 @@ def test_client_preserves_reconnecting_connection(client, monkeypatch):
 def primary(request):
     cls = adapter_class(*request.param, primary=True)
     instance = cls.__new__(cls)
-    if request.param[0] == "vector_store":
-        instance._prepare = None
-        instance._event_publisher = None
     from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 
     instance._jwt_secret = SECRET
@@ -634,3 +631,121 @@ def test_uploads_are_regrouped_into_negotiated_chunks_lazily():
     assert [len(chunk) for chunk in upload_chunks(pieces, 4)] == [4, 4, 4, 4, 2]
     assert b"".join(upload_chunks([b"ab", b"cd"], 3)) == b"abcd"
     assert list(upload_chunks([], 4)) == []
+
+
+def _api_client(identity: str = "api"):
+    from naas_abi_core.engine.nats_rpc import NatsRPCClient
+
+    client = NatsRPCClient("nats://unused:4222", SECRET, identity)
+    return client, connection(
+        client,
+        return_value=SimpleNamespace(
+            data=keyvalue_pb2.GetResponse().SerializeToString(), headers=None
+        ),
+    )
+
+
+@pytest.mark.parametrize("identity", ["api", "engine"])
+def test_a_trusted_client_sends_the_user_the_current_call_acts_for(identity):
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+
+    client, nc = _api_client(identity)
+    caller = CallContext(
+        principal=service_account("api"),
+        on_behalf_of=user("usr-ada"),
+        workspace_id="ws-1",
+        trace_id="trace-1",
+    )
+    try:
+        with use_call_context(caller):
+            context = client._context()
+            call(client)
+    finally:
+        client.close()
+    assert nc.request.call_args.kwargs["headers"]["Abi-On-Behalf-Of"] == "usr-ada"
+    assert (context.trace_id, context.workspace_id) == ("trace-1", "ws-1")
+    assert not context.principal_id and not context.tenant_id
+
+
+def test_another_client_calls_as_itself_and_never_names_a_user():
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+
+    client, nc = _api_client("dagster")
+    try:
+        with use_call_context(
+            CallContext(principal=service_account("api"), on_behalf_of=user("u"))
+        ):
+            call(client)
+    finally:
+        client.close()
+    assert "Abi-On-Behalf-Of" not in nc.request.call_args.kwargs["headers"]
+
+
+def test_without_a_user_no_header_and_a_fresh_trace():
+    client, nc = _api_client()
+    try:
+        call(client)
+        context = client._context()
+    finally:
+        client.close()
+    assert "Abi-On-Behalf-Of" not in nc.request.call_args.kwargs["headers"]
+    assert context.trace_id and not context.workspace_id
+
+
+def test_overflow_chunks_travel_as_the_call_they_belong_to(monkeypatch):
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.engine.nats_rpc import NatsRPCClient
+    from naas_abi_proto.transfer.v1 import transfer_pb2
+    from naas_abi_sdk.telemetry import TransferTrace
+
+    client = NatsRPCClient("nats://unused:4222", SECRET, "api")
+    sent = []
+
+    async def request(subject, payload, headers, **kwargs):
+        sent.append((transfer_pb2.CloseRequest.FromString(payload), headers))
+        return SimpleNamespace(data=transfer_pb2.CloseResponse().SerializeToString())
+
+    monkeypatch.setattr(client, "_do_request_async", request)
+    caller = CallContext(principal=service_account("api"), on_behalf_of=user("u1"))
+    call_request = keyvalue_pb2.SetRequest(
+        context=common_pb2.CallContext(trace_id="trace-1", workspace_id="ws-1")
+    )
+    try:
+        with use_call_context(caller):
+            chunk = client._chunk_call(
+                {"Nats-Auth-Token": "t", **client._on_behalf_of()},
+                client._chunk_envelope(call_request),
+                TransferTrace(None),
+            )
+        # Chunks run later, on the client's loop, outside the caller's context.
+        for _ in range(2):
+            asyncio.run(
+                chunk(
+                    "abi.overflow.close",
+                    transfer_pb2.CloseRequest(),
+                    transfer_pb2.CloseResponse,
+                )
+            )
+    finally:
+        client.close()
+    for message, headers in sent:
+        assert (message.context.trace_id, message.context.workspace_id) == (
+            "trace-1",
+            "ws-1",
+        )
+        assert headers["Abi-On-Behalf-Of"] == "u1"

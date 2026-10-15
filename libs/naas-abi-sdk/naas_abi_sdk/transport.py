@@ -13,6 +13,7 @@ from nats.aio.client import Client
 from nats.errors import MaxPayloadError, NoRespondersError
 
 from naas_abi_sdk import no_responders, overflow
+from naas_abi_sdk.call_context import current_call_context, on_behalf_of_header
 from naas_abi_sdk.lifeline import Lifeline
 from naas_abi_sdk.messages import message_size
 from naas_abi_sdk.telemetry import (
@@ -43,11 +44,18 @@ class Transport:
         url: str,
         token: str | Callable[[], str],
         timeout: float = 10.0,
+        *,
+        forward_user: bool = False,
         **connection_options: Any,
     ) -> None:
+        """``forward_user``: send the user the current call acts for
+        (``Abi-On-Behalf-Of``). Only for a transport holding a trusted
+        identity (``api``, ``engine``) that calls kernel services: they
+        refuse the header from anyone else, and no module host needs it."""
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("timeout must be finite and positive")
         self.url, self.token, self.timeout = url, token, timeout
+        self.forward_user = forward_user
         self.options = connection_options
         self.connection = Client()
         self._lock = asyncio.Lock()
@@ -111,13 +119,18 @@ class Transport:
         outgoing = type(request)()
         outgoing.CopyFrom(request)
         context = cast(Any, outgoing).context
+        current = current_call_context()
         if not context.trace_id:
-            context.trace_id = str(uuid.uuid4())
+            context.trace_id = current.trace_id or str(uuid.uuid4())
+        if not context.workspace_id and current.workspace_id:
+            context.workspace_id = current.workspace_id
         context.timeout_ms = int(self.timeout * 1000)
         token = self.token() if callable(self.token) else self.token
         if not token or "\r" in token or "\n" in token:
             raise ValueError("A nonempty service token without newlines is required")
         headers = {"Nats-Auth-Token": token}
+        if self.forward_user:
+            headers.update(on_behalf_of_header(current))
         payload = outgoing.SerializeToString()
         # The span covers the whole exchange; the trace travels in the headers.
         with client_span(

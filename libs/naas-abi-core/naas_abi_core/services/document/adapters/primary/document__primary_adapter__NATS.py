@@ -11,13 +11,10 @@ from functools import partial
 import nats.micro
 from google.protobuf.message import DecodeError
 from naas_abi_core import logger
-from naas_abi_core.engine.nats_auth import (
-    InvalidServiceTokenError,
-    verify_service_token,
-)
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
+    authenticate_request,
     broker_limit,
     request_payload,
     respond_protobuf,
@@ -96,22 +93,13 @@ class DocumentPrimaryAdapterNATS(ServicePrimary):
 
     async def _handle(self, request, *, operation: str) -> None:
         response_type = getattr(pb, OPERATIONS[operation] + "Response")
-        try:
-            identity = verify_service_token(
-                (request.headers or {}).get("Nats-Auth-Token", ""), self._jwt_secret
-            )
-        except InvalidServiceTokenError:
-            await respond_protobuf(
-                request,
-                response_type(
-                    error=common_pb2.CallError(
-                        code="UNAUTHENTICATED", message="missing or invalid auth token"
-                    )
-                ),
-                response_type,
-            )
+        caller = await authenticate_request(request, self._jwt_secret, response_type)
+        if caller is None:
             return
-        if operation in ADMIN_OPERATIONS and identity not in self._admin_identities:
+        if (
+            operation in ADMIN_OPERATIONS
+            and caller.principal.id not in self._admin_identities
+        ):
             await respond_protobuf(
                 request,
                 response_type(
@@ -132,7 +120,7 @@ class DocumentPrimaryAdapterNATS(ServicePrimary):
             if operation == "find":
                 limit = broker_limit(request)
                 call = partial(call, page_bytes=limit // PAGE_SHARE if limit else None)
-            result = await self._dispatch.call(call, parsed)
+            result = await self._dispatch.call(call, parsed, caller)
         except Exception as exc:  # noqa: BLE001 - translate failures at the RPC boundary
             code = next(
                 (code for code, cls in ERRORS.items() if isinstance(exc, cls)),

@@ -106,6 +106,37 @@ def test_sync_handlers_run_in_their_own_interruptible_thread():
     assert worker == "abi-job-compact:1" != loop_thread
 
 
+@pytest.mark.parametrize("synchronous", [True, False])
+def test_engine_jobs_run_as_the_engine_for_nobody(synchronous):
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        current_call_context,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.engine.engine_loaders.EngineJobLoader import as_engine
+    from naas_abi_core.module.jobs import JobContext
+
+    def sync_job(ctx):
+        return current_call_context()
+
+    async def async_job(ctx):
+        return current_call_context()
+
+    handler = as_engine(as_async_handler(sync_job if synchronous else async_job))
+
+    async def run():
+        ctx = JobContext("report:1", "report", 1, {"kind": "manual"}, {})
+        return await handler(ctx)
+
+    leaked = CallContext(principal=service_account("api"), on_behalf_of=user("u"))
+    with use_call_context(leaked):
+        seen = asyncio.run(run())
+    assert seen.principal == service_account("engine")
+    assert seen.user is None
+
+
 def test_async_handlers_are_used_as_is():
     async def handler(ctx):
         return None

@@ -27,9 +27,20 @@ from naas_abi_core.services.vector_store.IVectorStorePort import (
     VectorDocument,
     VectorPage,
 )
+from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 from naas_abi_proto.vector_store.values import decode_object, encode_object
 
 SECRET = "test-shared-secret"
+
+
+def _publishing_into(events: list) -> Any:
+    """Engine services whose EventService records what is published."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        events_available=lambda: True,
+        events=SimpleNamespace(publish=events.append),
+    )
 
 
 class _FakeRequest:
@@ -599,7 +610,9 @@ def test_count_vectors_round_trips_count():
 
 def test_successful_close_returns_no_error():
     stub = _StubAdapter()
-    adapter = VectorStorePrimaryAdapterNATS(stub, SECRET)
+    service = VectorStoreService(stub)
+    service.initialize()
+    adapter = VectorStorePrimaryAdapterNATS(service, SECRET)
     request = _FakeRequest(
         data=vector_store_pb2.CloseRequest().SerializeToString(),
         headers={AUTH_HEADER: _valid_token()},
@@ -658,10 +671,10 @@ def test_owner_emits_audit_for_remote_vector_mutations():
         DocumentsDeleted,
     )
 
-    events = []
-    primary = VectorStorePrimaryAdapterNATS(
-        Mock(), SECRET, event_publisher=events.append
-    )
+    events: list = []
+    service = VectorStoreService(Mock())
+    service.set_services(_publishing_into(events))
+    primary = VectorStorePrimaryAdapterNATS(service, SECRET)
     primary._call_create_collection(
         vector_store_pb2.CreateCollectionRequest(collection_name="test", dimension=3)
     )
@@ -679,6 +692,82 @@ def test_owner_emits_audit_for_remote_vector_mutations():
         CollectionDeleted,
     ]
     assert events[1].document_count == 1
+
+
+def test_remote_calls_reach_the_domain_service_and_audit_once():
+    """Every endpoint goes through VectorStoreService: one event per mutation,
+    reads publish nothing, and the port's arguments pass as given."""
+    from naas_abi_core.services.vector_store.ontologies.modules.VectorStoreEventOntology import (
+        CollectionEnsured,
+        DocumentsAdded,
+        DocumentsDeleted,
+        DocumentUpdated,
+        VectorStoreError,
+    )
+
+    events: list = []
+    stub = _StubAdapter()
+    service = VectorStoreService(stub)
+    service.set_services(_publishing_into(events))
+    primary = VectorStorePrimaryAdapterNATS(service, SECRET)
+
+    def call(handler, message, subject):
+        request = _FakeRequest(
+            data=message.SerializeToString(),
+            headers={AUTH_HEADER: _valid_token()},
+            subject=f"abi.svc.vector_store.v1.{subject}",
+        )
+        asyncio.run(handler(request))
+        return request.responses[0]
+
+    call(
+        primary._handle_create_collection,
+        vector_store_pb2.CreateCollectionRequest(
+            collection_name="docs", dimension=2, distance_metric="cosine"
+        ),
+        "create_collection",
+    )
+    call(
+        primary._handle_store_vectors,
+        vector_store_pb2.StoreVectorsRequest(
+            collection_name="docs",
+            documents=[
+                vector_store_pb2.VectorDocument(
+                    id="a", vector=vector_store_pb2.VectorData(values=[0.1, 0.2])
+                )
+            ],
+        ),
+        "store_vectors",
+    )
+    call(
+        primary._handle_update_vector,
+        vector_store_pb2.UpdateVectorRequest(
+            collection_name="docs", vector_id="a", metadata=encode_object({"k": 1})
+        ),
+        "update_vector",
+    )
+    call(
+        primary._handle_count_vectors,
+        vector_store_pb2.CountVectorsRequest(collection_name="docs"),
+        "count_vectors",
+    )
+    # The port's contract, unchanged over NATS: deleting no ids is a no-op.
+    emptied = vector_store_pb2.DeleteVectorsResponse.FromString(
+        call(
+            primary._handle_delete_vectors,
+            vector_store_pb2.DeleteVectorsRequest(collection_name="docs"),
+            "delete_vectors",
+        )
+    )
+
+    assert [type(e) for e in events] == [
+        CollectionEnsured,
+        DocumentsAdded,
+        DocumentUpdated,
+        DocumentsDeleted,
+    ]
+    assert not emptied.HasField("error")
+    assert not any(isinstance(e, VectorStoreError) for e in events)
 
 
 # ---------------------------------------------------------------------------
@@ -846,6 +935,43 @@ def test_list_vectors_transfer_frames_carry_every_document_in_bounded_pages():
     assert all(len(d.vector.values) == 256 for d in documents)
 
 
+def test_port_arguments_the_convenience_methods_refuse_pass_over_nats():
+    """search with k=0 and an update with nothing to change reach the port as
+    they would locally; only VectorStoreService's convenience methods refuse."""
+    stub = _seeded_stub()
+    primary = VectorStorePrimaryAdapterNATS(stub, SECRET)
+
+    def call(handler, message, subject):
+        request = _FakeRequest(
+            data=message.SerializeToString(),
+            headers={AUTH_HEADER: _valid_token()},
+            subject=f"abi.svc.vector_store.v1.{subject}",
+        )
+        asyncio.run(handler(request))
+        return request.responses[0]
+
+    searched = vector_store_pb2.SearchResponse.FromString(
+        call(
+            primary._handle_search,
+            vector_store_pb2.SearchRequest(
+                collection_name="docs", query_vector=[1.0, 1.0], k=0
+            ),
+            "search",
+        )
+    )
+    updated = vector_store_pb2.UpdateVectorResponse.FromString(
+        call(
+            primary._handle_update_vector,
+            vector_store_pb2.UpdateVectorRequest(
+                collection_name="docs", vector_id="doc-1"
+            ),
+            "update_vector",
+        )
+    )
+    assert not searched.HasField("error")
+    assert not updated.HasField("error")
+
+
 def test_the_owner_prepares_its_adapter_before_serving_a_call():
     # An engine's adapter may need initialize() (SqliteVec does); remote
     # callers must not depend on something in-process touching it first.
@@ -854,7 +980,7 @@ def test_the_owner_prepares_its_adapter_before_serving_a_call():
     )
 
     store = SqliteVecAdapter(":memory:")
-    adapter = VectorStorePrimaryAdapterNATS(store, SECRET, prepare=store.initialize)
+    adapter = VectorStorePrimaryAdapterNATS(VectorStoreService(store), SECRET)
     request = _FakeRequest(
         data=vector_store_pb2.CreateCollectionRequest(
             collection_name="docs", dimension=4, distance_metric="cosine"
