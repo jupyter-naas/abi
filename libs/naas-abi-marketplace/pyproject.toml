@@ -33,6 +33,9 @@ dev = [
     "mypy>=1.19.0",
     "pytest>=9.0.1",
     "python-semantic-release>=9.21.0",
+    # The X and PubMed orchestrations import Dagster, a legacy extra of core
+    # since 3.0: type-check them without making it a dependency.
+    "naas-abi-core[dagster]",
 ]
 
 [tool.semantic_release]

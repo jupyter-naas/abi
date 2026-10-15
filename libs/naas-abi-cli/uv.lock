@@ -2503,6 +2503,7 @@ provides-extras = ["ai-bedrock", "ai-chatgpt", "ai-claude", "ai-deepseek", "ai-g
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = ">=1.19.0" },
+    { name = "naas-abi-core", extras = ["dagster"], editable = "../naas-abi-core" },
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "python-semantic-release", specifier = ">=9.21.0" },
 ]
