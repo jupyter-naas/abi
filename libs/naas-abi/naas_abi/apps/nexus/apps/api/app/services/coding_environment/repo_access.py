@@ -13,7 +13,7 @@ A repository id from a request is never trusted on its own (bug (b) of #44):
 
 The workspace check stays in Nexus until #65 attaches role policies: until
 then a Nexus user's side of a kernel check is the TRANSITIONAL
-``builtin.transitional.user`` grant, which binds no repository to a workspace.
+``builtin.transitional.nexus_user`` grant, which binds no repository to a workspace.
 """
 
 from __future__ import annotations

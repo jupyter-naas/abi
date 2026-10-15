@@ -79,7 +79,7 @@ model_registry, discovery (agents, models, apps, jobs), source_control and codin
 
 - A principal with no policy is denied by every runtime service, in process and over NATS alike, and cannot
   invoke a remote agent, model or app, or trigger a job.
-- Nexus users keep working through `builtin.transitional.user` until #65 attaches their roles. Their checks
+- Nexus users keep working through `builtin.transitional.nexus_user` until #65 attaches their roles. Their checks
   are real only where Nexus binds a resource to a workspace itself (bug (b)), or under an explicit Deny.
   Users with IAM ids get real checks today.
 - Activity log actors are principal ids (a Nexus id, `usr_…`, or a service-account name) instead of

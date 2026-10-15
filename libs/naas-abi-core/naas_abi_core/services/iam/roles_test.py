@@ -125,6 +125,6 @@ def test_transitional_policies_say_so():
         roles.ENGINE,
         roles.API,
         roles.TRANSITIONAL_MODULE,
-        roles.TRANSITIONAL_USER,
+        roles.TRANSITIONAL_NEXUS_USER,
     ):
         assert "TRANSITIONAL" in by_id[policy_id].description

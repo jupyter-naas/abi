@@ -284,9 +284,11 @@ class IAMService(IIAMService, PolicySource):
         if principal.kind == "user":
             # builtin.self is held by every user, implicitly.
             statements += self._statements_of(roles.SELF, None, None)
-            if not _PRINCIPAL_ID.match(principal.id):
-                # TRANSITIONAL (#65): a Nexus user named by its Nexus id.
-                statements += self._statements_of(roles.TRANSITIONAL_USER, None, None)
+            if _named_by_nexus(principal, record):
+                # TRANSITIONAL (#65): a Nexus user, until its roles are attachments.
+                statements += self._statements_of(
+                    roles.TRANSITIONAL_NEXUS_USER, None, None
+                )
         elif (
             principal.kind == "service_account"
             and record is None
@@ -1044,6 +1046,14 @@ class IAMService(IIAMService, PolicySource):
 
     def close(self) -> None:
         self.store.close()
+
+
+def _named_by_nexus(principal: CallPrincipal, record: PrincipalRecord | None) -> bool:
+    """A user Nexus names on a call (TRANSITIONAL): IAM's user of issuer
+    ``urn:abi:nexus``, or a Nexus id IAM has no record of."""
+    if record is not None:
+        return record.issuer == LEGACY_NEXUS_ISSUER
+    return not _PRINCIPAL_ID.match(principal.id)
 
 
 def _call_principal(record: PrincipalRecord) -> CallPrincipal:

@@ -225,6 +225,51 @@ def test_the_runs_a_user_starts_are_the_users():
     asyncio.run(scenario())
 
 
+def test_transitional_holders_never_reach_each_others_runs():
+    """Regression: the TRANSITIONAL grants of Nexus users and remote modules
+    open discovery, but never another principal's agent run."""
+
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry(), iam=contract_iam())
+        req = await _ready(service)
+        lease: dict[str, Any] = {
+            "instance_id": "instance",
+            "lease_token": req.lease_token,
+        }
+
+        def nexus(user_id: str) -> CallContext:
+            return CallContext(
+                principal=service_account("api"),
+                on_behalf_of=Principal(id=user_id, kind="user"),
+            )
+
+        ada, bob = nexus("user-aaaaaaaaaaaa"), nexus("user-bbbbbbbbbbbb")
+        module = CallContext(principal=service_account("other-module"))
+        started = await service.authorize_agent(
+            pb.AuthorizeAgentRequest(
+                **lease, agent_name="Researcher", new_invocation=True
+            ),
+            PROVIDER,
+            ada,
+        )
+        owner = started.caller_identity
+        assert owner == "user-aaaaaaaaaaaa"
+        for operation in ("status", "event", "cancel"):
+            poll = pb.AuthorizeAgentRequest(
+                **lease,
+                agent_name="Researcher",
+                operation=operation,
+                invocation_id="run-1",
+                run_owner=owner,
+            )
+            assert (await service.authorize_agent(poll, PROVIDER, ada)).run_authorized
+            for stranger in (bob, module):
+                with pytest.raises(DiscoveryError, match="INVOCATION_NOT_FOUND"):
+                    await service.authorize_agent(poll, PROVIDER, stranger)
+
+    asyncio.run(scenario())
+
+
 def test_a_module_id_is_held_by_one_principal_at_a_time():
     async def scenario():
         service = DiscoveryService(MemoryRegistry(), iam=contract_iam())

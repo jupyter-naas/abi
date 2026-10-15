@@ -74,6 +74,10 @@ def _depends_on_itself(
 
 JOB_TRIGGER_KINDS = ("cron", "every", "event")
 
+# Who may evict registrations on a discovery with no IAM (tests, a bare
+# registry): the Nexus API and the engine. With IAM it is discovery:Evict.
+DEFAULT_ADMIN_IDENTITIES = ("api", "engine")
+
 # The service-account name form of a module (RFC §2): once IAM records module
 # accounts (#60), a module registers only under its own name.
 MODULE_ACCOUNT_PREFIX = "module/"
@@ -157,15 +161,15 @@ class DiscoveryService:
         snapshot_seconds: float = 1.0,
         project: str = "default",
         iam: IIAMService | None = None,
-        admin_identities: Iterable[str] = (),
+        admin_identities: Iterable[str] = DEFAULT_ADMIN_IDENTITIES,
     ):
-        """``admin_identities`` is accepted and ignored: evicting is
-        ``discovery:Evict``, a policy, not a hard-coded identity."""
+        """Evicting is ``discovery:Evict``, a policy. ``admin_identities`` only
+        serves a discovery with no IAM, which allows nothing else to evict."""
         if not math.isfinite(lease_seconds) or lease_seconds < 1:
             raise ValueError("lease_seconds must be finite and at least 1")
         if not math.isfinite(snapshot_seconds) or snapshot_seconds < 0:
             raise ValueError("snapshot_seconds must be finite and not negative")
-        del admin_identities
+        self.admin_identities = frozenset(admin_identities)
         self.registry, self.lease_seconds, self.clock = registry, lease_seconds, clock
         self.project = project
         self.iam = iam
@@ -178,6 +182,9 @@ class DiscoveryService:
         # waiting (group commit, see _mutate): its endpoint answers calls side by
         # side, and concurrent writes would exhaust each other's CAS retries.
         self._mutations = asyncio.Lock()
+        # The module of each live instance, as last read: an instance's module
+        # never changes, so a heartbeat checks it without reading the registry.
+        self._modules: dict[str, str] = {}
         self._pending: list[tuple[Callable[[pb.RegistryState], Any], Any]] = []
 
     # -- authorization ------------------------------------------------------------
@@ -278,7 +285,13 @@ class DiscoveryService:
         state = pb.RegistryState.FromString(data)
         self._snapshot = (self.clock(), state)  # never mutated: callers get copies
         live = [r for r in state.records if r.instance.expires_at > self.clock()]
+        self._remember_modules(live)
         return pb.RegistryState(records=live), revision
+
+    def _remember_modules(self, records: Iterable[pb.RegistryRecord]) -> None:
+        self._modules = {
+            r.instance.instance_id: r.instance.descriptor.module_id for r in records
+        }
 
     def _apply_rollouts(self, state: pb.RegistryState) -> dict[str, str]:
         """Choose the serving generation per module id and drain the ones it replaces.
@@ -669,6 +682,7 @@ class DiscoveryService:
                     except RevisionConflict:
                         continue  # another replica wrote: apply the batch again
                     self._snapshot = (self.clock(), state)
+                    self._remember_modules(state.records)
                 for settled, error, result in outcomes:
                     if settled.done():  # its caller was cancelled
                         continue
@@ -759,17 +773,12 @@ class DiscoveryService:
         (the operation then fails as it always did)."""
         if not self.guard.enforcing:
             return
-        state, _ = await self._read()
-        record = next(
-            (r for r in state.records if r.instance.instance_id == instance_id), None
-        )
-        if record is not None:
-            await self._require(
-                action,
-                "module",
-                self._parts(record.instance.descriptor.module_id),
-                not_found,
-            )
+        module_id = self._modules.get(instance_id)
+        if module_id is None:
+            await self._read()
+            module_id = self._modules.get(instance_id)
+        if module_id is not None:
+            await self._require(action, "module", self._parts(module_id), not_found)
 
     async def renew(self, req: pb.RenewRequest, owner: str) -> pb.RenewResponse:
         await self._require_on_instance(
@@ -825,9 +834,15 @@ class DiscoveryService:
         registers a fresh instance, so evicting a live process only restarts its
         membership. It is meant for crashed or stuck registrations.
         """
-        del owner  # who may evict is IAM's decision, in the caller's context
         _require(
             _name(req.instance_id), "INVALID_ARGUMENT", "Invalid instance identity"
+        )
+        # Who may evict is IAM's decision, in the caller's context. With no
+        # IAM to ask, only the platform's own identities may: never fail open.
+        _require(
+            self.guard.enforcing or owner in self.admin_identities,
+            "PERMISSION_DENIED",
+            "Only platform administrators can evict registrations",
         )
         await self._require_on_instance(
             "Evict", req.instance_id, _error("INSTANCE_NOT_FOUND", req.instance_id)

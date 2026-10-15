@@ -62,7 +62,7 @@ def test_bootstrap_is_idempotent_and_seeds_the_root_of_trust():
         roles.API,
         roles.IDP,
         roles.TRANSITIONAL_MODULE,
-        roles.TRANSITIONAL_USER,
+        roles.TRANSITIONAL_NEXUS_USER,
     } <= managed
     assert [c.service for c in store.list_catalogs()] == ["iam"]
 
@@ -195,6 +195,33 @@ def test_a_remote_module_cannot_evict_registrations(h):
     module = "abi:-:-:discovery:module/default/other"
     assert h.allowed("discovery:Register", module, actor="some-module")
     assert not h.allowed("discovery:Evict", module, actor="some-module")
+
+
+RUN = "abi:-:-:discovery:run/{owner}/default/inv-1"
+
+
+@pytest.mark.parametrize(
+    "action", ["discovery:GetAgentRun", "discovery:CancelAgentRun"]
+)
+def test_a_nexus_user_reaches_only_their_own_agent_runs(h, action):
+    """Regression: the transitional grant must not open another user's run."""
+    with _nexus_call("user-aaaaaaaaaaaa"):
+        assert h.iam.authorize(action, RUN.format(owner="user-aaaaaaaaaaaa")).allowed
+        assert not h.iam.authorize(
+            action, RUN.format(owner="user-bbbbbbbbbbbb")
+        ).allowed
+        assert h.iam.authorize(
+            "discovery:InvokeAgent", "abi:-:-:discovery:agent/default/m/a"
+        ).allowed
+
+
+@pytest.mark.parametrize(
+    "action", ["discovery:GetAgentRun", "discovery:CancelAgentRun"]
+)
+def test_a_remote_module_reaches_only_its_own_agent_runs(h, action):
+    assert h.allowed(action, RUN.format(owner="research"), actor="research")
+    assert not h.allowed(action, RUN.format(owner="user-1"), actor="research")
+    assert not h.allowed(action, RUN.format(owner="other"), actor="research")
 
 
 def test_an_iam_user_holds_no_transitional_grant(h):

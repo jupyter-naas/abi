@@ -14,9 +14,13 @@ working before the later subtasks of #44 land.
 * ``builtin.transitional.module`` is what a remote module's service account
   holds until subtask 6 (#60) gives it an approved manifest: its own document
   and dataset namespaces, and the kernel services a module can declare.
-* ``builtin.transitional.user`` is what a Nexus user named by its Nexus id
-  holds until subtask 11 (#65) attaches the roles of its memberships: Nexus
-  still decides what such a user may do, as before IAM.
+* ``builtin.transitional.nexus_user`` is what a Nexus user holds until
+  subtask 11 (#65) attaches the roles of its memberships: Nexus still decides
+  what such a user may do, as before IAM.
+
+Neither transitional grant reaches another principal's agent runs: discovery
+is granted on its modules, agents, models, apps and jobs, and on the holder's
+own runs only (``run/${principal.id}/*``).
 """
 
 from __future__ import annotations
@@ -40,7 +44,7 @@ ENGINE = "builtin.engine"
 API = "builtin.api"
 IDP = "builtin.idp"
 TRANSITIONAL_MODULE = "builtin.transitional.module"
-TRANSITIONAL_USER = "builtin.transitional.user"
+TRANSITIONAL_NEXUS_USER = "builtin.transitional.nexus_user"
 
 ROLES = (VIEWER, MEMBER, ADMIN, OWNER)
 ROLE_LEVELS: dict[str, frozenset[Level]] = {
@@ -124,11 +128,11 @@ PLATFORM_TYPES: tuple[_PlatformRow, ...] = (
 )
 
 # What a remote module may declare before manifests (TRANSITIONAL, #60).
+# Discovery is granted apart (``_transitional_discovery``): never other runs.
 _TRANSITIONAL_MODULE_SERVICES = (
     "activity_log",
     "cache",
     "coding_environment",
-    "discovery",
     "email",
     "event",
     "keyvalue",
@@ -373,6 +377,7 @@ def transitional_module_policy() -> Policy:
                 resources=("*",),
                 sid="TransitionalKernelServices",
             ),
+            *_transitional_discovery(),
             # Evicting another module's registration is the platform's.
             Statement(
                 effect="Deny",
@@ -384,18 +389,43 @@ def transitional_module_policy() -> Policy:
     )
 
 
-def transitional_user_policy() -> Policy:
+def _transitional_discovery() -> list[Statement]:
+    """Discovery for a transitional holder: every module, agent, model, app and
+    job, but only its own agent runs, so it never reads or cancels another
+    principal's run."""
+    return [
+        Statement(
+            effect="Allow",
+            actions=("discovery:*",),
+            resources=tuple(
+                f"abi:-:-:discovery:{type_}/*"
+                for type_ in ("module", "agent", "model", "app", "job", "job_run")
+            ),
+            sid="TransitionalDiscovery",
+        ),
+        Statement(
+            effect="Allow",
+            actions=("discovery:*",),
+            resources=("abi:-:-:discovery:run/${principal.id}/*",),
+            sid="TransitionalOwnRuns",
+        ),
+    ]
+
+
+def transitional_nexus_user_policy() -> Policy:
     """TRANSITIONAL (#65 attaches role policies from Nexus memberships, #61
     gives users IAM ids).
 
-    Held implicitly by a user named by a Nexus id rather than an IAM id: on a
-    Nexus call, ``api`` on behalf of that user. Nexus still decides what such a
-    user may do, with its own membership checks, so the user side of the
-    intersection (RFC §5.3) allows every kernel service a module can declare,
-    plus document and dataset. Never ``iam:*``; seals and explicit Denies hold.
+    Held implicitly by a user Nexus names on a call (issuer ``urn:abi:nexus``,
+    or a Nexus id IAM has no record of): on a Nexus call, ``api`` on behalf of
+    that user. Nexus still decides what such a user may do, with its own
+    membership checks, so the user side of the intersection (RFC §5.3) allows
+    the kernel services a module can declare, plus document and dataset, and
+    discovery on the user's own runs only. Never ``iam:*``; seals and explicit
+    Denies hold.
     """
     return _managed(
-        TRANSITIONAL_USER,
+        TRANSITIONAL_NEXUS_USER,
         "Nexus user (transitional)",
         "TRANSITIONAL: a Nexus user's side of a Nexus call until subtask 11 of "
         "#44 attaches the roles of its memberships.",
@@ -410,7 +440,8 @@ def transitional_user_policy() -> Policy:
                 ),
                 resources=("*",),
                 sid="TransitionalNexusUser",
-            )
+            ),
+            *_transitional_discovery(),
         ],
     )
 
@@ -454,5 +485,5 @@ def builtin_policies(registry: CatalogRegistry) -> list[Policy]:
         _broad(API, "api"),
         idp_policy(),
         transitional_module_policy(),
-        transitional_user_policy(),
+        transitional_nexus_user_policy(),
     ]

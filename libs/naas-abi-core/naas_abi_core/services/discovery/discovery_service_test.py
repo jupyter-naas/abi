@@ -340,6 +340,49 @@ def test_platform_admins_evict_and_the_owner_must_register_again():
     asyncio.run(scenario())
 
 
+def test_without_iam_evicting_never_fails_open():
+    """Regression: with no IAM to ask, a module cannot evict another one."""
+
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry(), clock=lambda: 0.0)
+        await service.register(registration("research", "r-1"), "research")
+        for caller in ("research", "other-module"):
+            with pytest.raises(DiscoveryError, match="PERMISSION_DENIED"):
+                await service.evict(pb.EvictRequest(instance_id="r-1"), caller)
+        await service.evict(pb.EvictRequest(instance_id="r-1"), "engine")
+
+    asyncio.run(scenario())
+
+
+def test_a_heartbeat_reads_the_registry_once():
+    from naas_abi_core.engine.call_context import as_service_account
+    from naas_abi_core.services.iam.tests.authorization_contract import (
+        contract_iam,
+    )
+
+    class CountingRegistry(MemoryRegistry):
+        reads = 0
+
+        async def read(self):
+            self.reads += 1
+            return await super().read()
+
+    async def scenario():
+        registry = CountingRegistry()
+        service = DiscoveryService(registry, clock=lambda: 0.0, iam=contract_iam())
+        req = registration("research", "r-1")
+        with as_service_account("engine"):
+            await service.register(req, "research")
+            registry.reads = 0
+            await service.renew(
+                pb.RenewRequest(instance_id="r-1", lease_token=req.lease_token),
+                "research",
+            )
+        assert registry.reads == 1
+
+    asyncio.run(scenario())
+
+
 def test_evicting_is_a_policy_not_an_identity():
     from naas_abi_core.engine.call_context import as_service_account
     from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError

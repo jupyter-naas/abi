@@ -190,11 +190,14 @@ class MyService(ServiceBase):
   record of (a remote module, whose token names it): its own document and
   dataset namespaces, and the kernel services a module can declare. Replaced by
   approved manifests in subtask 6 (#60).
-- `builtin.transitional.user`: held implicitly by a user named by a Nexus id
-  rather than an IAM id (on a Nexus call, `api` on behalf of that user). Nexus
+- `builtin.transitional.nexus_user`: held implicitly by a user Nexus names on
+  a call (IAM's user of issuer `urn:abi:nexus`, or a Nexus id IAM has no
+  record of; on a Nexus call, `api` on behalf of that user). Nexus
   still decides what such a user may do, so the user side of the intersection
   allows every kernel service a module can declare, plus document and dataset;
-  never `iam:*`. Seals and explicit Denies hold. Removed by subtask 11 (#65),
+  never `iam:*`. Like the module grant, it reaches discovery's modules, agents,
+  models, apps and jobs, but only its holder's own agent runs. Seals and
+  explicit Denies hold. Removed by subtask 11 (#65),
   which attaches the roles of each membership.
 - `LEGACY_NEXUS_ISSUER` (`urn:abi:nexus`): a Nexus user named on a call by its
   Nexus id resolves to IAM's user of that issuer, until OIDC providers (#61).
