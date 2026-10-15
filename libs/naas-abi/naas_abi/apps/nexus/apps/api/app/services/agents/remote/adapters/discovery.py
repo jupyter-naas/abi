@@ -88,10 +88,8 @@ class DiscoveryRemoteAgentDirectory:
         finished = False
         try:
             async for event in handle.events(timeout=self._timeout):
-                chunk = {"event": str(event["event"]), "data": str(event["data"])}
-                if event.get("chat_source") is False:
-                    chunk["chat_source"] = False
-                yield chunk
+                # The SDK's event: event, data and a chat_source opt-out.
+                yield {k: v for k, v in event.items() if k != "sequence"}
             finished = True
         except RPCError as exc:
             finished = True  # the run is already terminal

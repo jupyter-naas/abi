@@ -112,7 +112,6 @@ def _error(code: str, message: str) -> RPCError:
     return RPCError(code, message)
 
 
-
 def _agent_event(
     sequence: int, stored: dict, *, data: str = "", parts: int = 0
 ) -> pb.AgentEvent:
@@ -124,6 +123,7 @@ def _agent_event(
     if stored.get("chat_source") is False:
         event.chat_source = False
     return event
+
 
 class AgentHost:
     """Durable no-replay execution, with conversation claims that never auto-expire.
