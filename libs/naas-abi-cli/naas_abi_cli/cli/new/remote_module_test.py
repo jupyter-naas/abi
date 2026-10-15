@@ -21,6 +21,7 @@ from naas_abi_cli.cli.new.agent import _new_agent
 from naas_abi_cli.cli.new.module import _new_module
 from naas_abi_cli.cli.new.remote_module import (
     COMPOSE_OVERRIDE,
+    MIGRATE_TO_NATS_DOC,
     Project,
     add_compose_service,
     add_dev_module,
@@ -278,7 +279,7 @@ def test_a_remote_module_in_a_classic_project_gets_no_compose_service(
 
     assert result.exit_code == 0, result.output
     assert not (root / COMPOSE_OVERRIDE).exists()
-    assert "migrate-to-nats" in result.output
+    assert MIGRATE_TO_NATS_DOC in result.output
     assert "research:" in result.output  # the snippet, to add by hand
     # Ready for `abi dev up` once the project is on NATS.
     assert [

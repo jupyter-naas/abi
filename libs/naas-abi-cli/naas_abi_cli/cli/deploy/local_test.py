@@ -13,6 +13,7 @@ import yaml
 
 from naas_abi_cli.cli.deploy import local
 from naas_abi_cli.cli.deploy.local import (
+    MIGRATE_TO_NATS_DOC,
     _build_nexus_api_url,
     ensure_legacy_extras,
     legacy_extras_requirement,
@@ -90,7 +91,7 @@ def test_regenerating_an_older_project_does_not_switch_it_to_nats(
     setup_local_deploy(str(tmp_path), base_domain="localhost", regenerate=True)
 
     _assert_nats_is_opt_in(_services(tmp_path / "docker-compose.yml"))
-    assert "docs/migrate-to-nats.md" in capsys.readouterr().out
+    assert MIGRATE_TO_NATS_DOC in capsys.readouterr().out
 
 
 def test_regenerating_a_nats_project_keeps_it_on_nats(tmp_path: Path, capsys) -> None:
@@ -98,7 +99,7 @@ def test_regenerating_a_nats_project_keeps_it_on_nats(tmp_path: Path, capsys) ->
     setup_local_deploy(str(tmp_path), base_domain="localhost", regenerate=True)
 
     assert "profiles" not in _services(tmp_path / "docker-compose.yml")["nats"]
-    assert "migrate-to-nats" not in capsys.readouterr().out
+    assert MIGRATE_TO_NATS_DOC not in capsys.readouterr().out
 
 
 def _pyproject(project: Path, *dependencies: str) -> None:
