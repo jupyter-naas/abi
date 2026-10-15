@@ -4,6 +4,7 @@ const path = require('path');
 const nextConfig = {
   reactStrictMode: true,
   // Keep make check / production builds from overwriting a running dev server.
+  // distDir must stay relative to this app (Next does not accept absolute paths).
   distDir: process.env.NODE_ENV === 'development' ? '.next-dev' : '.next',
   transpilePackages: ['@nexus/ui', '@embedpdf/snippet', 'three'],
   experimental: {

@@ -17,6 +17,206 @@
 - Guide: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
   Every change: [Breaking changes in 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/breaking-changes-3.md).
 
+## v2.86.0 (2026-10-14)
+
+### Bug Fixes
+
+- **maps**: Refactor layer grouping and update dataset categories
+  ([`d4a74d7`](https://github.com/jupyter-naas/abi/commit/d4a74d75f66808bfc63c94327ae9130ee506c51c))
+
+- **maps**: Remove presence map references and update to use 'all' map
+  ([`532c8f7`](https://github.com/jupyter-naas/abi/commit/532c8f754f79d2391e086353a99395963c2ea253))
+
+- **maps**: Update feed and geojson debug handling
+  ([`f1cad6c`](https://github.com/jupyter-naas/abi/commit/f1cad6c1bbff5792716049a4c5f971138f3eae3a))
+
+- **maps,search**: Refine types and update map search subtitle
+  ([`dcf6830`](https://github.com/jupyter-naas/abi/commit/dcf68306aecd91fa64842abb2d6c703ed9466734))
+
+- **maps-components**: Adjust legend position and responsive max-width
+  ([`99e9396`](https://github.com/jupyter-naas/abi/commit/99e93960c961ce4896a649d28dcf491324e5a8be))
+
+- **nexus-map**: Update workspace maps routes and components
+  ([`4035ccc`](https://github.com/jupyter-naas/abi/commit/4035ccc7f770a4e3c86e47bb892d72caaea41997))
+
+### Chores
+
+- **nexus-map**: Commit staged changes and push
+  ([`df724fe`](https://github.com/jupyter-naas/abi/commit/df724fe722b9bf76d6508ac88c6ae26b2aa3a29f))
+
+- **scripts**: Make generate_basemap_previews.py executable
+  ([`3ffbb24`](https://github.com/jupyter-naas/abi/commit/3ffbb249136e9bf58260e50d4659b013308d9def))
+
+### Code Style
+
+- **web**: Update search input focus styles and clean up CSS
+  ([`6bc38b8`](https://github.com/jupyter-naas/abi/commit/6bc38b8da5958092961565211b103d655263c788))
+
+### Features
+
+- **maps**: Add and update multiple map components, API routes, and services
+  ([`5d43d37`](https://github.com/jupyter-naas/abi/commit/5d43d37b0d2e86dfc026119a53ac0949a05d6a33))
+
+- **maps**: Add basemap previews and basemap control component
+  ([`e5fc896`](https://github.com/jupyter-naas/abi/commit/e5fc8963e416f3e417b8600f3c07b9585b4877be))
+
+- **maps**: Add compactCountryCenters utility and related tests
+  ([`1459573`](https://github.com/jupyter-naas/abi/commit/1459573638dda80669ea8eedda90f9a0ade18e94))
+
+- **maps**: Add geojson debug support and modal UI
+  ([`ead5430`](https://github.com/jupyter-naas/abi/commit/ead5430786acd60a0a3142abb6c05f73a5829c86))
+
+- **maps**: Add new map icons and layer colors
+  ([`36ab3d9`](https://github.com/jupyter-naas/abi/commit/36ab3d9544a495a2cf34983c4045b1a100c12807))
+
+- **maps**: Add point search component and related styles
+  ([`9040303`](https://github.com/jupyter-naas/abi/commit/904030374e882fb9a4f08b2de748ee39b4f28942))
+
+- **maps**: Update and add multiple map components and API routes
+  ([`0a1c3b5`](https://github.com/jupyter-naas/abi/commit/0a1c3b5c5123e773b54c7071c97d00dbeadd7753))
+
+- **maps**: Update maps components and styles with region filter and sidebar layer counts
+  ([`44aa3c0`](https://github.com/jupyter-naas/abi/commit/44aa3c096142682efa16c6810e07c965f1ca77e5))
+
+- **maps**: Update nexus maps groups and related components
+  ([`bb22ddd`](https://github.com/jupyter-naas/abi/commit/bb22ddd24bd65dc11e0142186711df5ac43c4127))
+
+- **nexus-map**: Add extensive updates and new features for nexus maps module
+  ([`f496b5f`](https://github.com/jupyter-naas/abi/commit/f496b5f77261e496625206703ccea22207e00415))
+
+- **nexus-map**: Update nexus maps groups and workspace config
+  ([`d560e24`](https://github.com/jupyter-naas/abi/commit/d560e24a588405e222d1a8321957ef4a6fda0847))
+
+
+## v2.85.0 (2026-10-13)
+
+### Features
+
+- **workspace**: Add keepPanelClosedOnNextRoute to control panel state on route changes
+  ([`a3a1ec6`](https://github.com/jupyter-naas/abi/commit/a3a1ec63c1ceb1ec0bffa28fa1428118f427b221))
+
+
+## v2.84.0 (2026-10-13)
+
+### Bug Fixes
+
+- **nexus**: Satisfy Users table TypeScript for export and pane
+  ([`4436d23`](https://github.com/jupyter-naas/abi/commit/4436d23e7524aae83e9dfddf2bc4869792f2394a))
+
+### Features
+
+- **nexus**: Rebuild org Users table with column filters
+  ([`5a46b01`](https://github.com/jupyter-naas/abi/commit/5a46b01e0a6693261c2b162f0eebf158b1b66f64))
+
+
+## v2.83.1 (2026-10-12)
+
+### Bug Fixes
+
+- **nexus**: Restrict org admin reads to owners and admins
+  ([`9bf1349`](https://github.com/jupyter-naas/abi/commit/9bf134980ee79673e942a3400534cfb89b457082))
+
+
+## v2.83.0 (2026-10-09)
+
+### Bug Fixes
+
+- **identity_graph**: Drop graph silently instead of clear
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+- **triple_store**: Decode invalid UTF-8 error bodies in _raise_for_status
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+### Features
+
+- **files**: Add PDF preview support for PPTX files
+  ([`f56e33f`](https://github.com/jupyter-naas/abi/commit/f56e33f23b88498cbfb0c3e7d1b9bbc230c0bf8f))
+
+- **identity_graph**: Retry sync on Fuseki dataset lock races
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+### Refactoring
+
+- **files**: Reorganize file drives and add platform drive
+  ([`ad0eed4`](https://github.com/jupyter-naas/abi/commit/ad0eed46afa5d61217b7ab07f63cf35ba1502d72))
+
+### Testing
+
+- **triple_store**: Add test for _raise_for_status decoding invalid UTF-8
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+
+## v2.82.0 (2026-10-09)
+
+### Bug Fixes
+
+- **agent**: Add chat_source flag to ToolResponseEvent and support tool metadata opt-out
+  ([`e197797`](https://github.com/jupyter-naas/abi/commit/e1977973d8d7c4809c2dd589553ecc7d51563825))
+
+### Features
+
+- **chat**: Add topnav File → New Chat menu to start a new chat
+  ([`fbcca0e`](https://github.com/jupyter-naas/abi/commit/fbcca0ebeac462eb6ec5909d5e67ac141af523d9))
+
+- **files**: Add drive settings and refresh integration in files explorer
+  ([`79bfcd8`](https://github.com/jupyter-naas/abi/commit/79bfcd828833b4ba3a2224f175c6d10d9c4bb722))
+
+- **files**: Enforce read-only system files with dot-prefix
+  ([`697ab03`](https://github.com/jupyter-naas/abi/commit/697ab03ddf46714c6f243ee585e8935b546e5403))
+
+- **maps**: Add comprehensive maps layouts service and UI components
+  ([`5e626e6`](https://github.com/jupyter-naas/abi/commit/5e626e606fb5d942df4f0031afd650e8dbb29031))
+
+- **maps**: Add natural earth countries proxy and enhance maps components
+  ([`1780b95`](https://github.com/jupyter-naas/abi/commit/1780b95d5d235c23b2f0bfbf4e214f86ca0806e5))
+
+- **people-intel**: Add support for include_suffixes in graph config and workspace manifest
+  ([`ac6e604`](https://github.com/jupyter-naas/abi/commit/ac6e6042f0f2ed92ac97fa889d9a559443ea05ba))
+
+- **search**: Add SearchMenuBar component and integrate in workspace search page
+  ([`74c7cb3`](https://github.com/jupyter-naas/abi/commit/74c7cb3f46a2e5b62889958ef6f61380d4af2df0))
+
+- **shell**: Improve quick-open positioning and topnav app menu
+  ([`c9688bc`](https://github.com/jupyter-naas/abi/commit/c9688bc7899ba06fa6cde3cade9a8be80ac92d63))
+
+- **tenant-context**: Add document title detail context and hook
+  ([`b143171`](https://github.com/jupyter-naas/abi/commit/b143171693c9c5121fe2113c0edfd4a70e7512b0))
+
+- **workspaces**: Add background image support with staging, preview, and commit functionality
+  ([`9805a4b`](https://github.com/jupyter-naas/abi/commit/9805a4b6d4e89e8a37608d5a6263c1ebf8db2520))
+
+### Refactoring
+
+- **app-menu**: Use shared app menu classes for consistency
+  ([`93be22a`](https://github.com/jupyter-naas/abi/commit/93be22a54e70117d9e1096765fa1f842143c3669))
+
+- **graph-explorer-sidebar**: Update sidebar layout and search input styling
+  ([`52468b9`](https://github.com/jupyter-naas/abi/commit/52468b934e5527ba2201e41c4d2e1d1b8c4ce23f))
+
+- **maps**: Add basemap radio and home row for layouts
+  ([`fe39897`](https://github.com/jupyter-naas/abi/commit/fe39897bcfd8b25df38f7cbb30a901cad8a8b972))
+
+- **sidebar**: Improve panel section handling and prefetching
+  ([`26bc4c3`](https://github.com/jupyter-naas/abi/commit/26bc4c395d552b2dc49eed0f70910f21ad4ddc9e))
+
+- **sidebar**: Improve styling of 'All topics' row in search section
+  ([`0612d2d`](https://github.com/jupyter-naas/abi/commit/0612d2d77c10d813a3a0d820f3565ba77df78349))
+
+- **workspace**: Minor UI and path comment improvements
+  ([`6ef0a2c`](https://github.com/jupyter-naas/abi/commit/6ef0a2cb78d15d6948d39d84405b8147cac77e4c))
+
+- **workspaces**: Apply workspace seed fields with special handling for background image
+  ([`a8bc929`](https://github.com/jupyter-naas/abi/commit/a8bc929f260b8cb2f3b95f1211c80b46e70d39c1))
+
+
+## v2.81.1 (2026-10-08)
+
+### Bug Fixes
+
+- **nexus**: Copy the class name onto the stored agent row
+  ([`d7b8105`](https://github.com/jupyter-naas/abi/commit/d7b8105ced6c6371afba3326820a578a5785b22d))
+
+
 ## v2.81.0 (2026-10-07)
 
 ### Bug Fixes

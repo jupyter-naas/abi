@@ -8,4 +8,3 @@ class ActOfStudying(_ActOfStudying):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

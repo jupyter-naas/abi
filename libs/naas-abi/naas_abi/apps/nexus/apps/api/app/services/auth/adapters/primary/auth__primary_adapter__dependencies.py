@@ -61,6 +61,27 @@ async def get_current_user_required(current_user: User | None = Depends(get_curr
     return current_user
 
 
+async def get_current_user_released(token: str | None = Depends(oauth2_scheme)) -> User:
+    """``get_current_user_required`` on its own short-lived session.
+
+    The request does not keep a pooled connection while it runs. Use it on hot
+    read paths that fire many requests at once (Maps layer data, logos): with
+    the request-scoped session, every waiting request holds a connection and
+    the pool runs dry.
+    """
+    async with AsyncSessionLocal() as db:
+        user = await AuthService(
+            adapter=AuthSecondaryAdapterPostgres(db=db)
+        ).get_user_from_access_token(token)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return to_user_schema(user)
+
+
 async def get_workspace_role(user_id: str, workspace_id: str) -> str | None:
     async with AsyncSessionLocal() as db:
         registry = ServiceRegistry.instance()

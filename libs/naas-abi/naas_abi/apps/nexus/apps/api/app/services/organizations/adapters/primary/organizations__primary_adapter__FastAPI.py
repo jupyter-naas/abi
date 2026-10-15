@@ -135,6 +135,7 @@ class Organization(BaseModel):
     default_theme: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    current_user_role: str | None = None
 
 
 class OrganizationCreate(BaseModel):
@@ -335,11 +336,11 @@ async def get_organization(
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> Organization:
-    await require_org_access(current_user.id, org_id, service)
+    role = await require_org_access(current_user.id, org_id, service)
     row = await service.get_organization(org_id=org_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Organization not found")
-    return _to_schema(row)
+    return Organization(**row.__dict__, current_user_role=role)
 
 
 @router.post("")
@@ -749,7 +750,9 @@ async def list_org_members(
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> list[OrganizationMember]:
-    await require_org_access(current_user.id, org_id, service)
+    role = await require_org_access(current_user.id, org_id, service)
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only admins can list organization members")
     rows = await service.list_members(org_id=org_id)
     return [OrganizationMember(**row.__dict__) for row in rows]
 
@@ -888,7 +891,9 @@ async def list_org_domains(
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> list[OrganizationDomain]:
-    await require_org_access(current_user.id, org_id, service)
+    role = await require_org_access(current_user.id, org_id, service)
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only admins can list organization domains")
     rows = await service.list_domains(org_id=org_id)
     return [
         OrganizationDomain(
@@ -987,7 +992,9 @@ async def get_org_billing(
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> BillingInfo:
-    await require_org_access(current_user.id, org_id, service)
+    role = await require_org_access(current_user.id, org_id, service)
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only admins can manage billing")
     raise HTTPException(
         status_code=501,
         detail="Billing functionality is not yet implemented. This feature will be available in a future release.",

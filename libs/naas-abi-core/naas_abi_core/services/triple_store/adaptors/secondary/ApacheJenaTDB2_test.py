@@ -184,6 +184,22 @@ def test_query_construct_returns_graph():
     assert len(result) == 1
 
 
+def test_query_construct_decodes_utf8_without_a_charset():
+    adapter = _build_adapter()
+
+    body = '<http://example.org/jfd> <http://example.org/name> "Jean-François" .\n'
+    response = _ok_response()
+    response.headers = {"Content-Type": "application/n-triples"}
+    response.content = body.encode()
+    # What requests guessed for a large body sent without a charset.
+    response.text = body.encode().decode("latin-1")
+    adapter._session.post.return_value = response
+
+    result = adapter.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
+
+    assert {str(o) for o in result.objects()} == {"Jean-François"}
+
+
 def test_query_ask_returns_rdflib_ask_result():
     adapter = _build_adapter()
 
@@ -638,6 +654,24 @@ def test_dataset_lock_key_is_stable_and_url_scoped():
 # ---------------------------------------------------------------------------
 # clear_graph default graph
 # ---------------------------------------------------------------------------
+
+def test_raise_for_status_decodes_invalid_utf8_error_bodies():
+    adapter = _build_adapter()
+    response = Mock(status_code=400)
+    response.content = b"Graph does not exist: \xff"
+    response.text = Mock(side_effect=UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid"))
+
+    with pytest.raises(Exceptions.RequestError) as exc_info:
+        adapter._raise_for_status(
+            response,
+            operation="update",
+            endpoint="http://localhost:3030/ds/update",
+            attempts=1,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.response_body is not None
+
 
 def test_clear_graph_with_name_emits_clear_graph():
     adapter = _build_adapter()

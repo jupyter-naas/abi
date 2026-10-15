@@ -20,6 +20,10 @@ from naas_abi_core.services.dataset.DatasetPort import (
     DatasetSpec,
 )
 from naas_abi_core.services.dataset.DatasetService import DatasetService
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.memory_people_store import (
+    MemoryPeopleStore,
+    PeopleStore,
+)
 
 # Logical name -> (primary key, columns). The logical name is what config.yaml
 # maps to a physical table, so a client can serve their own tables from the
@@ -168,18 +172,20 @@ class DatasetsMissingError(RuntimeError):
         "&& make people-datasets"
     )
 
-    def __init__(self, table: str, namespace: str) -> None:
+    def __init__(self, table: str, namespace: str, command: str | None = None) -> None:
         self.table = table
         self.namespace = namespace
+        # A workspace dataset is built by its sync job, not by the Makefile.
+        self.command = command or self.BUILD_COMMAND
         super().__init__(
-            f"Dataset not exported: {namespace}.{table}\nRun: {self.BUILD_COMMAND}"
+            f"Dataset not exported: {namespace}.{table}\nRun: {self.command}"
         )
 
     def as_detail(self) -> dict[str, str]:
         return {
             "error": "missing_dataset",
             "dataset": f"{self.namespace}.{self.table}",
-            "command": self.BUILD_COMMAND,
+            "command": self.command,
             "message": str(self),
         }
 
@@ -274,13 +280,17 @@ def slug_list(slugs: list[str]) -> str:
 
 
 def fetch_people(
-    service: DatasetService,
+    service: PeopleStore,
     *,
     namespace: str,
     table: str,
     where: str = "",
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
+    if isinstance(service, MemoryPeopleStore):
+        return service.fetch_people(
+            namespace=namespace, table=table, where=where, limit=limit
+        )
     clause = f" WHERE {where}" if where else ""
     bound = f" LIMIT {int(limit)}" if limit else ""
     sql = f"SELECT * FROM {table}{clause} ORDER BY full_name{bound}"
@@ -288,7 +298,7 @@ def fetch_people(
 
 
 def fetch_children(
-    service: DatasetService,
+    service: PeopleStore,
     *,
     namespace: str,
     table: str,
@@ -300,6 +310,13 @@ def fetch_children(
     A person with no rows is absent from the result rather than present with an
     empty list: the caller decides what "nothing recorded" looks like.
     """
+    if isinstance(service, MemoryPeopleStore):
+        return service.fetch_children(
+            namespace=namespace,
+            table=table,
+            slugs=slugs,
+            order_by=order_by,
+        )
     if not slugs:
         return {}
     sql = (

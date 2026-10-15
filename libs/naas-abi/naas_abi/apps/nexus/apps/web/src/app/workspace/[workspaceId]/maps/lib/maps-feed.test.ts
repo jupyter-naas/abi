@@ -18,7 +18,14 @@ describe('graph map pin contract', () => {
   });
   it('keeps feed freshness and attribution without treating needsKey as a thrown error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ok:true, json:async () => ({
-      pins: [{id:'ship',lat:1,lng:2,label:'Vessel'}],
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        id: 'ship',
+        geometry: { type: 'Point', coordinates: [2, 1] },
+        properties: { label: 'Vessel' },
+      }],
+      count: 1,
       source: 'aisstream',
       attribution: 'AISStream',
       observedAt: '2026-09-21T00:00:00Z',
@@ -67,6 +74,27 @@ describe('normalizeFeedLoad', () => {
     expect(feed.reason).toBe('Source-reported street addresses');
   });
 
+  it('reads a canonical GeoJSON FeatureCollection feed', () => {
+    const feed = normalizeFeedLoad({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          id: 'paris',
+          geometry: { type: 'Point', coordinates: [2.35, 48.86] },
+          properties: { label: 'Paris', entityUri: 'urn:office' },
+        },
+      ],
+      count: 1,
+      source: 'graph',
+      empty: false,
+    });
+    expect(feed.pins).toEqual([
+      expect.objectContaining({ id: 'paris', lat: 48.86, lng: 2.35, label: 'Paris', entityUri: 'urn:office' }),
+    ]);
+    expect(feed.source).toBe('graph');
+  });
+
   it('reads GeoJSON Point features and URI-keyed pin dicts', () => {
     const fromFeatures = normalizeFeedLoad({
       type: 'FeatureCollection',
@@ -100,4 +128,25 @@ it('validates coverage coordinates and evidence and links only members in the sa
   expect(feed.coveragePins?.[0].memberIds).toEqual(['address']);
   expect(feed.coveragePins?.[0].sources).toHaveLength(1);
   expect(feed.coveragePins?.[0].entityUri).toBe('urn:city');
+});
+
+describe('normalizeFeedLoad keeps combined-map fields', () => {
+  it('passes layer and feed identity through (grouping depends on them)', async () => {
+    const { normalizeFeedLoad } = await import('./maps-feed');
+    const [pin] = normalizeFeedLoad({
+      pins: [
+        {
+          id: 'edf-solar:1', lat: 46, lng: 2, label: 'Parc', country: 'France',
+          layerId: 'edf-solar', layerColor: '#fe5815', featureId: '1',
+          feedId: 'edf-power-facilities', feedColor: '#fe5815', feedTitle: 'EDF',
+          classLabels: ['Solar', 'Storage'],
+        },
+      ],
+    }).pins;
+    expect(pin).toMatchObject({
+      layerId: 'edf-solar', layerColor: '#fe5815', featureId: '1',
+      feedId: 'edf-power-facilities', feedColor: '#fe5815', feedTitle: 'EDF',
+      classLabels: ['Solar', 'Storage'],
+    });
+  });
 });

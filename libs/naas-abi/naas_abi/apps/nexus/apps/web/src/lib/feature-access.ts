@@ -54,7 +54,7 @@ const DEFAULT_ROLE_BASELINE: Record<string, FeatureKey[]> = {
 };
 
 const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
-  maps: '/maps/presence',
+  maps: '/maps',
   chat: '/chat',
   files: '/files',
   agents: '/settings/agents',

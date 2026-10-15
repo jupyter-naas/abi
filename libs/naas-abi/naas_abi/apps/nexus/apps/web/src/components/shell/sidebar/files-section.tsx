@@ -1,16 +1,14 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight,
   File,
   Files,
   Folder,
   HardDrive,
-  RefreshCw,
   Search,
   Server,
-  Settings,
   Star,
   X,
 } from 'lucide-react';
@@ -23,10 +21,11 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { getApiUrl } from '@/lib/config';
 import { useConfirm, usePrompt } from '@/components/ui/dialogs';
 import { CollapsibleSection } from './collapsible-section';
-import { SidebarToolbarButton } from './sidebar-toolbar';
 import { getWorkspacePath } from './utils';
 import { filesBrowsePath } from '@/app/workspace/[workspaceId]/files/lib/files-route';
 import { driveRootForSource } from '@/app/workspace/[workspaceId]/files/lib/drive-label';
+import { FILES_EXPLORER_REFRESH_EVENT } from '@/app/workspace/[workspaceId]/files/lib/explorer-refresh';
+import { isSystemPath, withoutSystemFiles } from '@/lib/system-files';
 import { shellTokens } from '../tokens';
 import {
   canDropOntoExplorerFolder,
@@ -93,13 +92,25 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const isWorkspaceAdmin = workspaceRole === 'owner' || workspaceRole === 'admin';
   const [starredExpanded, setStarredExpanded] = useState(true);
   const [expandedDirs, setExpandedDirs] = useState<string[]>([]);
-  const [folderCache, setFolderCache] = useState<Record<string, FileInfo[]>>({});
+  const [rawFolderCache, setFolderCache] = useState<Record<string, FileInfo[]>>({});
   const [loadingDirs, setLoadingDirs] = useState<Record<string, boolean>>({});
   const [dirErrors, setDirErrors] = useState<Record<string, string | null>>({});
   const [explorerQuery, setExplorerQuery] = useState('');
   const loadGeneration = useRef(0);
-  const folderCacheRef = useRef(folderCache);
-  folderCacheRef.current = folderCache;
+  const folderCacheRef = useRef(rawFolderCache);
+  folderCacheRef.current = rawFolderCache;
+  // The tree caches whole listings and filters on render, so View → Show
+  // system files flips without refetching every open folder.
+  const showSystemFiles = useFilesStore((s) => s.showSystemFiles);
+  const folderCache = useMemo(
+    () =>
+      showSystemFiles
+        ? rawFolderCache
+        : Object.fromEntries(
+            Object.entries(rawFolderCache).map(([key, entries]) => [key, withoutSystemFiles(entries, false)]),
+          ),
+    [rawFolderCache, showSystemFiles],
+  );
   const {
     expandedCategories: fileExpandedCategories,
     toggleCategory: toggleFileCategory,
@@ -108,9 +119,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     syncedFolders,
     fetchFiles,
     fetchLocalFiles,
-    refreshFiles,
     currentPath,
-    loading,
     starredItems,
     unstarItem,
     setStarredNavigation,
@@ -294,7 +303,8 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     async (source: string, folder: FileInfo) => {
       const folderPath = normalizeExplorerPath(folder.path);
       // Drive roots are not rendered as tree rows; still guard empty paths.
-      if (!folderPath) return;
+      // System files are read-only.
+      if (!folderPath || isSystemPath(folderPath)) return;
 
       const newName = await prompt({
         title: 'Rename',
@@ -303,6 +313,14 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
         confirmLabel: 'Rename',
       });
       if (!newName || newName === folder.name) return;
+      if (isSystemPath(newName.trim())) {
+        await confirm({
+          title: 'Invalid name',
+          description: 'Names starting with "." are system files, which are read-only.',
+          confirmLabel: 'OK',
+        });
+        return;
+      }
       if (!isValidExplorerEntryName(newName)) {
         await confirm({
           title: 'Invalid name',
@@ -341,7 +359,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const handleDeleteFolder = useCallback(
     async (source: string, folder: FileInfo) => {
       const folderPath = normalizeExplorerPath(folder.path);
-      if (!folderPath) return;
+      if (!folderPath || isSystemPath(folderPath)) return;
 
       const confirmed = await confirm({
         title: `Delete "${folder.name}"?`,
@@ -388,6 +406,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
       const from = normalizeExplorerPath(draggedPath);
       const toFolder = normalizeExplorerPath(targetPath);
       if (!canDropOntoExplorerFolder(from, toFolder)) return;
+      if (isSystemPath(from) || isSystemPath(toFolder)) return;
 
       const name = from.includes('/') ? from.slice(from.lastIndexOf('/') + 1) : from;
       const newPath = toFolder ? `${toFolder}/${name}` : name;
@@ -476,9 +495,9 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     }
   }, [currentWorkspaceId, loadDir]);
 
-  const handleRefresh = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  // File → Refresh (TopNav) refreshes the page listing; the tree reloads here.
+  const reloadTreeRef = useRef<() => void>(() => {});
+  reloadTreeRef.current = () => {
     loadGeneration.current += 1;
     folderCacheRef.current = {};
     setFolderCache({});
@@ -490,19 +509,13 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
       const path = key.slice(sep + 2);
       void loadDir(source, path, { force: true });
     }
-    const activeSyncedFolder = syncedFolders.find((f) => f.id === activeSource);
-    if (activeSyncedFolder) {
-      fetchLocalFiles(activeSyncedFolder.id, currentPath);
-    } else {
-      refreshFiles();
-    }
   };
 
-  const handleOpenDriveSettings = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    router.push(getWorkspacePath(currentWorkspaceId, '/settings/drives'));
-  };
+  useEffect(() => {
+    const onRefresh = () => reloadTreeRef.current();
+    window.addEventListener(FILES_EXPLORER_REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(FILES_EXPLORER_REFRESH_EVENT, onRefresh);
+  }, []);
 
   const driveExpanded = (sourceId: string) =>
     expandedDirs.includes(explorerDirKey(sourceId, ''));
@@ -598,23 +611,6 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     );
   };
 
-  const sectionActions = (
-    <>
-      <SidebarToolbarButton
-        icon={<Settings size={14} />}
-        label="Drive settings"
-        onClick={handleOpenDriveSettings}
-      />
-      <SidebarToolbarButton
-        icon={<RefreshCw size={14} />}
-        label="Refresh"
-        onClick={handleRefresh}
-        disabled={loading}
-        spinning={loading}
-      />
-    </>
-  );
-
   return (
     <>
     {promptDialog}
@@ -628,11 +624,6 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
       collapsed={collapsed}
       detailOnly={detailOnly}
     >
-      <div className="mb-1 flex items-center justify-start gap-0.5">
-        {sectionActions}
-      </div>
-
-      <h2 className="px-2 pb-1 pt-1 text-[13px] font-medium">Explorer</h2>
       <label className="relative mb-1.5 block px-0.5">
         <Search size={13} className="absolute left-2.5 top-2.5 text-muted-foreground" />
         <input

@@ -55,7 +55,7 @@ from naas_abi_core.services.ontology.adaptors.secondary.OntologyService_Secondar
 
 ner = OntologyService_SecondaryAdaptor_NERPort(chat_model=my_chat_model)
 service = OntologyService(ner_adaptor=ner, ontology_str=open("schema.ttl").read())
-graph = service.named_entity_recognition("Bob met Alice in Paris.")
+graph = service.named_entity_recognition("Carol met Alice in Paris.")
 ```
 
 ## Tests

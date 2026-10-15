@@ -5,6 +5,22 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MapsFeedCanvas } from './maps-feed-canvas';
 import type { MapsFeedResult } from '../lib/maps-feed';
 import type { MapsPinMarker } from '../lib/leaflet-map';
+import type { MapsBasemapDef } from '../lib/maps-basemaps';
+
+// Basemaps come from the workspace catalog; the tests pass the one they draw.
+const basemapDefs: MapsBasemapDef[] = [{
+  id: 'openstreetmap',
+  label: 'Street',
+  category: 'standard',
+  order: 10,
+  renderer: {
+    kind: 'tile',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenStreetMap contributors',
+  },
+  system: true,
+  previewVersion: 0,
+}];
 
 const pins: MapsPinMarker[] = Array.from({ length: 21 }, (_, index) => ({
   id: `office-${index}`,
@@ -47,6 +63,8 @@ function renderFeed(fetchPins: (signal: AbortSignal) => Promise<MapsPinMarker[] 
     fetchPins,
     inspectable: true,
     workspaceId: 'ws-test',
+    basemapId: 'openstreetmap',
+    basemapDefs,
   }));
 }
 
@@ -86,19 +104,35 @@ it('renders one real Leaflet map and all locations during Strict Mode remount', 
   expect(host.querySelector('.leaflet-control-attribution')?.textContent).toContain('OpenStreetMap');
   expect(host.querySelector('.leaflet-control-attribution')?.textContent).not.toContain('CARTO');
 
-  const toggle = host.querySelector<HTMLButtonElement>('.maps-record-toggle')!;
-  expect(toggle.getAttribute('aria-expanded')).toBe('false');
-  await act(async () => toggle.click());
-  expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  const searchForm = host.querySelector<HTMLFormElement>('.maps-point-search__field')!;
+  await act(async () => searchForm.requestSubmit());
   expect(host.querySelectorAll('.maps-record-list button')).toHaveLength(21);
 
-  const country = host.querySelector('select')!;
+  const countryToggle = host.querySelector<HTMLButtonElement>('.maps-country-filter__toggle')!;
+  expect(host.querySelector('.maps-country-filter__panel')).toBeNull();
+  await act(async () => countryToggle.click());
+  expect(host.querySelector('.maps-country-filter__panel')).toBeTruthy();
+  expect(host.querySelectorAll('.maps-record-list button')).toHaveLength(21);
+  expect(host.querySelector('.maps-record-search')).toBeNull();
+  expect(host.querySelector('select')).toBeNull();
+
+  const searchInput = host.querySelector<HTMLInputElement>('[aria-label="Search locations"]')!;
   await act(async () => {
-    country.value = 'Country A';
-    country.dispatchEvent(new Event('change', { bubbles: true }));
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+      searchInput,
+      'Office 1',
+    );
+    searchInput.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  expect(host.querySelectorAll('.maps-record-list button')).toHaveLength(2);
-  expect(host.querySelectorAll('.leaflet-marker-icon')).toHaveLength(2);
+  expect(host.querySelectorAll('.maps-record-list button')).toHaveLength(1);
+
+  await act(async () => countryToggle.click());
+  const countryB = Array.from(host.querySelectorAll('.maps-country-filter__option')).find((el) =>
+    el.textContent?.includes('Country B'),
+  )!;
+  await act(async () => (countryB.querySelector('input') as HTMLInputElement).click());
+  expect(host.querySelectorAll('.maps-record-list button')).toHaveLength(1);
+  expect(host.querySelectorAll('.leaflet-marker-icon')).toHaveLength(1);
 
   await act(async () => {
     host.querySelector<HTMLElement>('.leaflet-marker-icon')!.click();
@@ -227,4 +261,43 @@ it('keeps city data usable when the country boundary provider fails', async () =
   await waitForUI(()=>expect(host.textContent).toContain('Country shading unavailable'));
   expect(host.querySelectorAll('.leaflet-marker-icon')).toHaveLength(2);
   expect(host.textContent).not.toContain('Feed unavailable');
+});
+
+it('lists a country group under the search box, then one of its locations', async () => {
+  const grouped: MapsPinMarker[] = [
+    {id:'a:1',label:'Lyon office',country:'France',lat:45.76,lng:4.83,layerId:'a',layerColor:'#ff0000',feedId:'a',feedTitle:'Offices',featureId:'1'},
+    {id:'a:2',label:'Lille office',country:'France',lat:50.63,lng:3.06,layerId:'a',layerColor:'#ff0000',feedId:'a',feedTitle:'Offices',featureId:'2'},
+    {id:'a:3',label:'Lima office',country:'Peru',lat:-12.04,lng:-77.04,layerId:'a',layerColor:'#ff0000',feedId:'a',feedTitle:'Offices',featureId:'3'},
+  ];
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Offline')));
+  await act(async () => root.render(createElement(MapsFeedCanvas, {
+    title: 'Offices',
+    loadingLabel: 'Loading',
+    readyMeta: count => `${count} locations`,
+    fetchPins: async () => grouped,
+    inspectable: true,
+    workspaceId: 'ws-test',
+    fitMaxZoom: 2,
+    basemapId: 'openstreetmap',
+    basemapDefs,
+  })));
+  await waitForUI(() => expect(host.querySelectorAll('.maps-pin-icon--cluster')).toHaveLength(2));
+  // Locations sits next to the search field, not in the toolbar.
+  expect(host.querySelector('.maps-point-search .maps-country-filter__toggle')).toBeTruthy();
+  expect(host.querySelector('.maps-canvas__toolbar .maps-country-filter__toggle')).toBeNull();
+
+  const france = Array.from(host.querySelectorAll<HTMLElement>('.maps-pin-icon--cluster'))
+    .find(marker => marker.title === 'France')!;
+  await act(async () => france.click());
+  const panel = host.querySelector('.maps-point-search .maps-record-panel')!;
+  expect(panel.querySelector('h2')?.textContent).toBe('France');
+  expect(panel.querySelector('.maps-record-group__badge')?.textContent).toBe('Offices2');
+  const members = panel.querySelectorAll<HTMLButtonElement>('.maps-record-list button');
+  expect(Array.from(members).map(button => button.querySelector('strong')?.textContent)).toEqual(['Lyon office', 'Lille office']);
+  expect(host.querySelector('.leaflet-popup')).toBeNull();
+
+  await act(async () => members[1].click());
+  expect(host.querySelector('.maps-point-search .maps-record-panel h2')?.textContent).toBe('Lille office');
+  await act(async () => host.querySelector<HTMLButtonElement>('.maps-record-back')!.click());
+  expect(host.querySelector('.maps-point-search .maps-record-panel h2')?.textContent).toBe('France');
 });

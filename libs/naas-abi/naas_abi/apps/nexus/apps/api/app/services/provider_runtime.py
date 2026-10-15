@@ -1553,20 +1553,28 @@ _AGENT_STEP_EVENTS = {
 }
 
 
-def agent_event_chunk(event_name: str, text: str) -> str | dict[str, Any] | None:
+def agent_event_chunk(
+    event_name: str, text: str, *, chat_source: object = None
+) -> str | dict[str, Any] | None:
     """Map one core ``Agent.stream_invoke`` event to a Nexus stream chunk.
 
     ``ai_message`` deltas become text; tool and routing steps become step events.
     ``message`` (the closing replay), ``done`` and empty events map to None: the
     caller decides whether the replay is needed. Shared by in-process and remote
-    agents, which emit the same vocabulary.
+    agents, which emit the same vocabulary. ``chat_source`` is the event's flag:
+    a ``tool_response`` whose tool opted out of chat sources keeps ``False``.
     """
     if not text.strip():
         return None
     if event_name == "ai_message":
         return text
     key = _AGENT_STEP_EVENTS.get(event_name)
-    return {"event": event_name, key: text} if key else None
+    if not key:
+        return None
+    chunk: dict[str, Any] = {"event": event_name, key: text}
+    if event_name == "tool_response" and chat_source is False:
+        chunk["chat_source"] = False
+    return chunk
 
 
 async def stream_with_abi_inprocess(
@@ -1726,7 +1734,9 @@ async def stream_with_abi_inprocess(
             if event_name == "message" and text.strip():
                 final_replay.append(text.strip())
                 continue
-            chunk = agent_event_chunk(event_name, text)
+            chunk = agent_event_chunk(
+                event_name, text, chat_source=event.get("chat_source")
+            )
             if chunk is not None:
                 emitted = emitted or isinstance(chunk, str)
                 yield chunk

@@ -2939,9 +2939,24 @@ export function ChatInterface({
             ))}
             {isLoading && !isStreaming && (
               <div className="flex items-start gap-3">
-                {/* Same geometry as an answer: avatar, gap, filled bubble. */}
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-workspace-accent text-white">
-                  <Bot size={16} />
+                {/* Same geometry as an answer: avatar, gap, filled bubble.
+                    The portrait pulses with the existing bounce while the reply starts. */}
+                <div
+                  className={cn(
+                    'flex h-8 w-8 flex-shrink-0 animate-pulse items-center justify-center overflow-hidden rounded-md',
+                    selectedAgentData?.logoUrl ? 'bg-transparent' : 'bg-workspace-accent text-white'
+                  )}
+                >
+                  {selectedAgentData?.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={getLogoUrl(selectedAgentData.logoUrl)}
+                      alt={selectedAgentData.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <Bot size={16} />
+                  )}
                 </div>
                 <div className="flex items-center gap-2 rounded-2xl bg-muted px-4 py-3">
                   <div className="flex gap-1">
