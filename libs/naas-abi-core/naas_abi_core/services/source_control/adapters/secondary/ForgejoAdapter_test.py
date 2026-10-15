@@ -219,6 +219,48 @@ def test_ensure_user_creates_when_missing() -> None:
     assert call["json"]["username"] == "alice"
 
 
+def test_ensure_user_binds_the_forge_user_to_its_principal() -> None:
+    session = FakeSession(
+        [
+            (
+                "GET",
+                "/users/alice",
+                FakeResponse(200, {"id": 7, "login_name": "alice"}),
+            ),
+            ("PATCH", "/admin/users/alice", FakeResponse(200, {})),
+        ]
+    )
+    assert (
+        _adapter(session).ensure_user(
+            external_id="usr-a", email="alice@example.com", username="alice"
+        )
+        == "7"
+    )
+    patch = session.find("PATCH", "/admin/users/alice")
+    assert patch is not None
+    assert patch["json"]["login_name"] == "usr-a"
+
+
+def test_ensure_user_refuses_a_forge_user_bound_to_another_principal() -> None:
+    session = FakeSession(
+        [("GET", "/users/alice", FakeResponse(200, {"id": 7, "login_name": "usr-b"}))]
+    )
+    with pytest.raises(AccessDeniedError):
+        _adapter(session).ensure_user(
+            external_id="usr-a", email="alice@example.com", username="alice"
+        )
+
+
+def test_find_user_reads_the_binding_back() -> None:
+    session = FakeSession(
+        [("GET", "/admin/users", FakeResponse(200, [{"login": "alice"}]))]
+    )
+    assert _adapter(session).find_user(external_id="usr-a") == "alice"
+    call = session.find("GET", "/admin/users")
+    assert call is not None
+    assert "login_name=usr-a" in call["url"]
+
+
 def test_create_proposal_posts_head_and_base() -> None:
     session = FakeSession(
         [("POST", "/repos/alice/proj/pulls", FakeResponse(201, _PULL))]

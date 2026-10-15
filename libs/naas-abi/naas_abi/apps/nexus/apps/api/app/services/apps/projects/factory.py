@@ -27,6 +27,9 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.projects.port import (
 from naas_abi.apps.nexus.apps.api.app.services.apps.projects.service import (
     AppProjectsService,
 )
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
+    ensure_shared_repo,
+)
 
 
 class AppProjectsUnavailableError(AppProjectError):
@@ -83,7 +86,7 @@ def build_app_projects_service(
     owner, _, name = repo_id.partition("/")
     if (id(sc), repo_id) not in _ENSURED_REPOS:
         try:
-            sc.ensure_repo(owner=owner, name=name)
+            ensure_shared_repo(sc, owner=owner, name=name)
         except Exception as exc:  # noqa: BLE001
             raise AppProjectsUnavailableError("Git storage (Forgejo) is not reachable.") from exc
         _ENSURED_REPOS.add((id(sc), repo_id))

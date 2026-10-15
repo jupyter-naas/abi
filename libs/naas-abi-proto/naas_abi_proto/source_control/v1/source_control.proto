@@ -221,6 +221,8 @@ message WorkflowRuns {
 
 message EnsureUserRequest {
   abi.common.v1.CallContext context = 1;
+  // Deprecated, ignored by the server: the principal is the call's user
+  // (or the calling service account), from the verified credentials.
   string external_id = 2;
   string email = 3;
   string username = 4;
@@ -673,6 +675,8 @@ message ListWorkflowRunsResponse {
 
 message MintGitTokenRequest {
   abi.common.v1.CallContext context = 1;
+  // Deprecated, ignored by the server: the principal is the call's user
+  // (or the calling service account), from the verified credentials.
   string user_id = 2;
 }
 message MintGitTokenResponse {

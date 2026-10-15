@@ -39,6 +39,11 @@ from naas_abi_core.engine.nats_sessions import ServicePrimary
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.source_control.v1 import source_control_pb2
+from naas_abi_core.services.iam.guard import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from naas_abi_core.services.source_control.adapters.source_control_nats_contract import (
     AUTH_HEADER,
     SERVICE_NAME,
@@ -492,6 +497,15 @@ class SourceControlPrimaryAdapterNATS(ServicePrimary):
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
             response = await self._dispatch.call(call, parsed_request, caller)
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
+            )
+            return
         except RepoNotFoundError as exc:
             await self._respond_error(
                 request,

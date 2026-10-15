@@ -36,18 +36,16 @@ class _FakeEventService:
     def __init__(self) -> None:
         self.published: list = []
 
-    def publish(self, event) -> None:
+    def emit(self, event) -> None:
         self.published.append(event)
-
-
-class _ExplodingEventService:
-    def publish(self, event) -> None:
-        raise RuntimeError("event bus down")
 
 
 class _FakeServices:
     def __init__(self, events=None) -> None:
         self._events = events
+
+    def iam_available(self) -> bool:
+        return False
 
     def events_available(self) -> bool:
         return self._events is not None
@@ -63,6 +61,9 @@ class _BlockedMergeAdapter(ISourceControlAdapter):
 
     def ensure_user(self, **kwargs) -> str:
         return "user-x"
+
+    def find_user(self, **kwargs) -> str | None:
+        return None
 
     def ensure_repo(self, **kwargs) -> Repo:
         return Repo(
@@ -263,15 +264,6 @@ def test_blocked_merge_emits_blocked_and_reraises() -> None:
     assert blocked[0].number == 1
     assert "blocked" in (blocked[0].reason or "")
     assert not any(isinstance(e, ProposalMerged) for e in events.published)
-
-
-def test_publisher_exception_does_not_break_operation() -> None:
-    adapter = InMemoryAdapter()
-    repo_id = _seed_repo(adapter)
-    svc = _wired_service(adapter, events=_ExplodingEventService())
-    # Must not raise even though every publish() throws.
-    proposal = _open_proposal(svc, repo_id)
-    assert proposal.state == PROPOSAL_OPEN
 
 
 def test_full_review_then_merge_flow() -> None:

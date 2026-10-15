@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from urllib.parse import parse_qs
 
 import pytest
 from fastapi import FastAPI
@@ -14,12 +15,25 @@ from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary import (
     coding_environment__primary_adapter__FastAPI as ce_api,
 )
+from naas_abi_core.engine.call_context import (
+    CallContext,
+    as_service_account,
+    service_account,
+    use_call_context,
+    user,
+)
 from naas_abi_core.services.coding_environment.adapters.secondary.InMemoryAdapter import (
     InMemoryAdapter,
 )
 from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
+from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
+from naas_abi_core.services.iam.tests.authorization_contract import (
+    contract_iam,
+    wire,
+)
+from naas_abi_core.services.iam.tests.iam_harness import IAMHarness, statement
 from naas_abi_core.services.source_control.adapters.secondary.InMemoryAdapter import (
     InMemoryAdapter as SourceControlInMemoryAdapter,
 )
@@ -77,25 +91,52 @@ class _FakeSession:
         return None
 
 
-def _client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+class _AsUser:
+    """Each request runs as ``api`` on behalf of the signed-in user, in its
+    workspace, as Nexus's identity middleware sets it."""
+
+    def __init__(self, app, user_id: str = "user-1") -> None:
+        self.app, self.user_id = app, user_id
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        query = parse_qs(scope.get("query_string", b"").decode())
+        context = CallContext(
+            principal=service_account("api"),
+            on_behalf_of=user(self.user_id),
+            workspace_id=(query.get("workspace_id") or [None])[0],
+        )
+        with use_call_context(context):
+            await self.app(scope, receive, send)
+
+
+def _client(monkeypatch: pytest.MonkeyPatch, role: str = "owner") -> TestClient:
     """A TestClient with the router mounted against the in-memory fakes.
 
     Auth, workspace access and the DB are bypassed so the test needs no real DB
     or live Coder. An in-memory source_control with the configured monorepo
-    backs the auto-clone orchestration.
+    backs the auto-clone orchestration. The kernel services are wired with an
+    IAM; the caller is ``api`` acting for ``user-1``, a Nexus user, whose
+    workspace role is ``role``.
     """
-    service = CodingEnvironmentService(InMemoryAdapter())
-    source_control = SourceControlService(SourceControlInMemoryAdapter())
+    iam = contract_iam()
+    service = wire(CodingEnvironmentService(InMemoryAdapter()), iam)
+    source_control = wire(SourceControlService(SourceControlInMemoryAdapter()), iam)
     owner, name = ce_api.settings.coding_repo_id.split("/", 1)
-    source_control.ensure_repo(owner=owner, name=name)
-    workspace_row = SimpleNamespace(id="org", coding_default_repo_id=None)
+    with as_service_account("engine"):
+        source_control.ensure_repo(owner=owner, name=name)
+    workspace_row = SimpleNamespace(id="org", coding_default_repo_id=None, organization_id=None)
     app = FastAPI()
     app.include_router(ce_api.router, prefix="/coding-environments")
+    app.add_middleware(_AsUser)
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
         id="user-1", email="user@example.com", name="User One"
     )
     app.dependency_overrides[ce_api._get_coding_environment_service] = lambda: service
     app.dependency_overrides[ce_api._get_source_control_service] = lambda: source_control
+    app.dependency_overrides[ce_api._get_iam] = lambda: iam
 
     # One session shared across requests so the in-memory coding_environments
     # bindings written at provision time survive into the list request.
@@ -107,10 +148,13 @@ def _client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app.dependency_overrides[get_db] = _fake_db
 
     async def _allow(user_id: str, workspace_id: str) -> str:
-        return "owner"
+        return role
 
     monkeypatch.setattr(ce_api, "require_workspace_access", _allow)
-    return TestClient(app)
+    client = TestClient(app)
+    client.iam = iam  # type: ignore[attr-defined]
+    client.source_control = source_control  # type: ignore[attr-defined]
+    return client
 
 
 def test_templates(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -349,7 +393,8 @@ def test_default_repo_get_set(monkeypatch: pytest.MonkeyPatch) -> None:
     resp = client.get("/coding-environments/default-repo", params={"workspace_id": "org"})
     assert resp.status_code == 200, resp.text
     assert resp.json()["repo_id"] == "abi/monorepo"
-    # set a new default (team-shared), then read it back
+    # set a new default (team-shared, one of this workspace's repos), then read it back
+    client.post("/coding-environments/repos", json={"workspace_id": "org", "name": "other"})
     resp = client.put(
         "/coding-environments/default-repo",
         json={"workspace_id": "org", "repo_id": "abi/other"},
@@ -427,3 +472,128 @@ def test_provision_creates_new_branch_from_source(monkeypatch: pytest.MonkeyPatc
     # the new branch was created off main in the monorepo
     resp = client.get("/coding-environments/branches", params={"workspace_id": "org"})
     assert "feature/login" in [b["name"] for b in resp.json()]
+
+
+# --- bug (b): write access only on a repository the caller may write ---------------
+
+
+def _collaborators(client: TestClient, repo_id: str) -> dict:
+    adapter = client.source_control.adapter  # type: ignore[attr-defined]
+    return adapter._repos[repo_id].get("collaborators", {})
+
+
+def _other_workspace_repo(client: TestClient) -> str:
+    """A repository placed in another workspace."""
+    iam = client.iam  # type: ignore[attr-defined]
+    with as_service_account("engine"):
+        client.source_control.ensure_repo(owner="abi", name="theirs")  # type: ignore[attr-defined]
+        iam.put_placement("source_control", "abi%2Ftheirs", "-", "other-ws")
+        iam.put_placement("source_control", "abi%2Ftheirs/*", "-", "other-ws")
+    return "abi/theirs"
+
+
+def test_a_member_gets_no_write_access_to_another_workspaces_repository(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _client(monkeypatch, role="member")
+    theirs = _other_workspace_repo(client)
+    resp = client.post(
+        "/coding-environments/git-token",
+        json={"workspace_id": "org", "repo_id": theirs},
+    )
+    assert resp.status_code == 404, resp.text
+    resp = client.post(
+        "/coding-environments",
+        json={
+            "workspace_id": "org",
+            "name": "dev",
+            "template_id": "tmpl-default",
+            "repo_id": theirs,
+        },
+    )
+    assert resp.status_code == 404, resp.text
+    resp = client.post(
+        "/coding-environments/sandbox/runtime",
+        params={"workspace_id": "org", "repo_id": theirs},
+    )
+    assert resp.status_code == 404, resp.text
+    resp = client.post(
+        "/coding-environments/branches",
+        json={"workspace_id": "org", "name": "x", "repo_id": theirs},
+    )
+    assert resp.status_code == 404, resp.text
+    assert _collaborators(client, theirs) == {}
+    # Nor can it read it, or make it this workspace's default.
+    resp = client.get(
+        "/coding-environments/repo-contents",
+        params={"workspace_id": "org", "repo_id": theirs},
+    )
+    assert resp.status_code == 404
+    resp = client.put(
+        "/coding-environments/default-repo",
+        json={"workspace_id": "org", "repo_id": theirs},
+    )
+    assert resp.status_code in (403, 404)
+
+
+def test_a_member_cannot_take_another_workspaces_repository_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _client(monkeypatch, role="member")
+    _other_workspace_repo(client)
+    resp = client.post("/coding-environments/repos", json={"workspace_id": "org", "name": "theirs"})
+    assert resp.status_code == 409, resp.text
+    assert _collaborators(client, "abi/theirs") == {}
+
+
+def test_a_viewer_gets_no_write_access(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch, role="viewer")
+    resp = client.post(
+        "/coding-environments/git-token",
+        json={"workspace_id": "org", "repo_id": "abi/monorepo"},
+    )
+    assert resp.status_code == 403, resp.text
+    assert _collaborators(client, "abi/monorepo") == {}
+    # A viewer still reads the workspace's repositories.
+    resp = client.get("/coding-environments/repo-contents", params={"workspace_id": "org"})
+    assert resp.status_code == 200
+
+
+def test_a_member_iam_denies_writing_gets_no_write_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _client(monkeypatch, role="member")
+    h = IAMHarness(client.iam)  # type: ignore[attr-defined]
+    record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "user-1")
+    h.grant(
+        record.id,
+        statement(
+            "Deny",
+            ["source_control:UpsertFile"],
+            ["abi:-:-:source_control:repo/abi%2Fmonorepo"],
+        ),
+    )
+    resp = client.post(
+        "/coding-environments/git-token",
+        json={"workspace_id": "org", "repo_id": "abi/monorepo"},
+    )
+    assert resp.status_code == 403, resp.text
+    assert _collaborators(client, "abi/monorepo") == {}
+
+
+def test_a_member_gets_write_access_to_a_repository_of_the_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _client(monkeypatch, role="member")
+    resp = client.post("/coding-environments/repos", json={"workspace_id": "org", "name": "ours"})
+    assert resp.status_code == 200, resp.text
+    assert client.iam.resolve_placement("source_control", "abi%2Fours") == (  # type: ignore[attr-defined]
+        "-",
+        "org",
+    )
+    resp = client.post(
+        "/coding-environments/git-token",
+        json={"workspace_id": "org", "repo_id": "abi/ours"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert _collaborators(client, "abi/ours") == {resp.json()["username"]: "write"}

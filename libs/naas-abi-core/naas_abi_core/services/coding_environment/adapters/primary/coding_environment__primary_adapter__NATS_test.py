@@ -78,6 +78,9 @@ class _StubAdapter(ICodingEnvironmentAdapter):
             raise self.next_error
         return f"user-{external_id}"
 
+    def find_user(self, *, external_id: str) -> str | None:
+        return f"user-{external_id}"
+
     def list_templates(self) -> list[WorkspaceTemplate]:
         if self.next_error is not None:
             raise self.next_error

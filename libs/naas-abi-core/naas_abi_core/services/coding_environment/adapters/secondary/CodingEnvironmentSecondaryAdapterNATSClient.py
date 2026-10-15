@@ -53,6 +53,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     WorkspaceStatus,
     WorkspaceTemplate,
 )
+from naas_abi_core.services.iam.guard import raise_authorization_error
 
 
 def _pb_to_template(pb: coding_environment_pb2.WorkspaceTemplate) -> WorkspaceTemplate:
@@ -102,6 +103,7 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     ``CallError.status`` when the originating exception set one.
     """
     status = error.status if error.HasField("status") else None
+    raise_authorization_error(error.code, error.message)
     if error.code == "PROVISION_FAILED":
         raise ProvisionFailedError(error.message, status=status)
     if error.code == "PROVISION_TIMEOUT":
@@ -164,6 +166,11 @@ class CodingEnvironmentSecondaryAdapterNATSClient(
         if response.HasField("error"):
             _raise_for_error(response.error)
         return response.user_id
+
+    def find_user(self, *, external_id: str) -> str | None:
+        raise NotImplementedError(
+            "Orchestrator users are resolved by the owning service, from the call"
+        )
 
     def list_templates(self) -> list[WorkspaceTemplate]:
         request = coding_environment_pb2.ListTemplatesRequest(context=self._context())

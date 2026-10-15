@@ -194,18 +194,31 @@ class ForgejoAdapter(ISourceControlAdapter):
     # -- Port implementation ------------------------------------------------
 
     def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+        # The principal a forge user belongs to is kept in its login_name (local
+        # source 0, where Forgejo never authenticates with it), so the binding
+        # survives restarts and ``find_user`` can read it back.
         try:
             user = self._request("GET", f"/users/{username}")
-            return str(user["id"])
         except SourceControlError as exc:
             if exc.status != 404:
                 raise
+        else:
+            bound = str(user.get("login_name") or "")
+            if bound and bound not in (external_id, username):
+                raise AccessDeniedError(
+                    f"Forge user {username} belongs to another principal"
+                )
+            if bound != external_id:
+                self._bind(username, external_id)
+            return str(user["id"])
         created = self._request(
             "POST",
             "/admin/users",
             json={
                 "email": email,
                 "username": username,
+                "login_name": external_id,
+                "source_id": 0,
                 # POST /admin/users requires a password even though the user
                 # authenticates via minted git tokens, not this password.
                 "password": secrets.token_urlsafe(32),
@@ -213,6 +226,21 @@ class ForgejoAdapter(ISourceControlAdapter):
             },
         )
         return str(created["id"])
+
+    def _bind(self, username: str, external_id: str, **fields: Any) -> None:
+        self._request(
+            "PATCH",
+            f"/admin/users/{username}",
+            json={"login_name": external_id, "source_id": 0, **fields},
+        )
+
+    def find_user(self, *, external_id: str) -> str | None:
+        found = self._request(
+            "GET",
+            f"/admin/users?source_id=0&login_name={quote(external_id, safe='')}",
+        )
+        users = found if isinstance(found, list) else []
+        return str(users[0]["login"]) if users else None
 
     def ensure_repo(
         self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
@@ -768,22 +796,19 @@ class ForgejoAdapter(ISourceControlAdapter):
             )
         return MergeResult(merged=True, sha=None, message=None)
 
-    def mint_git_token(self, *, user_id: str) -> str:
+    def mint_git_token(self, *, user_id: str, external_id: str | None = None) -> str:
         # ``user_id`` is the forge USERNAME. Forgejo/Gitea's token endpoint
         # requires BASIC auth as the user and rejects admin-token + Sudo
         # ("auth required"). So the admin resets a throwaway password, then we
         # basic-auth as the user to mint a scoped token (the password is never
-        # persisted or returned). Token names must be unique per user.
+        # persisted or returned). Token names must be unique per user. The
+        # PATCH keeps the user's binding to its principal (login_name).
         password = secrets.token_urlsafe(24)
-        self._request(
-            "PATCH",
-            f"/admin/users/{user_id}",
-            json={
-                "login_name": user_id,
-                "source_id": 0,
-                "password": password,
-                "must_change_password": False,
-            },
+        self._bind(
+            user_id,
+            external_id or user_id,
+            password=password,
+            must_change_password=False,
         )
         token = self._request(
             "POST",

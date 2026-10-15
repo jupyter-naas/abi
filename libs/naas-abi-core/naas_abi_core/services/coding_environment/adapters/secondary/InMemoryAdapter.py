@@ -26,6 +26,7 @@ class InMemoryAdapter(ICodingEnvironmentAdapter):
 
     def __init__(self, *, polls_until_ready: int = 0) -> None:
         self._users: dict[str, str] = {}  # username -> user id
+        self._principals: dict[str, str] = {}  # external id -> user id
         self._workspaces: dict[str, dict] = {}  # workspace id -> record
         self._counter = 0
         self._polls_until_ready = polls_until_ready
@@ -37,7 +38,11 @@ class InMemoryAdapter(ICodingEnvironmentAdapter):
     def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
         if username not in self._users:
             self._users[username] = self._next_id("user")
+        self._principals[external_id] = self._users[username]
         return self._users[username]
+
+    def find_user(self, *, external_id: str) -> str | None:
+        return self._principals.get(external_id)
 
     def list_templates(self) -> list[WorkspaceTemplate]:
         return [

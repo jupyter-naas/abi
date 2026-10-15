@@ -43,6 +43,9 @@ from naas_abi.apps.nexus.apps.api.app.core.config import (
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import create_access_token
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
+    ensure_shared_repo,
+)
 from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter import (
     _sanitize_coder_username,
 )
@@ -256,7 +259,7 @@ def _ensure_coding_repo(sc: SourceControlService) -> str:
     if not sep or not owner or not name or "/" in name:
         raise HTTPException(status_code=503, detail=_FORGEJO_NOT_CONFIGURED)
     try:
-        sc.ensure_repo(owner=owner, name=name)
+        ensure_shared_repo(sc, owner=owner, name=name)
     except SourceControlError as exc:
         raise _source_control_http_error(exc) from exc
     except (OSError, TimeoutError) as exc:
@@ -1289,7 +1292,7 @@ def _git_clone_url(
     """
     owner, _, name = repo_id.partition("/")
     try:
-        repo = sc.ensure_repo(owner=owner, name=name)
+        repo = ensure_shared_repo(sc, owner=owner, name=name)
         clone_url = str(getattr(repo, "clone_url", "") or "").strip()
     except Exception:
         clone_url = ""

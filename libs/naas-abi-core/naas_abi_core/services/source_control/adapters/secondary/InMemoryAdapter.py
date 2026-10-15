@@ -8,6 +8,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     REVIEW_APPROVED,
     REVIEW_CHANGES_REQUESTED,
     REVIEW_COMMENT,
+    AccessDeniedError,
     Branch,
     BranchNameConflictError,
     BranchNotFoundError,
@@ -50,6 +51,8 @@ class InMemoryAdapter(ISourceControlAdapter):
 
     def __init__(self) -> None:
         self._users: dict[str, str] = {}  # username -> user id
+        self._owners: dict[str, str] = {}  # username -> external id
+        self._forge_users: dict[str, str] = {}  # external id -> username
         self._repos: dict[str, dict] = {}  # repo_id -> record
         self._counter = 0
 
@@ -72,9 +75,19 @@ class InMemoryAdapter(ISourceControlAdapter):
     # -- Port implementation ------------------------------------------------
 
     def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+        bound = self._owners.get(username)
+        if bound is not None and bound != external_id:
+            raise AccessDeniedError(
+                f"Forge user {username} belongs to another principal"
+            )
         if username not in self._users:
             self._users[username] = self._next_id("user")
+        self._owners[username] = external_id
+        self._forge_users[external_id] = username
         return self._users[username]
+
+    def find_user(self, *, external_id: str) -> str | None:
+        return self._forge_users.get(external_id)
 
     def ensure_repo(
         self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
@@ -460,5 +473,5 @@ class InMemoryAdapter(ISourceControlAdapter):
         record["merge_sha"] = sha
         return MergeResult(merged=True, sha=sha, message="merged")
 
-    def mint_git_token(self, *, user_id: str) -> str:
+    def mint_git_token(self, *, user_id: str, external_id: str | None = None) -> str:
         return self._next_id("git-token")

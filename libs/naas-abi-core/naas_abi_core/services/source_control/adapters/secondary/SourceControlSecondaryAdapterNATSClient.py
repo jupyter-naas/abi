@@ -26,6 +26,7 @@ from collections.abc import Sequence
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.source_control.v1 import source_control_pb2
+from naas_abi_core.services.iam.guard import raise_authorization_error
 from naas_abi_core.services.source_control.adapters.source_control_nats_contract import (
     AUTH_HEADER,
     SUBJECT_PREFIX,
@@ -211,6 +212,7 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     exception types, not on the wire code.
     """
     status = error.status if error.HasField("status") else None
+    raise_authorization_error(error.code, error.message)
     if error.code == "REPO_NOT_FOUND":
         raise RepoNotFoundError(error.message, status=status)
     if error.code == "BRANCH_NOT_FOUND":
@@ -271,6 +273,11 @@ class SourceControlSecondaryAdapterNATSClient(NatsRPCClient, ISourceControlAdapt
         if response.HasField("error"):
             _raise_for_error(response.error)
         return response.user_id
+
+    def find_user(self, *, external_id: str) -> str | None:
+        raise NotImplementedError(
+            "Forge users are resolved by the owning service, from the call's user"
+        )
 
     def ensure_repo(
         self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
@@ -711,7 +718,11 @@ class SourceControlSecondaryAdapterNATSClient(NatsRPCClient, ISourceControlAdapt
             _raise_for_error(response.error)
         return [_pb_to_workflow_run(r) for r in response.workflow_runs.workflow_runs]
 
-    def mint_git_token(self, *, user_id: str) -> str:
+    def mint_git_token(
+        self, *, user_id: str = "", external_id: str | None = None
+    ) -> str:
+        # The owner mints for the call's user; ``user_id`` is ignored there.
+        del external_id
         request = source_control_pb2.MintGitTokenRequest(
             context=self._context(), user_id=user_id
         )

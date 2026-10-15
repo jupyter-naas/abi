@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from naas_abi_core.services.source_control.SourceControlPorts import (
+    AccessDeniedError,
     Branch,
     BranchNameConflictError,
     BranchNotFoundError,
@@ -115,9 +116,18 @@ class LocalGitAdapter(ISourceControlAdapter):
 
     def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
         del email
-        if username not in self._users:
+        bound = self._users.get(username)
+        if bound is not None and external_id and bound != external_id:
+            raise AccessDeniedError(
+                f"Forge user {username} belongs to another principal"
+            )
+        if bound is None or external_id:
             self._users[username] = external_id or username
         return self._users[username]
+
+    def find_user(self, *, external_id: str) -> str | None:
+        found = [name for name, owner in self._users.items() if owner == external_id]
+        return found[-1] if found else None
 
     def ensure_repo(
         self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
@@ -446,6 +456,6 @@ class LocalGitAdapter(ISourceControlAdapter):
         del repo_id, limit
         self._unsupported("list_workflow_runs")
 
-    def mint_git_token(self, *, user_id: str) -> str:
-        del user_id
+    def mint_git_token(self, *, user_id: str, external_id: str | None = None) -> str:
+        del user_id, external_id
         return "local"

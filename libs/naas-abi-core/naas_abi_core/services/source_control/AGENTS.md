@@ -26,8 +26,42 @@ removes a repository irreversibly (RepoNotFoundError when missing; Forgejo
 
 ## Service API
 
-`SourceControlService(adapter)` delegates port operations and publishes domain events.
+`SourceControlService(adapter)` authorizes each operation (below), delegates to the port and publishes domain events.
 See its public methods for orchestration beyond the adapter contract.
+
+## Authorization
+
+Every operation is checked inside `SourceControlService` (`iam_catalog.py`,
+RFC §6.4 "source_control") once the service is wired with IAM, so in-process
+and NATS callers are checked alike. A NATS facade is not wired and checks
+nothing itself: the owner it calls does.
+
+- **Resources.** `repo/<owner>%2F<name>` is a placed container (the service's id,
+  never a Nexus value); its branches `branch/<repo>/<name>` and proposals
+  `proposal/<repo>/<number>` take its placement. `forge_user/<principal id>` is
+  personal.
+- **The principal is the call's**, never a request field: the call's user, or the
+  actor when the call is on behalf of no one. `ensure_user` binds the forge user to
+  it (`ISourceControlAdapter.find_user`, persisted by Forgejo in the user's local
+  `login_name`); a username bound to another principal is refused
+  (`AccessDeniedError`). `mint_git_token` mints for that forge user only:
+  `user_id` and `external_id` in requests are ignored. Every user holds
+  `EnsureUser` and `MintGitToken` on their own forge user (`builtin.self`).
+- **`ensure_repo`** applies the create rule of RFC §4.4: placed in the call's target
+  workspace (exact id and `<id>/*`), on the platform without one. A repository that
+  exists with no placement predates IAM and is recorded on the platform, so no
+  workspace can claim it. TRANSITIONAL (#65): a target workspace IAM has no scope
+  for places the repository on the platform. `delete_repo` drops its placements.
+- **`add_collaborator` is `AddCollaborator`, an admin action.** Nexus grants a member
+  write on a workspace repository after its own check, as `api`
+  (`apps/nexus/.../coding_environment/repo_access.py`).
+- Lists (`list_repos`, `list_branches`, `list_proposals`) keep the items the caller
+  may list; branch and proposal lists first need the repository to be visible.
+- Wire codes `PERMISSION_DENIED` and `NOT_FOUND`; an invisible repository, branch
+  or proposal is `REPO_NOT_FOUND`, `BRANCH_NOT_FOUND`, `PROPOSAL_NOT_FOUND`.
+- Audit events go through `EventService.emit`.
+- Tests: `tests/source_control_authorization_test.py` (the `AuthorizationContract`
+  for `GetFile` and `AddCollaborator`, forge-user binding, placement, lists).
 
 ## Adapters
 

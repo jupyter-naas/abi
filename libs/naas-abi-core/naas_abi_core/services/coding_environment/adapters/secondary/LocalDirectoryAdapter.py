@@ -270,6 +270,10 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
             self._users[external_id] = external_id
         return self._users[external_id]
 
+    def find_user(self, *, external_id: str) -> str | None:
+        # A local user is the principal itself.
+        return external_id
+
     def list_templates(self) -> list[WorkspaceTemplate]:
         return [
             WorkspaceTemplate(

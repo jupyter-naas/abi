@@ -132,6 +132,9 @@ class _StubAdapter(ISourceControlAdapter):
     def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
         return self._next("user")
 
+    def find_user(self, *, external_id: str) -> str | None:
+        return None
+
     def ensure_repo(
         self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
     ) -> Repo:
@@ -383,7 +386,7 @@ class _StubAdapter(ISourceControlAdapter):
             )
         ][:limit]
 
-    def mint_git_token(self, *, user_id: str) -> str:
+    def mint_git_token(self, *, user_id: str, external_id: str | None = None) -> str:
         return self._next("git-token")
 
 
@@ -957,7 +960,9 @@ def test_merge_blocked_maps_to_call_error_with_status():
 
 def test_access_denied_maps_to_call_error_with_status():
     class _Adapter(_StubAdapter):
-        def mint_git_token(self, *, user_id: str) -> str:
+        def mint_git_token(
+            self, *, user_id: str, external_id: str | None = None
+        ) -> str:
             raise AccessDeniedError("forbidden", status=403)
 
     adapter = SourceControlPrimaryAdapterNATS(_Adapter(), SECRET)

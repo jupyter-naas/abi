@@ -249,12 +249,12 @@ class ServiceGuard:
                 name, self.service, canonical, NONE, NONE, False, False, iam
             )
         org = workspace = NONE
-        if target is not None:
-            registered = iam.workspace_org(target)
-            if registered is None:
-                # A workspace IAM does not know: nothing can be created in it.
-                raise _not_found(not_found, name=None)
+        registered = iam.workspace_org(target) if target is not None else None
+        if registered is not None:
             org, workspace = registered, target
+        # TRANSITIONAL (#65 registers Nexus's orgs and workspaces with
+        # iam:PutScope): a target workspace IAM has no scope for places the new
+        # resource on the platform, where no workspace role reaches it.
         name = resource_name(
             self.service,
             type,

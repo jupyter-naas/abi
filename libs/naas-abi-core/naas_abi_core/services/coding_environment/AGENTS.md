@@ -26,8 +26,40 @@ them (`""`/`None` otherwise); keep filling them in new adapters.
 
 ## Service API
 
-`CodingEnvironmentService(adapter)` delegates port operations and publishes domain events.
+`CodingEnvironmentService(adapter)` authorizes each operation (below), delegates to the port and publishes domain events.
 See its public methods for orchestration beyond the adapter contract.
+
+## Authorization
+
+Every operation is checked inside `CodingEnvironmentService` (`iam_catalog.py`,
+RFC §6.4 "coding_environment") once the service is wired with IAM, so in-process
+and NATS callers are checked alike. A NATS facade is not wired and checks
+nothing itself: the owner it calls does.
+
+- **Resources.** `environment/<owner principal id>/<environment id>` is personal,
+  placed in the call's target workspace when provisioned; `template/<id>` and
+  `coder_user/<principal id>` are platform-level.
+- **The principal is the call's**, never a request field: the call's user, or the
+  actor when the call is on behalf of no one. `user_id` and `external_id` in
+  requests are ignored: `ensure_user` binds the orchestrator user to the principal
+  (`ICodingEnvironmentAdapter.find_user`; local adapters use the principal itself,
+  Coder keeps the binding for the process, re-made by every `ensure_user`), and
+  `provision`, `list_environments` and `get_access` act for that user.
+- **The owner of an environment** comes from the orchestrator's records: the
+  environments it lists for the owner's orchestrator user (cached per process). An
+  environment whose owner the service cannot tell is named with owner `-`, which
+  only grants on every environment reach.
+- `Provision` is checked on `environment/<principal>/-` as placed (RFC §4.4); the new
+  environment is then placed in the target workspace. TRANSITIONAL (#65): a target
+  workspace IAM has no scope for leaves it on the platform.
+- `list_environments` keeps the caller's own; `list_all_environments` needs the
+  admin `ListAllEnvironments`. `get_runtime_binding` and `get_harness_binding`
+  return a credential, so they need `GetAccess` (None when denied).
+- Wire codes `PERMISSION_DENIED` and `NOT_FOUND`; an invisible environment is
+  `WORKSPACE_NOT_FOUND`.
+- Audit events go through `EventService.emit`.
+- Tests: `tests/coding_environment_authorization_test.py` (the
+  `AuthorizationContract` for `GetStatus` and `Provision`, ownership, placement).
 
 ## Adapters
 

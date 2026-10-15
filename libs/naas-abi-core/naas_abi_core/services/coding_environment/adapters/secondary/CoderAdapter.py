@@ -63,6 +63,7 @@ class CoderAdapter(ICodingEnvironmentAdapter):
         self._token_lifetime_seconds = default_token_lifetime_seconds
         self._workspace_autostop_ms = workspace_autostop_ms
         self._timeout = timeout
+        self._principals: dict[str, str] = {}  # external id -> Coder user id
         self._session = session if session is not None else _default_session()
         self._org_id: str | None = None
 
@@ -142,7 +143,7 @@ class CoderAdapter(ICodingEnvironmentAdapter):
         )
         try:
             user = self._request("GET", f"/users/{coder_username}")
-            return self._activate_if_needed(user)
+            return self._remember(external_id, self._activate_if_needed(user))
         except CodingEnvironmentError as exc:
             if exc.status != 404:
                 raise
@@ -159,7 +160,16 @@ class CoderAdapter(ICodingEnvironmentAdapter):
                 "organization_ids": [self._organization_id()],
             },
         )
-        return self._activate_if_needed(created)
+        return self._remember(external_id, self._activate_if_needed(created))
+
+    def _remember(self, external_id: str, user_id: str) -> str:
+        # Coder keeps no principal id: the binding lasts for this process, and
+        # callers ensure the user before acting for it (CodingEnvironmentService).
+        self._principals[external_id] = user_id
+        return user_id
+
+    def find_user(self, *, external_id: str) -> str | None:
+        return self._principals.get(external_id)
 
     def _activate_if_needed(self, user: dict) -> str:
         """Ensure the Coder user is active and return its id.

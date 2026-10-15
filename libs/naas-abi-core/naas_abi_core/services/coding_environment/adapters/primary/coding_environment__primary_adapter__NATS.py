@@ -62,6 +62,11 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
 from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
+from naas_abi_core.services.iam.guard import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from nats.micro.request import Request
 
 __all__ = [
@@ -287,6 +292,15 @@ class CodingEnvironmentPrimaryAdapterNATS(ServicePrimary):
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
             response = await self._dispatch.call(call, parsed_request, caller)
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
+            )
+            return
         except ProvisionFailedError as exc:
             await self._respond_error(
                 request,

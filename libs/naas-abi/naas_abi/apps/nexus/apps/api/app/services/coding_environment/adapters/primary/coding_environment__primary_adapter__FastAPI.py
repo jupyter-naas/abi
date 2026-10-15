@@ -4,7 +4,9 @@ Per-user browser coding environments (Coder-backed) exposed to Nexus:
 provision / start / stop / delete / status / access, plus template listing.
 
 Scoping: every operation requires membership of the given Nexus ``workspace_id``
-(org) via ``require_workspace_access``. Per-environment ownership binding (so a
+(org) via ``require_workspace_access``. A repository named by a request must
+belong to that workspace, and write access on it is granted only to a member
+IAM lets write it (``repo_access``). Per-environment ownership binding (so a
 member can only act on their own environment ids) lands with the Nexus
 persistence table — see RFC section 9. Listing is scoped to the caller's own
 orchestrator identity (``ensure_user`` -> owner filter), so it needs no such
@@ -40,6 +42,16 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import create_access_token
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
+    AuthorizationUnavailable,
+    RepoNotInWorkspace,
+    RepoWriteDenied,
+    authorize_repo,
+    belongs_to_workspace,
+    grant_write,
+    place_in_workspace,
+    placement_workspace,
+)
 from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter import (
     _sanitize_coder_username,
 )
@@ -59,6 +71,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
 from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
+from naas_abi_core.services.iam.IAMPorts import IIAMService
 from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
     Repo,
@@ -127,6 +140,42 @@ def _get_source_control_service(request: Request) -> SourceControlService | None
         return None
     request.app.state.source_control = service
     return service
+
+
+def _get_iam(request: Request) -> IIAMService | None:
+    """The engine's IAM, or None when no engine is loaded (nothing is granted)."""
+    iam = getattr(request.app.state, "iam", None)
+    if iam is not None:
+        return iam
+    try:
+        from naas_abi import ABIModule  # noqa: PLC0415
+
+        services = ABIModule.get_instance().engine.services
+        iam = services.iam if services.iam_available() else None
+    except Exception:
+        return None
+    request.app.state.iam = iam
+    return iam
+
+
+async def _authorize_repo(
+    iam: IIAMService | None,
+    repo_id: str,
+    workspace_id: str,
+    role: str | None,
+    *,
+    write: bool,
+) -> None:
+    """``repo_access.authorize_repo`` as HTTP: 404 for a repository this
+    workspace does not have, 403 for one it has but the caller may not write."""
+    try:
+        await run_in_threadpool(authorize_repo, iam, repo_id, workspace_id, role, write=write)
+    except RepoNotInWorkspace as exc:
+        raise HTTPException(status_code=404, detail="Repository not found.") from exc
+    except RepoWriteDenied as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except AuthorizationUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 def _forge_username(name: str, email: str) -> str:
@@ -253,8 +302,9 @@ def _prepare_clone(
     username = _forge_username(display_name, email)
     sc.ensure_user(external_id=external_id, email=email, username=username)
     # Per-user push: the user pushes branch-per-workspace changes to a shared
-    # monorepo they don't own, so they need write access.
-    sc.add_collaborator(repo_id=repo_id, username=username, permission="write")
+    # monorepo they don't own, so they need write access. The caller checked
+    # ``_authorize_repo(..., write=True)`` first.
+    grant_write(sc, repo_id, username)
 
     if new_branch:
         existing = {b.name for b in sc.list_branches(repo_id=repo_id)}
@@ -269,7 +319,7 @@ def _prepare_clone(
     if repo and repo.clone_url.startswith("file:"):
         return repo.clone_url, checkout
 
-    token = sc.mint_git_token(user_id=username)
+    token = sc.mint_git_token()
     creds = f"{quote(username, safe='')}:{quote(token, safe='')}"
     repo_url = (
         f"{settings.coding_git_clone_scheme}://{creds}"
@@ -437,17 +487,22 @@ async def list_repos(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(_get_iam),
 ) -> list[RepoListItem]:
-    """Repositories the user can work in (for the repo selector). The configured
-    default is surfaced first."""
+    """Repositories the user can work in (for the repo selector): this
+    workspace's and the shared deployment repository, surfaced first."""
     await require_workspace_access(current_user.id, workspace_id)
-    if source_control is None:
+    if source_control is None or iam is None:
         return []
     try:
         repos = await run_in_threadpool(source_control.list_repos)
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    items = [_to_repo_item(r) for r in repos]
+    items = [
+        _to_repo_item(r)
+        for r in repos
+        if await run_in_threadpool(belongs_to_workspace, iam, f"{r.owner}/{r.name}", workspace_id)
+    ]
     default = settings.coding_repo_id
     items.sort(key=lambda i: (i.repo_id != default, i.repo_id.lower()))
     return items
@@ -458,11 +513,31 @@ async def create_repo(
     body: RepoCreateRequest,
     current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(_get_iam),
+    db: AsyncSession = Depends(get_db),
 ) -> RepoListItem:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    """Create a repository for this workspace, placed in it, and make the
+    creator a writer."""
+    role = await require_workspace_access(current_user.id, body.workspace_id)
     if source_control is None or not _repo_owner():
         raise HTTPException(status_code=503, detail="No git backend configured.")
+    if iam is None:
+        raise HTTPException(status_code=503, detail="Authorization is unavailable.")
+    if role not in ("owner", "admin", "member"):
+        raise HTTPException(status_code=403, detail="Viewers cannot create repositories.")
     username = _forge_username(current_user.name or "", str(current_user.email))
+    repo_id = f"{_repo_owner()}/{body.name}"
+    placed = await run_in_threadpool(placement_workspace, iam, repo_id)
+    if placed is not None and placed.workspace != body.workspace_id:
+        raise HTTPException(status_code=409, detail="That repository name is taken.")
+    if placed is None:
+        existing = await run_in_threadpool(source_control.list_repos)
+        if any(f"{r.owner}/{r.name}" == repo_id for r in existing):
+            # It predates IAM, or belongs to no workspace: never claimed here.
+            raise HTTPException(status_code=409, detail="That repository name is taken.")
+    row = (
+        await db.execute(select(WorkspaceModel).where(WorkspaceModel.id == body.workspace_id))
+    ).scalar_one_or_none()
     try:
         # auto_init=False -> a truly empty repo, so an existing local history can
         # be pushed to it (the "create new repo, then push" onboarding flow).
@@ -473,7 +548,15 @@ async def create_repo(
             private=body.private,
             auto_init=body.auto_init,
         )
-        repo_id = f"{repo.owner}/{repo.name}"
+        if placed is None:
+            await run_in_threadpool(
+                place_in_workspace,
+                iam,
+                repo_id,
+                body.workspace_id,
+                getattr(row, "organization_id", None),
+            )
+        await _authorize_repo(iam, repo_id, body.workspace_id, role, write=True)
         # Repos are owned by the platform account, so grant the creator write
         # access — otherwise their push is rejected as "repository not found".
         await run_in_threadpool(
@@ -482,12 +565,7 @@ async def create_repo(
             email=str(current_user.email),
             username=username,
         )
-        await run_in_threadpool(
-            source_control.add_collaborator,
-            repo_id=repo_id,
-            username=username,
-            permission="write",
-        )
+        await run_in_threadpool(grant_write, source_control, repo_id, username)
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return _to_repo_item(repo)
@@ -501,12 +579,14 @@ async def repo_contents(
     ref: str | None = None,
     current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(_get_iam),
 ) -> list[ContentEntryResponse]:
     """Directory listing at ``path`` on ``ref`` — powers the repo file browser."""
-    await require_workspace_access(current_user.id, workspace_id)
+    role = await require_workspace_access(current_user.id, workspace_id)
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         return []
+    await _authorize_repo(iam, repo, workspace_id, role, write=False)
     try:
         entries = await run_in_threadpool(
             source_control.list_contents, repo_id=repo, path=path, ref=ref
@@ -527,11 +607,13 @@ async def repo_file(
     ref: str | None = None,
     current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(_get_iam),
 ) -> FileContentResponse:
-    await require_workspace_access(current_user.id, workspace_id)
+    role = await require_workspace_access(current_user.id, workspace_id)
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
+    await _authorize_repo(iam, repo, workspace_id, role, write=False)
     try:
         f = await run_in_threadpool(
             source_control.get_file, repo_id=repo, path=path, ref=ref
@@ -551,11 +633,13 @@ async def repo_commits(
     limit: int = 20,
     current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(_get_iam),
 ) -> list[CommitResponse]:
-    await require_workspace_access(current_user.id, workspace_id)
+    role = await require_workspace_access(current_user.id, workspace_id)
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         return []
+    await _authorize_repo(iam, repo, workspace_id, role, write=False)
     try:
         commits = await run_in_threadpool(
             source_control.list_commits, repo_id=repo, ref=ref, limit=limit
@@ -573,14 +657,18 @@ async def generate_git_token(
     body: GitTokenRequest,
     current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(_get_iam),
 ) -> GitTokenResponse:
     """Mint a personal git access token for the caller (shown once) and grant
-    write access on ``repo_id`` so they can push to it from outside."""
-    await require_workspace_access(current_user.id, body.workspace_id)
+    write access on ``repo_id``, when the caller may write it, so they can push
+    to it from outside."""
+    role = await require_workspace_access(current_user.id, body.workspace_id)
     if source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
     username = _forge_username(current_user.name or "", str(current_user.email))
     repo_id = _default_repo_id(body.repo_id)
+    if repo_id:
+        await _authorize_repo(iam, repo_id, body.workspace_id, role, write=True)
     try:
         await run_in_threadpool(
             source_control.ensure_user,
@@ -589,13 +677,9 @@ async def generate_git_token(
             username=username,
         )
         if repo_id:
-            await run_in_threadpool(
-                source_control.add_collaborator,
-                repo_id=repo_id,
-                username=username,
-                permission="write",
-            )
-        token = await run_in_threadpool(source_control.mint_git_token, user_id=username)
+            await run_in_threadpool(grant_write, source_control, repo_id, username)
+        # The token is the caller's: the service mints for the call's user.
+        token = await run_in_threadpool(source_control.mint_git_token)
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return GitTokenResponse(username=username, token=token)
@@ -621,12 +705,14 @@ async def set_default_repo(
     body: DefaultRepoRequest,
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
+    iam: IIAMService | None = Depends(_get_iam),
 ) -> DefaultRepoResponse:
     role = await require_workspace_access(current_user.id, body.workspace_id)
     if role not in ("owner", "admin"):
         raise HTTPException(
             status_code=403, detail="Only a workspace owner/admin can set the default repo."
         )
+    await _authorize_repo(iam, body.repo_id, body.workspace_id, role, write=False)
     row = (
         await db.execute(
             select(WorkspaceModel).where(WorkspaceModel.id == body.workspace_id)
@@ -645,13 +731,15 @@ async def list_repo_branches(
     repo_id: str | None = None,
     current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(_get_iam),
 ) -> list[BranchResponse]:
     """Branches of a repo (defaults to the configured one), for picking a source
     branch. Empty when no repo / git backend is configured."""
-    await require_workspace_access(current_user.id, workspace_id)
+    role = await require_workspace_access(current_user.id, workspace_id)
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         return []
+    await _authorize_repo(iam, repo, workspace_id, role, write=False)
     try:
         branches = await run_in_threadpool(source_control.list_branches, repo_id=repo)
     except SourceControlError as exc:
@@ -664,11 +752,13 @@ async def create_repo_branch(
     body: BranchCreateRequest,
     current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(_get_iam),
 ) -> BranchResponse:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    role = await require_workspace_access(current_user.id, body.workspace_id)
     repo = _default_repo_id(body.repo_id)
     if not repo or source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
+    await _authorize_repo(iam, repo, body.workspace_id, role, write=True)
     try:
         branch = await run_in_threadpool(
             source_control.create_branch,
@@ -690,12 +780,14 @@ async def delete_repo_branch(
     repo_id: str | None = None,
     current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(_get_iam),
 ) -> dict[str, bool]:
     """Delete a branch. ``name`` may contain slashes (url-encoded)."""
-    await require_workspace_access(current_user.id, workspace_id)
+    role = await require_workspace_access(current_user.id, workspace_id)
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
+    await _authorize_repo(iam, repo, workspace_id, role, write=True)
     try:
         await run_in_threadpool(
             source_control.delete_branch, repo_id=repo, name=name
@@ -768,11 +860,15 @@ async def provision_environment(
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
     db: AsyncSession = Depends(get_db),
+    iam: IIAMService | None = Depends(_get_iam),
 ) -> EnvironmentResponse:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    role = await require_workspace_access(current_user.id, body.workspace_id)
     params = dict(body.params or {})
     checkout_branch = body.branch or body.source_branch
     repo_id = _default_repo_id(body.repo_id)
+    if repo_id and source_control is not None:
+        # Cloning grants the caller write on the repository: only when they may.
+        await _authorize_repo(iam, repo_id, body.workspace_id, role, write=True)
 
     # Auto-clone the chosen repo on the chosen branch (when a repo + git backend
     # are configured; otherwise the workspace just opens an empty folder).
@@ -980,9 +1076,12 @@ async def ensure_sandbox_runtime(
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
     db: AsyncSession = Depends(get_db),
+    iam: IIAMService | None = Depends(_get_iam),
 ) -> SandboxRuntimeResponse:
     """Ensure a local sandbox + sidecar for the open repo (Slides-parity)."""
-    await require_workspace_access(current_user.id, workspace_id)
+    role = await require_workspace_access(current_user.id, workspace_id)
+    if source_control is not None:
+        await _authorize_repo(iam, repo_id, workspace_id, role, write=True)
     label = _code_runtime_label(workspace_id=workspace_id, repo_id=repo_id, branch=branch)
     name = _sandbox_workspace_name(
         workspace_id=workspace_id, repo_id=repo_id, branch=branch

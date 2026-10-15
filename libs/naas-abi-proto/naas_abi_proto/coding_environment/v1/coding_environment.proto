@@ -75,6 +75,8 @@ message WorkspaceAccess {
 
 message EnsureUserRequest {
   abi.common.v1.CallContext context = 1;
+  // Deprecated, ignored by the server: the principal is the call's user
+  // (or the calling service account), from the verified credentials.
   string external_id = 2;
   string email = 3;
   string username = 4;
@@ -101,6 +103,8 @@ message WorkspaceTemplates {
 
 message ProvisionRequest {
   abi.common.v1.CallContext context = 1;
+  // Deprecated, ignored by the server: the principal is the call's user
+  // (or the calling service account), from the verified credentials.
   string user_id = 2;
   string template_id = 3;
   string name = 4;
@@ -147,6 +151,8 @@ message DeleteResponse {
 
 message ListEnvironmentsRequest {
   abi.common.v1.CallContext context = 1;
+  // Deprecated, ignored by the server: the principal is the call's user
+  // (or the calling service account), from the verified credentials.
   string user_id = 2;
 }
 message ListEnvironmentsResponse {
@@ -198,6 +204,8 @@ message LogLines {
 message GetAccessRequest {
   abi.common.v1.CallContext context = 1;
   string workspace_id = 2;
+  // Deprecated, ignored by the server: the principal is the call's user
+  // (or the calling service account), from the verified credentials.
   string user_id = 3;
   string app_slug = 4;
 }

@@ -102,7 +102,14 @@ class ICodingEnvironmentAdapter(ABC):
 
     @abstractmethod
     def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
-        """Idempotently ensure an orchestrator user exists; return its id."""
+        """Idempotently ensure an orchestrator user exists for the principal
+        ``external_id``; return its id."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def find_user(self, *, external_id: str) -> str | None:
+        """The orchestrator user id ``ensure_user`` returned for ``external_id``,
+        or None when it is not known (yet)."""
         raise NotImplementedError()
 
     @abstractmethod

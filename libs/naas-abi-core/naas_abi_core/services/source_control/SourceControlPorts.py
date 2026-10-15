@@ -231,7 +231,17 @@ class ISourceControlAdapter(ABC):
 
     @abstractmethod
     def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
-        """Idempotently ensure a forge user exists; return its id."""
+        """Idempotently ensure a forge user exists, bound to ``external_id`` (the
+        principal it belongs to); return its id.
+
+        A forge username belongs to one principal: binding it to another raises
+        ``AccessDeniedError``.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def find_user(self, *, external_id: str) -> str | None:
+        """The forge username ``ensure_user`` bound to ``external_id``, or None."""
         raise NotImplementedError()
 
     @abstractmethod
@@ -433,6 +443,7 @@ class ISourceControlAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def mint_git_token(self, *, user_id: str) -> str:
-        """Mint a scoped git access token for ``user_id``."""
+    def mint_git_token(self, *, user_id: str, external_id: str | None = None) -> str:
+        """Mint a scoped git access token for the forge user ``user_id`` (a
+        username), bound to the principal ``external_id``."""
         raise NotImplementedError()

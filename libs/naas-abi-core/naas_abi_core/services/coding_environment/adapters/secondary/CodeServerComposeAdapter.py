@@ -36,6 +36,9 @@ class CodeServerComposeAdapter(ICodingEnvironmentAdapter):
         # No per-user identity in the shared-container model; echo the caller's id.
         return external_id
 
+    def find_user(self, *, external_id: str) -> str | None:
+        return external_id
+
     def list_templates(self) -> list[WorkspaceTemplate]:
         return [
             WorkspaceTemplate(
