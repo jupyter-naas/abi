@@ -40,6 +40,11 @@ const nextConfig = {
     ];
   },
   images: {
+    // Security: no Image Optimization API (/_next/image). Next < 15.5.24 has an
+    // unauthenticated RCE there when AVIF files are processed (GHSA-2xp9-vwfh-vxw4),
+    // and every <Image> in the app already passes `unoptimized`, so nothing uses it.
+    // Remove once Next.js is upgraded to >= 15.5.24.
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'https',
