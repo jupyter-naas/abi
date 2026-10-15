@@ -91,9 +91,9 @@ class PermissionDeniedError(IAMError, PermissionError):
 class ResourceNotFoundError(IAMNotFoundError):
     """The generic not-found of §5.4, for a service with no not-found of its own."""
 
-    def __init__(self, resource: str) -> None:
+    def __init__(self, resource: str = "", *, message: str | None = None) -> None:
         self.resource = resource
-        super().__init__(f"{resource} not found")
+        super().__init__(message or f"{resource} not found")
 
 
 # ---------------------------------------------------------------------------
@@ -654,7 +654,25 @@ class IIAMService(ABC):
     def list_placements(self, service: str | None = None) -> list[Placement]: ...
 
     @abstractmethod
+    def placement_of(self, service: str, canonical_id: str) -> Placement | None:
+        """The placement covering a resource (exact key, else the longest
+        prefix), or None when none does: a new top-level name or container.
+
+        Read by the service owning the resource, in process, to apply RFC §4.4;
+        it is not an authorization decision and needs no action.
+        """
+
+    def resolve_placement(self, service: str, canonical_id: str) -> tuple[str, str]:
+        """``(org, workspace)`` of a resource; the platform when nothing covers it."""
+        placement = self.placement_of(service, canonical_id)
+        return (placement.org, placement.workspace) if placement else ("-", "-")
+
+    @abstractmethod
     def put_scope(self, org: str, workspace: str = "-") -> ScopeRecord: ...
+
+    @abstractmethod
+    def workspace_org(self, workspace: str) -> str | None:
+        """The org a workspace was registered in (``iam:PutScope``), or None."""
 
     @abstractmethod
     def delete_scope(self, org: str, workspace: str = "-") -> bool: ...

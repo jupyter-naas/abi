@@ -49,6 +49,11 @@ from naas_abi_core.services.email.EmailPorts import (
     SentEmailSummary,
 )
 from naas_abi_core.services.email.EmailService import EmailService
+from naas_abi_core.services.iam.guard import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from nats.micro.request import Request
 
 __all__ = [
@@ -213,6 +218,15 @@ class EmailPrimaryAdapterNATS(ServicePrimary):
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
             response = await self._dispatch.call(call, parsed_request, caller)
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
+            )
+            return
         except SentEmailsNotKept as exc:
             await self._respond_error(
                 request, response_cls, "SENT_EMAILS_NOT_KEPT", str(exc), retryable=False

@@ -36,6 +36,7 @@ from naas_abi_core.services.email.EmailPorts import (
     SentEmailsNotKept,
     SentEmailSummary,
 )
+from naas_abi_core.services.iam.guard import raise_authorization_error
 
 
 def _attachment_to_pb(attachment: EmailAttachment) -> email_pb2.EmailAttachment:
@@ -83,10 +84,12 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     """Raise the exception matching ``error.code``.
 
     Must stay exactly symmetric with how ``EmailPrimaryAdapterNATS`` encodes
-    errors: ``SENT_EMAILS_NOT_KEPT`` and ``SENT_EMAIL_NOT_FOUND`` map back to
-    their ``EmailPorts`` exceptions; every other failure the server can report
-    -- including its own catch-all -- falls through to ``RuntimeError``.
+    errors: ``PERMISSION_DENIED`` and ``NOT_FOUND`` map back to IAM's errors,
+    ``SENT_EMAILS_NOT_KEPT`` and ``SENT_EMAIL_NOT_FOUND`` to their
+    ``EmailPorts`` exceptions; every other failure the server can report --
+    including its own catch-all -- falls through to ``RuntimeError``.
     """
+    raise_authorization_error(error.code, error.message)
     if error.code == "SENT_EMAILS_NOT_KEPT":
         raise SentEmailsNotKept(error.message)
     if error.code == "SENT_EMAIL_NOT_FOUND":

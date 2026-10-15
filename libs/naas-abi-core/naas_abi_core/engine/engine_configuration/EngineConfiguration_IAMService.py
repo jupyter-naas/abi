@@ -116,14 +116,18 @@ class IAMServiceConfiguration(BaseModel):
     cache_ttl_seconds: float = Field(default=60.0, gt=0, le=60)
 
     def load(self) -> IAMService:
-        """The service, bootstrapped: the engine's root of trust is in place."""
+        """The service, bootstrapped, with every kernel catalog registered: the
+        engine's root of trust is in place before any service serves."""
         from naas_abi_core.services.iam import IAMFactory
+        from naas_abi_core.services.iam.kernel_catalogs import register_kernel_catalogs
 
-        return IAMFactory.build(
+        service = IAMFactory.build(
             self.store.load(),
             self.authorizer,
             cache_ttl_seconds=self.cache_ttl_seconds,
         )
+        register_kernel_catalogs(service)
+        return service
 
     def local_storage(self) -> str | None:
         return self.store.local_storage()

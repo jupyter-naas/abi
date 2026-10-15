@@ -14,6 +14,9 @@ working before the later subtasks of #44 land.
 * ``builtin.transitional.module`` is what a remote module's service account
   holds until subtask 6 (#60) gives it an approved manifest: its own document
   and dataset namespaces, and the kernel services a module can declare.
+* ``builtin.transitional.user`` is what a Nexus user named by its Nexus id
+  holds until subtask 11 (#65) attaches the roles of its memberships: Nexus
+  still decides what such a user may do, as before IAM.
 """
 
 from __future__ import annotations
@@ -37,6 +40,7 @@ ENGINE = "builtin.engine"
 API = "builtin.api"
 IDP = "builtin.idp"
 TRANSITIONAL_MODULE = "builtin.transitional.module"
+TRANSITIONAL_USER = "builtin.transitional.user"
 
 ROLES = (VIEWER, MEMBER, ADMIN, OWNER)
 ROLE_LEVELS: dict[str, frozenset[Level]] = {
@@ -101,7 +105,9 @@ PLATFORM_TYPES: tuple[_PlatformRow, ...] = (
         self_=("EnsureUser", "MintGitToken"),
     ),
     _PlatformRow(
-        "activity_log", ("actor/${principal.id}",), self_=("Query", "QueryStream")
+        "activity_log",
+        ("actor/${principal.id}",),
+        self_=("Query", "QueryStream", "Record"),
     ),
     _PlatformRow("iam", ("principal/${principal.id}",), self_=("GetPrincipal",)),
     _PlatformRow(
@@ -371,6 +377,37 @@ def transitional_module_policy() -> Policy:
     )
 
 
+def transitional_user_policy() -> Policy:
+    """TRANSITIONAL (#65 attaches role policies from Nexus memberships, #61
+    gives users IAM ids).
+
+    Held implicitly by a user named by a Nexus id rather than an IAM id: on a
+    Nexus call, ``api`` on behalf of that user. Nexus still decides what such a
+    user may do, with its own membership checks, so the user side of the
+    intersection (RFC §5.3) allows every kernel service a module can declare,
+    plus document and dataset. Never ``iam:*``; seals and explicit Denies hold.
+    """
+    return _managed(
+        TRANSITIONAL_USER,
+        "Nexus user (transitional)",
+        "TRANSITIONAL: a Nexus user's side of a Nexus call until subtask 11 of "
+        "#44 attaches the roles of its memberships.",
+        [
+            Statement(
+                effect="Allow",
+                actions=tuple(
+                    f"{s}:*"
+                    for s in sorted(
+                        {*_TRANSITIONAL_MODULE_SERVICES, "dataset", "document"}
+                    )
+                ),
+                resources=("*",),
+                sid="TransitionalNexusUser",
+            )
+        ],
+    )
+
+
 def builtin_policies(registry: CatalogRegistry) -> list[Policy]:
     """Every managed policy, generated from ``registry``."""
     return [
@@ -410,4 +447,5 @@ def builtin_policies(registry: CatalogRegistry) -> list[Policy]:
         _broad(API, "api"),
         idp_policy(),
         transitional_module_policy(),
+        transitional_user_policy(),
     ]

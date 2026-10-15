@@ -121,5 +121,10 @@ def test_platform_and_self_policies_name_registered_actions_only():
 
 def test_transitional_policies_say_so():
     by_id = {p.id: p for p in roles.builtin_policies(registry())}
-    for policy_id in (roles.ENGINE, roles.API, roles.TRANSITIONAL_MODULE):
+    for policy_id in (
+        roles.ENGINE,
+        roles.API,
+        roles.TRANSITIONAL_MODULE,
+        roles.TRANSITIONAL_USER,
+    ):
         assert "TRANSITIONAL" in by_id[policy_id].description

@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     )
 
 from naas_abi_core import logger
+from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.engine.context import (
     get_default_agent_checkpointer,
     set_default_agent_checkpointer,
@@ -102,7 +103,11 @@ class Engine(IEngine):
 
     def load(self, module_names: list[str] | None = None):
         try:
-            self.__load(module_names)
+            # Boot is the engine's own work, for no caller (RFC §10.1): loading
+            # modules resolves models, records events and seeds data, each an
+            # authorized operation. Callers served later bring their own context.
+            with as_service_account("engine"):
+                self.__load(module_names)
         except BaseException:
             # A failed load may already hold the lease and serve the kernel
             # subjects. Give them up, or the process keeps answering calls

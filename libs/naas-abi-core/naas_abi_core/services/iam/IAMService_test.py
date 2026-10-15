@@ -62,6 +62,7 @@ def test_bootstrap_is_idempotent_and_seeds_the_root_of_trust():
         roles.API,
         roles.IDP,
         roles.TRANSITIONAL_MODULE,
+        roles.TRANSITIONAL_USER,
     } <= managed
     assert [c.service for c in store.list_catalogs()] == ["iam"]
 
@@ -160,6 +161,51 @@ def test_legacy_nexus_users_resolve_by_their_nexus_id(h):
     )
     with use_call_context(ctx):
         assert h.iam.authorize(QUERY, graph("a")).allowed
+
+
+def _nexus_call(user_id: str):
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        Principal,
+        use_call_context,
+    )
+
+    return use_call_context(
+        CallContext(
+            principal=Principal(id="api", kind="service_account", name="api"),
+            on_behalf_of=Principal(id=user_id, kind="user"),
+        )
+    )
+
+
+def test_a_nexus_user_holds_the_transitional_kernel_grant(h):
+    """TRANSITIONAL until #65: Nexus decides for a user named by its Nexus id."""
+    with _nexus_call("user-0123456789ab"):
+        assert h.iam.authorize(
+            "model_registry:Chat", "abi:-:-:model_registry:model/m"
+        ).allowed
+        assert h.iam.authorize(QUERY, graph("a")).allowed
+        assert not h.iam.authorize(
+            "iam:ListPrincipals", "abi:-:-:iam:principal/x"
+        ).allowed
+
+
+def test_an_iam_user_holds_no_transitional_grant(h):
+    bob = h.user()
+    assert not h.allowed(
+        "model_registry:Chat",
+        "abi:-:-:model_registry:model/m",
+        actor="api",
+        on_behalf_of=bob,
+    )
+
+
+def test_an_explicit_deny_beats_the_transitional_user_grant(h):
+    record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "user-0123456789ab")
+    h.grant(record.id, statement("Deny", [QUERY], [graph("a")]))
+    with _nexus_call("user-0123456789ab"):
+        assert not h.iam.authorize(QUERY, graph("a")).allowed
+        assert h.iam.authorize(QUERY, graph("b")).allowed
 
 
 def test_deleting_a_principal_keeps_its_id_and_drops_its_grants(h):

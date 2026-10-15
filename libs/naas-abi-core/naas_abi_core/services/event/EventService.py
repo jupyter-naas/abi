@@ -20,7 +20,7 @@ from threading import Thread
 from typing import Any
 
 from naas_abi_core import logger
-from naas_abi_core.engine.call_context import current_call_context
+from naas_abi_core.engine.call_context import as_service_account, current_call_context
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.event import EventCodec, EventFilter
 from naas_abi_core.services.event.EventPort import (
@@ -57,6 +57,19 @@ def _build_subclass_index(root: type = LogProcess) -> dict[str, type]:
 
     walk(root)
     return index
+
+
+def _stamp(event: Any) -> None:
+    """Who and where from the call's context, unless the event says otherwise."""
+    context = current_call_context()
+    served = context.user
+    for field_name, value in (
+        ("actor_user_id", served.id if served is not None else None),
+        ("actor_workspace_id", context.workspace_id),
+        ("triggered_via", context.triggered_via),
+    ):
+        if getattr(event, field_name, None) is None and value is not None:
+            setattr(event, field_name, value)
 
 
 class EventService(ServiceBase, IEventService):
@@ -108,16 +121,7 @@ class EventService(ServiceBase, IEventService):
             event.created_at = created_at
         timestamp = created_at.isoformat()
 
-        # Who/where from the call's context, unless the caller said otherwise.
-        context = current_call_context()
-        served = context.user
-        for field_name, value in (
-            ("actor_user_id", served.id if served is not None else None),
-            ("actor_workspace_id", context.workspace_id),
-            ("triggered_via", context.triggered_via),
-        ):
-            if getattr(event, field_name, None) is None and value is not None:
-                setattr(event, field_name, value)
+        _stamp(event)
 
         payload = EventCodec.serialize(event)
 
@@ -140,6 +144,25 @@ class EventService(ServiceBase, IEventService):
                 logger.warning(f"EventService: bus broadcast failed for {event_id}: {exc}")
 
         return stored
+
+    def emit(self, event: Any) -> StoredEvent | None:
+        """A kernel service's own audit event, for the operation it just served.
+
+        Stamped with the call's user, workspace and trigger as ``publish`` does,
+        then appended as the engine: the caller was authorized for the
+        operation, not for writing the event log. Never raises: the operation is
+        the source of truth, its event is best effort.
+        """
+        if isinstance(event, LogProcess):
+            _stamp(event)
+        try:
+            with as_service_account("engine"):
+                return self.publish(event)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"EventService: failed to emit {type(event).__name__}: {exc}"
+            )
+            return None
 
     # ------------------------------------------------------------------
     # query
@@ -474,6 +497,7 @@ class EventService(ServiceBase, IEventService):
                     # Fast path: evaluate filter against the raw JSON dict
                     # before the (more expensive) Pydantic reconstruction.
                     import json
+
                     if not EventFilter.matches(json.loads(payload), filter):
                         return
                 row = StoredEvent(

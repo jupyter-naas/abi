@@ -218,6 +218,11 @@ class IEventService(ABC):
         """
 
     @abstractmethod
+    def emit(self, event: Any) -> StoredEvent | None:
+        """A kernel service's own audit event: stamped with the call's user,
+        appended as the engine, never raising (None when it could not be kept)."""
+
+    @abstractmethod
     def query(
         self,
         event_class: type | None = None,

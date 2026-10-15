@@ -276,9 +276,21 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
         response = self._request("list_placements", service=service)
         return [codec.placement_from_pb(p) for p in response.placements]
 
+    def placement_of(self, service: str, canonical_id: str) -> Placement | None:
+        raise NotImplementedError(
+            "Placements are resolved by the service owning the resource, on the "
+            "serving engine, never through a NATS facade"
+        )
+
     def put_scope(self, org: str, workspace: str = "-") -> ScopeRecord:
         response = self._request("put_scope", org=org, workspace=workspace)
         return codec.scope_from_pb(response.scope)
+
+    def workspace_org(self, workspace: str) -> str | None:
+        raise NotImplementedError(
+            "Scopes are read by the service owning the resource, on the serving "
+            "engine, never through a NATS facade"
+        )
 
     def delete_scope(self, org: str, workspace: str = "-") -> bool:
         return self._request("delete_scope", org=org, workspace=workspace).deleted

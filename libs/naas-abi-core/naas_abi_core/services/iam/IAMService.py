@@ -284,6 +284,9 @@ class IAMService(IIAMService, PolicySource):
         if principal.kind == "user":
             # builtin.self is held by every user, implicitly.
             statements += self._statements_of(roles.SELF, None, None)
+            if not _PRINCIPAL_ID.match(principal.id):
+                # TRANSITIONAL (#65): a Nexus user named by its Nexus id.
+                statements += self._statements_of(roles.TRANSITIONAL_USER, None, None)
         elif (
             principal.kind == "service_account"
             and record is None
@@ -356,21 +359,21 @@ class IAMService(IIAMService, PolicySource):
     # Placements (RFC §4.4)
     # =========================================================================
 
-    def resolve_placement(self, service: str, canonical_id: str) -> tuple[str, str]:
-        """``(org, workspace)`` of a resource: the exact key, else the longest
-        matching prefix, else the platform."""
+    def placement_of(self, service: str, canonical_id: str) -> Placement | None:
+        """The placement covering a resource: the exact key, else the longest
+        matching prefix, else None (the platform)."""
         best: Placement | None = None
         for placement in self._all_placements():
             if placement.service != service:
                 continue
             if placement.id_key == canonical_id:
-                return placement.org, placement.workspace
+                return placement
             if placement.id_key.endswith("*") and canonical_id.startswith(
                 placement.id_key[:-1]
             ):
                 if best is None or len(placement.id_key) > len(best.id_key):
                     best = placement
-        return (best.org, best.workspace) if best is not None else (NONE, NONE)
+        return best
 
     def _all_placements(self) -> list[Placement]:
         return self._placements.get("all", self.store.list_placements)
