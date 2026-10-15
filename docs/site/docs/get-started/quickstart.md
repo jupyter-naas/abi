@@ -133,15 +133,21 @@ abi chat
 
 ```bash
 # Install Ollama: https://ollama.com/download
-ollama pull qwen3:8b   # or deepseek-r1:8b or gemma3:4b
+ollama pull qwen2.5:3b && ollama pull nomic-embed-text
+uv add "naas-abi-marketplace[ai-ollama]"
 ```
 
-Enable the Ollama module in the project's config (the generated `config.yaml`
-shows how) and set:
+Then, in `config.yaml` (the generated file shows each step in its comments):
+uncomment the `naas_abi_marketplace.ai.ollama` module, and set
 
 ```yaml
 global_config:
   ai_mode: "local"
+
+services:
+  model_registry:
+    default_chat_model: "qwen-2.5-3b"
+    default_embedding_model: "nomic-embed-text"
 ```
 
 ---

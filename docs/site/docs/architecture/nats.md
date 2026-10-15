@@ -111,7 +111,8 @@ sessions, and large reads stream. See [Large payloads](./remote-apps#large-paylo
 
 An engine can use a service that another engine owns: set the service's
 adapter to `nats_rpc` on the engine that does not own it. This exists for every
-kernel service except the model registry. Nothing enforces which engine owns a
+kernel service except the model registry (the engine that owns the models serves
+them) and the bus (JetStream on the broker in NATS mode). Nothing enforces which engine owns a
 service, so keep one owner per service, or owners on the same backend.
 
 ## JetStream
