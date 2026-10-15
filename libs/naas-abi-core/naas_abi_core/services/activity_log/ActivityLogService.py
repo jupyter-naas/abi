@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
-from naas_abi_core.engine.call_context import current_call_context
+from naas_abi_core.engine.call_context import call_subject
 from naas_abi_core.services.activity_log.ActivityLogPort import (
     ActivityEvent,
     ActivityLogQuery,
@@ -20,15 +20,8 @@ if TYPE_CHECKING:
 
 
 def call_actor() -> str | None:
-    """The actor of the current call: its user, else the calling service
-    account; None for an anonymous call (RFC §10.1)."""
-    context = current_call_context()
-    if context.user is not None:
-        return context.user.id
-    principal = context.principal
-    if principal.kind == "service_account":
-        return principal.name or principal.id
-    return None
+    """The actor of the current call (``call_subject``), RFC §10.1."""
+    return call_subject()
 
 
 class ActivityLogService(ServiceBase, IActivityLogDomain):

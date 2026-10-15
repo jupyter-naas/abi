@@ -74,7 +74,14 @@ class InMemoryAdapter(ISourceControlAdapter):
 
     # -- Port implementation ------------------------------------------------
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
         bound = self._owners.get(username)
         if bound is not None and bound != external_id:
             raise AccessDeniedError(

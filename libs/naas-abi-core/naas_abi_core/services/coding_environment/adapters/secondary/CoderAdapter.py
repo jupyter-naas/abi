@@ -28,6 +28,10 @@ _ERROR = {"failed", "canceled"}
 _ADMIN_PAGE_SIZE = 100
 
 
+# Site roles that administer Coder: such a user is never handed to a principal.
+_ADMIN_ROLES = frozenset({"owner", "user-admin", "template-admin", "auditor"})
+
+
 class CoderAdapter(ICodingEnvironmentAdapter):
     """Secondary adapter for Coder OSS (~v2.34.x) over its REST API.
 
@@ -133,7 +137,14 @@ class CoderAdapter(ICodingEnvironmentAdapter):
 
     # -- Port implementation ------------------------------------------------
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
         # Coder usernames are strict (lowercase alphanumeric + single hyphens,
         # <=32 chars); map the display name / email to a valid one.
         coder_username = (
@@ -143,10 +154,20 @@ class CoderAdapter(ICodingEnvironmentAdapter):
         )
         try:
             user = self._request("GET", f"/users/{coder_username}")
-            return self._remember(external_id, self._activate_if_needed(user))
         except CodingEnvironmentError as exc:
             if exc.status != 404:
                 raise
+        else:
+            # A username comes from a display name anyone can choose: the user
+            # is the caller's only if bound to it here, or if a first party
+            # vouches for the email the user carries. Never an administrator.
+            if self._principals.get(external_id) != user["id"] and not (
+                self._may_claim(user, email, vouched_email)
+            ):
+                raise AccessDeniedError(
+                    f"Coder user {coder_username} belongs to another principal"
+                )
+            return self._remember(external_id, self._activate_if_needed(user))
         created = self._request(
             "POST",
             "/users",
@@ -161,6 +182,18 @@ class CoderAdapter(ICodingEnvironmentAdapter):
             },
         )
         return self._remember(external_id, self._activate_if_needed(created))
+
+    def _may_claim(self, user: dict, email: str, vouched_email: bool) -> bool:
+        if user["id"] in self._principals.values():
+            return False  # bound to another principal in this process
+        if any(
+            (role.get("name") if isinstance(role, dict) else role) in _ADMIN_ROLES
+            for role in user.get("roles") or ()
+        ):
+            return False
+        if not vouched_email or not email:
+            return False
+        return str(user.get("email") or "").strip().lower() == email.strip().lower()
 
     def _remember(self, external_id: str, user_id: str) -> str:
         # Coder keeps no principal id: the binding lasts for this process, and

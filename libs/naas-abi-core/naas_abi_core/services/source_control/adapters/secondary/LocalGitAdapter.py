@@ -114,8 +114,15 @@ class LocalGitAdapter(ISourceControlAdapter):
     def _unsupported(self, feature: str) -> NoReturn:
         raise NotImplementedError(f"{feature} is not supported by the local_git adapter")
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
-        del email
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
+        del email, vouched_email
         bound = self._users.get(username)
         if bound is not None and external_id and bound != external_id:
             raise AccessDeniedError(

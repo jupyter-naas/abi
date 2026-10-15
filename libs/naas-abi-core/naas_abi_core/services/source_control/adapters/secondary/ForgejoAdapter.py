@@ -193,24 +193,39 @@ class ForgejoAdapter(ISourceControlAdapter):
 
     # -- Port implementation ------------------------------------------------
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
         # The principal a forge user belongs to is kept in its login_name (local
         # source 0, where Forgejo never authenticates with it), so the binding
         # survives restarts and ``find_user`` can read it back.
-        try:
-            user = self._request("GET", f"/users/{username}")
-        except SourceControlError as exc:
-            if exc.status != 404:
-                raise
-        else:
-            bound = str(user.get("login_name") or "")
-            if bound and bound not in (external_id, username):
+        existing = self._user(username)
+        if existing is not None:
+            if str(existing.get("login_name") or "") == external_id:
+                return str(existing["id"])
+            if not self._may_claim(existing, external_id, email, vouched_email):
                 raise AccessDeniedError(
                     f"Forge user {username} belongs to another principal"
                 )
-            if bound != external_id:
-                self._bind(username, external_id)
-            return str(user["id"])
+            self._bind(username, external_id)
+            return str(existing["id"])
+        own = self.find_user(external_id=external_id)
+        if own is not None:
+            # One account per principal: follow a new username by renaming.
+            self._request(
+                "POST",
+                f"/admin/users/{own}/rename",
+                json={"new_username": username},
+            )
+            renamed = self._user(username)
+            if renamed is None:
+                raise SourceControlError(f"Renaming forge user {own} failed")
+            return str(renamed["id"])
         created = self._request(
             "POST",
             "/admin/users",
@@ -227,6 +242,32 @@ class ForgejoAdapter(ISourceControlAdapter):
         )
         return str(created["id"])
 
+    def _user(self, username: str) -> dict | None:
+        try:
+            user = self._request("GET", f"/users/{username}")
+        except SourceControlError as exc:
+            if exc.status != 404:
+                raise
+            return None
+        return user if isinstance(user, dict) else None
+
+    def _may_claim(
+        self, user: dict, external_id: str, email: str, vouched_email: bool
+    ) -> bool:
+        """Whether an account bound to no principal is the caller's: never an
+        administrator, never when the caller already has an account, and only
+        for the verified owner of the account's email."""
+        bound = str(user.get("login_name") or "")
+        if bound and bound != str(user.get("login") or ""):
+            return False  # bound to another principal
+        if user.get("is_admin"):
+            return False
+        if not vouched_email or not email:
+            return False
+        if str(user.get("email") or "").strip().lower() != email.strip().lower():
+            return False
+        return self.find_user(external_id=external_id) is None
+
     def _bind(self, username: str, external_id: str, **fields: Any) -> None:
         self._request(
             "PATCH",
@@ -239,8 +280,16 @@ class ForgejoAdapter(ISourceControlAdapter):
             "GET",
             f"/admin/users?source_id=0&login_name={quote(external_id, safe='')}",
         )
-        users = found if isinstance(found, list) else []
-        return str(users[0]["login"]) if users else None
+        users = [
+            u
+            for u in (found if isinstance(found, list) else [])
+            if str(u.get("login_name") or "") == external_id
+        ]
+        if not users:
+            return None
+        # Newest binding wins, should an older account still carry it.
+        latest = max(users, key=lambda u: int(u.get("id") or 0))
+        return str(latest["login"])
 
     def ensure_repo(
         self, *, owner: str, name: str, private: bool = True, auto_init: bool = True

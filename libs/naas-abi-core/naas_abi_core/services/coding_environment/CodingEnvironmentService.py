@@ -3,7 +3,11 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 
-from naas_abi_core.engine.call_context import current_call_context
+from naas_abi_core.engine.call_context import (
+    ANONYMOUS_PRINCIPAL,
+    call_subject,
+    vouched_by_first_party,
+)
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     PHASE_ERROR,
     PHASE_RUNNING,
@@ -60,6 +64,13 @@ class CodingEnvironmentService(ServiceBase):
         super().__init__()
         self._adapter = adapter
         self._guard = ServiceGuard.of(CATALOG, self)
+        # TRANSITIONAL (#65): environment ownership is read from the
+        # orchestrator for the calling principal and cached per process, and
+        # the Coder adapter keeps its principal bindings per process too. After
+        # a restart, or on another replica, an environment is found again once
+        # its owner's orchestrator user is ensured (Nexus ensures it before each
+        # per-user operation); until then it answers as not found. Persisting
+        # the bindings is left to #65.
         self._owners: dict[str, str] = {}  # environment id -> owner principal
 
     @property
@@ -81,9 +92,9 @@ class CodingEnvironmentService(ServiceBase):
 
     @staticmethod
     def _principal() -> str:
-        """Whom a personal operation concerns: the call's user, else the actor."""
-        context = current_call_context()
-        return (context.user or context.principal).id
+        """Whom a personal operation concerns (``call_subject``); an anonymous
+        call concerns the anonymous principal, which IAM allows nothing."""
+        return call_subject() or ANONYMOUS_PRINCIPAL.id
 
     def _orchestrator_user(self, principal: str) -> str:
         found = self._adapter.find_user(external_id=principal)
@@ -131,7 +142,12 @@ class CodingEnvironmentService(ServiceBase):
         principal = self._principal()
         self._guard.require("EnsureUser", "coder_user", principal)
         return self._adapter.ensure_user(
-            external_id=principal, email=email, username=username
+            external_id=principal,
+            email=email,
+            username=username,
+            # Only a first party's word about its user's email can claim an
+            # existing orchestrator user.
+            vouched_email=vouched_by_first_party(),
         )
 
     def list_templates(self) -> list[WorkspaceTemplate]:

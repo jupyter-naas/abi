@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import replace
-
-from naas_abi_core.engine.call_context import current_call_context, use_call_context
-from naas_abi_core.services.iam.guard import ServiceGuard
+from naas_abi_core.engine.call_context import (
+    ANONYMOUS_PRINCIPAL,
+    as_service_account,
+    call_subject,
+    vouched_by_first_party,
+)
+from naas_abi_core.services.iam.guard import PLACEMENT_WRITER, ServiceGuard
 from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.source_control.iam_catalog import CATALOG
 from naas_abi_core.services.source_control.ontologies.modules.SourceControlEventOntology import (
@@ -92,9 +95,9 @@ class SourceControlService(ServiceBase):
 
     @staticmethod
     def _principal() -> str:
-        """Whom a personal operation concerns: the call's user, else the actor."""
-        context = current_call_context()
-        return (context.user or context.principal).id
+        """Whom a personal operation concerns (``call_subject``); an anonymous
+        call concerns the anonymous principal, which IAM allows nothing."""
+        return call_subject() or ANONYMOUS_PRINCIPAL.id
 
     # -- checks -----------------------------------------------------------------
 
@@ -147,7 +150,12 @@ class SourceControlService(ServiceBase):
         principal = self._principal()
         self._guard.require("EnsureUser", "forge_user", principal)
         return self._adapter.ensure_user(
-            external_id=principal, email=email, username=username
+            external_id=principal,
+            email=email,
+            username=username,
+            # Only a first party's word about its user's email can claim an
+            # account that predates the binding.
+            vouched_email=vouched_by_first_party(),
         )
 
     def mint_git_token(self, *, user_id: str | None = None) -> str:
@@ -171,24 +179,25 @@ class SourceControlService(ServiceBase):
     ) -> Repo:
         """Create the repository, placed in the call's target workspace (RFC §4.4).
 
-        A repository that already exists with no placement predates IAM: it is
-        recorded on the platform, so no workspace can claim it.
+        Re-ensuring a repository that exists is not a create: it needs
+        ``EnsureRepo`` on the repository as placed. One with no placement
+        predates IAM: it is recorded on the platform, so no workspace claims it.
         """
         repo_id = f"{owner}/{name}"
         iam = self._guard.iam
-        if (
-            iam is not None
-            and iam.placement_of(
-                "source_control", self._guard.canonical_id("repo", repo_id)
+        if iam is not None and self._exists(repo_id):
+            # Not a create: an existing repository is ensured where it is
+            # placed, whatever the call's target workspace.
+            canonical = self._guard.canonical_id("repo", repo_id)
+            if iam.placement_of("source_control", canonical) is None:
+                # It predates IAM: the platform's, so no workspace claims it.
+                with as_service_account(PLACEMENT_WRITER):
+                    iam.put_placement("source_control", canonical)
+                    iam.put_placement("source_control", f"{canonical}/*")
+            self._repo("EnsureRepo", repo_id)
+            return self._adapter.ensure_repo(
+                owner=owner, name=name, private=private, auto_init=auto_init
             )
-            is None
-            and self._exists(repo_id)
-        ):
-            context = current_call_context()
-            with use_call_context(replace(context, workspace_id=None)):
-                self._guard.create(
-                    "EnsureRepo", "repo", repo_id, not_found=_repo_missing(repo_id)
-                ).record()
         creation = self._guard.create(
             "EnsureRepo", "repo", repo_id, not_found=_repo_missing(repo_id)
         )

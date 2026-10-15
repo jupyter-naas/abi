@@ -67,3 +67,32 @@ def as_service_account(name: str) -> Iterator[CallContext]:
     )
     with use_call_context(context):
         yield context
+
+
+# The first-party accounts whose word about their user is trusted (RFC §10.2).
+FIRST_PARTY_ACCOUNTS = ("api", "engine")
+
+
+def call_subject(context: CallContext | None = None) -> str | None:
+    """Whom a call concerns: its user (RFC §10.1), else its calling principal;
+    None for an anonymous call.
+
+    The one rule for the owner of what a call creates (an agent run, an
+    environment), the actor of what it records, and the forge or orchestrator
+    account it acts as. Never a request field.
+    """
+    context = context if context is not None else current_call_context()
+    if context.user is not None:
+        return context.user.id
+    if context.principal.kind == "anonymous":
+        return None
+    return context.principal.id
+
+
+def vouched_by_first_party(context: CallContext | None = None) -> bool:
+    """Whether the call's actor is a first-party account (``api``, ``engine``)
+    that verified what it says about its user, such as the user's email."""
+    principal = (context if context is not None else current_call_context()).principal
+    return principal.kind == "service_account" and (
+        principal.name or principal.id
+    ) in FIRST_PARTY_ACCOUNTS

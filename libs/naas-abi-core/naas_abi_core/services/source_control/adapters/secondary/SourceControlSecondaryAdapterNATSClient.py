@@ -258,7 +258,16 @@ class SourceControlSecondaryAdapterNATSClient(NatsRPCClient, ISourceControlAdapt
     # ISourceControlAdapter.
     # ------------------------------------------------------------------
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
+        # The owner decides what it vouches for, from its own verified caller.
+        del vouched_email
         request = source_control_pb2.EnsureUserRequest(
             context=self._context(),
             external_id=external_id,

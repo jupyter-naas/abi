@@ -6,6 +6,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     PHASE_PROVISIONING,
     PHASE_RUNNING,
     PHASE_STOPPED,
+    AccessDeniedError,
     ICodingEnvironmentAdapter,
     WorkspaceAccess,
     WorkspaceNameConflictError,
@@ -35,11 +36,24 @@ class InMemoryAdapter(ICodingEnvironmentAdapter):
         self._counter += 1
         return f"{prefix}-{self._counter}"
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
-        if username not in self._users:
-            self._users[username] = self._next_id("user")
-        self._principals[external_id] = self._users[username]
-        return self._users[username]
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
+        user = self._users.get(username)
+        if user is not None and self._principals.get(external_id) != user:
+            if user in self._principals.values() or not vouched_email:
+                raise AccessDeniedError(
+                    f"User {username} belongs to another principal"
+                )
+        if user is None:
+            user = self._users[username] = self._next_id("user")
+        self._principals[external_id] = user
+        return user
 
     def find_user(self, *, external_id: str) -> str | None:
         return self._principals.get(external_id)

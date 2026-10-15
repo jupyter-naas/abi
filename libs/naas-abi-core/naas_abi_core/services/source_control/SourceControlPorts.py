@@ -230,12 +230,24 @@ class ISourceControlAdapter(ABC):
     """
 
     @abstractmethod
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
         """Idempotently ensure a forge user exists, bound to ``external_id`` (the
         principal it belongs to); return its id.
 
-        A forge username belongs to one principal: binding it to another raises
-        ``AccessDeniedError``.
+        A forge username belongs to one principal: an account bound to another
+        principal, or an administrator, is never handed over
+        (``AccessDeniedError``). A principal keeps one account: asked under a
+        new username, its account is renamed when the backend can. An account
+        bound to no principal (it predates the binding) is claimed only when
+        ``vouched_email`` (a first-party caller verified ``email``) and the
+        account's email is that one.
         """
         raise NotImplementedError()
 

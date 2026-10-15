@@ -101,9 +101,22 @@ class ICodingEnvironmentAdapter(ABC):
     """Secondary (driven) port for a coding-environment orchestrator."""
 
     @abstractmethod
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
         """Idempotently ensure an orchestrator user exists for the principal
-        ``external_id``; return its id."""
+        ``external_id``; return its id.
+
+        An existing user is the principal's only when it is already bound to
+        it, or when ``vouched_email`` (a first-party caller verified ``email``)
+        and the user's email is that one. Never an administrator, never a user
+        bound to another principal: those raise ``AccessDeniedError``.
+        """
         raise NotImplementedError()
 
     @abstractmethod

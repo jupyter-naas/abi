@@ -18,6 +18,7 @@ import jwt
 from naas_abi_core.engine.call_context import (
     ON_BEHALF_OF_HEADER,
     CallContext,
+    call_subject,
     service_account,
     user,
 )
@@ -78,6 +79,6 @@ def caller_of(
 
 
 def run_owner(context: CallContext) -> str:
-    """Who owns what a call starts: the user it acts for, else the actor."""
-    served = context.user
-    return served.id if served is not None else context.principal.id
+    """Who owns what a call starts (``call_subject``): the user it acts for,
+    else the actor."""
+    return call_subject(context) or context.principal.id

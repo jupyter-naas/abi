@@ -264,8 +264,15 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
         base = record.get("harness_base")
         return str(base) if base else None
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
-        del email, username
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
+        del email, username, vouched_email
         if external_id not in self._users:
             self._users[external_id] = external_id
         return self._users[external_id]
