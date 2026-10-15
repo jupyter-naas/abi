@@ -55,7 +55,10 @@ async def stream_with_remote_agent(
         ):
             name, text = event.get("event", ""), str(event.get("data") or "")
             if name == "done" or text == "[DONE]":
-                break
+                # Read on to the run's end: the module saves the run and frees
+                # the conversation after its done event, and leaving the stream
+                # early cancels the run. A next turn sent at once found it BUSY.
+                continue
             if name == "message":
                 if text.strip():
                     final_replay.append(text.strip())

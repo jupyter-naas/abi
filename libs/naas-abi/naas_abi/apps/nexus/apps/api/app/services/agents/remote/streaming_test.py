@@ -134,3 +134,26 @@ def test_a_chat_completion_joins_the_remote_agents_text(monkeypatch):
     assert directory.calls == [
         (RESEARCHER.key, "USER PROFILE\n\nwhat is JetStream?", "conv-1", None)
     ]
+
+
+def test_the_stream_reads_on_to_the_runs_end_after_done():
+    # Breaking out at done closed the directory's stream, which cancels the
+    # run while the module still holds the conversation.
+    finished = []
+
+    class _Draining(_Directory):
+        async def stream(self, key, prompt, *, thread_id, invocation_id=None):
+            async for event in super().stream(
+                key, prompt, thread_id=thread_id, invocation_id=invocation_id
+            ):
+                yield event
+            finished.append(True)
+
+    chunks = _run(
+        _Draining(
+            [{"event": "ai_message", "data": "hi"}, {"event": "done", "data": "[DONE]"}]
+        )
+    )
+
+    assert chunks == ["hi"]
+    assert finished == [True]
