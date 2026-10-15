@@ -503,6 +503,47 @@ def test_draining_ends_event_streams_and_lets_a_download_finish(broker, tmp_path
     asyncio.run(scenario())
 
 
+def test_draining_lets_a_background_task_finish_after_its_stream(broker, tmp_path):
+    """A streamed response whose body ended runs its Starlette background task
+    (an audit write, an email): a drain waits for it, quiet as it is, and
+    never cancels it."""
+    from starlette.background import BackgroundTask
+
+    api = fastapi.FastAPI()
+    done = asyncio.Event()
+
+    async def audit():
+        await asyncio.sleep(app_host.DRAIN_IDLE_SECONDS * 2)
+        done.set()
+
+    @api.get("/api/export")
+    async def export():
+        async def body():
+            yield b"e" * MB
+
+        return StreamingResponse(
+            body(),
+            media_type="application/octet-stream",
+            background=BackgroundTask(audit),
+        )
+
+    async def scenario():
+        host = await _module(broker, tmp_path, api)
+        nexus = Transport(broker, NexusToken(), timeout=60)
+        try:
+            response = await call_app(nexus, "acme", "i-1", _request("/api/export"))
+            assert len(await _body(nexus, response)) == MB
+            await asyncio.sleep(0.1)  # the body is over; the task runs
+            await asyncio.wait_for(host.drain(30), 10)
+            assert done.is_set()
+        finally:
+            await host.close()
+            await nexus.close()
+            await host.session.client.transport.close()
+
+    asyncio.run(scenario())
+
+
 def test_an_app_failing_mid_stream_is_an_error_to_the_reader(broker, tmp_path):
     """A6, the module's half: the reader learns the body is cut."""
 

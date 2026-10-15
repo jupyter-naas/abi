@@ -268,10 +268,16 @@ class AppHost:
 
     def _end_idle_streams(self) -> None:
         """End, with an error, the streamed responses a drain need not wait
-        for: server-sent events, and those whose app went quiet."""
+        for: server-sent events, and those whose app went quiet. A response
+        whose body ended is never cut: its app may still run a background
+        task (Starlette runs it after the body), which the drain waits for."""
         now = asyncio.get_running_loop().time()
         for call in list(self._responding):
-            if call.event_stream or (
+            if call.body_ended or (
+                call.source is not None and call.source.done.is_set()
+            ):
+                self._responding.discard(call)
+            elif call.event_stream or (
                 not call.sending and now - call.activity >= DRAIN_IDLE_SECONDS
             ):
                 self._responding.discard(call)
@@ -653,6 +659,8 @@ class _AsgiCall:
         # Inside send(): a body chunk waits for its reader, which is no idling.
         self.sending = False
         self.event_stream = False
+        # The app sent its last body message: what runs now is its own work.
+        self.body_ended = False
 
     def _touch(self) -> None:
         self.activity = asyncio.get_running_loop().time()
@@ -826,6 +834,7 @@ class _AsgiCall:
                 await self.source.put(body[start : start + size])
             if not more:
                 await self.source.finish()
+                self.body_ended = True
         finally:
             self.sending = False
             self._touch()

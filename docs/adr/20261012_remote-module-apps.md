@@ -3,7 +3,7 @@
 ## Status
 Accepted.
 
-Amended six times since; see the amendments at the end. The text above
+Amended seven times since; see the amendments at the end. The text above
 them is the decision as accepted on 2026-10-12.
 
 ## Date
@@ -346,3 +346,37 @@ own snapshot adds up to 1 s), as the agent and model hosts do, never past
 the caller token's expiry: an instance that loses READY may serve a request
 within that window. A draining module refuses requests on its own. Asking
 discovery on every request would double each request's round trips.
+
+## Amendment (2026-10-15): a draining module finishes what it took
+
+**Decision.** On SIGTERM the module drains its apps before it closes
+(`AppHost.drain`, under the module's `drain_timeout_seconds`, 300 s by
+default):
+
+- Its subscriptions drain, so a new request finds no responder and Nexus
+  sends it to another instance. A request still queued behind busy calls is
+  refused with `MODULE_UNAVAILABLE`: the app never ran it, so Nexus may
+  resend it.
+- Requests in progress, uploads included, answer.
+- A response still streaming may finish, and so may a Starlette background
+  task that runs after its body: a response whose body ended is never cut.
+- Two kinds of stream are ended at once with `MODULE_UNAVAILABLE`, and their
+  readers reconnect to another instance. One is server-sent events
+  (`text/event-stream`). The other is any stream whose app has sent nothing
+  for `DRAIN_IDLE_SECONDS` (1 s) and is not waiting for its reader.
+
+**Why the idle rule.** The module has to exit within its orchestrator's
+grace period: Docker's default is 10 s before SIGKILL. An idle stream looks
+the same as an endless one (a long poll, server-sent events served without
+their content type). Waiting for it would hold every shutdown for the whole
+drain timeout.
+
+**Tradeoff.** A finite stream whose app pauses for more than 1 s is cut
+during a drain, and its reader sees an error. Examples are an LLM answer
+streamed as plain text, NDJSON progress, or an export that computes between
+chunks. The reader retries, and Nexus sends the retry to a ready instance.
+An app that needs such a stream to survive a rollout keeps it busy (a
+progress line, or whitespace the format ignores) at least once a second. A
+longer idle window would protect slower streams. It would also hold every
+deploy for that long whenever a reader keeps a quiet stream open.
+
