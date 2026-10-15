@@ -40,7 +40,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
     is_segment,
     mint_remote_app_grant,
     read_remote_app_grant,
-    redact_grant_path,
+    redact_request_target,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
     INLINE_BYTES,
@@ -588,12 +588,14 @@ async def open_remote_app(module_id: str, app: str, request: Request, path: str 
 
 
 class RedactGrantFilter(logging.Filter):
-    """Hides the grant in uvicorn's access log (its third argument is the path)."""
+    """Hides credentials in uvicorn's access log, whose third argument is the
+    path with its query: a remote app's grant, and the value of a credential
+    parameter such as the app-html routes' ``?token=``."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         args = record.args
         if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str):
-            record.args = (*args[:2], redact_grant_path(args[2]), *args[3:])
+            record.args = (*args[:2], redact_request_target(args[2]), *args[3:])
         return True
 
 
