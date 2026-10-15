@@ -1,6 +1,6 @@
 # Maps graph layers
 
-Modules register `GraphMapLayer` descriptors in their FastAPI hook with `register_map_layer`. ABI contains the reusable catalog and viewer; company-specific evidence and projection queries stay in their module.
+Modules register `GraphMapLayer` descriptors in their FastAPI hook with `register_map_layer`. ABI contains the reusable catalog and viewer; company-specific evidence and projection queries stay in their module. Optional `color` (`#rgb` / `#rrggbb`) is listed on `GET /api/maps/layers`. The web uses that hex (or a shared pin hex) for dots and clusters instead of hashing a palette color.
 
 `service.py` defines the read-only `GraphQueryPort`, descriptor and catalog. The primary adapter exposes `GET /api/maps/layers` and `GET /api/maps/layers/{id}`. Both require workspace membership, resolve existing graph grants and disable caching. Projections receive `WorkspaceGraphStore`, never the unrestricted catalog store. The declared graph must be readable before the feed runs. Snapshot selection belongs to the module; never union historical snapshots automatically.
 
