@@ -441,6 +441,7 @@ def test_new_app_in_a_remote_module_says_how_nexus_serves_it(tmp_path: Path) -> 
     for written in (apps / "reports" / "manifest.json", apps / "AGENTS.md"):
         text = written.read_text()
         assert "research" in text and "your_module_name" not in text
+    assert "  - module: research\n" in (apps / "AGENTS.md").read_text()
     assert "/app-html/remote/<module_id>/reports/" in result.output
     assert 'expose_app("reports", app)' in result.output
 
@@ -449,6 +450,24 @@ def test_new_app_in_a_remote_module_says_how_nexus_serves_it(tmp_path: Path) -> 
     assert _invoke(_new_app, apps, "charts").exit_code == 0
     assert (apps / "AGENTS.md").read_text() == "hand-written notes\n"
     assert "research" in (apps / "charts" / "manifest.json").read_text()
+
+
+def test_new_app_in_a_nested_module_names_its_dotted_package(tmp_path: Path) -> None:
+    from naas_abi_cli.cli.new.app import _new_app
+
+    core = tmp_path / "src" / "core"
+    research = core / "research"
+    research.mkdir(parents=True)
+    (core / "__init__.py").write_text("")
+    (research / "__init__.py").write_text("class ABIModule(BaseModule):\n    pass\n")
+    apps = research / "apps"
+    apps.mkdir()
+
+    assert _invoke(_new_app, apps, "reports").exit_code == 0
+
+    assert "the core.research module" in (apps / "reports" / "manifest.json").read_text()
+    for written in (apps / "AGENTS.md", apps / "reports" / "README.md"):
+        assert "  - module: core.research\n" in written.read_text()
 
 
 def test_new_agent_in_an_in_engine_module_is_a_core_agent(tmp_path: Path) -> None:
