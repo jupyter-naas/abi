@@ -122,3 +122,42 @@ def test_backend_error_is_not_leaked_or_retried():
         service._for_namespace.return_value.get.assert_called_once()
     finally:
         primary._dispatch.close()
+
+
+def test_a_2x_adapter_without_max_bytes_answers_finds_over_nats():
+    # A custom adapter written for 2.x: find() takes no max_bytes. The primary
+    # always sets a page budget (the broker limit is known); the service drops
+    # it for such an adapter, and the page goes back whole.
+    from datetime import UTC, datetime
+
+    from naas_abi_core.services.document.DocumentPort import Document, Page
+    from naas_abi_core.services.document.DocumentService import DocumentService
+
+    now = datetime.now(UTC)
+    calls = []
+
+    class Adapter2x:
+        def find(self, namespace, collection, where, order_by, limit, cursor):
+            calls.append((namespace, collection, limit, cursor))
+            return Page([Document("one", {"n": 1}, now, now, 1)], None)
+
+    primary = DocumentPrimaryAdapterNATS(
+        DocumentService._for_engine(Adapter2x()),  # type: ignore[arg-type]
+        SECRET,
+    )
+    request = SimpleNamespace(
+        data=pb.FindRequest(
+            namespace="module", collection="state", limit=10
+        ).SerializeToString(),
+        headers={"Nats-Auth-Token": issue_service_token("test", SECRET)},
+        respond=AsyncMock(),
+        _msg=SimpleNamespace(_client=SimpleNamespace(max_payload=8 * 1024 * 1024)),
+    )
+    try:
+        asyncio.run(primary._handle(request, operation="find"))
+        response = pb.FindResponse.FromString(request.respond.call_args.args[0])
+        assert not response.HasField("error"), response.error
+        assert [d.id for d in response.items] == ["one"]
+        assert calls == [("module", "state", 10, None)]
+    finally:
+        primary._dispatch.close()

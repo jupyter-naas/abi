@@ -1,4 +1,6 @@
-from collections.abc import Iterable, Iterator, Mapping
+import inspect
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from typing import Any
 
 from naas_abi_core.services.document.DocumentPort import (
     CollectionSpec,
@@ -18,10 +20,18 @@ from naas_abi_core.services.document.DocumentPort import (
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
-def _max_bytes(max_bytes: int | None) -> dict[str, int]:
-    """A byte budget, passed on only when given: an adapter written before
-    the keyword keeps working for every call without one."""
-    return {} if max_bytes is None else {"max_bytes": max_bytes}
+def _max_bytes(find: Callable[..., Any], max_bytes: int | None) -> dict[str, int]:
+    """A byte budget, for an adapter whose ``find`` takes one: an adapter
+    written before the keyword answers unbounded pages, which the NATS primary
+    still sends whole (RPC overflow)."""
+    if max_bytes is None:
+        return {}
+    parameters = inspect.signature(find).parameters
+    if "max_bytes" not in parameters and not any(
+        p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()
+    ):
+        return {}
+    return {"max_bytes": max_bytes}
 
 
 class DocumentService(ServiceBase):
@@ -162,7 +172,7 @@ class DocumentService(ServiceBase):
             order_by,
             limit,
             cursor,
-            **_max_bytes(max_bytes),
+            **_max_bytes(self.__adapter.find, max_bytes),
         )
 
     def iterate(
@@ -188,7 +198,7 @@ class DocumentService(ServiceBase):
                 order_by,
                 batch,
                 cursor,
-                **_max_bytes(max_bytes),
+                **_max_bytes(self.__adapter.find, max_bytes),
             )
             yield from page.items
             cursor = page.cursor
