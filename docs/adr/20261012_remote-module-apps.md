@@ -317,7 +317,9 @@ redirect's still stays in the app. A value HTTP cannot carry (outside
 latin-1, a line break or another control byte) is dropped. A `Set-Cookie`
 pair is cut at its first `;` and needs a valid name. A `Location` whose
 resolved path holds `%2e` is dropped, the request's own path included. The
-query reaches the module as the browser sent it, without `token`.
+query reaches the module as the browser sent it, less a `token` that holds a
+Nexus credential: one that authenticated the request, the `ABI_API_KEY`, or
+any token Nexus signed. An app's own `token` parameter passes.
 
 **Bodies.** A response that breaks off after it started raises in Nexus, so
 the server aborts the connection and the browser sees a failed download, not a
