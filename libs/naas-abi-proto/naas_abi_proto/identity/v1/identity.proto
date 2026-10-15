@@ -1,0 +1,186 @@
+// NATS-RPC contract for identity: the OIDC providers the engine trusts.
+// See docs/specs/rfcs/20261013_identity-and-authorization.md, §12.1.
+//
+// Subjects: abi.identity.v1.<operation>, one per Request/Response pair below
+// (abi.identity.v1.authenticate, abi.identity.v1.exchange_code, ...).
+//
+// Every operation is authorized with the identity:* catalog on
+// abi:-:-:identity:provider/<name>, for the caller the server verifies from
+// the request's credentials. A client secret never travels: the engine runs
+// the provider side of a sign-in itself.
+//
+// Errors: NOT_FOUND (no such provider, or the caller may not see it),
+// PERMISSION_DENIED, TOKEN_<REASON> for a refused token (TOKEN_EXPIRED,
+// TOKEN_WRONG_AUDIENCE, TOKEN_UNKNOWN_ISSUER, TOKEN_INVALID_SIGNATURE, ...),
+// SUSPENDED (IAM suspended or deleted the user), SIGN_IN_FAILED (the provider
+// refused a grant; the message starts with its OAuth error), UNAVAILABLE (the
+// provider cannot be reached), INVALID_ARGUMENT.
+syntax = "proto3";
+
+package abi.identity.v1;
+
+import "naas_abi_proto/common/v1/common.proto";
+
+// -- records ---------------------------------------------------------------
+
+// A configured provider, without its client secret.
+// provisioning: builtin | zitadel | keycloak | none.
+message Provider {
+  string name = 1;
+  string issuer = 2;
+  string client_id = 3;
+  string display_name = 4;
+  repeated string scopes = 5;
+  optional string groups_claim = 6;
+  string provisioning = 7;
+}
+
+// A verified ID token. groups are the raw values of the provider's groups
+// claim; claims_json is every claim, as JSON.
+message VerifiedToken {
+  string provider = 1;
+  string issuer = 2;
+  string subject = 3;
+  repeated string audience = 4;
+  int64 issued_at = 5;
+  int64 expires_at = 6;
+  optional string email = 7;
+  bool email_verified = 8;
+  optional string display_name = 9;
+  repeated string groups = 10;
+  optional string nonce = 11;
+  optional string session_id = 12;
+  string claims_json = 13;
+}
+
+// A verified token resolved to its IAM user; group_ids are the IAM groups its
+// groups claim maps to.
+message AuthenticatedUser {
+  string principal_id = 1;
+  VerifiedToken token = 2;
+  repeated string group_ids = 3;
+}
+
+message TokenSet {
+  optional string id_token = 1;
+  optional string access_token = 2;
+  optional string refresh_token = 3;
+  optional int64 expires_in = 4;
+  optional string token_type = 5;
+  optional string scope = 6;
+}
+
+// A completed code exchange or refresh. refresh_at: when the relying party
+// re-verifies at the provider at the latest (Unix seconds, ten minutes at most).
+message SignIn {
+  AuthenticatedUser user = 1;
+  TokenSet tokens = 2;
+  int64 refresh_at = 3;
+}
+
+// -- providers -------------------------------------------------------------
+
+message ListProvidersRequest {
+  abi.common.v1.CallContext context = 1;
+}
+message ListProvidersResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Provider providers = 2;
+  optional string default_provider = 3;
+}
+
+message GetProviderRequest {
+  abi.common.v1.CallContext context = 1;
+  string name = 2;
+}
+message GetProviderResponse {
+  abi.common.v1.CallError error = 1;
+  Provider provider = 2;
+}
+
+// -- tokens ----------------------------------------------------------------
+
+message VerifyTokenRequest {
+  abi.common.v1.CallContext context = 1;
+  string token = 2;
+  optional string nonce = 3;
+}
+message VerifyTokenResponse {
+  abi.common.v1.CallError error = 1;
+  VerifiedToken token = 2;
+}
+
+message AuthenticateRequest {
+  abi.common.v1.CallContext context = 1;
+  string token = 2;
+  optional string nonce = 3;
+}
+message AuthenticateResponse {
+  abi.common.v1.CallError error = 1;
+  AuthenticatedUser user = 2;
+}
+
+// -- a relying party's sign-in ---------------------------------------------
+
+message AuthorizationUrlRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string redirect_uri = 3;
+  string state = 4;
+  string nonce = 5;
+  // BASE64URL(SHA256(code_verifier)), RFC 7636.
+  string code_challenge = 6;
+  optional string login_hint = 7;
+  optional string prompt = 8;
+}
+message AuthorizationUrlResponse {
+  abi.common.v1.CallError error = 1;
+  string url = 2;
+}
+
+message ExchangeCodeRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string code = 3;
+  string code_verifier = 4;
+  string redirect_uri = 5;
+  string nonce = 6;
+}
+message ExchangeCodeResponse {
+  abi.common.v1.CallError error = 1;
+  SignIn sign_in = 2;
+}
+
+message RefreshRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string refresh_token = 3;
+  // The user the session belongs to: a refresh naming another is refused.
+  string principal_id = 4;
+}
+message RefreshResponse {
+  abi.common.v1.CallError error = 1;
+  SignIn sign_in = 2;
+}
+
+message RevokeRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string refresh_token = 3;
+}
+message RevokeResponse {
+  abi.common.v1.CallError error = 1;
+  bool revoked = 2;
+}
+
+message EndSessionUrlRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  optional string id_token_hint = 3;
+  optional string post_logout_redirect_uri = 4;
+  optional string state = 5;
+}
+message EndSessionUrlResponse {
+  abi.common.v1.CallError error = 1;
+  optional string url = 2;
+}

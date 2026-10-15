@@ -23,6 +23,7 @@ def kernel_catalogs() -> tuple[ActionCatalog, ...]:
     from naas_abi_core.services.discovery.iam_catalog import CATALOG as DISCOVERY
     from naas_abi_core.services.email.iam_catalog import CATALOG as EMAIL
     from naas_abi_core.services.event.iam_catalog import CATALOG as EVENT
+    from naas_abi_core.services.identity.iam_catalog import CATALOG as IDENTITY
     from naas_abi_core.services.model_registry.iam_catalog import (
         CATALOG as MODEL_REGISTRY,
     )
@@ -36,6 +37,7 @@ def kernel_catalogs() -> tuple[ActionCatalog, ...]:
         DISCOVERY,
         EMAIL,
         EVENT,
+        IDENTITY,
         MODEL_REGISTRY,
         SOURCE_CONTROL,
     )

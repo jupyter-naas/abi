@@ -55,6 +55,9 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_EventService 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_IAMService import (
     IAMServiceConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_Identity import (
+    IdentityConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueService import (
     KeyValueAdapterConfiguration,
     KeyValueAdapterPythonConfiguration,
@@ -646,6 +649,9 @@ class EngineConfiguration(BaseModel):
     global_config: GlobalConfig
 
     nats: NATSConfiguration | None = None
+    # The OIDC identity providers the engine trusts (RFC 20261013 §12.1):
+    # engine-wide, never per organization.
+    identity: IdentityConfiguration = Field(default_factory=IdentityConfiguration)
     telemetry: TelemetryConfiguration = Field(default_factory=TelemetryConfiguration)
 
     modules: list[ModuleConfig]

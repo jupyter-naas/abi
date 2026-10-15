@@ -44,6 +44,7 @@ if TYPE_CHECKING:
         EmailService,
         EventService,
         IAMService,
+        IdentityService,
         KeyValueService,
         ModelRegistryService,
         ObjectStorageService,
@@ -96,6 +97,7 @@ class ServicesProxy(_ServicesAccess):
     event: EventService
     events: EventService
     iam: IAMService
+    identity: IdentityService
     keyvalue: KeyValueService
     kv: KeyValueService
     object_storage: ObjectStorageService

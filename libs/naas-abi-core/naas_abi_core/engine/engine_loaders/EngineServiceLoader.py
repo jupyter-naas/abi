@@ -153,6 +153,8 @@ class EngineServiceLoader:
         iam = self.__configuration.services.iam.load()
         services = IEngine.Services(
             iam=iam,
+            # The OIDC providers the engine trusts (RFC §12.1): users are IAM's.
+            identity=self.__configuration.identity.load(iam),
             document=self.__configuration.services.document.load()
             if self._should_load_service(DocumentService, services_to_load)
             else None,

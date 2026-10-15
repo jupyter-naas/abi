@@ -9,6 +9,7 @@ from naas_abi_sdk.services.dataset import DatasetService
 from naas_abi_sdk.services.document import DocumentService
 from naas_abi_sdk.services.event import EventService
 from naas_abi_sdk.services.iam import IAMService
+from naas_abi_sdk.services.identity import IdentityService
 from naas_abi_sdk.services.keyvalue import KeyValueService
 from naas_abi_sdk.services.model_registry import ModelRegistryService
 from naas_abi_sdk.services.object_storage import ObjectStorageService
@@ -31,6 +32,7 @@ FACTORIES = {
     "triple_store": TripleStoreService,
     "vector_store": VectorStoreService,
     "iam": IAMService,
+    "identity": IdentityService,
 }
 
 

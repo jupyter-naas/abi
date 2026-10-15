@@ -84,6 +84,10 @@ from naas_abi_core.services.iam.adapters.primary.iam__primary_adapter__NATS impo
     IAMPrimaryAdapterNATS,
 )
 from naas_abi_core.services.iam.IAMService import IAMService
+from naas_abi_core.services.identity.adapters.primary.identity__primary_adapter__NATS import (
+    IdentityPrimaryAdapterNATS,
+)
+from naas_abi_core.services.identity.IdentityService import IdentityService
 from naas_abi_core.services.keyvalue.adapters.primary.keyvalue__primary_adapter__NATS import (
     KeyValuePrimaryAdapterNATS,
 )
@@ -194,6 +198,16 @@ class EngineNATSLoader:
             nats_runtime.run_coro(primary_iam.start(nc))
             started.append(primary_iam)
             logger.debug("EngineNATSLoader: exposed iam over NATS")
+
+        if services.identity_available() and isinstance(
+            services.identity, IdentityService
+        ):
+            primary_identity = IdentityPrimaryAdapterNATS(
+                services.identity, nats_config.jwt_secret
+            )
+            nats_runtime.run_coro(primary_identity.start(nc))
+            started.append(primary_identity)
+            logger.debug("EngineNATSLoader: exposed identity over NATS")
 
         if services.object_storage_available() and not isinstance(
             services.object_storage.adapter, ObjectStorageSecondaryAdapterNATSClient

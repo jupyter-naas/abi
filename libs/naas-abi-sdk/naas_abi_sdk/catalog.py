@@ -95,6 +95,17 @@ OPERATIONS = {
         "delete_scope",
         "register_catalog",
     ],
+    "identity": [
+        "list_providers",
+        "get_provider",
+        "verify_token",
+        "authenticate",
+        "authorization_url",
+        "exchange_code",
+        "refresh",
+        "revoke",
+        "end_session_url",
+    ],
     "keyvalue": [
         "get",
         "set",

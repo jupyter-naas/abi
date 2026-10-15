@@ -49,6 +49,9 @@ from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.iam.adapters.secondary.IAMSecondaryAdapterNATSClient import (
     IAMSecondaryAdapterNATSClient,
 )
+from naas_abi_core.services.identity.adapters.secondary.IdentitySecondaryAdapterNATSClient import (
+    IdentitySecondaryAdapterNATSClient,
+)
 from naas_abi_core.services.keyvalue.adapters.secondary.KeyValueSecondaryAdapterNATSClient import (
     KeyValueSecondaryAdapterNATSClient,
 )
@@ -123,6 +126,9 @@ class EngineNATSDependencies:
             # The owner itself, never a NATS facade: a check reads the caller's
             # CallContext in this process, which a hop would replace with "engine".
             values["iam"] = owners.iam
+        if owners.identity_available():
+            # The owner too: it authorizes the caller of this process's context.
+            values["identity"] = owners.identity
         if owners.bus_available():
             if isinstance(owners.bus.adapter, NATSJetStreamAdapter):
                 self.clients.append(owners.bus.adapter)
@@ -293,6 +299,7 @@ class EngineNATSDependencies:
         self.clients.append(models)
         values: dict[str, Any] = {
             "iam": self._client(IAMSecondaryAdapterNATSClient),
+            "identity": self._client(IdentitySecondaryAdapterNATSClient),
             "bus": bus,
             "object_storage": ObjectStorageService(
                 self._client(ObjectStorageSecondaryAdapterNATSClient)

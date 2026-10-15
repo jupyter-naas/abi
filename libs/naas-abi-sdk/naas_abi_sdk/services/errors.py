@@ -63,6 +63,27 @@ class RevisionConflict(ServiceError):
     """A policy changed since the revision an update was based on (IAM)."""
 
 
+class TokenRejected(ServiceError):
+    """An identity provider's token is not accepted; ``code`` is ``TOKEN_<REASON>``
+    (``TOKEN_EXPIRED``, ``TOKEN_WRONG_AUDIENCE``, ``TOKEN_UNKNOWN_ISSUER``...)."""
+
+    @property
+    def reason(self) -> str:
+        return self.code.removeprefix("TOKEN_").lower()
+
+
+class Suspended(ServiceError):
+    """IAM suspended or deleted the user a valid token names."""
+
+
+class SignInFailed(ServiceError):
+    """The identity provider refused a code exchange or a refresh."""
+
+
+class ProviderUnavailable(ServiceError):
+    """The identity provider cannot be reached."""
+
+
 ERRORS = {
     "OBJECT_NOT_FOUND": ObjectNotFound,
     "OBJECT_ALREADY_EXISTS": ObjectAlreadyExists,
@@ -78,10 +99,15 @@ ERRORS = {
     "NOT_FOUND": NotFound,
     "CONFLICT": Conflict,
     "REVISION_CONFLICT": RevisionConflict,
+    "SUSPENDED": Suspended,
+    "SIGN_IN_FAILED": SignInFailed,
+    "UNAVAILABLE": ProviderUnavailable,
 }
 
 
 def domain_error(error: RPCError) -> ServiceError:
+    if error.code.startswith("TOKEN_"):
+        return TokenRejected(error.code, str(error), response=error.response)
     return ERRORS.get(error.code, ServiceError)(
         error.code, str(error), response=error.response
     )

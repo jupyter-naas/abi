@@ -138,7 +138,7 @@ class IdentityConfiguration(BaseModel):
         )
         from naas_abi_core.services.identity.IdentityService import IdentityService
 
-        return IdentityService(
+        service = IdentityService(
             [p.to_provider() for p in self.providers],
             iam,  # type: ignore[arg-type]  # the owner: resolve_idp_groups is IAMService's
             OIDCHttpHttpx(timeout_seconds=self.verifier.http_timeout_seconds),
@@ -148,3 +148,20 @@ class IdentityConfiguration(BaseModel):
             discovery_cache_seconds=self.verifier.discovery_cache_seconds,
             refetch_seconds=self.verifier.jwks_refetch_seconds,
         )
+        if self.providers:
+            _warm_up_in_background(service)
+        return service
+
+
+def _warm_up_in_background(service: IdentityService) -> None:
+    """Read each provider's discovery document and JWKS without delaying boot;
+    one that cannot be read is logged, and read again on first use."""
+    import threading
+
+    from naas_abi_core import logger
+
+    def warm_up() -> None:
+        for name, error in service.warm_up().items():
+            logger.warning(f"Identity provider {name}: {error}")
+
+    threading.Thread(target=warm_up, name="identity-warm-up", daemon=True).start()
