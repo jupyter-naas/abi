@@ -15,7 +15,7 @@ import {
 } from '@/lib/slides-pane-conversation';
 import { sheetsPaneConversationKey, dropSheetsPaneConversationKeys } from '@/lib/sheets-pane-conversation';
 import { conversationTitleFromPrompt } from '@/lib/office-auto-title';
-import { useAuthStore } from './auth';
+import { hasSession, useAuthStore } from './auth';
 import { useDocumentsStore } from './documents';
 import { useSlidesStore } from './slides';
 import { getApiUrl } from '@/lib/config';
@@ -1367,7 +1367,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   },
 
   fetchWorkspaces: async () => {
-    if (!useAuthStore.getState().token) return;
+    if (!hasSession()) return;
     // Concurrent callers share one request. Three components fetch the workspace
     // list on mount on every page load (the workspace layout, the shell layout
     // and the platform status footer), which used to mean three identical

@@ -1,6 +1,13 @@
 /**
  * Authentication store for NEXUS.
  * Manages user session, tokens, and auth state.
+ *
+ * Two kinds of session:
+ * - `bearer`: the built-in login (password, magic link, code). Its tokens are
+ *   kept here and persisted, as before.
+ * - `cookie`: a sign-in through an identity provider. The API holds the
+ *   session behind an httpOnly cookie; this store keeps no token at all, only
+ *   the session's CSRF token, in memory (never persisted).
  */
 
 import { create } from 'zustand';
@@ -21,11 +28,16 @@ export interface User {
   createdAt: Date;
 }
 
+export type SessionKind = 'bearer' | 'cookie';
+
 export interface AuthState {
   // State
   user: User | null;
   token: string | null;
   refreshToken: string | null;
+  sessionKind: SessionKind | null;
+  // Cookie sessions only, in memory: sent as X-CSRF-Token on every change.
+  csrfToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
@@ -42,7 +54,15 @@ export interface AuthState {
   clearError: () => void;
   refreshAccessToken: () => Promise<boolean>;
   checkAuth: () => Promise<boolean>;
+  // Identity providers: which one an email goes to, start a sign-in there,
+  // and adopt the cookie session the API set on the way back.
+  routeLogin: (email: string) => Promise<string | null>;
+  signInWithProvider: (options: { provider?: string; email?: string; next?: string }) => void;
+  adoptCookieSession: () => Promise<boolean>;
 }
+
+const CSRF_HEADER = 'X-CSRF-Token';
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 import { getApiUrl } from '@/lib/config';
 import {
@@ -60,6 +80,8 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       token: null,
       refreshToken: null,
+      sessionKind: null,
+      csrfToken: null,
       isAuthenticated: false,
       isLoading: false,
       error: null,
@@ -119,6 +141,8 @@ export const useAuthStore = create<AuthState>()(
             user: { ...data.user, avatar: normalizeAvatar(data.user?.avatar) },
             token: data.access_token,
             refreshToken: data.refresh_token ?? null,
+            sessionKind: 'bearer',
+            csrfToken: null,
             isAuthenticated: true,
             isLoading: false,
             error: null,
@@ -161,6 +185,8 @@ export const useAuthStore = create<AuthState>()(
             user: { ...data.user, avatar: normalizeAvatar(data.user?.avatar) },
             token: data.access_token,
             refreshToken: data.refresh_token ?? null,
+            sessionKind: 'bearer',
+            csrfToken: null,
             isAuthenticated: true,
             isLoading: false,
             error: null,
@@ -222,6 +248,8 @@ export const useAuthStore = create<AuthState>()(
             user: { ...data.user, avatar: normalizeAvatar(data.user?.avatar) },
             token: data.access_token,
             refreshToken: data.refresh_token ?? null,
+            sessionKind: 'bearer',
+            csrfToken: null,
             isAuthenticated: true,
             isLoading: false,
             error: null,
@@ -266,11 +294,29 @@ export const useAuthStore = create<AuthState>()(
       // Logout - clears auth state and ALL persisted store data
       logout: () => {
         clearAuthFlagCookie();
+        const { sessionKind, csrfToken } = get();
+        if (sessionKind === 'cookie') {
+          // The API ends the session; the provider may end its own too.
+          void fetch(`${getApiUrl()}/api/auth/oidc/logout`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: csrfToken ? { [CSRF_HEADER]: csrfToken } : {},
+          })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+              if (data?.end_session_url && typeof window !== 'undefined') {
+                window.location.href = data.end_session_url;
+              }
+            })
+            .catch(() => undefined);
+        }
 
         set({
           user: null,
           token: null,
           refreshToken: null,
+          sessionKind: null,
+          csrfToken: null,
           isAuthenticated: false,
           error: null,
         });
@@ -309,6 +355,8 @@ export const useAuthStore = create<AuthState>()(
 
       // Share rotation within a tab, and serialize it across tabs where supported.
       refreshAccessToken: (): Promise<boolean> => {
+        // A cookie session is refreshed by the API, at the provider: re-read it.
+        if (get().sessionKind === 'cookie') return get().adoptCookieSession();
         if (refreshPromise) return refreshPromise;
         const originalRefreshToken = get().refreshToken;
         const refresh = async (): Promise<boolean> => {
@@ -354,6 +402,10 @@ export const useAuthStore = create<AuthState>()(
 
       // Check if current token is valid; silently refreshes if expired.
       checkAuth: async (): Promise<boolean> => {
+        if (get().sessionKind === 'cookie') {
+          const adopted = await get().adoptCookieSession();
+          return adopted || get().isAuthenticated;
+        }
         const { token } = get();
 
         // No access token — try to recover via refresh token
@@ -415,29 +467,140 @@ export const useAuthStore = create<AuthState>()(
           return get().isAuthenticated;
         }
       },
+
+      routeLogin: async (email: string): Promise<string | null> => {
+        try {
+          const response = await fetch(`${getApiUrl()}/api/auth/oidc/route`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+          });
+          if (!response.ok) return null;
+          const data = await response.json();
+          return typeof data.provider === 'string' && data.provider ? data.provider : null;
+        } catch {
+          return null;
+        }
+      },
+
+      signInWithProvider: ({ provider, email, next }: { provider?: string; email?: string; next?: string }) => {
+        if (typeof window === 'undefined') return;
+        window.location.href = providerLoginUrl({ provider, email, next });
+      },
+
+      adoptCookieSession: async (): Promise<boolean> => {
+        const apiBase = getApiUrl();
+        try {
+          const response = await fetch(`${apiBase}/api/auth/oidc/session`, {
+            credentials: 'include',
+            cache: 'no-store',
+          });
+          if (response.status === 401) {
+            if (get().sessionKind === 'cookie') {
+              clearAuthFlagCookie();
+              set({ user: null, sessionKind: null, csrfToken: null, isAuthenticated: false });
+            }
+            return false;
+          }
+          if (!response.ok) return false;
+          const data = await response.json();
+          const user = data.user ?? {};
+          const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
+          setAuthFlagCookie();
+          set({
+            user: { ...user, avatar: normalizeAvatar(user.avatar) },
+            token: null,
+            refreshToken: null,
+            sessionKind: 'cookie',
+            csrfToken: typeof data.csrf_token === 'string' ? data.csrf_token : null,
+            isAuthenticated: true,
+            error: null,
+          });
+          return true;
+        } catch {
+          return false;
+        }
+      },
     };
     },
     {
       name: 'nexus-auth',
       storage: createJSONStorage(() => getSafeStorage()),
       merge: mergeAuthPersistedState,
-      partialize: (state) => ({
-        user: state.user,
-        token: state.token,
-        refreshToken: state.refreshToken,
-        isAuthenticated: state.isAuthenticated,
-      }),
+      partialize: (state) => persistedAuthState(state),
     }
   )
 );
 
+/** What is persisted: never a token of a cookie session, never a CSRF token. */
+export function persistedAuthState(state: Pick<AuthState, 'user' | 'token' | 'refreshToken' | 'sessionKind' | 'isAuthenticated'>) {
+  if (state.sessionKind === 'cookie') {
+    return { user: state.user, sessionKind: state.sessionKind, isAuthenticated: state.isAuthenticated };
+  }
+  return {
+    user: state.user,
+    token: state.token,
+    refreshToken: state.refreshToken,
+    sessionKind: state.sessionKind,
+    isAuthenticated: state.isAuthenticated,
+  };
+}
+
+const COOKIE_SESSION = 'cookie-session';
+
 /**
- * Get auth header for API requests
+ * A value that names the current session: the bearer token, a marker for a
+ * cookie session, null when signed out. For effects that follow the session.
  */
-export function getAuthHeader(): Record<string, string> {
-  const token = useAuthStore.getState().token;
-  if (!token) return {};
-  return { 'Authorization': `Bearer ${token}` };
+export function selectSession(state: Pick<AuthState, 'token' | 'sessionKind' | 'isAuthenticated'>): string | null {
+  if (state.token) return state.token;
+  return state.sessionKind === 'cookie' && state.isAuthenticated ? COOKIE_SESSION : null;
+}
+
+/** Whether a user is signed in: a bearer token, or a cookie session. */
+export function hasSession(state: Pick<AuthState, 'token' | 'sessionKind' | 'isAuthenticated'> = useAuthStore.getState()): boolean {
+  return Boolean(state.token) || (state.sessionKind === 'cookie' && state.isAuthenticated);
+}
+
+/** The API's URL that starts a sign-in at an identity provider. */
+export function providerLoginUrl({ provider, email, next }: { provider?: string; email?: string; next?: string }): string {
+  const params = new URLSearchParams();
+  if (provider) params.set('provider', provider);
+  if (email) params.set('email', email);
+  if (next) params.set('next', next);
+  return `${getApiUrl()}/api/auth/oidc/login?${params}`;
+}
+
+/**
+ * Get auth header for API requests: the bearer token, or for a cookie session
+ * the CSRF token on a request that changes state. Pair it with
+ * `credentials: authCredentials()`.
+ */
+export function getAuthHeader(method: string = 'GET'): Record<string, string> {
+  const { token, sessionKind, csrfToken } = useAuthStore.getState();
+  if (token) return { 'Authorization': `Bearer ${token}` };
+  if (sessionKind === 'cookie' && csrfToken && !SAFE_METHODS.has(method.toUpperCase())) {
+    return { [CSRF_HEADER]: csrfToken };
+  }
+  return {};
+}
+
+/** Cookie sessions travel as the API's cookie: requests must include it. */
+export function authCredentials(): RequestCredentials | undefined {
+  return useAuthStore.getState().sessionKind === 'cookie' ? 'include' : undefined;
+}
+
+/** `init` with this session's credentials, the CSRF token loaded when needed. */
+export async function withAuth(init: RequestInit = {}): Promise<RequestInit> {
+  const method = (init.method || 'GET').toUpperCase();
+  const state = useAuthStore.getState();
+  if (state.sessionKind === 'cookie' && !state.csrfToken && !SAFE_METHODS.has(method)) {
+    await state.adoptCookieSession();
+  }
+  const headers = new Headers(init.headers);
+  for (const [name, value] of Object.entries(getAuthHeader(method))) headers.set(name, value);
+  const credentials = authCredentials() ?? init.credentials;
+  return { ...init, headers, ...(credentials ? { credentials } : {}) };
 }
 
 /**
@@ -457,12 +620,16 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
     !new Headers(options.headers).has(SETTINGS_CACHE_HEADER) &&
     shouldUseSettingsCache(window.location.pathname, options.method);
 
+  const method = (options.method || 'GET').toUpperCase();
   const makeRequest = (tok: string | null) =>
     fetchWithSettingsCacheFallback(wantSettingsCache, (useCache) => {
       const headers = new Headers(options.headers);
       if (tok) headers.set('Authorization', `Bearer ${tok}`);
+      const { sessionKind, csrfToken } = useAuthStore.getState();
+      const cookieSession = !tok && sessionKind === 'cookie';
+      if (cookieSession && csrfToken && !SAFE_METHODS.has(method)) headers.set(CSRF_HEADER, csrfToken);
       if (useCache) headers.set(SETTINGS_CACHE_HEADER, '1');
-      return fetch(fullUrl, { ...options, headers });
+      return fetch(fullUrl, { ...options, headers, ...(cookieSession ? { credentials: 'include' as const } : {}) });
     });
 
   // Surface in-flight activity to the UI (e.g. ApiStatusIndicator pulses while busy).
@@ -471,6 +638,9 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
   begin();
 
   try {
+    if (useAuthStore.getState().sessionKind === 'cookie') {
+      return await cookieSessionFetch(method, makeRequest);
+    }
     if (shouldRefreshAccessToken(useAuthStore.getState().token)) {
       await useAuthStore.getState().refreshAccessToken();
     }
@@ -502,6 +672,30 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
   } finally {
     end();
   }
+}
+
+/** A cookie session's request: the CSRF token loaded first for a change, the
+ * session re-read once on a 401 or 403 (another tab, a restart), else signed out. */
+async function cookieSessionFetch(
+  method: string,
+  makeRequest: (tok: string | null) => Promise<Response>,
+): Promise<Response> {
+  const store = useAuthStore.getState();
+  if (!store.csrfToken && !SAFE_METHODS.has(method)) await store.adoptCookieSession();
+  const response = await makeRequest(null);
+  if (response.status !== 401 && !(response.status === 403 && !SAFE_METHODS.has(method))) {
+    return response;
+  }
+  if (await useAuthStore.getState().adoptCookieSession()) {
+    const retried = await makeRequest(null);
+    if (retried.status !== 401) return retried;
+  }
+  if (response.status === 403) return response;
+  useAuthStore.getState().logout();
+  if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth/')) {
+    window.location.href = '/auth/login';
+  }
+  return response;
 }
 
 /** Adopt rotations and explicit logout from other tabs before using shared credentials. */

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { authFetch, useAuthStore } from '@/stores/auth';
+import { authFetch, hasSession, useAuthStore } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { GraphReadCache } from '@/lib/graph-request-cache';
 
@@ -11,7 +11,7 @@ const requestKey = (endpoint: string, payload: string) =>
 const cacheable = (endpoint: string) => endpoint.startsWith('explorer/');
 
 useAuthStore.subscribe((state, previous) => {
-  if (state.user?.id !== previous.user?.id || Boolean(state.token) !== Boolean(previous.token)) cache.clear();
+  if (state.user?.id !== previous.user?.id || hasSession(state) !== hasSession(previous)) cache.clear();
 });
 if (typeof window !== 'undefined') {
   window.addEventListener('graph-cache-refresh', () => cache.clear());

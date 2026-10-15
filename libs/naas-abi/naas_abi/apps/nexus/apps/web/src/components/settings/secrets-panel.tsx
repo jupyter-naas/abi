@@ -132,11 +132,9 @@ export function SecretsPanel() {
     setImportNotice(null);
     try {
       const authModule = await import('@/stores/auth');
-      const { authFetch, useAuthStore } = authModule;
-      
-      // Check if we have a token
-      const currentToken = useAuthStore.getState().token;
-      if (!currentToken) {
+      const { authFetch, hasSession } = authModule;
+
+      if (!hasSession()) {
         window.location.href = '/auth/login';
         return;
       }

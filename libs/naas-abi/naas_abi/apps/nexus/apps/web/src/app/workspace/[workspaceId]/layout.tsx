@@ -5,7 +5,7 @@ import { useParams, usePathname, useRouter } from 'next/navigation';
 import { getWorkspaceSwitchPath, isWorkspacePathAllowed, pathNeedsAgentCatalog, pathNeedsGraphExport } from '@/lib/feature-access';
 import { GraphExportToastHost } from '@/components/graph/graph-export-toast-host';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { useAuthStore } from '@/stores/auth';
+import { selectSession, useAuthStore } from '@/stores/auth';
 
 export default function WorkspaceIdLayout({
   children,
@@ -22,7 +22,7 @@ export default function WorkspaceIdLayout({
   const setCurrentWorkspace = useWorkspaceStore((s) => s.setCurrentWorkspace);
   const syncWorkspaceConversations = useWorkspaceStore((s) => s.syncWorkspaceConversations);
   const contextPanelOpen = useWorkspaceStore((s) => s.contextPanelOpen);
-  const token = useAuthStore((s) => s.token);
+  const token = useAuthStore(selectSession);
   const currentWorkspace = workspaces.find((w) => w.id === workspaceId);
 
   // Before paint, so section pages fetch the target workspace instead of

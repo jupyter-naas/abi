@@ -12,7 +12,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { useAuthStore } from '@/stores/auth';
+import { selectSession, useAuthStore } from '@/stores/auth';
 import { getApiUrl, getWebsocketPath } from '@/lib/config';
 
 interface PresenceUser {
@@ -36,7 +36,7 @@ const WebSocketContext = createContext<WebSocketContextType | null>(null);
 
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user);
-  const token = useAuthStore((state) => state.token);
+  const token = useAuthStore(selectSession);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [presenceUsers, setPresenceUsers] = useState<string[]>([]);
@@ -53,9 +53,11 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     const apiUrl = getApiUrl();
     const websocketPath = getWebsocketPath();
 
+    const bearer = useAuthStore.getState().token;
     const socketInstance = io(apiUrl, {
       path: websocketPath,
-      auth: { authorization: `Bearer ${token}` },
+      // A cookie session's cookie travels with the handshake instead.
+      ...(bearer ? { auth: { authorization: `Bearer ${bearer}` } } : { withCredentials: true }),
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,

@@ -25,7 +25,7 @@
 
 import type { AnalyticsEvent, EventName } from '@/app/analytics/lib/types';
 import { getApiUrl } from '@/lib/config';
-import { useAuthStore } from '@/stores/auth';
+import { authCredentials, getAuthHeader, useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 
 const SESSION_KEY = 'nexus.analytics.session_id';
@@ -188,6 +188,7 @@ export function trackEvent(
     fetch(`${getApiUrl()}/api/analytics/events`, {
       method: 'POST',
       headers: eventHeaders(),
+      credentials: authCredentials(),
       body: JSON.stringify(event),
       keepalive: true,
     }).catch(() => {
@@ -202,6 +203,7 @@ function eventHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const token = sessionToken();
   if (token) headers.Authorization = `Bearer ${token}`;
+  else Object.assign(headers, getAuthHeader('POST'));  // a cookie session's CSRF token
   return headers;
 }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useAuthStore } from '@/stores/auth';
+import { getAuthHeader, hasSession } from '@/stores/auth';
 import type { MapsCustomDataset } from '@/lib/maps-custom-datasets';
 import { mapsCustomFeedUrl } from '../lib/datasets';
 import { fetchMapsFeedPins } from '../lib/maps-feed';
@@ -39,14 +39,13 @@ export function MapsCustomFeed({ dataset }: { dataset: MapsCustomDataset }) {
         if (!workspaceId) {
           throw new Error('Missing workspace');
         }
-        const token = useAuthStore.getState().token;
-        if (!token) {
+        if (!hasSession()) {
           throw new Error('Not authenticated');
         }
         const { pins } = await fetchMapsFeedPins(
           mapsCustomFeedUrl(dataset.id, workspaceId),
           signal,
-          { Authorization: `Bearer ${token}` },
+          getAuthHeader(),
         );
         return pins;
       }}

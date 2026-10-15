@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FolderKanban, Loader2, LogOut } from 'lucide-react';
 import { clearAuthFlagCookie } from '@/lib/auth-session';
-import { authFetch, useAuthStore } from '@/stores/auth';
+import { authFetch, selectSession, useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 
 function slugify(value: string): string {
@@ -20,7 +20,7 @@ function slugify(value: string): string {
 export default function NoWorkspacePage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const token = useAuthStore((s) => s.token);
+  const token = useAuthStore(selectSession);
   const logout = useAuthStore((s) => s.logout);
   const fetchWorkspaces = useWorkspaceStore((s) => s.fetchWorkspaces);
   const workspaces = useWorkspaceStore((s) => s.workspaces);

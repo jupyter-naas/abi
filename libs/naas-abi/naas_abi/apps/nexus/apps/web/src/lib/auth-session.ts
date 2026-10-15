@@ -68,3 +68,10 @@ export function shouldRefreshAccessToken(token: string | null, now = Date.now())
     return true;
   }
 }
+
+/** A path on this app to land on after sign-in: never another origin. */
+export function safeNextPath(value: string | null | undefined): string {
+  if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return '/';
+  if (/[\u0000-\u001f]/.test(value)) return '/';
+  return value;
+}

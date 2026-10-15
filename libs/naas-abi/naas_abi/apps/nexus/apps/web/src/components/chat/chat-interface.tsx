@@ -57,7 +57,7 @@ import { SuggestionsBlock } from './suggestions-block';
 import { slidesEmptyStateCopy } from './slides-empty-state';
 import { templateDisplayName } from '@/lib/slides-templates';
 import { dispatchCodeFileUpdated, useCodeStore } from '@/stores/code';
-import { useAuthStore, authFetch } from '@/stores/auth';
+import { useAuthStore, authFetch, authCredentials, getAuthHeader } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { useTenant } from '@/contexts/tenant-context';
 import { ChatAgentSelector } from '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector';
@@ -1280,6 +1280,7 @@ export function ChatInterface({
             `${getApiBase()}/api/chat/ingestion-jobs/${jobId}`,
             {
               headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+              credentials: authCredentials(),
               signal: abortController.signal,
             },
           );
@@ -1348,7 +1349,8 @@ export function ChatInterface({
       `${getApiBase()}/api/chat/conversations/${conversationId}/files/upload`,
       {
         method: 'POST',
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : getAuthHeader('POST')) },
+        credentials: authCredentials(),
         body: formData,
       },
     );
@@ -1389,6 +1391,7 @@ export function ChatInterface({
       const params = new URLSearchParams({ scope: 'my_drive', path });
       const res = await fetch(`${getApiBase()}/api/files/?${params}`, {
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: authCredentials(),
       });
       if (!res.ok) return;
       const data = await res.json();
@@ -1418,8 +1421,9 @@ export function ChatInterface({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : getAuthHeader('POST')),
         },
+        credentials: authCredentials(),
         body: JSON.stringify({ source_path: sourcePath, workspace_id: currentWorkspaceId }),
       },
     );
@@ -2442,8 +2446,9 @@ export function ChatInterface({
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            ...(token ? { 'Authorization': `Bearer ${token}` } : getAuthHeader('POST')),
           },
+          credentials: authCredentials(),
           signal: controller.signal,
           body: JSON.stringify({
             conversation_id: conversationId,
@@ -2690,8 +2695,9 @@ export function ChatInterface({
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            ...(token ? { 'Authorization': `Bearer ${token}` } : getAuthHeader('POST')),
           },
+          credentials: authCredentials(),
           body: JSON.stringify({
             conversation_id: conversationId,
             workspace_id: workspaceId,

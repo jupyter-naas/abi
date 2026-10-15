@@ -1,5 +1,6 @@
 import type { MapsPinMarker } from './leaflet-map';
 import type { MapsFeedMeta } from './maps-view';
+import { authCredentials } from '@/stores/auth';
 
 export type { MapsFeedMeta, MapsFeedView } from './maps-view';
 export { formatMapsFeedAge, withMapsView } from './maps-view';
@@ -170,7 +171,8 @@ export async function fetchMapsFeedPins(
   signal?: AbortSignal,
   headers?: HeadersInit,
 ): Promise<MapsFeedResult> {
-  const res = await fetch(url, { signal, headers, cache: 'no-store' });
+  // A cookie session's cookie must go with the request.
+  const res = await fetch(url, { signal, headers, credentials: authCredentials(), cache: 'no-store' });
   const data = (await res.json()) as MapsFeedPayload;
   if (!res.ok && !(data.pins && Array.isArray(data.pins) && data.pins.length) && !data.empty && !data.needsKey) {
     throw new Error(data.error || data.message || `Feed ${res.status}`);

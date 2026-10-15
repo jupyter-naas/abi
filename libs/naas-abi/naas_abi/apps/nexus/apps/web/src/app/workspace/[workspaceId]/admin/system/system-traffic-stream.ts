@@ -1,5 +1,5 @@
 import { getApiUrl } from '@/lib/config';
-import { getAuthHeader } from '@/stores/auth';
+import { withAuth } from '@/stores/auth';
 import { SYSTEM_API } from './system-api';
 import { parseSseFrames, type TrafficFrame } from './system-traffic-model';
 
@@ -16,10 +16,10 @@ export async function streamTraffic({
   onFrame: (frame: TrafficFrame) => void;
   maxSeconds?: number;
 }): Promise<void> {
-  const res = await fetch(`${getApiUrl()}${SYSTEM_API}/traffic/stream?max_seconds=${maxSeconds}`, {
-    headers: { ...getAuthHeader(), Accept: 'text/event-stream' },
-    signal,
-  });
+  const res = await fetch(
+    `${getApiUrl()}${SYSTEM_API}/traffic/stream?max_seconds=${maxSeconds}`,
+    await withAuth({ headers: { Accept: 'text/event-stream' }, signal }),
+  );
   if (!res.ok || !res.body) {
     throw new Error(res.status === 403 ? 'Platform super admin role required' : `HTTP ${res.status}`);
   }

@@ -25,6 +25,8 @@ export default function LoginForm() {
     login,
     requestMagicLink,
     verifyOtp,
+    routeLogin,
+    signInWithProvider,
     isLoading,
     error,
     clearError,
@@ -46,6 +48,12 @@ export default function LoginForm() {
     return null;
   });
   const [codeSent, setCodeSent] = useState(false);
+  // The engine's identity providers: an email routes to one (its organization's
+  // verified domain, else the default), and each can be picked directly.
+  const [providers, setProviders] = useState<{ name: string; display_name: string }[]>([]);
+  const [redirecting, setRedirecting] = useState(false);
+  const ssoError = ssoErrorMessage(searchParams.get('sso_error'));
+  const nextPath = searchParams.get('redirect') ?? undefined;
 
   useEffect(() => {
     setMounted(true);
@@ -61,6 +69,10 @@ export default function LoginForm() {
         }
       })
       .catch(() => setPasswordAuthEnabled((prev) => (prev === null ? false : prev)));
+    fetch(`${getApiUrl()}/api/auth/oidc/providers`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => setProviders(Array.isArray(d.providers) ? d.providers : []))
+      .catch(() => setProviders([]));
   }, []);
 
   useEffect(() => {
@@ -102,6 +114,15 @@ export default function LoginForm() {
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
+
+    if (providers.length > 0) {
+      const provider = await routeLogin(email.trim());
+      if (provider) {
+        setRedirecting(true);
+        signInWithProvider({ provider, email: email.trim(), next: nextPath });
+        return;
+      }
+    }
 
     if (passwordAuthEnabled) {
       const workspaceId = await login(email, password);
@@ -210,6 +231,16 @@ export default function LoginForm() {
         <div className="mb-6 text-center">
           <TypingWelcome textColor={textColor} mutedColor={mutedTextColor} />
         </div>
+
+        {ssoError && !error && (
+          <div
+            className="mb-6 flex items-center gap-2 bg-destructive/10 p-3 text-sm text-destructive"
+            style={{ borderRadius: cardRadius }}
+          >
+            <AlertCircle size={16} />
+            <span>{ssoError}</span>
+          </div>
+        )}
 
         {error && (
           <div
@@ -390,7 +421,12 @@ export default function LoginForm() {
             onMouseEnter={(e) => { if (!isLoading) e.currentTarget.style.backgroundColor = accentColor; }}
             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = primaryColor; }}
           >
-            {isLoading ? (
+            {redirecting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Redirecting...
+              </>
+            ) : isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 {passwordAuthEnabled
@@ -408,6 +444,31 @@ export default function LoginForm() {
             )}
           </button>
         </form>
+
+        {providers.length > 0 && (
+          <div className="mt-6 space-y-3">
+            <div className="flex items-center gap-3 text-xs" style={{ color: mutedTextColor }}>
+              <span className="h-px flex-1" style={{ backgroundColor: mutedTextColor, opacity: 0.3 }} />
+              or
+              <span className="h-px flex-1" style={{ backgroundColor: mutedTextColor, opacity: 0.3 }} />
+            </div>
+            {providers.map((provider) => (
+              <button
+                key={provider.name}
+                type="button"
+                disabled={redirecting}
+                onClick={() => {
+                  setRedirecting(true);
+                  signInWithProvider({ provider: provider.name, email: email.trim() || undefined, next: nextPath });
+                }}
+                className="flex h-11 w-full items-center justify-center px-4 text-sm font-medium transition-all disabled:opacity-50"
+                style={{ borderRadius: buttonRadius, border: `1px solid ${mutedTextColor}`, color: textColor }}
+              >
+                Continue with {provider.display_name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {tenant.show_terms_footer && (
         <p className="mt-8 text-center text-caption" style={{ color: subtitleColor }}>
@@ -433,6 +494,30 @@ export default function LoginForm() {
       )}
     </div>
   );
+}
+
+/** What the login page shows for an identity provider's sign-in that failed. */
+export function ssoErrorMessage(code: string | null): string | null {
+  if (!code) return null;
+  switch (code) {
+    case 'email_in_use':
+      return 'This email already belongs to another account. Ask an administrator to link them.';
+    case 'suspended':
+      return 'This account is suspended.';
+    case 'expired_request':
+      return 'The sign-in expired. Please try again.';
+    case 'browser_mismatch':
+      return 'The sign-in was started in another browser. Please try again here.';
+    case 'provider_unavailable':
+      return 'The identity provider cannot be reached right now.';
+    case 'no_provider':
+    case 'unknown_provider':
+      return 'Single sign-on is not set up for this address.';
+    case 'access_denied':
+      return 'The sign-in was cancelled.';
+    default:
+      return 'The sign-in failed. Please try again.';
+  }
 }
 
 const TYPING_WELCOME_PHRASES = [
