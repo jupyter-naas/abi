@@ -34,6 +34,7 @@ from naas_abi_core.engine.nats_auth import (
 from naas_abi_core.engine.nats_sessions import (
     ServicePrimary,
     SessionHost,
+    flush_to_broker,
     session_owner,
     stop_delivery,
     until,
@@ -42,6 +43,10 @@ from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.telemetry import ServedTransfer, serve_transfer
 from nats.errors import Error as NATSError
+
+# How long stop() waits for the broker to confirm its unsubscribes (twice at
+# most: one wait to write them, one for the broker's answer).
+STOP_FLUSH_SECONDS = 1
 
 OPERATIONS = {
     "open": (pb.OpenRequest, pb.OpenResponse),
@@ -238,7 +243,7 @@ class TransferHost(SessionHost):
                         cb=partial(self._dispatch, operation),
                     )
                 )
-            await nc.flush()
+            await flush_to_broker(nc)
             self.reaper = asyncio.create_task(self._expire())
         except BaseException:
             await self.stop()
@@ -258,9 +263,10 @@ class TransferHost(SessionHost):
         self.subscriptions.clear()
         if subscribed and self.nc is not None:
             # Once stop returns the broker has dropped the subjects: a request
-            # finds no responder, never a host that no longer answers.
-            with contextlib.suppress(NATSError):
-                await self.nc.flush()
+            # finds no responder, never a host that no longer answers. Bounded,
+            # so a reconnecting connection cannot eat the shutdown's grace.
+            with contextlib.suppress(NATSError, asyncio.TimeoutError):
+                await flush_to_broker(self.nc, timeout=STOP_FLUSH_SECONDS)
         self.shared_subscriptions.clear()
         if self.reaper:
             self.reaper.cancel()

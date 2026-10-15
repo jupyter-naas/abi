@@ -67,6 +67,21 @@ async def until(done: Callable[[], bool]) -> None:
         await asyncio.sleep(POLL_SECONDS)
 
 
+async def flush_to_broker(nc: Any, timeout: int = 10) -> None:
+    """Return once the broker has processed what ``nc`` sent so far: its
+    SUBs serve, its UNSUBs stop delivery.
+
+    ``Client.flush`` alone does not promise it: it writes its PING straight
+    to the socket, ahead of the SUBs and UNSUBs still buffered for the
+    flusher task, so the PONG can come back first (seen on nats-server 2.14:
+    a request right after it found no responder, or one that had left).
+    Reaches into nats-py: ``Client._flush_pending``.
+    """
+    # On the socket (bounded: nats-py's own wait has no limit by default)...
+    await asyncio.wait_for(nc._flush_pending(force_flush=True), timeout)
+    await nc.flush(timeout=timeout)  # ...and processed by the broker
+
+
 async def stop_delivery(subscriptions: Iterable[Any]) -> None:
     """End nats-py ``subscriptions`` at the broker, keeping what it delivered.
 
@@ -86,8 +101,7 @@ async def stop_delivery(subscriptions: Iterable[Any]) -> None:
         await nc._send_unsubscribe(subscription._id)
         connections[id(nc)] = nc
     for nc in connections.values():
-        await nc._flush_pending(force_flush=True)  # on the socket...
-        await nc.flush()  # ...and processed by the broker
+        await flush_to_broker(nc)
 
 
 class SessionHost(ABC):
