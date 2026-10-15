@@ -9,8 +9,8 @@ Command Line Interface (CLI) tool for building and managing ABI (Agentic Brain I
 Since 3.0, `abi new project` creates projects that run on NATS and `abi new
 module` creates remote modules (`naas-abi-sdk`). Dagster and RabbitMQ are
 legacy extras for projects without NATS, removed in the next major. Upgrading
-a 2.x project: [Migrate from 2.x to 3.0](../../docs/site/docs/upgrade/migrate-to-3.md).
-Every command: [CLI Reference](../../docs/site/docs/capabilities/developer-toolchain/cli.md).
+a 2.x project: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
+Every command: [CLI Reference](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/capabilities/developer-toolchain/cli.md).
 
 ## Installation
 
@@ -470,6 +470,6 @@ The CLI integrates seamlessly with the ABI ecosystem:
 
 ## See Also
 
-- [ABI Main README](../../../README.md) - Complete ABI framework documentation
-- [naas-abi-core](../naas-abi-core/) - Core engine documentation
-- [naas-abi-marketplace](../naas-abi-marketplace/) - Marketplace modules documentation
+- [ABI Main README](https://github.com/jupyter-naas/abi/blob/main/README.md) - Complete ABI framework documentation
+- [naas-abi-core](https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-core) - Core engine documentation
+- [naas-abi-marketplace](https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-marketplace) - Marketplace modules documentation
