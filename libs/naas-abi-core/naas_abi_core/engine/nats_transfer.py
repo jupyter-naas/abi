@@ -13,6 +13,7 @@ ends ``open`` (a queue group) and the owner's sessions go on until they finish.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import contextvars
 import math
 import queue
@@ -40,6 +41,7 @@ from naas_abi_core.engine.nats_sessions import (
 from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.telemetry import ServedTransfer, serve_transfer
+from nats.errors import Error as NATSError
 
 OPERATIONS = {
     "open": (pb.OpenRequest, pb.OpenResponse),
@@ -205,6 +207,7 @@ class TransferHost(SessionHost):
         self.error_mapper = error_mapper
         self.sessions: dict[str, TransferSession] = {}
         self.subscriptions: list[Any] = []
+        self.nc: Any = None
         # ``open``, on a queue group: any owner may answer it.
         self.shared_subscriptions: list[Any] = []
         self.tasks: set[asyncio.Task] = set()
@@ -212,6 +215,7 @@ class TransferHost(SessionHost):
         self.packet_bytes = 0
 
     async def start(self, nc):
+        self.nc = nc
         self.packet_bytes = nc.max_payload  # the broker's limit, the only one
         self.chunk_bytes = min(self.chunk_bytes, self.packet_bytes // 2)
         if self.chunk_bytes < 1024:
@@ -248,9 +252,15 @@ class TransferHost(SessionHost):
         await until(lambda: not self.sessions)
 
     async def stop(self):
+        subscribed = bool(self.subscriptions)
         for sub in self.subscriptions:
             await sub.unsubscribe()
         self.subscriptions.clear()
+        if subscribed and self.nc is not None:
+            # Once stop returns the broker has dropped the subjects: a request
+            # finds no responder, never a host that no longer answers.
+            with contextlib.suppress(NATSError):
+                await self.nc.flush()
         self.shared_subscriptions.clear()
         if self.reaper:
             self.reaper.cancel()
