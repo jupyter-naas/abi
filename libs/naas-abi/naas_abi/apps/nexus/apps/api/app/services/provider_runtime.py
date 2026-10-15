@@ -743,15 +743,16 @@ async def complete_with_remote_agent(
     injection_preamble: str | None,
 ) -> str:
     """The streamed answer of an agent published by a remote module, whole:
-    its text chunks joined, its step events left out."""
+    its text chunks joined, its step events left out. Raises when the agent is
+    unavailable or its run fails, as ``complete_with_abi`` does."""
     from naas_abi.apps.nexus.apps.api.app.services.agents.remote.streaming import (
-        stream_with_remote_agent,
+        remote_agent_chunks,
     )
 
     if not thread_id:
         raise ValueError("A remote agent needs a conversation (thread_id)")
     parts: list[str] = []
-    async for chunk in stream_with_remote_agent(
+    async for chunk in remote_agent_chunks(
         messages,
         config,
         thread_id,
