@@ -248,7 +248,7 @@ export default function OrgRolesPage() {
               disabled={!dirty || saving}
             >
               <Save size={16} />
-              {saved ? 'Saved' : saving ? 'Saving...' : 'Save'}
+              {saved ? 'Saved!' : saving ? 'Saving...' : 'Save Changes'}
             </button>
           ) : undefined
         }
