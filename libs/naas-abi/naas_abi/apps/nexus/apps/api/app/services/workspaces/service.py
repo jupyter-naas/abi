@@ -183,6 +183,6 @@ class WorkspaceService:
         )
 
     async def update_workspace_logo(
-        self, workspace_id: str, logo_url: str
+        self, workspace_id: str, logo_url: str | None
     ) -> WorkspaceRecord | None:
         return await self.adapter.set_workspace_logo(workspace_id=workspace_id, logo_url=logo_url)

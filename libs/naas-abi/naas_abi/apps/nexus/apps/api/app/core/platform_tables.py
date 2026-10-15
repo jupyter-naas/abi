@@ -42,8 +42,8 @@ PLATFORM_TABLES: dict[str, str] = {
     "refresh_tokens": "Sign-in sessions: one row per refresh token, with device and expiry.",
     "revoked_tokens": "Access tokens revoked before they expired.",
     "magic_link_tokens": "Magic link and one-time code sign-in challenges.",
-    "password_reset_tokens": "Password reset links.",
-    "password_changes": "When each user changed their password.",
+    "password_reset_tokens": "Password reset links.",  # nosec B105 - description, not a secret
+    "password_changes": "When each user changed their password.",  # nosec B105 - description
     "api_keys": "Personal API keys (prefix only; the key itself is hashed).",
     "secrets": "Workspace secrets (values are encrypted).",
     "rate_limit_events": "Requests counted by the rate limiter.",
@@ -181,7 +181,8 @@ def _require_known(name: str) -> str:
 
 
 async def _count(db: AsyncSession, name: str) -> int:
-    result = await db.execute(text(f'SELECT COUNT(*) FROM "{_require_known(name)}"'))
+    # The table name is one of the PLATFORM_TABLES constants (_require_known).
+    result = await db.execute(text(f'SELECT COUNT(*) FROM "{_require_known(name)}"'))  # nosec B608
     return int(result.scalar_one())
 
 
@@ -281,7 +282,11 @@ async def read_platform_table(
     """Every column of the table and up to ``limit`` rows, secrets masked."""
     table_name = _require_known(name)
     total = await _count(db, table_name)
-    result = await db.execute(text(f'SELECT * FROM "{table_name}" LIMIT :limit'), {"limit": limit})
+    # Allowlisted table name (_require_known); the limit is a bound parameter.
+    result = await db.execute(
+        text(f'SELECT * FROM "{table_name}" LIMIT :limit'),  # nosec B608
+        {"limit": limit},
+    )
     columns = list(result.keys())
     rows = [_masked_row(table_name, columns, row) for row in result.all()]
     return PlatformTable(
@@ -307,7 +312,8 @@ async def read_platform_table_row(db: AsyncSession, name: str, id: str) -> Platf
         f'CAST("{column}" AS TEXT) = :key_{index}' for index, column in enumerate(primary_key)
     )
     result = await db.execute(
-        text(f'SELECT * FROM "{table_name}" WHERE {where} LIMIT 1'),
+        # Allowlisted table, column names from the database catalog, values bound.
+        text(f'SELECT * FROM "{table_name}" WHERE {where} LIMIT 1'),  # nosec B608
         {f"key_{index}": value for index, value in enumerate(values)},
     )
     found = result.first()

@@ -216,5 +216,7 @@ class WorkspacePermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def set_workspace_logo(self, workspace_id: str, logo_url: str) -> WorkspaceRecord | None:
+    async def set_workspace_logo(
+        self, workspace_id: str, logo_url: str | None
+    ) -> WorkspaceRecord | None:
         raise NotImplementedError

@@ -58,6 +58,9 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
     SignupDisabledError,
     UserNotFoundError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots import (
+    is_safe_drive_id,
+)
 from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
     ensure_under_limit,
     get_rate_limit_identifier,
@@ -588,6 +591,8 @@ async def upload_avatar(
 def _drive_avatar_response(
     object_storage: ObjectStorageService, user_id: str, basename: str
 ) -> Response:
+    if not is_safe_drive_id(user_id):
+        raise HTTPException(status_code=404, detail="Avatar not found")
     stored = avatar_store.read_avatar(object_storage, user_id, basename)
     if stored is None:
         raise HTTPException(status_code=404, detail="Avatar not found")

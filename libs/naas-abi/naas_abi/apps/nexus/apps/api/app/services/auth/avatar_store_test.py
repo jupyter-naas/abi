@@ -5,7 +5,6 @@ from datetime import datetime
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.auth.avatar_store import (
     ORG_AVATAR_BASENAME,
-    archive_prefix,
     avatar_prefix,
     avatar_url,
     read_avatar,
@@ -40,7 +39,6 @@ class MemoryStorage:
 
 def test_layout_is_in_the_personal_drive() -> None:
     assert avatar_prefix("user-1") == "naas_abi/my-drive/user-1/.settings/avatar"
-    assert archive_prefix("user-1") == "naas_abi/my-drive/user-1/.settings/avatar/archives"
     assert avatar_url("user-1", "abcdef0123456789") == "/api/auth/avatar/user/user-1?v=abcdef012345"
 
 

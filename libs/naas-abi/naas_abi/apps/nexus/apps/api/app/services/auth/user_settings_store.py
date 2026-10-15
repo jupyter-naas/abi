@@ -10,14 +10,10 @@ owns, refreshed whenever their profile or picture changes.
 
 from __future__ import annotations
 
-import json
 from datetime import date, datetime
 from typing import Any, Protocol
 
 from naas_abi.apps.nexus.apps.api.app.services.auth import drive_settings
-from naas_abi_core.services.object_storage.ObjectStoragePort import (
-    Exceptions as StorageExceptions,
-)
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 
 SECTION = "user"
@@ -62,16 +58,6 @@ def user_settings_document(user: UserInfo) -> dict[str, Any]:
             "created_at": _iso(user.created_at),
         },
     }
-
-
-def read_user_settings(storage: ObjectStorageService, user_id: str) -> dict[str, Any] | None:
-    try:
-        content = storage.get_object(
-            drive_settings.settings_prefix(user_id, SECTION), USER_SETTINGS_KEY
-        )
-    except StorageExceptions.ObjectNotFound:
-        return None
-    return json.loads(content)
 
 
 def save_user_settings(

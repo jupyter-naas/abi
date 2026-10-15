@@ -1,7 +1,15 @@
-/* organizations settings / workspaces — page chrome; grid still uses Tailwind in TSX */
+/* Organization Settings > Workspaces: the table reuses the Users table styles (users.css). */
 
-.org-settings-workspaces-page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
+.org-workspaces-open {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* Create workspace page. */
+.org-create-workspace-hint {
+  margin-top: var(--space-1);
+  font-weight: var(--font-weight-normal, 400);
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--destructive-hex);
 }

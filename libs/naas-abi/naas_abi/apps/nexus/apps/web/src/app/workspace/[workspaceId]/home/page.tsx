@@ -101,6 +101,7 @@ export default function HomePage() {
           fallbackColor={theme?.backgroundColor}
           onClose={() => setBackgroundDialogOpen(false)}
           onSaved={(backgroundImageUrl) => applyWorkspaceTheme(currentWorkspaceId, { backgroundImageUrl })}
+          onRemoved={() => applyWorkspaceTheme(currentWorkspaceId, { backgroundImageUrl: '' })}
         />
       )}
       <div className="relative min-h-0 flex-1 overflow-hidden">

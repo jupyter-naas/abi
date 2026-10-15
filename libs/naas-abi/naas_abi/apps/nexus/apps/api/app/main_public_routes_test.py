@@ -32,6 +32,7 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/api/auth/avatar/{filename}"): "avatar images used in <img> tags",
     ("GET", "/api/auth/avatar/user/{user_id}"): "account pictures (personal drive) in <img> tags",
     ("GET", "/api/auth/avatar/user/{user_id}/org"): "organization member pictures (personal drive)",
+    ("GET", "/api/workspaces/{workspace_id}/logo"): "workspace logos (workspace drive) in <img> tags",
     ("GET", "/app-preview/{token}"): "capability URL (signed preview token)",
     ("GET", "/app-preview/{token}/{path:path}"): "capability URL (signed preview token)",
     ("GET", "/provider-logos/{provider_id}"): "static provider logos",

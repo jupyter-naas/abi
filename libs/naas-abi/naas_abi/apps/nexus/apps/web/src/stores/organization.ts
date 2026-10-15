@@ -96,9 +96,9 @@ export type OrganizationMemberCreateProfile = {
   interest?: string;
 };
 
+/** No name: a member's full name is always their account name (users.name). */
 export type OrganizationMemberProfileUpdate = {
   role?: 'admin' | 'member';
-  name?: string;
   organization?: string;
   job_title?: string;
   bio?: string;

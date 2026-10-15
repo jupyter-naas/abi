@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { AlertCircle, ArrowLeft, UserPlus } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Camera, UserPlus, X } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
 import { useOrganizationStore, type OrganizationMemberCreateProfile } from '@/stores/organization';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -14,6 +14,8 @@ import '@/app/account/profile/profile.css';
 import '../users.css';
 
 const BIO_MAX_LENGTH = 2000;
+const AVATAR_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 
 type Draft = Required<OrganizationMemberCreateProfile> & { email: string };
 
@@ -60,7 +62,7 @@ export default function OrgCreateUserPage() {
   const params = useParams();
   const router = useRouter();
   const orgId = params.orgId as string;
-  const { inviteMember } = useOrganizationStore();
+  const { inviteMember, uploadMemberAvatar } = useOrganizationStore();
 
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [role, setRole] = useState<'admin' | 'member'>('member');
@@ -68,6 +70,36 @@ export default function OrgCreateUserPage() {
   const [workspaceIds, setWorkspaceIds] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
+  // Picked now, uploaded right after the user exists (organization picture, avatar_org).
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!avatarFile) {
+      setAvatarPreview('');
+      return;
+    }
+    const url = URL.createObjectURL(avatarFile);
+    setAvatarPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [avatarFile]);
+
+  const pickAvatar = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!AVATAR_TYPES.includes(file.type)) {
+      setError('Please choose a PNG, JPG, GIF or WEBP image.');
+      return;
+    }
+    if (file.size > AVATAR_MAX_BYTES) {
+      setError('The picture must be less than 2MB.');
+      return;
+    }
+    setError('');
+    setAvatarFile(file);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -127,6 +159,17 @@ export default function OrgCreateUserPage() {
           throw new Error(data.detail || 'User created, but the workspaces could not be assigned');
         }
       }
+      if (avatarFile) {
+        try {
+          await uploadMemberAvatar(orgId, member.userId, avatarFile);
+        } catch (err) {
+          throw new Error(
+            `User created, but the picture could not be uploaded: ${
+              err instanceof Error ? err.message : 'unknown error'
+            }. Upload it from their page.`
+          );
+        }
+      }
       router.push(`${orgSettingsSectionPath(orgId, 'users')}/${member.userId}`);
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : 'Failed to create the user');
@@ -172,6 +215,53 @@ export default function OrgCreateUserPage() {
           <span>{error}</span>
         </div>
       )}
+
+      <div className="account-profile-avatar-section">
+        <div className="account-profile-avatar-wrapper">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={AVATAR_TYPES.join(',')}
+            onChange={pickAvatar}
+            className="account-profile-avatar-input"
+          />
+          {avatarPreview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarPreview} alt="" className="account-profile-avatar-image" />
+          ) : (
+            <div className="account-profile-avatar-placeholder">
+              {(draft.name || draft.email || '?').charAt(0).toUpperCase()}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={creating}
+            className="account-profile-avatar-upload-button"
+            title="Choose a picture"
+          >
+            <Camera size={16} />
+          </button>
+        </div>
+        <div>
+          <h3 className="account-profile-avatar-info-name">{draft.name.trim() || 'New user'}</h3>
+          <p className="account-profile-avatar-info-email">{draft.email.trim()}</p>
+          <p className="account-profile-avatar-info-hint">
+            Organization picture (max 2MB), uploaded when the user is created. Their account shows
+            it when it has no picture.
+          </p>
+          {avatarFile ? (
+            <button
+              type="button"
+              onClick={() => setAvatarFile(null)}
+              className="account-profile-avatar-remove-button"
+            >
+              <X size={12} />
+              Remove picture
+            </button>
+          ) : null}
+        </div>
+      </div>
 
       <AccountSectionCard padded stack>
         <div className="account-profile-form-grid">

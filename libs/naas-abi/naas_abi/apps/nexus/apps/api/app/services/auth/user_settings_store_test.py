@@ -6,7 +6,6 @@ from datetime import datetime
 
 from naas_abi.apps.nexus.apps.api.app.services.auth.avatar_store_test import MemoryStorage
 from naas_abi.apps.nexus.apps.api.app.services.auth.user_settings_store import (
-    read_user_settings,
     save_user_settings,
 )
 
@@ -36,7 +35,7 @@ def test_first_save_writes_user_json_without_the_password() -> None:
 
     assert result.changed is True and result.archived_key is None
     assert storage.paths() == {f"{PREFIX}/user.json"}
-    document = read_user_settings(storage, "user-1")
+    document = json.loads(storage.get_object(PREFIX, "user.json"))
     assert document["schema_version"] == 1
     assert document["user"] == {
         "id": "user-1",
@@ -69,4 +68,7 @@ def test_changed_info_archives_the_previous_version() -> None:
     assert result.archived_key == "20261014T100005Z_user.json"
     archived = json.loads(storage.get_object(f"{PREFIX}/archives", "20261014T100005Z_user.json"))
     assert archived["user"]["organization"] == "Acme"
-    assert read_user_settings(storage, "user-1")["user"]["organization"] == "Forvis Mazars"
+    assert (
+        json.loads(storage.get_object(PREFIX, "user.json"))["user"]["organization"]
+        == "Forvis Mazars"
+    )

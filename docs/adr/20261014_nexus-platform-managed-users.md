@@ -75,6 +75,10 @@ and per-member workspace assignment.
    identical to the current file (same SHA-256 hash) changes nothing. The
    database stays the source of truth: a storage failure is logged and never
    fails the request.
+   Workspace logos follow the same logic in the workspace drive:
+   `naas_abi/workspace-drive/<workspace_id>/.settings/logos/logo.<ext>`, served
+   at `GET /api/workspaces/{id}/logo` (SVGs with a sandboxing CSP). Only org
+   owners and admins can create a workspace in their organization.
 8. **Snapshots replace the yaml lists.** `config.users.yaml` (one entry per
    person: account fields, org roles, workspace roles) is not read on boot.
    `python -m naas_abi.apps.nexus.apps.api.app.core.users_import <file>`

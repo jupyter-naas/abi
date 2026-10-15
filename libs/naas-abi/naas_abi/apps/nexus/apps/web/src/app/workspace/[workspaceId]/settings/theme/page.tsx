@@ -1,19 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import {
-  Brush,
-  Upload,
-  Image as ImageIcon,
-  Check,
-  X,
-  RefreshCw,
-  Smile,
-  Palette,
-} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Brush, Camera, Check, Image as ImageIcon, Palette, RefreshCw, Smile, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   SettingsEmpty,
   SettingsField,
@@ -22,12 +12,15 @@ import {
   SettingsSection,
 } from '@/components/settings/settings-ui';
 import { getApiUrl } from '@/lib/config';
+import { fetchCurrentBackgroundImage } from '@/lib/home-background';
+import { authFetch } from '@/stores/auth';
 import {
   useWorkspaceStore,
   PRESET_COLORS,
   DEFAULT_THEME,
-  type WorkspaceTheme,
 } from '@/stores/workspace';
+import { BackgroundImageEditor } from '../../home/components/background-image-editor';
+import { resolveDeskImageUrl } from '../../home/home-desk';
 
 // Common emoji choices for workspace icons
 const EMOJI_OPTIONS = [
@@ -36,37 +29,77 @@ const EMOJI_OPTIONS = [
   '🌍', '🌐', '☁️', '🔒', '🛡️', '⚙️', '🎮', '🎵',
 ];
 
+const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
+const LOGO_MAX_BYTES = 5 * 1024 * 1024;
+
+function assetUrl(url?: string | null): string {
+  if (!url) return '';
+  return url.startsWith('/') ? `${getApiUrl()}${url}` : url;
+}
+
+async function readApiError(response: Response, fallback: string): Promise<string> {
+  try {
+    const data = await response.json();
+    if (typeof data?.detail === 'string') return data.detail;
+  } catch {
+    // ignore parse errors
+  }
+  return fallback;
+}
+
+/**
+ * Settings → Theme: the workspace's identity (logo, stored in the workspace
+ * drive like account avatars, or an emoji), its desk wallpaper (the same editor
+ * as Home → File → Edit background image) and its colors.
+ */
 export default function ThemeSettingsPage() {
-  // Use reactive selectors instead of getCurrentWorkspace()
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
   const updateWorkspaceTheme = useWorkspaceStore((state) => state.updateWorkspaceTheme);
-  const updateWorkspace = useWorkspaceStore((state) => state.updateWorkspace);
-  
-  // Compute workspace from reactive state
+  const applyWorkspaceTheme = useWorkspaceStore((state) => state.applyWorkspaceTheme);
+
   const workspace = workspaces.find((w) => w.id === currentWorkspaceId) || null;
   const theme = workspace?.theme || DEFAULT_THEME;
+  const canEdit = workspace?.currentUserRole === 'owner' || workspace?.currentUserRole === 'admin';
 
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [customColor, setCustomColor] = useState(theme.primaryColor);
-  const [logoUrl, setLogoUrl] = useState(theme.logoUrl || '');
-  const [backgroundImageUrl, setBackgroundImageUrl] = useState(theme.backgroundImageUrl || '');
   const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // Sync local state when workspace changes
+  // Remounts the inline wallpaper editor after Save/Cancel so it reloads the current wallpaper.
+  const [wallpaperEditorKey, setWallpaperEditorKey] = useState(0);
+  const [driveBackgroundUrl, setDriveBackgroundUrl] = useState<string | undefined>();
+
   useEffect(() => {
-    if (workspace) {
-      setCustomColor(workspace.theme?.primaryColor || DEFAULT_THEME.primaryColor);
-      setLogoUrl(workspace.theme?.logoUrl || '');
-      setBackgroundImageUrl(workspace.theme?.backgroundImageUrl || '');
-    }
+    if (workspace) setCustomColor(workspace.theme?.primaryColor || DEFAULT_THEME.primaryColor);
   }, [workspace]);
 
-  if (!workspace) {
+  // As on Home: the wallpaper lives in the workspace drive; when the theme lost
+  // its pointer, ask the API for the committed file.
+  const themeBackgroundUrl = resolveDeskImageUrl(theme.backgroundImageUrl);
+  useEffect(() => {
+    setDriveBackgroundUrl(undefined);
+    if (!currentWorkspaceId || themeBackgroundUrl) return;
+    let cancelled = false;
+    void fetchCurrentBackgroundImage(currentWorkspaceId)
+      .then((url) => {
+        if (!cancelled && url) setDriveBackgroundUrl(url);
+      })
+      .catch(() => {
+        // No wallpaper: the editor starts empty.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentWorkspaceId, themeBackgroundUrl]);
+  const currentBackgroundUrl = themeBackgroundUrl || driveBackgroundUrl;
+
+  if (!workspace || !currentWorkspaceId) {
     return <SettingsEmpty title="No workspace selected" />;
   }
+
+  const logoSrc = assetUrl(theme.logoUrl);
 
   const handleColorChange = (color: string) => {
     updateWorkspaceTheme({ primaryColor: color });
@@ -78,74 +111,55 @@ export default function ThemeSettingsPage() {
     setShowEmojiPicker(false);
   };
 
-  const handleLogoUrlChange = (url: string) => {
-    setLogoUrl(url);
-    updateWorkspaceTheme({ logoUrl: url });
-  };
-
-  const handleBackgroundImageUrlChange = (url: string) => {
-    setBackgroundImageUrl(url);
-    updateWorkspaceTheme({ backgroundImageUrl: url });
-  };
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    event.target.value = '';
     if (!file) return;
-    setUploadError(null);
-
-    // Validate file type
-    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
-    if (!validTypes.includes(file.type)) {
-      setUploadError('Please upload a valid image file (PNG, JPG, GIF, WEBP, or SVG)');
+    setLogoError(null);
+    if (!LOGO_TYPES.includes(file.type)) {
+      setLogoError('Please choose a PNG, JPG, GIF, WEBP or SVG image.');
       return;
     }
-
-    // Validate file size (5MB max)
-    if (file.size > 5 * 1024 * 1024) {
-      setUploadError('File size must be less than 5MB');
+    if (file.size > LOGO_MAX_BYTES) {
+      setLogoError('The logo must be less than 5MB.');
       return;
     }
-
     setUploading(true);
     try {
-      const { authFetch } = await import('@/stores/auth');
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await authFetch(
-        `/api/workspaces/${currentWorkspaceId}/upload-logo`,
-        {
-          method: 'POST',
-          body: formData,
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        // Use the API base URL for the logo
-        const fullUrl = `${getApiUrl()}${data.logo_url}`;
-        setLogoUrl(fullUrl);
-        updateWorkspaceTheme({ logoUrl: fullUrl });
-      } else {
-        const error = await response.json();
-        setUploadError(`Upload failed: ${error.detail || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
-      setUploadError('Failed to upload logo');
+      const form = new FormData();
+      form.append('file', file);
+      const res = await authFetch(`/api/workspaces/${currentWorkspaceId}/upload-logo`, {
+        method: 'POST',
+        body: form,
+      });
+      if (!res.ok) throw new Error(await readApiError(res, 'Failed to upload the logo'));
+      const data: { logo_url: string } = await res.json();
+      // The API already saved it (workspace drive): update the store only.
+      applyWorkspaceTheme(currentWorkspaceId, { logoUrl: data.logo_url });
+    } catch (err) {
+      setLogoError(err instanceof Error ? err.message : 'Failed to upload the logo');
     } finally {
       setUploading(false);
-      // Reset input
-      if (event.target) {
-        event.target.value = '';
-      }
     }
   };
 
-  const handleResetTheme = () => {
-    updateWorkspaceTheme({ ...DEFAULT_THEME });
+  const handleLogoRemove = async () => {
+    setLogoError(null);
+    try {
+      const res = await authFetch(`/api/workspaces/${currentWorkspaceId}/logo`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(await readApiError(res, 'Failed to remove the logo'));
+      applyWorkspaceTheme(currentWorkspaceId, { logoUrl: '' });
+    } catch (err) {
+      setLogoError(err instanceof Error ? err.message : 'Failed to remove the logo');
+    }
+  };
+
+  const handleResetColors = () => {
+    updateWorkspaceTheme({
+      primaryColor: DEFAULT_THEME.primaryColor,
+      accentColor: DEFAULT_THEME.accentColor,
+    });
     setCustomColor(DEFAULT_THEME.primaryColor);
-    setLogoUrl('');
   };
 
   const selectedRing = 'ring-2 ring-foreground ring-offset-2 ring-offset-background';
@@ -153,136 +167,147 @@ export default function ThemeSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <SettingsPageHeader title="Workspace Theme" description="Customize the look and feel of your workspace" />
+      <SettingsPageHeader
+        title="Workspace Theme"
+        description="The workspace logo, desk wallpaper and colors. Changes are saved automatically."
+      />
 
-      <SettingsSection title="Preview">
-        <div className="flex items-center gap-4 p-4" style={{ backgroundColor: theme.sidebarColor || '#111111' }}>
-          <div
-            className="flex h-12 w-12 items-center justify-center overflow-hidden text-2xl text-white"
-            style={{ backgroundColor: theme.logoUrl ? 'transparent' : theme.primaryColor }}
-          >
-            {theme.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={theme.logoUrl} alt="Logo" className="h-full w-full object-cover" />
-            ) : (
-              theme.logoEmoji || workspace.name.charAt(0)
+      <SettingsSection
+        title={
+          <span className="flex items-center gap-2">
+            <ImageIcon size={16} className="text-muted-foreground" />
+            Identity
+          </span>
+        }
+      >
+        <div className="flex flex-wrap items-center gap-5">
+          <div className="relative">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={LOGO_TYPES.join(',')}
+              onChange={(event) => void handleLogoUpload(event)}
+              className="hidden"
+            />
+            <div
+              className="flex h-20 w-20 items-center justify-center overflow-hidden text-3xl text-white"
+              style={{ backgroundColor: logoSrc ? 'transparent' : theme.primaryColor }}
+            >
+              {logoSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logoSrc} alt="Workspace logo" className="h-full w-full object-cover" />
+              ) : (
+                theme.logoEmoji || workspace.name.charAt(0)
+              )}
+            </div>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center bg-workspace-accent text-white shadow-md transition-colors hover:bg-workspace-accent/90 disabled:opacity-60"
+                title="Upload a logo"
+                aria-label="Upload a logo"
+              >
+                {uploading ? <RefreshCw size={14} className="animate-spin" /> : <Camera size={14} />}
+              </button>
             )}
           </div>
-          <div>
-            <h4 className="text-lg font-semibold text-white">{workspace.name}</h4>
-            <p className="text-sm text-gray-400">{workspace.description}</p>
+
+          <div className="min-w-0 flex-1">
+            <h4 className="truncate text-lg font-semibold text-foreground">{workspace.name}</h4>
+            {workspace.description && (
+              <p className="truncate text-sm text-muted-foreground">{workspace.description}</p>
+            )}
+            <p className="mt-1 text-xs text-muted-foreground">
+              Logo: PNG, JPG, GIF, WEBP or SVG, max 5MB. Without a logo, the emoji is shown.
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  disabled={!canEdit}
+                >
+                  <span className="text-base">{theme.logoEmoji || '📁'}</span>
+                  Change emoji
+                  <Smile size={14} className="text-muted-foreground" />
+                </Button>
+                {showEmojiPicker && (
+                  <div className="absolute left-0 top-full z-50 mt-2 w-80 border border-border bg-popover p-3 shadow-lg">
+                    <div className="grid grid-cols-8 gap-1">
+                      {EMOJI_OPTIONS.map((emoji) => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => handleEmojiSelect(emoji)}
+                          className={cn(
+                            'flex h-9 w-9 items-center justify-center text-xl transition-colors hover:bg-primary/10',
+                            theme.logoEmoji === emoji && 'bg-primary/20 ring-2 ring-primary'
+                          )}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {logoSrc && canEdit && (
+                <Button variant="secondary" size="sm" className="gap-1" onClick={() => void handleLogoRemove()}>
+                  <X size={14} />
+                  Remove logo
+                </Button>
+              )}
+            </div>
           </div>
         </div>
+        {logoError && (
+          <div className="mt-3">
+            <SettingsNotice tone="error">{logoError}</SettingsNotice>
+          </div>
+        )}
       </SettingsSection>
 
       <SettingsSection
         title={
           <span className="flex items-center gap-2">
             <ImageIcon size={16} className="text-muted-foreground" />
-            Logo
+            Desktop wallpaper
           </span>
         }
       >
-        <div className="space-y-5">
-          <SettingsField label="Emoji Icon">
-            <div className="relative">
-              <Button variant="secondary" className="h-12 gap-3 px-4" onClick={() => setShowEmojiPicker(!showEmojiPicker)}>
-                <span className="text-2xl">{theme.logoEmoji || '📁'}</span>
-                <span className="font-normal text-muted-foreground">Click to change emoji</span>
-                <Smile size={16} className="ml-2 text-muted-foreground" />
-              </Button>
-
-              {showEmojiPicker && (
-                <div className="absolute left-0 top-full z-50 mt-2 w-80 border border-border bg-popover p-3 shadow-lg">
-                  <div className="grid grid-cols-8 gap-1">
-                    {EMOJI_OPTIONS.map((emoji) => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        onClick={() => handleEmojiSelect(emoji)}
-                        className={cn(
-                          'flex h-9 w-9 items-center justify-center text-xl transition-colors hover:bg-primary/10',
-                          theme.logoEmoji === emoji && 'bg-primary/20 ring-2 ring-primary'
-                        )}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </SettingsField>
-
-          <SettingsField label="Logo Image" hint="The logo will be used instead of the emoji icon">
-            <div className="space-y-3">
-              <div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-                <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-                  {uploading ? (
-                    <>
-                      <RefreshCw size={16} className="animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <Upload size={16} />
-                      Upload Logo
-                    </>
-                  )}
-                </Button>
-                <p className="mt-1 text-xs text-muted-foreground">PNG, JPG, GIF, WEBP, or SVG (max 5MB)</p>
-              </div>
-              {uploadError && <SettingsNotice tone="error">{uploadError}</SettingsNotice>}
-              <div>
-                <p className="mb-1 text-xs font-medium text-muted-foreground">Or enter a URL</p>
-                <div className="flex gap-2">
-                  <Input
-                    type="url"
-                    value={logoUrl}
-                    onChange={(e) => handleLogoUrlChange(e.target.value)}
-                    placeholder="https://example.com/logo.png"
-                    className="flex-1"
-                  />
-                  {logoUrl && (
-                    <Button variant="secondary" size="icon" className="h-9 w-9" onClick={() => handleLogoUrlChange('')} title="Clear">
-                      <X size={16} />
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </SettingsField>
-
-          <SettingsField label="Desktop wallpaper" hint="URL of the image used as the Home canvas background">
-            <div className="flex gap-2">
-              <Input
-                type="url"
-                value={backgroundImageUrl}
-                onChange={(e) => handleBackgroundImageUrlChange(e.target.value)}
-                placeholder="https://example.com/hero.jpg"
-                className="flex-1"
-              />
-              {backgroundImageUrl && (
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className="h-9 w-9"
-                  onClick={() => handleBackgroundImageUrlChange('')}
-                  title="Clear"
-                >
-                  <X size={16} />
-                </Button>
-              )}
-            </div>
-          </SettingsField>
-        </div>
+        {canEdit ? (
+          <>
+            <p className="mb-3 text-sm text-muted-foreground">
+              The Home desk background. PNG, JPEG, GIF, WEBP or AVIF, up to 10 MB. Drag to move,
+              scroll to zoom, then save.
+            </p>
+            <BackgroundImageEditor
+              key={wallpaperEditorKey}
+              open
+              workspaceId={currentWorkspaceId}
+              currentBackgroundUrl={currentBackgroundUrl}
+              fallbackColor={theme.backgroundColor}
+              onClose={() => setWallpaperEditorKey((key) => key + 1)}
+              onSaved={(backgroundImageUrl) =>
+                applyWorkspaceTheme(currentWorkspaceId, { backgroundImageUrl })
+              }
+              onRemoved={() => {
+                setDriveBackgroundUrl(undefined);
+                applyWorkspaceTheme(currentWorkspaceId, { backgroundImageUrl: '' });
+              }}
+              saveLabel="Save wallpaper"
+              cancelLabel="Discard changes"
+            />
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Only workspace owners and admins can change the wallpaper.
+          </p>
+        )}
       </SettingsSection>
 
       <SettingsSection
@@ -356,16 +381,15 @@ export default function ThemeSettingsPage() {
               ))}
             </div>
           </SettingsField>
+
+          <div className="flex justify-end">
+            <Button variant="secondary" onClick={handleResetColors}>
+              <RefreshCw size={16} />
+              Reset colors
+            </Button>
+          </div>
         </div>
       </SettingsSection>
-
-      <div className="flex items-center justify-between border-t border-border pt-6">
-        <Button variant="secondary" onClick={handleResetTheme}>
-          <RefreshCw size={16} />
-          Reset to Default
-        </Button>
-        <p className="text-sm text-muted-foreground">Changes are saved automatically</p>
-      </div>
     </div>
   );
 }

@@ -167,3 +167,20 @@ def test_background_image_url_carries_non_default_framing() -> None:
         background_image_url("ws-1", "abc.png", x=25, y=62.5, zoom=1.75)
         == "/api/workspaces/ws-1/background-image?v=abc.png&x=25&y=62.5&z=1.75"
     )
+
+
+def test_remove_archives_the_wallpaper_and_clears_drafts(tmp_path) -> None:
+    from datetime import datetime
+
+    files = _files(tmp_path)
+    bg = WorkspaceBackgroundImage(files, WS)
+    name = bg.commit(bg.stage(PNG))
+    bg.stage(JPEG)  # a draft in progress
+
+    archived = bg.remove(now=datetime(2026, 10, 14, 10, 0, 5))
+
+    assert archived == f"20261014T100005Z_{name}"
+    assert bg.current_name() is None
+    assert _names(files, _home("tmp")) == []
+    assert _names(files, _home("archives")) == [archived]
+    assert bg.remove(now=datetime(2026, 10, 14, 11, 0, 0)) is None

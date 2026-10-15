@@ -491,7 +491,9 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
         await self.db.commit()
         return True
 
-    async def set_workspace_logo(self, workspace_id: str, logo_url: str) -> WorkspaceRecord | None:
+    async def set_workspace_logo(
+        self, workspace_id: str, logo_url: str | None
+    ) -> WorkspaceRecord | None:
         result = await self.db.execute(
             select(WorkspaceModel).where(WorkspaceModel.id == workspace_id)
         )
