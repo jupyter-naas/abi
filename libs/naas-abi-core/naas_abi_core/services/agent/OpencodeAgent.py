@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import atexit
 import contextlib
+import contextvars
 import json
 import os
 import random
@@ -882,7 +883,9 @@ def _run_coroutine_sync(coro: Any) -> Any:
         except Exception as e:  # noqa: BLE001
             container["error"] = e
 
-    thread = Thread(target=_runner, daemon=True)
+    # The caller's context (who is calling, RFC §10.2) goes with the coroutine:
+    # a raw Thread starts with an empty one.
+    thread = Thread(target=contextvars.copy_context().run, args=(_runner,), daemon=True)
     thread.start()
     thread.join()
 

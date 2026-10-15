@@ -10,6 +10,13 @@ instead of crashing the agent turn.
 Scope: read-heavy + safe writes across the knowledge graph (triple store),
 object storage, vector store, cache and key-value store. Sensitive/side-effecting
 services (secrets, message bus, email) are intentionally excluded for now.
+
+Every tool acts for the user who is chatting: it calls the kernel in the run's
+``CallContext`` (on a Nexus chat, ``api`` on behalf of that user), which the
+agent run carries to its tools. Each service authorizes the call against that
+user's policy, so a tool only reaches what the user may see; a refusal comes
+back as ``{"error": ...}``. A run with no caller (no context) reaches nothing.
+Tools never switch identity.
 """
 
 from __future__ import annotations

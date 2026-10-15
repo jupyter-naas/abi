@@ -1,3 +1,4 @@
+import contextvars
 import threading
 import weakref
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -150,8 +151,13 @@ You: code a project
                     )
             logger.debug("Intent index background warmup complete.")
 
+        # The embeddings are calls of the caller's (the engine's, at boot), not
+        # anonymous ones: a raw Thread starts with an empty context.
         thread = threading.Thread(
-            target=_warm, name="intent-index-warmup", daemon=True
+            target=contextvars.copy_context().run,
+            args=(_warm,),
+            name="intent-index-warmup",
+            daemon=True,
         )
         thread.start()
         return thread
@@ -181,8 +187,14 @@ You: code a project
 
                 vectors_by_start: dict[int, list[list[float]]] = {}
                 with ThreadPoolExecutor(max_workers=batch_count) as executor:
+                    # Each worker embeds as the caller (an executor thread does
+                    # not inherit the context).
                     future_to_start = {
-                        executor.submit(self._embed_documents, batch): start
+                        executor.submit(
+                            contextvars.copy_context().run,
+                            self._embed_documents,
+                            batch,
+                        ): start
                         for start, batch in batches
                     }
                     for future in as_completed(future_to_start):

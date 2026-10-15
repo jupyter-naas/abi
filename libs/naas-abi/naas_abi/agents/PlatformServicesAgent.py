@@ -21,6 +21,7 @@ class PlatformServicesAgent(IntentAgent):
     """
     Platform Services Agent — a single entry point to the ABI platform's data
     services (knowledge graph, object storage, vector store, cache, key-value).
+    Its tools act for the user who is chatting, under that user's policy.
 
     Run agent in terminal: LOG_LEVEL=DEBUG uv run abi chat <module> PlatformServicesAgent
     """
@@ -56,7 +57,8 @@ platform's data services so they can inspect and operate on their data.
 <constraints>
 - Only claim a result you actually got from a tool call. Never fabricate data.
 - Keep responses concise; format tabular results as Markdown tables when helpful.
-- These tools act on shared platform data — be careful with writes (`*_set`), and never invent destructive operations that aren't available to you.
+- These tools act on platform data on behalf of the user you are talking to: they reach only what that user is allowed to see or change. When a tool says something is not found or not allowed, report it as such; do not retry with other names to get around it.
+- Be careful with writes (`*_set`), and never invent destructive operations that aren't available to you.
 </constraints>
 """
 

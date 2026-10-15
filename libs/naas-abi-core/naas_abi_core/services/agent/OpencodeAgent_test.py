@@ -1,7 +1,16 @@
+import asyncio
+
+from naas_abi_core.engine.call_context import (
+    CallContext,
+    current_call_context,
+    service_account,
+    use_call_context,
+)
 from naas_abi_core.services.agent.OpencodeAgent import (
     OpencodeAgent,
     OpencodeAgentConfiguration,
     OpencodeStartupError,
+    _run_coroutine_sync,
 )
 
 
@@ -182,3 +191,17 @@ def test_ensure_opencode_auth_file_from_engine_configuration(monkeypatch, tmp_pa
     assert '"openrouter"' in content
     assert '"type": "api"' in content
     assert '"key": "sk-test"' in content
+
+
+def test_a_sync_run_inside_a_loop_keeps_the_callers_context():
+    """``invoke`` from a running loop hops to a thread; the caller goes with it."""
+
+    async def caller_seen():
+        return current_call_context()
+
+    async def invoke_from_a_loop():
+        return _run_coroutine_sync(caller_seen())
+
+    caller = CallContext(principal=service_account("api"))
+    with use_call_context(caller):
+        assert asyncio.run(invoke_from_a_loop()) == caller
