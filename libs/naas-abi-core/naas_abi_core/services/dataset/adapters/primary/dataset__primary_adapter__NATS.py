@@ -670,6 +670,8 @@ class DatasetPrimaryAdapterNATS(ServiceWithTransfers):
         self, req: dataset_pb2.NamespaceVersionRequest
     ) -> dataset_pb2.NamespaceVersionResponse:
         version = self._adapter.namespace_version(req.namespace)
+        if version is None:  # never held a dataset: no arm of the oneof
+            return dataset_pb2.NamespaceVersionResponse()
         return dataset_pb2.NamespaceVersionResponse(version=version)
 
     async def _handle_drop(self, request: Request) -> None:
