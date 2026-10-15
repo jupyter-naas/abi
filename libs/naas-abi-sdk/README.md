@@ -473,7 +473,8 @@ inference cannot be forcibly interrupted: the adapter waits for its worker threa
 before releasing the claim. Completed side effects cannot be undone. Graph
 interrupt/resume is not yet part of this protocol.
 
-The host admits at most 32 active runs per module. Prompts remain bounded to
+The host admits at most 200 active runs per process (`MAX_ACTIVE_RUNS`),
+shared by every agent it hosts; one more fails with `AGENT_BUSY`. Prompts remain bounded to
 64 KiB. Events and results are stored separately as immutable 8 KiB fragments;
 there is no 64 KiB output limit or 1024-event cap. The run record holds committed
 sequence counters and stays small. Status returns up to 64 event references;
