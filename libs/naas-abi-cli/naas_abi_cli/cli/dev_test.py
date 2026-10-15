@@ -34,6 +34,13 @@ def _spec(name: str, port: int) -> "ServiceSpec":
     return dev._service_spec(name, port)
 
 
+@pytest.fixture(autouse=True)
+def _outside_the_repository(monkeypatch, tmp_path) -> None:
+    """Run from an empty folder: launching the api generates ABI_API_KEY into
+    the project's .env, which must not be the repository's own."""
+    monkeypatch.chdir(tmp_path)
+
+
 # =============================================================================
 # Browser-facing URLs
 # =============================================================================
