@@ -73,7 +73,14 @@ class _StubAdapter(ICodingEnvironmentAdapter):
         self.logs: dict[str, list[str]] = {}
         self.last_params: dict[str, str] | None | object = "unset"
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
         if self.next_error is not None:
             raise self.next_error
         return f"user-{external_id}"

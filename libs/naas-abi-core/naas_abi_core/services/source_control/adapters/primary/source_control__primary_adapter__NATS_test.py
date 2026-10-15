@@ -129,7 +129,14 @@ class _StubAdapter(ISourceControlAdapter):
             html_url=f"https://forge.test/pr/{record['number']}",
         )
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
         return self._next("user")
 
     def find_user(self, *, external_id: str) -> str | None:
@@ -1054,7 +1061,14 @@ def test_not_implemented_maps_to_unimplemented_not_retryable():
 
 def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():
     class _BoomAdapter(_StubAdapter):
-        def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+        def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
             raise RuntimeError("some sensitive internal detail")
 
     adapter = SourceControlPrimaryAdapterNATS(_BoomAdapter(), SECRET)
