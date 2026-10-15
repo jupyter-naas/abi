@@ -170,7 +170,9 @@ services:
       - MCP_TRANSPORT=http
       - MCP_HOST=0.0.0.0
     ports:
-      - 8000:8000
+      # The MCP server checks no credential and calls agents with ABI_API_KEY:
+      # from this machine only.
+      - 127.0.0.1:8000:8000
     networks:
       - abi-network
 

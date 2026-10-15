@@ -328,8 +328,10 @@ working.
   `NATS_MODULE_PASSWORD` in `.env`, a Caddy route for `/app-html/remote/*`,
   MinIO from `pgsty/minio` and `pgsty/mc` (the `quay.io/minio` images are no
   longer served, `c539455e4`), a working `fuseki-compact`, and an
-  `mcp-server` that mounts the project and listens on `0.0.0.0`
-  (`24b9a5e42`).
+  `mcp-server` that mounts the project and listens on `0.0.0.0` in its
+  container (`24b9a5e42`), published on the host's `127.0.0.1:8000` only: it
+  checks no credential and calls the agents with `ABI_API_KEY`, so reach it
+  through a tunnel or a proxy that authenticates.
 - **NATS on:** the NATS stack: `nats` without a profile (the engine waits for
   it; it refuses to start without both passwords), no `dagster` service,
   RabbitMQ behind the `rabbitmq` profile, `NATS_JWT_SECRET` in `.env`.
