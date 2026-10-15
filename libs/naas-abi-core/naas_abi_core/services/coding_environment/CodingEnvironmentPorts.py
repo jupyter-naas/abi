@@ -30,6 +30,10 @@ class WorkspaceStatus:
     name: str
     phase: str  # one of PHASE_*
     agent_ready: bool = False
+    # Who owns it and what it was built from, when the backend knows (admin views).
+    owner: str = ""
+    template: str = ""
+    created_at: str | None = None  # ISO 8601
 
 
 @dataclass(frozen=True)
@@ -134,6 +138,12 @@ class ICodingEnvironmentAdapter(ABC):
     @abstractmethod
     def list_environments(self, *, user_id: str) -> list[WorkspaceStatus]:
         """List the workspaces owned by ``user_id`` (newest-first if known)."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def list_all_environments(self) -> list[WorkspaceStatus]:
+        """Every workspace across all users (platform admin view), each with its
+        ``owner`` when the backend knows it."""
         raise NotImplementedError()
 
     @abstractmethod

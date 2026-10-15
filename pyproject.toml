@@ -12,7 +12,9 @@ readme = "README.md"
 dependencies = [
     "naas-abi",
     "naas-abi-cli",
-    "naas-abi-core[all]",
+    # This repository runs without NATS (config.yaml), with Dagster and
+    # RabbitMQ, and tests them: the legacy extras are not in [all].
+    "naas-abi-core[all,dagster,rabbitmq]",
     "naas-abi-marketplace[ai-chatgpt]",
     "naas-abi-marketplace[ai-claude]",
     "naas-abi-marketplace[ai-deepseek]",
@@ -113,7 +115,7 @@ dependencies = [
 [project.scripts]
 abi = "naas_abi_cli.cli:main"
 api = "naas_abi_core.apps.api.api:api"
-mcp-server = "naas_abi_core.apps.mcp_server:run"
+mcp-server = "naas_abi_core.apps.mcp.mcp_server:run"
 
 [project.optional-dependencies]
 dev = [
@@ -164,6 +166,7 @@ log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(linen
 log_cli_date_format = "%Y-%m-%d %H:%M:%S"
 
 [tool.uv.sources]
+naas-abi-proto = {path = "libs/naas-abi-proto", editable = true}
 naas-abi = { path = "libs/naas-abi" , editable = true }
 naas-abi-core = { path = "libs/naas-abi-core" , editable = true }
 naas-abi-marketplace = { path = "libs/naas-abi-marketplace" , editable = true }

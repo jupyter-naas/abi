@@ -18,6 +18,8 @@ wire contract this pairs with.
 SERVICE_NAME = "triple_store"
 SERVICE_VERSION = "1.0.0"
 SUBJECT_PREFIX = "abi.svc.triple_store.v1"
+# transfer/v1 sessions for streamed reads (docs/adr/20261003_nats-streamed-results.md).
+TRANSFER_PREFIX = f"{SUBJECT_PREFIX}.transfer"
 
 # Header carrying the Stage 1 service JWT (see naas_abi_core.engine.nats_auth).
 # The client attaches the token under this exact header name -- both sides

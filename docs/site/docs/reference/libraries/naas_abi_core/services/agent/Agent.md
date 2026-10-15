@@ -1,178 +1,216 @@
 # Agent
 
 ## What it is
-A LangGraph/LangChain-based orchestration layer that runs a chat model with tool calling, supports sub-agent handoff via tools, persists conversation state via a checkpointer (in-memory or PostgreSQL), and can stream events (tool usage/response, AI messages) including SSE-friendly output.
+
+A LangGraph/LangChain orchestration wrapper around a `BaseChatModel` that:
+
+- Runs a chat model with optional tool calling (LangChain tools + “native” tool schemas).
+- Supports sub-agents via `transfer_to_<agent>` handoff tools (LangGraph `Command` routing).
+- Persists conversation state via a LangGraph checkpointer (engine-provided, PostgreSQL, or in-memory).
+- Streams execution events (tool usage/response, AI messages, routing/model-call) and can expose SSE endpoints.
+
+---
 
 ## Public API
 
-### Functions
+### Module-level functions
+
 - `create_checkpointer() -> BaseCheckpointSaver`  
-  Creates a conversation checkpointer:
-  - Uses PostgreSQL-backed checkpointer when `POSTGRES_URL` is set (shared across instances).
-  - Falls back to in-memory `MemorySaver` otherwise (or on PostgreSQL init failure).
+  Creates a checkpointer:
+  - If running inside an engine: uses `get_default_agent_checkpointer()`.
+  - Else, uses PostgreSQL when `POSTGRES_URL` is set (shared singleton per process).
+  - Else falls back to in-memory `MemorySaver`.
 
 - `close_shared_checkpointer() -> None`  
-  Closes the shared PostgreSQL connection (if used) and resets the shared checkpointer.
+  Closes/reset the shared PostgreSQL connection/checkpointer (if in use).
+
+- `compact_old_tool_messages(messages: list[AnyMessage]) -> list[AnyMessage]`  
+  Returns a copy of `messages` where older `ToolMessage` contents are stubbed/truncated to reduce context size (does not mutate checkpointed state).
 
 - `make_handoff_tool(agent: Agent, parent_graph: bool = False) -> BaseTool`  
-  Creates a tool named `transfer_to_<agent_name>` that, when called, returns a `langgraph.types.Command` to route execution to the target agent node and injects a `ToolMessage` indicating handoff.
+  Builds a tool named `transfer_to_<agent_name>` that:
+  - Appends an internal `ToolMessage` (`__handoff__:<agent>`) to the state’s messages.
+  - Updates `current_active_agent`.
+  - Returns a `langgraph.types.Command` that routes to the target agent node (optionally in `Command.PARENT` graph).
 
-### Data / Configuration classes
+### Data / configuration classes
+
 - `class AgentSharedState`  
-  Shared mutable routing state:
+  Shared, mutable routing/thread state:
   - `thread_id: str`
-  - `current_active_agent: Optional[str]`
-  - `supervisor_agent: Optional[str]`
+  - `current_active_agent: str | None` (sticky routing target)
+  - `supervisor_agent: str | None` (used by sub-agents + `request_help`)
   - `requesting_help: bool`
-  - Setters validate names via `Agent.validate_name`.
+  - Methods: `set_thread_id`, `set_current_active_agent`, `set_supervisor_agent`, `set_requesting_help`
 
-- `class AgentConfiguration` (dataclass)  
-  Hooks and system prompt configuration:
+- `class AgentConfiguration` *(dataclass)*  
+  Hooks + system prompt:
   - `on_tool_usage(message)`
   - `on_tool_response(message)`
   - `on_ai_message(message, agent_name)`
+  - `on_agent_calling(agent_name)`
+  - `on_agent_routing(agent_name)`
   - `system_prompt: str | Callable[[list[AnyMessage]], str]`
-  - `get_system_prompt(messages)` returns computed prompt.
+  - `get_system_prompt(messages) -> str`
 
-- `class CompletionQuery(pydantic.BaseModel)`  
-  Request model used by the FastAPI endpoints:
+- `class CompletionQuery(BaseModel)`  
+  Request body used by FastAPI endpoints:
   - `prompt: str`
   - `thread_id: str | int`
 
 ### Events (dataclasses)
+
+Used internally for `stream_invoke` and the shared event queue:
+
 - `Event(payload)`
 - `ToolUsageEvent`
 - `ToolResponseEvent`
 - `AIMessageEvent(payload, agent_name)`
+- `CallModelEvent(payload, agent_name)`
+- `AgentRoutingEvent(payload, agent_name)`
 - `FinalStateEvent`
 
 ### Main class: `class Agent(Expose)`
-Key constructor and methods:
 
-- `Agent.__init__(...)`  
-  Creates an agent with:
-  - tool binding (if model supports it),
-  - optional sub-agents (added as graph nodes and exposed via `transfer_to_*` tools),
-  - optional default tools injection (`enable_default_tools=True`),
-  - memory via provided `memory` or `create_checkpointer()`,
-  - compiled LangGraph `graph` using the checkpointer.
+#### Constructor
 
-- `Agent.validate_name(name: str) -> str` *(static)*  
-  Ensures node/tool-safe names (`^[a-zA-Z0-9_-]+$`), replacing invalid characters with `_`.
+- `Agent.__init__(..., chat_model, tools=None, agents=None, memory=None, state=AgentSharedState(), configuration=AgentConfiguration(), event_queue=None, native_tools=None, enable_default_tools=True, markdown_pretty_display=False)`
 
-- `Agent.prepare_tools(tools, agents) -> (list[Tool|BaseTool], list[Agent])`  
-  Normalizes tools and agents:
-  - Converts `Agent` instances into handoff tools (via `as_tools()`).
+Key behaviors from initialization:
+
+- Validates/sanitizes `name` via `validate_name`.
+- Optionally injects:
+  - `request_help` tool when `state.supervisor_agent` is set (and differs from this agent).
+  - default tools via `default_tools(self)` when `enable_default_tools=True`.
+- Normalizes tools and sub-agents via `prepare_tools(...)`.
+- Binds tools to the chat model when supported (`can_bind_tools(model)`), including a variant that excludes “workspace-gated” tools unless a workspace context is present.
+- Selects checkpointer from `memory` or `create_checkpointer()`.
+- In `ENV=dev`, randomizes `thread_id` to a UUID.
+- Builds/compiles the internal LangGraph (`build_graph()`).
+
+#### Primary methods
+
+- `validate_name(name: str) -> str` *(static)*  
+  Replaces invalid graph/tool name characters with `_` (pattern `^[a-zA-Z0-9_-]+$`). Cached.
+
+- `prepare_tools(tools, agents) -> (list[Tool|BaseTool], list[Agent])`  
+  - Converts `Agent` instances into `transfer_to_*` tools (`as_tools()`).
   - Deduplicates by tool/agent name.
 
-- `Agent.as_tools(parent_graph: bool = False) -> list[BaseTool]`  
-  Exposes this agent as a single handoff tool: `transfer_to_<agent_name>`.
+- `as_tools(parent_graph: bool = False) -> list[BaseTool]`  
+  Exposes this agent as a single handoff tool via `make_handoff_tool`.
 
-- `Agent.build_graph(patcher: Optional[Callable] = None) -> None`  
-  Builds and compiles the internal LangGraph state machine. If provided, `patcher` can modify the graph before compilation.
+- `build_graph(patcher: Callable | None = None) -> None`  
+  Builds/compiles a `StateGraph(ABIAgentState)` with nodes:
+  - `render_system_prompt` → `current_active_agent` → `continue_conversation` → `call_model` → `call_tools` (as needed)
+  - Each sub-agent is added as a node with `agent.graph`.
 
-- `Agent.stream(prompt: str) -> Generator[tuple|dict|Any, None, None]`  
-  Streams LangGraph execution chunks (`graph.stream(..., subgraphs=True)`) and emits internal callbacks/events for:
-  - tool usage (AIMessage with tool calls),
-  - tool response (ToolMessage),
-  - AI messages (from specific nodes).
+- `stream(prompt: str) -> Generator[dict|Any, None, None]`  
+  Runs `graph.stream(..., subgraphs=True)` for a `HumanMessage(prompt)` and yields raw LangGraph stream chunks. Also emits internal events/callbacks for:
+  - tool usage (AI messages containing tool calls),
+  - tool responses (ToolMessage; excluding handoff tool messages),
+  - AI messages (from `call_model` / `call_tools`).
 
-- `Agent.invoke(prompt: str) -> str`  
-  Runs `stream()` to completion and returns the final message content (best-effort extraction from last chunk).
+- `invoke(prompt: str) -> str`  
+  Consumes `stream()` to completion and returns final message content (best-effort extraction). Publishes an “invocation completed” event.
 
-- `Agent.stream_invoke(prompt: str) -> Generator[dict, None, None]`  
+- `stream_invoke(prompt: str) -> Generator[dict, None, None]`  
   Runs `invoke()` in a background thread and yields SSE-style events:
-  - `tool_usage`, `tool_response`, `ai_message`, then line-buffered `message`, and final `done`.
+  - `tool_usage`, `tool_response` (truncated), `ai_message`, `call_model`, `agent_routing`
+  - `message` (line-buffered final response)
+  - `done`
 
-- `Agent.reset() -> None`  
-  Starts a new conversation thread by incrementing numeric `thread_id` or generating a new UUID.
+- `reset() -> None`  
+  Starts a new conversation thread:
+  - increments numeric `thread_id`, else sets a new UUID.
 
-- `Agent.duplicate(queue: Queue | None = None, agent_shared_state: AgentSharedState | None = None) -> Agent`  
-  Clones the agent configuration into a new instance with:
-  - shared checkpointer,
-  - new/shared `AgentSharedState`,
-  - shared event queue if provided,
-  - recursively duplicated sub-agents.
+- `duplicate(queue: Queue | None = None, agent_shared_state: AgentSharedState | None = None) -> Agent`  
+  Creates a new instance that shares:
+  - the same checkpointer,
+  - the provided/shared `AgentSharedState`,
+  - the provided/shared event queue,
+  and recursively duplicates sub-agents. Rebuilds graphs; may carry `recursion_limit`.
 
-- `Agent.as_api(router: APIRouter, ...) -> None`  
+- `as_api(router: APIRouter, route_name="", name="", description="", description_stream="", tags=None) -> None`  
   Registers FastAPI endpoints:
-  - `POST /<route_name>/completion` → returns `invoke(prompt)` for the provided `thread_id`.
-  - `POST /<route_name>/stream-completion` → returns `EventSourceResponse` using `stream_invoke(prompt)`.
+  - `POST /<route_name>/completion` → duplicates the agent with `thread_id` and returns `invoke(prompt)`.
+  - `POST /<route_name>/stream-completion` → SSE via `EventSourceResponse(stream_invoke(prompt))`.
 
-- Callback registration:
-  - `on_tool_usage(callback)`
-  - `on_tool_response(callback)`
-  - `on_ai_message(callback)` (also propagates to sub-agents)
+#### Callback registration (configuration overrides)
 
-- Properties:
-  - `name: str`, `description: str`
-  - `tools: list[Tool|BaseTool]` (structured tools)
-  - `structured_tools`
-  - `agents: list[Agent]`
-  - `state: AgentSharedState`
-  - `chat_model: BaseChatModel`
-  - `configuration: AgentConfiguration`
+- `on_tool_usage(callback)`
+- `on_tool_response(callback)`
+- `on_ai_message(callback)` (also applied to sub-agents)
 
-- Misc:
-  - `hello() -> str` returns `"Hello"`.
+#### Properties
+
+- `name: str`
+- `description: str`
+- `tools: list[Tool|BaseTool]` (structured tools)
+- `structured_tools: list[Tool|BaseTool]`
+- `agents: list[Agent]`
+- `state: AgentSharedState`
+- `chat_model: BaseChatModel`
+- `configuration: AgentConfiguration`
+- `app` (returns `self._app`; `_app` is not defined in this file)
+
+#### Misc
+
+- `hello() -> str` → `"Hello"`
+- `Agent.New(...)` → raises `NotImplementedError`
+
+---
 
 ## Configuration/Dependencies
 
 ### Environment variables
+
 - `POSTGRES_URL`  
-  When set, `create_checkpointer()` attempts PostgreSQL-backed persistence via `langgraph.checkpoint.postgres.PostgresSaver` + `psycopg`.
-  - Uses a shared global connection/checkpointer per process.
-  - Retries connection up to 3 times with 2s delay.
+  Enables a shared, process-wide PostgreSQL checkpointer (`langgraph.checkpoint.postgres.PostgresSaver` via `psycopg`). Retries connection up to 3 times.
 
 - `ENV=dev`  
-  Randomizes `state.thread_id` to a UUID during agent initialization.
+  On init, randomizes `state.thread_id` to a UUID.
 
-### Key runtime dependencies
-- LangChain core: `BaseChatModel`, tools (`tool`, `BaseTool`, `StructuredTool`), messages (`HumanMessage`, `AIMessage`, `ToolMessage`, etc.)
-- LangGraph: `StateGraph`, `Command`, `MemorySaver` (and optional Postgres saver)
-- SSE: `sse_starlette.sse.EventSourceResponse` (for API streaming)
-- Internal:
-  - `default_tools(self)` (optional injection)
-  - `can_bind_tools(model)` (checks tool-binding support)
-  - `naas_abi_core.models.Model.ChatModel` (wrapper type supported in constructor)
+### Runtime dependencies (non-exhaustive)
+
+- LangChain Core: `BaseChatModel`, messages (`HumanMessage`, `AIMessage`, `ToolMessage`, …), tools (`tool`, `StructuredTool`, `BaseTool`).
+- LangGraph: `StateGraph`, `Command`, checkpointers (`MemorySaver`, optional `PostgresSaver`).
+- SSE: `sse_starlette.sse.EventSourceResponse`
+- Internal modules: `default_tools`, `can_bind_tools`, engine context (`get_default_agent_checkpointer`, `get_default_event_service`), agent context vars (workspace/user/chat ids).
+
+---
 
 ## Usage
 
 ### Minimal invocation
+
 ```python
-from langchain_core.messages import HumanMessage
-from langchain_core.language_models import BaseChatModel
 from naas_abi_core.services.agent.Agent import Agent
+from langchain_core.language_models import BaseChatModel
 
-# You must provide a concrete BaseChatModel implementation.
-model: BaseChatModel = ...  # e.g., a LangChain chat model instance
+model: BaseChatModel = ...  # provide a concrete LangChain chat model
+agent = Agent(name="main", description="Demo agent", chat_model=model)
 
-agent = Agent(
-    name="main",
-    description="My agent",
-    chat_model=model,
-)
-
-print(agent.invoke("Hello!"))
+print(agent.invoke("Hello"))
 ```
 
-### Register callbacks (tool usage / responses / AI messages)
+### With sub-agent handoff
+
 ```python
 from naas_abi_core.services.agent.Agent import Agent
 from langchain_core.language_models import BaseChatModel
 
 model: BaseChatModel = ...
 
-agent = Agent(name="main", description="Demo", chat_model=model)
+math_agent = Agent(name="math", description="Math helper", chat_model=model)
+main = Agent(name="main", description="Supervisor", chat_model=model, agents=[math_agent])
 
-agent.on_tool_usage(lambda msg: print("TOOL USAGE:", msg.tool_calls))
-agent.on_tool_response(lambda msg: print("TOOL RESPONSE:", getattr(msg, "content", msg)))
-agent.on_ai_message(lambda msg, who: print(f"AI ({who}):", msg.content))
-
-agent.invoke("Do something that calls tools.")
+# The supervisor will have a tool named transfer_to_math
+print(main.invoke("Please ask @math to compute 2+2."))
 ```
 
 ### FastAPI endpoints
+
 ```python
 from fastapi import FastAPI
 from naas_abi_core.services.agent.Agent import Agent
@@ -181,16 +219,16 @@ from langchain_core.language_models import BaseChatModel
 app = FastAPI()
 model: BaseChatModel = ...
 
-agent = Agent(name="main", description="API agent", chat_model=model)
+agent = Agent(name="agent", description="API agent", chat_model=model)
 agent.as_api(app.router, route_name="agent")
-
-# POST /agent/completion  with JSON: {"prompt": "...", "thread_id": "1"}
-# POST /agent/stream-completion with same payload (SSE)
 ```
 
+---
+
 ## Caveats
-- `Agent.New(...)` is declared but **not implemented** (raises `NotImplementedError`).
-- Tool calling depends on the chat model supporting `bind_tools()`; when unsupported, tools are not available and a warning is logged.
-- Name validation replaces invalid characters (including `:`) with `_`; this affects agent/tool names used as LangGraph node IDs.
-- When a sub-agent has a supervisor set, a `request_help` tool is injected and can route control back to the supervisor by setting `current_active_agent` and returning a `Command` to the parent graph.
-- `app` property returns `self._app`, but `_app` is not defined in this file (access may fail unless set elsewhere).
+
+- `Agent.New(...)` is declared but not implemented.
+- Tool calling is only enabled when the model supports binding tools (`can_bind_tools`); otherwise tools are not available to the model.
+- `Agent.app` returns `self._app`, but `_app` is not defined in this module (property access may fail unless set elsewhere).
+- Sub-agent routing is persisted in the checkpointer (`current_active_agent` / `supervisor_agent`) and restored per-thread on subsequent turns; names not in the agent’s graph are ignored.
+- `stream_invoke` uses a shared queue; if the worker thread dies before posting a final event, it raises `RuntimeError`.

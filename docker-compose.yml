@@ -159,12 +159,20 @@ services:
         condition: service_healthy
     command:
       ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.mcp.mcp_server"]
+    # The repository and the venv the abi service synced (it is healthy first),
+    # as the abi service mounts them: the host's .venv stays out of the container.
+    volumes:
+      - .:/app
+      - venv_cache:/app/.venv
     environment:
       - ABI_API_BASE=http://abi:9879
       - ABI_API_KEY=abi
       - MCP_TRANSPORT=http
+      - MCP_HOST=0.0.0.0
     ports:
-      - 8000:8000
+      # The MCP server checks no credential and calls agents with ABI_API_KEY:
+      # from this machine only.
+      - 127.0.0.1:8000:8000
     networks:
       - abi-network
 
@@ -410,7 +418,9 @@ services:
   # MinIO - S3-compatible Object Storage for Dagster Compute Logs
   # -----------------------------------------------------------------------------
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # MinIO stopped publishing public images (quay.io/minio, minio/* on Docker Hub).
+    # pgsty/minio is a community fork built from MinIO source, drop-in compatible.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     pull_policy: always
     restart: unless-stopped
     command: server /data --console-address :9001
@@ -432,7 +442,7 @@ services:
 
   # mc container to initialize the bucket on startup
   minio-init:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
     pull_policy: always
     depends_on:
       minio:
@@ -484,13 +494,26 @@ services:
   # the NATS Services framework's $SRV.* discovery subjects.
   nats:
     profiles: ["nats"]
-    image: nats:2-alpine
+    image: nats:2.14.7-alpine
     pull_policy: always
     restart: unless-stopped
-    command: ["-c", "/etc/nats/nats.conf", "-js", "-sd", "/data", "-m", "8222"]
+    environment:
+      # The broker's users (nats.conf). `abi deploy local` generates them in .env.
+      - NATS_ABI_PASSWORD=${NATS_ABI_PASSWORD:-}
+      - NATS_MODULE_PASSWORD=${NATS_MODULE_PASSWORD:-}
+    # nats-server takes an empty password as is, which would let anyone log in
+    # as that user: refuse to start without both.
+    command:
+      - sh
+      - -c
+      - |
+        for key in NATS_ABI_PASSWORD NATS_MODULE_PASSWORD; do
+          [ -n "$$(printenv $$key)" ] || { echo "$$key is empty: run abi deploy local" >&2; exit 1; }
+        done
+        exec nats-server -c /etc/nats/nats.conf -js -sd /data -m 8222
     ports:
-      - 4222:4222 # client connections
-      - 8222:8222 # HTTP monitoring
+      - 127.0.0.1:4222:4222 # client connections, from this machine only
+      - 127.0.0.1:8222:8222 # HTTP monitoring (no auth)
     volumes:
       - nats_data:/data
       - ./.deploy/docker/nats/nats.conf:/etc/nats/nats.conf:ro # max_payload (no CLI flag)

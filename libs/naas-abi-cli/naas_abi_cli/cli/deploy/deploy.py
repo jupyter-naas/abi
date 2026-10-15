@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from rich.console import Console
 from rich.markdown import Markdown
 
-from .local import setup_local_deploy
+from .local import ensure_legacy_extras, project_uses_nats, setup_local_deploy
 
 
 @click.group("deploy")
@@ -260,13 +260,42 @@ def naas(env: str):
 def local_deploy(
     env: str, regenerate: bool, no_backup: bool, headscale: bool, coding: bool
 ):
+    """Write the project's docker-compose stack.
+
+    A project whose config has a `nats:` block runs on the `nats` service. One
+    without it keeps the classic stack, with Dagster and RabbitMQ (legacy, to be
+    removed in the next major), and gets the naas-abi-core[dagster,rabbitmq]
+    extras they need added to its pyproject.toml.
+    """
+    project_path = os.getcwd()
     setup_local_deploy(
-        os.getcwd(),
+        project_path,
         include_headscale=headscale,
         include_coding=coding,
         regenerate=regenerate,
         backup=not no_backup,
     )
+    if project_uses_nats(project_path) is False:
+        ensure_legacy_extras(project_path)
+
+
+# `abi new module` declares remote modules in the override file, which
+# `--regenerate` never rewrites. `--file` turns off Compose's own lookup of it.
+COMPOSE_OVERRIDE = "docker-compose.override.yml"
+
+
+def _compose_command(*args: str) -> list[str]:
+    files = ["--file", "docker-compose.yml"]
+    if os.path.exists(COMPOSE_OVERRIDE):
+        files += ["--file", COMPOSE_OVERRIDE]
+    return [
+        "docker", "compose",
+        *files,
+        "--env-file", ".env",
+        "--profile", "infrastructure",
+        "--profile", "container",
+        *args,
+    ]
 
 
 @deploy.command("local-up")
@@ -278,14 +307,7 @@ def local_deploy(
     help="Run containers in the background.",
 )
 def local_up(detach: bool):
-    cmd = [
-        "docker", "compose",
-        "--file", "docker-compose.yml",
-        "--env-file", ".env",
-        "--profile", "infrastructure",
-        "--profile", "container",
-        "up",
-    ]
+    cmd = _compose_command("up")
     if detach:
         cmd.append("-d")
     print(" ".join(cmd))
@@ -301,14 +323,7 @@ def local_up(detach: bool):
     help="Remove volumes along with the containers.",
 )
 def local_down(volumes: bool):
-    cmd = [
-        "docker", "compose",
-        "--file", "docker-compose.yml",
-        "--env-file", ".env",
-        "--profile", "infrastructure",
-        "--profile", "container",
-        "down",
-    ]
+    cmd = _compose_command("down")
     if volumes:
         cmd.append("-v")
     subprocess.run(cmd, check=False)
@@ -316,7 +331,4 @@ def local_down(volumes: bool):
 
 @deploy.command("local-logs")
 def local_logs():
-    subprocess.run(
-        "docker compose --file docker-compose.yml --env-file .env --profile infrastructure --profile container logs -f",
-        shell=True,
-    check=False)
+    subprocess.run(_compose_command("logs", "-f"), check=False)

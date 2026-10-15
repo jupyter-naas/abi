@@ -37,8 +37,10 @@ from naas_abi_core.services.keyvalue.adapters.keyvalue_nats_contract import (
 )
 from naas_abi_core.services.keyvalue.KeyValuePorts import (
     IKeyValueAdapter,
+    KVKeyPage,
     KVLockTimeoutError,
     KVNotFoundError,
+    check_page_limit,
 )
 
 
@@ -54,6 +56,8 @@ def _raise_for_error(
     """
     if error.code == "KV_NOT_FOUND":
         raise KVNotFoundError(error.message)
+    if error.code == "INVALID_ARGUMENT":
+        raise ValueError(error.message)
     if error.code == "KV_LOCK_TIMEOUT":
         if lock_timeout_detail is not None:
             raise KVLockTimeoutError(
@@ -183,3 +187,41 @@ class KeyValueSecondaryAdapterNATSClient(NatsRPCClient, IKeyValueAdapter):
                 else None,
             )
         return response.ok_value
+
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> KVKeyPage:
+        check_page_limit(limit)
+        request = keyvalue_pb2.ListKeysRequest(
+            context=self._context(), prefix=prefix, limit=limit
+        )
+        if after is not None:
+            request.after = after
+        response = self._call(
+            f"{SUBJECT_PREFIX}.list_keys", request, keyvalue_pb2.ListKeysResponse
+        )
+        if response.HasField("error"):
+            _raise_for_error(
+                response.error,
+                response.lock_timeout_detail
+                if response.HasField("lock_timeout_detail")
+                else None,
+            )
+        return KVKeyPage(
+            tuple(response.keys),
+            response.next_after if response.HasField("next_after") else None,
+        )
+
+    def get_ttl(self, key: str) -> int | None:
+        request = keyvalue_pb2.GetTtlRequest(context=self._context(), key=key)
+        response = self._call(
+            f"{SUBJECT_PREFIX}.get_ttl", request, keyvalue_pb2.GetTtlResponse
+        )
+        if response.HasField("error"):
+            _raise_for_error(
+                response.error,
+                response.lock_timeout_detail
+                if response.HasField("lock_timeout_detail")
+                else None,
+            )
+        return response.seconds if response.HasField("seconds") else None

@@ -1,3 +1,4 @@
+import { parseMapsLayerIds } from '@/app/workspace/[workspaceId]/maps/lib/maps-route';
 import { getFeatureForWorkspacePath, type FeatureKey } from '@/lib/feature-access';
 
 export type FeatureOfficeAgentSpec = {
@@ -104,8 +105,14 @@ export function resourceFromPath(pathname: string | null | undefined): FeatureRe
   if (feature === 'datasets' && seg[1] && seg[2]) {
     return { feature, kind: 'dataset', id: `${decode(seg[1])}/${decode(seg[2])}` };
   }
-  if (feature === 'maps' && seg[1]) {
-    return { feature, kind: 'map_dataset', id: decode(seg[1]) };
+  if (feature === 'maps') {
+    const layers = parseMapsLayerIds(path.split('?')[1] ?? '');
+    if (layers.length === 1) {
+      return { feature, kind: 'map_dataset', id: layers[0] };
+    }
+    if (layers.length > 1) {
+      return { feature, kind: 'map_dataset', id: layers.join(',') };
+    }
   }
   if (feature === 'agents' && seg[2]) {
     return { feature, kind: 'agent', id: decode(seg[2]) };

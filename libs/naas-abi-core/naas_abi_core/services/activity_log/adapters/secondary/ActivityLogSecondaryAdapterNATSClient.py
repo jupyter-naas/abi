@@ -21,9 +21,9 @@ versa) just to agree on a header name.
 
 from __future__ import annotations
 
-from datetime import UTC
+from collections.abc import Iterator
+from contextlib import contextmanager
 
-from google.protobuf import json_format
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
 from naas_abi_core.proto.activity_log.v1 import activity_log_pb2
 from naas_abi_core.proto.common.v1 import common_pb2
@@ -31,33 +31,18 @@ from naas_abi_core.services.activity_log.ActivityLogPort import (
     ActivityEvent,
     ActivityLogQuery,
     IActivityLogAdapter,
+    pin_snapshot,
 )
 from naas_abi_core.services.activity_log.adapters.activity_log_nats_contract import (
     AUTH_HEADER,
     SUBJECT_PREFIX,
+    TRANSFER_PREFIX,
 )
-
-
-def _event_to_pb(event: ActivityEvent) -> activity_log_pb2.ActivityEvent:
-    pb = activity_log_pb2.ActivityEvent(
-        actor_id=event.actor_id,
-        event_type=event.event_type,
-    )
-    pb.timestamp.FromDatetime(event.timestamp)
-    if event.correlation_id is not None:
-        pb.correlation_id = event.correlation_id
-    pb.attributes.update(event.attributes)
-    return pb
-
-
-def _pb_to_event(pb: activity_log_pb2.ActivityEvent) -> ActivityEvent:
-    return ActivityEvent(
-        actor_id=pb.actor_id,
-        event_type=pb.event_type,
-        timestamp=pb.timestamp.ToDatetime(tzinfo=UTC),
-        correlation_id=pb.correlation_id if pb.HasField("correlation_id") else None,
-        attributes=json_format.MessageToDict(pb.attributes),
-    )
+from naas_abi_core.services.activity_log.adapters.activity_log_stream_codec import (
+    decode_events,
+    event_to_pb,
+    pb_to_event,
+)
 
 
 def _query_to_pb(query: ActivityLogQuery) -> activity_log_pb2.ActivityLogQueryFilter:
@@ -70,6 +55,11 @@ def _query_to_pb(query: ActivityLogQuery) -> activity_log_pb2.ActivityLogQueryFi
         pb.until.FromDatetime(query.until)
     if query.limit is not None:
         pb.limit = query.limit
+    pb.newest_first = query.newest_first
+    if query.before_seq is not None:
+        pb.before_seq = query.before_seq
+    if query.after_seq is not None:
+        pb.after_seq = query.after_seq
     return pb
 
 
@@ -108,7 +98,7 @@ class ActivityLogSecondaryAdapterNATSClient(NatsRPCClient, IActivityLogAdapter):
 
     def record(self, event: ActivityEvent) -> None:
         request = activity_log_pb2.RecordRequest(
-            context=self._context(), event=_event_to_pb(event)
+            context=self._context(), event=event_to_pb(event)
         )
         response = self._call(
             f"{SUBJECT_PREFIX}.record", request, activity_log_pb2.RecordResponse
@@ -129,7 +119,32 @@ class ActivityLogSecondaryAdapterNATSClient(NatsRPCClient, IActivityLogAdapter):
         )
         if response.HasField("error"):
             _raise_for_error(response.error)
-        return [_pb_to_event(pb) for pb in response.events.events]
+        return [pb_to_event(pb) for pb in response.events.events]
+
+    @contextmanager
+    def query_stream(
+        self, actor_id: str, query: ActivityLogQuery | None = None
+    ) -> Iterator[Iterator[ActivityEvent]]:
+        """Events fetched as the caller iterates, over a transfer stream
+        (docs/adr/20261003_nats-streamed-results.md). The snapshot is pinned
+        here, before the stream opens, so an event recorded after the block
+        opened is never included. Leaving the block closes the session."""
+        pinned = pin_snapshot(self.query, actor_id, query)
+        if pinned is None:
+            yield iter(())
+            return
+        request = activity_log_pb2.QueryRequest(
+            actor_id=actor_id, filter=_query_to_pb(pinned)
+        )
+        with self._transfer_stream(
+            TRANSFER_PREFIX, "query", request.SerializeToString(), _raise_for_error
+        ) as frames:
+            if frames is None:
+                raise RuntimeError(
+                    "activity_log NATS RPC failed (UNAVAILABLE): "
+                    "no engine streams activity logs"
+                )
+            yield (event for frame in frames for event in decode_events(frame))
 
     def list_actors(self) -> list[str]:
         request = activity_log_pb2.ListActorsRequest(context=self._context())

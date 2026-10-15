@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+### Upgrade notes (3.0)
+
+- `abi new project` creates NATS projects (`--without-nats` for the classic
+  one), and `abi new module` creates remote modules in them (`--in-engine` for
+  a module the engine loads).
+- `abi dev up` runs `nats-server` (2.14 or later), the engine with discovery
+  and the `dev.modules` remote modules in a NATS project; `--with-tracing`
+  adds Jaeger. Dagster is left out in NATS mode.
+- `abi deploy local` writes the NATS stack for a project with a `nats:` block;
+  for one without, it keeps the classic stack and adds the legacy
+  `naas-abi-core[dagster,rabbitmq]` extras to `pyproject.toml` (`uv add`).
+- New commands: `abi module key`, `abi agent migrate-memory`,
+  `abi agent prune-memory`.
+- Guide: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
+  Every change: [Breaking changes in 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/breaking-changes-3.md).
+
+## v2.27.1 (2026-10-14)
+
+### Bug Fixes
+
+- **maps**: Update feed and geojson debug handling
+  ([`f1cad6c`](https://github.com/jupyter-naas/abi/commit/f1cad6c1bbff5792716049a4c5f971138f3eae3a))
+
+### Refactoring
+
+- **files**: Reorganize file drives and add platform drive
+  ([`ad0eed4`](https://github.com/jupyter-naas/abi/commit/ad0eed46afa5d61217b7ab07f63cf35ba1502d72))
+
+
 ## v2.27.0 (2026-10-07)
 
 ### Features

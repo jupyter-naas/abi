@@ -8,4 +8,3 @@ class Skill(_Skill):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

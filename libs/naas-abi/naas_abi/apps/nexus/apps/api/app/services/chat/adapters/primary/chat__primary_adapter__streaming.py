@@ -42,7 +42,7 @@ OPENAI_COMPATIBLE = [
     "openrouter",
     "perplexity",
 ]
-SUPPORTED_STREAMING = ["ollama", "cloudflare", "abi", *OPENAI_COMPATIBLE]
+SUPPORTED_STREAMING = ["ollama", "cloudflare", "abi", "remote", *OPENAI_COMPATIBLE]
 
 
 def _first_prompt_for_office_title(request: ChatRequest) -> str:
@@ -202,7 +202,9 @@ def _extract_urls_from_text(text: str) -> list[str]:
         return []
     urls: list[str] = []
     seen: set[str] = set()
-    for match in re.findall(r"https?://[^\s<>\]\)]+", text):
+    # Quotes end a URL: tool outputs are often JSON or a repr, and keeping the
+    # closing `"` listed every URL twice (`https://x` and `https://x",`).
+    for match in re.findall(r"https?://[^\s<>\]\)\"'`]+", text):
         url = match.rstrip(".,;)")
         if url not in seen:
             seen.add(url)
@@ -565,14 +567,22 @@ async def stream_chat_response(
                     context=request_context(current_user),
                     client_context=client_ctx or None,
                 )
-                user_context_preamble = await registry.chat.build_abi_injection_preamble(
-                    prior_messages=prior_messages,
-                    user_id=current_user.id,
-                    workspace_id=request.workspace_id,
-                    conversation_id=conversation_id,
-                    context=request_context(current_user),
-                    client_context=client_ctx or None,
-                )
+                if provider.type == "remote":
+                    user_context_preamble = await registry.chat.build_remote_agent_preamble(
+                        prior_messages=prior_messages,
+                        user_id=current_user.id,
+                        workspace_id=request.workspace_id,
+                        conversation_id=conversation_id,
+                    )
+                else:
+                    user_context_preamble = await registry.chat.build_abi_injection_preamble(
+                        prior_messages=prior_messages,
+                        user_id=current_user.id,
+                        workspace_id=request.workspace_id,
+                        conversation_id=conversation_id,
+                        context=request_context(current_user),
+                        client_context=client_ctx or None,
+                    )
             await db.commit()
         except Exception:
             await db.rollback()
@@ -698,7 +708,12 @@ async def stream_chat_response(
                 elif isinstance(chunk, dict):
                     payload = chunk
                     _ingest_stream_event_into_steps(chunk, steps)
-                    if chunk.get("event") == "tool_response":
+                    # A tool may opt out of sources (`metadata={"chat_source":
+                    # False}`): its URLs are internal identifiers, not references.
+                    if (
+                        chunk.get("event") == "tool_response"
+                        and chunk.get("chat_source") is not False
+                    ):
                         output = chunk.get("output") or chunk.get("content") or ""
                         for url in _extract_urls_from_text(str(output)):
                             if url not in web_source_urls:
@@ -789,6 +804,21 @@ async def stream_chat_response(
                     yield output
                 if not inprocess_emitted:
                     raise RuntimeError("In-process ABI stream returned no content")
+            elif provider.type == "remote":
+                from naas_abi.apps.nexus.apps.api.app.services.agents.remote.streaming import (
+                    stream_with_remote_agent,
+                )
+
+                async for output in emit_stream(
+                    stream_with_remote_agent(
+                        provider_messages,
+                        provider_config,
+                        thread_id=conversation_id,
+                        user_context_preamble=user_context_preamble,
+                        invocation_id=assistant_msg_id,
+                    )
+                ):
+                    yield output
             elif provider.type in OPENAI_COMPATIBLE:
                 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
                     stream_with_openai_compatible,

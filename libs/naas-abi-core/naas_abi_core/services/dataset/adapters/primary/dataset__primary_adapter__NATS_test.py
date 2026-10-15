@@ -12,9 +12,11 @@ import asyncio
 # evaluated in _StubAdapter's class body below (methods after ``list``);
 # use ``builtins.list`` there -- same workaround as DatasetPort.py/DatasetService.py.
 import builtins
+import json
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
 from naas_abi_core.engine.nats_auth import issue_service_token
 from naas_abi_core.proto.dataset.v1 import dataset_pb2
 from naas_abi_core.services.dataset.adapters.primary.dataset__primary_adapter__NATS import (
@@ -108,6 +110,7 @@ class _StubAdapter(IDatasetPort):
         namespace: str = "default",
         mode: WriteMode = "append",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> DatasetInfo:
         key = (namespace, name)
         if key not in self.datasets:
@@ -120,17 +123,34 @@ class _StubAdapter(IDatasetPort):
         return updated
 
     def query(
-        self, sql: str, *, namespace: str = "default", snapshot_id: int | None = None
+        self,
+        sql: str,
+        *,
+        namespace: str = "default",
+        snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> QueryResult:
         return QueryResult(columns=["answer"], rows=[{"answer": 42}])
 
-    def flush(self, name: str, *, namespace: str = "default") -> QueryResult:
+    def flush(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
         return QueryResult(columns=[], rows=[])
 
     def inlined_row_count(self, name: str, *, namespace: str = "default") -> int:
         return 7
 
-    def compact(self, name: str, *, namespace: str = "default") -> QueryResult:
+    def compact(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
         return QueryResult(columns=[], rows=[])
 
     def list_snapshots(self) -> builtins.list[DatasetSnapshotInfo]:
@@ -138,6 +158,12 @@ class _StubAdapter(IDatasetPort):
             DatasetSnapshotInfo(snapshot_id=info.snapshot_id, created_at=datetime.now(UTC))
             for info in self.datasets.values()
         ]
+
+    def namespace_version(self, namespace: str) -> int | None:
+        versions = [
+            info.snapshot_id for (ns, _), info in self.datasets.items() if ns == namespace
+        ]
+        return max(versions, default=None)
 
     def drop(self, name: str, *, namespace: str = "default") -> None:
         key = (namespace, name)
@@ -390,7 +416,31 @@ def test_list_round_trips_datasets():
     assert sorted(item.name for item in response.datasets.items) == ["a", "b"]
 
 
-def test_query_round_trips_rows_via_struct():
+@pytest.mark.parametrize(("namespace", "version"), [("acme", 2), ("empty", None)])
+def test_namespace_version_round_trips_and_stays_unset_for_an_empty_namespace(
+    namespace, version
+):
+    stub = _StubAdapter()
+    stub.create(DatasetSpec(name="a", namespace="acme", columns=()))
+    stub.create(DatasetSpec(name="b", namespace="acme", columns=()))
+    adapter = DatasetPrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=dataset_pb2.NamespaceVersionRequest(
+            namespace=namespace
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.dataset.v1.namespace_version",
+    )
+
+    asyncio.run(adapter._handle_namespace_version(request))
+
+    response = dataset_pb2.NamespaceVersionResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert (response.version if response.HasField("version") else None) == version
+
+
+def test_query_answers_json_rows_with_exact_integers():
     adapter = DatasetPrimaryAdapterNATS(_StubAdapter(), SECRET)
     request = _FakeRequest(
         data=dataset_pb2.QueryRequest(
@@ -406,8 +456,7 @@ def test_query_round_trips_rows_via_struct():
     response.ParseFromString(request.responses[0])
     assert not response.HasField("error")
     assert list(response.query_result.columns) == ["answer"]
-    assert len(response.query_result.rows) == 1
-    assert response.query_result.rows[0]["answer"] == 42
+    assert [json.loads(row) for row in response.query_result.rows] == [{"answer": 42}]
 
 
 # ---------------------------------------------------------------------------

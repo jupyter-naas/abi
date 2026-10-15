@@ -27,12 +27,15 @@ from threading import Thread
 
 import nats
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_naming import connection_name
+from naas_abi_sdk.lifeline import Lifeline
 from nats.aio.client import Client as NATSClient
 
 _loop: asyncio.AbstractEventLoop | None = None
 _loop_thread: Thread | None = None
 _nc: NATSClient | None = None
 _nc_url: str | None = None
+_nc_lifeline: Lifeline | None = None
 _lock = threading.Lock()
 
 
@@ -78,25 +81,34 @@ def get_connection(nats_url: str, timeout: float = 10.0) -> NATSClient:
     behaviour ``Agent.create_checkpointer`` already has for
     ``POSTGRES_URL``.
     """
-    global _nc, _nc_url
+    global _nc, _nc_url, _nc_lifeline
     with _lock:
         if _nc is not None and _nc.is_connected and _nc_url == nats_url:
             return _nc
         if _nc is not None:
             _close_locked()
-        _nc = run_coro(nats.connect(nats_url), timeout=timeout)
+        # Closed for good (nats-py gave up reconnecting): see naas_abi_sdk.lifeline.
+        watched = Lifeline("abi-engine")
+        _nc = run_coro(
+            nats.connect(
+                nats_url, name=connection_name("abi-engine"), closed_cb=watched.closed
+            ),
+            timeout=timeout,
+        )
         _nc_url = nats_url
+        _nc_lifeline = watched
         return _nc
 
 
 def _close_locked() -> None:
-    global _nc, _nc_url
-    nc = _nc
+    global _nc, _nc_url, _nc_lifeline
+    nc, watched = _nc, _nc_lifeline
     _nc = None
     _nc_url = None
+    _nc_lifeline = None
     if nc is not None:
         try:
-            run_coro(nc.close(), timeout=5.0)
+            run_coro(watched.close(nc) if watched else nc.close(), timeout=5.0)
         except Exception:  # noqa: BLE001
             # Best-effort on the way out, mirrors _close_shared_checkpointer.
             logger.opt(exception=True).debug(

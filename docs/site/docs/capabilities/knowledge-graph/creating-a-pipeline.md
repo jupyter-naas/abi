@@ -119,9 +119,24 @@ See [Creating an Ontology](/capabilities/knowledge-graph/creating-an-ontology) f
 
 ---
 
-## Registering in Dagster
+## Scheduling a pipeline
 
-Pipelines can be scheduled via Dagster. Define a Dagster asset in your module:
+In NATS mode, run a pipeline on a schedule with a [module job](/architecture/remote-modules#module-jobs) on the module that owns it. The engine hosts it, and a synchronous handler runs in a worker thread:
+
+```python
+from datetime import timedelta
+from naas_abi_core.module.jobs import Every, JobContext, job
+
+class ABIModule(BaseModule):
+    @job(triggers=(Every("1h"),), timeout=timedelta(minutes=30))
+    def sync_items(self, ctx: JobContext) -> dict:
+        pipeline = MyPipeline(MyPipelineConfiguration(...))
+        return pipeline.run(MyPipelineParameters())  # stored on the run record
+```
+
+A run's result, logs and failures show in the Nexus System app's **Jobs** tab, where **Run now** triggers it by hand.
+
+Projects without NATS can still schedule it with a Dagster asset, a [legacy](/capabilities/applications/dagster) extra removed in the next major:
 
 ```python
 from dagster import asset

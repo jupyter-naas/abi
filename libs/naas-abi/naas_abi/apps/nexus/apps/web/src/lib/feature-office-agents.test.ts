@@ -73,7 +73,7 @@ describe('resourceFromPath', () => {
       kind: 'dataset',
       id: 'sales/orders',
     });
-    expect(resourceFromPath('/workspace/ws-1/maps/earthquakes')?.id).toBe('earthquakes');
+    expect(resourceFromPath('/workspace/ws-1/maps?layer=earthquakes')?.id).toBe('earthquakes');
     expect(resourceFromPath('/workspace/ws-1/settings/agents/agent-7')).toEqual({
       feature: 'agents',
       kind: 'agent',
@@ -98,7 +98,7 @@ describe('featureOpenResource', () => {
   it('prefers what the page published for this feature', () => {
     const app = { feature: 'apps' as const, kind: 'app', id: 'm:wsr' };
     expect(featureOpenResource('/workspace/ws-1/apps', app)).toEqual(app);
-    expect(featureOpenResource('/workspace/ws-1/maps/iss', app)?.id).toBe('iss');
+    expect(featureOpenResource('/workspace/ws-1/maps?layer=iss', app)?.id).toBe('iss');
   });
 });
 

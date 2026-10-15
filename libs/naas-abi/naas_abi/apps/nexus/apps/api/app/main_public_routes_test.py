@@ -32,6 +32,14 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/api/auth/avatar/{filename}"): "avatar images used in <img> tags",
     ("GET", "/app-preview/{token}"): "capability URL (signed preview token)",
     ("GET", "/app-preview/{token}/{path:path}"): "capability URL (signed preview token)",
+    **{
+        (method, "/app-remote/{grant}/{module_id}/{app}/{path:path}"): (
+            "capability URL (signed remote app grant)"
+        )
+        for method in ("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+    },
+    ("GET", "/app-remote/{grant}/{module_id}/{app}"): "capability URL (signed remote app grant)",
+    ("HEAD", "/app-remote/{grant}/{module_id}/{app}"): "capability URL (signed remote app grant)",
     ("GET", "/provider-logos/{provider_id}"): "static provider logos",
 }
 
@@ -66,11 +74,13 @@ def routes() -> dict[tuple[str, str], set]:
 
 def _auth_guards() -> set:
     from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
+        get_current_user_released,
         get_current_user_required,
     )
     from naas_abi_core.apps.api.abi_api_key_auth import require_abi_api_token
 
-    return {get_current_user_required, require_abi_api_token}
+    # get_current_user_released checks the same token on its own session.
+    return {get_current_user_required, get_current_user_released, require_abi_api_token}
 
 
 def test_every_route_requires_a_signed_in_caller_unless_listed(routes) -> None:
@@ -93,3 +103,19 @@ def test_ollama_control_routes_are_superadmin_only(routes) -> None:
 
     for key in SUPERADMIN_ONLY:
         assert require_superadmin in routes[key], key
+
+
+def test_sysadmin_routes_are_superadmin_only(routes) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
+        require_superadmin,
+    )
+
+    sysadmin = [key for key in routes if key[1].startswith("/api/admin/system/")]
+    assert sysadmin, "the SysAdmin router is not mounted"
+    for key in sysadmin:
+        assert require_superadmin in routes[key], key
+
+
+def test_the_trace_viewer_is_mounted_under_sysadmin(routes) -> None:
+    for path in ("", "/services", "/operations", "/{trace_id}"):
+        assert ("GET", f"/api/admin/system/traces{path}") in routes, path

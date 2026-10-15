@@ -83,7 +83,7 @@ services.events.subscribe(UserAuthenticated, on_user_auth)
 # ---------------------------------------------------------------------------
 
 services.events.publish(UserAuthenticated(user_id="alice", method="oauth_google"))
-services.events.publish(UserAuthenticated(user_id="bob",   method="password"))
+services.events.publish(UserAuthenticated(user_id="erin",   method="password"))
 services.events.publish(UserAuthenticated(user_id="carol", method="oauth_google"))
 
 # Give the in-process bus thread a moment to deliver before we move on.
@@ -159,21 +159,21 @@ for evt in services.events.iter_query(
 
 ```text
 [live] alice via oauth_google at 2026-05-22 ...
-[live] bob via password at 2026-05-22 ...
+[live] erin via password at 2026-05-22 ...
 [live] carol via oauth_google at 2026-05-22 ...
 
 --- query (eager, first 2) ---
   alice   method=oauth_google   created_at=2026-05-22T...  seq=1
-  bob     method=password       created_at=2026-05-22T...  seq=2
+  erin     method=password       created_at=2026-05-22T...  seq=2
 
 --- iter_query (snapshot, batched) ---
   seq=1  alice (oauth_google)
-  seq=2  bob (password)
+  seq=2  erin (password)
   seq=3  carol (oauth_google)
 
 --- iter_query_for_consumer (worker first run) ---
   processing seq=1  user=alice
-  processing seq=2  user=bob
+  processing seq=2  user=erin
   processing seq=3  user=carol
 
 [live] dave via passkey at 2026-05-22 ...
@@ -183,7 +183,7 @@ for evt in services.events.iter_query(
 
 --- iter_query (last 10 min, max 50 events) ---
   2026-05-22T...  alice
-  2026-05-22T...  bob
+  2026-05-22T...  erin
   2026-05-22T...  carol
   2026-05-22T...  dave
 ```

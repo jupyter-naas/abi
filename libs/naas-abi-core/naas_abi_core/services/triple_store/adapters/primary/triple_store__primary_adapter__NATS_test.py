@@ -525,6 +525,30 @@ def test_query_ask_encodes_boolean():
     assert response.success.ask_answer is False
 
 
+def test_query_update_answers_an_empty_select():
+    class _HttpLikePort(_StubPort):
+        # Oxigraph and ApacheJenaTDB2 answer an update with an unbound Result.
+        def query(self, query: str) -> rdflib.query.Result:
+            return rdflib.query.Result("SELECT")
+
+    adapter = TripleStorePrimaryAdapterNATS(_HttpLikePort(), SECRET)
+    request = _FakeRequest(
+        data=triple_store_pb2.QueryRequest(
+            query="DROP SILENT GRAPH <http://test.example.org/g>"
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.triple_store.v1.query",
+    )
+
+    asyncio.run(adapter._handle_query(request))
+
+    response = triple_store_pb2.QueryResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert response.success.result_type == "SELECT"
+    assert list(response.success.select.rows) == []
+
+
 def test_query_construct_encodes_triples_nt():
     stub = _StubPort()
     adapter = TripleStorePrimaryAdapterNATS(stub, SECRET)
@@ -776,12 +800,21 @@ def test_start_is_idempotent(monkeypatch):
 
     monkeypatch.setattr(primary_module.nats.micro, "add_service", _fake_add_service)
 
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    # Enough of a connection for the streamed-reads transfer host.
+    nc = SimpleNamespace(
+        max_payload=1024 * 1024, subscribe=AsyncMock(), flush=AsyncMock()
+    )
     adapter = TripleStorePrimaryAdapterNATS(_StubPort(), SECRET)
-    asyncio.run(adapter.start(object()))
+    asyncio.run(adapter.start(nc))
     first_call_count = len(calls)
-    asyncio.run(adapter.start(object()))  # second call must be a no-op
+    transfer_subscriptions = nc.subscribe.await_count
+    asyncio.run(adapter.start(nc))  # second call must be a no-op
     assert len(calls) == first_call_count
     assert first_call_count == 11  # one endpoint per ITripleStorePort method
+    assert nc.subscribe.await_count == transfer_subscriptions > 0
 
 
 @pytest.mark.parametrize(

@@ -1,4 +1,6 @@
-from collections.abc import Iterable, Iterator, Mapping
+import inspect
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from typing import Any
 
 from naas_abi_core.services.document.DocumentPort import (
     CollectionSpec,
@@ -10,11 +12,26 @@ from naas_abi_core.services.document.DocumentPort import (
     Predicate,
     Value,
     validate_data,
+    validate_max_bytes,
     validate_name,
     validate_query,
     validate_version,
 )
 from naas_abi_core.services.ServiceBase import ServiceBase
+
+
+def _max_bytes(find: Callable[..., Any], max_bytes: int | None) -> dict[str, int]:
+    """A byte budget, for an adapter whose ``find`` takes one: an adapter
+    written before the keyword answers unbounded pages, which the NATS primary
+    still sends whole (RPC overflow)."""
+    if max_bytes is None:
+        return {}
+    parameters = inspect.signature(find).parameters
+    if "max_bytes" not in parameters and not any(
+        p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()
+    ):
+        return {}
+    return {"max_bytes": max_bytes}
 
 
 class DocumentService(ServiceBase):
@@ -47,19 +64,37 @@ class DocumentService(ServiceBase):
         return root
 
     @property
+    def adapter(self) -> IDocumentAdapter:
+        return self.__adapter
+
+    @property
     def namespace(self) -> str:
         if self.__can_bind_namespaces:
             raise PermissionError("The engine document root only binds namespaces")
         return self.__namespace
 
-    def _for_namespace(self, namespace: str) -> "DocumentService":
-        """Composition-root hook; module proxies choose the namespace."""
+    def for_namespace(self, namespace: str) -> "DocumentService":
+        """A view bound to ``namespace``; only the engine root can create one.
+
+        Module proxies bind their own module's namespace. Platform administration
+        (the unlocked proxy's ``document_admin``) may bind any namespace.
+        """
         if not self.__can_bind_namespaces:
             raise PermissionError("A bound document service cannot change namespace")
         scoped = DocumentService(self.__adapter, namespace)
         if self.services_wired:
             scoped.set_services(self.services)
         return scoped
+
+    def _for_namespace(self, namespace: str) -> "DocumentService":
+        """Composition-root hook kept for existing callers; see ``for_namespace``."""
+        return self.for_namespace(namespace)
+
+    def namespaces(self) -> list[str]:
+        """Namespaces holding at least one collection; engine root only."""
+        if not self.__can_bind_namespaces:
+            raise PermissionError("A bound document service cannot list namespaces")
+        return self.__adapter.namespaces()
 
     def ensure_collection(self, spec: CollectionSpec) -> None:
         self.__adapter.ensure_collection(self.namespace, spec)
@@ -69,6 +104,10 @@ class DocumentService(ServiceBase):
 
     def collections(self) -> list[str]:
         return self.__adapter.collections(self.namespace)
+
+    def collection_spec(self, collection: str) -> CollectionSpec:
+        """Declared fields and unique groups. Raises ``CollectionNotFound``."""
+        return self.__adapter.collection_spec(self.namespace, validate_name(collection))
 
     def put(
         self,
@@ -120,10 +159,20 @@ class DocumentService(ServiceBase):
         order_by: OrderBy = None,
         limit: int = 100,
         cursor: str | None = None,
+        max_bytes: int | None = None,
     ) -> Page:
+        """A page of at most ``limit`` items, cut earlier by ``max_bytes``
+        (see ``IDocumentAdapter.find``); follow ``cursor`` until it is None."""
         where = validate_query(where, order_by, limit)
+        validate_max_bytes(max_bytes)
         return self.__adapter.find(
-            self.namespace, validate_name(collection), where, order_by, limit, cursor
+            self.namespace,
+            validate_name(collection),
+            where,
+            order_by,
+            limit,
+            cursor,
+            **_max_bytes(self.__adapter.find, max_bytes),
         )
 
     def iterate(
@@ -133,15 +182,23 @@ class DocumentService(ServiceBase):
         where: Iterable[Predicate] = (),
         order_by: OrderBy = None,
         batch: int = 500,
+        max_bytes: int | None = None,
     ) -> Iterator[Document]:
         # where/collection are validated once here rather than by find() on
         # every page, since neither changes across pages of the same query.
         where = validate_query(where, order_by, batch)
+        validate_max_bytes(max_bytes)
         collection = validate_name(collection)
         cursor = None
         while True:
             page = self.__adapter.find(
-                self.namespace, collection, where, order_by, batch, cursor
+                self.namespace,
+                collection,
+                where,
+                order_by,
+                batch,
+                cursor,
+                **_max_bytes(self.__adapter.find, max_bytes),
             )
             yield from page.items
             cursor = page.cursor

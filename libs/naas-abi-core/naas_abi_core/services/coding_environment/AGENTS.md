@@ -18,6 +18,12 @@ Provision and manage coding workspaces through interchangeable providers.
 Implement every abstract method of `ICodingEnvironmentAdapter` in `CodingEnvironmentPorts.py`.
 Keep provider dependencies in secondary adapters and preserve typed domain errors.
 
+`list_all_environments()` is the platform admin view (the Nexus System app): every
+user's workspaces. Coder pages `GET /workspaces` with the admin token; in-memory and
+local-directory list every record; compose returns its one shared editor.
+`WorkspaceStatus` carries `owner`, `template` and `created_at` when the backend knows
+them (`""`/`None` otherwise); keep filling them in new adapters.
+
 ## Service API
 
 `CodingEnvironmentService(adapter)` delegates port operations and publishes domain events.
@@ -47,6 +53,11 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/coding_environment/ --im
 
 ## NATS RPC adapters
 
+A `NotImplementedError` in the wrapped adapter crosses NATS as the non-retryable
+code `UNIMPLEMENTED` and is raised again as `NotImplementedError` by the client.
+`adapters/secondary/CodingEnvironmentSecondaryAdapterNATSClient_broker_test.py` runs
+`list_all_environments` against a local `nats-server` (no Docker).
+
 `adapters/primary/coding_environment__primary_adapter__NATS.py` exposes the service's
 protobuf endpoints. `adapters/secondary/CodingEnvironmentSecondaryAdapterNATSClient.py` implements the outbound
 port. Wire contracts live under `naas_abi_core/proto/coding_environment/v1/`.
@@ -54,10 +65,12 @@ port. Wire contracts live under `naas_abi_core/proto/coding_environment/v1/`.
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
-The maximum message size is 8 MiB (or a lower broker limit); oversized replies
-return non-retryable `PAYLOAD_TOO_LARGE`, and micro-service error headers raise
-instead of becoming an empty success. Larger results require streaming or a
-storage reference. No RPC is automatically replayed after transport failure:
+Requests and replies above the broker limit (8 MiB, or lower) overflow as
+transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+that, at the overflow host's capacity, or with an older peer, the call fails
+with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
+instead of becoming an empty success. Overflowed values are held whole in
+memory; results that should not be require streaming or a storage reference. No RPC is automatically replayed after transport failure:
 a timeout can hide a completed operation. Reconcile its outcome before retrying.
 `close()` releases only the client's transport, including for vector storage.
 

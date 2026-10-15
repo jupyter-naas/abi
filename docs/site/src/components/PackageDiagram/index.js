@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 
-// Diamond layout: cli at top, naas-abi left, marketplace right, core at bottom
+// Diamond layout: cli at top, naas-abi left, marketplace right, core below,
+// then the SDK and the protobuf contracts remote modules use.
 const NODES = [
   {
     id: 'cli',
-    label: 'naas-abi-cli\nabi stack · abi chat · abi deploy',
+    label: 'naas-abi-cli\nabi new · abi dev · abi deploy',
     x: 0, y: -160,
     color: { background: '#d1fae5', border: '#22c55e', highlight: { background: '#a7f3d0', border: '#22c55e' }, hover: { background: '#a7f3d0', border: '#22c55e' } },
   },
@@ -26,6 +27,18 @@ const NODES = [
     x: 0, y: 160,
     color: { background: '#fce7f3', border: '#ec4899', highlight: { background: '#fbcfe8', border: '#ec4899' }, hover: { background: '#fbcfe8', border: '#ec4899' } },
   },
+  {
+    id: 'sdk',
+    label: 'naas-abi-sdk\nRemote modules · NATS clients',
+    x: -240, y: 300,
+    color: { background: '#fef9c3', border: '#eab308', highlight: { background: '#fef08a', border: '#eab308' }, hover: { background: '#fef08a', border: '#eab308' } },
+  },
+  {
+    id: 'proto',
+    label: 'naas-abi-proto\nv1 protobuf contracts',
+    x: 240, y: 300,
+    color: { background: '#f1f5f9', border: '#64748b', highlight: { background: '#e2e8f0', border: '#64748b' }, hover: { background: '#e2e8f0', border: '#64748b' } },
+  },
 ];
 
 const EDGES = [
@@ -34,6 +47,9 @@ const EDGES = [
   { from: 'abi', to: 'core', label: 'imports', color: { color: '#ec4899' }, font: { size: 10, color: '#64748b', align: 'middle' } },
   { from: 'abi', to: 'mkt',  label: 'enables selectively', dashes: true, color: { color: '#8b5cf6' }, font: { size: 10, color: '#64748b', align: 'middle' } },
   { from: 'mkt', to: 'core', label: 'imports', color: { color: '#ec4899' }, font: { size: 10, color: '#64748b', align: 'middle' } },
+  { from: 'core', to: 'sdk', label: '[nats] extra', color: { color: '#eab308' }, font: { size: 10, color: '#64748b', align: 'middle' } },
+  { from: 'core', to: 'proto', label: 'imports', color: { color: '#64748b' }, font: { size: 10, color: '#64748b', align: 'middle' } },
+  { from: 'sdk', to: 'proto', label: 'imports', color: { color: '#64748b' }, font: { size: 10, color: '#64748b', align: 'middle' } },
 ];
 
 const OPTIONS = {
@@ -77,7 +93,7 @@ export default function PackageDiagram() {
     <div style={{ margin: '24px 0' }}>
       <div
         ref={containerRef}
-        style={{ height: '380px', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#ffffff', overflow: 'hidden' }}
+        style={{ height: '480px', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#ffffff', overflow: 'hidden' }}
       />
     </div>
   );

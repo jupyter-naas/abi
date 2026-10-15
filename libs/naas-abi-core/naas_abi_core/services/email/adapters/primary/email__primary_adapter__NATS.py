@@ -16,7 +16,6 @@ depend on each other; see that module's docstring for why).
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -28,7 +27,14 @@ from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
-from naas_abi_core.engine.nats_rpc import respond_protobuf
+from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
+from naas_abi_core.engine.nats_rpc import (
+    RequestPayloadError,
+    request_payload,
+    respond_protobuf,
+)
+from naas_abi_core.engine.nats_sessions import ServicePrimary
+from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.email.v1 import email_pb2
 from naas_abi_core.services.email.adapters.email_nats_contract import (
@@ -37,10 +43,16 @@ from naas_abi_core.services.email.adapters.email_nats_contract import (
     SERVICE_VERSION,
     SUBJECT_PREFIX,
 )
-from naas_abi_core.services.email.EmailPorts import EmailAttachment, IEmailAdapter
+from naas_abi_core.services.email.EmailPorts import (
+    EmailAttachment,
+    IEmailAdapter,
+    SentEmail,
+    SentEmailNotFound,
+    SentEmailsNotKept,
+    SentEmailSummary,
+)
 from naas_abi_core.services.email.EmailService import EmailService
 from nats.micro.request import Request
-from nats.micro.service import Service
 
 __all__ = [
     "AUTH_HEADER",
@@ -52,6 +64,18 @@ __all__ = [
 
 _RequestT = TypeVar("_RequestT", bound=Message)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
+
+
+def _summary_to_pb(summary: SentEmailSummary) -> email_pb2.SentEmailSummary:
+    return email_pb2.SentEmailSummary(
+        message_id=summary.message_id,
+        sent_at=summary.sent_at,
+        size=summary.size,
+        subject=summary.subject,
+        to=summary.to,
+        sender=summary.sender,
+        snippet=summary.snippet,
+    )
 
 
 def _pb_to_attachments(
@@ -79,7 +103,7 @@ def _pb_to_attachments(
     ]
 
 
-class EmailPrimaryAdapterNATS:
+class EmailPrimaryAdapterNATS(ServicePrimary):
     """Serves email over NATS RPC (request/reply).
 
     Wraps a real adapter *or* the domain service and registers one NATS
@@ -108,7 +132,8 @@ class EmailPrimaryAdapterNATS:
     ) -> None:
         self._adapter = adapter
         self._jwt_secret = jwt_secret
-        self._service: Service | None = None
+        self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
+        self._service: TracedService | None = None
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``email`` NATS service on ``nc``.
@@ -120,7 +145,7 @@ class EmailPrimaryAdapterNATS:
         if self._service is not None:
             return
 
-        service = await nats.micro.add_service(
+        service = await add_traced_service(
             nc,
             name=SERVICE_NAME,
             version=SERVICE_VERSION,
@@ -131,14 +156,25 @@ class EmailPrimaryAdapterNATS:
             subject=f"{SUBJECT_PREFIX}.send",
             handler=self._handle_send,
         )
+        for name, handler in (
+            ("list_sent", self._handle_list_sent),
+            ("get_sent", self._handle_get_sent),
+            ("delete_sent", self._handle_delete_sent),
+        ):
+            await service.add_endpoint(
+                name=name, subject=f"{SUBJECT_PREFIX}.{name}", handler=handler
+            )
         self._service = service
 
     async def stop(self) -> None:
         """Deregister the service, draining its subscriptions."""
         service = self._service
         self._service = None
-        if service is not None:
-            await service.stop()
+        try:
+            if service is not None:
+                await service.stop()
+        finally:
+            self._dispatch.close()
 
     # ------------------------------------------------------------------
     # Shared request handling: auth, decode, dispatch, encode.
@@ -163,7 +199,12 @@ class EmailPrimaryAdapterNATS:
 
         parsed_request = request_cls()
         try:
-            parsed_request.ParseFromString(request.data)
+            parsed_request.ParseFromString(await request_payload(request))
+        except RequestPayloadError as exc:
+            await self._respond_error(
+                request, response_cls, exc.code, exc.message, retryable=False
+            )
+            return
         except DecodeError:
             await self._respond_error(
                 request,
@@ -180,7 +221,17 @@ class EmailPrimaryAdapterNATS:
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await asyncio.to_thread(call, parsed_request)
+            response = await self._dispatch.call(call, parsed_request)
+        except SentEmailsNotKept as exc:
+            await self._respond_error(
+                request, response_cls, "SENT_EMAILS_NOT_KEPT", str(exc), retryable=False
+            )
+            return
+        except SentEmailNotFound as exc:
+            await self._respond_error(
+                request, response_cls, "SENT_EMAIL_NOT_FOUND", str(exc), retryable=False
+            )
+            return
         except Exception:  # noqa: BLE001 - a handler must never crash the service
             logger.opt(exception=True).error(
                 f"EmailPrimaryAdapterNATS: unexpected error handling {request.subject!r}"
@@ -230,7 +281,7 @@ class EmailPrimaryAdapterNATS:
         )
 
     def _call_send(self, req: email_pb2.SendRequest) -> email_pb2.SendResponse:
-        self._adapter.send(
+        message_id = self._adapter.send(
             to_email=req.to_email if req.HasField("to_email") else None,
             subject=req.subject,
             text_body=req.text_body,
@@ -242,4 +293,59 @@ class EmailPrimaryAdapterNATS:
             to_emails=list(req.to_emails) if req.to_emails else None,
             cc_emails=list(req.cc_emails) if req.cc_emails else None,
         )
-        return email_pb2.SendResponse()
+        response = email_pb2.SendResponse()
+        if message_id is not None:
+            response.message_id = message_id
+        return response
+
+    async def _handle_list_sent(self, request: Request) -> None:
+        await self._handle(
+            request,
+            email_pb2.ListSentRequest,
+            email_pb2.ListSentResponse,
+            self._call_list_sent,
+        )
+
+    def _call_list_sent(
+        self, req: email_pb2.ListSentRequest
+    ) -> email_pb2.ListSentResponse:
+        summaries = self._adapter.list_sent(
+            limit=req.limit, before=req.before if req.HasField("before") else None
+        )
+        return email_pb2.ListSentResponse(
+            messages=email_pb2.SentEmailSummaries(
+                messages=[_summary_to_pb(s) for s in summaries]
+            )
+        )
+
+    async def _handle_get_sent(self, request: Request) -> None:
+        await self._handle(
+            request,
+            email_pb2.GetSentRequest,
+            email_pb2.GetSentResponse,
+            self._call_get_sent,
+        )
+
+    def _call_get_sent(
+        self, req: email_pb2.GetSentRequest
+    ) -> email_pb2.GetSentResponse:
+        sent: SentEmail = self._adapter.get_sent(req.message_id)
+        return email_pb2.GetSentResponse(
+            message=email_pb2.SentEmail(
+                summary=_summary_to_pb(sent.summary), raw=sent.raw
+            )
+        )
+
+    async def _handle_delete_sent(self, request: Request) -> None:
+        await self._handle(
+            request,
+            email_pb2.DeleteSentRequest,
+            email_pb2.DeleteSentResponse,
+            self._call_delete_sent,
+        )
+
+    def _call_delete_sent(
+        self, req: email_pb2.DeleteSentRequest
+    ) -> email_pb2.DeleteSentResponse:
+        self._adapter.delete_sent(req.message_id)
+        return email_pb2.DeleteSentResponse()

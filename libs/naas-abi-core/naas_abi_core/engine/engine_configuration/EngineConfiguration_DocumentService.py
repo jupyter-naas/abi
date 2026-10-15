@@ -2,6 +2,7 @@ from typing import Any, Literal
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
+    config_model,
 )
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
@@ -31,9 +32,17 @@ class DocumentAdapterPostgreSQLConfiguration(BaseModel):
     pool_timeout: float = Field(default=5.0, gt=0, allow_inf_nan=False)
 
 
+class DocumentAdapterNATSConfiguration(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    nats_url: str = "nats://127.0.0.1:4222"
+    jwt_secret: str = Field(min_length=32, repr=False)
+    service_identity: str = "engine"
+    timeout_seconds: float = Field(default=10.0, gt=0, allow_inf_nan=False)
+
+
 class DocumentAdapterConfiguration(GenericLoader):
     model_config = ConfigDict(extra="forbid")
-    adapter: Literal["sqlite", "postgresql", "custom"]
+    adapter: Literal["sqlite", "postgresql", "nats_rpc", "custom"]
     config: dict[str, Any] = Field(default_factory=dict, repr=False)
 
     @model_validator(mode="after")
@@ -50,6 +59,8 @@ class DocumentAdapterConfiguration(GenericLoader):
                 self.config,
                 "Invalid configuration for services.document.document_adapter 'postgresql' adapter",
             )
+        elif self.adapter == "nats_rpc":
+            DocumentAdapterNATSConfiguration.model_validate(self.config)
         elif (
             not self.python_module
             or not self.module_callable
@@ -81,10 +92,29 @@ class DocumentAdapterConfiguration(GenericLoader):
                     self.config
                 ).model_dump(by_alias=True)
             )
+        if self.adapter == "nats_rpc":
+            from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterNATSClient import (
+                DocumentSecondaryAdapterNATSClient,
+            )
+
+            return DocumentSecondaryAdapterNATSClient(
+                **DocumentAdapterNATSConfiguration.model_validate(
+                    self.config
+                ).model_dump()
+            )
         adapter = super().load()
         if not isinstance(adapter, IDocumentAdapter):
             raise TypeError("Custom document adapter must implement IDocumentAdapter")
         return adapter
+
+    def local_storage(self) -> str | None:
+        """Where the documents live (single-serving-engine ADR)."""
+        if self.adapter == "sqlite":
+            path = config_model(DocumentAdapterSQLiteConfiguration, self.config).path
+            return f"SQLite at {path}"
+        if self.adapter == "custom":
+            return self.custom_local_storage()
+        return None  # postgresql; nats_rpc is another engine's
 
 
 class DocumentServiceConfiguration(BaseModel):

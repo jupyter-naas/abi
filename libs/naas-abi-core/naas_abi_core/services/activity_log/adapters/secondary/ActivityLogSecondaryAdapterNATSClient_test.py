@@ -1,5 +1,9 @@
 import asyncio
+import shutil
+import socket
+import subprocess
 import time
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from threading import Event as ThreadingEvent
 from threading import Thread
@@ -199,8 +203,44 @@ class _PrimaryAdapterServer:
             await self._nc.close()
 
 
+@contextmanager
+def _native_nats_server(binary: str, workdir):
+    """A throwaway local ``nats-server`` on a free port (no Docker needed)."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    with (workdir / "nats.log").open("w") as log:
+        process = subprocess.Popen(
+            [binary, "-a", "127.0.0.1", "-p", str(port)],
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if process.poll() is not None:
+                    pytest.fail("nats-server exited before accepting connections")
+                try:
+                    with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                        break
+                except OSError:
+                    time.sleep(0.01)
+            else:
+                pytest.fail("nats-server did not become ready")
+            yield f"nats://127.0.0.1:{port}"
+        finally:
+            process.terminate()
+            process.wait(timeout=5)
+
+
 @pytest.fixture(scope="session")
-def nats_url():
+def nats_url(tmp_path_factory):
+    # A local nats-server binary first (fast, no Docker), else a container.
+    binary = shutil.which("nats-server")
+    if binary is not None:
+        with _native_nats_server(binary, tmp_path_factory.mktemp("nats")) as url:
+            yield url
+        return
     try:
         # Imported here, not at module level: testcontainers is a dev-only
         # dependency, absent from environments that don't run
@@ -209,7 +249,7 @@ def nats_url():
         # ObjectStorageSecondaryAdapterNATSClient_test.py.
         from testcontainers.core.container import DockerContainer
 
-        with DockerContainer("nats:2-alpine").with_exposed_ports(4222) as container:
+        with DockerContainer("nats:2.14.7-alpine").with_exposed_ports(4222) as container:
             host = container.get_container_host_ip()
             port = container.get_exposed_port(4222)
             url = f"nats://{host}:{port}"

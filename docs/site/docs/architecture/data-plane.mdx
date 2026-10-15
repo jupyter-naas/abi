@@ -26,7 +26,7 @@ ABI stores five categories of data, each in a purpose-built open-source backend:
 
 **Vector data** lives in Qdrant as high-dimensional embeddings, used for semantic similarity search and agent memory retrieval. Pipelines that process unstructured content (documents, emails, transcripts) embed and store them here alongside their provenance in the knowledge graph.
 
-**Relational data** lives in PostgreSQL. Agent conversation history, workflow state, and application data (Nexus) all use Postgres as the system of record for structured, transactional data.
+**Relational data** lives in PostgreSQL. Application data (Nexus), the documents of the Document Service (agent conversation memory, job runs, the activity log) and the dataset catalog all use Postgres as the system of record for structured, transactional data.
 
 **Object data** lives in MinIO, an S3-compatible object store. Raw files ingested from integrations (PDFs, CSVs, images, audio) are stored here before pipeline processing, and retained as source-of-truth artifacts.
 
@@ -40,9 +40,9 @@ All five backends are community-licensed (Apache 2.0 or MIT), expose standard in
 
 ABI provides three compute modes for moving data through the system:
 
-**Batch compute** runs through Dagster pipelines. Integrations pull data from external APIs (GitHub, LinkedIn, Salesforce, Stripe, and others) on schedules or on demand. Pipelines transform raw API responses into RDF triples or embeddings and write them to the appropriate store. Pipeline code is plain Python with no proprietary DSL.
+**Batch compute** runs as [module jobs](./remote-modules#module-jobs). A module declares its jobs with a schedule (`Cron`, `Every`) and runs them in its own process; JetStream schedules and delivers the triggers, with no central scheduler. Integrations pull data from external APIs (GitHub, LinkedIn, Salesforce, Stripe, and others) on schedules or on demand, and pipelines transform raw API responses into RDF triples or embeddings and write them to the appropriate store. Pipeline code is plain Python with no proprietary DSL. (Dagster remains available as a legacy extra for projects with NATS off.)
 
-**Event-driven compute** runs through the message bus (RabbitMQ in production, an in-process queue in local dev). Workflows can publish events that trigger downstream processing asynchronously: a new document arrives, a pipeline extracts entities, those entities update the knowledge graph, an agent is notified.
+**Event-driven compute** runs through NATS: the bus is JetStream, and a job can run on an event (`OnEvent`, with a filter on the event's fields). Workflows can publish events that trigger downstream processing asynchronously: a new document arrives, a pipeline extracts entities, those entities update the knowledge graph, an agent is notified.
 
 **Interactive compute** runs inline within agents. When a user or system sends a request, the agent selects SPARQL queries, Python workflows, and external integrations as tools and executes them in the context of a single LLM call. Latency is bounded by the tool calls, not by a separate compute tier.
 

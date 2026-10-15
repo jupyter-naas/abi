@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Callable
 from typing import Any
@@ -76,6 +77,83 @@ def _sparql_iri(value: str | None) -> str | None:
 
 def _label_from_iri(iri: str) -> str:
     return iri.split("/")[-1].split("#")[-1]
+
+
+def _filter_conditions(filter_item: dict[str, str | None]) -> str:
+    conditions = ["?s ?p ?o ."]
+    subject_iri = _sparql_iri(filter_item.get("subject_uri"))
+    predicate_iri = _sparql_iri(filter_item.get("predicate_uri"))
+    object_iri = _sparql_iri(filter_item.get("object_uri"))
+    if subject_iri:
+        conditions.append(f"FILTER(?s = {subject_iri})")
+    if predicate_iri:
+        conditions.append(f"FILTER(?p = {predicate_iri})")
+    if object_iri:
+        conditions.append(f"FILTER(?o = {object_iri})")
+    return " ".join(conditions)
+
+
+_EMPTY_PREVIEW: dict[str, Any] = {
+    "count": 0,
+    "individual_count": 0,
+    "object_properties_count": 0,
+    "data_properties_count": 0,
+    "rows": [],
+}
+
+
+def _preview(store: Any, graph_values: str, patterns: list[str], limit: int) -> dict[str, Any]:
+    """Count the distinct triples matching any filter on the store, and read
+    only the ``limit`` rows shown: memory does not grow with the graphs."""
+    union = " UNION ".join("{ " + pattern + " }" for pattern in patterns)
+    matching = f"""
+        VALUES ?g {{ {graph_values} }}
+        GRAPH ?g {{
+            FILTER(?o != <{OWL.NamedIndividual}>)
+            {union}
+        }}"""
+    triples = f"SELECT DISTINCT ?s ?p ?o WHERE {{ {matching} }}"
+    rdf_type = f"<{RDF.type}>"
+    web = 'FILTER(STRSTARTS(STR(?node), "http://") || STRSTARTS(STR(?node), "https://"))'
+
+    def numbers(sparql: str) -> list[int]:
+        for row in store.query(sparql):
+            return [int(value) if value is not None else 0 for value in row]
+        return []
+
+    try:
+        count, objects, data = numbers(
+            "SELECT (COUNT(*) AS ?triples) "
+            f"(SUM(IF(isIRI(?o) && ?p != {rdf_type}, 1, 0)) AS ?objects) "
+            "(SUM(IF(isLiteral(?o), 1, 0)) AS ?data) "
+            f"WHERE {{ {{ {triples} }} }}"
+        )
+        # Nodes: http(s) subjects, and http(s) objects of non-type relations.
+        (individuals,) = numbers(
+            "SELECT (COUNT(DISTINCT ?node) AS ?individuals) WHERE { "
+            f"{{ SELECT DISTINCT (?s AS ?node) WHERE {{ {matching} }} }} UNION "
+            f"{{ SELECT DISTINCT (?o AS ?node) WHERE {{ {matching} "
+            f"FILTER(isIRI(?o) && ?p != {rdf_type}) }} }} {web} }}"
+        )
+        shown = list(store.query(f"{triples} LIMIT {max(0, limit)}"))
+    except Exception:
+        return dict(_EMPTY_PREVIEW)
+
+    rows: list[dict[str, str]] = []
+    for row in shown:
+        assert isinstance(row, ResultRow)
+        labels = [
+            _label_from_iri(value) if value.startswith(("http://", "https://")) else value
+            for value in (str(row.s), str(row.p), str(row.o))
+        ]
+        rows.append(dict(zip(("subject", "predicate", "object"), labels, strict=True)))
+    return {
+        "count": count,
+        "individual_count": individuals,
+        "object_properties_count": objects,
+        "data_properties_count": data,
+        "rows": rows,
+    }
 
 
 def _format_typed_label(label: str, type_label: str | None) -> str:
@@ -364,116 +442,8 @@ class ViewService:
         self._access_scope.require(self._access_scope.workspace_id, graph_uris)
         graph_values = " ".join(sparql_iri(uri) for uri in graph_uris)
 
-        normalized_filters = filters or [{}]
-
-        def _filter_conditions(filter_item: dict[str, str | None]) -> str:
-            conditions = ["?s ?p ?o ."]
-            subject_iri = _sparql_iri(filter_item.get("subject_uri"))
-            predicate_iri = _sparql_iri(filter_item.get("predicate_uri"))
-            object_iri = _sparql_iri(filter_item.get("object_uri"))
-            if subject_iri:
-                conditions.append(f"FILTER(?s = {subject_iri})")
-            if predicate_iri:
-                conditions.append(f"FILTER(?p = {predicate_iri})")
-            if object_iri:
-                conditions.append(f"FILTER(?o = {object_iri})")
-            return " ".join(conditions)
-
-        unique_triples: set[tuple[str, str, str]] = set()
-        ordered_triples: list[tuple[str, str, str, bool, bool]] = []
-
-        try:
-            for filter_item in normalized_filters:
-                filter_clause = _filter_conditions(filter_item)
-                triples_rows = store.query(
-                    f"""
-                    SELECT DISTINCT ?s ?p ?o (isIRI(?o) AS ?o_is_iri) (isLiteral(?o) AS ?o_is_literal)
-                    WHERE {{
-                        VALUES ?g {{ {graph_values} }}
-                        GRAPH ?g {{
-                            FILTER(?o != <{str(OWL.NamedIndividual)}>)
-                            {filter_clause}
-                        }}
-                    }}
-                    """
-                )
-                for row in triples_rows:
-                    assert isinstance(row, ResultRow)
-                    triple = (str(row.s), str(row.p), str(row.o))
-                    if triple in unique_triples:
-                        continue
-                    unique_triples.add(triple)
-                    object_is_iri = str(getattr(row, "o_is_iri", "false")).lower() == "true"
-                    object_is_literal = (
-                        str(getattr(row, "o_is_literal", "false")).lower() == "true"
-                    )
-                    ordered_triples.append(
-                        (
-                            triple[0],
-                            triple[1],
-                            triple[2],
-                            object_is_iri,
-                            object_is_literal,
-                        )
-                    )
-        except Exception:
-            return {
-                "count": 0,
-                "individual_count": 0,
-                "object_properties_count": 0,
-                "data_properties_count": 0,
-                "rows": [],
-            }
-
-        total_count = len(unique_triples)
-        object_properties_count = 0
-        data_properties_count = 0
-        nodes: set[str] = set()
-        for subject, predicate, object_value, object_is_iri, object_is_literal in ordered_triples:
-            if object_is_iri and predicate != str(RDF.type):
-                object_properties_count += 1
-            if object_is_literal:
-                data_properties_count += 1
-            if subject.startswith("http://") or subject.startswith("https://"):
-                nodes.add(subject)
-            if predicate == str(RDF.type):
-                continue
-            if object_is_iri and (
-                object_value.startswith("http://") or object_value.startswith("https://")
-            ):
-                nodes.add(object_value)
-        individual_count = len(nodes)
-
-        rows: list[dict[str, str]] = []
-        for subject, predicate, object_value, _, _ in ordered_triples[: int(limit)]:
-            s_label = (
-                _label_from_iri(subject) if subject.startswith(("http://", "https://")) else subject
-            )
-            p_label = (
-                _label_from_iri(predicate)
-                if predicate.startswith(("http://", "https://"))
-                else predicate
-            )
-            o_label = (
-                _label_from_iri(object_value)
-                if object_value.startswith(("http://", "https://"))
-                else object_value
-            )
-            rows.append(
-                {
-                    "subject": s_label,
-                    "predicate": p_label,
-                    "object": o_label,
-                }
-            )
-
-        return {
-            "count": total_count,
-            "individual_count": individual_count,
-            "object_properties_count": object_properties_count,
-            "data_properties_count": data_properties_count,
-            "rows": rows,
-        }
+        patterns = [_filter_conditions(item) for item in filters or [{}]]
+        return await asyncio.to_thread(_preview, store, graph_values, patterns, int(limit))
 
     def _visibility_clause(self, query, user_id: str | None):
         if user_id:

@@ -27,11 +27,15 @@ override-dependencies = ["onnxruntime<1.26"]
 # project tracks the checked-out source instead of the last published release.
 # Clone with `--recursive` (or run `git submodule update --init`) or these
 # paths will be empty and `uv sync` will fail.
+# naas-abi-proto and naas-abi-sdk (NATS mode, remote modules) are not on PyPI
+# yet: naas-abi-core's nats extra resolves them from here.
 [tool.uv.sources]
 naas-abi = { path = ".abi/libs/naas-abi",  editable = true }
 naas-abi-core = { path = ".abi/libs/naas-abi-core",  editable = true }
 naas-abi-marketplace = { path = ".abi/libs/naas-abi-marketplace",  editable = true }
 naas-abi-cli = { path = ".abi/libs/naas-abi-cli",  editable = true }
+naas-abi-proto = { path = ".abi/libs/naas-abi-proto",  editable = true }
+naas-abi-sdk = { path = ".abi/libs/naas-abi-sdk",  editable = true }
 # {% else %}
 # To resolve the framework from source instead of PyPI, add the submodule
 #   git submodule add https://github.com/jupyter-naas/abi.git .abi
@@ -41,4 +45,6 @@ naas-abi-cli = { path = ".abi/libs/naas-abi-cli",  editable = true }
 # naas-abi-core = { path = ".abi/libs/naas-abi-core",  editable = true }
 # naas-abi-marketplace = { path = ".abi/libs/naas-abi-marketplace",  editable = true }
 # naas-abi-cli = { path = ".abi/libs/naas-abi-cli",  editable = true }
+# naas-abi-proto = { path = ".abi/libs/naas-abi-proto",  editable = true }
+# naas-abi-sdk = { path = ".abi/libs/naas-abi-sdk",  editable = true }
 # {% endif %}

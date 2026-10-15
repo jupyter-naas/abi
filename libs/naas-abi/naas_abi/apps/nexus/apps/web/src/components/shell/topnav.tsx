@@ -32,7 +32,6 @@ export function TopNav() {
   const activePanelSection = useWorkspaceStore((s) => s.activePanelSection);
   const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
   const lastActivePanelSection = useWorkspaceStore((s) => s.lastActivePanelSection);
-  const sectionPanelWidth = useWorkspaceStore((s) => s.sectionPanelWidth);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
 
   useEffect(() => {
@@ -61,30 +60,9 @@ export function TopNav() {
   return (
     <header className="glass-nav relative z-[200] shrink-0 border-b border-border/50">
       <div className="relative flex items-stretch" style={{ height: TOPNAV_HEIGHT }}>
-        {sectionTitleOpen && (
-          <div
-            className="flex h-full shrink-0 items-center pl-4 pr-3"
-            style={{ minWidth: sectionPanelWidth }}
-            data-testid="app-menu-bar"
-          >
-            {nav ? (
-              nav
-            ) : panelHref ? (
-              <Link
-                href={panelHref}
-                data-testid="section-panel-title"
-                className="truncate text-sm font-semibold hover:text-workspace-accent"
-              >
-                {panelTitle}
-              </Link>
-            ) : (
-              <span data-testid="section-panel-title" className="truncate text-sm font-semibold">
-                {panelTitle}
-              </span>
-            )}
-          </div>
-        )}
-
+        {/* The panel toggle leads the bar so it stays put whether the
+            feature column is open or closed; the section title or the
+            page's app menu follows it. */}
         <div className="relative z-10 flex min-w-0 items-center gap-1 pl-2 pr-2">
           {!sidebarOpen && (
             <button
@@ -104,7 +82,7 @@ export function TopNav() {
               type="button"
               onClick={() => setActivePanelSection(activePanelSection ? null : sectionToToggle)}
               className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md transition-all',
+                'flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-all',
                 'hover:bg-muted hover:text-foreground',
                 activePanelSection ? 'text-foreground' : 'text-muted-foreground'
               )}
@@ -115,9 +93,31 @@ export function TopNav() {
               <PanelLeft size={14} />
             </button>
           )}
+
+          {/* The app menu bar belongs to the page: it shows whether or not the
+              panel is open. Without one, an open panel shows its title. */}
+          {mounted && nav ? (
+            <div className="ml-1 flex min-w-0 items-center" data-testid="app-menu-bar">
+              {nav}
+            </div>
+          ) : sectionTitleOpen && panelHref ? (
+            <Link
+              href={panelHref}
+              data-testid="section-panel-title"
+              className="ml-1 truncate text-sm font-semibold hover:text-workspace-accent"
+            >
+              {panelTitle}
+            </Link>
+          ) : sectionTitleOpen ? (
+            <span data-testid="section-panel-title" className="ml-1 truncate text-sm font-semibold">
+              {panelTitle}
+            </span>
+          ) : null}
         </div>
 
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-8">
+        {/* Below xl the bar is too narrow for the centred workspace title to
+            clear the menu bar and actions, so it is hidden rather than overlap. */}
+        <div className="pointer-events-none absolute inset-0 hidden items-center justify-center px-8 xl:flex">
           <div className="pointer-events-auto w-full max-w-[32rem]">
             <QuickOpen />
           </div>

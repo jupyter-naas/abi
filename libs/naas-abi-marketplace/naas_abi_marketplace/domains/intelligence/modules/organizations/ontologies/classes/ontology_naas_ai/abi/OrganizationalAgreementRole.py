@@ -8,4 +8,3 @@ class OrganizationalAgreementRole(_OrganizationalAgreementRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

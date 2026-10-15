@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Files, Database, Code, Presentation, FileText, Table2, LayoutGrid, Store, Settings, Activity, Home, Blocks, MoreHorizontal,
+  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Files, Database, Code, Presentation, FileText, Table2, LayoutGrid, Store, Settings, Activity, Home, Blocks, MoreHorizontal, Server,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -30,6 +30,7 @@ import { clearAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/app
 import { dockShowsLabels } from '@/lib/shell-columns';
 import { ColumnResizeHandle, useColumnResize } from '../column-resize-handle';
 import { DockProfile } from './dock-profile';
+import { prefetchSectionPanel } from './section-panel';
 import { WorkspaceSwitcher } from '../workspace-switcher';
 
 type SectionDef = {
@@ -107,6 +108,7 @@ export function Sidebar() {
     lastY: number;
   } | null>(null);
   const didDragRef = useRef(false);
+  const panelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -116,6 +118,9 @@ export function Sidebar() {
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const activePanelSection = useWorkspaceStore((s) => s.activePanelSection);
   const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
+  // What the column should show, updated on click before React paints it.
+  // The store lags by a frame so a second click is not read against the old section.
+  const intendedPanelRef = useRef<SidebarSection | null>(activePanelSection);
   const sidebarNavOrder = useWorkspaceStore((s) => s.sidebarNavOrder);
   const setSidebarNavOrder = useWorkspaceStore((s) => s.setSidebarNavOrder);
   const dockWidth = useWorkspaceStore((s) => s.dockWidth);
@@ -147,9 +152,46 @@ export function Sidebar() {
 
   useEffect(() => () => {
     if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    if (panelTimerRef.current) clearTimeout(panelTimerRef.current);
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
   }, []);
+
+  // Closing is cheap and should happen inside the click. Opening a column
+  // renders that section, so it waits until the click has painted — and it
+  // does not wait for the page route, which is a compile round-trip in dev.
+  const showPanel = (id: SidebarSection | null) => {
+    intendedPanelRef.current = id;
+    if (panelTimerRef.current) clearTimeout(panelTimerRef.current);
+    panelTimerRef.current = null;
+    if (id === null) {
+      setActivePanelSection(null);
+      return;
+    }
+    panelTimerRef.current = setTimeout(() => {
+      panelTimerRef.current = null;
+      setActivePanelSection(id);
+    }, 0);
+  };
+
+  // Route commits catch up with the column. A click that already chose a
+  // different section wins over a navigation that left earlier.
+  const applyPanelFromRoute = (id: SidebarSection | null) => {
+    if (intendedPanelRef.current && id && intendedPanelRef.current !== id) return;
+    if (panelTimerRef.current) {
+      clearTimeout(panelTimerRef.current);
+      panelTimerRef.current = null;
+    }
+    intendedPanelRef.current = id;
+    setActivePanelSection(id);
+  };
+
+  // Other entry points (Home, quick open, the top bar) write the store
+  // directly. Follow them unless a click is already queued ahead of the store.
+  useEffect(() => {
+    if (panelTimerRef.current) return;
+    intendedPanelRef.current = activePanelSection;
+  }, [activePanelSection]);
 
   const urlSection = useMemo(() => {
     return ALL_SECTIONS.find((s) => {
@@ -176,25 +218,32 @@ export function Sidebar() {
   useEffect(() => {
     if (lastReconciledPathRef.current === pathname) return;
     lastReconciledPathRef.current = pathname;
+    // Home launching an app hands it the full width; later routes resume.
+    const ws = useWorkspaceStore.getState();
+    if (ws.keepPanelClosedOnNextRoute) {
+      ws.setKeepPanelClosedOnNextRoute(false);
+      applyPanelFromRoute(null);
+      return;
+    }
     if (pathname.endsWith('/settings/infrastructure')) {
-      setActivePanelSection('infrastructure');
+      applyPanelFromRoute('infrastructure');
       return;
     }
     if (!urlSection) {
       // Events is an admin route with its own feed panel; the rest of /admin/
       // is full-bleed.
-      if (pathname.includes('/admin/events')) setActivePanelSection('events');
-      else if (pathname.includes('/admin/')) setActivePanelSection(null);
+      if (pathname.includes('/admin/events')) applyPanelFromRoute('events');
+      else if (pathname.includes('/admin/')) applyPanelFromRoute(null);
       return;
     }
     // Home is a desk, not a column. A mark-opened Workspaces panel may stay open.
     if (urlSection.id === 'home') {
       if (useWorkspaceStore.getState().activePanelSection !== 'workspaces') {
-        setActivePanelSection(null);
+        applyPanelFromRoute(null);
       }
       return;
     }
-    setActivePanelSection(urlSection.id);
+    applyPanelFromRoute(urlSection.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, urlSection]);
 
@@ -256,7 +305,7 @@ export function Sidebar() {
   const getDefaultPath = useCallback((sectionId: SidebarSection): string | undefined => {
     switch (sectionId) {
       case 'home':     return getWorkspacePath(currentWorkspaceId, '/home');
-      case 'maps':     return getWorkspacePath(currentWorkspaceId, '/maps/presence');
+      case 'maps':     return getWorkspacePath(currentWorkspaceId, '/maps');
       case 'search':   return getWorkspacePath(currentWorkspaceId, '/search');
       case 'chat':     return getWorkspacePath(currentWorkspaceId, '/chat');
       case 'ontology': {
@@ -284,6 +333,7 @@ export function Sidebar() {
     for (const section of orderedSections) {
       const path = getDefaultPath(section.id);
       if (path) router.prefetch(path);
+      prefetchSectionPanel(section.id);
     }
   }, [currentWorkspaceId, getDefaultPath, orderedSections, router]);
 
@@ -291,17 +341,13 @@ export function Sidebar() {
     setHoverTip(null);
     clearAppsSkipRestore();
     const path = getDefaultPath(section.id);
-    // Navigating: only flip the dock highlight now. The pathname reconciler
-    // above opens the matching column when the route commits, so the column
-    // and the page swap together. Setting the store here rendered the whole
-    // new column synchronously inside pointerup (zustand updates are always
-    // sync), blocking the click for 100s of ms on heavy sections (Ontology).
     const navigates = !!path && path.split('?')[0] !== pathname;
     const navigate = () => {
       if (!path) return;
       setPendingSection({ id: section.id, from: pathname });
       router.push(path);
     };
+    const shown = intendedPanelRef.current;
     // Query-only change (e.g. Ontology's restored route): the pathname stays
     // put, so the reconciler will not run; switch the column here.
     const pushQueryOnly = () => {
@@ -310,11 +356,11 @@ export function Sidebar() {
     if (section.id === 'home') {
       // Closing is cheap, and the reconciler keeps a Workspaces panel open on
       // Home, so an explicit Home click still closes whatever column is open.
-      setActivePanelSection(null);
+      showPanel(null);
       if (navigates) navigate();
       return;
     }
-    if (activePanelSection === section.id) {
+    if (shown === section.id) {
       if (section.id === 'slides') {
         const gallery = getDefaultPath('slides');
         if (gallery && isSlidesNestedPath(pathname, gallery)) {
@@ -329,16 +375,20 @@ export function Sidebar() {
           return;
         }
       }
-      setActivePanelSection(null);
+      showPanel(null);
       return;
     }
     if (section.id === 'files') setActiveSource('my-drive');
+    prefetchSectionPanel(section.id);
     if (navigates) {
       navigate();
+      // The column used to open only after the route committed, so the dock
+      // highlight moved and the list sat still for the whole page load.
+      showPanel(section.id);
       return;
     }
     // Same route (column was closed): no pathname change, so open it now.
-    setActivePanelSection(section.id);
+    showPanel(section.id);
     pushQueryOnly();
   };
 
@@ -629,6 +679,7 @@ export function Sidebar() {
               onPointerEnter={(e) => {
                 const path = getDefaultPath(section.id);
                 if (path) router.prefetch(path);
+                prefetchSectionPanel(section.id);
                 showHoverTip(section, e.currentTarget);
               }}
               onPointerLeave={hideHoverTip}
@@ -717,6 +768,7 @@ export function Sidebar() {
       >
         {[
           { key: 'admin-events', href: '/admin/events', label: 'Events', description: 'Recent platform activity', icon: <Activity size={18} />, section: 'events' as SidebarSection, visible: isSuperadmin },
+          { key: 'admin-system', href: '/admin/system', label: 'System', description: 'Kernel services, modules and the NATS network', icon: <Server size={18} />, section: null as SidebarSection | null, visible: isSuperadmin },
           { key: 'infrastructure', href: '/settings/infrastructure', label: 'Infrastructure', description: 'Explore ABI layers, components and dependencies', icon: <Blocks size={18} />, section: 'infrastructure' as SidebarSection, visible: canSettingsWorkspace },
         ].filter((item) => item.visible).map((item) => {
           const base = getWorkspacePath(currentWorkspaceId, item.href);
@@ -724,8 +776,13 @@ export function Sidebar() {
           return (
             <button
               key={item.key}
-              onClick={() => { setActivePanelSection(item.section); router.push(base); }}
-              onPointerEnter={(e) => showHoverTip({ id: item.key, ...item }, e.currentTarget)}
+              onClick={() => { showPanel(item.section); router.push(base); }}
+              onPointerEnter={(e) => {
+                // System has no section panel to prefetch.
+                if (item.section) prefetchSectionPanel(item.section);
+                router.prefetch(base);
+                showHoverTip({ id: item.key, ...item }, e.currentTarget);
+              }}
               onPointerLeave={hideHoverTip}
               onFocus={(e) => showHoverTip({ id: item.key, ...item }, e.currentTarget)}
               onBlur={hideHoverTip}
@@ -749,7 +806,12 @@ export function Sidebar() {
             <button
               key={section.id}
               onClick={() => handleSectionClick(section)}
-              onPointerEnter={(e) => showHoverTip(section, e.currentTarget)}
+              onPointerEnter={(e) => {
+                prefetchSectionPanel(section.id);
+                const path = getDefaultPath(section.id);
+                if (path) router.prefetch(path);
+                showHoverTip(section, e.currentTarget);
+              }}
               onPointerLeave={hideHoverTip}
               onFocus={(e) => showHoverTip(section, e.currentTarget)}
               onBlur={hideHoverTip}
@@ -817,6 +879,7 @@ export function Sidebar() {
                 key={section.id}
                 type="button"
                 role="menuitem"
+                onPointerEnter={() => prefetchSectionPanel(section.id)}
                 onClick={() => {
                   setMoreOpen(false);
                   handleSectionClick(section);

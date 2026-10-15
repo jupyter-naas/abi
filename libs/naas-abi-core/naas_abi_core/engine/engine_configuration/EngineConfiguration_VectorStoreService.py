@@ -2,6 +2,7 @@ from typing import Literal, Self
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
+    config_model,
 )
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
@@ -175,6 +176,26 @@ class VectorStoreAdapterConfiguration(GenericLoader):
                 raise ValueError(f"Unknown adapter: {self.adapter}")
         else:
             return super().load()
+
+    def local_storage(self) -> str | None:
+        """Where the vectors live (single-serving-engine ADR)."""
+        if self.adapter == "qdrant_in_memory":
+            path = config_model(
+                VectorStoreAdapterQdrantInMemoryConfiguration, self.config
+            ).storage_path
+            return (
+                "embedded Qdrant in this process"
+                if path == ":memory:"
+                else f"embedded Qdrant at {path}"
+            )
+        if self.adapter == "sqlite_vec":
+            path = config_model(
+                VectorStoreAdapterSqliteVecConfiguration, self.config
+            ).persistence_path
+            return f"SQLite at {path}"
+        if self.adapter == "custom":
+            return self.custom_local_storage()
+        return None  # qdrant; nats_rpc is another engine's
 
 
 class VectorStoreServiceConfiguration(BaseModel):

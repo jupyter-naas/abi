@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-core"
-version = "2.41.2"
+version = "2.43.0"
 description = "Abi framework allowing you to build your AI system."
 authors = [{ name = "Grace Lambert", email = "maxime@naas.ai" },{ name = "Alice Dupont", email = "florent@naas.ai" }, { name = "Emma Petit", email = "jeremy@naas.ai" }]
 requires-python = ">=3.11,<4"
@@ -34,10 +34,6 @@ dependencies = [
     "docker>=7.1.0",
     "types-pyyaml>=6.0.12.20250915",
     "types-paramiko>=4.0.0.20250822",
-    "dagster>=1.11.12",
-    "dagster-webserver>=1.11.12",
-    "dagster-postgres>=0.27.12",
-    "dagster-aws>=0.27.12",
     "pyoxigraph>=0.5.5",
     "duckdb>=1.5.5",
 ]
@@ -63,39 +59,54 @@ sqlite-vec = [
     "sqlite-vec>=0.1.9",
 ]
 
+# Every supported extra. The legacy `dagster` and `rabbitmq` extras are not in
+# it: a project without NATS adds them itself (naas-abi-core[all,dagster,rabbitmq],
+# which `abi new project --without-nats` and `abi deploy local` write).
 all = [
     "naas-abi-core[ssh]",
     "naas-abi-core[aws]",
     "naas-abi-core[qdrant]",
     "naas-abi-core[sqlite-vec]",
     "naas-abi-core[openrouter]",
-    "naas-abi-core[dagster]",
     "naas-abi-core[redis]",
-    "naas-abi-core[rabbitmq]",
     "naas-abi-core[nats]",
     "naas-abi-core[microsoft]",
+    "naas-abi-core[otel]",
 ]
 openrouter = [
     "langchain-openai>=0.3.35",
 ]
+# Legacy, for projects without NATS, to be removed in the next major: Dagster
+# schedules module orchestrations and dataset compaction (NATS mode uses module
+# jobs), RabbitMQ is the bus (NATS mode uses JetStream). dagster-aws holds the
+# S3 compute log manager the local deploy's dagster.yaml configures. With
+# SQLAlchemy 2.1 (dagster 1.13.26), every Postgres storage call from the
+# webserver fails with "the connection is closed".
 dagster = [
     "dagster>=1.12.13",
+    "dagster-aws>=0.28.14",
     "dagster-postgres>=0.28.14",
     "dagster-webserver>=1.12.14",
+    "sqlalchemy<2.1",
 ]
 redis = [
     "redis>=7.1.0",
 ]
+# Legacy, see the dagster extra above.
 rabbitmq = [
     "pika",
 ]
 nats = [
     "nats-py>=2.16.0",
     "pyjwt>=2.11.0",
-    "protobuf>=6.33.5",
+    "naas-abi-proto>=0.1.0",
+    "naas-abi-sdk[models]>=0.1.0",
 ]
 microsoft = [
     "msal>=1.37.0",
+]
+otel = [
+    "naas-abi-sdk[otel]>=0.1.0",
 ]
 [project.scripts]
 onto2py = "naas_abi_core.utils.onto2py.__main__:main"
@@ -172,3 +183,7 @@ ignore_errors = true
 markers = [
     "integration: marks tests as integration tests (may require external services)",
 ]
+
+[tool.uv.sources]
+naas-abi-sdk = {path = "../naas-abi-sdk", editable = true}
+naas-abi-proto = {path = "../naas-abi-proto", editable = true}

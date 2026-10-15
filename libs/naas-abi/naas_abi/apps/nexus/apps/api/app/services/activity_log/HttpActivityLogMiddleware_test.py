@@ -31,6 +31,11 @@ def _build_app(tmp_path, **mw_kwargs):
         await request.body()  # consume
         return {"access_token": "x"}
 
+    @app.put("/api/admin/system/resources/secret/entry")
+    async def _write_secret(request: Request):
+        await request.body()
+        return {"ok": True}
+
     @app.post("/upload")
     async def _upload(request: Request):
         await request.body()
@@ -219,6 +224,22 @@ def test_auth_path_skips_body_capture(app_with_middleware):
     assert body.startswith("[PATH_SKIPPED")
 
 
+def test_system_app_data_writes_skip_body_capture(app_with_middleware):
+    """Super admins write raw service values (secrets, objects) there: never log them."""
+    app, service = app_with_middleware
+    client = TestClient(app)
+    client.put(
+        "/api/admin/system/resources/secret/entry?id=OPENAI_API_KEY",
+        content=b"sk-not-for-the-log",
+        headers={"Content-Type": "text/plain"},
+    )
+
+    body = service.query("anonymous")[0].attributes["request_body"]
+    assert isinstance(body, str)
+    assert body.startswith("[PATH_SKIPPED")
+    assert "sk-not-for-the-log" not in repr(service.query("anonymous")[0].attributes)
+
+
 def test_multipart_body_is_not_captured(app_with_middleware):
     app, service = app_with_middleware
     client = TestClient(app)
@@ -282,3 +303,14 @@ def test_authorization_header_value_is_never_stored(app_with_middleware):
 
     flat = repr(service.query("anonymous")[0].attributes)
     assert "supersecret" not in flat
+
+
+def test_a_remote_app_grant_never_reaches_the_log(app_with_middleware):
+    """The grant in an /app-remote/ path is a bearer credential."""
+    app, service = app_with_middleware
+
+    TestClient(app).get("/app-remote/GRANT-SECRET/acme.research/console/index.html")
+
+    (event,) = service.query("anonymous")
+    assert event.attributes["path"] == "/app-remote/[grant]/acme.research/console/index.html"
+    assert "GRANT-SECRET" not in str(event.attributes)

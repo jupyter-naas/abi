@@ -1,28 +1,53 @@
 # `agent` (CLI command group)
 
 ## What it is
-- A `click` command group that provides an `agent list` subcommand.
-- It loads the Naas ABI `Engine`, reads available agents from loaded modules, and prints them as a table using `rich`.
+- A `click` command group that exposes agent-related operations:
+  - List available agents discovered by the Naas ABI engine.
+  - Migrate agent “memory” (checkpoints) into the document service (schema 2).
+  - Prune old stored agent memory from the document service.
 
 ## Public API
 - `agent()`
-  - Click command group registered under the name `agent`.
-- `list()`
-  - Click subcommand `agent list`.
-  - Loads the engine and outputs a table of available agents grouped by module.
+  - `click` group registered as `agent`.
+
+### Commands
+- `agent list`
+  - Loads `Engine()`, calls `engine.load()`, and prints a Rich table of agents (`module`, `agent.__name__`) sorted alphabetically by module then agent name.
+- `agent migrate-memory`
+  - Copies agent checkpoints into the document service (schema 2, incremental).
+  - Supports sources:
+    - `postgres` (LangGraph PostgreSQL tables) via `--source-url` / `POSTGRES_URL`.
+    - `documents-v1` (legacy document schema 1 full snapshots).
+  - Dry-run by default; writes only with `--apply`.
+  - Outputs a JSON report to stdout.
+- `agent prune-memory`
+  - Deletes old checkpoints/writes/values from document-backed agent memory, keeping recent checkpoints per thread.
+  - Dry-run by default; deletes only with `--apply`.
+  - Outputs a JSON report to stdout.
+
+### Internal helpers (module-private)
+- `_postgres_memory(url: str) -> contextmanager[tuple[Any, Sequence[str]]]`
+  - Opens a read-only PostgreSQL checkpoint source and yields `(source, thread_ids)`.
+- `_documents(namespace: str) -> Any`
+  - Loads the document service from engine configuration and binds it to a namespace.
+- `_source(origin: str, url: str | None, namespace: str, agent_id: str) -> contextmanager`
+  - Selects the checkpoint source (`postgres` or `documents-v1`) and yields `(source, thread_ids)`.
 
 ## Configuration/Dependencies
-- **Dependencies**
-  - `click` (CLI framework)
-  - `naas_abi_core.engine.Engine.Engine` (`Engine` used to load modules/agents)
-  - `rich` (`Console`, `Table` for formatted terminal output)
-- **Runtime expectations**
-  - `Engine().load()` populates `engine.modules` where:
-    - Keys are module names (strings)
-    - Values expose an `.agents` iterable of agent objects/classes with a `__name__` attribute
+- **Core dependencies**
+  - `click`
+  - `rich` (`Console`, `Table`)
+  - `naas_abi_core.engine.Engine.Engine` (`Engine`)
+- **Engine role**
+  - `use_auto_engine_role()` is invoked by `agent list`.
+- **Document service**
+  - Uses `EngineConfiguration.load_configuration().services.document.load()`.
+  - Memory operations use `DocumentCheckpointSaver` and related migration utilities.
+- **Environment**
+  - `POSTGRES_URL` (optional): used by `migrate-memory` when `--from postgres` and `--source-url` is not passed.
 
 ## Usage
-Minimal example integrating this command group into a CLI:
+Register the group in your CLI:
 
 ```python
 import click
@@ -38,12 +63,15 @@ if __name__ == "__main__":
     cli()
 ```
 
-Then run:
+Run commands:
 
 ```bash
 python app.py agent list
+python app.py agent migrate-memory --from postgres --source-url "$POSTGRES_URL"
+python app.py agent prune-memory --keep-last 20
 ```
 
 ## Caveats
-- The subcommand name is `list`, which shadows Python’s built-in `list` within this module.
-- Output depends on `Engine.load()` successfully discovering modules and agents; if no modules/agents are loaded, the table will be empty.
+- The function `list()` shadows Python’s built-in `list` name within this module.
+- `migrate-memory` requires a PostgreSQL URL when `--from postgres`; otherwise it raises a `click.UsageError`.
+- `prune-memory` should be run while threads are idle; the docstring recommends stopping engines (API, Dagster) before migrating or pruning.

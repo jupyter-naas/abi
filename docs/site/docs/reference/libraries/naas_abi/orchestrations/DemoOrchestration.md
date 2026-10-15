@@ -1,24 +1,24 @@
 # `DemoOrchestration`
 
 ## What it is
-A minimal `DagsterOrchestration` implementation that constructs an orchestration with an empty Dagster `Definitions` set (no assets, schedules, jobs, or sensors).
+A minimal `DagsterOrchestration` implementation that returns an orchestration with empty Dagster `Definitions` (no assets, jobs, schedules, or sensors). Dagster is imported lazily to allow module import without the Dagster extra installed.
 
 ## Public API
 - **Class `DemoOrchestration(DagsterOrchestration)`**
+  - Purpose: Provide an “empty” orchestration scaffold.
   - **`@classmethod New() -> DemoOrchestration`**
-    - Creates and returns a `DemoOrchestration` instance configured with empty `dagster.Definitions`:
-      - `assets=[]`
-      - `schedules=[]`
-      - `jobs=[]`
-      - `sensors=[]`
+    - Creates a `DemoOrchestration` instance with:
+      - `definitions=dagster.Definitions(assets=[], schedules=[], jobs=[], sensors=[])`
+    - Raises a helpful “missing extra” error if `dagster` is not installed.
 
 ## Configuration/Dependencies
 - **Dependencies**
-  - `dagster` (imported as `dg`)
   - `naas_abi_core.orchestrations.DagsterOrchestration.DagsterOrchestration`
+  - `naas_abi_core.utils.LegacyExtras.raise_missing_extra`
+  - `dagster` (imported inside `New()`)
 
 - **Configuration**
-  - No external configuration is used; `New()` always builds empty `Definitions`.
+  - None; `New()` always builds empty `Definitions`.
 
 ## Usage
 ```python
@@ -28,4 +28,5 @@ orch = DemoOrchestration.New()
 ```
 
 ## Caveats
-- The created orchestration contains **no** assets, jobs, schedules, or sensors; it is effectively a placeholder scaffold.
+- Produces an orchestration with **no** assets, jobs, schedules, or sensors (placeholder scaffold).
+- Requires `dagster` to be installed at runtime when calling `New()`; otherwise it raises via `raise_missing_extra`.

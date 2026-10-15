@@ -9,6 +9,7 @@ import nats
 import pytest
 import rdflib
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_rpc import NatsRPCError
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
 from naas_abi_core.services.triple_store.adapters.primary.triple_store__primary_adapter__NATS import (
@@ -63,6 +64,59 @@ def test_context_manager_calls_close():
         pass
 
     assert closed == [True]
+
+
+@pytest.mark.parametrize(
+    "operation, response",
+    [
+        ("insert", triple_store_pb2.InsertResponse()),
+        ("remove", triple_store_pb2.RemoveResponse()),
+    ],
+)
+def test_writes_send_the_callers_deadline(operation, response):
+    client = TripleStoreSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", JWT_SECRET, "api", timeout_seconds=10.0
+    )
+    sent = []
+
+    def fake_call(subject, request, response_cls, **kwargs):
+        sent.append((request.context.timeout_ms, kwargs.get("timeout_seconds")))
+        return response
+
+    client._call = fake_call  # type: ignore[method-assign]
+    graph_name = URIRef("http://test.example.org/g")
+
+    getattr(client, operation)(Graph(), graph_name, timeout_seconds=900.0)
+    getattr(client, operation)(Graph(), graph_name)
+
+    assert sent == [(900_000, 900.0), (10_000, None)]
+
+
+@pytest.mark.parametrize(
+    "operation, response",
+    [
+        ("create_graph", triple_store_pb2.CreateGraphResponse()),
+        ("clear_graph", triple_store_pb2.ClearGraphResponse()),
+        ("drop_graph", triple_store_pb2.DropGraphResponse()),
+    ],
+)
+def test_graph_writes_send_the_callers_deadline(operation, response):
+    client = TripleStoreSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", JWT_SECRET, "api", timeout_seconds=10.0
+    )
+    sent = []
+
+    def fake_call(subject, request, response_cls, **kwargs):
+        sent.append((request.context.timeout_ms, kwargs.get("timeout_seconds")))
+        return response
+
+    client._call = fake_call  # type: ignore[method-assign]
+    graph_name = URIRef("http://test.example.org/g")
+
+    getattr(client, operation)(graph_name, timeout_seconds=900.0)
+    getattr(client, operation)(graph_name)
+
+    assert sent == [(900_000, 900.0), (10_000, None)]
 
 
 # ---------------------------------------------------------------------------
@@ -398,7 +452,17 @@ class _PrimaryAdapterServer:
 
 
 @pytest.fixture(scope="session")
-def nats_url():
+def nats_url(tmp_path_factory):
+    # A local nats-server when there is one (no Docker needed), else a container.
+    from naas_abi_core.engine.nats_test_server import (
+        native_nats_server,
+        nats_server_binary,
+    )
+
+    if nats_server_binary() is not None:
+        with native_nats_server(tmp_path_factory.mktemp("nats")) as url:
+            yield url
+        return
     try:
         # Imported here, not at module level: testcontainers is a dev-only
         # dependency, absent from environments that don't run
@@ -406,7 +470,7 @@ def nats_url():
         # pattern in NATSJetStreamAdapter_test.py / ObjectStorageSecondaryAdapterNATSClient_test.py.
         from testcontainers.core.container import DockerContainer
 
-        with DockerContainer("nats:2-alpine").with_exposed_ports(4222) as container:
+        with DockerContainer("nats:2.14.7-alpine").with_exposed_ports(4222) as container:
             host = container.get_container_host_ip()
             port = container.get_exposed_port(4222)
             url = f"nats://{host}:{port}"
@@ -499,6 +563,211 @@ def test_handle_view_event_round_trips_over_the_wire(nats_url):
         client.handle_view_event(
             (None, None, None), OntologyEvent.INSERT, (None, None, None)
         )
+    finally:
+        client.close()
+        server.stop()
+
+
+# --- streamed reads over transfer frames (docs/adr/20261003_nats-streamed-results.md)
+
+
+class _StreamingPort(_InMemoryTripleStorePort):
+    """Streams lazily and refuses the materialized calls: a stream that works
+    proves the client went through the transfer endpoint."""
+
+    ROWS = 20_000
+
+    def query(self, query: str):
+        raise AssertionError("query() must not be called for a stream")
+
+    def get(self):
+        raise AssertionError("get() must not be called for a stream")
+
+    def query_stream(self, query: str):
+        from contextlib import contextmanager
+
+        from naas_abi_core.services.triple_store.TripleStorePorts import QueryStream
+
+        @contextmanager
+        def opened():
+            if query.startswith("ASK"):
+                yield QueryStream("ASK", ask_answer=True)
+            elif query.startswith("CONSTRUCT"):
+                yield QueryStream("CONSTRUCT", triples=iter(self._triples()))
+            else:
+                yield QueryStream(
+                    "SELECT",
+                    vars=["n", "missing"],
+                    rows=({"n": rdflib.Literal(n)} for n in range(self.ROWS)),
+                )
+
+        return opened()
+
+    def export(self, graph_name=None):
+        from contextlib import contextmanager
+
+        @contextmanager
+        def opened():
+            yield iter(self._triples())
+
+        return opened()
+
+    @staticmethod
+    def _triples():
+        blank = rdflib.BNode()
+        return [
+            (blank, URIRef("http://ex/p"), rdflib.Literal(f"line\n{n}"))
+            for n in range(5_000)
+        ]
+
+
+@pytest.fixture
+def streaming_client(nats_url):
+    server = _PrimaryAdapterServer(nats_url, JWT_SECRET, _StreamingPort())
+    server.start()
+    client = TripleStoreSecondaryAdapterNATSClient(
+        nats_url=nats_url, jwt_secret=JWT_SECRET, service_identity="api"
+    )
+    yield client
+    client.close()
+    server.stop()
+
+
+@pytest.mark.integration
+def test_query_stream_reads_select_rows_over_transfer_frames(streaming_client):
+    with streaming_client.query_stream("SELECT ?n ?missing WHERE {}") as result:
+        assert (result.result_type, result.vars) == ("SELECT", ["n", "missing"])
+        values = [int(row["n"]) for row in result.rows]
+    assert values == list(range(_StreamingPort.ROWS))
+
+
+@pytest.mark.integration
+def test_query_stream_reads_ask_and_construct_over_transfer_frames(streaming_client):
+    with streaming_client.query_stream("ASK {}") as asked:
+        assert (asked.result_type, asked.ask_answer) == ("ASK", True)
+    with streaming_client.query_stream("CONSTRUCT {}") as built:
+        triples = list(built.triples)
+    assert len(triples) == 5_000 and len({s for s, _, _ in triples}) == 1
+
+
+@pytest.mark.integration
+def test_export_reads_triples_over_transfer_frames(streaming_client):
+    with streaming_client.export(URIRef("http://ex/graph")) as triples:
+        assert sum(1 for _ in triples) == 5_000
+
+
+@pytest.mark.integration
+def test_leaving_a_stream_early_releases_its_session(streaming_client):
+    with streaming_client.query_stream("SELECT ?n WHERE {}") as result:
+        next(iter(result.rows))
+    # A second stream still gets a session: the first one was closed.
+    with streaming_client.query_stream("ASK {}") as asked:
+        assert asked.ask_answer is True
+
+
+@pytest.mark.integration
+def test_get_reads_the_store_over_the_export_stream(streaming_client):
+    # _StreamingPort.get() fails: the client must read the export stream.
+    graph = streaming_client.get()
+
+    assert len(graph) == 5_000
+    assert len({s for s, _, _ in graph}) == 1  # blank node identity kept
+
+
+@pytest.mark.integration
+def test_streams_without_a_transfer_host_fail_clearly(nats_url):
+    client = TripleStoreSecondaryAdapterNATSClient(
+        nats_url=nats_url, jwt_secret=JWT_SECRET, service_identity="api"
+    )
+    try:
+        with (
+            pytest.raises(NatsRPCError, match="UNAVAILABLE"),
+            client.export() as triples,
+        ):
+            list(triples)
+        with (
+            pytest.raises(NatsRPCError, match="UNAVAILABLE"),
+            client.query_stream("ASK {}"),
+        ):
+            pass
+    finally:
+        client.close()
+
+
+@pytest.mark.integration
+def test_a_write_behind_a_long_one_waits_for_its_own_deadline(nats_url):
+    """A chat's graph write queued behind a billing apply (the store takes one
+    write at a time) fails at the client's default deadline, not with its own."""
+
+    class _BusyStore(_InMemoryTripleStorePort):
+        def insert(self, triples: Graph, graph_name: URIRef) -> None:
+            time.sleep(0.8)  # the write lock is held by another writer
+            super().insert(triples, graph_name)
+
+    wrapped = _BusyStore()
+    server = _PrimaryAdapterServer(nats_url, JWT_SECRET, wrapped)
+    server.start()
+    client = TripleStoreSecondaryAdapterNATSClient(
+        nats_url=nats_url,
+        jwt_secret=JWT_SECRET,
+        service_identity="engine",
+        timeout_seconds=0.3,
+    )
+    graph_name = URIRef("http://test.example.org/chat")
+    triples = Graph()
+    triples.add(
+        (URIRef("http://test.example.org/m"), URIRef("http://test.example.org/p"), URIRef("http://test.example.org/o"))
+    )
+    try:
+        client.list_graphs()  # warm the connection
+        with pytest.raises(TimeoutError):
+            client.insert(triples, graph_name)
+        client.insert(triples, graph_name, timeout_seconds=10.0)
+        assert len(wrapped.get()) == 1  # both writes landed: the same triple
+    finally:
+        client.close()
+        server.stop()
+
+
+@pytest.mark.integration
+def test_a_fuseki_update_without_an_answer_reaches_the_caller_as_a_request_error(
+    nats_url,
+):
+    """Not as RuntimeError("triple_store NATS RPC failed (INTERNAL)"): the caller
+    can tell a timeout behind another writer from a rejected update."""
+    from unittest.mock import MagicMock, patch
+
+    import requests
+    from naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2 import (
+        ApacheJenaTDB2,
+    )
+
+    session = MagicMock()
+    session.get.return_value = MagicMock(status_code=200)
+    with patch(
+        "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.requests.Session",
+        return_value=session,
+    ):
+        fuseki = ApacheJenaTDB2(jena_tdb2_url="http://fuseki:3030/ds", timeout=60)
+    session.post.side_effect = requests.ReadTimeout("Read timed out. (read timeout=60)")
+
+    server = _PrimaryAdapterServer(nats_url, JWT_SECRET, fuseki)
+    server.start()
+    client = TripleStoreSecondaryAdapterNATSClient(
+        nats_url=nats_url,
+        jwt_secret=JWT_SECRET,
+        service_identity="engine",
+        timeout_seconds=10.0,
+    )
+    triples = Graph()
+    triples.add(
+        (URIRef("http://test.example.org/m"), URIRef("http://test.example.org/p"), URIRef("http://test.example.org/o"))
+    )
+    try:
+        with pytest.raises(Exceptions.RequestError) as exc_info:
+            client.insert(triples, URIRef("http://test.example.org/chat"))
+        assert exc_info.value.operation == "update"
+        assert "ReadTimeout" in str(exc_info.value)
     finally:
         client.close()
         server.stop()

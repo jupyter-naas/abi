@@ -301,3 +301,110 @@ def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():
 def test_stop_without_start_is_a_noop():
     adapter = EmailPrimaryAdapterNATS(_StubAdapter(), SECRET)
     asyncio.run(adapter.stop())  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# Kept sent mail.
+# ---------------------------------------------------------------------------
+
+
+def _call(adapter, handler, request_msg, response_cls, subject):
+    request = _FakeRequest(
+        data=request_msg.SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject=subject,
+    )
+    asyncio.run(handler(adapter)(request))
+    response = response_cls()
+    response.ParseFromString(request.responses[0])
+    return response
+
+
+def test_send_returns_the_kept_message_id(tmp_path):
+    from naas_abi_core.services.email.adapters.secondary.FilesystemAdapter import (
+        FilesystemAdapter,
+    )
+
+    adapter = EmailPrimaryAdapterNATS(
+        FilesystemAdapter(directory=str(tmp_path)), SECRET
+    )
+
+    response = _call(
+        adapter,
+        lambda a: a._handle_send,
+        email_pb2.SendRequest(
+            to_email="alice@example.com",
+            subject="Hi",
+            text_body="b",
+            from_email="n@example.com",
+        ),
+        email_pb2.SendResponse,
+        "abi.svc.email.v1.send",
+    )
+
+    assert not response.HasField("error")
+    assert (tmp_path / f"{response.message_id}.eml").is_file()
+
+
+def test_sent_mail_of_an_adapter_that_keeps_none_is_reported():
+    adapter = EmailPrimaryAdapterNATS(_StubAdapter(), SECRET)
+
+    response = _call(
+        adapter,
+        lambda a: a._handle_list_sent,
+        email_pb2.ListSentRequest(limit=10),
+        email_pb2.ListSentResponse,
+        "abi.svc.email.v1.list_sent",
+    )
+
+    assert response.error.code == "SENT_EMAILS_NOT_KEPT"
+    assert response.error.retryable is False
+
+
+def test_list_get_and_delete_kept_mail(tmp_path):
+    from naas_abi_core.services.email.adapters.secondary.FilesystemAdapter import (
+        FilesystemAdapter,
+    )
+
+    fs = FilesystemAdapter(directory=str(tmp_path))
+    message_id = fs.send(
+        to_email="alice@example.com",
+        subject="Hello",
+        text_body="b",
+        from_email="n@example.com",
+    )
+    adapter = EmailPrimaryAdapterNATS(fs, SECRET)
+
+    listed = _call(
+        adapter,
+        lambda a: a._handle_list_sent,
+        email_pb2.ListSentRequest(limit=10),
+        email_pb2.ListSentResponse,
+        "abi.svc.email.v1.list_sent",
+    )
+    got = _call(
+        adapter,
+        lambda a: a._handle_get_sent,
+        email_pb2.GetSentRequest(message_id=message_id),
+        email_pb2.GetSentResponse,
+        "abi.svc.email.v1.get_sent",
+    )
+    deleted = _call(
+        adapter,
+        lambda a: a._handle_delete_sent,
+        email_pb2.DeleteSentRequest(message_id=message_id),
+        email_pb2.DeleteSentResponse,
+        "abi.svc.email.v1.delete_sent",
+    )
+    missing = _call(
+        adapter,
+        lambda a: a._handle_get_sent,
+        email_pb2.GetSentRequest(message_id=message_id),
+        email_pb2.GetSentResponse,
+        "abi.svc.email.v1.get_sent",
+    )
+
+    assert [m.subject for m in listed.messages.messages] == ["Hello"]
+    assert got.message.summary.message_id == message_id and b"Hello" in got.message.raw
+    assert not deleted.HasField("error")
+    assert missing.error.code == "SENT_EMAIL_NOT_FOUND"

@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { getApiUrl } from '@/lib/config';
 
 interface TenantConfig {
@@ -69,6 +69,28 @@ export function useTenant() {
   return useContext(TenantContext);
 }
 
+/** The page's own name ahead of the section, e.g. the open app in Apps. */
+type TitleDetail = { detail: string; pathname: string } | null;
+const TitleDetailContext = createContext<Dispatch<SetStateAction<TitleDetail>>>(() => {});
+
+/**
+ * Prefix the tab title with what the page has open:
+ * "People Intelligence | Apps | <tab title>". Cleared on unmount, and only
+ * honoured on the route that set it so it never leaks onto the next page.
+ */
+export function useDocumentTitleDetail(detail?: string | null): void {
+  const setDetail = useContext(TitleDetailContext);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    const value = detail?.trim();
+    if (!value || !pathname) return;
+    const entry = { detail: value, pathname };
+    setDetail(entry);
+    return () => setDetail((current) => (current === entry ? null : current));
+  }, [setDetail, detail, pathname]);
+}
+
 /** Map workspace path segment to nav label for document title */
 const WORKSPACE_SEGMENT_TITLE: Record<string, string> = {
   chat: 'Chat',
@@ -87,7 +109,12 @@ const WORKSPACE_SEGMENT_TITLE: Record<string, string> = {
   account: 'Settings',
 };
 
-function getPageTitle(pathname: string, tabTitle: string): string {
+function getPageTitle(pathname: string, tabTitle: string, detail?: string): string {
+  const base = getSectionTitle(pathname, tabTitle);
+  return detail ? `${detail} | ${base}` : base;
+}
+
+function getSectionTitle(pathname: string, tabTitle: string): string {
   // Auth routes and login: use config title only
   if (pathname.startsWith('/auth/') || pathname.startsWith('/org/')) {
     return tabTitle;
@@ -132,8 +159,12 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   const tenantFaviconUrlRef = useRef<string | null>(null);
   const pathnameRef = useRef(pathname);
   const tenantTabTitleRef = useRef(tenant.tab_title);
+  const [titleDetail, setTitleDetail] = useState<TitleDetail>(null);
+  const detail = titleDetail && titleDetail.pathname === pathname ? titleDetail.detail : undefined;
+  const detailRef = useRef(detail);
   pathnameRef.current = pathname;
   tenantTabTitleRef.current = tenant.tab_title;
+  detailRef.current = detail;
 
   useEffect(() => {
     const apiBase = getApiUrl();
@@ -153,7 +184,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const applyTitleAndFavicon = () => {
-    const title = getPageTitle(pathname, tenant.tab_title);
+    const title = getPageTitle(pathname, tenant.tab_title, detail);
     document.title = title;
     if (tenant.favicon_url) {
       tenantFaviconUrlRef.current = tenant.favicon_url;
@@ -175,7 +206,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(t3);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenant.tab_title, tenant.favicon_url, pathname]);
+  }, [tenant.tab_title, tenant.favicon_url, pathname, detail]);
 
   // Keep favicon and title persistent: re-apply when Next.js (or anything else)
   // mutates <head> after our initial apply (route metadata races).
@@ -183,7 +214,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     if (typeof document === 'undefined') return;
 
     const reapplyIfDrifted = () => {
-      const expectedTitle = getPageTitle(pathnameRef.current, tenantTabTitleRef.current);
+      const expectedTitle = getPageTitle(pathnameRef.current, tenantTabTitleRef.current, detailRef.current);
       if (document.title !== expectedTitle) {
         document.title = expectedTitle;
       }
@@ -211,6 +242,8 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   }, [tenant.favicon_url, tenant.tab_title]);
 
   return (
-    <TenantContext.Provider value={tenant}>{children}</TenantContext.Provider>
+    <TenantContext.Provider value={tenant}>
+      <TitleDetailContext.Provider value={setTitleDetail}>{children}</TitleDetailContext.Provider>
+    </TenantContext.Provider>
   );
 }

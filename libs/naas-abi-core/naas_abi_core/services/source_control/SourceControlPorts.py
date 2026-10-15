@@ -251,6 +251,14 @@ class ISourceControlAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def delete_repo(self, *, repo_id: str) -> None:
+        """Delete a repository and everything in it (platform admin operation).
+
+        Irreversible. Raise RepoNotFoundError if it does not exist.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
     def add_collaborator(
         self, *, repo_id: str, username: str, permission: str = "write"
     ) -> None:

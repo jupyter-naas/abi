@@ -206,3 +206,26 @@ def test_list_files_sort_by_modified_mixes_naive_and_aware_timestamps(tmp_path) 
 
     desc = files_service.list_files(path="dir", sort_by="modified", sort_dir="desc")
     assert [f.name for f in desc.files] == ["aware.txt", "naive.txt"]
+
+
+def test_list_files_hides_system_files_when_asked(tmp_path) -> None:
+    files_service = _make_files_service(tmp_path)
+    files_service.create_file(path="dir/.env", content="x", content_type="text/plain")
+    files_service.create_folder(path="dir/.abi")
+    files_service.create_file(path="dir/a.txt", content="x", content_type="text/plain")
+
+    result = files_service.list_files(path="dir", include_hidden=False)
+
+    assert [f.name for f in result.files] == ["a.txt"]
+    # total counts what is listed, so paging stays consistent.
+    assert result.total == 1
+
+
+def test_list_files_includes_system_files_by_default(tmp_path) -> None:
+    files_service = _make_files_service(tmp_path)
+    files_service.create_file(path="dir/.env", content="x", content_type="text/plain")
+    files_service.create_file(path="dir/a.txt", content="x", content_type="text/plain")
+
+    result = files_service.list_files(path="dir")
+
+    assert {f.name for f in result.files} == {".env", "a.txt"}

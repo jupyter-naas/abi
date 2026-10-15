@@ -44,8 +44,8 @@ def test_namespace_is_bound_for_collection_and_document_operations(service, adap
 @pytest.mark.parametrize(
     "value",
     [
-        datetime(2026, 1, 1),  # noqa: DTZ001 - exercise rejection of naive datetimes
-        {"a": [datetime(2026, 1, 1)]},  # noqa: DTZ001 - exercise nested validation
+        datetime(2026, 1, 1),  # exercise rejection of naive datetimes
+        {"a": [datetime(2026, 1, 1)]},  # exercise nested validation
         Decimal("1.2"),
         float("nan"),
         float("inf"),
@@ -133,6 +133,25 @@ def test_engine_root_cannot_use_an_implicit_storage_namespace(adapter):
     adapter.put.assert_not_called()
 
 
+def test_engine_root_lists_namespaces_and_binds_them_publicly(adapter):
+    adapter.namespaces.return_value = ["a.module", "b.module"]
+    root = DocumentService._for_engine(adapter)
+
+    assert root.namespaces() == ["a.module", "b.module"]
+    scoped = root.for_namespace("a.module")
+    scoped.collections()
+    adapter.collections.assert_called_once_with("a.module")
+    assert root._for_namespace("b.module").namespace == "b.module"
+
+
+def test_a_bound_service_cannot_list_or_switch_namespaces(service, adapter):
+    with pytest.raises(PermissionError):
+        service.namespaces()
+    with pytest.raises(PermissionError):
+        service.for_namespace("other.module")
+    adapter.namespaces.assert_not_called()
+
+
 def test_iterate_validates_the_query_once_not_once_per_page(
     service, adapter, monkeypatch
 ):
@@ -165,3 +184,21 @@ def test_failed_filter_iteration_does_not_start_bulk_deletion(service, adapter):
         service.delete_many("records", predicates())
     adapter.find.assert_not_called()
     adapter.delete.assert_not_called()
+
+
+def test_an_adapter_written_before_max_bytes_keeps_working(adapter):
+    # 2.x custom adapters: find() without the max_bytes keyword.
+    now = datetime.now(UTC)
+    one = Document("one", {}, now, now, 1)
+
+    class OldAdapter:
+        def find(self, namespace, collection, where, order_by, limit, cursor):
+            return Page([one], None)
+
+    old = DocumentService(OldAdapter(), namespace="my.module")  # type: ignore[arg-type]
+    assert old.find("records").items == [one]
+    assert list(old.iterate("records")) == [one]
+    service = DocumentService(adapter, namespace="my.module")
+    adapter.find.return_value = Page([], None)
+    service.find("records", max_bytes=10)
+    assert adapter.find.call_args.kwargs == {"max_bytes": 10}

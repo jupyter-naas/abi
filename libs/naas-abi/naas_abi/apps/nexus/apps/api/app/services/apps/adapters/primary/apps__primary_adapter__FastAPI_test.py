@@ -36,3 +36,230 @@ def test_build_app_info_reads_manifest_agent(tmp_path: Path) -> None:
         },
     )
     assert info.agent == "operations.counter_uas CounterUASAgent"
+
+
+def test_remote_module_apps_join_the_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import factory
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters.in_memory import (
+        InMemoryRemoteAppDirectory,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import RemoteApp
+
+    console = RemoteApp("acme.research", "console", "Console", "Ops", "operations", "🛰")
+    monkeypatch.setattr(
+        factory,
+        "get_remote_app_directory",
+        lambda: InMemoryRemoteAppDirectory({console: None}),
+    )
+
+    (info,) = asyncio.run(adapter._remote_apps_catalog())
+
+    assert info.app_id == "remote/acme.research:console"
+    assert info.module_path == "remote/acme.research"
+    assert info.url == "/app-html/remote/acme.research/console/index.html"
+    assert (info.name, info.category, info.icon_emoji) == ("Console", "operations", "🛰")
+
+
+def test_a_discovery_outage_still_lists_the_local_apps(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import factory
+
+    class Down:
+        async def list_apps(self):
+            raise ConnectionError("nats down")
+
+    monkeypatch.setattr(factory, "get_remote_app_directory", lambda: Down())
+
+    assert asyncio.run(adapter._remote_apps_catalog()) == ()
+
+
+def _granting(monkeypatch: pytest.MonkeyPatch, enabled: set[str], revoked: bool = False):
+    """The grant endpoint's collaborators: the credential's revocation check
+    and the workspaces enabling the app (access.py)."""
+    from fastapi import HTTPException
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import access, http_routes
+
+    monkeypatch.setattr(http_routes, "current_secret_key", lambda: "s3cret")
+
+    async def refuse_revoked_credential(user_id, request):
+        if revoked:
+            raise HTTPException(status_code=401, detail="Sign in again to open this app")
+
+    monkeypatch.setattr(http_routes, "refuse_revoked_credential", refuse_revoked_credential)
+    asked = []
+
+    async def remote_app_workspace(user_id, app_id, workspace_id):
+        asked.append((user_id, app_id, workspace_id))
+        if workspace_id not in enabled:
+            raise HTTPException(status_code=403, detail="This app is not enabled in this workspace")
+        return workspace_id
+
+    monkeypatch.setattr(access, "remote_app_workspace", remote_app_workspace)
+    return asked
+
+
+def test_a_remote_app_opens_under_a_grant_for_the_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+    from types import SimpleNamespace
+
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import read_remote_app_grant
+
+    asked = _granting(monkeypatch, enabled={"ws-1"})
+    body = adapter.RemoteAppGrantRequest(
+        module_id="acme.research", app="console", workspace_id="ws-1"
+    )
+
+    answer = asyncio.run(
+        adapter.create_remote_app_grant(body, SimpleNamespace(), SimpleNamespace(id="u-1"))
+    )
+
+    _, prefix, grant, rest = answer.path.split("/", 3)
+    assert (prefix, rest) == ("app-remote", "acme.research/console/")
+    granted = read_remote_app_grant(grant, secret="s3cret")
+    assert granted is not None
+    assert (granted.user_id, granted.module_id, granted.app, granted.workspace_id) == (
+        "u-1",
+        "acme.research",
+        "console",
+        "ws-1",
+    )
+    assert asked == [("u-1", "remote/acme.research:console", "ws-1")]
+    assert answer.expires_in == adapter.nexus_config.settings.remote_app_grant_expire_minutes * 60
+
+
+def test_a_grant_lasts_its_own_lifetime_not_the_access_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review round 1: an access token about to be refreshed must not make the
+    Apps page reload the app; revocation binds the grant to the session."""
+    import asyncio
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from jose import jwt
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import http_routes
+
+    _granting(monkeypatch, enabled={"ws-1"})
+    expires = datetime.now(UTC).timestamp() + 40  # the token has 40 s left
+    monkeypatch.setattr(http_routes, "_presented_user", lambda request: ("u-1", expires))
+    body = adapter.RemoteAppGrantRequest(
+        module_id="acme.research", app="console", workspace_id="ws-1"
+    )
+
+    answer = asyncio.run(
+        adapter.create_remote_app_grant(body, SimpleNamespace(), SimpleNamespace(id="u-1"))
+    )
+
+    minutes = adapter.nexus_config.settings.remote_app_grant_expire_minutes
+    assert answer.expires_in == minutes * 60
+    claims = jwt.get_unverified_claims(answer.path.split("/")[2])
+    assert claims["exp"] >= datetime.now(UTC).timestamp() + minutes * 60 - 5
+
+
+def test_a_logged_out_session_token_mints_no_grant(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+
+    _granting(monkeypatch, enabled={"ws-1"}, revoked=True)
+    body = adapter.RemoteAppGrantRequest(
+        module_id="acme.research", app="console", workspace_id="ws-1"
+    )
+
+    with pytest.raises(HTTPException) as refused:
+        asyncio.run(
+            adapter.create_remote_app_grant(body, SimpleNamespace(), SimpleNamespace(id="u-1"))
+        )
+
+    assert refused.value.status_code == 401  # authFetch refreshes and asks again
+
+
+def test_a_remote_app_opens_only_in_a_workspace_that_enables_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A15: the grant names a workspace the user can open, where the app is on."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+
+    _granting(monkeypatch, enabled={"ws-1"})
+    body = adapter.RemoteAppGrantRequest(
+        module_id="acme.research", app="console", workspace_id="ws-2"
+    )
+
+    with pytest.raises(HTTPException) as refused:
+        asyncio.run(
+            adapter.create_remote_app_grant(body, SimpleNamespace(), SimpleNamespace(id="u-1"))
+        )
+
+    assert refused.value.status_code == 403
+    with pytest.raises(ValueError):
+        adapter.RemoteAppGrantRequest(module_id="acme.research", app="console")
+
+
+def test_a_user_can_end_their_remote_app_grants(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+    from types import SimpleNamespace
+
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import revocation
+
+    revoked = []
+
+    async def revoke(user_id: str) -> None:
+        revoked.append(user_id)
+
+    monkeypatch.setattr(revocation, "revoke_remote_app_grants", revoke)
+
+    answer = asyncio.run(adapter.revoke_remote_app_grants(SimpleNamespace(id="u-1")))
+
+    assert answer.status_code == 204
+    assert revoked == ["u-1"]
+
+
+@pytest.mark.parametrize(
+    ("module_id", "app"), [("..", "console"), ("acme/x", "console"), ("acme", "a.b"), ("acme", "")]
+)
+def test_a_grant_names_one_path_segment_each(module_id: str, app: str) -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        adapter.RemoteAppGrantRequest(module_id=module_id, app=app, workspace_id="ws-1")
+
+
+def test_a_loaded_module_named_remote_does_not_take_remote_app_urls(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A26: /app-html/remote/ belongs to remote modules' apps."""
+    import json
+    import logging
+
+    def module_at(name: str, root: Path):
+        app_dir = root / "apps" / "board"
+        app_dir.mkdir(parents=True)
+        (app_dir / "manifest.json").write_text(json.dumps({"name": "Board"}))
+        (app_dir / "index.html").write_text("<h1>board</h1>")
+        module_type = type("ABIModule", (), {"__module__": name})
+        module = module_type()
+        module.module_root_path = str(root)
+        return module
+
+    modules = [module_at("remote", tmp_path / "a"), module_at("acme.ops", tmp_path / "b")]
+    monkeypatch.setattr(adapter, "_iter_loaded_modules", lambda: iter(modules))
+    adapter._scan_apps_catalog.cache_clear()
+    adapter._scan_apps_html_paths.cache_clear()
+    try:
+        with caplog.at_level(logging.WARNING):
+            catalog = adapter._scan_apps_catalog()
+            paths = adapter._scan_apps_html_paths()
+    finally:
+        adapter._scan_apps_catalog.cache_clear()
+        adapter._scan_apps_html_paths.cache_clear()
+
+    assert [app.module_path for app in catalog] == ["acme.ops"]
+    assert set(paths) == {"acme/ops/board/index.html", "acme/ops/board/manifest.json"}
+    assert "Module remote: its apps are not served" in caplog.text

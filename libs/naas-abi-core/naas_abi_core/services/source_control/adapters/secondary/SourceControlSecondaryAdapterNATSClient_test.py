@@ -114,6 +114,11 @@ def test_raise_for_error_maps_validation_error():
         _raise_for_error(common_pb2.CallError(code="VALIDATION_ERROR", message="x"))
 
 
+def test_raise_for_error_maps_unimplemented_to_not_implemented():
+    with pytest.raises(NotImplementedError, match="not here"):
+        _raise_for_error(common_pb2.CallError(code="UNIMPLEMENTED", message="not here"))
+
+
 def test_raise_for_error_maps_unknown_code_to_runtime_error():
     with pytest.raises(RuntimeError, match="INTERNAL"):
         _raise_for_error(common_pb2.CallError(code="INTERNAL", message="boom"))
@@ -271,7 +276,7 @@ def nats_url():
         # pattern in NATSJetStreamAdapter_test.py / ObjectStorageSecondaryAdapterNATSClient_test.py.
         from testcontainers.core.container import DockerContainer
 
-        with DockerContainer("nats:2-alpine").with_exposed_ports(4222) as container:
+        with DockerContainer("nats:2.14.7-alpine").with_exposed_ports(4222) as container:
             host = container.get_container_host_ip()
             port = container.get_exposed_port(4222)
             url = f"nats://{host}:{port}"

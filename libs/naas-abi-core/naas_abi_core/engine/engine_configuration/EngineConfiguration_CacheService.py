@@ -46,11 +46,16 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
+    config_model,
 )
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
 )
-from naas_abi_core.services.cache.CachePort import CachedData, ICacheAdapter
+from naas_abi_core.services.cache.CachePort import (
+    CachedData,
+    CacheKeyPage,
+    ICacheAdapter,
+)
 from naas_abi_core.services.cache.CacheService import CacheService
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -130,6 +135,7 @@ class _NoOpCacheAdapter(ICacheAdapter):
     def set_if_absent(self, key: str, value: CachedData) -> bool: return self._fail()  # type: ignore[return-value]
     def delete(self, key: str) -> None: self._fail()
     def exists(self, key: str) -> bool: return self._fail()  # type: ignore[return-value]
+    def list_keys(self, prefix: str = "", *, limit: int = 100, after: str | None = None) -> CacheKeyPage: return self._fail()  # type: ignore[return-value]
 
 
 class ObjectStorageBackedAdapter(ICacheAdapter):
@@ -167,16 +173,30 @@ class ObjectStorageBackedAdapter(ICacheAdapter):
     def exists(self, key: str) -> bool:
         return self._inner.exists(key)
 
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> CacheKeyPage:
+        return self._inner.list_keys(prefix, limit=limit, after=after)
+
 
 # ---------------------------------------------------------------------------
 # Per-entry adapter configuration (one entry = one tier)
 # ---------------------------------------------------------------------------
 
 
+class KeyValueBackedAdapter(ObjectStorageBackedAdapter):
+    """Reuse lazy cache-port forwarding, backed by the injected KV service."""
+    def wire_services(self, services: IEngine.Services) -> None:
+        from naas_abi_core.services.cache.adapters.secondary.CacheKeyValueAdapter import (
+            CacheKeyValueAdapter,
+        )
+        self._inner = CacheKeyValueAdapter(services.kv, prefix=self._cache_prefix)
+
+
 class CacheAdapterEntry(GenericLoader):
     """One adapter entry in the cache stack."""
 
-    adapter: Literal["fs", "redis", "object_storage", "nats_rpc", "custom"]
+    adapter: Literal["fs", "redis", "object_storage", "keyvalue", "nats_rpc", "custom"]
     tier: str = TIER_COLD  # "hot" | "cold" | any custom name
     config: dict | None = None
 
@@ -191,6 +211,7 @@ class CacheAdapterEntry(GenericLoader):
             "fs": (CacheAdapterFSConfiguration, "fs"),
             "redis": (CacheAdapterRedisConfiguration, "redis"),
             "object_storage": (CacheAdapterObjectStorageConfiguration, "object_storage"),
+            "keyvalue": (CacheAdapterObjectStorageConfiguration, "keyvalue"),
             "nats_rpc": (CacheAdapterNATSConfiguration, "nats_rpc"),
         }
         if self.adapter in validators:
@@ -231,6 +252,10 @@ class CacheAdapterEntry(GenericLoader):
             os_cfg = CacheAdapterObjectStorageConfiguration(**self.config)
             return ObjectStorageBackedAdapter(cache_prefix=os_cfg.cache_prefix)
 
+        if self.adapter == "keyvalue":
+            kv_cfg = CacheAdapterObjectStorageConfiguration(**self.config)
+            return KeyValueBackedAdapter(cache_prefix=kv_cfg.cache_prefix)
+
         if self.adapter == "nats_rpc":
             nats_cfg = CacheAdapterNATSConfiguration(**self.config)
             from naas_abi_core.services.cache.adapters.secondary.CacheSecondaryAdapterNATSClient import (
@@ -248,6 +273,22 @@ class CacheAdapterEntry(GenericLoader):
 # ---------------------------------------------------------------------------
 # Top-level service configuration
 # ---------------------------------------------------------------------------
+
+    def local_storage(  # type: ignore[override]
+        self, *, object_storage: str | None = None, keyvalue: str | None = None
+    ) -> str | None:
+        """Where this tier's entries live; ``object_storage`` and ``keyvalue`` are
+        those services' own answers (single-serving-engine ADR)."""
+        if self.adapter == "fs":
+            base_path = config_model(CacheAdapterFSConfiguration, self.config).base_path
+            return f"files under {base_path}"
+        if self.adapter == "object_storage" and object_storage:
+            return f"the object_storage service: {object_storage}"
+        if self.adapter == "keyvalue" and keyvalue:
+            return f"the keyvalue service: {keyvalue}"
+        if self.adapter == "custom":
+            return self.custom_local_storage()
+        return None  # redis; nats_rpc is another engine's
 
 
 class CacheServiceConfiguration(BaseModel):

@@ -22,8 +22,12 @@ event/
 ├── EventFilter.py          # build_where (SQL pushdown) + matches (in-memory eval)
 ├── benchmark.py + BENCHMARK.md
 ├── README.md               # user guide (publishing, subscribing, filter DSL)
+├── adapters/event_stream_codec.py   # StoredEvent <-> protobuf, stream frames
 ├── adapters/secondary/
-│   └── EventSQLiteAdapter.py
+│   ├── EventSQLiteAdapter.py
+│   ├── EventPostgreSQLAdapter.py    # shared by every engine
+│   └── EventPostgreSQLArchive.py    # hourly job: events older than 7 days -> Dataset Service
+├── tests/event__secondary_adapter__generic_test.py   # contracts: every adapter, every store
 └── ontologies/
     ├── modules/EventOntology.{ttl,py}    # RDFEntity, Process, LogProcess (canonical bases)
     └── classes/                          # auto-generated event classes
@@ -37,11 +41,13 @@ event/
 append(event_id, event_type, timestamp, payload: bytes) -> StoredEvent
 query(event_type, since_seq, until_seq,
       since_timestamp, until_timestamp,
-      json_filter, limit) -> list[StoredEvent]
+      json_filter, limit, newest_first, search) -> list[StoredEvent]
+query_stream(...same arguments...)   # context manager -> Iterator[StoredEvent]
 max_seq(event_type=None) -> int
 get_cursor(consumer_id, event_type) -> int
 set_cursor(consumer_id, event_type, last_seq) -> None
 query_for_consumer(consumer_id, event_type, limit) -> list[StoredEvent]   # atomic cursor advance
+list_event_types() -> list[EventTypeSummary]   # type IRI, count, last_seq, last_timestamp
 ```
 
 ## Service API (`EventService.py`)
@@ -53,6 +59,11 @@ publish(event) -> StoredEvent
 query(event_class=None, since_seq=None, until_seq=None,
       since_timestamp=None, until_timestamp=None,
       filter=None, limit=None) -> list[Any]
+
+query_stream(event_class=None, ...same as query...)   # with ... as events
+query_stored_stream(event_type=None, ...same as query_stored...)
+# Read as the caller iterates; events appended after the block opened are
+# not included. Over NATS, one transfer stream instead of paged RPCs.
 
 iter_query(event_class, since_seq=None, since_timestamp=None,
            until_timestamp=None, filter=None, limit=None,
@@ -66,7 +77,16 @@ seek_consumer_to_end(consumer_id, event_class) -> dict  # jump cursor to max seq
 
 subscribe(event_class, callback, filter=None) -> Thread
 # Live-only fanout. Each subscriber is independent. Filter evaluated in-memory.
+
+# Raw access by type IRI (admin views, tools without the event classes):
+event_types() -> list[EventTypeSummary]
+query_stored(event_type=None, since_seq=None, until_seq=None, limit=None,
+             newest_first=False, search=None) -> list[StoredEvent]
+get_stored(seq) -> StoredEvent          # EventNotFoundError if absent
 ```
+
+The Nexus System app (Data tab) browses the log read-only through these: event
+types as folders, events newest first. The log is append-only by design.
 
 ## Filter DSL
 
@@ -85,7 +105,30 @@ EventBridge-style: `eq`, `prefix`, `suffix`, `contains`, `in`, `gt`, `gte`, `lt`
 
 | Adapter | Backend / Notes |
 |---|---|
-| `EventSQLiteAdapter` | SQLite (WAL). Tables: `events(seq, id, event_type, timestamp, payload)`, `consumer_cursors(consumer_id, event_type, last_seq, updated_at)` |
+| `EventSQLiteAdapter` (`adapter: sqlite`, the default) | SQLite (WAL). Tables: `events(seq, id, event_type, timestamp, payload)`, `consumer_cursors(consumer_id, event_type, last_seq, updated_at)` |
+| `EventPostgreSQLAdapter` (`adapter: postgresql`) | PostgreSQL, one schema (default `abi_event`). The same two tables, a `JSONB` copy of JSON payloads for `json_filter`, and a one-row `event_sequence` counter: appends are gapless, visible in `seq` order across engines, and numbers are never reused. Shared by every engine, so deploys can hand over without downtime. Keeps 7 days (`archive_after_days`); its `event_archive` job moves older events to the dataset `events_archive`. |
+
+`EventPostgreSQLAdapter` filter semantics follow SQLite's, with two deliberate
+differences: numeric ranges ignore values that are not numbers, and LIKE
+wildcards in prefix, suffix and contains match literally. Decision:
+`docs/adr/20261006_shared-event-and-activity-log-storage.md`.
+
+### Archive (`EventPostgreSQLArchive.py`)
+
+`EventArchiveJobs` runs hourly on the serving engine, in NATS mode. The adapter
+offers it through `job_owners(services)`, which `Engine.job_owners()` collects
+from service adapters. Each run:
+
+1. deletes what an interrupted run archived but did not delete, using the
+   archive's highest `seq`;
+2. finds how far it may go: before the first event newer than the window, and
+   below the cursor of every consumer that read within it;
+3. moves batches into the dataset `events_archive` (namespace = the event
+   schema, partitioned by month), each written as one snapshot before its rows
+   are deleted.
+
+Idle consumers are logged and left behind. Archived events are read with SQL on
+the dataset. Decision: `docs/adr/20261006_event-log-archive.md`.
 
 ## Factory (`EventFactory.py`)
 
@@ -95,6 +138,8 @@ EventFactory.EventSQLite_find_storage(
     subpath: str = "events.sqlite",
     needle: str = "storage",
 ) -> EventService
+
+EventFactory.EventServicePostgreSQL(dsn, schema="abi_event", bus=None) -> EventService
 ```
 
 ## Tests
@@ -102,7 +147,15 @@ EventFactory.EventSQLite_find_storage(
 ```bash
 uv run pytest libs/naas-abi-core/naas_abi_core/services/event/EventService_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/event/adapters/secondary/EventSQLiteAdapter_test.py
+# PostgreSQL (EVENT_TEST_POSTGRES_DSN), with the activity log on PostgreSQL documents:
+EVENT_TEST_POSTGRES_DSN=... DOCUMENT_TEST_POSTGRES_DSN=... make test-event-core
 ```
+
+`tests/event__secondary_adapter__generic_test.py` holds two contracts.
+`EventSecondaryAdapterContract` is what every adapter must pass (streamed
+queries, filter errors); the NATS client runs it, so its run covers the transfer
+path. `EventStorageContract` adds what every store must do: sequencing, filters,
+search, cursors and type summaries. The SQLite and PostgreSQL adapters run it.
 
 ## Adding a new adapter
 
@@ -126,12 +179,34 @@ port. Wire contracts live under `naas_abi_core/proto/event/v1/`.
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
-The maximum message size is 8 MiB (or a lower broker limit); oversized replies
-return non-retryable `PAYLOAD_TOO_LARGE`, and micro-service error headers raise
-instead of becoming an empty success. Larger results require streaming or a
-storage reference. No RPC is automatically replayed after transport failure:
+Requests and replies above the broker limit (8 MiB, or lower) overflow as
+transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+that, at the overflow host's capacity, or with an older peer, the call fails
+with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
+instead of becoming an empty success. Overflowed values are held whole in
+memory; results that should not be require streaming or a storage reference. No RPC is automatically replayed after transport failure:
 a timeout can hide a completed operation. Reconcile its outcome before retrying.
 `close()` releases only the client's transport, including for vector storage.
+
+A malformed filter raises `FilterError` (a `ValueError`) on every adapter: the
+primary answers non-retryable `INVALID_FILTER`, and the client raises
+`FilterError` again.
+
+### Streamed queries
+
+`IEventAdapter.query_stream(...)` reads what `query` returns, as the caller
+iterates, inside the `with` (docs/adr/20261003_nats-streamed-results.md). The
+highest `seq` (of `event_type` when given) is pinned when the block opens:
+events appended while it is read are not included, so the stream always ends.
+The port's default reads `STREAM_PAGE` (500) events at a time by keyset on
+`seq` (`since_seq`, or `until_seq` for `newest_first`), honouring `limit`; the
+SQLite adapter holds its lock per page only. Over NATS the primary hosts
+`transfer/v1` sessions on `abi.svc.event.v1.transfer` (operation `query`,
+metadata a `QueryRequest`, frames `StoredEvents` batches of about 256 KiB built
+in `adapters/event_stream_codec.py`); the core client pins `max_seq` before
+opening and has no unary fallback. `query_for_consumer` is not streamed: its
+cursor advances with the read, so a stream would commit before delivery;
+`iter_query_for_consumer` keeps its batched calls.
 
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.

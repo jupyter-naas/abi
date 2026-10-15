@@ -155,3 +155,28 @@ async def test_authorize_path_platform_drive_checks_flag(monkeypatch) -> None:
 
     assert scoped_path == "naas_abi/platform-drive/shared/readme.md"
     require_pd.assert_awaited_once_with("user-1", "ws-1")
+
+
+@pytest.mark.parametrize(
+    "path",
+    [".env", "docs/.abi", "docs/.abi/config.yaml", "naas_abi/workspace-drive/ws-1/.gitkeep"],
+)
+def test_reject_system_path_refuses_dot_segments(path: str) -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        files_api._reject_system_path(path)
+
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["", "docs/readme.md", "naas_abi/workspace-drive/ws-1/archive.tar.gz", "/docs//notes"],
+)
+def test_reject_system_path_allows_ordinary_paths(path: str) -> None:
+    files_api._reject_system_path(path)
+
+
+def test_reject_system_path_checks_every_path_given() -> None:
+    # Rename: an ordinary file cannot be renamed into a system name either.
+    with pytest.raises(HTTPException):
+        files_api._reject_system_path("docs/readme.md", "docs/.readme.md")

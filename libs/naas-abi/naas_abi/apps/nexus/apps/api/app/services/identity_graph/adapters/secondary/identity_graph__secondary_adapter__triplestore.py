@@ -10,10 +10,12 @@ from rdflib import Graph, URIRef
 
 
 class IdentityGraphStoreSecondaryAdapterTripleStore(IdentityGraphStorePort):
-    """Rebuilds the identity named graph: clear (or create), then insert.
+    """Rebuilds the identity named graph: drop, then insert.
 
-    Clearing first is what drops users and memberships deleted in Postgres
-    since the last boot.
+    Dropping first is what drops users and memberships deleted in Postgres
+    since the last boot. ``DROP SILENT`` is a no-op if the graph is missing,
+    and avoids ``list_graphs()`` + ``CLEAR GRAPH``: Fuseki's catalog can list a
+    named graph that ``CLEAR GRAPH`` then rejects with HTTP 400.
     """
 
     def __init__(self, triple_store_getter: Callable[[], TripleStoreService]):
@@ -21,9 +23,6 @@ class IdentityGraphStoreSecondaryAdapterTripleStore(IdentityGraphStorePort):
 
     def replace_graph(self, graph_uri: URIRef, graph: Graph) -> None:
         triple_store = self._triple_store_getter()
-        if graph_uri in triple_store.list_graphs():
-            triple_store.clear_graph(graph_uri)
-        else:
-            triple_store.create_graph(graph_uri)
+        triple_store.query(f"DROP SILENT GRAPH <{graph_uri}>")
         if len(graph):
             triple_store.insert(graph, graph_uri)

@@ -15,6 +15,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -664,6 +665,8 @@ class AgentConfigModel(Base):
     )  # Provider name (xai, openai, anthropic, etc.)
     is_default = Column(Integer, nullable=False, default=0)
     enabled = Column(Boolean, nullable=False, default=False)  # Whether agent is available for chat
+    # A user's explicit toggle; sync keeps it over the workspace roster. NULL = follow the roster.
+    enabled_override = Column(Boolean, nullable=True)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
@@ -848,5 +851,69 @@ class SearchSettingsModel(Base):
 
     workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
     settings = Column(Text, nullable=False)  # JSON {"disabled_scopes": [...]}
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+class MapsLayoutModel(Base):
+    """A workspace's custom Maps layout: a SPARQL pin layer (JSON definition)."""
+
+    __tablename__ = "maps_layouts"
+
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    layout_id = Column(String(48), primary_key=True)
+    definition = Column(Text, nullable=False)  # JSON MapsLayout
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+class MapsBasemapModel(Base):
+    """A workspace's Maps basemap: JSON definition plus its preview image."""
+
+    __tablename__ = "maps_basemaps"
+
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    basemap_id = Column(String(48), primary_key=True)
+    definition = Column(Text, nullable=False)  # JSON MapsBasemap (no preview fields)
+    preview = Column(LargeBinary, nullable=True)
+    preview_content_type = Column(String(32), nullable=True)
+    preview_version = Column(Integer, nullable=False, default=0)
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+class MapsFeedLayerModel(Base):
+    """A workspace's map layer: a view on one of its feeds (JSON definition)."""
+
+    __tablename__ = "maps_feed_layers"
+
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    layer_id = Column(String(48), primary_key=True)
+    feed_id = Column(String(48), nullable=False)
+    definition = Column(Text, nullable=False)  # JSON MapsFeedLayer
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+class MapsGrantModel(Base):
+    """Which workspaces may use a Maps layer or basemap (deployment or custom item)."""
+
+    __tablename__ = "maps_grants"
+
+    kind = Column(String(16), primary_key=True)  # layout | basemap
+    item_id = Column(String(48), primary_key=True)
+    owner_workspace_id = Column(String, primary_key=True, default="")  # "" = deployment
+    workspace_ids = Column(Text, nullable=True)  # JSON list; NULL = every workspace
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+class MapsSettingsModel(Base):
+    """A workspace's Maps settings: hidden layers/basemaps, layer colors, applied seeds."""
+
+    __tablename__ = "maps_settings"
+
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    settings = Column(Text, nullable=False)  # JSON MapsWorkspaceSettings
     updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)

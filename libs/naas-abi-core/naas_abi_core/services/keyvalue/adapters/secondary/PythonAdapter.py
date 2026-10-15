@@ -1,3 +1,4 @@
+import math
 import os
 import sqlite3
 import threading
@@ -6,7 +7,10 @@ from dataclasses import dataclass
 
 from naas_abi_core.services.keyvalue.KeyValuePorts import (
     IKeyValueAdapter,
+    KVKeyPage,
     KVNotFoundError,
+    check_page_limit,
+    paginate_keys,
 )
 
 
@@ -183,3 +187,50 @@ class PythonAdapter(IKeyValueAdapter):
                 ).fetchone()
                 return row is not None
             return key in self._store
+
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> KVKeyPage:
+        check_page_limit(limit)
+        now = self._now()
+        with self._lock:
+            if self._conn is not None:
+                # SQLite's BINARY collation compares UTF-8 bytes: code-point order,
+                # the same as Python's sorted(). substr() avoids LIKE wildcards.
+                rows = self._conn.execute(
+                    "SELECT key FROM kv_store"
+                    " WHERE (expires_at IS NULL OR expires_at > ?)"
+                    " AND substr(key, 1, ?) = ?"
+                    " AND (? IS NULL OR key > ?)"
+                    " ORDER BY key LIMIT ?",
+                    (now, len(prefix), prefix, after, after, limit + 1),
+                ).fetchall()
+                keys = tuple(row[0] for row in rows)
+                page = keys[:limit]
+                return KVKeyPage(page, page[-1] if len(keys) > limit else None)
+            live = [
+                key
+                for key, entry in self._store.items()
+                if entry.expires_at is None or entry.expires_at > now
+            ]
+        return paginate_keys(live, prefix, limit, after)
+
+    def get_ttl(self, key: str) -> int | None:
+        with self._lock:
+            self._purge_if_expired(key)
+            if self._conn is not None:
+                row = self._conn.execute(
+                    "SELECT expires_at FROM kv_store WHERE key = ?",
+                    (key,),
+                ).fetchone()
+                if row is None:
+                    raise KVNotFoundError(f"Key not found: {key}")
+                expires_at = row[0]
+            else:
+                entry = self._store.get(key)
+                if entry is None:
+                    raise KVNotFoundError(f"Key not found: {key}")
+                expires_at = entry.expires_at
+        if expires_at is None:
+            return None
+        return max(1, math.ceil(expires_at - self._now()))

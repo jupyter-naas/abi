@@ -221,7 +221,7 @@ def nats_url():
     try:
         from testcontainers.core.container import DockerContainer
 
-        with DockerContainer("nats:2-alpine").with_exposed_ports(4222) as container:
+        with DockerContainer("nats:2.14.7-alpine").with_exposed_ports(4222) as container:
             host = container.get_container_host_ip()
             port = container.get_exposed_port(4222)
             url = f"nats://{host}:{port}"

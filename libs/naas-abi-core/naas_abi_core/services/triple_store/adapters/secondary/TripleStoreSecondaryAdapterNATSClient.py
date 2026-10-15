@@ -30,19 +30,30 @@ whatever ``CallError.code`` comes back.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 import rdflib
 from google.protobuf.message import Message
-from naas_abi_core.engine.nats_rpc import NatsRPCClient
+from naas_abi_core.engine.nats_rpc import NatsRPCClient, NatsRPCError
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
 from naas_abi_core.services.triple_store.adapters.triple_store_nats_contract import (
     AUTH_HEADER,
     SUBJECT_PREFIX,
+    TRANSFER_PREFIX,
+)
+from naas_abi_core.services.triple_store.adapters.triple_store_stream_codec import (
+    decode_header,
+    decode_rows,
+    decode_triples,
 )
 from naas_abi_core.services.triple_store.TripleStorePorts import (
     Exceptions,
     ITripleStorePort,
     OntologyEvent,
+    QueryStream,
+    Triple,
 )
 from rdflib import Graph, URIRef, Variable
 from rdflib.term import Identifier
@@ -194,38 +205,60 @@ class TripleStoreSecondaryAdapterNATSClient(NatsRPCClient, ITripleStorePort):
     # ITripleStorePort.
     # ------------------------------------------------------------------
 
-    def insert(self, triples: Graph, graph_name: URIRef) -> None:
+    def insert(
+        self,
+        triples: Graph,
+        graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> None:
+        """``timeout_seconds`` replaces the client's default deadline for this
+        write: the store takes one write at a time, so a write can wait minutes
+        behind a long one."""
         request = triple_store_pb2.InsertRequest(
-            context=self._context(),
+            context=self._context(timeout_seconds),
             triples_nt=_graph_to_nt(triples),
             graph_name=str(graph_name),
         )
         response = self._call(
-            f"{SUBJECT_PREFIX}.insert", request, triple_store_pb2.InsertResponse
+            f"{SUBJECT_PREFIX}.insert",
+            request,
+            triple_store_pb2.InsertResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error, self._detail_or_none(response))
 
-    def remove(self, triples: Graph, graph_name: URIRef) -> None:
+    def remove(
+        self,
+        triples: Graph,
+        graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> None:
+        """``timeout_seconds``: as for ``insert``."""
         request = triple_store_pb2.RemoveRequest(
-            context=self._context(),
+            context=self._context(timeout_seconds),
             triples_nt=_graph_to_nt(triples),
             graph_name=str(graph_name),
         )
         response = self._call(
-            f"{SUBJECT_PREFIX}.remove", request, triple_store_pb2.RemoveResponse
+            f"{SUBJECT_PREFIX}.remove",
+            request,
+            triple_store_pb2.RemoveResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error, self._detail_or_none(response))
 
     def get(self) -> Graph:
-        request = triple_store_pb2.GetRequest(context=self._context())
-        response = self._call(
-            f"{SUBJECT_PREFIX}.get", request, triple_store_pb2.GetResponse
-        )
-        if response.HasField("error"):
-            _raise_for_error(response.error, self._detail_or_none(response))
-        return _nt_to_graph(response.triples_nt)
+        """The whole store, read over the export stream: no RPC size cap and no
+        serialized copy next to the graph."""
+        graph = Graph()
+        with self.export() as triples:
+            for triple in triples:
+                graph.add(triple)
+        return graph
 
     def handle_view_event(
         self,
@@ -256,6 +289,54 @@ class TripleStoreSecondaryAdapterNATSClient(NatsRPCClient, ITripleStorePort):
             _raise_for_error(response.error, self._detail_or_none(response))
         return _pb_to_query_result(response.success)
 
+    # ------------------------------------------------------------------
+    # Streamed reads over transfer frames (triple_store_stream_codec.py,
+    # docs/adr/20261003_nats-streamed-results.md). Frames are fetched as the
+    # caller iterates; leaving the ``with`` closes the session.
+    # ------------------------------------------------------------------
+
+    @contextmanager
+    def query_stream(self, query: str) -> Iterator[QueryStream]:
+        metadata = triple_store_pb2.QueryRequest(query=query).SerializeToString()
+        with self._stream("query", metadata) as frames:
+            header = next(frames, None)
+            if header is None:
+                raise RuntimeError("triple_store stream ended without its header")
+            result = decode_header(header)
+            if result.result_type == "SELECT":
+                result.rows = (row for frame in frames for row in decode_rows(frame))
+            elif result.result_type in ("CONSTRUCT", "DESCRIBE"):
+                bnodes: dict = {}
+                result.triples = (
+                    triple
+                    for frame in frames
+                    for triple in decode_triples(frame, bnodes)
+                )
+            yield result
+
+    @contextmanager
+    def export(self, graph_name: URIRef | None = None) -> Iterator[Iterator[Triple]]:
+        metadata = str(graph_name).encode("utf-8") if graph_name is not None else b""
+        with self._stream("export", metadata) as frames:
+            bnodes: dict = {}
+            yield (
+                triple for frame in frames for triple in decode_triples(frame, bnodes)
+            )
+
+    @contextmanager
+    def _stream(self, operation: str, metadata: bytes) -> Iterator[Iterator[bytes]]:
+        with self._transfer_stream(
+            TRANSFER_PREFIX,
+            operation,
+            metadata,
+            lambda error: _raise_for_error(error, None),
+        ) as frames:
+            if frames is None:
+                raise NatsRPCError(
+                    "UNAVAILABLE", "No triple store engine hosts streams"
+                )
+            yield frames
+
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
         request = triple_store_pb2.QueryViewRequest(
             context=self._context(), view=view, query=query
@@ -282,36 +363,50 @@ class TripleStoreSecondaryAdapterNATSClient(NatsRPCClient, ITripleStorePort):
             _raise_for_error(response.error, self._detail_or_none(response))
         return _nt_to_graph(response.triples_nt)
 
-    def create_graph(self, graph_name: URIRef) -> None:
+    def create_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ) -> None:
+        """``timeout_seconds``: as for ``insert``."""
         request = triple_store_pb2.CreateGraphRequest(
-            context=self._context(), graph_name=str(graph_name)
+            context=self._context(timeout_seconds), graph_name=str(graph_name)
         )
         response = self._call(
             f"{SUBJECT_PREFIX}.create_graph",
             request,
             triple_store_pb2.CreateGraphResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error, self._detail_or_none(response))
 
-    def clear_graph(self, graph_name: URIRef) -> None:
+    def clear_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ) -> None:
+        """``timeout_seconds``: as for ``insert``."""
         request = triple_store_pb2.ClearGraphRequest(
-            context=self._context(), graph_name=str(graph_name)
+            context=self._context(timeout_seconds), graph_name=str(graph_name)
         )
         response = self._call(
             f"{SUBJECT_PREFIX}.clear_graph",
             request,
             triple_store_pb2.ClearGraphResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error, self._detail_or_none(response))
 
-    def drop_graph(self, graph_name: URIRef) -> None:
+    def drop_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ) -> None:
+        """``timeout_seconds``: as for ``insert``."""
         request = triple_store_pb2.DropGraphRequest(
-            context=self._context(), graph_name=str(graph_name)
+            context=self._context(timeout_seconds), graph_name=str(graph_name)
         )
         response = self._call(
-            f"{SUBJECT_PREFIX}.drop_graph", request, triple_store_pb2.DropGraphResponse
+            f"{SUBJECT_PREFIX}.drop_graph",
+            request,
+            triple_store_pb2.DropGraphResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error, self._detail_or_none(response))

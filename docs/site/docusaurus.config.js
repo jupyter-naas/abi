@@ -89,6 +89,12 @@ const config = {
         { property: "og:image:height", content: "630" },
         { property: "og:type", content: "website" },
       ],
+      announcementBar: {
+        id: "abi-3-0",
+        content:
+          'ABI 3.0 runs on NATS. Upgrading from 2.x? Read <a href="/upgrade/migrate-to-3">the migration guide</a> and <a href="/updates/abi-3-0-nats">the release note</a>.',
+        isCloseable: true,
+      },
       // Algolia search configuration
       algolia: {
         appId: "NGBDVK8FYQ",

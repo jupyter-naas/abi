@@ -29,6 +29,9 @@ class AgentRecord:
     resolved_model_id: str | None = None
     # Chat models the agent class can load. Empty/None means a single resolved id.
     model_ids: list[str] | None = None
+    # Set when a user toggled ``enabled`` by hand: sync keeps it over the
+    # workspace ``agents:`` roster (which only decides the default). None = follow it.
+    enabled_override: bool | None = None
 
 
 @dataclass
@@ -67,6 +70,7 @@ class AgentUpdateInput:
     enabled: bool | None = None
     is_default: bool | None = None
     model: str | None = None
+    enabled_override: bool | None = None
 
 
 class AgentPersistencePort(ABC):

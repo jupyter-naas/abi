@@ -222,6 +222,10 @@ interface WorkspaceState {
   lastActivePanelSection: SidebarSection | null;
   /** The column the Workspaces list replaced (null = no column). Not persisted. */
   panelSectionBeforeWorkspaces: SidebarSection | null;
+  /** One-shot: the next route change keeps the feature column closed instead
+   *  of opening the route's section (Home launching an app). Not persisted. */
+  keepPanelClosedOnNextRoute: boolean;
+  setKeepPanelClosedOnNextRoute: (keep: boolean) => void;
   /** Dismiss the mark-opened Workspaces list, putting back the column it covered. */
   closeWorkspacesPanel: () => void;
   /** Icon order for the workspace nav. Settings stays pinned and is omitted. */
@@ -363,6 +367,8 @@ interface WorkspaceState {
   selectWorkspace: (id: string) => void;
   updateWorkspace: (id: string, updates: Partial<Workspace>) => void;
   updateWorkspaceTheme: (updates: Partial<WorkspaceTheme>) => void;
+  /** Apply a theme change the server already saved (no PATCH back). */
+  applyWorkspaceTheme: (workspaceId: string, updates: Partial<WorkspaceTheme>) => void;
   getCurrentWorkspace: () => Workspace | null;
   fetchWorkspaces: () => Promise<void>;
 
@@ -553,6 +559,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   })),
   lastActivePanelSection: null,
   panelSectionBeforeWorkspaces: null,
+  keepPanelClosedOnNextRoute: false,
+  setKeepPanelClosedOnNextRoute: (keep) => set({ keepPanelClosedOnNextRoute: keep }),
   closeWorkspacesPanel: () => set((state) => (
     state.activePanelSection === 'workspaces'
       ? { activePanelSection: state.panelSectionBeforeWorkspaces }
@@ -1297,6 +1305,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       ),
     }));
   },
+
+  applyWorkspaceTheme: (workspaceId, updates) =>
+    set((state) => ({
+      workspaces: state.workspaces.map((w) =>
+        w.id === workspaceId ? { ...w, theme: { ...w.theme, ...updates }, updatedAt: new Date() } : w
+      ),
+    })),
 
   updateWorkspaceTheme: async (updates) => {
     const { currentWorkspaceId } = get();

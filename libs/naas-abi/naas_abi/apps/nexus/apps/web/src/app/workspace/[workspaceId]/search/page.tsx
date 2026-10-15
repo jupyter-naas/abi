@@ -22,6 +22,7 @@ import { TopicIcon } from '@/components/search/topic-icon';
 import { TopicScopeView } from '@/components/search/topic-scope-view';
 import { useSearchScopes } from '@/components/search/use-search-scopes';
 import { WebSearchPanel } from '@/components/search/web-search-panel';
+import { SearchMenuBar } from '@/components/search/search-menu-bar';
 import { cn } from '@/lib/utils';
 import { readSearchRoute, resolveScope, searchHref, type SearchRoute } from '@/lib/search-topics';
 import { topicsApi } from '@/lib/search-topics-api';
@@ -94,6 +95,7 @@ function Search() {
       <Header
         title="Search"
         subtitle={active?.description || 'People, organizations, apps, files, chats, ontology and more'}
+        nav={<SearchMenuBar workspaceId={workspaceId} canEdit={canEdit} />}
         actions={
           <button
             type="button"
@@ -124,12 +126,12 @@ function Search() {
               // a tab is a step Back can undo, a new query on the results is not.
               go({ q: input.trim(), tab: 'results' }, route.tab === 'results' ? 'replace' : 'push');
             }}
-            className={cn('group flex items-center gap-3 rounded-xl border bg-card shadow-sm transition-[border-color,box-shadow]',
-              // The accent is a CSS variable, not a Tailwind colour: arbitrary values carry it.
-              'focus-within:border-[color:var(--workspace-accent,#22c55e)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--workspace-accent,#22c55e)_22%,transparent)]',
-              landing ? 'w-full px-4 py-3.5' : 'p-3')}
+            className={cn(
+              'workspace-omni-search group flex items-center gap-3 rounded-xl border border-border bg-card shadow-sm',
+              landing ? 'w-full px-4 py-3.5' : 'p-3',
+            )}
           >
-            <SearchIcon size={landing ? 20 : 18} className="text-muted-foreground transition-colors group-focus-within:text-[color:var(--workspace-accent,#22c55e)]" />
+            <SearchIcon size={landing ? 20 : 18} className="text-muted-foreground" />
             <input
               type="search"
               value={input}
@@ -161,12 +163,6 @@ function Search() {
                   <TopicIcon name={scope.icon} /> {scope.label}
                 </Link>
               ))}
-              {canEdit && (
-                <Link href={`/workspace/${encodeURIComponent(workspaceId)}/settings/search`}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground">
-                  <Settings2 size={12} /> Topics
-                </Link>
-              )}
             </nav>
           ) : (
             /* Same scopes as the sidebar, for narrow screens where it is hidden. */

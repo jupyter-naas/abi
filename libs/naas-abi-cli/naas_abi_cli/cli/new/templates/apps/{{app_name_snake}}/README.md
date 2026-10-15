@@ -49,7 +49,7 @@ Apps are discovered automatically as long as the parent module is enabled in you
 
 ```yaml
 modules:
-  - path: src/custom/{{ module_name_snake }}
+  - module: {{ module_name_snake }}
     enabled: true
 ```
 

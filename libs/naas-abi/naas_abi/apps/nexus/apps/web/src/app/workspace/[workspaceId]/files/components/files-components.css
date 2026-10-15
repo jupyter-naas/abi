@@ -70,9 +70,6 @@
   outline: none;
 }
 
-.files-mobile-toolbar-search input:focus {
-  box-shadow: var(--shadow-focus);
-}
 
 .files-mobile-toolbar-search-icon {
   position: absolute;
