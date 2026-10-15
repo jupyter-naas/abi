@@ -18,6 +18,7 @@ import hashlib
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from urllib.parse import unquote_plus
 
 from jose import JWTError, jwt
 
@@ -28,6 +29,30 @@ _ALGORITHM = "HS256"
 MODULE_ID_PATTERN = r"^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,127}$"
 APP_NAME_PATTERN = r"^[A-Za-z0-9_-]{1,64}$"
 _GRANT_IN_PATH = re.compile(rf"^{GRANT_ROUTE_PREFIX}/[^/]+")
+# Query parameters that carry a credential, matched case-insensitively: the
+# app-html routes take ``?token=<JWT>``, OAuth callbacks a ``code``, presigned
+# URLs a signature.
+CREDENTIAL_QUERY_KEYS: frozenset[str] = frozenset(
+    {
+        "token",
+        "access_token",
+        "refresh_token",
+        "id_token",
+        "api_key",
+        "apikey",
+        "key",
+        "password",
+        "secret",
+        "client_secret",
+        "code",
+        "session",
+        "signature",
+        "sig",
+        "x-amz-credential",
+        "x-amz-security-token",
+        "x-amz-signature",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -112,3 +137,20 @@ def redact_grant_path(path: str) -> str:
     """The path with its grant hidden, for logs and traces: the grant is a
     bearer credential."""
     return _GRANT_IN_PATH.sub(f"{GRANT_ROUTE_PREFIX}/[grant]", path)
+
+
+def redact_request_target(target: str) -> str:
+    """A request's path and query, as an access log prints them, with the
+    grant and every credential parameter's value hidden. The other
+    parameters stay as sent."""
+    path, sep, query = target.partition("?")
+    path = redact_grant_path(path)
+    if not sep:
+        return path
+    pairs = []
+    for pair in query.split("&"):
+        name, eq, _ = pair.partition("=")
+        if eq and unquote_plus(name).lower() in CREDENTIAL_QUERY_KEYS:
+            pair = f"{name}=[redacted]"
+        pairs.append(pair)
+    return f"{path}?{'&'.join(pairs)}"

@@ -19,6 +19,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
     mint_remote_app_grant,
     read_remote_app_grant,
     redact_grant_path,
+    redact_request_target,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
     AppRequest,
@@ -592,6 +593,40 @@ def test_the_access_log_hides_the_grant():
 
     assert GRANT not in record.getMessage()
     assert "/app-remote/[grant]/acme.research/console/index.html?x=1" in record.getMessage()
+
+
+def test_credential_parameters_are_redacted_from_request_targets():
+    assert (
+        redact_request_target("/app-html/a/b/index.html?token=eyJ.x.y&theme=dark")
+        == "/app-html/a/b/index.html?token=[redacted]&theme=dark"
+    )
+    assert (
+        redact_request_target("/x?Access_Token=a&api%5Fkey=b&code=c&X-Amz-Signature=d&q=e")
+        == "/x?Access_Token=[redacted]&api%5Fkey=[redacted]&code=[redacted]"
+        "&X-Amz-Signature=[redacted]&q=e"
+    )
+    assert redact_request_target("/x?token&tokens=1&a=b=c") == "/x?token&tokens=1&a=b=c"
+    assert redact_request_target(f"{ROOT}/api?token=t") == (
+        "/app-remote/[grant]/acme.research/console/api?token=[redacted]"
+    )
+
+
+def test_the_access_log_hides_the_app_html_token():
+    jwt_value = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1In0.c2lnbmF0dXJl"
+    record = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        __file__,
+        1,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1:1", "GET", f"/app-html/system/index.html?token={jwt_value}&v=2", "1.1", 200),
+        None,
+    )
+
+    assert http.RedactGrantFilter().filter(record)
+
+    assert jwt_value not in record.getMessage()
+    assert "/app-html/system/index.html?token=[redacted]&v=2" in record.getMessage()
 
 
 # -- #48 review: grants end at logout, and name a workspace -----------------------
