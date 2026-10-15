@@ -2,6 +2,73 @@
 
 <!-- version list -->
 
+## v2.87.0 (2026-10-15)
+
+### Bug Fixes
+
+- **roles**: Update roles badge to show count of roles instead of grants
+  ([`6a9eaa3`](https://github.com/jupyter-naas/abi/commit/6a9eaa3324344ba4f32304459770c5323cd89a13))
+
+- **workspace**: Remove fallbackColor usage and update desk wallpaper styling
+  ([`a9644cf`](https://github.com/jupyter-naas/abi/commit/a9644cfc13f34ac079c03d4936a9e989dffe9ac7))
+
+- **workspaces**: Update workspace link to home instead of maps
+  ([`794a38f`](https://github.com/jupyter-naas/abi/commit/794a38faef404f51b877846e482eba4d12367550))
+
+### Chores
+
+- **next**: Update next and eslint-config-next to 14.2.35
+  ([`1af4422`](https://github.com/jupyter-naas/abi/commit/1af442203d4ba58080bd45807079d09902db25b3))
+
+### Features
+
+- **auth**: Add per-organization member profile pictures and tests
+  ([`a0735f8`](https://github.com/jupyter-naas/abi/commit/a0735f8240bde35bab015e7198e059fe20dc1508))
+
+- **auth,api,web**: Implement nexus org member profile enhancements
+  ([`e4d14d2`](https://github.com/jupyter-naas/abi/commit/e4d14d2cef7e76ca6a748d94154c316535f168de))
+
+- **branding**: Redirect old branding route to general branding settings
+  ([`57cc8ed`](https://github.com/jupyter-naas/abi/commit/57cc8edb02b5611895c817d3ef73492a6d797827))
+
+- **branding**: Update organization branding settings page and styles
+  ([`58d5521`](https://github.com/jupyter-naas/abi/commit/58d5521df033c7dd791fc32e4f5ac94b127d71d6))
+
+- **home**: Add desktop wallpaper editor and home menu bar enhancements
+  ([`6414e56`](https://github.com/jupyter-naas/abi/commit/6414e56d4c46944e15d0085cc67e97218020b7ff))
+
+- **next.config**: Disable Image Optimization API for security until Next.js >= 15.5.24
+  ([`53bf84b`](https://github.com/jupyter-naas/abi/commit/53bf84b86bd6f5bfddcae38a164da1b760cc9fe1))
+
+- **nexus-org-member-profile**: Add workspace import and update workspace seeding logic
+  ([`f0db105`](https://github.com/jupyter-naas/abi/commit/f0db105d9d2d1d0ab5242448f6ddf1de24dd6c99))
+
+- **nexus-org-member-profile**: Update multiple core, service, and UI files with workspace and
+  feature flag enhancements
+  ([`8809d85`](https://github.com/jupyter-naas/abi/commit/8809d857cd4e1b9d9f5aef718c6b64365d05effb))
+
+- **nexus-org-member-profile**: Update platform managed users and workspace logos
+  ([`8f67a03`](https://github.com/jupyter-naas/abi/commit/8f67a03a4bca806b058f1dab9627715beb5cff8a))
+
+- **org-settings**: Add servers and services sections with detailed pages
+  ([`9581551`](https://github.com/jupyter-naas/abi/commit/958155153e6a8565a4ccc1c8366c3299eeb2d4b0))
+
+- **roles**: Update roles matrix and feature sorting
+  ([`1c3cbe9`](https://github.com/jupyter-naas/abi/commit/1c3cbe91f54dea5f4044474c89ef381ffdb5f233))
+
+- **roles**: Update roles page UI and functionality
+  ([`1dcd880`](https://github.com/jupyter-naas/abi/commit/1dcd8804e560e6430834e6c45eebe74bdc4ddda1))
+
+- **roles**: Update save button text to 'Save Changes' and add exclamation on saved
+  ([`640f79a`](https://github.com/jupyter-naas/abi/commit/640f79a47162c4b02eaf6bfdbe39ac66bd7fb2d0))
+
+- **workspace**: Add workspace group support in seed and UI
+  ([`6dfdda4`](https://github.com/jupyter-naas/abi/commit/6dfdda4e87fc7b848d0843c211d5bf5f64914628))
+
+- **workspaces**: Add group dropdown with new group input in workspace creation
+  ([`15f0d74`](https://github.com/jupyter-naas/abi/commit/15f0d74c0c8f45b8f88d86d3fde83918fb59d282))
+
+
 ## v2.86.0 (2026-10-14)
 
 ### Bug Fixes
