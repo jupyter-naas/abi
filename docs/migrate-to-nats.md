@@ -105,8 +105,8 @@ Dagster stay where they are.
    jobs.
 
 What changes even with NATS off is listed in
-[`breaking-changes-3.0.md`](breaking-changes-3.0.md) (section "With NATS off").
-The ones you are most likely to see:
+[`breaking-changes-3.0.md`](breaking-changes-3.0.md), where each entry says
+what it does with NATS off. The ones you are most likely to see:
 
 - A cache tier with `adapter: object_storage` or `adapter: keyvalue` loads the
   service it depends on.
