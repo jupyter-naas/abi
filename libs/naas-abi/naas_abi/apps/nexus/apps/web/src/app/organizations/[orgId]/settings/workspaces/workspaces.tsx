@@ -677,7 +677,7 @@ export default function OrganizationWorkspacesPage() {
                       </td>
                       <td>
                         <Link
-                          href={`/workspace/${workspace.id}/maps`}
+                          href={`/workspace/${workspace.id}/home`}
                           className="org-settings-users-secondary-button org-workspaces-open"
                         >
                           <ExternalLink size={14} />
