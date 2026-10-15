@@ -157,3 +157,65 @@ def test_the_stream_reads_on_to_the_runs_end_after_done():
 
     assert chunks == ["hi"]
     assert finished == [True]
+
+
+def _complete(monkeypatch, directory, messages=None):
+    from naas_abi.apps.nexus.apps.api.app.services import provider_runtime
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote import factory
+
+    monkeypatch.setattr(factory, "get_remote_agent_directory", lambda: directory)
+    return asyncio.run(
+        provider_runtime.complete_chat(
+            messages or [Message(role="user", content="what is JetStream?")],
+            _config(),
+            None,
+            thread_id="conv-1",
+            injection_preamble=None,
+        )
+    )
+
+
+def test_a_chat_completion_raises_when_the_agent_is_unavailable(monkeypatch):
+    # Not a 200 whose stored answer is the error text: the service marks the
+    # provider "(error)", as for an in-process agent.
+    import pytest
+
+    unavailable = _Directory(error=RemoteAgentUnavailable(RESEARCHER.key, "NO_RESPONDERS"))
+    with pytest.raises(RemoteAgentUnavailable, match="NO_RESPONDERS"):
+        _complete(monkeypatch, unavailable)
+
+
+def test_a_chat_completion_without_a_user_message_raises(monkeypatch):
+    import pytest
+
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote.streaming import NoUserMessage
+
+    with pytest.raises(NoUserMessage):
+        _complete(monkeypatch, _Directory(), [Message(role="assistant", content="hi")])
+
+
+class _FailsAfterDone(_Directory):
+    """A run whose answer is done, then ends FAILED while the module saves it."""
+
+    async def stream(self, key, prompt, *, thread_id, invocation_id=None):
+        yield {"event": "ai_message", "data": "JetStream"}
+        yield {"event": "done", "data": "[DONE]"}
+        raise RemoteAgentUnavailable(key, "AGENT_FAILED")
+
+
+def test_a_failure_after_done_leaves_the_answer_as_it_was(monkeypatch, caplog):
+    assert _run(_FailsAfterDone()) == ["JetStream"]
+    assert "AGENT_FAILED" in caplog.text
+    assert _complete(monkeypatch, _FailsAfterDone()) == "JetStream"
+
+
+def test_a_failure_before_done_still_ends_the_stream_with_an_error():
+    class _FailsMidway(_Directory):
+        async def stream(self, key, prompt, *, thread_id, invocation_id=None):
+            yield {"event": "ai_message", "data": "Jet"}
+            raise RemoteAgentUnavailable(key, "WAIT_TIMEOUT")
+
+    chunks = _run(_FailsMidway())
+
+    assert chunks[0] == "Jet"
+    assert "**Error:**" in chunks[1] and "WAIT_TIMEOUT" in chunks[1]
