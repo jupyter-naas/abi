@@ -1378,7 +1378,9 @@ The flow:
 
 #### 10.1 The type
 
-`naas_abi_core.engine.call_context` (subtask 2), mirrored in `naas_abi_sdk.call_context`:
+`naas_abi_sdk.call_context` (subtask 2), re-exported by `naas_abi_core.engine.call_context`: one context
+variable, so the engine and the SDK clients it runs read the same value. A core installed without the SDK (no
+`nats` extra) runs a verbatim copy, `naas_abi_core/engine/call_context_types.py`.
 
 ```python
 @dataclass(frozen=True)
@@ -1399,9 +1401,16 @@ class CallContext:
     scope: tuple[Statement, ...] | None = None   # abi_scope narrowing
     workspace_id: str | None = None          # target workspace: a request input, not identity
     trace_id: str | None = None
+    triggered_via: str | None = None         # "api", "cli", "configuration"…, stamped on events
 
-current_call_context: ContextVar[CallContext]   # default: ANONYMOUS, which every check denies
+    @property
+    def user(self) -> Principal | None: ...  # the call's user, below
+
+_call_context: ContextVar[CallContext]   # default: ANONYMOUS, which every check denies
 ```
+
+Until IAM assigns `sa_` ids (subtask 6), a service account's id is its name (`api`, `engine`, a module), and
+an OBO user's id is the one its trusted caller names (a Nexus user id).
 
 **The call's user** is `on_behalf_of` when it is set, else `principal` when it is a user, else none. Services
 use it wherever an operation concerns "the user": the activity actor, the forge or Coder user, the owner of
@@ -1410,9 +1419,15 @@ a new personal resource. It never comes from a request field.
 Helpers:
 
 - `use_call_context(ctx)`: a context manager that sets the variable and resets it on exit.
-- `current()`.
-- `as_service_account(name)`: in-process only, logged. It is how boot, schedulers, jobs and Nexus
-  housekeeping run. Remote code has no equivalent: it holds only its token.
+- `current_call_context()`.
+- `as_service_account(name)` (core only): in-process only, logged. It is how boot, schedulers, jobs and
+  Nexus housekeeping run. Remote code has no equivalent: it holds only its token.
+- `on_behalf_of_header(ctx)`: the `Abi-On-Behalf-Of` header naming the call's user, or none.
+
+The event actor fields (`actor_user_id`, `actor_workspace_id`, `triggered_via`) come from the call's user,
+`workspace_id` and `triggered_via`. The older names `event_actor_user_id`, `event_actor_workspace_id`,
+`event_triggered_via` (and `agent_user_id`, `agent_workspace_id`) are views of this context with a
+ContextVar-like `get`/`set`/`reset`, so there is one source of identity.
 
 #### 10.2 Who sets it
 
@@ -1446,6 +1461,27 @@ The module learns who is calling only from the delegated token's verified claims
 
 **Transition.** Until subtask 8 issues delegated tokens, an `Abi-On-Behalf-Of: <principal id>` header is
 honoured only when the verified caller is `api` or `engine`. Subtask 8 removes it.
+
+- From any other caller the call is refused as unauthenticated, before the domain service, with its own
+  message (`on-behalf-of refused: …`) and a log line: a header naming a user can only narrow a call (§5.3),
+  so dropping it silently would widen it.
+- The core RPC client sends the current call's user only when its own identity is `api` or `engine`; another
+  identity calls as itself, as before. The SDK transport sends it only when built with `forward_user=True`,
+  which the engine's kernel-calling transports (model registry, jobs) set. Nexus's transports to agent and
+  app hosts do not: module hosts get the user from delegated tokens (subtask 8).
+- Stage 1 tokens (HS256, `{sub, iat, exp}`) carry no audience, `jti`, groups or `abi_scope`: those fields stay
+  empty until subtask 6.
+
+**As built in subtask 2.** `naas_abi_core.engine.nats_identity` is the shared helper: `caller_context` verifies
+the token and the header, `nats_rpc.authenticate_request` wraps it for `nats.micro` requests (and answers a
+refusal), and `for_request` adds the trace and target workspace of the request's `context` envelope.
+`DomainRPCDispatcher.call(fn, request, caller)` runs the worker in a copy of the context holding that caller;
+discovery, the model registry and transfer sessions use it the same way. A transfer session runs as the caller
+who opened it and belongs to that actor acting for that user: the same actor for another user is refused.
+Overflow chunks carry their call's token, user, trace and workspace. So far `as_service_account` wraps
+engine-hosted jobs (`engine`) and Nexus's configuration seeding (`api`); engine boot still runs anonymous. The event, vector_store and cache
+endpoints call their domain services (`EventService`'s stored-level operations, `VectorStoreService`,
+`CacheService`'s tier views), so a check in the domain service covers them.
 
 ### 11. IAM, the kernel service
 

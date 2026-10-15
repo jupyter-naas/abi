@@ -266,6 +266,16 @@ is read discards the upload before anything is written. The SDK facade's
 protobuf endpoints. `adapters/secondary/DatasetSecondaryAdapterNATSClient.py` implements the outbound
 port. Wire contracts live under `naas_abi_core/proto/dataset/v1/`.
 
+Every primary runs its domain call as the verified caller: it authenticates the
+request with `nats_rpc.authenticate_request` (built on `engine/nats_identity.py`,
+it answers a refusal itself) and hands that `CallContext`
+(`engine/call_context.py`) to its dispatcher. The actor is the
+token's identity; the user it acts for comes from the `Abi-On-Behalf-Of`
+header, accepted from `api` and `engine` only; trace and target workspace come
+from the request's `context`. Never read identity from request fields
+(`principal_id` and `tenant_id` are reserved). Clients forward the current
+call's user, trace and workspace. Nothing authorizes on it yet.
+
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. `query`, `flush` and `compact` pass a caller's

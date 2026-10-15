@@ -11,6 +11,13 @@ LangGraph support lives in langgraph.py and is opt-in via [langgraph]; never imp
 it from package __init__ or make it a base dependency. Only async graph execution
 is supported. Keep checkpoint schema versions and pending-write semantics explicit.
 Document module namespaces are a programming boundary, not authorization.
+`call_context.py` holds the caller identity of the call being served (`CallContext`,
+one ContextVar that core's `engine/call_context.py` re-exports; core keeps a verbatim
+copy, `engine/call_context_types.py`, for installs without the SDK, so keep them equal).
+`Transport.call` puts the call's trace and workspace in the request's `context`, and
+its user in the `Abi-On-Behalf-Of` header only for `Transport(forward_user=True)`:
+kernel services accept that header only from `api` and `engine`, so only the
+engine's kernel-calling transports set it. Identity never goes in request fields.
 The document schema is in langgraph_documents.py, shared with core's synchronous
 engine saver and the Nexus viewer: collections, ids, write plans (schema 2 stores
 increments: content-addressed blobs, list elements and chunks, parts above

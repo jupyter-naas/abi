@@ -302,10 +302,13 @@ nats_url, jwt_secret, service_identity and timeout_seconds (default 10), preserv
 an explicit upstream route without re-exposing it.
 
 The canonical contract is `naas-abi-proto/naas_abi_proto/document/v1/document.proto`.
+The primary builds each call's `CallContext` with `engine/nats_identity.py` and
+runs the domain call under it (`engine/call_context.py`).
 Namespaces are explicit on the wire and convention-bound in module proxies, not
 per-module authorization under Stage 1 shared JWT trust. Cross-namespace operations
 (`namespaces`) are authorized explicitly: only the primary's `admin_identities`
-(`api` and `engine` by default) may call them, others get `PERMISSION_DENIED`
+(`api` and `engine` by default; the caller's `CallContext` principal) may call
+them, others get `PERMISSION_DENIED`
 (`PermissionError` on the client). Server domain validation
 is authoritative. Never silently replay storage failures. Engine-owned backend
 resources must not be closed by a remote client.

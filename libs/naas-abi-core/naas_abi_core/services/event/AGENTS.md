@@ -81,9 +81,26 @@ subscribe(event_class, callback, filter=None) -> Thread
 # Raw access by type IRI (admin views, tools without the event classes):
 event_types() -> list[EventTypeSummary]
 query_stored(event_type=None, since_seq=None, until_seq=None, limit=None,
-             newest_first=False, search=None) -> list[StoredEvent]
+             newest_first=False, search=None, *, since_timestamp=None,
+             until_timestamp=None, filter=None) -> list[StoredEvent]
 get_stored(seq) -> StoredEvent          # EventNotFoundError if absent
+
+# Stored-level operations a remote EventService asks of this log (the NATS
+# endpoints). None broadcasts: the remote publisher already did.
+append_stored(event_id, event_type, timestamp, payload) -> StoredEvent
+max_seq(event_type=None) -> int
+get_cursor(consumer_id, event_type) -> int
+set_cursor(consumer_id, event_type, last_seq) -> None
+query_stored_for_consumer(consumer_id, event_type, limit=None, filter=None)
 ```
+
+`publish` stamps `actor_user_id`, `actor_workspace_id` and `triggered_via` from
+the call's `CallContext` (`engine/call_context.py`): the call's user, its target
+workspace and how it started, unless the event sets its own. `context.py`'s
+`event_actor_user_id`, `event_actor_workspace_id` and `event_triggered_via`
+(and `agent_user_id`/`agent_workspace_id`, the same objects) are views of that
+context with a ContextVar-like `get`/`set`/`reset`; setting the user sets
+`on_behalf_of`. There is no second source of identity.
 
 The Nexus System app (Data tab) browses the log read-only through these: event
 types as folders, events newest first. The log is append-only by design.
@@ -175,6 +192,23 @@ search, cursors and type summaries. The SQLite and PostgreSQL adapters run it.
 `adapters/primary/event__primary_adapter__NATS.py` exposes the service's
 protobuf endpoints. `adapters/secondary/EventSecondaryAdapterNATSClient.py` implements the outbound
 port. Wire contracts live under `naas_abi_core/proto/event/v1/`.
+
+The wire contract is the durable-log port's (`IEventAdapter`): a remote
+`EventService` serializes, stamps and broadcasts its events on its side and
+only stores them here. The primary still wraps the engine's `EventService` and
+calls its stored-level operations, so every remote call reaches the domain
+service; none of them broadcasts, so each event goes out once. Given a bare
+`IEventAdapter` (tests), it serves it through an `EventService` of its own.
+
+Every primary runs its domain call as the verified caller: it authenticates the
+request with `nats_rpc.authenticate_request` (built on `engine/nats_identity.py`,
+it answers a refusal itself) and hands that `CallContext`
+(`engine/call_context.py`) to its dispatcher. The actor is the
+token's identity; the user it acts for comes from the `Abi-On-Behalf-Of`
+header, accepted from `api` and `engine` only; trace and target workspace come
+from the request's `context`. Never read identity from request fields
+(`principal_id` and `tenant_id` are reserved). Clients forward the current
+call's user, trace and workspace. Nothing authorizes on it yet.
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception

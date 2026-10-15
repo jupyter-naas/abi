@@ -133,6 +133,16 @@ protobuf endpoints, one per port method (`list_vectors` and `get_collection_info
 included). `adapters/secondary/VectorStoreSecondaryAdapterNATSClient.py` implements the outbound
 port. Wire contracts live under `naas_abi_core/proto/vector_store/v1/`.
 
+Every primary runs its domain call as the verified caller: it authenticates the
+request with `nats_rpc.authenticate_request` (built on `engine/nats_identity.py`,
+it answers a refusal itself) and hands that `CallContext`
+(`engine/call_context.py`) to its dispatcher. The actor is the
+token's identity; the user it acts for comes from the `Abi-On-Behalf-Of`
+header, accepted from `api` and `engine` only; trace and target workspace come
+from the request's `context`. Never read identity from request fields
+(`principal_id` and `tenant_id` are reserved). Clients forward the current
+call's user, trace and workspace. Nothing authorizes on it yet.
+
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
@@ -169,6 +179,12 @@ Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
 The latter uses a local `nats-server` executable without Docker.
 
-NATS primaries emit mutation audit events through an injected owner-side event
-publisher. Remote VectorStoreService facades must remain unwired for events to
-avoid duplicating them. Failures in audit publication do not fail persistence.
+The NATS primary wraps the engine's `VectorStoreService`, so every remote call
+reaches the domain service through its port-shaped methods (`create_collection`,
+`store_documents`, `search`, `update_vector`, `delete_vectors`, `list_vectors`,
+...). They take the port's arguments as given, so the wire keeps the port's
+contract; the convenience methods (`add_documents`, `search_similar`,
+`update_document`, `delete_documents`, `list_documents`) validate and then call
+them. The service initializes its adapter and emits the mutation audit events,
+once. Remote VectorStoreService facades must remain unwired for events to avoid
+duplicating them. Failures in audit publication do not fail persistence.

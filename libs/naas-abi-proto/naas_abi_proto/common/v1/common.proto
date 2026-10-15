@@ -10,20 +10,22 @@ syntax = "proto3";
 
 package abi.common.v1;
 
-// Carried on every kernel-domain RPC call.
+// Carried on every kernel-domain RPC call. Request data, never identity.
 //
-// principal_id/workspace_id/tenant_id are carried starting now, in Stage 1,
-// even though nothing enforces them yet — see the RFC's "Decisions locked
-// in": this is a wire-format decision that's expensive to retrofit later,
-// cheap to add now while the envelope is being designed. Real per-user
-// authorization is deliberately Stage 2 work, checked in the domain via a
-// shared context variable, never in the primary adapter — don't add
-// enforcement logic here.
+// Who calls is not read from here: a server takes the caller from the
+// verified Nats-Auth-Token header, and the user it acts for from the
+// Abi-On-Behalf-Of header (honoured from trusted identities only), into the
+// engine's CallContext variable (naas_abi_core.engine.call_context; see
+// docs/specs/rfcs/20261013_identity-and-authorization.md, §10). Anything in a
+// request body is the caller's own claim, so it is untrusted.
 message CallContext {
   string trace_id = 1;
   int32 timeout_ms = 2;
-  string principal_id = 3;  // end-user identity — carried, not yet enforced
+  // Reserved and deprecated: servers ignore it, clients leave it empty.
+  string principal_id = 3;
+  // The target workspace of a create: an input, authorized like any other.
   string workspace_id = 4;
+  // Reserved and deprecated: servers ignore it, clients leave it empty.
   string tenant_id = 5;
 }
 

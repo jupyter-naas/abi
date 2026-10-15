@@ -321,6 +321,13 @@ document assumes them.
   `principal_id`/`workspace_id`/`tenant_id` above is exactly the wire-level carrier this needs for the NATS case;
   building the actual ARN scope model, the policy-matching logic, and the `contextvars` plumbing is deliberately
   not part of Stage 1 — noted here so the direction is decided, not so it gets built now.
+
+  *Superseded in part by [`20261013_identity-and-authorization.md`](20261013_identity-and-authorization.md)
+  §10.* The context variable now exists (`naas_abi_core.engine.call_context`), but identity does not travel in
+  `CallContext.principal_id`/`tenant_id`: a request body is the caller's own claim. Those fields are reserved
+  and ignored. The actor comes from the verified `Nats-Auth-Token`, the user it acts for from the
+  `Abi-On-Behalf-Of` header (trusted identities only), and `workspace_id` stays as the target workspace of a
+  create.
 - **One RPC message is capped at 8 MB (`max_payload: 8MB`), and that cap is final.** nats-server refuses any
   single message above `max_payload`; the 1 MB default would reject a 2 MB `get_object` reply or a whole-store
   `triple_store.get`. 8 MB is the largest value NATS recommends, and there is no CLI flag for it, so every launcher

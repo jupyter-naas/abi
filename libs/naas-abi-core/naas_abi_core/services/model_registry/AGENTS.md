@@ -89,6 +89,8 @@ implements registry lookup over NATS, restores core model wrappers, and forwards
 only bootstrap registration/validation to its local owner. `list_registered_models`
 returns `(canonical_id, model)` entries for complete catalog publication.
 EngineNATSLoader exposes the primary; EngineNATSDependencies injects the client.
+The primary runs each call, and each stream, under the caller's `CallContext`
+(`engine/nats_identity.py`, `engine/call_context.py`).
 Never expose that client as a primary or route registration through inference RPCs.
 Each provider call runs in a `model <operation> <canonical id>` span (identity,
 input counts and reported token usage only: never messages, texts or options).
