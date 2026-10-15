@@ -22,7 +22,7 @@ SUBJECT_PREFIX = "abi.svc.activity_log.v1"
 # (docs/adr/20261003_nats-streamed-results.md).
 TRANSFER_PREFIX = f"{SUBJECT_PREFIX}.transfer"
 
-# Header carrying the Stage 1 service JWT (see naas_abi_core.engine.nats_auth).
+# Header carrying the caller's engine token (see naas_abi_core.engine.nats_auth).
 # The client attaches the token under this exact header name -- both sides
 # of this contract must agree on it.
 AUTH_HEADER = "Nats-Auth-Token"

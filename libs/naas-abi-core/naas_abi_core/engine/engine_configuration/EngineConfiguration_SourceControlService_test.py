@@ -4,6 +4,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_SourceControl
     SourceControlAdapterNATSConfiguration,
     SourceControlServiceConfiguration,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_SERVICE_KEY
 from naas_abi_core.services.source_control.adapters.secondary.ForgejoAdapter import (
     ForgejoAdapter,
 )
@@ -85,8 +86,7 @@ def test_source_control_configuration_nats_rpc_is_lazy():
             adapter="nats_rpc",
             config={
                 "nats_url": "nats://127.0.0.1:4222",
-                "jwt_secret": "test-shared-secret",
-                "service_identity": "api",
+                "service_key": TEST_SERVICE_KEY,
             },
         )
     )
@@ -97,7 +97,7 @@ def test_source_control_configuration_nats_rpc_is_lazy():
     assert isinstance(configuration.load(), SourceControlService)
 
 
-def test_source_control_configuration_nats_rpc_requires_jwt_secret():
+def test_source_control_configuration_nats_rpc_requires_a_service_key():
     with pytest.raises(Exception):
         SourceControlAdapterConfiguration(
             adapter="nats_rpc",
@@ -107,6 +107,4 @@ def test_source_control_configuration_nats_rpc_requires_jwt_secret():
 
 def test_source_control_adapter_nats_configuration_rejects_unknown_fields():
     with pytest.raises(Exception):
-        SourceControlAdapterNATSConfiguration(
-            jwt_secret="test-shared-secret", unknown_field="x"
-        )
+        SourceControlAdapterNATSConfiguration(unknown_field="x")

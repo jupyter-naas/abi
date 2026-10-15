@@ -6,21 +6,22 @@ admin ⊆ owner) and stored with explicit action lists, so ``explain`` shows rea
 statements. IAM regenerates them whenever a catalog changes.
 
 Also here, and named so: the TRANSITIONAL policies that keep every caller
-working before the later subtasks of #44 land.
+working before the later subtasks of #44 land: ``builtin.engine`` and
+``builtin.api`` are one broad statement each (``TransitionalBroadAccess``).
+Subtask 11 (#65) replaces them with enumerated statements.
 
 * ``builtin.engine`` and ``builtin.api`` are one broad statement each
   (``TransitionalBroadAccess``). Subtask 11 (#65) replaces them with enumerated
   statements.
-* ``builtin.transitional.module`` is what a remote module's service account
-  holds until subtask 6 (#60) gives it an approved manifest: its own document
-  and dataset namespaces, and the kernel services a module can declare.
 * ``builtin.transitional.nexus_user`` is what a Nexus user holds until
   subtask 11 (#65) attaches the roles of its memberships: Nexus still decides
-  what such a user may do, as before IAM.
+  what such a user may do, as before IAM. It never reaches another
+  principal's agent runs: discovery is granted on its modules, agents,
+  models, apps and jobs, and on the holder's own runs only
+  (``run/${principal.id}/*``).
 
-Neither transitional grant reaches another principal's agent runs: discovery
-is granted on its modules, agents, models, apps and jobs, and on the holder's
-own runs only (``run/${principal.id}/*``).
+``builtin.module_bootstrap`` is what every module's service account holds,
+approved or not (RFC §8.3): its own discovery record and its own manifest.
 """
 
 from __future__ import annotations
@@ -43,8 +44,8 @@ PLATFORM_MEMBER = "builtin.platform.member"
 ENGINE = "builtin.engine"
 API = "builtin.api"
 IDP = "builtin.idp"
-TRANSITIONAL_MODULE = "builtin.transitional.module"
 TRANSITIONAL_NEXUS_USER = "builtin.transitional.nexus_user"
+MODULE_BOOTSTRAP = "builtin.module_bootstrap"
 
 ROLES = (VIEWER, MEMBER, ADMIN, OWNER)
 ROLE_LEVELS: dict[str, frozenset[Level]] = {
@@ -125,23 +126,6 @@ PLATFORM_TYPES: tuple[_PlatformRow, ...] = (
         ("provider_model/*",),
         viewer=("ListProviderModels", "GetProviderModel"),
     ),
-)
-
-# What a remote module may declare before manifests (TRANSITIONAL, #60).
-# Discovery is granted apart (``_transitional_discovery``): never other runs.
-_TRANSITIONAL_MODULE_SERVICES = (
-    "activity_log",
-    "cache",
-    "coding_environment",
-    "email",
-    "event",
-    "keyvalue",
-    "model_registry",
-    "object_storage",
-    "secret",
-    "source_control",
-    "triple_store",
-    "vector_store",
 )
 
 
@@ -337,67 +321,72 @@ def idp_policy() -> Policy:
     )
 
 
-def transitional_module_policy() -> Policy:
-    """TRANSITIONAL (#60 replaces it with approved manifests).
+def module_bootstrap_policy() -> Policy:
+    """Held by every module's service account, approved or not (RFC §8.3).
 
-    Held implicitly by every service account IAM has no record of: today, the
-    remote modules, whose token names their module. The engine does not see a
-    remote module's declared services before manifests, so it gets the kernel
-    services a module can declare, and only its own namespaces in document and
-    dataset (``${principal.id}`` is the module's name until #60).
+    ``${module.project}`` and ``${module.id}`` come from the account's name,
+    ``module/<project>/<module_id>``: the module reaches its own discovery
+    record and its own manifest, nothing else, until a manifest is approved.
     """
     return _managed(
-        TRANSITIONAL_MODULE,
-        "Remote module (transitional)",
-        "TRANSITIONAL: a remote module's access until subtask 6 of #44 "
-        "approves its permission manifest.",
+        MODULE_BOOTSTRAP,
+        "Module bootstrap",
+        "What a module's service account holds before and after approval: its "
+        "own discovery record and its own permission manifest.",
         [
             Statement(
                 effect="Allow",
-                actions=("document:*",),
-                resources=(
-                    "abi:-:-:document:namespace/${principal.id}",
-                    "abi:-:-:document:collection/${principal.id}/*",
-                    "abi:-:-:document:document/${principal.id}/*",
+                actions=(
+                    "discovery:Register",
+                    "discovery:Renew",
+                    "discovery:Unregister",
+                    "discovery:GetModule",
                 ),
-                sid="TransitionalOwnDocuments",
+                resources=("abi:-:-:discovery:module/${module.project}/${module.id}",),
+                sid="OwnRegistration",
             ),
             Statement(
                 effect="Allow",
-                actions=("dataset:*",),
-                resources=(
-                    "abi:-:-:dataset:namespace/${principal.id}",
-                    "abi:-:-:dataset:dataset/${principal.id}/*",
-                ),
-                sid="TransitionalOwnDatasets",
+                actions=("iam:SubmitManifest", "iam:GetManifest"),
+                resources=("abi:-:-:iam:manifest/${principal.id}",),
+                sid="OwnManifest",
             ),
-            Statement(
-                effect="Allow",
-                actions=tuple(f"{s}:*" for s in _TRANSITIONAL_MODULE_SERVICES),
-                resources=("*",),
-                sid="TransitionalKernelServices",
-            ),
-            *_transitional_discovery(),
-            # Evicting another module's registration is the platform's.
+            # Evicting another module's registration is the platform's, whatever
+            # a manifest says.
             Statement(
                 effect="Deny",
                 actions=("discovery:Evict",),
                 resources=("*",),
-                sid="TransitionalNoEviction",
+                sid="NoEviction",
             ),
         ],
     )
 
 
+# What a Nexus user's side of a Nexus call may reach (TRANSITIONAL, #65).
+# Discovery is granted apart (``_transitional_discovery``): never other runs.
+_TRANSITIONAL_USER_SERVICES = (
+    "activity_log",
+    "cache",
+    "coding_environment",
+    "dataset",
+    "document",
+    "email",
+    "event",
+    "keyvalue",
+    "model_registry",
+    "object_storage",
+    "secret",
+    "source_control",
+    "triple_store",
+    "vector_store",
+)
+
+
 def _transitional_discovery() -> list[Statement]:
     """Discovery for a transitional holder: every module, agent, model, app and
     job, but agent runs only its own or those of the user it acts for, so it
-    never reads or cancels another principal's run.
-
-    Registering is bound further by discovery itself: a live module id belongs
-    to the principal of its instances, and renewing or unregistering needs the
-    instance's lease. A module id nobody holds can still be registered by any
-    module until #60's accounts register only their own module."""
+    never reads or cancels another principal's run."""
     return [
         Statement(
             effect="Allow",
@@ -444,12 +433,7 @@ def transitional_nexus_user_policy() -> Policy:
         [
             Statement(
                 effect="Allow",
-                actions=tuple(
-                    f"{s}:*"
-                    for s in sorted(
-                        {*_TRANSITIONAL_MODULE_SERVICES, "dataset", "document"}
-                    )
-                ),
+                actions=tuple(f"{s}:*" for s in _TRANSITIONAL_USER_SERVICES),
                 resources=("*",),
                 sid="TransitionalNexusUser",
             ),
@@ -496,6 +480,6 @@ def builtin_policies(registry: CatalogRegistry) -> list[Policy]:
         _broad(ENGINE, "engine"),
         _broad(API, "api"),
         idp_policy(),
-        transitional_module_policy(),
         transitional_nexus_user_policy(),
+        module_bootstrap_policy(),
     ]

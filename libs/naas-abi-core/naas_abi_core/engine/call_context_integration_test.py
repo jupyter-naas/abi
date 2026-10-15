@@ -26,12 +26,12 @@ from naas_abi_core.engine.call_context import (
     user,
 )
 from naas_abi_core.engine.EngineProxy import ServicesProxy
-from naas_abi_core.engine.nats_auth import issue_service_token
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
 from naas_abi_core.engine.nats_test_server import (
     native_nats_server,
     nats_server_binary,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.module.Module import ModuleDependencies
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.activity_log.adapters.primary.activity_log__primary_adapter__NATS import (
@@ -128,7 +128,7 @@ pytestmark = pytest.mark.skipif(
     nats_server_binary() is None, reason="nats-server is not installed"
 )
 
-SECRET = "call-context-integration-secret-32b"
+SECRET = TEST_TOKENS.verifier
 # Nexus serving a signed-in user: the RFC's "api on behalf of the user".
 CALLER = CallContext(
     principal=service_account("api"),
@@ -152,7 +152,9 @@ def recording(cls: type, seen: list[CallContext]) -> Any:
         def __getattribute__(self, name: str) -> Any:
             if name.startswith("__"):
                 return object.__getattribute__(self, name)
-            seen.append(current_call_context())
+            # Who calls, for whom, on what: the token's own audience and id
+            # exist only over NATS.
+            seen.append(replace(current_call_context(), audience=None, token_id=None))
             raise Reached(name)
 
     return Recording()
@@ -363,7 +365,7 @@ def _over_nats(url: str, kernel: Kernel, send) -> list[CallContext]:
 
 
 async def _core_client(url: str, kernel: Kernel) -> None:
-    client = NatsRPCClient(url, SECRET, "api")
+    client = NatsRPCClient(url, TEST_TOKENS.source("api"))
 
     def call() -> None:
         request = type(kernel.request)()
@@ -378,7 +380,7 @@ async def _core_client(url: str, kernel: Kernel) -> None:
 
 
 async def _sdk_transport(url: str, kernel: Kernel) -> None:
-    transport = Transport(url, issue_service_token("api", SECRET), forward_user=True)
+    transport = Transport(url, TEST_TOKENS.token("api"), forward_user=True)
     try:
         await transport.call(kernel.subject, kernel.request, kernel.response)
     except RPCError:
@@ -404,7 +406,7 @@ def test_a_streamed_call_runs_as_the_caller_who_opened_it(broker):
 
     async def scenario() -> None:
         nc = await nats.connect(url := broker)
-        client = VectorStoreSecondaryAdapterNATSClient(url, SECRET, "api")
+        client = VectorStoreSecondaryAdapterNATSClient(url, TEST_TOKENS.source("api"))
 
         def read() -> None:
             with client.list_vectors_stream("docs") as documents:
@@ -436,7 +438,9 @@ def test_a_synchronous_engine_client_sends_its_callers_user(broker):
     primary = ModelRegistryNATS(recording(ModelRegistryService, seen), SECRET)
 
     def call() -> None:
-        client = ModelRegistryNATSClient(ModelRegistryService(), broker, SECRET)
+        client = ModelRegistryNATSClient(
+            ModelRegistryService(), broker, TEST_TOKENS.source("engine")
+        )
         try:
             with use_call_context(CALLER), pytest.raises(RPCError):
                 client.list_canonical_ids()
@@ -470,7 +474,7 @@ def test_a_module_calls_as_itself_and_for_nobody(broker, inside_a_users_call):
 
     async def scenario() -> None:
         nc = await nats.connect(broker)
-        transport = Transport(broker, issue_service_token("module/acme/people", SECRET))
+        transport = Transport(broker, TEST_TOKENS.token("module/acme/people"))
         try:
             await primary.start(nc)
             await nc.flush()
@@ -499,7 +503,7 @@ def test_only_trusted_identities_may_name_a_user(broker):
         # A module forwarding a user: refused until delegated tokens exist.
         transport = Transport(
             broker,
-            issue_service_token("module/acme/people", SECRET),
+            TEST_TOKENS.token("module/acme/people"),
             forward_user=True,
         )
         try:

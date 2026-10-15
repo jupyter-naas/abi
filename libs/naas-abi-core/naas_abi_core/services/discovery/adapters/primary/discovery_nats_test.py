@@ -2,24 +2,24 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.discovery.adapters.primary.discovery_nats import (
     DiscoveryNATS,
 )
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
-SECRET = "discovery-unit-test-secret-32-bytes"
+SECRET = TEST_TOKENS.verifier
 
 
 def test_authentication_precedes_domain_mutations_and_binds_caller():
     async def scenario():
         service = AsyncMock()
-        primary = DiscoveryNATS(service, SECRET, "test")
+        primary = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
         service.register.return_value = pb.RegisterResponse()
         msg = SimpleNamespace(
             data=pb.RegisterRequest().SerializeToString(),
             headers={},
-            reply="reply",
+            reply="_INBOX.reply",
             respond=AsyncMock(),
             _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
         )
@@ -31,7 +31,7 @@ def test_authentication_precedes_domain_mutations_and_binds_caller():
             == "UNAUTHENTICATED"
         )
         service.register.assert_not_awaited()
-        msg.headers = {"Nats-Auth-Token": issue_service_token("caller", SECRET)}
+        msg.headers = {"Nats-Auth-Token": TEST_TOKENS.token("caller")}
         await primary._handle("register", msg)
         assert service.register.call_args.args[1] == "caller"
 
@@ -60,13 +60,13 @@ def test_evict_is_an_authenticated_mutation_decided_by_iam():
         service = DiscoveryService(MemoryRegistry(), project="test", iam=iam)
         with as_service_account("engine"):
             await service.register(registration("research", "r-1"), "research")
-        primary = DiscoveryNATS(service, SECRET, "test")
+        primary = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
 
         async def evict_as(identity):
             msg = SimpleNamespace(
                 data=pb.EvictRequest(instance_id="r-1").SerializeToString(),
-                headers={"Nats-Auth-Token": issue_service_token(identity, SECRET)},
-                reply="reply",
+                headers={"Nats-Auth-Token": TEST_TOKENS.token(identity)},
+                reply="_INBOX.reply",
                 respond=AsyncMock(),
                 _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
             )
@@ -88,14 +88,14 @@ def test_an_overflow_uploaded_request_is_refused_as_too_large():
     # empty body and must not be parsed as an empty (valid) request.
     async def scenario():
         service = AsyncMock()
-        primary = DiscoveryNATS(service, SECRET, "test")
+        primary = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
         msg = SimpleNamespace(
             data=b"",
             headers={
-                "Nats-Auth-Token": issue_service_token("caller", SECRET),
+                "Nats-Auth-Token": TEST_TOKENS.token("caller"),
                 "Abi-Overflow-Request": f"{'a' * 32}:upload",
             },
-            reply="reply",
+            reply="_INBOX.reply",
             _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
         )
         await primary._handle("register", msg)
@@ -110,18 +110,18 @@ def test_authorize_agent_verifies_the_forwarded_caller_and_its_user():
     async def scenario():
         service = AsyncMock()
         service.authorize_agent.return_value = pb.AuthorizeAgentResponse()
-        primary = DiscoveryNATS(service, SECRET, "test")
+        primary = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
 
         async def authorize(caller, on_behalf_of=""):
             msg = SimpleNamespace(
                 data=pb.AuthorizeAgentRequest(
                     instance_id="r-1",
                     agent_name="Researcher",
-                    caller_token=issue_service_token(caller, SECRET),
+                    caller_token=TEST_TOKENS.token(caller),
                     caller_on_behalf_of=on_behalf_of,
                 ).SerializeToString(),
-                headers={"Nats-Auth-Token": issue_service_token("research", SECRET)},
-                reply="reply",
+                headers={"Nats-Auth-Token": TEST_TOKENS.token("research")},
+                reply="_INBOX.reply",
                 _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
             )
             await primary._handle("authorize_agent", msg)
@@ -170,8 +170,8 @@ def test_stopping_under_load_answers_every_request_it_was_sent(tmp_path):
     async def stop_once(url: str) -> int:
         service = DiscoveryService(MemoryRegistry())
         old_nc, new_nc, client_nc = [await nats.connect(url) for _ in range(3)]
-        old = DiscoveryNATS(service, SECRET, "test")
-        new = DiscoveryNATS(service, SECRET, "test")
+        old = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
+        new = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
         await old.start(old_nc)
         await new.start(new_nc)
         lost, sending = [], asyncio.Event()
@@ -220,7 +220,7 @@ def test_stop_ends_delivery_at_the_broker_before_draining(monkeypatch):
         return SimpleNamespace(name=name, drain=drain)
 
     monkeypatch.setattr(discovery_nats, "stop_delivery", stop_delivery, raising=False)
-    primary = DiscoveryNATS(AsyncMock(), SECRET, "test")
+    primary = DiscoveryNATS(AsyncMock(), TEST_TOKENS.verifier, "test")
     subscriptions = [subscription("a"), subscription("b")]
     primary.subscriptions = list(subscriptions)
 
@@ -255,8 +255,8 @@ class _Subscriber:
 def _lookup_message():
     return SimpleNamespace(
         data=pb.GetModuleRequest(module_id="research").SerializeToString(),
-        headers={"Nats-Auth-Token": issue_service_token("caller", SECRET)},
-        reply="reply",
+        headers={"Nats-Auth-Token": TEST_TOKENS.token("caller")},
+        reply="_INBOX.reply",
         subject="abi.discovery.test.v1.get_module",
         _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
     )
@@ -277,7 +277,7 @@ def test_lookups_are_answered_side_by_side_and_stop_waits_for_them(monkeypatch):
             return pb.GetModuleResponse()
 
         service = SimpleNamespace(get_module=get_module)
-        primary = DiscoveryNATS(service, SECRET, "test")
+        primary = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
         nc = _Subscriber()
         await primary.start(nc)
         messages = [_lookup_message() for _ in range(3)]

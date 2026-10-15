@@ -13,9 +13,10 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorage
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
 )
+from naas_abi_core.engine.nats_credentials import rpc_client
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStorePort
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Only import for type checking, not at runtime
 
@@ -164,15 +165,14 @@ class TripleStoreAdapterNATSConfiguration(BaseModel):
       adapter: "nats_rpc"
       config:
         nats_url: "nats://127.0.0.1:4222"
-        jwt_secret: "{{ secret.NATS_SERVICE_JWT_SECRET }}"
-        service_identity: "api"
+        service_key: "{{ secret.ABI_UPSTREAM_SERVICE_KEY }}"
     """
 
     model_config = ConfigDict(extra="forbid")
 
     nats_url: str = "nats://127.0.0.1:4222"
-    jwt_secret: str
-    service_identity: str = "api"
+    # A key of the upstream engine (abi_sk_...), exchanged for its tokens.
+    service_key: str = Field(repr=False)
 
 
 class TripleStoreAdapterConfiguration(GenericLoader):
@@ -188,7 +188,15 @@ class TripleStoreAdapterConfiguration(GenericLoader):
         "custom",
     ]
     config: (
-        OxigraphAdapterConfiguration | ApacheJenaTDB2AdapterConfiguration | AWSNeptuneAdapterConfiguration | AWSNeptuneSSHTunnelAdapterConfiguration | TripleStoreAdapterFilesystemConfiguration | TripleStoreAdapterOxigraphEmbeddedConfiguration | TripleStoreAdapterObjectStorageConfiguration | TripleStoreAdapterNATSConfiguration | dict
+        OxigraphAdapterConfiguration
+        | ApacheJenaTDB2AdapterConfiguration
+        | AWSNeptuneAdapterConfiguration
+        | AWSNeptuneSSHTunnelAdapterConfiguration
+        | TripleStoreAdapterFilesystemConfiguration
+        | TripleStoreAdapterOxigraphEmbeddedConfiguration
+        | TripleStoreAdapterObjectStorageConfiguration
+        | TripleStoreAdapterNATSConfiguration
+        | dict
         | None
     ) = None
 
@@ -379,7 +387,7 @@ class TripleStoreAdapterConfiguration(GenericLoader):
 
                 TripleStoreAdapterNATSConfiguration.model_validate(arguments)
 
-                return TripleStoreSecondaryAdapterNATSClient(**arguments)
+                return rpc_client(TripleStoreSecondaryAdapterNATSClient, **arguments)
             else:
                 raise ValueError(f"Adapter {self.adapter} not supported")
         else:

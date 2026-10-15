@@ -16,7 +16,6 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import RemoteA
 # (the Abi-On-Behalf-Of header, until delegated tokens replace it): discovery
 # checks the user's policy (discovery:InvokeAgent, OpenApp) and makes the user
 # the owner of the runs it starts, so any API worker can follow them.
-CALLER_IDENTITY = "api"
 
 _directory: RemoteAgentDirectory | None = None
 
@@ -27,16 +26,14 @@ def build_remote_agent_directory(nats: Any | None) -> RemoteAgentDirectory:
         return InMemoryRemoteAgentDirectory()
 
     def discovery_client() -> Any:
-        from naas_abi_core.engine.nats_auth import issue_service_token
+        from naas_abi.apps.nexus.apps.api.app.services.engine_credentials import (
+            api_token,
+        )
         from naas_abi_sdk.discovery import DiscoveryClient
         from naas_abi_sdk.transport import Transport
 
-        transport = Transport(
-            nats.nats_url,
-            lambda: issue_service_token(CALLER_IDENTITY, nats.jwt_secret),
-            timeout=30,
-            forward_user=True,
-        )
+        # api's own tokens (engine_credentials), on behalf of the signed-in user.
+        transport = Transport(nats.nats_url, api_token(), timeout=30, forward_user=True)
         return DiscoveryClient(transport, nats.discovery.project)
 
     return DiscoveryRemoteAgentDirectory(discovery_client)

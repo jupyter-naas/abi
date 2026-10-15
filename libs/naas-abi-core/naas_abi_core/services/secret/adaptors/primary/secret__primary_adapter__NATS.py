@@ -7,10 +7,9 @@ wire contract and ``naas_abi_core/proto/README.md`` for why it lives
 there). This is the server side; the matching client is
 ``SecretSecondaryAdapterNATSClient``.
 
-Security note: Stage 1's shared-JWT auth (``naas_abi_core.engine.nats_auth``)
-has no per-caller ARN/IAM authorization -- see
-``secret_nats_contract.py``'s docstring. Ported anyway, an explicit,
-accepted, temporary gap, not an oversight.
+Security note: callers are authenticated (``naas_abi_core.engine.nats_auth``)
+but not yet authorized per secret -- see ``secret_nats_contract.py``'s
+docstring. A known, temporary gap, not an oversight.
 """
 
 from __future__ import annotations
@@ -22,6 +21,7 @@ import nats
 import nats.micro
 from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
@@ -85,10 +85,10 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
     def __init__(
         self,
         adapter: ISecretAdapter | Secret,
-        jwt_secret: str,
+        verifier: TokenVerifier,
     ) -> None:
         self._adapter = adapter
-        self._jwt_secret = jwt_secret
+        self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
 
@@ -151,7 +151,7 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
         response_cls: Callable[..., _ResponseT],
         call: Callable[[_RequestT], _ResponseT],
     ) -> None:
-        caller = await authenticate_request(request, self._jwt_secret, response_cls)
+        caller = await authenticate_request(request, self._verifier, response_cls)
         if caller is None:
             return
 

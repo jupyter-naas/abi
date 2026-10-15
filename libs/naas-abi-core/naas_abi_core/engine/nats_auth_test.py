@@ -1,51 +1,297 @@
-from datetime import UTC, datetime, timedelta
+import time
+from typing import Any
 
+import jwt
 import pytest
 from naas_abi_core.engine.nats_auth import (
+    MAX_TOKEN_SECONDS,
     InvalidServiceTokenError,
-    issue_service_token,
-    verify_service_token,
+    IssuedToken,
+    JWKSVerifier,
+    RenewingTokenSource,
+    SigningKey,
+    TokenClaims,
+    parse_key,
+    sign_token,
 )
 
-SECRET = "test-shared-secret"
+ISSUER = "urn:abi:engine:test"
 
 
-def test_issue_and_verify_round_trips_identity():
-    token = issue_service_token("api", SECRET)
-
-    assert verify_service_token(token, SECRET) == "api"
-
-
-def test_verify_rejects_wrong_secret():
-    token = issue_service_token("api", SECRET)
-
-    with pytest.raises(InvalidServiceTokenError):
-        verify_service_token(token, "a-different-secret")
-
-
-def test_verify_rejects_malformed_token():
-    with pytest.raises(InvalidServiceTokenError):
-        verify_service_token("not-a-jwt", SECRET)
+def claims(**overrides) -> TokenClaims:
+    now = int(time.time())
+    values: dict[str, Any] = {
+        "issuer": ISSUER,
+        "subject": "sa_01jabcdefghjkmnpqrstvwxyz0",
+        "audience": "abi:nats",
+        "kind": "service_account",
+        "token_id": "t1",
+        "issued_at": now,
+        "expires_at": now + 600,
+        "name": "module/acme/people",
+    }
+    values.update(overrides)
+    return TokenClaims(**values)
 
 
-def test_verify_rejects_expired_token():
-    issued_at = datetime.now(UTC) - timedelta(hours=2)
-    token = issue_service_token(
-        "dagster", SECRET, ttl=timedelta(hours=1), now=issued_at
+@pytest.fixture
+def key() -> SigningKey:
+    return SigningKey.generate()
+
+
+def verifier_for(*keys: SigningKey, **options) -> JWKSVerifier:
+    return JWKSVerifier(
+        lambda: {"issuer": ISSUER, "keys": [k.public_jwk() for k in keys]}, **options
     )
 
+
+def test_round_trip_keeps_every_claim(key):
+    original = claims(
+        actor="sa_01jabcdefghjkmnpqrstvwxyz1",
+        groups=("grp_01jabcdefghjkmnpqrstvwxyz0",),
+        scope=({"effect": "Allow", "actions": ["a:B"], "resources": ["*"]},),
+        session="s1",
+    )
+    verified = verifier_for(key).verify(sign_token(key, original))
+    assert verified == original
+
+
+def test_tokens_name_their_key(key):
+    header = jwt.get_unverified_header(sign_token(key, claims()))
+    assert header == {"alg": "ES256", "kid": key.kid, "typ": "JWT"}
+    assert key.kid[8] == "-" and len(key.kid) == 17
+
+
+def test_issuer_refuses_tokens_longer_than_ten_minutes(key):
+    now = int(time.time())
+    with pytest.raises(ValueError, match="600"):
+        sign_token(key, claims(issued_at=now, expires_at=now + MAX_TOKEN_SECONDS + 1))
+
+
+def test_verifier_refuses_tokens_longer_than_ten_minutes(key):
+    now = int(time.time())
+    payload = claims(issued_at=now, expires_at=now + 3600).to_payload()
+    token = jwt.encode(
+        payload, key.private_key, algorithm="ES256", headers={"kid": key.kid}
+    )
+    with pytest.raises(InvalidServiceTokenError, match="ten minutes"):
+        verifier_for(key).verify(token)
+
+
+def test_verifier_refuses_another_key(key):
+    other = SigningKey.generate()
     with pytest.raises(InvalidServiceTokenError):
-        verify_service_token(token, SECRET)
+        verifier_for(key).verify(sign_token(other, claims()))
 
 
-def test_issue_rejects_empty_identity():
-    with pytest.raises(ValueError, match="identity"):
-        issue_service_token("", SECRET)
+def test_verifier_refuses_a_forged_kid(key):
+    other = SigningKey.generate()
+    forged = SigningKey(key.kid, other.private_key)
+    with pytest.raises(InvalidServiceTokenError):
+        verifier_for(key).verify(sign_token(forged, claims()))
 
 
-def test_different_identities_are_distinguishable():
-    api_token = issue_service_token("api", SECRET)
-    dagster_token = issue_service_token("dagster", SECRET)
+def test_verifier_refuses_hs256_even_with_the_public_key_as_secret(key):
+    token = jwt.encode(
+        claims().to_payload(),
+        "a-shared-secret-of-at-least-32-bytes!",
+        algorithm="HS256",
+        headers={"kid": key.kid},
+    )
+    with pytest.raises(InvalidServiceTokenError, match="ES256"):
+        verifier_for(key).verify(token)
 
-    assert verify_service_token(api_token, SECRET) == "api"
-    assert verify_service_token(dagster_token, SECRET) == "dagster"
+
+def test_verifier_refuses_another_issuer(key):
+    with pytest.raises(InvalidServiceTokenError):
+        verifier_for(key).verify(sign_token(key, claims(issuer="urn:abi:engine:x")))
+
+
+def test_verifier_refuses_an_audience_it_does_not_accept(key):
+    token = sign_token(key, claims(audience="abi:session"))
+    with pytest.raises(InvalidServiceTokenError, match="audience"):
+        verifier_for(key).verify(token)
+    assert verifier_for(key, audiences=("abi:session",)).verify(token).audience
+
+
+def test_verifier_refuses_expired_tokens_after_the_skew(key):
+    now = int(time.time())
+    token = sign_token(key, claims(issued_at=now - 700, expires_at=now - 100))
+    with pytest.raises(InvalidServiceTokenError):
+        verifier_for(key).verify(token)
+    recent = sign_token(key, claims(issued_at=now - 610, expires_at=now - 10))
+    assert verifier_for(key).verify(recent)  # within 30 s of skew
+
+
+def test_verifier_refuses_malformed_tokens(key):
+    for token in ("", "not-a-jwt", "a.b.c"):
+        with pytest.raises(InvalidServiceTokenError):
+            verifier_for(key).verify(token)
+
+
+def test_unknown_kid_refetches_at_most_every_30_seconds(key):
+    later = SigningKey.generate()
+    published = [key]
+    fetches = []
+    now = [1000.0]
+
+    def fetch():
+        fetches.append(now[0])
+        return {"issuer": ISSUER, "keys": [k.public_jwk() for k in published]}
+
+    verifier = JWKSVerifier(fetch, clock=lambda: now[0])
+    stamp = int(time.time())
+    token = sign_token(later, claims(issued_at=stamp, expires_at=stamp + 600))
+    with pytest.raises(InvalidServiceTokenError):
+        verifier.verify(token)
+    published.append(later)
+    now[0] += 10
+    with pytest.raises(InvalidServiceTokenError):
+        verifier.verify(token)  # still within 30 s: no refetch
+    now[0] += 25
+    assert verifier.verify(token).subject
+    assert fetches == [1000.0, 1035.0]
+
+
+def test_jwks_is_cached_for_five_minutes(key):
+    fetches = []
+    now = [0.0]
+
+    def fetch():
+        fetches.append(now[0])
+        return {"issuer": ISSUER, "keys": [key.public_jwk()]}
+
+    verifier = JWKSVerifier(fetch, clock=lambda: now[0])
+    token = sign_token(key, claims())
+    verifier.verify(token)
+    now[0] = 299
+    verifier.verify(token)
+    now[0] = 300
+    verifier.verify(token)
+    assert fetches == [0.0, 300]
+
+
+def test_an_unreachable_jwks_backs_off_and_keeps_known_keys_a_while(key):
+    fetches = []
+    now = [0.0]
+    up = [True]
+
+    def fetch():
+        fetches.append(now[0])
+        if not up[0]:
+            raise TimeoutError("engine unreachable")
+        return {"issuer": ISSUER, "keys": [key.public_jwk()]}
+
+    verifier = JWKSVerifier(fetch, clock=lambda: now[0])
+    token = sign_token(key, claims())
+    verifier.verify(token)
+    up[0] = False
+    now[0] = 300  # the cache expired: one attempt fails, the known keys verify
+    assert verifier.verify(token).subject
+    now[0] = 302  # backing off: no attempt
+    assert verifier.verify(token).subject
+    now[0] = 306
+    assert verifier.verify(token).subject
+    assert fetches == [0.0, 300, 306]
+    now[0] = 1200  # 15 minutes past the cache: the stale keys stop verifying
+    with pytest.raises(InvalidServiceTokenError, match="cannot read the JWKS"):
+        verifier.verify(token)
+    up[0] = True
+    now[0] = 1206
+    assert verifier.verify(token).subject
+
+
+def test_a_slow_fetch_does_not_hold_up_verifiers_with_keys(key):
+    import threading
+
+    release = threading.Event()
+    fetching = threading.Event()
+    now = [0.0]
+    calls = []
+
+    def fetch():
+        calls.append(now[0])
+        if len(calls) > 1:
+            fetching.set()
+            release.wait(5)
+        return {"issuer": ISSUER, "keys": [key.public_jwk()]}
+
+    verifier = JWKSVerifier(fetch, clock=lambda: now[0])
+    token = sign_token(key, claims())
+    verifier.verify(token)
+    now[0] = 300
+    slow = threading.Thread(target=verifier.verify, args=(token,))
+    slow.start()
+    assert fetching.wait(5)
+    started = time.monotonic()
+    assert verifier.verify(token).subject  # the stale keys, at once
+    assert time.monotonic() - started < 1
+    release.set()
+    slow.join(5)
+    assert len(calls) == 2
+
+
+def test_pem_round_trip(key):
+    restored = SigningKey.from_pem(key.kid, key.private_pem())
+    assert restored.public_jwk() == key.public_jwk()
+
+
+def test_claims_refuse_unknown_kinds_and_several_audiences(key):
+    payload = claims().to_payload()
+    with pytest.raises(InvalidServiceTokenError):
+        TokenClaims.from_payload({**payload, "kind": "admin"})
+    with pytest.raises(InvalidServiceTokenError):
+        TokenClaims.from_payload({**payload, "aud": ["abi:nats", "abi:session"]})
+
+
+def test_renewing_source_renews_at_half_life():
+    now = [0.0]
+    issued = []
+
+    def fetch():
+        issued.append(now[0])
+        return IssuedToken(f"t{len(issued)}", now[0] + 600)
+
+    source = RenewingTokenSource("engine", fetch, clock=lambda: now[0])
+    assert source.token() == "t1"
+    now[0] = 299
+    assert source.token() == "t1"
+    now[0] = 300
+    assert source.token() == "t2"
+    source.invalidate()
+    assert source.token() == "t3"
+
+
+def test_renewing_source_keeps_a_valid_token_when_renewal_fails():
+    now = [0.0]
+    calls = []
+
+    def fetch():
+        calls.append(now[0])
+        if len(calls) > 1:
+            raise ConnectionError("engine away")
+        return IssuedToken("t1", 600)
+
+    source = RenewingTokenSource("engine", fetch, clock=lambda: now[0])
+    source.token()
+    now[0] = 400
+    assert source.token() == "t1"
+    now[0] = 599
+    with pytest.raises(ConnectionError):
+        source.token()
+
+
+def test_parse_key():
+    assert parse_key("abi_sk_abcdefghijklmnop_c2VjcmV0_-x") == (
+        "abi_sk_",
+        "abcdefghijklmnop",
+        "c2VjcmV0_-x",
+    )
+    for bad in (
+        "",
+        "abi_sk_short_x",
+        "abi_xx_abcdefghijklmnop_x",
+        "abi_sk_ABCDEFGHIJKLMNOP_x",
+    ):
+        with pytest.raises(ValueError):
+            parse_key(bad)

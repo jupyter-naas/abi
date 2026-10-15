@@ -17,6 +17,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, TypeVar
 
 from naas_abi_core import logger
@@ -27,7 +28,12 @@ from naas_abi_core.engine.call_context import (
 from naas_abi_core.engine.call_context import (
     Principal as CallPrincipal,
 )
-from naas_abi_core.services.iam import roles
+from naas_abi_core.engine.nats_auth import (
+    NATS_AUDIENCE,
+    IssuedToken,
+    JWKSVerifier,
+)
+from naas_abi_core.services.iam import broker, keys, modules, roles
 from naas_abi_core.services.iam.adapters.secondary.authorizer__policy import (
     PolicyAuthorizer,
 )
@@ -40,6 +46,7 @@ from naas_abi_core.services.iam.iam_catalog import CATALOG, SEALS
 from naas_abi_core.services.iam.IAMPorts import (
     KIND_PREFIXES,
     Attachment,
+    CreatedKey,
     Decision,
     EffectiveStatement,
     Explanation,
@@ -47,10 +54,17 @@ from naas_abi_core.services.iam.IAMPorts import (
     GroupMapping,
     IAMConflictError,
     IAMNotFoundError,
+    IAMSecrets,
     IAMStore,
     IAuthorizer,
     IIAMService,
+    KeyRecord,
+    KeyRefusedError,
+    ManifestRecord,
+    ManifestStatus,
+    ManifestSubmission,
     Page,
+    PermissionDeniedError,
     Placement,
     Policy,
     PolicySource,
@@ -71,9 +85,12 @@ from naas_abi_core.services.iam.names import (
 )
 from naas_abi_core.services.iam.policy import (
     PolicyDocument,
+    PolicyValidationError,
+    bind_variables,
     parse_policy_document,
     within_scope,
 )
+from naas_abi_core.services.iam.tokens import TokenIssuer
 
 # TRANSITIONAL (until subtask 7, #61): a Nexus user is named on a call by its
 # Nexus user id. IAM records it as a user of this issuer, subject = that id.
@@ -126,6 +143,14 @@ def attachment_resource(policy_id: str, principal_id: str, scope: str | None) ->
     )
 
 
+def key_resource(principal_id: str, key_id: str) -> str:
+    return resource_name("iam", "key", [principal_id, key_id], kind="path")
+
+
+def manifest_resource(principal_id: str) -> str:
+    return resource_name("iam", "manifest", principal_id)
+
+
 def placement_resource(service: str, id_key: str) -> str:
     return resource_name("iam", "placement", [service, id_key], kind="path")
 
@@ -137,6 +162,16 @@ def scope_resource(org: str, workspace: str = NONE) -> str:
 
 def catalog_resource(service: str) -> str:
     return resource_name("iam", "catalog", service)
+
+
+# The engine's own service key, for its client-role engines (RFC §8.2): they
+# exchange it like any other key. Sealed to engine, like every iam/ secret.
+ENGINE_KEY_SECRET = "iam/service-keys/engine"
+# The key the engine seals the job triggers it stores with (HMAC-SHA256).
+TRIGGER_SEAL_SECRET = "iam/job-trigger-seal"
+TRIGGER_SEAL_VERSION = "v1"
+ENGINE_KEY_DESCRIPTION = "client-role engines"
+_CI_KEY_EXPIRY = timedelta(days=90)
 
 
 class _TTLCache:
@@ -187,6 +222,10 @@ class IAMService(IIAMService, PolicySource):
         cache_ttl_seconds: float = 60.0,
         cache_size: int = 4096,
         seals: Sequence[Seal] = SEALS,
+        secrets: IAMSecrets | None = None,
+        access_ttl_seconds: int = 600,
+        key_rotation_days: int = 30,
+        auto_approve: bool = False,
     ) -> None:
         self.store = store
         self._registry = CatalogRegistry()
@@ -195,10 +234,28 @@ class IAMService(IIAMService, PolicySource):
         self._policies = _TTLCache(cache_ttl_seconds, cache_size)
         self._placements = _TTLCache(cache_ttl_seconds, 1)
         self._listeners: list[Callable[[int], None]] = []
+        self._seen_revision: int | None = None
+        self._seal_key: bytes | None = None
+        self._seal_lock = threading.Lock()
+        self._approve_lock = threading.Lock()
         for catalog in store.list_catalogs():
             self._registry.register(catalog)
         self._registry.register(CATALOG)
         self.authorizer = (authorizer or PolicyAuthorizer)(self)
+        if secrets is None:
+            from naas_abi_core.services.iam.adapters.secondary.IAMSecretsMemory import (
+                IAMSecretsMemory,
+            )
+
+            secrets = IAMSecretsMemory()
+        self.secrets = secrets
+        self.tokens = TokenIssuer(
+            store,
+            secrets,
+            access_ttl_seconds=access_ttl_seconds,
+            rotation_days=key_rotation_days,
+        )
+        self.auto_approve = auto_approve
 
     # =========================================================================
     # Decisions: the caller is the current CallContext.
@@ -257,7 +314,10 @@ class IAMService(IIAMService, PolicySource):
         key = (principal.kind, principal.id, principal.name, principal.groups)
         return self._subjects.get(key, lambda: self._compute_subject(principal))
 
-    def _compute_subject(self, principal: CallPrincipal) -> Subject:
+    def _compute_subject(
+        self, principal: CallPrincipal, *, fresh: bool = False
+    ) -> Subject:
+        """``fresh``: read every policy from the store, never from the cache."""
         if principal.kind == "anonymous":
             return Subject(principal.id, "active", ())
         record = self._resolve(principal)
@@ -280,28 +340,38 @@ class IAMService(IIAMService, PolicySource):
             group = via.get(attachment.principal_id)
             if group is not None and group not in active_groups:
                 continue  # a suspended group grants nothing
-            statements += self._statements_of(attachment.policy_id, attachment, group)
+            statements += self._statements_of(
+                attachment.policy_id, attachment, group, fresh=fresh
+            )
         if principal.kind == "user":
             # builtin.self is held by every user, implicitly.
-            statements += self._statements_of(roles.SELF, None, None)
+            statements += self._statements_of(roles.SELF, None, None, fresh=fresh)
             if _named_by_nexus(principal, record):
                 # TRANSITIONAL (#65): a Nexus user, until its roles are attachments.
                 statements += self._statements_of(
-                    roles.TRANSITIONAL_NEXUS_USER, None, None
+                    roles.TRANSITIONAL_NEXUS_USER, None, None, fresh=fresh
                 )
-        elif (
-            principal.kind == "service_account"
-            and record is None
-            and (principal.name or principal.id) not in roles.SERVICE_ACCOUNTS
-        ):
-            # TRANSITIONAL (#60): a remote module's service account.
-            statements += self._statements_of(roles.TRANSITIONAL_MODULE, None, None)
+        # ${module.*} name the module of a module's account; for any other
+        # principal they match nothing.
+        variables = modules.variables(record.name if record is not None else None)
+        statements = [
+            replace(effective, statement=bound)
+            for effective in statements
+            if (bound := bind_variables(effective.statement, variables)) is not None
+        ]
         return Subject(principal.id, status, tuple(statements))
 
     def _statements_of(
-        self, policy_id: str, attachment: Attachment | None, group: str | None
+        self,
+        policy_id: str,
+        attachment: Attachment | None,
+        group: str | None,
+        *,
+        fresh: bool = False,
     ) -> list[EffectiveStatement]:
-        policy = self._cached_policy(policy_id)
+        policy = (
+            self._load_policy(policy_id) if fresh else self._cached_policy(policy_id)
+        )
         if policy is None:
             return []
         scope = attachment.scope if attachment else None
@@ -325,13 +395,13 @@ class IAMService(IIAMService, PolicySource):
         return effective
 
     def _cached_policy(self, policy_id: str) -> Policy | None:
-        def load() -> Policy | None:
-            try:
-                return self.store.get_policy(policy_id)
-            except IAMNotFoundError:
-                return None
+        return self._policies.get(policy_id, lambda: self._load_policy(policy_id))
 
-        return self._policies.get(policy_id, load)
+    def _load_policy(self, policy_id: str) -> Policy | None:
+        try:
+            return self.store.get_policy(policy_id)
+        except IAMNotFoundError:
+            return None
 
     def _active(self, principal_id: str) -> bool:
         try:
@@ -552,7 +622,24 @@ class IAMService(IIAMService, PolicySource):
                 id=principal_id, kind="service_account", name=name, owner_id=owner_id
             )
         )
+        if modules.parse_account(name) is not None:
+            # A module's account always holds its bootstrap (RFC §8.3).
+            self.store.attach(
+                Attachment(new_id("att"), roles.MODULE_BOOTSTRAP, record.id)
+            )
         self._changed()
+        return record
+
+    def find_service_account(self, name: str) -> PrincipalRecord:
+        """The service account named ``name`` (``iam:GetPrincipal`` on it)."""
+        record = self.store.find_service_account(name)
+        missing = lambda: IAMNotFoundError(f"Service account {name!r} not found")
+        if record is None:
+            # Same answer as for an account the caller may not see.
+            raise missing()
+        self.require(
+            "iam:GetPrincipal", principal_resource(record.id), not_found=missing
+        )
         return record
 
     def get_principal(self, principal_id: str) -> PrincipalRecord:
@@ -957,6 +1044,537 @@ class IAMService(IIAMService, PolicySource):
                 self.store.detach(companion, principal_id, None)
 
     # =========================================================================
+    # Tokens (RFC §9.1): the engine signs, everyone verifies with the JWKS.
+    # =========================================================================
+
+    def jwks(self) -> dict[str, Any]:
+        """The public signing keys and the issuer. Public: no action needed."""
+        return self.tokens.jwks()
+
+    def verifier(self, audiences: Iterable[str] = (NATS_AUDIENCE,)) -> JWKSVerifier:
+        """A verifier reading this process's JWKS, with no NATS hop."""
+        return JWKSVerifier(self.jwks, audiences=audiences)
+
+    def issue_service_token(
+        self, name: str, *, audience: str = NATS_AUDIENCE
+    ) -> IssuedToken:
+        """A token for the engine's own service account ``name`` (``engine``,
+        ``api``), for code running in this process. Not exposed over NATS:
+        remote callers exchange a key."""
+        record = self.store.find_service_account(name)
+        if record is None or not record.active:
+            raise IAMNotFoundError(f"No active service account {name!r}")
+        return self.tokens.issue(
+            record.id, kind="service_account", audience=audience, name=record.name
+        )
+
+    def exchange_key(self, value: str) -> IssuedToken:
+        """A service account's key for an ``abi:nats`` access token (RFC §8.2).
+
+        The key is the credential: no caller is checked. ``KeyRefusedError``
+        for every refusal, whatever its cause.
+        """
+        principal, _ = self.authenticate_key(value)
+        return self.tokens.issue(
+            principal.id,
+            kind="service_account",
+            audience=NATS_AUDIENCE,
+            name=principal.name,
+        )
+
+    def authenticate_key(self, value: str) -> tuple[PrincipalRecord, KeyRecord]:
+        """The active service account a valid ``abi_sk_`` key belongs to.
+
+        Revocation, expiry and suspension take effect at once: nothing here is
+        cached. Records the key's last use.
+        """
+        try:
+            presented = keys.parse(value)
+            record = self.store.get_key(presented.key_id)
+            principal = self.store.get_principal(record.principal_id)
+        except (ValueError, IAMNotFoundError):
+            raise KeyRefusedError() from None
+        now = datetime.now(UTC)
+        if (
+            presented.kind != "service"
+            or record.kind != "service"
+            or not presented.matches(record.secret_hash)
+            or not record.usable(now)
+            or principal.kind != "service_account"
+            or not principal.active
+        ):
+            raise KeyRefusedError()
+        self.store.touch_key(record.key_id, now)
+        return principal, record
+
+    # =========================================================================
+    # Job trigger seals (RFC §8.4)
+    # =========================================================================
+
+    def seal_trigger(self, fields: Sequence[Any]) -> str:
+        """The seal of a job trigger the engine stores: an HMAC over
+        ``fields`` (its subject, kind, body hash and claim-check headers, as
+        the broker control lists them), with a key in ``IAMSecrets``. A job
+        host stores no key: it asks the engine whether a seal is its own
+        (``trigger_sealed``). In process only."""
+        import base64
+        import hashlib
+        import hmac
+        import json
+
+        digest = hmac.new(
+            self._trigger_seal_key(),
+            json.dumps(list(fields), separators=(",", ":")).encode(),
+            hashlib.sha256,
+        ).digest()
+        return f"{TRIGGER_SEAL_VERSION}.{base64.urlsafe_b64encode(digest).decode()}"
+
+    def trigger_sealed(self, fields: Sequence[Any], seal: str) -> bool:
+        """Whether ``seal`` is this engine's over ``fields``."""
+        import hmac
+
+        return bool(seal) and hmac.compare_digest(self.seal_trigger(fields), seal)
+
+    def _trigger_seal_key(self) -> bytes:
+        import base64
+        import secrets as random
+
+        with self._seal_lock:
+            if self._seal_key is None:
+                stored = self.secrets.get(TRIGGER_SEAL_SECRET)
+                if not stored:
+                    self.secrets.put(
+                        TRIGGER_SEAL_SECRET,
+                        base64.urlsafe_b64encode(random.token_bytes(32)).decode(),
+                    )
+                    # Another engine may have written it meanwhile: the stored one wins.
+                    stored = self.secrets.get(TRIGGER_SEAL_SECRET)
+                self._seal_key = base64.urlsafe_b64decode(str(stored))
+            return self._seal_key
+
+    def engine_service_key(self) -> str:
+        """The engine's own key, kept in ``IAMSecrets`` for client-role engines
+        of this deployment (RFC §8.2), created on first use. In process only."""
+        stored = self.secrets.get(ENGINE_KEY_SECRET)
+        if stored:
+            try:
+                self.authenticate_key(stored)
+                return stored
+            except KeyRefusedError:
+                logger.info("The stored engine service key is no longer valid")
+        engine = self.store.find_service_account("engine")
+        if engine is None:
+            raise IAMNotFoundError("IAM is not bootstrapped")
+        # One such key at a time: a process that never saw the stored key (its
+        # secret service read before another wrote it) replaces it.
+        now = datetime.now(UTC)
+        for earlier in self.store.list_keys(engine.id):
+            if earlier.description == ENGINE_KEY_DESCRIPTION and earlier.usable(now):
+                self.store.revoke_key(earlier.key_id, now)
+        created = self._create_key(engine, description=ENGINE_KEY_DESCRIPTION)
+        self.secrets.put(ENGINE_KEY_SECRET, created.value)
+        return created.value
+
+    # =========================================================================
+    # Keys (RFC §8.1)
+    # =========================================================================
+
+    def create_key(
+        self,
+        principal_id: str,
+        *,
+        description: str = "",
+        expires_at: datetime | None = None,
+    ) -> CreatedKey:
+        """A new key for a service account; its value is in the result only.
+
+        At most five active keys. ``ci/*`` accounts' keys expire in 90 days
+        unless told otherwise; module keys never do by default.
+        """
+        principal = self._require_key_owner(principal_id)
+        return self._create_key(
+            principal, description=description, expires_at=expires_at, check=True
+        )
+
+    def _create_key(
+        self,
+        principal: PrincipalRecord,
+        *,
+        description: str = "",
+        expires_at: datetime | None = None,
+        check: bool = False,
+    ) -> CreatedKey:
+        new = keys.generate_key("service")
+        if check:
+            self.require(
+                "iam:CreateKey",
+                key_resource(principal.id, new.key_id),
+                not_found=lambda: IAMNotFoundError(
+                    f"Principal {principal.id} not found"
+                ),
+            )
+        now = datetime.now(UTC)
+        if expires_at is None and (principal.name or "").startswith("ci/"):
+            expires_at = now + _CI_KEY_EXPIRY
+        if expires_at is not None and expires_at <= now:
+            raise ValueError("A key cannot expire in the past")
+        active = [k for k in self.store.list_keys(principal.id) if k.usable(now)]
+        if len(active) >= keys.MAX_ACTIVE_KEYS:
+            raise IAMConflictError(
+                f"{principal.id} holds {keys.MAX_ACTIVE_KEYS} active keys: "
+                "revoke one first"
+            )
+        record = self.store.create_key(
+            KeyRecord(
+                key_id=new.key_id,
+                principal_id=principal.id,
+                secret_hash=new.secret_hash,
+                description=description,
+                created_at=now,
+                expires_at=expires_at,
+            )
+        )
+        self._changed()
+        return CreatedKey(record, new.value)
+
+    def list_keys(self, principal_id: str) -> list[KeyRecord]:
+        found = self.store.list_keys(principal_id)
+        allowed = set(
+            self.filter(
+                "iam:ListKeys", (key_resource(principal_id, k.key_id) for k in found)
+            ).allowed
+        )
+        return [k for k in found if key_resource(principal_id, k.key_id) in allowed]
+
+    def revoke_key(self, principal_id: str, key_id: str) -> KeyRecord:
+        """Takes effect at the next exchange and the next broker connection;
+        tokens already issued expire within ten minutes."""
+        missing = lambda: IAMNotFoundError(f"Key {key_id} not found")
+        self.require(
+            "iam:RevokeKey", key_resource(principal_id, key_id), not_found=missing
+        )
+        try:
+            record = self.store.get_key(key_id)
+        except IAMNotFoundError:
+            raise missing() from None
+        if record.principal_id != principal_id:
+            raise missing()
+        revoked = self.store.revoke_key(key_id, datetime.now(UTC))
+        self._changed()
+        return revoked
+
+    def _require_key_owner(self, principal_id: str) -> PrincipalRecord:
+        try:
+            principal = self._get_principal(principal_id)
+        except IAMNotFoundError:
+            principal = None
+        if principal is None or principal.kind != "service_account":
+            raise IAMNotFoundError(f"Service account {principal_id} not found")
+        if principal.status == "deleted":
+            raise IAMConflictError(f"Principal {principal_id} is deleted")
+        return principal
+
+    # =========================================================================
+    # Module permission manifests (RFC §8.3)
+    # =========================================================================
+
+    def submit_manifest(
+        self,
+        module_id: str,
+        project: str,
+        document: Mapping[str, Any] | str | PolicyDocument,
+    ) -> ManifestSubmission:
+        """The calling module's manifest: pending until an admin approves it.
+
+        The caller must be the service account ``module/<project>/<module_id>``:
+        that binds the module's logical name to its credential. Submitting the
+        approved version again changes nothing; a new version is pending while
+        the approved policy stays in force, unless ``modules.auto_approve``.
+        """
+        modules.check_module(project, module_id)
+        account = self._calling_module_account(project, module_id)
+        self.require(
+            "iam:SubmitManifest",
+            manifest_resource(account.id),
+            not_found=lambda: IAMNotFoundError(f"Manifest of {account.id} not found"),
+        )
+        parsed = parse_policy_document(document)
+        _refuse_reserved_topics(parsed)
+        raw = parsed.to_dict()
+        sha256 = modules.manifest_sha256(raw)
+        try:
+            existing: ManifestRecord | None = self.store.get_manifest(
+                account.id, sha256
+            )
+        except IAMNotFoundError:
+            existing = None
+        in_force = bool(self.store.list_manifests(account.id, "approved"))
+        if existing is not None and existing.status in ("approved", "rejected"):
+            return ManifestSubmission(existing, in_force=in_force)
+        if existing is not None and existing.status == "superseded":
+            # A rollback to an earlier version: it waits for approval again,
+            # like a new one (the version in force stays in force).
+            existing = self.store.put_manifest(
+                replace(existing, status="pending", decided_at=None, decided_by=None)
+            )
+            if not self.auto_approve:
+                logger.info(
+                    f"Module {account.name} submitted manifest {sha256[:12]} again: "
+                    f"approve it with `abi iam module approve {account.name}`"
+                )
+                self._changed()
+                return ManifestSubmission(existing, in_force=in_force)
+        record = existing or self.store.put_manifest(
+            ManifestRecord(
+                principal_id=account.id,
+                sha256=sha256,
+                module_id=module_id,
+                project=project,
+                document=raw,
+            )
+        )
+        if not self.auto_approve:
+            if existing is None:
+                logger.info(
+                    f"Module {account.name} submitted manifest {sha256[:12]}: "
+                    f"approve it with `abi iam module approve {account.name}`"
+                )
+                self._changed()
+            return ManifestSubmission(record, in_force=in_force)
+        approved = self._approve(record, parsed, decided_by="auto_approve")
+        return ManifestSubmission(approved, approved_now=True, in_force=True)
+
+    def get_manifest(
+        self, principal_id: str, sha256: str | None = None
+    ) -> ManifestRecord:
+        """A manifest version, by default the latest one submitted."""
+        missing = lambda: IAMNotFoundError(f"Manifest of {principal_id} not found")
+        self.require(
+            "iam:GetManifest", manifest_resource(principal_id), not_found=missing
+        )
+        return self._manifest(principal_id, sha256, missing)
+
+    def list_manifests(
+        self, *, principal_id: str | None = None, status: ManifestStatus | None = None
+    ) -> list[ManifestRecord]:
+        found = self.store.list_manifests(principal_id, status)
+        allowed = set(
+            self.filter(
+                "iam:ListManifests", (manifest_resource(m.principal_id) for m in found)
+            ).allowed
+        )
+        return [m for m in found if manifest_resource(m.principal_id) in allowed]
+
+    def approve_manifest(
+        self,
+        principal_id: str,
+        sha256: str | None = None,
+        *,
+        document: Mapping[str, Any] | str | PolicyDocument | None = None,
+    ) -> ManifestRecord:
+        """Approve a module's manifest as submitted, or narrowed to ``document``.
+
+        Without ``sha256``, the latest pending version, and none other: a
+        rejected or superseded version is approved by naming its ``sha256``.
+        The approved document becomes the managed policy
+        ``module.<project>.<module_id>``.
+        """
+        missing = lambda: IAMNotFoundError(f"Manifest of {principal_id} not found")
+        self.require(
+            "iam:ApproveManifest", manifest_resource(principal_id), not_found=missing
+        )
+        record = self._manifest(principal_id, sha256, missing, pending_only=True)
+        parsed = parse_policy_document(
+            document if document is not None else record.document
+        )
+        current = self.current_user_or_actor()
+        return self._approve(record, parsed, decided_by=current)
+
+    def reject_manifest(
+        self, principal_id: str, sha256: str | None = None, *, reason: str = ""
+    ) -> ManifestRecord:
+        """Refuse a version; an approved policy in force stays in force."""
+        missing = lambda: IAMNotFoundError(f"Manifest of {principal_id} not found")
+        self.require(
+            "iam:RejectManifest", manifest_resource(principal_id), not_found=missing
+        )
+        record = self._manifest(principal_id, sha256, missing, pending_only=True)
+        if record.status == "approved":
+            raise IAMConflictError(
+                f"Manifest {record.sha256[:12]} is approved: approve another "
+                "version, or suspend the service account"
+            )
+        rejected = self.store.put_manifest(
+            replace(
+                record,
+                status="rejected",
+                decided_at=datetime.now(UTC),
+                decided_by=self.current_user_or_actor(),
+                reason=reason,
+            )
+        )
+        self._changed()
+        return rejected
+
+    def current_user_or_actor(self) -> str:
+        current = current_call_context()
+        user = current.user
+        return (user or current.principal).id
+
+    def _calling_module_account(self, project: str, module_id: str) -> PrincipalRecord:
+        caller = current_call_context().principal
+        record = self._resolve(caller) if caller.kind == "service_account" else None
+        if record is None or record.name != modules.account_name(project, module_id):
+            raise PermissionDeniedError(
+                "iam:SubmitManifest",
+                manifest_resource(record.id if record else caller.id),
+                message=(
+                    f"Module {module_id!r} of project {project!r} runs as the service "
+                    f"account {modules.account_name(project, module_id)!r}, not "
+                    f"{(record.name if record else caller.name) or caller.id!r}"
+                ),
+            )
+        return record
+
+    def _manifest(
+        self,
+        principal_id: str,
+        sha256: str | None,
+        missing: Callable[[], BaseException],
+        *,
+        pending_only: bool = False,
+    ) -> ManifestRecord:
+        """The version ``sha256``; without it the latest one, or with
+        ``pending_only`` the latest pending one (``IAMNotFoundError`` when
+        nothing waits for a decision)."""
+        if sha256:
+            try:
+                return self.store.get_manifest(principal_id, sha256)
+            except IAMNotFoundError:
+                raise missing() from None
+        found = self.store.list_manifests(principal_id)
+        if pending_only:
+            found = [m for m in found if m.status == "pending"]
+            if not found:
+                raise IAMNotFoundError(
+                    f"No manifest of {principal_id} waits for a decision: "
+                    "name a version (sha256) to decide on another one"
+                )
+        if not found:
+            raise missing()
+        return found[-1]
+
+    def _approve(
+        self, record: ManifestRecord, document: PolicyDocument, *, decided_by: str
+    ) -> ManifestRecord:
+        # One approval at a time in this process: the nested-topic check reads
+        # what earlier approvals wrote. (Engines and abi iam sharing a store can
+        # still race; the broker then grants both topics, JetStream refuses the
+        # second queue stream.)
+        with self._approve_lock:
+            return self._approve_now(record, document, decided_by=decided_by)
+
+    def _approve_now(
+        self, record: ManifestRecord, document: PolicyDocument, *, decided_by: str
+    ) -> ManifestRecord:
+        _refuse_reserved_topics(document)
+        account = self._get_principal(record.principal_id)
+        bound = modules.bind(document, record.project, record.module_id)
+        self._refuse_nested_topics(account.id, bound)
+        policy_id = modules.policy_id(record.project, record.module_id)
+        self.store.put_managed_policy(
+            Policy(
+                id=policy_id,
+                name=f"Module {record.project}/{record.module_id}",
+                description=f"The approved permission manifest of {account.name}.",
+                document=bound,
+                managed=True,
+            )
+        )
+        if self._find_attachment(policy_id, account.id, None) is None:
+            self.store.attach(Attachment(new_id("att"), policy_id, account.id))
+        for other in self.store.list_manifests(account.id, "approved"):
+            if other.sha256 != record.sha256:
+                self.store.put_manifest(replace(other, status="superseded"))
+        placed = {(p.service, p.id_key) for p in self.store.list_placements()}
+        for service, id_key in modules.namespace_placements(record.module_id):
+            if (service, id_key) not in placed:
+                self.store.put_placement(Placement(service, id_key))
+        approved = self.store.put_manifest(
+            replace(
+                record,
+                status="approved",
+                decided_at=datetime.now(UTC),
+                decided_by=decided_by,
+                reason="",
+            )
+        )
+        logger.info(f"Manifest {record.sha256[:12]} of {account.name} approved")
+        self._changed()
+        return approved
+
+    def _refuse_nested_topics(
+        self, principal_id: str, document: PolicyDocument
+    ) -> None:
+        """No granted topic may sit inside another (``broker.nested_topic_problems``):
+        the topics the Allow statements of every policy attached to another
+        principal name, managed (approved manifests) or not."""
+        others: list[str] = []
+        policies = {
+            a.policy_id
+            for a in self.store.list_attachments()
+            if a.principal_id != principal_id
+        }
+        for policy_id in sorted(policies):
+            policy = self._load_policy(policy_id)
+            if policy is not None:
+                others += broker.topics_of(policy.document.statements)
+        problems = broker.nested_topic_problems(
+            broker.topics_of(document.statements), others
+        )
+        if problems:
+            raise PolicyValidationError(problems)
+
+    # =========================================================================
+    # Broker permissions (RFC §8.4)
+    # =========================================================================
+
+    def broker_permissions(
+        self, principal: PrincipalRecord, key: KeyRecord
+    ) -> broker.BrokerPermissions:
+        """The subjects a connection authenticated by ``key`` may use.
+
+        Computed from the store, never from the cache: an approval made a
+        moment ago counts at the next connection.
+        """
+        return self._derive(principal, key.key_id)
+
+    def broker_grants(self, principal_id: str) -> broker.BrokerPermissions:
+        """What ``principal_id``'s connections are granted, for the engine's
+        broker control to check a request against (no inbox: no key). In
+        process only; from the store, never from the cache. A principal that
+        is not active is granted nothing (``IAMNotFoundError`` when unknown)."""
+        principal = self._get_principal(principal_id)
+        if principal.status != "active":
+            raise PermissionDeniedError(
+                "broker", principal_resource(principal.id), message="not active"
+            )
+        return self._derive(principal, "-")
+
+    def _derive(
+        self, principal: PrincipalRecord, key_id: str
+    ) -> broker.BrokerPermissions:
+        ctx = CallContext(principal=_call_principal(principal))
+        subject = self._compute_subject(ctx.principal, fresh=True)
+        return broker.derive(
+            principal_id=principal.id,
+            key_id=key_id,
+            statements=subject.statements,
+            catalogs=self._registry,
+            module=modules.parse_account(principal.name),
+        )
+
+    # =========================================================================
     # Boot
     # =========================================================================
 
@@ -1002,9 +1620,24 @@ class IAMService(IIAMService, PolicySource):
         self._policies.clear()
         self._placements.clear()
 
-    def _changed(self) -> None:
-        self.invalidate()
+    def refresh_if_changed(self) -> bool:
+        """Drop the caches when the store's revision differs from the last one
+        this service saw (another process wrote, or the store was restored to
+        an older revision). A change notice is only a hint: its number is
+        never trusted."""
         revision = self.store.revision()
+        if revision == self._seen_revision:
+            return False
+        self._seen_revision = revision
+        self.invalidate()
+        return True
+
+    def _changed(self) -> None:
+        # The revision first: a write of another process between the two would
+        # otherwise be recorded as seen, and its notice ignored.
+        revision = self.store.revision()
+        self.invalidate()
+        self._seen_revision = revision
         for listener in list(self._listeners):
             try:
                 listener(revision)
@@ -1080,3 +1713,15 @@ def _check_placement(placement: Placement) -> None:
     key = placement.id_key
     if not key or "*" in key[:-1] or "?" in key:
         raise ValueError(f"A placement key is an id or a prefix ending in '*': {key!r}")
+
+
+def _refuse_reserved_topics(document: PolicyDocument) -> None:
+    """A manifest naming a bus topic under a platform root (``abi``, ``evt``,
+    ``_INBOX``, ``$...``) would reach those subjects through the broker."""
+    errors = [
+        f"statement {index}: {problem}"
+        for index, statement in enumerate(document.statements)
+        for problem in broker.reserved_topic_problems(statement.resources)
+    ]
+    if errors:
+        raise PolicyValidationError(errors)

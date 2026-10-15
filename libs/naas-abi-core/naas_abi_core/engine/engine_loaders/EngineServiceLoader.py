@@ -149,8 +149,17 @@ class EngineServiceLoader:
         services_to_load = self._services_to_load(module_dependencies)
         logger.debug(f"Services to load: {services_to_load}")
 
-        # First, bootstrapped: every other service authorizes through it.
-        iam = self.__configuration.services.iam.load()
+        # First, bootstrapped: every other service authorizes through it. Its
+        # signing keys live in this host's own secret adapters.
+        from naas_abi_core.services.iam.adapters.secondary.IAMSecretsSecretService import (
+            IAMSecretsSecretService,
+        )
+
+        iam = self.__configuration.services.iam.load(
+            secrets=IAMSecretsSecretService(
+                self.__configuration.services.secret.load_local
+            )
+        )
         services = IEngine.Services(
             iam=iam,
             # The OIDC providers the engine trusts (RFC §12.1): users are IAM's.

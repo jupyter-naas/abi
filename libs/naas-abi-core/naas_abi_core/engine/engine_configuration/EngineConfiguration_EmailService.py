@@ -7,9 +7,10 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
 )
+from naas_abi_core.engine.nats_credentials import rpc_client
 from naas_abi_core.services.email.EmailPorts import IEmailAdapter
 from naas_abi_core.services.email.EmailService import EmailService
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class EmailAdapterSMTPConfiguration(BaseModel):
@@ -66,19 +67,25 @@ class EmailAdapterNATSConfiguration(BaseModel):
       adapter: "nats_rpc"
       config:
         nats_url: "nats://127.0.0.1:4222"
-        jwt_secret: "{{ secret.NATS_SERVICE_JWT_SECRET }}"
-        service_identity: "api"
+        service_key: "{{ secret.ABI_UPSTREAM_SERVICE_KEY }}"
     """
+
     model_config = ConfigDict(extra="forbid")
 
     nats_url: str = "nats://127.0.0.1:4222"
-    jwt_secret: str
-    service_identity: str = "api"
+    # A key of the upstream engine (abi_sk_...), exchanged for its tokens.
+    service_key: str = Field(repr=False)
 
 
 class EmailAdapterConfiguration(GenericLoader):
     adapter: Literal[
-        "smtp", "filesystem", "ses", "sendgrid", "microsoft_outlook", "nats_rpc", "custom"
+        "smtp",
+        "filesystem",
+        "ses",
+        "sendgrid",
+        "microsoft_outlook",
+        "nats_rpc",
+        "custom",
     ]
     config: dict | None = None
 
@@ -137,9 +144,7 @@ class EmailAdapterConfiguration(GenericLoader):
 
             return SMTPAdapter(**self.config)
         elif self.adapter == "filesystem":
-            assert self.config is not None, (
-                "config is required for filesystem adapter"
-            )
+            assert self.config is not None, "config is required for filesystem adapter"
             from naas_abi_core.services.email.adapters.secondary.FilesystemAdapter import (
                 FilesystemAdapter,
             )
@@ -160,7 +165,9 @@ class EmailAdapterConfiguration(GenericLoader):
 
             return SendGridAdapter(**self.config)
         elif self.adapter == "microsoft_outlook":
-            assert self.config is not None, "config is required for microsoft_outlook adapter"
+            assert self.config is not None, (
+                "config is required for microsoft_outlook adapter"
+            )
             from naas_abi_core.services.email.adapters.secondary.MicrosoftOutlookAdapter import (
                 MicrosoftOutlookAdapter,
             )
@@ -172,7 +179,7 @@ class EmailAdapterConfiguration(GenericLoader):
                 EmailSecondaryAdapterNATSClient,
             )
 
-            return EmailSecondaryAdapterNATSClient(**self.config)
+            return rpc_client(EmailSecondaryAdapterNATSClient, **self.config)
         elif self.adapter == "custom":
             return super().load()
         else:
@@ -187,7 +194,9 @@ class EmailAdapterConfiguration(GenericLoader):
             return f"files under {directory}"
         if self.adapter == "custom":
             return self.custom_local_storage()
-        return None  # smtp, ses, sendgrid, microsoft_outlook; nats_rpc is another engine's
+        return (
+            None  # smtp, ses, sendgrid, microsoft_outlook; nats_rpc is another engine's
+        )
 
 
 class EmailServiceConfiguration(BaseModel):

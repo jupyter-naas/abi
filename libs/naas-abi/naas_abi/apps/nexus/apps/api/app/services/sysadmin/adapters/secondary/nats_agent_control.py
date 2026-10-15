@@ -1,6 +1,7 @@
 """Cancelling a remote agent run over NATS, on the instance that owns it.
 
-The request goes to ``agent_subject(project, owner, agent, "cancel")`` with the
+The request goes to ``agent_subject(project, sa, owner, agent, "cancel")``, the
+owner's service account read from discovery, with the
 API's service token; the agent host lets a platform administrator (discovery's
 admin identities) cancel any caller's run. Cancelling is cooperative: the run
 stops at its next step and records CANCELLED.
@@ -26,12 +27,30 @@ class NatsAgentControl:
         self.project = project
         self._timeout = timeout
 
+    async def _service_account(self, run: AgentRun) -> str:
+        """The owner instance's service account: its subjects carry it."""
+        from naas_abi_sdk.discovery import DiscoveryClient
+
+        discovery = DiscoveryClient(self._transport(), self.project)
+        after = ""
+        while True:
+            instances, after = await asyncio.wait_for(
+                discovery.list_modules(after_instance_id=after), self._timeout
+            )
+            for instance in instances:
+                if instance.instance_id == run.owner:
+                    return instance.service_account
+            if not after:
+                return ""
+
     async def cancel(self, run: AgentRun) -> None:
         from naas_abi_proto.agent.v1 import agent_pb2 as pb
         from naas_abi_sdk.agent import agent_subject
         from nats.errors import NoRespondersError
 
-        subject = agent_subject(self.project, run.owner, run.agent, "cancel")
+        subject = agent_subject(
+            self.project, await self._service_account(run), run.owner, run.agent, "cancel"
+        )
         request = pb.CancelRequest(invocation_id=run.invocation_id, output_format=2)
         try:
             await asyncio.wait_for(

@@ -8,7 +8,7 @@ against a minimal fake ``Request`` that records whatever gets passed to
 import asyncio
 import threading
 
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.proto.secret.v1 import secret_pb2
 from naas_abi_core.services.secret.adaptors.primary.secret__primary_adapter__NATS import (
     AUTH_HEADER,
@@ -19,7 +19,7 @@ from naas_abi_core.services.secret.SecretPorts import (
     SecretAuthenticationError,
 )
 
-SECRET = "test-shared-secret"
+SECRET = TEST_TOKENS.verifier
 
 
 class _FakeRequest:
@@ -63,7 +63,7 @@ class _StubAdapter(ISecretAdapter):
 
 
 def _valid_token() -> str:
-    return issue_service_token("api", SECRET)
+    return TEST_TOKENS.token("api")
 
 
 def _get_request(key: str = "k") -> bytes:
@@ -88,7 +88,7 @@ def test_missing_token_returns_unauthenticated():
 
 def test_wrong_secret_returns_unauthenticated():
     adapter = SecretPrimaryAdapterNATS(_StubAdapter(), SECRET)
-    token = issue_service_token("api", "a-different-secret")
+    token = OTHER_TOKENS.token("api")
     request = _FakeRequest(_get_request(), headers={AUTH_HEADER: token})
 
     asyncio.run(adapter._handle_get(request))
@@ -184,7 +184,10 @@ def test_list_round_trips_entries_including_none_values():
 
     response = secret_pb2.ListResponse()
     response.ParseFromString(request.responses[0])
-    entries = {e.key: (e.value if e.HasField("value") else None) for e in response.found.entries}
+    entries = {
+        e.key: (e.value if e.HasField("value") else None)
+        for e in response.found.entries
+    }
     assert entries == {"A": "1", "B": None}
 
 
@@ -197,9 +200,7 @@ def test_secret_authentication_error_maps_to_call_error():
     stub = _StubAdapter()
     stub.raise_auth_error = True
     adapter = SecretPrimaryAdapterNATS(stub, SECRET)
-    request = _FakeRequest(
-        _get_request(), headers={AUTH_HEADER: _valid_token()}
-    )
+    request = _FakeRequest(_get_request(), headers={AUTH_HEADER: _valid_token()})
 
     asyncio.run(adapter._handle_get(request))
 

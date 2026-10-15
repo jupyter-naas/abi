@@ -20,7 +20,7 @@ CONFIG = (
     "global_config: {ai_mode: cloud, skip_ontology_loading: true}\n"
     "modules: []\n"
     "services: {secret: {secret_adapters: []}}\n"
-    "nats: {jwt_secret: test-secret}\n"
+    "nats: {service_key: abi_sk_aaaaaaaaaaaaaaaa_dGVzdC1vbmx5LXNlcnZpY2Uta2V5}\n"
 )
 
 
@@ -103,8 +103,8 @@ def new_engine(**engine):
     settings = ", ".join(f"{key}: {value}" for key, value in engine.items())
     return Engine(
         CONFIG.replace(
-            "{jwt_secret: test-secret}",
-            f"{{jwt_secret: test-secret, engine: {{{settings}}}}}",
+            "nats: {service_key: ",
+            f"nats: {{engine: {{{settings}}}, service_key: ",
         )
     )
 

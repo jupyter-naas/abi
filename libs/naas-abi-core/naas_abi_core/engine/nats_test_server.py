@@ -53,9 +53,15 @@ def pytest_runtest_makereport(
 
 @contextmanager
 def native_nats_server(
-    workdir: Path, *, max_payload: int | None = None, jetstream: bool = False
+    workdir: Path,
+    *,
+    max_payload: int | None = None,
+    jetstream: bool = False,
+    config: str = "",
 ) -> Iterator[str]:
-    """Run ``nats-server`` on a free local port; yield its URL."""
+    """Run ``nats-server`` on a free local port; yield its URL.
+
+    ``config``: more nats.conf (an ``authorization`` block, say)."""
     binary = nats_server_binary()
     if binary is None:
         raise RuntimeError("nats-server is not installed")
@@ -63,10 +69,11 @@ def native_nats_server(
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     command = [binary, "-a", "127.0.0.1", "-p", str(port)]
-    if max_payload is not None:
-        config = workdir / "nats.conf"
-        config.write_text(f"max_payload: {max_payload}\n")
-        command += ["-c", str(config)]
+    if max_payload is not None or config:
+        path = workdir / "nats.conf"
+        limit = f"max_payload: {max_payload}\n" if max_payload is not None else ""
+        path.write_text(limit + config)
+        command += ["-c", str(path)]
     if jetstream:
         command += ["-js", "-sd", str(workdir / "jetstream")]
     with (workdir / "nats.log").open("w") as log:

@@ -3,6 +3,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
     deep_merge,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_SERVICE_KEY
 
 BASE = (
     "api: {}\n"
@@ -47,7 +48,7 @@ def test_an_adapter_block_is_replaced_whole_not_merged():
         "bus": {
             "bus_adapter": {
                 "adapter": "nats_jetstream",
-                "config": {"nats_url": "nats://h:1"},
+                "config": {"nats_url": "nats://h:1", "service_key": TEST_SERVICE_KEY},
             }
         }
     }
@@ -66,7 +67,6 @@ def test_an_overlay_adds_nats_mode_without_touching_the_project_config(
     overlay.write_text(
         "nats:\n"
         "  nats_url: nats://127.0.0.1:13042\n"
-        "  jwt_secret: dev-secret-0123456789abcdef0123456789abcdef\n"
         "  discovery: {project: dev}\n"
         "services:\n"
         "  bus: {bus_adapter: {adapter: nats_jetstream, config: {nats_url: 'nats://127.0.0.1:13042'}}}\n"

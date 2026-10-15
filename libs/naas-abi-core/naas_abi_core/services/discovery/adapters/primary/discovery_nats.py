@@ -6,7 +6,7 @@ from typing import Any
 from google.protobuf.message import DecodeError
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import use_call_context
-from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
+from naas_abi_core.engine.nats_auth import InvalidServiceTokenError, TokenVerifier
 from naas_abi_core.engine.nats_dispatch import max_concurrent_requests
 from naas_abi_core.engine.nats_identity import caller_context, for_request, refusal
 from naas_abi_core.engine.nats_sessions import stop_delivery
@@ -43,11 +43,11 @@ class DiscoveryNATS:
     def __init__(
         self,
         service: DiscoveryService,
-        secret: str,
+        verifier: TokenVerifier,
         project: str,
         max_concurrency: int | None = None,
     ):
-        self.service, self.secret, self.project = service, secret, project
+        self.service, self.verifier, self.project = service, verifier, project
         self.subscriptions: list[Subscription] = []
         self.max_payload = 512 * 1024
         # Calls side by side, as the kernel services (nats.max_concurrent_requests).
@@ -63,7 +63,9 @@ class DiscoveryNATS:
                     await nc.subscribe(
                         f"abi.discovery.{self.project}.v1.{operation}",
                         queue=f"abi.discovery.{self.project}.owners",
-                        cb=self.calls.callback(partial(self._handle, operation)),
+                        cb=self.calls.callback(
+                            partial(self._handle, operation), requests=True
+                        ),
                     )
                 )
             await nc.flush()
@@ -84,7 +86,7 @@ class DiscoveryNATS:
         request_type, response_type, mutation = OPERATIONS[operation]
         response = response_type()
         try:
-            context = caller_context(msg.headers, self.secret)
+            context = caller_context(msg.headers, self.verifier)
             owner = context.principal.id
             # An overflow upload is above the broker limit, so above this cap too.
             if len(msg.data) > self.max_payload or overflow.REQUEST_HEADER in (
@@ -100,7 +102,7 @@ class DiscoveryNATS:
                 caller_of(
                     request.caller_token,
                     request.caller_on_behalf_of,
-                    self.secret,
+                    self.verifier,
                     at=getattr(request, "stored_at", 0.0),
                 )
                 if operation.startswith("authorize_")

@@ -12,7 +12,6 @@ import uuid
 from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
 from threading import Event as ThreadingEvent
 from threading import RLock, Thread
 from typing import Any, Self, TypeVar, cast
@@ -26,9 +25,9 @@ from naas_abi_core.engine.call_context import (
     on_behalf_of_header,
 )
 from naas_abi_core.engine.nats_auth import (
-    DEFAULT_TTL,
     InvalidServiceTokenError,
-    issue_service_token,
+    TokenSource,
+    TokenVerifier,
 )
 from naas_abi_core.engine.nats_identity import (
     ON_BEHALF_OF_IDENTITIES,
@@ -55,7 +54,6 @@ from nats.aio.client import Client as NATSClient
 from nats.errors import MaxPayloadError, NoRespondersError
 from nats.micro.request import ERROR_CODE_HEADER, ERROR_HEADER, Request
 
-_TOKEN_RENEWAL_MARGIN = timedelta(minutes=5)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
 
 
@@ -118,7 +116,7 @@ async def request_payload(request: Request) -> bytes:
 
 
 async def authenticate_request(
-    request: Request, secret: str, response_cls: Callable[..., Message]
+    request: Request, verifier: TokenVerifier, response_cls: Callable[..., Message]
 ) -> CallContext | None:
     """The verified caller of a ``nats.micro`` request (``nats_identity``).
 
@@ -126,7 +124,7 @@ async def authenticate_request(
     ``None`` comes back: the primary has nothing left to do.
     """
     try:
-        return caller_context(request.headers, secret)
+        return caller_context(request.headers, verifier)
     except InvalidServiceTokenError as exc:
         message = refusal(exc, "missing or invalid auth token")
     response = response_cls()
@@ -161,6 +159,8 @@ async def respond_protobuf(
 
     Error replies also carry their code in the ``Abi-Error-Code`` header (for the
     traffic view, which never reads payloads) and fail the current trace span.
+    (``nats_tracing.traced_handler`` drops a request whose reply subject is
+    not an inbox before it runs.)
     """
     payload = response.SerializeToString()
     code = _error_code(response)
@@ -285,23 +285,22 @@ class NatsRPCClient:
     def __init__(
         self,
         nats_url: str,
-        jwt_secret: str,
-        service_identity: str,
+        credentials: TokenSource,
         timeout_seconds: float = 10.0,
         *,
         auth_header: str = "Nats-Auth-Token",
     ) -> None:
+        """``credentials``: the engine's own tokens, or a service key's
+        (``nats_credentials``). Never a signing secret."""
         self._auth_header = auth_header
         self._nats_url = nats_url
-        self._jwt_secret = jwt_secret
-        self._service_identity = service_identity
+        self._credentials = credentials
+        self._service_identity = credentials.identity
         self._timeout_seconds = timeout_seconds
 
         self._loop: asyncio.AbstractEventLoop | None = None
         self._loop_thread: Thread | None = None
         self._nc: NATSClient | None = None
-        self._token: str | None = None
-        self._token_expires_at: datetime | None = None
         # Protect loop lifecycle and token bookkeeping, never network waits.
         # Connection initialization is serialized separately on the owning loop.
         self._call_lock = RLock()
@@ -417,19 +416,11 @@ class NatsRPCClient:
                 )
 
     # ------------------------------------------------------------------
-    # Auth: issue once, reissue only when close to expiry.
+    # Auth: the credentials renew their token at half its life.
     # ------------------------------------------------------------------
 
     def _current_token(self) -> str:
-        now = datetime.now(UTC)
-        if (
-            self._token is None
-            or self._token_expires_at is None
-            or now >= self._token_expires_at - _TOKEN_RENEWAL_MARGIN
-        ):
-            self._token = issue_service_token(self._service_identity, self._jwt_secret)
-            self._token_expires_at = now + DEFAULT_TTL
-        return self._token
+        return self._credentials.token()
 
     # ------------------------------------------------------------------
     # RPC plumbing.
@@ -477,8 +468,7 @@ class NatsRPCClient:
         the default, each being small. ``on_behalf_of``: the user header,
         captured once for a whole stream; by default the current call's."""
         payload = request.SerializeToString()
-        with self._call_lock:
-            token = self._current_token()
+        token = self._current_token()
         if on_behalf_of is None:
             on_behalf_of = self._on_behalf_of()
         call_headers = {self._auth_header: token, **on_behalf_of}

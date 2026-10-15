@@ -11,9 +11,10 @@ from naas_abi_core.engine.engine_loaders.EngineJobLoader import (
     EngineJobLoader,
     as_async_handler,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.module.jobs import JobDescriptor, JobsMixin, job
 
-SECRET = "engine-job-loader-test-secret-32-bytes"
+SECRET = TEST_TOKENS.verifier
 
 
 class _Jobs(JobsMixin):
@@ -49,7 +50,6 @@ class _Host:
 
 def _config(**jobs):
     return NATSConfiguration(
-        jwt_secret=SECRET,
         discovery=DiscoveryConfiguration(project="zen"),
         jobs=NATSJobsConfiguration(**jobs),
     )
@@ -62,6 +62,7 @@ def _loader(config, hosts):
 
     return EngineJobLoader(
         config,
+        credentials=TEST_TOKENS.source("engine"),
         documents_factory=lambda transport, module_id: f"docs:{module_id}",
         host_factory=host_factory,
     )
@@ -171,7 +172,7 @@ def test_disabled_or_non_nats_engines_host_nothing():
 
 def test_project_defaults_without_discovery():
     hosts: list[_Host] = []
-    loader = _loader(NATSConfiguration(jwt_secret=SECRET), hosts)
+    loader = _loader(NATSConfiguration(), hosts)
 
     loader.start({"acme.jobs": _Jobs()}, document_available=True)
     loader.stop()
@@ -221,6 +222,7 @@ def test_a_module_triggers_its_own_jobs_while_its_host_runs():
     hosts: list = []
     loader = EngineJobLoader(
         _config(),
+        credentials=TEST_TOKENS.source("engine"),
         documents_factory=lambda transport, module_id: None,
         host_factory=lambda *a, **k: (
             hosts.append(_TriggeringHost(*a, **k)) or hosts[-1]

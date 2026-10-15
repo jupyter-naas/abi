@@ -42,7 +42,7 @@ from naas_abi_core.engine.nats_sessions import (
     until,
 )
 from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
-from naas_abi_sdk.messages import reply
+from naas_abi_sdk.messages import reply, reply_allowed
 from naas_abi_sdk.telemetry import ServedTransfer, serve_transfer
 
 OPERATIONS = {
@@ -176,7 +176,7 @@ class TransferHost(SessionHost):
     def __init__(
         self,
         prefix,
-        secret,
+        verifier,
         handler,
         *,
         operations,
@@ -211,7 +211,7 @@ class TransferHost(SessionHost):
         self.max_buffered_upload_bytes = max_buffered_upload_bytes
         self.buffered_upload_bytes = 0
         self.retiring: set[asyncio.Task] = set()
-        self.prefix, self.secret, self.handler = prefix, secret, handler
+        self.prefix, self.verifier, self.handler = prefix, verifier, handler
         self.owner = session_owner(owner)
         self.operations, self.chunk_bytes = set(operations), chunk_bytes
         self.idle_seconds, self.max_sessions = idle_seconds, max_sessions
@@ -329,6 +329,10 @@ class TransferHost(SessionHost):
                 logger.warning("Transfer cleanup deferred until backend returns")
 
     async def _dispatch(self, operation, msg):
+        if not reply_allowed(msg.reply):
+            # Dropped before anything is done: the reply subject is the sender's.
+            logger.warning(f"Dropped a transfer {operation} replying to {msg.reply!r}")
+            return
         if operation != "open":
             try:
                 transfer_id = OPERATIONS[operation][0].FromString(msg.data).id
@@ -375,7 +379,7 @@ class TransferHost(SessionHost):
         response = OPERATIONS[operation][1]()
         caller = request = None
         try:
-            context = caller_context(msg.headers, self.secret)
+            context = caller_context(msg.headers, self.verifier)
             caller = context.principal.id
             if len(msg.data) > self.packet_bytes:
                 raise TransferError(

@@ -196,6 +196,50 @@ class Explanation(_message.Message):
     statement: DecidingStatement
     def __init__(self, allowed: bool = ..., reason: _Optional[str] = ..., action: _Optional[str] = ..., resource: _Optional[str] = ..., statement: _Optional[_Union[DecidingStatement, _Mapping]] = ...) -> None: ...
 
+class Key(_message.Message):
+    __slots__ = ("key_id", "principal_id", "kind", "description", "created_at", "expires_at", "last_used_at", "revoked_at")
+    KEY_ID_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    LAST_USED_AT_FIELD_NUMBER: _ClassVar[int]
+    REVOKED_AT_FIELD_NUMBER: _ClassVar[int]
+    key_id: str
+    principal_id: str
+    kind: str
+    description: str
+    created_at: _timestamp_pb2.Timestamp
+    expires_at: _timestamp_pb2.Timestamp
+    last_used_at: _timestamp_pb2.Timestamp
+    revoked_at: _timestamp_pb2.Timestamp
+    def __init__(self, key_id: _Optional[str] = ..., principal_id: _Optional[str] = ..., kind: _Optional[str] = ..., description: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_used_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., revoked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+
+class Manifest(_message.Message):
+    __slots__ = ("principal_id", "sha256", "module_id", "project", "document_json", "status", "submitted_at", "decided_at", "decided_by", "reason")
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    SHA256_FIELD_NUMBER: _ClassVar[int]
+    MODULE_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_FIELD_NUMBER: _ClassVar[int]
+    DOCUMENT_JSON_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    SUBMITTED_AT_FIELD_NUMBER: _ClassVar[int]
+    DECIDED_AT_FIELD_NUMBER: _ClassVar[int]
+    DECIDED_BY_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    principal_id: str
+    sha256: str
+    module_id: str
+    project: str
+    document_json: str
+    status: str
+    submitted_at: _timestamp_pb2.Timestamp
+    decided_at: _timestamp_pb2.Timestamp
+    decided_by: str
+    reason: str
+    def __init__(self, principal_id: _Optional[str] = ..., sha256: _Optional[str] = ..., module_id: _Optional[str] = ..., project: _Optional[str] = ..., document_json: _Optional[str] = ..., status: _Optional[str] = ..., submitted_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., decided_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., decided_by: _Optional[str] = ..., reason: _Optional[str] = ...) -> None: ...
+
 class ChangeEvent(_message.Message):
     __slots__ = ("revision",)
     REVISION_FIELD_NUMBER: _ClassVar[int]
@@ -819,3 +863,211 @@ class RegisterCatalogResponse(_message.Message):
     error: _common_pb2.CallError
     registered: bool
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., registered: bool = ...) -> None: ...
+
+class TokenRequest(_message.Message):
+    __slots__ = ("context", "key")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    key: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., key: _Optional[str] = ...) -> None: ...
+
+class TokenResponse(_message.Message):
+    __slots__ = ("error", "access_token", "expires_in", "principal_id", "name")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    ACCESS_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_IN_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    access_token: str
+    expires_in: int
+    principal_id: str
+    name: str
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., access_token: _Optional[str] = ..., expires_in: _Optional[int] = ..., principal_id: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
+
+class JwksRequest(_message.Message):
+    __slots__ = ("context",)
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ...) -> None: ...
+
+class JwksResponse(_message.Message):
+    __slots__ = ("error", "jwks_json")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    JWKS_JSON_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    jwks_json: str
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., jwks_json: _Optional[str] = ...) -> None: ...
+
+class FindServiceAccountRequest(_message.Message):
+    __slots__ = ("context", "name")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    name: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ...) -> None: ...
+
+class FindServiceAccountResponse(_message.Message):
+    __slots__ = ("error", "principal")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    principal: Principal
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., principal: _Optional[_Union[Principal, _Mapping]] = ...) -> None: ...
+
+class CreateKeyRequest(_message.Message):
+    __slots__ = ("context", "principal_id", "description", "expires_at")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    principal_id: str
+    description: str
+    expires_at: _timestamp_pb2.Timestamp
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., principal_id: _Optional[str] = ..., description: _Optional[str] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+
+class CreateKeyResponse(_message.Message):
+    __slots__ = ("error", "key", "value")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    key: Key
+    value: str
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., key: _Optional[_Union[Key, _Mapping]] = ..., value: _Optional[str] = ...) -> None: ...
+
+class ListKeysRequest(_message.Message):
+    __slots__ = ("context", "principal_id")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    principal_id: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., principal_id: _Optional[str] = ...) -> None: ...
+
+class ListKeysResponse(_message.Message):
+    __slots__ = ("error", "keys")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    KEYS_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    keys: _containers.RepeatedCompositeFieldContainer[Key]
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., keys: _Optional[_Iterable[_Union[Key, _Mapping]]] = ...) -> None: ...
+
+class RevokeKeyRequest(_message.Message):
+    __slots__ = ("context", "principal_id", "key_id")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    KEY_ID_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    principal_id: str
+    key_id: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., principal_id: _Optional[str] = ..., key_id: _Optional[str] = ...) -> None: ...
+
+class RevokeKeyResponse(_message.Message):
+    __slots__ = ("error", "key")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    key: Key
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., key: _Optional[_Union[Key, _Mapping]] = ...) -> None: ...
+
+class SubmitManifestRequest(_message.Message):
+    __slots__ = ("context", "module_id", "project", "document_json")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    MODULE_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_FIELD_NUMBER: _ClassVar[int]
+    DOCUMENT_JSON_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    module_id: str
+    project: str
+    document_json: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., module_id: _Optional[str] = ..., project: _Optional[str] = ..., document_json: _Optional[str] = ...) -> None: ...
+
+class SubmitManifestResponse(_message.Message):
+    __slots__ = ("error", "manifest", "approved_now", "in_force")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    MANIFEST_FIELD_NUMBER: _ClassVar[int]
+    APPROVED_NOW_FIELD_NUMBER: _ClassVar[int]
+    IN_FORCE_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    manifest: Manifest
+    approved_now: bool
+    in_force: bool
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., manifest: _Optional[_Union[Manifest, _Mapping]] = ..., approved_now: bool = ..., in_force: bool = ...) -> None: ...
+
+class GetManifestRequest(_message.Message):
+    __slots__ = ("context", "principal_id", "sha256")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    SHA256_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    principal_id: str
+    sha256: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., principal_id: _Optional[str] = ..., sha256: _Optional[str] = ...) -> None: ...
+
+class GetManifestResponse(_message.Message):
+    __slots__ = ("error", "manifest")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    MANIFEST_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    manifest: Manifest
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., manifest: _Optional[_Union[Manifest, _Mapping]] = ...) -> None: ...
+
+class ListManifestsRequest(_message.Message):
+    __slots__ = ("context", "principal_id", "status")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    principal_id: str
+    status: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., principal_id: _Optional[str] = ..., status: _Optional[str] = ...) -> None: ...
+
+class ListManifestsResponse(_message.Message):
+    __slots__ = ("error", "manifests")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    MANIFESTS_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    manifests: _containers.RepeatedCompositeFieldContainer[Manifest]
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., manifests: _Optional[_Iterable[_Union[Manifest, _Mapping]]] = ...) -> None: ...
+
+class ApproveManifestRequest(_message.Message):
+    __slots__ = ("context", "principal_id", "sha256", "document_json")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    SHA256_FIELD_NUMBER: _ClassVar[int]
+    DOCUMENT_JSON_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    principal_id: str
+    sha256: str
+    document_json: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., principal_id: _Optional[str] = ..., sha256: _Optional[str] = ..., document_json: _Optional[str] = ...) -> None: ...
+
+class ApproveManifestResponse(_message.Message):
+    __slots__ = ("error", "manifest")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    MANIFEST_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    manifest: Manifest
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., manifest: _Optional[_Union[Manifest, _Mapping]] = ...) -> None: ...
+
+class RejectManifestRequest(_message.Message):
+    __slots__ = ("context", "principal_id", "sha256", "reason")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    SHA256_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    principal_id: str
+    sha256: str
+    reason: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., principal_id: _Optional[str] = ..., sha256: _Optional[str] = ..., reason: _Optional[str] = ...) -> None: ...
+
+class RejectManifestResponse(_message.Message):
+    __slots__ = ("error", "manifest")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    MANIFEST_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    manifest: Manifest
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., manifest: _Optional[_Union[Manifest, _Mapping]] = ...) -> None: ...

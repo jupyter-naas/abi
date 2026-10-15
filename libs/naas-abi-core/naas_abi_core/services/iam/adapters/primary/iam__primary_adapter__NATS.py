@@ -6,18 +6,27 @@ credentials (``nats_rpc.authenticate_request``), so ``authorize`` and
 with IAM's own ``iam:*`` catalog inside ``IAMService``, never here.
 
 After every change it publishes ``abi.iam.v1.changed`` (a ``ChangeEvent``
-with the store revision), so remote caches can drop their entries.
+with the store revision), so remote caches can drop their entries. It hears
+the same subject too: a change written to the store by another process (the
+``abi iam`` CLI) drops this process's cache at once.
+
+``abi.iam.v1.token`` and ``abi.iam.v1.jwks`` need no credentials: the key is
+one, and the JWKS is public (RFC §8.2, §9.1).
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
+from datetime import UTC
 from functools import partial
 from typing import Any
 
 import nats
 from google.protobuf.message import DecodeError
 from naas_abi_core import logger
+from naas_abi_core.engine.call_context import ANONYMOUS, CallContext
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
@@ -38,13 +47,14 @@ def _opt(message: Any, field: str) -> Any:
 
 
 class IAMPrimaryAdapterNATS(ServicePrimary):
-    def __init__(self, service: IAMService, jwt_secret: str) -> None:
+    def __init__(self, service: IAMService, verifier: TokenVerifier) -> None:
         self._iam = service
-        self._jwt_secret = jwt_secret
+        self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(codec.SERVICE_NAME)
         self._service: TracedService | None = None
         self._nc: nats.NATS | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._changes: Any = None
 
     async def start(self, nc: nats.NATS) -> None:
         if self._service is not None:
@@ -65,9 +75,13 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
         self._nc = nc
         self._loop = asyncio.get_running_loop()
         self._iam.add_change_listener(self._publish_change)
+        self._changes = await nc.subscribe(codec.CHANGED_SUBJECT, cb=self._heard_change)
 
     async def stop(self) -> None:
         self._iam.remove_change_listener(self._publish_change)
+        if self._changes is not None:
+            await self._changes.unsubscribe()
+            self._changes = None
         service, self._service = self._service, None
         try:
             if service is not None:
@@ -85,10 +99,25 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             nc.publish(codec.CHANGED_SUBJECT, payload), loop
         )
 
+    async def _heard_change(self, msg: Any) -> None:
+        """Another process changed the store: drop what this one cached."""
+        try:
+            pb.ChangeEvent.FromString(msg.data)
+        except DecodeError:
+            return
+        # The notice's revision is never trusted (a forged or huge one would
+        # stop invalidation): the store's is read, and compared with the last
+        # one this process saw.
+        await asyncio.to_thread(self._iam.refresh_if_changed)
+
     async def _handle(self, request, *, operation: str) -> None:
         name = codec.OPERATIONS[operation]
         response_type = getattr(pb, f"{name}Response")
-        caller = await authenticate_request(request, self._jwt_secret, response_type)
+        caller: CallContext | None
+        if operation in codec.PUBLIC_OPERATIONS:
+            caller = ANONYMOUS
+        else:
+            caller = await authenticate_request(request, self._verifier, response_type)
         if caller is None:
             return
         try:
@@ -354,3 +383,95 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
     ) -> pb.RegisterCatalogResponse:
         registered = self._iam.register_catalog(codec.catalog_from_pb(req.catalog))
         return pb.RegisterCatalogResponse(registered=registered)
+
+    # -- tokens (no credentials) ------------------------------------------------------
+
+    def _call_token(self, req: pb.TokenRequest) -> pb.TokenResponse:
+        import time
+
+        issued = self._iam.exchange_key(req.key)
+        return pb.TokenResponse(
+            access_token=issued.token,
+            expires_in=max(0, int(issued.expires_at - time.time())),
+            principal_id=issued.principal_id,
+            name=issued.name,
+        )
+
+    def _call_jwks(self, req: pb.JwksRequest) -> pb.JwksResponse:
+        return pb.JwksResponse(jwks_json=json.dumps(self._iam.jwks(), sort_keys=True))
+
+    # -- service accounts and keys ------------------------------------------------------
+
+    def _call_find_service_account(
+        self, req: pb.FindServiceAccountRequest
+    ) -> pb.FindServiceAccountResponse:
+        record = self._iam.find_service_account(req.name)
+        return pb.FindServiceAccountResponse(principal=codec.principal_to_pb(record))
+
+    def _call_create_key(self, req: pb.CreateKeyRequest) -> pb.CreateKeyResponse:
+        expires_at = (
+            req.expires_at.ToDatetime(tzinfo=UTC)
+            if req.HasField("expires_at")
+            else None
+        )
+        created = self._iam.create_key(
+            req.principal_id, description=req.description, expires_at=expires_at
+        )
+        return pb.CreateKeyResponse(
+            key=codec.key_to_pb(created.record), value=created.value
+        )
+
+    def _call_list_keys(self, req: pb.ListKeysRequest) -> pb.ListKeysResponse:
+        found = self._iam.list_keys(req.principal_id)
+        return pb.ListKeysResponse(keys=[codec.key_to_pb(k) for k in found])
+
+    def _call_revoke_key(self, req: pb.RevokeKeyRequest) -> pb.RevokeKeyResponse:
+        record = self._iam.revoke_key(req.principal_id, req.key_id)
+        return pb.RevokeKeyResponse(key=codec.key_to_pb(record))
+
+    # -- manifests -------------------------------------------------------------------------
+
+    def _call_submit_manifest(
+        self, req: pb.SubmitManifestRequest
+    ) -> pb.SubmitManifestResponse:
+        submitted = self._iam.submit_manifest(
+            req.module_id, req.project, json.loads(req.document_json or "{}")
+        )
+        return pb.SubmitManifestResponse(
+            manifest=codec.manifest_to_pb(submitted.manifest),
+            approved_now=submitted.approved_now,
+            in_force=submitted.in_force,
+        )
+
+    def _call_get_manifest(self, req: pb.GetManifestRequest) -> pb.GetManifestResponse:
+        record = self._iam.get_manifest(req.principal_id, _opt(req, "sha256"))
+        return pb.GetManifestResponse(manifest=codec.manifest_to_pb(record))
+
+    def _call_list_manifests(
+        self, req: pb.ListManifestsRequest
+    ) -> pb.ListManifestsResponse:
+        found = self._iam.list_manifests(
+            principal_id=_opt(req, "principal_id"), status=_opt(req, "status")
+        )
+        return pb.ListManifestsResponse(
+            manifests=[codec.manifest_to_pb(m) for m in found]
+        )
+
+    def _call_approve_manifest(
+        self, req: pb.ApproveManifestRequest
+    ) -> pb.ApproveManifestResponse:
+        document = _opt(req, "document_json")
+        record = self._iam.approve_manifest(
+            req.principal_id,
+            _opt(req, "sha256"),
+            document=json.loads(document) if document else None,
+        )
+        return pb.ApproveManifestResponse(manifest=codec.manifest_to_pb(record))
+
+    def _call_reject_manifest(
+        self, req: pb.RejectManifestRequest
+    ) -> pb.RejectManifestResponse:
+        record = self._iam.reject_manifest(
+            req.principal_id, _opt(req, "sha256"), reason=req.reason
+        )
+        return pb.RejectManifestResponse(manifest=codec.manifest_to_pb(record))

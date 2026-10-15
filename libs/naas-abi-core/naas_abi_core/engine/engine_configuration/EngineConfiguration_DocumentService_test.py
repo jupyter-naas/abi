@@ -14,6 +14,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_DocumentServi
 from naas_abi_core.engine.engine_loaders.EngineServiceLoader import EngineServiceLoader
 from naas_abi_core.engine.EngineProxy import EngineProxy
 from naas_abi_core.engine.IEngine import IEngine
+from naas_abi_core.engine.nats_test_tokens import TEST_SERVICE_KEY
 from naas_abi_core.module.Module import ModuleDependencies
 from naas_abi_core.services.document.DocumentPort import (
     CollectionSpec,
@@ -183,7 +184,7 @@ def test_nats_adapter_configuration_and_client_lifetime():
 
     adapter = DocumentAdapterConfiguration(
         adapter="nats_rpc",
-        config={"nats_url": "nats://unused:4222", "jwt_secret": "x" * 32},
+        config={"nats_url": "nats://unused:4222", "service_key": TEST_SERVICE_KEY},
     ).load()
     assert isinstance(adapter, DocumentSecondaryAdapterNATSClient)
     adapter.close()

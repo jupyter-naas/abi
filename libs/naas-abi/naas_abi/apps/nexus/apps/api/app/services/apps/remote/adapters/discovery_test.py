@@ -37,7 +37,7 @@ class FakeDiscovery:
 
 
 def _directory(discovery, calls, answers, now=None):
-    async def call_app(transport, project, instance_id, request):
+    async def call_app(transport, project, instance_id, request, *, service_account=""):
         calls.append((instance_id, request))
         answer = answers.pop(0) if answers else pb.HttpResponse(status=200, body=b"ok")
         if isinstance(answer, Exception):

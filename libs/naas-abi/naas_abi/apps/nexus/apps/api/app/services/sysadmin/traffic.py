@@ -54,8 +54,8 @@ def classify(subject: str) -> tuple[str, str, str]:
         return kind, service, parts[-1]
     if subject.startswith("abi.discovery.") and len(parts) == 5:
         return "discovery", parts[2], parts[4]
-    if subject.startswith("abi.agent.") and len(parts) == 7:
-        return "agent", f"{parts[2]}/{parts[3]}", parts[6]
+    if subject.startswith("abi.agent.") and len(parts) == 8:
+        return "agent", f"{parts[2]}/{parts[4]}", parts[7]
     if subject.startswith("abi.jobs.") and len(parts) >= 4:
         return "job", parts[2], parts[3]
     if subject.startswith("evt.") and len(parts) >= 2:

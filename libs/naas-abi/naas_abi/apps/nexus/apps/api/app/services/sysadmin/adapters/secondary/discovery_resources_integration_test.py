@@ -22,10 +22,11 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.contracts import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import SourceUnavailable
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.tests import fixtures
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 
 pytestmark = pytest.mark.integration
 
-SECRET = "sysadmin-discovery-test-secret-32-bytes"
+SECRET = TEST_TOKENS.verifier
 
 
 @pytest.fixture(scope="module")
@@ -67,7 +68,6 @@ def broker(tmp_path_factory):
 
 
 async def _register(nc, project, module_id, instance_id, version):
-    from naas_abi_core.engine.nats_auth import issue_service_token
     from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
     request = pb.RegisterRequest(
@@ -84,7 +84,7 @@ async def _register(nc, project, module_id, instance_id, version):
         f"abi.discovery.{project}.v1.register",
         request.SerializeToString(),
         timeout=5,
-        headers={"Nats-Auth-Token": issue_service_token(module_id, SECRET)},
+        headers={"Nats-Auth-Token": TEST_TOKENS.token(module_id)},
     )
     assert not pb.RegisterResponse.FromString(reply.data).error.code
 
@@ -108,13 +108,10 @@ class Registry:
         await _register(self.broker.nc, self.project, "zeta", "z-1", "1.0.0")
 
     def client(self):
-        from naas_abi_core.engine.nats_auth import issue_service_token
         from naas_abi_sdk.discovery import DiscoveryClient
         from naas_abi_sdk.transport import Transport
 
-        transport = Transport(
-            self.broker.url, lambda: issue_service_token(self.identity, SECRET), timeout=5
-        )
+        transport = Transport(self.broker.url, lambda: TEST_TOKENS.token(self.identity), timeout=5)
         self.transports.append(transport)
         return DiscoveryClient(transport, self.project)
 

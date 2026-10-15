@@ -32,8 +32,11 @@ MAX_PATTERNS = 100
 
 Effect = Literal["Allow", "Deny"]
 
-# Variables a stored policy may use in its resources (RFC §3.4).
-POLICY_VARIABLES = frozenset({"scope", "principal.id", "user.id"})
+# Variables a stored policy may use in its resources (RFC §3.4). The module
+# ones resolve for a module's service account, ``module/<project>/<id>``
+# (RFC §8.3); for any other principal they match nothing.
+MODULE_VARIABLES = frozenset({"module.id", "module.project"})
+POLICY_VARIABLES = frozenset({"scope", "principal.id", "user.id"}) | MODULE_VARIABLES
 # What a policy attached at a scope must start each resource pattern with.
 SCOPE_PREFIX = "${scope}:"
 
@@ -144,6 +147,34 @@ def within_scope(statement: Statement) -> Statement | None:
         effect=statement.effect,
         actions=statement.actions,
         resources=kept,
+        sid=statement.sid,
+    )
+
+
+def bind_variables(
+    statement: Statement, values: Mapping[str, str | None]
+) -> Statement | None:
+    """``statement`` with the variables of ``values`` replaced in its resources.
+
+    Other variables stay. A pattern naming one of them with a None value is
+    dropped (it would match nothing); None when no pattern is left.
+    """
+    kept: list[str] = []
+    for pattern in statement.resources:
+        names = set(variables(pattern)) & set(values)
+        if any(values[name] is None for name in names):
+            continue
+        for name in names:
+            pattern = pattern.replace("${" + name + "}", cast(str, values[name]))
+        kept.append(pattern)
+    if not kept:
+        return None
+    if tuple(kept) == statement.resources:
+        return statement
+    return Statement(
+        effect=statement.effect,
+        actions=statement.actions,
+        resources=tuple(kept),
         sid=statement.sid,
     )
 

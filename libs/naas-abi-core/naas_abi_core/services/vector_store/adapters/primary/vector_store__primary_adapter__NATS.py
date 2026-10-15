@@ -6,9 +6,8 @@ contract and ``naas_abi_core/proto/README.md`` for why it lives there). This
 is the server side; the matching client is
 ``VectorStoreSecondaryAdapterNATSClient``.
 
-Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): one shared
-secret, one claim -- which known first-party process holds the token. Every
-incoming request must carry a valid token in the ``Nats-Auth-Token`` header
+Auth (see ``naas_abi_core.engine.nats_auth``): every incoming request
+must carry an engine token, verified against the JWKS, in the ``Nats-Auth-Token`` header
 (``AUTH_HEADER``, imported from ``vector_store_nats_contract`` below -- that's
 a neutral module neither adapter owns, so this file and the client's don't
 depend on each other; see that module's docstring for why).
@@ -40,6 +39,7 @@ import nats.micro
 import numpy as np
 from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
@@ -110,7 +110,7 @@ class VectorStorePrimaryAdapterNATS(ServiceWithTransfers):
     def __init__(
         self,
         service: VectorStoreService | IVectorStorePort,
-        jwt_secret: str,
+        verifier: TokenVerifier,
     ) -> None:
         # A bare port (tests) is served through a VectorStoreService of its own.
         self._adapter = (
@@ -118,12 +118,12 @@ class VectorStorePrimaryAdapterNATS(ServiceWithTransfers):
             if isinstance(service, VectorStoreService)
             else VectorStoreService(service)
         )
-        self._jwt_secret = jwt_secret
+        self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
         self._transfer = TransferHost(
             TRANSFER_PREFIX,
-            jwt_secret,
+            verifier,
             self._transfer_frames,
             operations=("list_vectors",),
             chunk_bytes=1024 * 1024,
@@ -249,7 +249,7 @@ class VectorStorePrimaryAdapterNATS(ServiceWithTransfers):
         response_cls: Callable[..., _ResponseT],
         call: Callable[[_RequestT], _ResponseT],
     ) -> None:
-        caller = await authenticate_request(request, self._jwt_secret, response_cls)
+        caller = await authenticate_request(request, self._verifier, response_cls)
         if caller is None:
             return
 

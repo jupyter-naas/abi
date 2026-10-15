@@ -11,7 +11,7 @@ import asyncio
 
 import pytest
 import rdflib
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
 from naas_abi_core.services.triple_store.adapters.primary.triple_store__primary_adapter__NATS import (
     AUTH_HEADER,
@@ -25,7 +25,7 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
 from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import XSD
 
-SECRET = "test-shared-secret"
+SECRET = TEST_TOKENS.verifier
 
 
 class _FakeRequest:
@@ -112,7 +112,9 @@ class _StubPort(ITripleStorePort):
     def create_graph(self, graph_name: URIRef) -> None:
         key = str(graph_name)
         if key in self._known_graphs:
-            raise Exceptions.GraphAlreadyExistsError(f"Graph {graph_name} already exists")
+            raise Exceptions.GraphAlreadyExistsError(
+                f"Graph {graph_name} already exists"
+            )
         self._known_graphs.add(key)
         self._ds.graph(URIRef(key))
 
@@ -175,7 +177,7 @@ class _DomainOnlyStub:
 
 
 def _valid_token() -> str:
-    return issue_service_token("api", SECRET)
+    return TEST_TOKENS.token("api")
 
 
 def _insert_request(
@@ -230,7 +232,7 @@ def test_malformed_token_returns_unauthenticated():
 
 def test_token_signed_with_wrong_secret_returns_unauthenticated():
     adapter = TripleStorePrimaryAdapterNATS(_StubPort(), SECRET)
-    wrong_secret_token = issue_service_token("api", "a-different-secret")
+    wrong_secret_token = OTHER_TOKENS.token("api")
     request = _FakeRequest(
         data=_insert_request(), headers={AUTH_HEADER: wrong_secret_token}
     )
@@ -310,7 +312,9 @@ def test_create_clear_drop_list_graphs_roundtrip():
     graph_name = "http://test.example.org/managed"
 
     create_request = _FakeRequest(
-        data=triple_store_pb2.CreateGraphRequest(graph_name=graph_name).SerializeToString(),
+        data=triple_store_pb2.CreateGraphRequest(
+            graph_name=graph_name
+        ).SerializeToString(),
         headers={AUTH_HEADER: _valid_token()},
         subject="abi.svc.triple_store.v1.create_graph",
     )
@@ -335,7 +339,9 @@ def test_create_clear_drop_list_graphs_roundtrip():
     stub.insert(g, URIRef(graph_name))
 
     clear_request = _FakeRequest(
-        data=triple_store_pb2.ClearGraphRequest(graph_name=graph_name).SerializeToString(),
+        data=triple_store_pb2.ClearGraphRequest(
+            graph_name=graph_name
+        ).SerializeToString(),
         headers={AUTH_HEADER: _valid_token()},
         subject="abi.svc.triple_store.v1.clear_graph",
     )
@@ -346,7 +352,9 @@ def test_create_clear_drop_list_graphs_roundtrip():
     assert len(stub.get()) == 0
 
     drop_request = _FakeRequest(
-        data=triple_store_pb2.DropGraphRequest(graph_name=graph_name).SerializeToString(),
+        data=triple_store_pb2.DropGraphRequest(
+            graph_name=graph_name
+        ).SerializeToString(),
         headers={AUTH_HEADER: _valid_token()},
         subject="abi.svc.triple_store.v1.drop_graph",
     )
@@ -410,9 +418,7 @@ def test_handle_view_event_dispatches_on_a_raw_port():
     adapter = TripleStorePrimaryAdapterNATS(stub, SECRET)
     request = _FakeRequest(
         data=triple_store_pb2.HandleViewEventRequest(
-            view=triple_store_pb2.TriplePattern(
-                predicate="http://test.example.org/p"
-            ),
+            view=triple_store_pb2.TriplePattern(predicate="http://test.example.org/p"),
             event=triple_store_pb2.ONTOLOGY_EVENT_TYPE_INSERT,
             triple=triple_store_pb2.TriplePattern(
                 subject="http://test.example.org/s",
@@ -511,7 +517,9 @@ def test_query_ask_encodes_boolean():
     stub = _StubPort()
     adapter = TripleStorePrimaryAdapterNATS(stub, SECRET)
     request = _FakeRequest(
-        data=triple_store_pb2.QueryRequest(query="ASK { ?s ?p ?o }").SerializeToString(),
+        data=triple_store_pb2.QueryRequest(
+            query="ASK { ?s ?p ?o }"
+        ).SerializeToString(),
         headers={AUTH_HEADER: _valid_token()},
         subject="abi.svc.triple_store.v1.query",
     )

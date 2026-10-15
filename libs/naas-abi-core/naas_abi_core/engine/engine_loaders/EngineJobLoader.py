@@ -23,6 +23,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     NATSConfiguration,
 )
 from naas_abi_core.engine.engine_loaders.SyncJobRunner import SyncJobRunner
+from naas_abi_core.engine.nats_auth import TokenSource
 
 ENGINE_IDENTITY = "engine"
 LOOP_THREAD_NAME = "abi-engine-jobs-loop"
@@ -144,6 +145,7 @@ class EngineJobLoader:
         self,
         configuration: NATSConfiguration | None,
         *,
+        credentials: TokenSource | None = None,
         documents_factory: Callable[[Any, str], Any] = _default_documents,
         host_factory: Callable[..., Any] = _default_host,
         host_options: Mapping[str, Any] | None = None,
@@ -153,6 +155,8 @@ class EngineJobLoader:
         CancelJobRun); by default the one the modules are wired with."""
         self.iam = iam
         self.configuration = configuration
+        # The engine's own tokens (nats_credentials): the job host's kernel calls.
+        self.credentials = credentials
         self.documents_factory = documents_factory
         self.host_factory = host_factory
         self.host_options = dict(host_options or {})
@@ -210,14 +214,14 @@ class EngineJobLoader:
     def _start_host(self, module_id: str, module: Any) -> None:
         assert self._loop is not None and self.configuration is not None
         if self._transport is None:
-            from naas_abi_core.engine.nats_auth import issue_service_token
             from naas_abi_core.engine.nats_naming import connection_name
             from naas_abi_sdk.transport import Transport
 
-            secret = self.configuration.jwt_secret
+            if self.credentials is None:
+                raise RuntimeError("Engine jobs need the engine's credentials")
             self._transport = Transport(
                 self.configuration.nats_url,
-                lambda: issue_service_token(ENGINE_IDENTITY, secret),
+                self.credentials.token,
                 name=connection_name("abi-engine:jobs"),
                 forward_user=True,  # kernel calls, as the trusted engine identity
             )

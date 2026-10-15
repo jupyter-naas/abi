@@ -1,4 +1,3 @@
-
 from naas_abi_core.services.model_registry.ModelRegistryService import (
     ModelRegistryService,
 )

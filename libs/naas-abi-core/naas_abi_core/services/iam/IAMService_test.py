@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -13,6 +15,7 @@ from naas_abi_core.services.iam.catalog import ActionCatalog, ActionSpec, Resour
 from naas_abi_core.services.iam.IAMPorts import (
     IAMConflictError,
     IAMNotFoundError,
+    KeyRefusedError,
     PermissionDeniedError,
     RevisionConflictError,
 )
@@ -21,7 +24,10 @@ from naas_abi_core.services.iam.IAMService import (
     IAMService,
     attachment_resource,
 )
-from naas_abi_core.services.iam.policy import PolicyValidationError
+from naas_abi_core.services.iam.policy import (
+    PolicyValidationError,
+    parse_policy_document,
+)
 from naas_abi_core.services.iam.tests.iam_harness import (
     TRIPLE_STORE,
     document,
@@ -61,8 +67,8 @@ def test_bootstrap_is_idempotent_and_seeds_the_root_of_trust():
         roles.ENGINE,
         roles.API,
         roles.IDP,
-        roles.TRANSITIONAL_MODULE,
         roles.TRANSITIONAL_NEXUS_USER,
+        roles.MODULE_BOOTSTRAP,
     } <= managed
     assert [c.service for c in store.list_catalogs()] == ["iam"]
 
@@ -681,3 +687,440 @@ def test_the_ensure_user_race_authorizes_the_existing_principal(h):
     finally:
         store.find_user = original  # type: ignore[method-assign]
     assert store.get_principal(bob.id).email == "bob@example.com"
+
+
+# -- service accounts, keys and the exchange (RFC §8.1, §8.2) -------------------------
+
+
+def _module(h, name: str = "module/acme/people"):
+    return h.service_account(name)
+
+
+def test_a_key_is_shown_once_and_stored_hashed(h, iam):
+    account = _module(h)
+    created = h.admin("create_key", account.id, description="dev")
+    assert created.value.startswith(f"abi_sk_{created.record.key_id}_")
+    stored = iam.store.get_key(created.record.key_id)
+    assert created.value.split("_", 3)[3] not in repr(stored)
+    assert len(stored.secret_hash) == 64
+    assert h.admin("list_keys", account.id) == [stored]
+
+
+def test_exchange_gives_a_ten_minute_nats_token_for_the_account(h, iam):
+    account = _module(h)
+    value = h.admin("create_key", account.id).value
+    issued = iam.exchange_key(value)
+    claims = iam.verifier().verify(issued.token)
+    assert claims.subject == account.id
+    assert claims.name == "module/acme/people"
+    assert claims.kind == "service_account" and claims.audience == "abi:nats"
+    assert claims.lifetime == 600
+    assert iam.store.get_key(value.split("_")[2]).last_used_at is not None
+
+
+@pytest.mark.parametrize(
+    "mangle",
+    [
+        lambda v: v[:-1] + ("A" if v[-1] != "A" else "B"),  # wrong secret
+        lambda v: "abi_sk_aaaaaaaaaaaaaaaa_" + v.split("_", 3)[3],  # unknown id
+        lambda v: v.replace("abi_sk_", "abi_pk_"),  # another kind
+        lambda v: "not-a-key",
+    ],
+)
+def test_exchange_refuses_a_bad_key_with_one_message(h, iam, mangle):
+    value = h.admin("create_key", _module(h).id).value
+    with pytest.raises(KeyRefusedError, match="^invalid key$"):
+        iam.exchange_key(mangle(value))
+
+
+def test_revoked_expired_or_suspended_keys_stop_at_the_next_exchange(h, iam):
+    account = _module(h)
+    revoked = h.admin("create_key", account.id)
+    iam.exchange_key(revoked.value)
+    h.admin("revoke_key", account.id, revoked.record.key_id)
+    with pytest.raises(KeyRefusedError):
+        iam.exchange_key(revoked.value)
+
+    expiring = h.admin(
+        "create_key", account.id, expires_at=datetime.now(UTC) + timedelta(seconds=1)
+    )
+    time.sleep(1.1)
+    with pytest.raises(KeyRefusedError):
+        iam.exchange_key(expiring.value)
+
+    live = h.admin("create_key", account.id)
+    h.admin("suspend_principal", account.id)
+    with pytest.raises(KeyRefusedError):
+        iam.exchange_key(live.value)
+    h.admin("resume_principal", account.id)
+    assert iam.exchange_key(live.value).token
+
+
+def test_rotation_issues_a_new_key_and_revokes_the_old(h, iam):
+    account = _module(h)
+    old = h.admin("create_key", account.id, description="prod")
+    new = h.admin("rotate_key", account.id, old.record.key_id)
+    assert new.record.description == "prod"
+    assert iam.exchange_key(new.value)
+    with pytest.raises(KeyRefusedError):
+        iam.exchange_key(old.value)
+
+
+def test_at_most_five_active_keys(h):
+    account = _module(h)
+    created = [h.admin("create_key", account.id) for _ in range(5)]
+    with pytest.raises(IAMConflictError, match="5 active keys"):
+        h.admin("create_key", account.id)
+    h.admin("revoke_key", account.id, created[0].record.key_id)
+    assert h.admin("create_key", account.id)
+
+
+def test_ci_keys_expire_in_90_days_module_keys_never(h):
+    ci = h.admin("create_key", h.service_account("ci/nightly").id).record
+    assert ci.expires_at is not None
+    assert ci.expires_at - datetime.now(UTC) > timedelta(days=89)
+    assert h.admin("create_key", _module(h).id).record.expires_at is None
+
+
+def test_keys_need_iam_actions_and_belong_to_their_account(h):
+    account = _module(h)
+    other = _module(h, "module/acme/other")
+    key = h.admin("create_key", account.id)
+    with h.as_(other):
+        with pytest.raises(IAMNotFoundError):
+            h.iam.create_key(account.id)
+        with pytest.raises(IAMNotFoundError):
+            h.iam.revoke_key(account.id, key.record.key_id)
+        assert h.iam.list_keys(account.id) == []
+    with pytest.raises(IAMNotFoundError):
+        h.admin("revoke_key", other.id, key.record.key_id)
+
+
+def test_a_module_account_starts_with_its_bootstrap_only(h, iam):
+    account = _module(h)
+    attached = iam.store.list_attachments(principal_id=account.id)
+    assert [a.policy_id for a in attached] == [roles.MODULE_BOOTSTRAP]
+    assert iam.store.list_attachments(principal_id=h.service_account("ci/x").id) == []
+
+
+def test_the_engine_key_is_created_once_and_kept_in_the_secrets(iam):
+    value = iam.engine_service_key()
+    assert iam.secrets.get("iam/service-keys/engine") == value
+    assert iam.engine_service_key() == value
+    assert iam.verifier().verify(iam.exchange_key(value).token).name == "engine"
+
+
+def test_a_lost_engine_key_is_replaced_not_accumulated(iam):
+    first = iam.engine_service_key()
+    for _ in range(6):  # each boot of a process that never saw the stored key
+        iam.secrets.delete("iam/service-keys/engine")
+        latest = iam.engine_service_key()
+    engine = iam.store.find_service_account("engine")
+    now = datetime.now(UTC)
+    active = [k.key_id for k in iam.store.list_keys(engine.id) if k.usable(now)]
+    assert active == [latest.split("_")[2]]
+    with pytest.raises(KeyRefusedError):
+        iam.exchange_key(first)
+
+
+def test_in_process_tokens_for_the_engine_and_api(iam):
+    for name in ("engine", "api"):
+        claims = iam.verifier().verify(iam.issue_service_token(name).token)
+        assert claims.name == name and claims.subject.startswith("sa_")
+
+
+# -- manifests (RFC §8.3) ---------------------------------------------------------------
+
+MANIFEST = document(
+    statement(
+        "Allow",
+        ["triple_store:Query"],
+        ["abi:-:-:triple_store:graph/${module.id}-*"],
+        sid="OwnGraphs",
+    )
+)
+
+
+def _submit(h, account, manifest=MANIFEST, module_id="people", project="acme"):
+    with h.as_(account):
+        return h.iam.submit_manifest(module_id, project, manifest)
+
+
+def test_a_manifest_is_pending_until_approved(h, iam):
+    account = _module(h)
+    own = "abi:-:-:triple_store:graph/people-contacts"
+    submitted = _submit(h, account)
+    assert submitted.manifest.status == "pending" and not submitted.approved_now
+    assert not h.allowed(QUERY, own, account)
+    approved = h.admin("approve_manifest", account.id)
+    assert approved.status == "approved" and approved.decided_by
+    assert h.allowed(QUERY, own, account)
+    assert not h.allowed(QUERY, "abi:-:-:triple_store:graph/other-x", account)
+    policy = iam.store.get_policy("module.acme.people")
+    assert policy.managed
+    assert policy.document.statements[0].resources == (
+        "abi:-:-:triple_store:graph/people-*",
+    )
+    # Submitting the approved version again changes nothing.
+    again = _submit(h, account)
+    assert again.manifest.status == "approved" and not again.approved_now
+
+
+def test_approval_places_the_module_namespaces_on_the_platform(h, iam):
+    account = _module(h)
+    _submit(h, account)
+    h.admin("approve_manifest", account.id)
+    keys = {(p.service, p.id_key) for p in iam.store.list_placements()}
+    assert {
+        ("document", "people"),
+        ("document", "people/*"),
+        ("dataset", "people"),
+        ("dataset", "people/*"),
+    } <= keys
+
+
+def test_a_new_version_waits_while_the_approved_one_holds(h):
+    account = _module(h)
+    _submit(h, account)
+    h.admin("approve_manifest", account.id)
+    wider = document(statement("Allow", ["triple_store:*"], ["*"]))
+    pending = _submit(h, account, wider)
+    assert pending.manifest.status == "pending"
+    assert h.allowed(QUERY, "abi:-:-:triple_store:graph/people-a", account)
+    assert not h.allowed("triple_store:Insert", "abi:-:-:triple_store:graph/x", account)
+
+
+def test_an_admin_can_narrow_or_reject(h):
+    account = _module(h)
+    _submit(h, account, document(statement("Allow", ["triple_store:*"], ["*"])))
+    narrowed = document(
+        statement("Allow", ["triple_store:Query"], ["abi:-:-:triple_store:graph/a"])
+    )
+    h.admin("approve_manifest", account.id, document=narrowed)
+    assert h.allowed(QUERY, "abi:-:-:triple_store:graph/a", account)
+    assert not h.allowed("triple_store:Insert", "abi:-:-:triple_store:graph/a", account)
+
+    other = _module(h, "module/acme/other")
+    _submit(h, other, module_id="other")
+    rejected = h.admin("reject_manifest", other.id, reason="too wide")
+    assert rejected.status == "rejected" and rejected.reason == "too wide"
+    assert _submit(h, other, module_id="other").manifest.status == "rejected"
+    with pytest.raises(IAMConflictError):
+        h.admin(
+            "reject_manifest", account.id, h.admin("get_manifest", account.id).sha256
+        )
+
+
+def test_auto_approve_approves_at_submission(h, iam):
+    iam.auto_approve = True
+    account = _module(h)
+    submitted = _submit(h, account)
+    assert submitted.manifest.status == "approved" and submitted.approved_now
+    assert h.allowed(QUERY, "abi:-:-:triple_store:graph/people-a", account)
+    assert not _submit(h, account).approved_now
+
+
+def test_a_module_submits_only_as_its_own_account(h):
+    account = _module(h)
+    with pytest.raises(PermissionDeniedError, match="runs as the service account"):
+        _submit(h, account, module_id="other")
+    with pytest.raises(PermissionDeniedError):
+        _submit(h, account, project="beta")
+    with pytest.raises(PermissionDeniedError):
+        _submit(h, h.service_account("ci/nightly"))
+
+
+def test_without_a_version_only_a_pending_manifest_is_decided(h):
+    account = _module(h)
+    _submit(h, account)
+    rejected = h.admin("reject_manifest", account.id, reason="no")
+    # Nothing waits: a rejected version is decided on only by naming it.
+    with pytest.raises(IAMNotFoundError, match="waits for a decision"):
+        h.admin("approve_manifest", account.id)
+    with pytest.raises(IAMNotFoundError, match="waits for a decision"):
+        h.admin("reject_manifest", account.id)
+    approved = h.admin("approve_manifest", account.id, rejected.sha256)
+    assert approved.status == "approved"
+
+
+def test_a_superseded_version_submitted_again_waits_for_approval(h):
+    account = _module(h)
+    first = _submit(h, account).manifest
+    h.admin("approve_manifest", account.id)
+    wider = document(statement("Allow", ["triple_store:*"], ["*"]))
+    _submit(h, account, wider)
+    h.admin("approve_manifest", account.id)
+    assert h.admin("get_manifest", account.id, first.sha256).status == "superseded"
+    # Rolling back to the first version: pending again, the wider one in force.
+    again = _submit(h, account)
+    assert again.manifest.status == "pending" and again.in_force
+    assert [m.sha256 for m in h.admin("list_manifests", status="pending")] == [
+        first.sha256
+    ]
+    assert h.allowed("triple_store:Insert", "abi:-:-:triple_store:graph/x", account)
+    assert h.admin("approve_manifest", account.id).sha256 == first.sha256
+    assert not h.allowed("triple_store:Insert", "abi:-:-:triple_store:graph/x", account)
+
+
+def test_approving_needs_the_admin_action(h):
+    account = _module(h)
+    _submit(h, account)
+    with h.as_(account), pytest.raises(PermissionDeniedError):
+        h.iam.approve_manifest(account.id)
+    assert h.admin("list_manifests", status="pending")[0].principal_id == account.id
+
+
+def test_unapproved_modules_reach_nothing_but_their_bootstrap(h):
+    account = _module(h)
+    _submit(h, account)
+    assert not h.allowed(
+        "document:Find", "abi:-:-:document:collection/people/c", account
+    )
+    assert not h.allowed(QUERY, "abi:-:-:triple_store:graph/people-a", account)
+
+
+# -- broker permissions (RFC §8.4) -------------------------------------------------------
+
+
+def test_broker_permissions_follow_the_approved_policy(h, iam):
+    account = _module(h)
+    key = h.admin("create_key", account.id).record
+    sa = account.id.removeprefix("sa_")
+    before = iam.broker_permissions(account, key)
+    assert before.inbox_prefix == f"_INBOX.{key.key_id}"
+    assert f"_INBOX.{key.key_id}.>" in before.subscribe
+    assert "_INBOX.>" not in before.subscribe
+    assert f"abi.agent.acme.{sa}.>" in before.subscribe
+    assert f"abi.mod.acme.{sa}.>" in before.subscribe
+    assert "abi.iam.v1.token" in before.publish
+    assert "abi.iam.v1.changed" not in before.publish
+    assert "abi.discovery.acme.v1.>" in before.publish
+    assert not any(s.startswith("abi.svc.") for s in before.publish)
+    assert ">" not in before.publish and ">" not in before.subscribe
+
+    _submit(h, account, document(statement("Allow", ["document:*"], ["*"])))
+    h.admin("approve_manifest", account.id)
+    after = iam.broker_permissions(account, key)
+    assert "abi.svc.document.v1.>" in after.publish
+    assert "abi.svc.triple_store.v1.>" not in after.publish
+
+
+def test_broker_permissions_never_read_a_cached_policy(h, iam):
+    account = _module(h)
+    key = h.admin("create_key", account.id).record
+    _submit(h, account, document(statement("Allow", ["document:*"], ["*"])))
+    h.admin("approve_manifest", account.id)
+    assert h.allowed("document:Get", "abi:-:-:document:document/x/y", account)
+    # Narrowed in the store by another process (abi iam), this one not told.
+    policy = iam.store.get_policy("module.acme.people")
+    iam.store.put_managed_policy(
+        replace(
+            policy,
+            document=parse_policy_document(
+                document(statement("Allow", ["keyvalue:*"], ["abi:*:*:keyvalue:*"]))
+            ),
+        )
+    )
+    after = iam.broker_permissions(account, key)
+    assert "abi.svc.document.v1.>" not in after.publish
+    assert "abi.svc.keyvalue.v1.>" in after.publish
+
+
+def test_a_manifest_naming_a_platform_topic_is_refused(h):
+    account = _module(h)
+    wide = document(statement("Allow", ["bus:*"], ["abi:-:-:bus:topic/abi.iam.v1"]))
+    with pytest.raises(PolicyValidationError, match="reserved for the platform"):
+        _submit(h, account, wide)
+    _submit(h, account)
+    with pytest.raises(PolicyValidationError, match="reserved for the platform"):
+        h.admin("approve_manifest", account.id, document=wide)
+
+
+def _topic(topic: str):
+    return document(statement("Allow", ["bus:*"], [f"abi:-:-:bus:topic/{topic}"]))
+
+
+def test_a_topic_nested_in_another_modules_approved_topic_is_refused(h):
+    orders = _module(h)
+    _submit(h, orders, _topic("orders"))
+    h.admin("approve_manifest", orders.id)
+    eu = _module(h, "module/acme/eu")
+    _submit(h, eu, _topic("orders.eu"), module_id="eu")
+    with pytest.raises(PolicyValidationError, match="inside approved topic"):
+        h.admin("approve_manifest", eu.id)
+    # The same topic is shared, fine.
+    shared = _module(h, "module/acme/shared")
+    _submit(h, shared, _topic("orders"), module_id="shared")
+    assert h.admin("approve_manifest", shared.id).status == "approved"
+
+
+def test_a_forged_change_notice_never_stops_refreshes(iam):
+    import asyncio
+    from types import SimpleNamespace
+
+    from naas_abi_proto.iam.v1 import iam_pb2 as pb
+
+    from naas_abi_core.services.iam.adapters.primary.iam__primary_adapter__NATS import (
+        IAMPrimaryAdapterNATS,
+    )
+
+    other = IAMService(iam.store)  # another process writing the same store
+    primary = IAMPrimaryAdapterNATS(iam, iam.verifier())
+    calls = []
+    iam.invalidate = lambda: calls.append(iam.store.revision())  # type: ignore[method-assign]
+
+    def heard(revision: int) -> None:
+        msg = SimpleNamespace(
+            data=pb.ChangeEvent(revision=revision).SerializeToString()
+        )
+        asyncio.run(primary._heard_change(msg))
+
+    heard(2**62)  # forged: the store's revision is what counts
+    seen = len(calls)
+    heard(2**62)
+    assert len(calls) == seen  # nothing changed in the store
+    with as_service_account("engine"):
+        other.create_service_account("ci/after-the-forgery")
+    heard(1)  # a real change, whatever the notice says
+    assert len(calls) == seen + 1
+
+
+def test_a_topic_nested_in_a_policy_attached_directly_is_refused_too(h, iam):
+    from naas_abi_core.services.iam.IAMPorts import Attachment, Policy, new_id
+
+    ci = h.service_account("ci/feeder")
+    iam.store.put_managed_policy(
+        Policy(
+            id="custom.feeder",
+            name="feeder",
+            document=parse_policy_document(_topic("orders")),
+            managed=True,
+        )
+    )
+    iam.store.attach(Attachment(new_id("att"), "custom.feeder", ci.id))
+    eu = _module(h, "module/acme/eu")
+    _submit(h, eu, _topic("orders.eu"), module_id="eu")
+    with pytest.raises(PolicyValidationError, match="inside approved topic"):
+        h.admin("approve_manifest", eu.id)
+
+
+def test_a_denied_topic_is_no_topic_another_one_nests_in(h):
+    orders = _module(h)
+    _submit(h, orders, _topic("orders"))
+    h.admin("approve_manifest", orders.id)
+    denier = _module(h, "module/acme/denier")
+    only_deny = document(statement("Deny", ["bus:*"], ["abi:-:-:bus:topic/orders.eu"]))
+    _submit(h, denier, only_deny, module_id="denier")
+    assert h.admin("approve_manifest", denier.id).status == "approved"
+
+
+def test_a_trigger_seal_is_the_engines_over_exactly_its_fields(iam):
+    fields = ["abi.jobs.p.trigger.a.b", "manual", "0" * 64, []]
+    seal = iam.seal_trigger(fields)
+    assert iam.trigger_sealed(fields, seal)
+    assert not iam.trigger_sealed([*fields[:1], "event", *fields[2:]], seal)
+    assert not iam.trigger_sealed(["abi.jobs.p.trigger.a.c", *fields[1:]], seal)
+    assert not iam.trigger_sealed(fields, "v1.forged")
+    # The key is kept: another engine on the same secrets seals the same.
+    other = IAMService(iam.store, secrets=iam.secrets)
+    assert other.trigger_sealed(fields, seal)

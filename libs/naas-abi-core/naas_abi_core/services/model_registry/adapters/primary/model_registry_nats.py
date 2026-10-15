@@ -18,7 +18,7 @@ from naas_abi_core.engine.call_context import (
     service_account,
     use_call_context,
 )
-from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
+from naas_abi_core.engine.nats_auth import InvalidServiceTokenError, TokenVerifier
 from naas_abi_core.engine.nats_identity import caller_context, for_request, refusal
 from naas_abi_core.engine.nats_sessions import SessionHost, session_owner, until
 from naas_abi_core.engine.nats_transfer import (
@@ -118,7 +118,7 @@ class ModelRegistryNATS(SessionHost):
     def __init__(
         self,
         registry: IModelRegistry,
-        secret: str,
+        verifier: TokenVerifier,
         *,
         stream_ttl: float = 30,
         deadline: float | None = None,
@@ -133,7 +133,7 @@ class ModelRegistryNATS(SessionHost):
             if v is not None
         ):
             raise ValueError("Model deadlines must be finite and positive")
-        self.registry, self.secret = registry, secret
+        self.registry, self.verifier = registry, verifier
         self.owner = session_owner(owner)
         self.stream_ttl, self.deadline = stream_ttl, deadline
         self.subscriptions: list[Any] = []
@@ -155,7 +155,7 @@ class ModelRegistryNATS(SessionHost):
             raise ValueError("Model upload budgets must be finite")
         self.transfer = TransferHost(
             "abi.svc.model_registry.v1.transfer",
-            secret,
+            verifier,
             self._transfer_frames,
             operations=("chat", "stream", "embed"),
             total_seconds=deadline,
@@ -265,7 +265,7 @@ class ModelRegistryNATS(SessionHost):
         request_type, response_type = OPERATIONS[operation]
         response = response_type()
         try:
-            context = caller_context(msg.headers, self.secret)
+            context = caller_context(msg.headers, self.verifier)
             caller = context.principal.id
             # An overflow upload is above the broker limit, so above this cap too.
             if len(msg.data) > self.max_payload or overflow.REQUEST_HEADER in (

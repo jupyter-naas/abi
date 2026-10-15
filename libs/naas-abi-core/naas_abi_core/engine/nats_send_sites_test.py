@@ -30,6 +30,22 @@ SEND = re.compile(
 )
 
 REVIEWED = {
+    "naas-abi-core/naas_abi_core/engine/nats_auth_callout.py": (
+        1,
+        "auth callout answer: one signed JWT naming one policy's subjects",
+    ),
+    "naas-abi-core/naas_abi_core/engine/nats_credentials.py": (
+        1,
+        "key exchange and JWKS requests: a key, or nothing",
+    ),
+    "naas-abi-sdk/naas_abi_sdk/credentials.py": (
+        1,
+        "key exchange: the key, then one token",
+    ),
+    "naas-abi-sdk/naas_abi_sdk/app_streams.py": (
+        2,
+        "body pulls and their cancel: a sequence number or a flag",
+    ),
     "naas-abi-core/naas_abi_core/engine/nats_overflow.py": (
         1,
         "overflow fetch: transfer read/start/close requests, a few bytes each",
@@ -66,18 +82,38 @@ REVIEWED = {
         ),
     ),
     "naas-abi-sdk/naas_abi_sdk/bus.py": (
-        2,
-        "bus publish/enqueue: claim_check.prepare (JetStream header reserved)",
+        3,
+        (
+            "bus publish/enqueue (again once its stream exists): claim_check.prepare "
+            "(JetStream header reserved)"
+        ),
     ),
     "naas-abi-sdk/naas_abi_sdk/claim_check.py": (
-        1,
-        "object store put: chunks sized to half the broker limit",
+        2,
+        (
+            "stored chunks (again once the stream exists): at most the broker limit "
+            "less 1 KiB for subject and headers"
+        ),
     ),
     "naas-abi-sdk/naas_abi_sdk/job_host.py": (
         2,
         (
             "schedule messages carry b'{}'; the event bridge's trigger goes through "
-            "claim_check.prepare"
+            "claim_check.prepare with trigger_reserve"
+        ),
+    ),
+    "naas-abi-sdk/naas_abi_sdk/broker_control.py": (
+        1,
+        (
+            "a few names and numbers; a trigger's body is claim-checked first "
+            "(jobs.trigger_reserve: base64 and the engine's headers)"
+        ),
+    ),
+    "naas-abi-core/naas_abi_core/engine/nats_broker_control.py": (
+        3,
+        (
+            "a trigger: refused above the broker limit, headers counted, before it is "
+            "published (twice: again once the stream exists); a cancel carries a run id"
         ),
     ),
     "naas-abi-sdk/naas_abi_sdk/jobs.py": (

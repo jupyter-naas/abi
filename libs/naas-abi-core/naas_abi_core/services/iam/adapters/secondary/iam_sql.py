@@ -21,6 +21,9 @@ from naas_abi_core.services.iam.IAMPorts import (
     IAMConflictError,
     IAMNotFoundError,
     IAMStore,
+    KeyRecord,
+    ManifestRecord,
+    ManifestStatus,
     Page,
     Placement,
     Policy,
@@ -28,6 +31,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
     RevisionConflictError,
     ScopeRecord,
+    SigningKeyRecord,
 )
 from naas_abi_core.services.iam.policy import PolicyDocument
 from sqlalchemy import (
@@ -157,6 +161,52 @@ catalogs = Table(
     Column("document", Text, nullable=False),
 )
 
+keys = Table(
+    "iam_keys",
+    metadata,
+    Column("key_id", String(32), primary_key=True),
+    Column("principal_id", String(64), ForeignKey("iam_principals.id"), nullable=False),
+    Column("kind", String(16), nullable=False),
+    # sha256(secret), hex: the secret has 256 bits of entropy (RFC §8.1).
+    Column("secret_hash", String(64), nullable=False),
+    Column("description", Text, nullable=False, default=""),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True)),
+    Column("last_used_at", DateTime(timezone=True)),
+    Column("revoked_at", DateTime(timezone=True)),
+)
+
+manifests = Table(
+    "iam_manifests",
+    metadata,
+    Column(
+        "principal_id",
+        String(64),
+        ForeignKey("iam_principals.id"),
+        primary_key=True,
+    ),
+    Column("sha256", String(64), primary_key=True),
+    Column("module_id", Text, nullable=False),
+    Column("project", Text, nullable=False),
+    Column("document", Text, nullable=False),
+    Column("status", String(16), nullable=False),
+    Column("submitted_at", DateTime(timezone=True), nullable=False),
+    Column("decided_at", DateTime(timezone=True)),
+    Column("decided_by", String(64)),
+    Column("reason", Text, nullable=False, default=""),
+)
+
+# Metadata only: the private keys live in the secret service (RFC §9.1).
+signing_keys = Table(
+    "iam_signing_keys",
+    metadata,
+    Column("kid", String(64), primary_key=True),
+    Column("public_jwk", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("activates_at", DateTime(timezone=True), nullable=False),
+    Column("retires_at", DateTime(timezone=True)),
+)
+
 state = Table(
     "iam_state",
     metadata,
@@ -233,6 +283,45 @@ def _attachment(row: Row) -> Attachment:
         principal_id=row.principal_id,
         scope=row.scope or None,
         created_at=_aware(row.created_at),
+    )
+
+
+def _key(row: Row) -> KeyRecord:
+    return KeyRecord(
+        key_id=row.key_id,
+        principal_id=row.principal_id,
+        secret_hash=row.secret_hash,
+        kind=row.kind,
+        description=row.description,
+        created_at=_aware(row.created_at),
+        expires_at=_aware(row.expires_at),
+        last_used_at=_aware(row.last_used_at),
+        revoked_at=_aware(row.revoked_at),
+    )
+
+
+def _manifest(row: Row) -> ManifestRecord:
+    return ManifestRecord(
+        principal_id=row.principal_id,
+        sha256=row.sha256,
+        module_id=row.module_id,
+        project=row.project,
+        document=json.loads(row.document),
+        status=row.status,
+        submitted_at=_aware(row.submitted_at),
+        decided_at=_aware(row.decided_at),
+        decided_by=row.decided_by,
+        reason=row.reason,
+    )
+
+
+def _signing_key(row: Row) -> SigningKeyRecord:
+    return SigningKeyRecord(
+        kid=row.kid,
+        public_jwk=json.loads(row.public_jwk),
+        created_at=_aware(row.created_at),  # type: ignore[arg-type]
+        activates_at=_aware(row.activates_at),  # type: ignore[arg-type]
+        retires_at=_aware(row.retires_at),
     )
 
 
@@ -760,6 +849,166 @@ class IAMStoreSQL(IAMStore):
                     select(catalogs.c.document).order_by(catalogs.c.service)
                 )
             ]
+
+    # -- keys -------------------------------------------------------------------------
+
+    def create_key(self, record: KeyRecord) -> KeyRecord:
+        with self._change() as conn:
+            if (
+                conn.execute(
+                    select(principals.c.id).where(
+                        principals.c.id == record.principal_id
+                    )
+                ).first()
+                is None
+            ):
+                raise IAMNotFoundError(f"Principal {record.principal_id} not found")
+            if conn.execute(
+                select(keys.c.key_id).where(keys.c.key_id == record.key_id)
+            ).first():
+                raise IAMConflictError(f"Key {record.key_id} exists")
+            conn.execute(
+                insert(keys).values(
+                    key_id=record.key_id,
+                    principal_id=record.principal_id,
+                    kind=record.kind,
+                    secret_hash=record.secret_hash,
+                    description=record.description,
+                    created_at=record.created_at or _now(),
+                    expires_at=record.expires_at,
+                    last_used_at=None,
+                    revoked_at=record.revoked_at,
+                )
+            )
+        return self.get_key(record.key_id)
+
+    def get_key(self, key_id: str) -> KeyRecord:
+        with self._read() as conn:
+            row = conn.execute(select(keys).where(keys.c.key_id == key_id)).first()
+        if row is None:
+            raise IAMNotFoundError(f"Key {key_id} not found")
+        return _key(row)
+
+    def list_keys(self, principal_id: str | None = None) -> list[KeyRecord]:
+        query = select(keys).order_by(keys.c.created_at, keys.c.key_id)
+        if principal_id is not None:
+            query = query.where(keys.c.principal_id == principal_id)
+        with self._read() as conn:
+            return [_key(row) for row in conn.execute(query)]
+
+    def revoke_key(self, key_id: str, at: datetime) -> KeyRecord:
+        current = self.get_key(key_id)
+        if current.revoked_at is None:
+            with self._change() as conn:
+                conn.execute(
+                    update(keys)
+                    .where(keys.c.key_id == key_id, keys.c.revoked_at.is_(None))
+                    .values(revoked_at=at)
+                )
+        return self.get_key(key_id)
+
+    def touch_key(self, key_id: str, at: datetime) -> None:
+        with self._write() as conn:
+            conn.execute(
+                update(keys).where(keys.c.key_id == key_id).values(last_used_at=at)
+            )
+
+    # -- manifests --------------------------------------------------------------------
+
+    def put_manifest(self, record: ManifestRecord) -> ManifestRecord:
+        key = (manifests.c.principal_id == record.principal_id) & (
+            manifests.c.sha256 == record.sha256
+        )
+        with self._change() as conn:
+            if (
+                conn.execute(
+                    select(principals.c.id).where(
+                        principals.c.id == record.principal_id
+                    )
+                ).first()
+                is None
+            ):
+                raise IAMNotFoundError(f"Principal {record.principal_id} not found")
+            conn.execute(delete(manifests).where(key))
+            conn.execute(
+                insert(manifests).values(
+                    principal_id=record.principal_id,
+                    sha256=record.sha256,
+                    module_id=record.module_id,
+                    project=record.project,
+                    document=json.dumps(record.document, sort_keys=True),
+                    status=record.status,
+                    submitted_at=record.submitted_at or _now(),
+                    decided_at=record.decided_at,
+                    decided_by=record.decided_by,
+                    reason=record.reason,
+                )
+            )
+        return self.get_manifest(record.principal_id, record.sha256)
+
+    def get_manifest(self, principal_id: str, sha256: str) -> ManifestRecord:
+        with self._read() as conn:
+            row = conn.execute(
+                select(manifests).where(
+                    manifests.c.principal_id == principal_id,
+                    manifests.c.sha256 == sha256,
+                )
+            ).first()
+        if row is None:
+            raise IAMNotFoundError(f"Manifest {sha256} of {principal_id} not found")
+        return _manifest(row)
+
+    def list_manifests(
+        self, principal_id: str | None = None, status: ManifestStatus | None = None
+    ) -> list[ManifestRecord]:
+        query = select(manifests).order_by(
+            manifests.c.submitted_at, manifests.c.principal_id, manifests.c.sha256
+        )
+        if principal_id is not None:
+            query = query.where(manifests.c.principal_id == principal_id)
+        if status is not None:
+            query = query.where(manifests.c.status == status)
+        with self._read() as conn:
+            return [_manifest(row) for row in conn.execute(query)]
+
+    # -- signing keys -------------------------------------------------------------------
+
+    def add_signing_key(self, record: SigningKeyRecord) -> None:
+        with self._change() as conn:
+            if conn.execute(
+                select(signing_keys.c.kid).where(signing_keys.c.kid == record.kid)
+            ).first():
+                raise IAMConflictError(f"Signing key {record.kid} exists")
+            conn.execute(
+                insert(signing_keys).values(
+                    kid=record.kid,
+                    public_jwk=json.dumps(record.public_jwk, sort_keys=True),
+                    created_at=record.created_at,
+                    activates_at=record.activates_at,
+                    retires_at=record.retires_at,
+                )
+            )
+
+    def list_signing_keys(self) -> list[SigningKeyRecord]:
+        with self._read() as conn:
+            return [
+                _signing_key(row)
+                for row in conn.execute(
+                    select(signing_keys).order_by(
+                        signing_keys.c.created_at, signing_keys.c.kid
+                    )
+                )
+            ]
+
+    def retire_signing_key(self, kid: str, retires_at: datetime) -> None:
+        with self._write() as conn:
+            changed = conn.execute(
+                update(signing_keys)
+                .where(signing_keys.c.kid == kid, signing_keys.c.retires_at.is_(None))
+                .values(retires_at=retires_at)
+            ).rowcount
+            if changed:
+                conn.execute(update(state).values(revision=state.c.revision + 1))
 
     # -- store ----------------------------------------------------------------------
 

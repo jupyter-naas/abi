@@ -7,7 +7,9 @@ accounts), AWS-style policies, attachments, built-in roles, placements, scopes,
 action catalogs, and the evaluator that decides. It is the authorization half of
 the identity and authorization RFC
 ([`docs/specs/rfcs/20261013_identity-and-authorization.md`](../../../../../docs/specs/rfcs/20261013_identity-and-authorization.md),
-§2 to §7 and §11); authentication stays with the identity providers.
+§2 to §11). It also authenticates service accounts: their keys, the engine's
+ES256 tokens and JWKS, module permission manifests and the broker permissions
+derived from them (§8, §9.1). User login stays with the identity providers.
 
 - **Deny by default.** Nothing is allowed without a matching Allow, for every
   principal, `engine` and `api` included. An explicit Deny always wins.
@@ -33,12 +35,17 @@ source_control, coding_environment) enforce through `guard.py` (subtask 5 of
 | `iam_catalog.py` | IAM's own `iam:*` catalog and the code-declared seals (§11.3) |
 | `guard.py` | `ServiceGuard`: how a domain service checks (names, require, filter, create rule, placements) and the shared wire codes |
 | `kernel_catalogs.py` | The kernel services' catalogs (`services/<name>/iam_catalog.py`), registered at boot |
+| `keys.py` | Service keys `abi_sk_<key id>_<secret>`: generation, parsing, hashing |
+| `tokens.py` | `TokenIssuer`: ES256 signing keys, their rotation, the JWKS and the tokens it signs |
+| `modules.py` | Module accounts `module/<project>/<module_id>`, manifest hashing, variable binding, namespace placements |
+| `broker.py` | `BrokerPermissions` of an account, derived from its effective policy (§8.4) |
 | `IAMPorts.py` | Records, errors, `IAMStore`, `IAuthorizer`, `PolicySource`, `IIAMService` |
 | `IAMService.py` | The domain service: decisions, cached effective policies, self-authorized CRUD, bootstrap |
 | `IAMFactory.py` | Composition: store + authorizer + bootstrap; SQLite/PostgreSQL/memory helpers |
 | `adapters/secondary/iam_sql.py` | The SQL store on SQLAlchemy Core, shared by SQLite and PostgreSQL |
 | `adapters/secondary/IAMStoreSQLite.py`, `IAMStorePostgreSQL.py`, `IAMStoreMemory.py` | Store adapters |
 | `adapters/secondary/authorizer__policy.py`, `authorizer__allow_all.py` | Authorizer adapters |
+| `adapters/secondary/IAMSecretsSecretService.py`, `IAMSecretsMemory.py` | `IAMSecrets`: signing keys and the engine's key, under `iam/` |
 | `adapters/secondary/IAMSecondaryAdapterNATSClient.py` | `IIAMService` over NATS, for client-role engines |
 | `adapters/primary/iam__primary_adapter__NATS.py` | `abi.iam.v1.*` endpoints and `abi.iam.v1.changed` |
 | `adapters/iam_nats_codec.py` | Records and errors on the wire, shared by both NATS sides |
@@ -51,7 +58,8 @@ source_control, coding_environment) enforce through `guard.py` (subtask 5 of
 **`IAMStore`** (secondary): principals (unique `(issuer, subject)` for users,
 unique service-account names), static group members, IdP group mappings,
 policies with optimistic revisions, attachments (unique per policy, principal
-and scope), placements, scopes and catalogs. Every write bumps `revision()` in
+and scope), placements, scopes, catalogs, keys (hashed), manifests (one row
+per submitted version) and signing keys (public half and schedule). Every write bumps `revision()` in
 the same transaction; `install_id()` is generated once. Errors:
 `IAMNotFoundError`, `IAMConflictError`, `RevisionConflictError`. The store is not
 the Document Service: IAM authorizes that.
@@ -63,6 +71,11 @@ the Document Service: IAM authorizes that.
 `sid`, attachment, scope, group). The `policy` adapter reads a `PolicySource`
 (implemented by `IAMService`); a relationship-based adapter can replace it
 without touching callers.
+
+**`IAMSecrets`** (secondary): IAM's own secrets, `get`/`put`/`delete` under
+`iam/`: signing keys' private halves (`iam/signing-keys/<kid>`) and the engine
+account's key for client-role engines (`iam/service-keys/engine`). The engine
+passes the secret service built from its local adapters, never `nats_rpc`.
 
 **`IIAMService`**: what callers use, implemented in process by `IAMService` and
 over NATS by `IAMSecondaryAdapterNATSClient`. `require` is defined once, on the
@@ -121,6 +134,41 @@ and org-level `abi:<org>:-` ones do not; an unscoped one is `abi:%2A:%2A:…`,
 `names.ALL_ORGS`, which no `${scope}` expands to, `abi:-:-` included, so only
 the platform admin's grants reach it; no other resource may use `%2A`), `placement_resource`, `scope_resource`,
 `catalog_resource`.
+
+## Service accounts, keys, tokens and manifests
+
+```python
+created = iam.create_key(account_id, description="prod")  # CreatedKey: value shown once
+iam.list_keys(account_id)
+iam.revoke_key(account_id, key_id)
+iam.rotate_key(account_id, key_id)
+iam.exchange_key(value)  # IssuedToken (abi:nats, ≤ 10 min); KeyRefusedError
+iam.issue_service_token("api")  # in process only: the engine's own accounts
+iam.jwks()
+iam.verifier()  # what every NATS primary verifies with
+iam.submit_manifest(
+    module_id, project, document
+)  # ManifestSubmission(manifest, approved_now, in_force)
+iam.approve_manifest(account_id, document=None)  # narrowed when a document is given
+iam.reject_manifest(account_id, reason="...")
+iam.broker_permissions(principal, key)  # records from authenticate_key; never cached
+```
+
+- **Keys.** At most five active per account; `ci/*` keys expire in 90 days by
+  default. Only `sha256(secret)` is stored. Revocation takes effect at the next
+  exchange and the next broker connection.
+- **Module accounts** are `module/<project>/<module_id>` and start with
+  `builtin.module_bootstrap` only: their own discovery record and their own
+  manifest. Approval writes the managed policy `module.<project>.<module_id>`
+  (`${module.id}`, `${module.project}` bound), attaches it, and places the
+  module's document and dataset namespaces at platform level. A changed manifest
+  is a new pending version while the approved one stays in force.
+  `modules.auto_approve` approves on submission (the `abi dev` overlay only).
+- **Signing keys** rotate every `tokens.key_rotation_days`, checked whenever a
+  token is issued or the JWKS read. The JWKS names the issuer
+  `urn:abi:engine:<install id>`.
+- **Engine key.** `engine_service_key()` returns the key client-role engines
+  exchange, kept in `IAMSecrets`; a lost one is replaced, not added to.
 
 **Caching.** Effective statements per principal, policies and placements are
 cached for at most `cache_ttl_seconds` (60) and dropped on every change made
@@ -181,24 +229,21 @@ class MyService(ServiceBase):
 - `builtin.idp`: the built-in IdP's own namespace, secrets and sender.
 - Feature policies (`builtin.features.*`) come with the Nexus catalog (#65).
 
+- `builtin.module_bootstrap`: a module account before approval (above).
+
 **TRANSITIONAL** (named so in the code and in
 [ADR 20261015_iam-transitional-bootstrap](../../../../../docs/adr/20261015_iam-transitional-bootstrap.md)):
 
 - `builtin.engine`, `builtin.api`: one `TransitionalBroadAccess` statement each,
   until subtask 11 (#65) enumerates them.
-- `builtin.transitional.module`: held implicitly by a service account IAM has no
-  record of (a remote module, whose token names it): its own document and
-  dataset namespaces, and the kernel services a module can declare. Replaced by
-  approved manifests in subtask 6 (#60).
 - `builtin.transitional.nexus_user`: held implicitly by a user Nexus names on
   a call (IAM's user of issuer `urn:abi:nexus`, or a Nexus id IAM has no
   record of; on a Nexus call, `api` on behalf of that user). Nexus
   still decides what such a user may do, so the user side of the intersection
-  allows every kernel service a module can declare, plus document and dataset;
-  never `iam:*`. Like the module grant, it reaches discovery's modules, agents,
-  models, apps and jobs, but only its holder's own agent runs. Seals and
-  explicit Denies hold. Removed by subtask 11 (#65),
-  which attaches the roles of each membership.
+  allows every kernel service, document and dataset included; never `iam:*`.
+  It reaches discovery's modules, agents, models, apps and jobs, but only its
+  holder's own agent runs. Seals and explicit Denies hold. Removed by
+  subtask 11 (#65), which attaches the roles of each membership.
 - `LEGACY_NEXUS_ISSUER` (`urn:abi:nexus`): a Nexus user named on a call by its
   Nexus id resolves to IAM's user of that issuer, until the built-in login's
   users move to the built-in IdP (#67). Users of an identity provider are IAM
@@ -216,10 +261,10 @@ services:
       # dsn: "postgresql://..."   # postgres: an existing database
       # schema: abi_iam
     authorizer: policy             # policy (default) | allow_all (explicit opt-out; warns at boot)
-    modules:                       # reserved for #60: validated, not read yet
-      auto_approve: false
-    tokens:                        # reserved for #60 and #62: validated, not read yet
-      access_ttl_seconds: 600
+    modules:
+      auto_approve: false          # true only in the abi dev overlay
+    tokens:
+      access_ttl_seconds: 600      # capped at 600
       key_rotation_days: 30
     cache_ttl_seconds: 60
 ```
@@ -243,8 +288,19 @@ attachment (`org_seed.sync_platform_admins`).
 ## NATS and SDK
 
 Proto `naas-abi-proto/naas_abi_proto/iam/v1/iam.proto`, subjects
-`abi.iam.v1.<operation>`. Wire codes: `PERMISSION_DENIED`, `NOT_FOUND`,
-`CONFLICT`, `REVISION_CONFLICT`, `INVALID_ARGUMENT`. The SDK facade is
+`abi.iam.v1.<operation>`. `token` (key exchange) and `jwks` need no token;
+every other operation authorizes its caller. The primary also listens to
+`abi.iam.v1.changed` from other processes (`abi iam`, another engine) and drops
+its cache. The engine's auth callout (`engine/nats_auth_callout.py`) admits
+module connections with `broker_permissions`, without response permissions.
+The engine's broker control (`engine/nats_broker_control.py`,
+`abi.broker.v1.<operation>`) creates the streams and consumers modules use
+and writes the jobs stream for them, checked against `broker_grants`:
+modules never create or change a stream or a consumer. `broker.py` documents what each grant
+reaches; a bus topic under `abi`, `evt`, `_INBOX`, `$` or `_` is refused at
+submission and approval. Wire codes: `PERMISSION_DENIED`, `NOT_FOUND`,
+`CONFLICT`, `REVISION_CONFLICT`, `INVALID_ARGUMENT`, `UNAUTHENTICATED` (a
+refused key). The SDK facade is
 `engine.services.iam` (`naas_abi_sdk/services/iam.py`), reachable without a
 dependency declaration; records are dictionaries.
 

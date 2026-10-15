@@ -23,6 +23,9 @@ from naas_abi_core.services.iam.IAMPorts import (
     GroupMapping,
     IAMConflictError,
     IAMNotFoundError,
+    KeyRecord,
+    KeyRefusedError,
+    ManifestRecord,
     PermissionDeniedError,
     Placement,
     Policy,
@@ -74,7 +77,20 @@ OPERATIONS = {
     "put_scope": "PutScope",
     "delete_scope": "DeleteScope",
     "register_catalog": "RegisterCatalog",
+    "token": "Token",
+    "jwks": "Jwks",
+    "find_service_account": "FindServiceAccount",
+    "create_key": "CreateKey",
+    "list_keys": "ListKeys",
+    "revoke_key": "RevokeKey",
+    "submit_manifest": "SubmitManifest",
+    "get_manifest": "GetManifest",
+    "list_manifests": "ListManifests",
+    "approve_manifest": "ApproveManifest",
+    "reject_manifest": "RejectManifest",
 }
+# Need no credentials: the key is one; the JWKS is public (RFC §8.2, §9.1).
+PUBLIC_OPERATIONS = frozenset({"token", "jwks"})
 
 # Wire code -> exception. INVALID_ARGUMENT covers policy validation: its
 # message lists every error.
@@ -84,10 +100,13 @@ ERRORS: dict[str, type[Exception]] = {
     "CONFLICT": IAMConflictError,
     "REVISION_CONFLICT": RevisionConflictError,
     "INVALID_ARGUMENT": ValueError,
+    "UNAUTHENTICATED": KeyRefusedError,
 }
 
 
 def error_code(exc: BaseException) -> str:
+    if isinstance(exc, KeyRefusedError):
+        return "UNAUTHENTICATED"
     if isinstance(exc, PermissionDeniedError):
         return "PERMISSION_DENIED"
     if isinstance(exc, IAMNotFoundError):
@@ -106,6 +125,10 @@ def raise_for(error: Any) -> None:
     cls = ERRORS.get(error.code)
     if cls is PermissionDeniedError:
         raise PermissionDeniedError(message=error.message)
+    if cls is KeyRefusedError and error.message == "invalid key":
+        raise KeyRefusedError()
+    if cls is KeyRefusedError:  # a refused token, not a refused key
+        cls = None
     if cls is not None:
         raise cls(error.message)
     raise RuntimeError(f"iam NATS RPC failed ({error.code}): {error.message}")
@@ -371,4 +394,65 @@ def explanation_from_pb(message: pb.Explanation) -> Explanation:
         action=message.action,
         resource=message.resource,
         statement=statement,
+    )
+
+
+def key_to_pb(record: KeyRecord) -> pb.Key:
+    return _stamped(
+        pb.Key(
+            key_id=record.key_id,
+            principal_id=record.principal_id,
+            kind=record.kind,
+            description=record.description,
+        ),
+        created_at=record.created_at,
+        expires_at=record.expires_at,
+        last_used_at=record.last_used_at,
+        revoked_at=record.revoked_at,
+    )
+
+
+def key_from_pb(message: pb.Key) -> KeyRecord:
+    return KeyRecord(
+        key_id=message.key_id,
+        principal_id=message.principal_id,
+        secret_hash="",  # never on the wire
+        kind=message.kind,  # type: ignore[arg-type]
+        description=message.description,
+        created_at=_datetime(message, "created_at"),
+        expires_at=_datetime(message, "expires_at"),
+        last_used_at=_datetime(message, "last_used_at"),
+        revoked_at=_datetime(message, "revoked_at"),
+    )
+
+
+def manifest_to_pb(record: ManifestRecord) -> pb.Manifest:
+    message = pb.Manifest(
+        principal_id=record.principal_id,
+        sha256=record.sha256,
+        module_id=record.module_id,
+        project=record.project,
+        document_json=json.dumps(record.document, sort_keys=True),
+        status=record.status,
+        reason=record.reason,
+    )
+    if record.decided_by is not None:
+        message.decided_by = record.decided_by
+    return _stamped(
+        message, submitted_at=record.submitted_at, decided_at=record.decided_at
+    )
+
+
+def manifest_from_pb(message: pb.Manifest) -> ManifestRecord:
+    return ManifestRecord(
+        principal_id=message.principal_id,
+        sha256=message.sha256,
+        module_id=message.module_id,
+        project=message.project,
+        document=json.loads(message.document_json or "{}"),
+        status=message.status,  # type: ignore[arg-type]
+        submitted_at=_datetime(message, "submitted_at"),
+        decided_at=_datetime(message, "decided_at"),
+        decided_by=_optional(message, "decided_by"),
+        reason=message.reason,
     )

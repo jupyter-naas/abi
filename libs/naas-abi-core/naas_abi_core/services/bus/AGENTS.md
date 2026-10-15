@@ -65,8 +65,12 @@ No factory file:
 
 ```python
 from naas_abi_core.services.bus.BusService import BusService
-from naas_abi_core.services.bus.adapters.secondary.PythonQueueAdapter import PythonQueueAdapter
-from naas_abi_core.services.bus.adapters.secondary.RabbitMQAdapter import RabbitMQAdapter
+from naas_abi_core.services.bus.adapters.secondary.PythonQueueAdapter import (
+    PythonQueueAdapter,
+)
+from naas_abi_core.services.bus.adapters.secondary.RabbitMQAdapter import (
+    RabbitMQAdapter,
+)
 
 bus = BusService(PythonQueueAdapter(persistence_path="bus.sqlite", journal_mode="WAL"))
 bus = BusService(RabbitMQAdapter(rabbitmq_url="amqp://guest:guest@localhost/"))
@@ -102,7 +106,7 @@ at-least-once delivery. The port has no stable idempotency-key contract yet.
 
 Payloads above the broker's `max_payload` (header block counted, JetStream's own
 header reserved) travel as claim checks (`naas_abi_sdk.claim_check`,
-docs/adr/20261003_nats-claim-check.md): stored in the `abi_claim_checks` object
-store and replaced by a reference that subscriber and worker callbacks resolve
+docs/adr/20261003_nats-claim-check.md): stored in the `ABI_CLAIM_CHECKS` stream
+under the topic's scope and replaced by a reference that subscriber and worker callbacks resolve
 before they run, wire-compatible with the SDK `BusClient`. Up to 256 MiB; stored
 values expire after 7 days, so a queued item must be consumed within that time.

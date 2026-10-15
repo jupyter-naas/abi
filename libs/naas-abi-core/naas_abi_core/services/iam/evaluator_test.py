@@ -563,27 +563,40 @@ def test_idp_holds_only_its_own_namespace_secrets_and_sender(h):
     assert not h.allowed(QUERY, graph("a"), actor="idp")
 
 
-def test_an_unknown_remote_module_holds_the_transitional_module_policy(h):
+def test_a_service_account_iam_has_no_record_of_holds_nothing(h):
     module = "people"
     own = f"abi:-:-:document:collection/{module}/contacts"
-    assert h.allowed("document:Find", own, actor=module)
-    assert not h.allowed(
-        "document:Find", "abi:-:-:document:collection/other/c", actor=module
-    )
-    assert h.allowed(
-        "dataset:Query", f"abi:-:-:dataset:dataset/{module}/orders", actor=module
-    )
-    assert h.allowed(QUERY, graph("a"), actor=module)
-    assert not h.allowed("iam:CreatePolicy", "abi:-:-:iam:policy/p", actor=module)
-    # A module named with slashes is one encoded segment.
-    assert h.allowed(
-        "document:Get",
-        "abi:-:-:document:document/module%2Facme%2Fpeople/c/1",
-        actor="module/acme/people",
-    )
-    # Once IAM knows the account, it holds what is attached to it, nothing more.
-    h.service_account(module)
     assert not h.allowed("document:Find", own, actor=module)
+    assert not h.allowed(QUERY, graph("a"), actor=module)
+    assert not h.allowed(
+        "discovery:Register", "abi:-:-:discovery:module/acme/people", actor=module
+    )
+
+
+def test_a_module_account_reaches_its_own_registration_and_manifest_only(h):
+    account = h.service_account("module/acme/people")
+    own = "abi:-:-:discovery:module/acme/people"
+    for action in ("Register", "Renew", "Unregister", "GetModule"):
+        assert h.allowed(f"discovery:{action}", own, account)
+    assert not h.allowed(
+        "discovery:Register", "abi:-:-:discovery:module/acme/other", account
+    )
+    assert not h.allowed(
+        "discovery:Register", "abi:-:-:discovery:module/beta/people", account
+    )
+    assert not h.allowed("discovery:Evict", own, account)
+    manifest = f"abi:-:-:iam:manifest/{account.id}"
+    assert h.allowed("iam:SubmitManifest", manifest, account)
+    assert not h.allowed("iam:ApproveManifest", manifest, account)
+    assert not h.allowed(
+        "iam:SubmitManifest",
+        "abi:-:-:iam:manifest/sa_01jabcdefghjkmnpqrstvwxyz0",
+        account,
+    )
+    assert not h.allowed(QUERY, graph("a"), account)
+    # The same policy names nothing for an account that is not a module's.
+    ci = h.service_account("ci/nightly")
+    assert not h.allowed("discovery:Register", own, ci)
 
 
 # -- the opt-out ----------------------------------------------------------------------------------------------------

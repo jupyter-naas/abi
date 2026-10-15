@@ -1,0 +1,64 @@
+"""Service-account and personal keys (RFC §8.1).
+
+``abi_sk_<key id>_<secret>`` (service accounts) and ``abi_pk_<key id>_<secret>``
+(personal API keys, #62): the key id is 16 lowercase base32 characters, the
+secret 32 random bytes in base64url without padding. IAM stores the key id and
+``sha256(secret)``; a 256-bit secret needs no slow hash. Comparison is
+constant-time.
+"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import os
+from dataclasses import dataclass
+
+from naas_abi_core.engine.nats_auth import (
+    PERSONAL_KEY_PREFIX,
+    SERVICE_KEY_PREFIX,
+    parse_key,
+)
+from naas_abi_core.services.iam.IAMPorts import KeyKind
+
+PREFIXES: dict[KeyKind, str] = {
+    "service": SERVICE_KEY_PREFIX,
+    "personal": PERSONAL_KEY_PREFIX,
+}
+# Active keys a principal may hold at once (RFC §8.1): enough to rotate.
+MAX_ACTIVE_KEYS = 5
+
+
+@dataclass(frozen=True)
+class NewKey:
+    key_id: str
+    secret_hash: str
+    value: str  # the whole key, shown once
+
+
+def generate_key(kind: KeyKind = "service") -> NewKey:
+    key_id = base64.b32encode(os.urandom(10)).decode().lower()
+    secret = base64.urlsafe_b64encode(os.urandom(32)).rstrip(b"=").decode()
+    return NewKey(key_id, hash_secret(secret), f"{PREFIXES[kind]}{key_id}_{secret}")
+
+
+def hash_secret(secret: str) -> str:
+    return hashlib.sha256(secret.encode()).hexdigest()
+
+
+@dataclass(frozen=True)
+class PresentedKey:
+    kind: KeyKind
+    key_id: str
+    secret: str
+
+    def matches(self, secret_hash: str) -> bool:
+        return hmac.compare_digest(hash_secret(self.secret), secret_hash)
+
+
+def parse(value: str) -> PresentedKey:
+    """``ValueError`` for anything that is not an ABI key."""
+    prefix, key_id, secret = parse_key(value)
+    kind: KeyKind = "service" if prefix == SERVICE_KEY_PREFIX else "personal"
+    return PresentedKey(kind, key_id, secret)

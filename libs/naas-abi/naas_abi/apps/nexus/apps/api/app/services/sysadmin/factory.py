@@ -48,8 +48,6 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.service import SysAdminS
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.traces import TraceStore
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.traffic import TrafficHub
 
-# Same service identity as the API's other NATS calls (remote agents).
-CALLER_IDENTITY = "api"
 CONNECTION_NAME = "nexus-api-sysadmin"
 TAP_CONNECTION_NAME = "nexus-api-traffic-tap"
 DATA_CONNECTION_NAME = "nexus-api-sysadmin-data"
@@ -95,12 +93,14 @@ class _UnavailableTap:
 
 
 def _transport(nats: Any, name: str, *, forward_user: bool = False) -> Any:
-    from naas_abi_core.engine.nats_auth import issue_service_token
+    from naas_abi.apps.nexus.apps.api.app.services.engine_credentials import (
+        api_token,
+    )
     from naas_abi_sdk.transport import Transport
 
     return Transport(
         nats.nats_url,
-        lambda: issue_service_token(CALLER_IDENTITY, nats.jwt_secret),
+        api_token(),
         timeout=10,
         name=name,
         connect_timeout=2,

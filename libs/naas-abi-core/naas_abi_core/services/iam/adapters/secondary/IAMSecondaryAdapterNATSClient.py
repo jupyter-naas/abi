@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Mapping
+from datetime import datetime
 from typing import Any
 
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
@@ -17,11 +18,16 @@ from naas_abi_core.services.iam.adapters import iam_nats_codec as codec
 from naas_abi_core.services.iam.catalog import ActionCatalog
 from naas_abi_core.services.iam.IAMPorts import (
     Attachment,
+    CreatedKey,
     Decision,
     Explanation,
     FilterResult,
     GroupMapping,
     IIAMService,
+    KeyRecord,
+    ManifestRecord,
+    ManifestStatus,
+    ManifestSubmission,
     Page,
     Placement,
     Policy,
@@ -302,3 +308,89 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             "register_catalog", catalog=codec.catalog_to_pb(catalog)
         )
         return response.registered
+
+    # -- service accounts, keys and manifests ----------------------------------------------
+
+    def find_service_account(self, name: str) -> PrincipalRecord:
+        response = self._request("find_service_account", name=name)
+        return codec.principal_from_pb(response.principal)
+
+    def create_key(
+        self,
+        principal_id: str,
+        *,
+        description: str = "",
+        expires_at: datetime | None = None,
+    ) -> CreatedKey:
+        request = pb.CreateKeyRequest(
+            context=self._context(), principal_id=principal_id, description=description
+        )
+        if expires_at is not None:
+            request.expires_at.FromDatetime(expires_at)
+        response = self._call(
+            f"{codec.SUBJECT_PREFIX}.create_key", request, pb.CreateKeyResponse
+        )
+        if response.HasField("error") and response.error.code:
+            codec.raise_for(response.error)
+        return CreatedKey(codec.key_from_pb(response.key), response.value)
+
+    def list_keys(self, principal_id: str) -> list[KeyRecord]:
+        response = self._request("list_keys", principal_id=principal_id)
+        return [codec.key_from_pb(k) for k in response.keys]
+
+    def revoke_key(self, principal_id: str, key_id: str) -> KeyRecord:
+        response = self._request("revoke_key", principal_id=principal_id, key_id=key_id)
+        return codec.key_from_pb(response.key)
+
+    def submit_manifest(
+        self, module_id: str, project: str, document: Any
+    ) -> ManifestSubmission:
+        response = self._request(
+            "submit_manifest",
+            module_id=module_id,
+            project=project,
+            document_json=_document_text(document),
+        )
+        return ManifestSubmission(
+            codec.manifest_from_pb(response.manifest),
+            response.approved_now,
+            response.in_force,
+        )
+
+    def get_manifest(
+        self, principal_id: str, sha256: str | None = None
+    ) -> ManifestRecord:
+        response = self._request(
+            "get_manifest", principal_id=principal_id, sha256=sha256
+        )
+        return codec.manifest_from_pb(response.manifest)
+
+    def list_manifests(
+        self, *, principal_id: str | None = None, status: ManifestStatus | None = None
+    ) -> list[ManifestRecord]:
+        response = self._request(
+            "list_manifests", principal_id=principal_id, status=status
+        )
+        return [codec.manifest_from_pb(m) for m in response.manifests]
+
+    def approve_manifest(
+        self, principal_id: str, sha256: str | None = None, *, document: Any = None
+    ) -> ManifestRecord:
+        response = self._request(
+            "approve_manifest",
+            principal_id=principal_id,
+            sha256=sha256,
+            document_json=_document_text(document) if document is not None else None,
+        )
+        return codec.manifest_from_pb(response.manifest)
+
+    def reject_manifest(
+        self, principal_id: str, sha256: str | None = None, *, reason: str = ""
+    ) -> ManifestRecord:
+        response = self._request(
+            "reject_manifest", principal_id=principal_id, sha256=sha256, reason=reason
+        )
+        return codec.manifest_from_pb(response.manifest)
+
+    def jwks(self) -> dict[str, Any]:
+        return json.loads(self._request("jwks").jwks_json)

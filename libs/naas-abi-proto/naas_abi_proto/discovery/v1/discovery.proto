@@ -66,6 +66,11 @@ message Instance {
   double expires_at = 4;
   // The deploy this process belongs to. Empty when the process is not in a rollout.
   string rollout_id = 5;
+  // The registering service account, as one subject token: the ULID part of
+  // its sa_ id. Set by discovery from the verified caller, never by the
+  // module. Hosting subjects carry it (abi.agent.<project>.<sa>.<instance>...),
+  // so the broker confines each module to its own.
+  string service_account = 6;
 }
 message RegisterRequest {
   abi.common.v1.CallContext context = 1;

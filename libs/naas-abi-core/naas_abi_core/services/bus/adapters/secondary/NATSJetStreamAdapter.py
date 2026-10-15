@@ -274,14 +274,17 @@ class NATSJetStreamAdapter(IBusAdapter):
         subject = self._subject(topic, routing_key)
         with self.__publish_lock:
             self._run_coro(
-                self._do_publish_async(subject, payload), timeout=_send_timeout(payload)
+                self._do_publish_async(topic, subject, payload),
+                timeout=_send_timeout(payload),
             )
 
-    async def _do_publish_async(self, subject: str, payload: bytes) -> None:
+    async def _do_publish_async(self, topic: str, subject: str, payload: bytes) -> None:
         nc, _js = await self._ensure_connection_async()
         # Above the broker limit (headers counted) the payload travels as a
         # claim check; subscribers read it back (naas_abi_sdk.claim_check).
-        body, headers = await claim_check.prepare(nc, payload)
+        body, headers = await claim_check.prepare(
+            nc, payload, scope=claim_check.topic_scope(topic)
+        )
         await nc.publish(subject, body, headers=headers)
         # Core NATS publish only buffers the frame; flush so the message is
         # genuinely on the wire by the time the synchronous caller gets
@@ -367,7 +370,10 @@ class NATSJetStreamAdapter(IBusAdapter):
         # JetStream adds its own header: a body that just fits would make the
         # server close the connection, so that header is reserved too.
         body, headers = await claim_check.prepare(
-            nc, payload, reserve=claim_check.stream_header_reserve(stream_name)
+            nc,
+            payload,
+            scope=claim_check.topic_scope(topic),
+            reserve=claim_check.stream_header_reserve(stream_name),
         )
         await js.publish(subject, body, stream=stream_name, headers=headers)
 

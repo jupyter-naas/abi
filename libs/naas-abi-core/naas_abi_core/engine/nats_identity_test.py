@@ -2,29 +2,63 @@ import asyncio
 
 import pytest
 from naas_abi_core.engine.call_context import CallContext, service_account, user
-from naas_abi_core.engine.nats_auth import InvalidServiceTokenError, issue_service_token
+from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
 from naas_abi_core.engine.nats_identity import (
     OnBehalfOfRefusedError,
     caller_context,
     for_request,
 )
 from naas_abi_core.engine.nats_rpc import authenticate_request
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_proto.common.v1 import common_pb2
 from naas_abi_proto.dataset.v1 import dataset_pb2
 from naas_abi_proto.keyvalue.v1 import keyvalue_pb2
 from naas_abi_proto.transfer.v1 import transfer_pb2
 
-SECRET = "nats-identity-test-secret-32-bytes!"
+SECRET = TEST_TOKENS.verifier
 
 
 def headers(identity: str, **extra: str) -> dict[str, str]:
-    return {"Nats-Auth-Token": issue_service_token(identity, SECRET), **extra}
+    return {"Nats-Auth-Token": TEST_TOKENS.token(identity), **extra}
 
 
 def test_the_caller_is_the_tokens_subject():
-    assert caller_context(headers("people"), SECRET) == CallContext(
-        principal=service_account("people")
+    context = caller_context(headers("people"), SECRET)
+    assert context.principal == service_account("people")
+    assert context.on_behalf_of is None
+    assert context.audience == "abi:nats" and context.token_id
+
+
+def test_the_principal_is_the_id_iam_issued_the_token_for():
+    token = TEST_TOKENS.token(
+        "module/acme/people", subject="sa_01jabcdefghjkmnpqrstvwxyz0"
     )
+    context = caller_context({"Nats-Auth-Token": token}, SECRET)
+    assert context.principal.id == "sa_01jabcdefghjkmnpqrstvwxyz0"
+    assert context.principal.name == "module/acme/people"
+
+
+def test_an_actor_claim_acts_for_the_tokens_user_with_its_groups():
+    token = TEST_TOKENS.token(
+        "usr_01jabcdefghjkmnpqrstvwxyz0",
+        kind="user",
+        actor="sa_01jabcdefghjkmnpqrstvwxyz1",
+        groups=("grp_01jabcdefghjkmnpqrstvwxyz0",),
+    )
+    context = caller_context({"Nats-Auth-Token": token}, SECRET)
+    assert context.principal.id == "sa_01jabcdefghjkmnpqrstvwxyz1"
+    assert context.on_behalf_of.id == "usr_01jabcdefghjkmnpqrstvwxyz0"
+    assert context.on_behalf_of.groups == frozenset({"grp_01jabcdefghjkmnpqrstvwxyz0"})
+    # A delegated token names its user already: no header may name another.
+    with pytest.raises(OnBehalfOfRefusedError):
+        caller_context(
+            {"Nats-Auth-Token": token, "Abi-On-Behalf-Of": "usr-ada"}, SECRET
+        )
+
+
+def test_a_module_token_named_api_by_a_foreign_issuer_is_refused():
+    with pytest.raises(InvalidServiceTokenError):
+        caller_context({"Nats-Auth-Token": OTHER_TOKENS.token("api")}, SECRET)
 
 
 @pytest.mark.parametrize("identity", ["api", "engine"])
@@ -53,11 +87,7 @@ def test_a_malformed_user_is_refused(named):
     [
         {},
         {"Nats-Auth-Token": "not-a-token"},
-        {
-            "Nats-Auth-Token": issue_service_token(
-                "api", "another-secret-32-bytes-long!!"
-            )
-        },
+        {"Nats-Auth-Token": OTHER_TOKENS.token("api")},
     ],
 )
 def test_without_a_valid_token_there_is_no_caller(sent):
@@ -83,7 +113,8 @@ def _authenticate(sent, response_cls=keyvalue_pb2.GetResponse):
 
 def test_authenticate_request_hands_back_the_caller_and_answers_nothing():
     caller, replies = _authenticate(headers("api"))
-    assert caller == CallContext(principal=service_account("api"))
+    assert caller.principal == service_account("api")
+    assert caller.on_behalf_of is None
     assert replies == []
 
 

@@ -6,6 +6,7 @@ from naas_abi_core.engine.nats_rpc_integration_test import (  # noqa: F401 - pyt
     SECRET,
     broker,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.document.adapters.primary.document__primary_adapter__NATS import (
     DocumentPrimaryAdapterNATS,
 )
@@ -48,7 +49,9 @@ def document_host(broker, tmp_path):  # noqa: F811 - imported pytest fixture
 class TestDocumentNATS(DocumentSecondaryAdapterContract):
     @pytest.fixture
     def peer(self, document_host):
-        client = DocumentSecondaryAdapterNATSClient(document_host, SECRET, "peer")
+        client = DocumentSecondaryAdapterNATSClient(
+            document_host, TEST_TOKENS.source("peer")
+        )
         try:
             yield client
         finally:
@@ -56,7 +59,9 @@ class TestDocumentNATS(DocumentSecondaryAdapterContract):
 
     @pytest.fixture
     def adapter(self, document_host):
-        client = DocumentSecondaryAdapterNATSClient(document_host, SECRET, "test")
+        client = DocumentSecondaryAdapterNATSClient(
+            document_host, TEST_TOKENS.source("test")
+        )
         try:
             yield client
         finally:
@@ -65,7 +70,9 @@ class TestDocumentNATS(DocumentSecondaryAdapterContract):
 
 @BROKER_8_MIB
 def test_namespaces_need_a_platform_identity(document_host):
-    client = DocumentSecondaryAdapterNATSClient(document_host, SECRET, "acme.module")
+    client = DocumentSecondaryAdapterNATSClient(
+        document_host, TEST_TOKENS.source("acme.module")
+    )
     try:
         with pytest.raises(PermissionError):
             client.namespaces()
@@ -76,7 +83,9 @@ def test_namespaces_need_a_platform_identity(document_host):
 @pytest.mark.parametrize("broker", [64 * 1024], indirect=True)
 def test_find_pages_fit_the_broker_without_overflow(document_host):
     # No overflow host runs here: a reply above 64 KiB would fail outright.
-    client = DocumentSecondaryAdapterNATSClient(document_host, SECRET, "test")
+    client = DocumentSecondaryAdapterNATSClient(
+        document_host, TEST_TOKENS.source("test")
+    )
     try:
         client.ensure_collection("module", CollectionSpec(name="records"))
         for n in range(20):

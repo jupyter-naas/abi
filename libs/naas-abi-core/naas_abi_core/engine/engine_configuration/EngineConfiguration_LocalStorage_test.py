@@ -8,6 +8,7 @@ import pytest
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     ServicesConfiguration,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_SERVICE_KEY
 
 ALL = (
     "activity_log",
@@ -31,7 +32,7 @@ S3 = {
     "access_key_id": "key",
     "secret_access_key": "secret",
 }
-NATS = {"nats_url": "nats://nats:4222", "jwt_secret": "x" * 32}
+NATS = {"nats_url": "nats://nats:4222", "service_key": TEST_SERVICE_KEY}
 
 SHARED = {
     "document": {

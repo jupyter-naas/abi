@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from naas_abi_core.services.iam.IAMPorts import IAMStore
+from naas_abi_core.services.iam.IAMPorts import IAMSecrets, IAMStore
 from naas_abi_core.services.iam.IAMService import AuthorizerFactory, IAMService
 
 AuthorizerName = Literal["policy", "allow_all"]
@@ -33,9 +33,19 @@ def build(
     *,
     cache_ttl_seconds: float = 60.0,
     bootstrap: bool = True,
+    secrets: IAMSecrets | None = None,
+    access_ttl_seconds: int = 600,
+    key_rotation_days: int = 30,
+    auto_approve: bool = False,
 ) -> IAMService:
     service = IAMService(
-        store, authorizer_factory(authorizer), cache_ttl_seconds=cache_ttl_seconds
+        store,
+        authorizer_factory(authorizer),
+        cache_ttl_seconds=cache_ttl_seconds,
+        secrets=secrets,
+        access_ttl_seconds=access_ttl_seconds,
+        key_rotation_days=key_rotation_days,
+        auto_approve=auto_approve,
     )
     if bootstrap:
         service.bootstrap()

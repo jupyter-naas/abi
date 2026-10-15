@@ -17,6 +17,7 @@ from typing import Any
 from uuid import uuid4
 
 from naas_abi_core.engine.call_context import ON_BEHALF_OF_HEADER
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_identity import caller_context
 from naas_abi_core.engine.nats_transfer import (
     TransferError,
@@ -53,7 +54,7 @@ async def _echo(operation: str, metadata: bytes, source: Any):
 class OverflowHost(TransferHost):
     def __init__(
         self,
-        secret: str,
+        verifier: TokenVerifier,
         *,
         max_value_bytes: int = overflow.MAX_VALUE_BYTES,
         max_parked_bytes: int = 1024 * 1024 * 1024,
@@ -64,7 +65,7 @@ class OverflowHost(TransferHost):
     ) -> None:
         super().__init__(
             overflow.PREFIX,
-            secret,
+            verifier,
             _echo,
             operations=(overflow.UPLOAD_OPERATION,),
             chunk_bytes=chunk_bytes,
@@ -91,7 +92,7 @@ class OverflowHost(TransferHost):
 
     async def park(self, headers: Mapping[str, str], data: bytes) -> str:
         """Hold a reply for the request's caller; return its transfer id."""
-        context = caller_context(headers, self.secret)
+        context = caller_context(headers, self.verifier)
         caller = context.principal.id
         if len(data) > self.max_value_bytes:
             raise TransferError(

@@ -14,7 +14,11 @@ from typing import Any, TypeVar
 
 Result = TypeVar("Result")
 
-from naas_abi_core.engine.call_context import CallContext, use_call_context
+from naas_abi_core.engine.call_context import (
+    CallContext,
+    current_call_context,
+    use_call_context,
+)
 from naas_abi_core.services.discovery.caller import run_owner
 from naas_abi_core.services.discovery.discovery_ports import (
     RegistryPort,
@@ -23,6 +27,7 @@ from naas_abi_core.services.discovery.discovery_ports import (
 from naas_abi_core.services.discovery.iam_catalog import CATALOG
 from naas_abi_core.services.iam.guard import ServiceGuard
 from naas_abi_core.services.iam.IAMPorts import IIAMService
+from naas_abi_core.services.iam.modules import subject_token
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
 
@@ -75,7 +80,8 @@ def _depends_on_itself(
 JOB_TRIGGER_KINDS = ("cron", "every", "event")
 
 # Who may evict registrations on a discovery with no IAM (tests, a bare
-# registry): the Nexus API and the engine. With IAM it is discovery:Evict.
+# registry): the Nexus API and the engine, by their service-account names.
+# With IAM it is discovery:Evict.
 DEFAULT_ADMIN_IDENTITIES = ("api", "engine")
 
 # The service-account name form of a module (RFC §2): once IAM records module
@@ -756,6 +762,8 @@ class DiscoveryService:
                         instance_id=req.instance_id,
                         expires_at=self.clock() + self.lease_seconds,
                         rollout_id=req.rollout_id,
+                        # From the verified caller: its hosting subjects carry it.
+                        service_account=subject_token(owner),
                     ),
                 )
             self._ready(state)
@@ -834,13 +842,19 @@ class DiscoveryService:
         registers a fresh instance, so evicting a live process only restarts its
         membership. It is meant for crashed or stuck registrations.
         """
+        caller = current_call_context().principal
         _require(
             _name(req.instance_id), "INVALID_ARGUMENT", "Invalid instance identity"
         )
         # Who may evict is IAM's decision, in the caller's context. With no
         # IAM to ask, only the platform's own identities may: never fail open.
         _require(
-            self.guard.enforcing or owner in self.admin_identities,
+            self.guard.enforcing
+            or owner in self.admin_identities
+            or (
+                caller.kind == "service_account"
+                and caller.name in self.admin_identities
+            ),
             "PERMISSION_DENIED",
             "Only platform administrators can evict registrations",
         )

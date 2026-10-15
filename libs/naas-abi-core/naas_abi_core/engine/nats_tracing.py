@@ -20,16 +20,30 @@ from typing import Any
 
 import nats.errors
 import nats.micro
+from naas_abi_core import logger
 from naas_abi_core.engine.nats_dispatch import max_concurrent_requests
 from naas_abi_core.engine.nats_sessions import stop_delivery, until
 from naas_abi_sdk.concurrency import ConcurrentCalls
+from naas_abi_sdk.messages import reply_allowed
 from naas_abi_sdk.telemetry import server_span
+
+_NOT_MICRO = object()
 
 
 def traced_handler(
     handler: Callable[[Any], Awaitable[None]],
 ) -> Callable[[Any], Awaitable[None]]:
     async def handle(request: Any) -> None:
+        # A reply subject is the sender's choice, and the engine would answer
+        # with its own rights (on $JS.API.STREAM.DELETE.<stream>, say): only
+        # inboxes are answered, so a request asking for anything else is
+        # dropped before it runs (naas_abi_sdk.messages.reply_allowed).
+        reply = getattr(getattr(request, "_msg", None), "reply", _NOT_MICRO)
+        if reply is not _NOT_MICRO and not reply_allowed(reply):
+            logger.warning(
+                f"Dropped a request on {request.subject}: reply to {reply!r}"
+            )
+            return
         with server_span(request.subject, request.headers):
             await handler(request)
 

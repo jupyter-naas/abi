@@ -1,5 +1,6 @@
 import re
 
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.services.discovery.adapters.primary.discovery_nats import (
     DiscoveryNATS,
 )
@@ -15,7 +16,7 @@ from nats.js.errors import BucketNotFoundError
 
 async def start_discovery(
     nc: Client,
-    secret: str,
+    verifier: TokenVerifier,
     project: str = "default",
     lease_seconds: float = 20,
     iam: IIAMService | None = None,
@@ -39,7 +40,7 @@ async def start_discovery(
             project=project,
             iam=iam,
         ),
-        secret,
+        verifier,
         project,
     )
     await primary.start(nc)

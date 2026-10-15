@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from naas_abi.apps.nexus.apps.api.app.services.agents.remote.factory import (
-    CALLER_IDENTITY,
-)
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters.discovery import (
     DiscoveryRemoteAppDirectory,
 )
@@ -30,12 +27,13 @@ def build_remote_app_directory(nats: Any | None) -> RemoteAppDirectory:
         return InMemoryRemoteAppDirectory()
 
     def clients() -> tuple[Any, Any, Any, str]:
-        from naas_abi_core.engine.nats_auth import issue_service_token
+        from naas_abi.apps.nexus.apps.api.app.services.engine_credentials import (
+            api_token,
+        )
         from naas_abi_sdk.discovery import DiscoveryClient
         from naas_abi_sdk.transport import Transport
 
-        def token() -> str:
-            return issue_service_token(CALLER_IDENTITY, nats.jwt_secret)
+        token = api_token()
 
         # On behalf of the signed-in user: the app host learns the user from
         # discovery, which verifies it (never from HttpRequest.user_id).

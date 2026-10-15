@@ -3,7 +3,11 @@
 Every kernel NATS primary adapter builds the context of a call here, and only
 here (docs/specs/rfcs/20261013_identity-and-authorization.md, §10.2):
 
-* the actor is the ``sub`` of the verified ``Nats-Auth-Token``;
+* the ``Nats-Auth-Token`` is an engine token, verified against the JWKS
+  (``nats_auth.TokenVerifier``) for an audience the endpoint accepts;
+* the actor is its ``sub``, a principal id (``abi_name`` names a service
+  account); with ``act``, the actor is ``act.sub`` and ``sub`` the user it
+  acts for. ``grp`` and ``abi_scope`` become the groups and the narrowing;
 * the user it acts for is the ``Abi-On-Behalf-Of`` header, accepted only when
   the actor is a trusted identity (``api``, ``engine``) until delegated tokens
   replace the header. From anyone else the call is refused;
@@ -23,12 +27,13 @@ from naas_abi_core import logger
 from naas_abi_core.engine.call_context import (
     ON_BEHALF_OF_HEADER,
     CallContext,
-    service_account,
+    Principal,
     user,
 )
 from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
-    verify_service_token,
+    TokenClaims,
+    TokenVerifier,
 )
 
 AUTH_HEADER = "Nats-Auth-Token"
@@ -44,23 +49,58 @@ class OnBehalfOfRefusedError(InvalidServiceTokenError):
     """The caller named a user it may not act for."""
 
 
-def caller_context(headers: Mapping[str, str] | None, secret: str) -> CallContext:
-    """The verified caller of a NATS request.
+def caller_context(
+    headers: Mapping[str, str] | None,
+    verifier: TokenVerifier,
+    *,
+    at: float | None = None,
+) -> CallContext:
+    """The verified caller of a NATS request; ``at``: when its token had to be
+    valid, by default now (``TokenVerifier.verify``).
 
     Raises :class:`InvalidServiceTokenError` for a missing or invalid token,
     and its subclass :class:`OnBehalfOfRefusedError` for an
     ``Abi-On-Behalf-Of`` header the caller may not send.
     """
     headers = headers or {}
-    identity = verify_service_token(headers.get(AUTH_HEADER, ""), secret)
+    claims = verifier.verify(headers.get(AUTH_HEADER, ""), at=at)
+    context = token_context(claims)
     named = headers.get(ON_BEHALF_OF_HEADER, "")
     if not named:
-        return CallContext(principal=service_account(identity))
-    if identity not in ON_BEHALF_OF_IDENTITIES:
+        return context
+    identity = claims.name or claims.subject
+    if (
+        context.on_behalf_of is not None
+        or claims.kind != "service_account"
+        or identity not in ON_BEHALF_OF_IDENTITIES
+    ):
         raise OnBehalfOfRefusedError(f"{identity!r} may not act on behalf of a user")
     if len(named) > _MAX_PRINCIPAL_ID or named != named.strip():
         raise OnBehalfOfRefusedError("Malformed on-behalf-of principal id")
-    return CallContext(principal=service_account(identity), on_behalf_of=user(named))
+    return replace(context, on_behalf_of=user(named))
+
+
+def token_context(claims: TokenClaims) -> CallContext:
+    """The ``CallContext`` a verified token stands for (RFC §10.2)."""
+    groups = frozenset(claims.groups)
+    sub = Principal(
+        id=claims.subject,
+        kind=claims.kind,  # type: ignore[arg-type]  # user | service_account
+        name=claims.name if claims.kind == "service_account" else None,
+        groups=groups if claims.kind == "user" else frozenset(),
+    )
+    if claims.actor is not None:
+        actor = Principal(id=claims.actor, kind="service_account")
+        principal, on_behalf_of = actor, sub
+    else:
+        principal, on_behalf_of = sub, None
+    return CallContext(
+        principal=principal,
+        on_behalf_of=on_behalf_of,
+        audience=claims.audience,
+        token_id=claims.token_id,
+        scope=claims.scope,
+    )
 
 
 def refusal(exc: InvalidServiceTokenError, invalid_token: str) -> str:

@@ -8,15 +8,15 @@ services:
       path: storage/iam/iam.sqlite
       # dsn: "{{ secret.IAM_POSTGRES_DSN }}"
     authorizer: policy             # policy (default) | allow_all (explicit opt-out; warns at boot)
-    modules:                       # reserved: read from subtask 6 (#60) on
-      auto_approve: false          # true only in the abi dev overlay
-    tokens:                        # reserved: read from subtasks 6 and 8 (#60, #62) on
+    modules:
+      auto_approve: false          # true only in the abi dev overlay (RFC §8.3)
+    tokens:
       access_ttl_seconds: 600      # capped at 600
-      key_rotation_days: 30
+      key_rotation_days: 30        # signing key rotation (RFC §9.1)
 ```
 
-``modules`` and ``tokens`` are validated now, so a configuration written for the
-next subtasks fails early when it is wrong, but nothing reads them yet.
+The signing keys' private halves and the engine's own service key live in
+the secret service (its local adapters), under ``iam/``.
 
 ``authorizer: allow_all`` is never a default: it must be written down, and the
 engine warns at every boot that runs with it.
@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from typing import Literal, Self
 
-from naas_abi_core.services.iam.IAMPorts import IAMStore
+from naas_abi_core.services.iam.IAMPorts import IAMSecrets, IAMStore
 from naas_abi_core.services.iam.IAMService import IAMService
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -87,17 +87,17 @@ class IAMStoreConfiguration(BaseModel):
 
 
 class IAMModulesConfiguration(BaseModel):
-    """Reserved: manifest approval reads it from subtask 6 (#60) on."""
+    """Module permission manifests (RFC §8.3)."""
 
     model_config = ConfigDict(extra="forbid")
 
-    # Approve module permission manifests without review (subtask 6, #60):
-    # only the abi dev overlay sets it.
+    # Approve module permission manifests without review: only the abi dev
+    # overlay sets it. Fresh configs and the Docker templates keep false.
     auto_approve: bool = False
 
 
 class IAMTokensConfiguration(BaseModel):
-    """Reserved: the token issuer reads it from subtasks 6 and 8 (#60, #62) on."""
+    """The engine's token issuer (RFC §9.1)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -115,9 +115,12 @@ class IAMServiceConfiguration(BaseModel):
     # Effective policies are cached at most this long (RFC §5.6: 60 seconds).
     cache_ttl_seconds: float = Field(default=60.0, gt=0, le=60)
 
-    def load(self) -> IAMService:
+    def load(self, secrets: IAMSecrets | None = None) -> IAMService:
         """The service, bootstrapped, with every kernel catalog registered: the
-        engine's root of trust is in place before any service serves."""
+        engine's root of trust is in place before any service serves.
+
+        ``secrets``: where the signing keys live (the secret service); without
+        one they live in memory, and tokens die with the process."""
         from naas_abi_core.services.iam import IAMFactory
         from naas_abi_core.services.iam.kernel_catalogs import register_kernel_catalogs
 
@@ -125,6 +128,10 @@ class IAMServiceConfiguration(BaseModel):
             self.store.load(),
             self.authorizer,
             cache_ttl_seconds=self.cache_ttl_seconds,
+            secrets=secrets,
+            access_ttl_seconds=self.tokens.access_ttl_seconds,
+            key_rotation_days=self.tokens.key_rotation_days,
+            auto_approve=self.modules.auto_approve,
         )
         register_kernel_catalogs(service)
         return service

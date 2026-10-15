@@ -7,13 +7,14 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
 )
+from naas_abi_core.engine.nats_credentials import rpc_client
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
     IObjectStorageAdapter,
 )
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ObjectStorageAdapterFSConfiguration(BaseModel):
@@ -24,6 +25,7 @@ class ObjectStorageAdapterFSConfiguration(BaseModel):
       config:
         base_path: "storage/datastore"
     """
+
     model_config = ConfigDict(extra="forbid")
 
     base_path: str
@@ -42,6 +44,7 @@ class ObjectStorageAdapterS3Configuration(BaseModel):
         session_token: "{{ secret.AWS_SESSION_TOKEN }}"
         endpoint_url: "http://localhost:9000"
     """
+
     model_config = ConfigDict(extra="forbid")
 
     bucket_name: str
@@ -63,6 +66,7 @@ class ObjectStorageAdapterNaasConfiguration(BaseModel):
         storage_name: "{{ secret.STORAGE_NAME }}"
         base_prefix: "my-prefix"
     """
+
     model_config = ConfigDict(extra="forbid")
 
     naas_api_key: str
@@ -83,6 +87,7 @@ class ObjectStorageAdapterR2Configuration(BaseModel):
         access_key_id: "{{ secret.R2_ACCESS_KEY_ID }}"
         secret_access_key: "{{ secret.R2_SECRET_ACCESS_KEY }}"
     """
+
     model_config = ConfigDict(extra="forbid")
 
     account_id: str
@@ -103,20 +108,24 @@ class ObjectStorageAdapterNATSConfiguration(BaseModel):
       adapter: "nats_rpc"
       config:
         nats_url: "nats://127.0.0.1:4222"
-        jwt_secret: "{{ secret.NATS_SERVICE_JWT_SECRET }}"
-        service_identity: "api"
+        service_key: "{{ secret.ABI_UPSTREAM_SERVICE_KEY }}"
     """
+
     model_config = ConfigDict(extra="forbid")
 
     nats_url: str = "nats://127.0.0.1:4222"
-    jwt_secret: str
-    service_identity: str = "api"
+    # A key of the upstream engine (abi_sk_...), exchanged for its tokens.
+    service_key: str = Field(repr=False)
 
 
 class ObjectStorageAdapterConfiguration(GenericLoader):
     adapter: Literal["fs", "s3", "naas", "r2", "nats_rpc", "custom"]
     config: (
-        ObjectStorageAdapterFSConfiguration | ObjectStorageAdapterS3Configuration | ObjectStorageAdapterNaasConfiguration | ObjectStorageAdapterR2Configuration | ObjectStorageAdapterNATSConfiguration
+        ObjectStorageAdapterFSConfiguration
+        | ObjectStorageAdapterS3Configuration
+        | ObjectStorageAdapterNaasConfiguration
+        | ObjectStorageAdapterR2Configuration
+        | ObjectStorageAdapterNATSConfiguration
         | None
     ) = None
 
@@ -214,8 +223,8 @@ class ObjectStorageAdapterConfiguration(GenericLoader):
                     ObjectStorageSecondaryAdapterNATSClient,
                 )
 
-                return ObjectStorageSecondaryAdapterNATSClient(
-                    **self.config.model_dump()
+                return rpc_client(
+                    ObjectStorageSecondaryAdapterNATSClient, **self.config.model_dump()
                 )
             else:
                 raise ValueError(f"Unknown adapter: {self.adapter}")

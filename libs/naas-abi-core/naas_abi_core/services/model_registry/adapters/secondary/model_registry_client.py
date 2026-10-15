@@ -1,7 +1,7 @@
 """Local registration at bootstrap; all model reads and inference cross NATS."""
 
 from naas_abi_core.engine import nats_runtime
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_auth import TokenSource
 from naas_abi_core.engine.nats_identity import ON_BEHALF_OF_IDENTITIES
 from naas_abi_core.engine.nats_naming import connection_name
 from naas_abi_core.models.Model import ChatModel, EmbeddingModel
@@ -23,14 +23,14 @@ class ModelRegistryNATSClient(ModelRegistryService):
         self,
         owner: ModelRegistryService,
         url: str,
-        secret: str,
+        credentials: TokenSource,
         identity: str = "engine",
     ):
         super().__init__()
         self.owner = owner
         self.transport = Transport(
             url,
-            lambda: issue_service_token(identity, secret),
+            credentials.token,
             timeout=120,
             # The registry is a kernel service; engine and api are trusted to
             # name the user they act for.

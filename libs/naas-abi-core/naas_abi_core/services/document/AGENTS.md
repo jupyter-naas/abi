@@ -298,7 +298,7 @@ backend-specific methods into the module-facing port.
 `adapters/secondary/DocumentSecondaryAdapterNATSClient.py` implements the complete
 storage port, with close disposing only its own transport. Top-level NATS wiring
 injects a remote root into engine module proxies. `adapter: nats_rpc` also accepts
-nats_url, jwt_secret, service_identity and timeout_seconds (default 10), preserving
+nats_url, service_key (a key of the owning engine's IAM) and timeout_seconds (default 10), preserving
 an explicit upstream route without re-exposing it.
 
 The canonical contract is `naas-abi-proto/naas_abi_proto/document/v1/document.proto`.

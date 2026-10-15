@@ -81,9 +81,7 @@ def test_ships_models_false_when_models_dir_only_has_tests(
     )
 
 
-def test_ships_models_false_when_no_models_dir(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_ships_models_false_when_no_models_dir(tmp_path: Path, monkeypatch) -> None:
     _write_pkg(tmp_path, "eng_module_loader_test_pkg.no_dir")
     _install(tmp_path, monkeypatch)
 

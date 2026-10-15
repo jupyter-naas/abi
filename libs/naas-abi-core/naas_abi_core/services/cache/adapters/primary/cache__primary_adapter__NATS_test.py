@@ -10,7 +10,7 @@ import asyncio
 from typing import Any
 
 import pytest
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.proto.cache.v1 import cache_pb2
 from naas_abi_core.services.cache.adapters.primary.cache__primary_adapter__NATS import (
     AUTH_HEADER,
@@ -30,7 +30,7 @@ from naas_abi_core.services.cache.CacheService import (
     SingleTierCacheService,
 )
 
-SECRET = "test-shared-secret"
+SECRET = TEST_TOKENS.verifier
 
 
 class _FakeRequest:
@@ -92,7 +92,7 @@ class _StubAdapter(ICacheAdapter):
 
 
 def _valid_token() -> str:
-    return issue_service_token("api", SECRET)
+    return TEST_TOKENS.token("api")
 
 
 def _get_request(key: str = "k") -> bytes:
@@ -141,7 +141,7 @@ def test_malformed_token_returns_unauthenticated():
 
 def test_token_signed_with_wrong_secret_returns_unauthenticated():
     adapter = CachePrimaryAdapterNATS(_StubAdapter(), SECRET)
-    wrong_secret_token = issue_service_token("api", "a-different-secret")
+    wrong_secret_token = OTHER_TOKENS.token("api")
     request = _FakeRequest(
         data=_get_request(), headers={AUTH_HEADER: wrong_secret_token}
     )

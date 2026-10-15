@@ -28,7 +28,6 @@ import shutil
 import socket
 import subprocess
 import time
-from datetime import UTC, datetime, timedelta
 from threading import Event as ThreadingEvent
 from threading import Thread
 from unittest.mock import AsyncMock
@@ -37,6 +36,8 @@ import nats
 import numpy as np
 import pytest
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_auth import StaticTokenSource
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.services.vector_store.adapters.primary.vector_store__primary_adapter__NATS import (
     VectorStorePrimaryAdapterNATS,
@@ -53,7 +54,7 @@ from naas_abi_core.services.vector_store.IVectorStorePort_test import (
     GenericVectorStoreAdapterTest,
 )
 
-JWT_SECRET = "test-shared-secret"
+JWT_SECRET = TEST_TOKENS.verifier
 
 
 # ---------------------------------------------------------------------------
@@ -64,13 +65,15 @@ JWT_SECRET = "test-shared-secret"
 def test_init_is_lazy(monkeypatch):
     connect = AsyncMock()
     monkeypatch.setattr(nats, "connect", connect)
-    VectorStoreSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
+    VectorStoreSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", TEST_TOKENS.source("api")
+    )
     connect.assert_not_called()
 
 
 def test_close_without_connecting_is_a_noop():
     client = VectorStoreSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api"
+        "nats://127.0.0.1:4222", TEST_TOKENS.source("api")
     )
     client.close()  # must not raise, must not connect
 
@@ -78,7 +81,7 @@ def test_close_without_connecting_is_a_noop():
 def test_context_manager_calls_close():
     closed = []
     client = VectorStoreSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api"
+        "nats://127.0.0.1:4222", TEST_TOKENS.source("api")
     )
     client.close = lambda: closed.append(True)  # type: ignore[method-assign]
 
@@ -98,7 +101,7 @@ def test_context_manager_calls_close():
 
 def test_close_does_not_invoke_the_remote_rpc():
     client = VectorStoreSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api"
+        "nats://127.0.0.1:4222", TEST_TOKENS.source("api")
     )
 
     def _fail_if_called(*args, **kwargs):
@@ -117,7 +120,7 @@ def test_close_does_not_invoke_the_remote_rpc():
 
 def test_create_collection_rejects_kwargs_with_not_implemented():
     client = VectorStoreSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api"
+        "nats://127.0.0.1:4222", TEST_TOKENS.source("api")
     )
     with pytest.raises(NotImplementedError):
         client.create_collection("docs", 4, on_disk_payload=True)
@@ -147,45 +150,6 @@ def test_raise_for_error_maps_unauthenticated_to_runtime_error():
 # ---------------------------------------------------------------------------
 
 
-def test_token_is_issued_once_and_reused(monkeypatch):
-    calls: list[str] = []
-
-    def fake_issue(identity: str, secret: str) -> str:
-        calls.append(identity)
-        return f"token-{len(calls)}"
-
-    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.issue_service_token", fake_issue)
-
-    client = VectorStoreSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api"
-    )
-
-    assert client._current_token() == "token-1"
-    assert client._current_token() == "token-1"
-    assert calls == ["api"]
-
-
-def test_token_is_reissued_when_close_to_expiry(monkeypatch):
-    calls: list[str] = []
-
-    def fake_issue(identity: str, secret: str) -> str:
-        calls.append(identity)
-        return f"token-{len(calls)}"
-
-    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.issue_service_token", fake_issue)
-
-    client = VectorStoreSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api"
-    )
-    assert client._current_token() == "token-1"
-
-    # Simulate the token being almost expired.
-    client._token_expires_at = datetime.now(UTC) + timedelta(seconds=1)
-
-    assert client._current_token() == "token-2"
-    assert calls == ["api", "api"]
-
-
 # ---------------------------------------------------------------------------
 # Real round trip: a live NATS container, a real VectorStorePrimaryAdapterNATS
 # wrapping a real QdrantInMemoryAdapter, and the client talking to it over
@@ -199,9 +163,9 @@ class _PrimaryAdapterServer:
     own background loop, since nats-py has no synchronous API on either
     side."""
 
-    def __init__(self, nats_url: str, jwt_secret: str, wrapped_adapter) -> None:
+    def __init__(self, nats_url: str, verifier, wrapped_adapter) -> None:
         self._nats_url = nats_url
-        self._jwt_secret = jwt_secret
+        self._verifier = verifier
         self._wrapped_adapter = wrapped_adapter
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: Thread | None = None
@@ -238,7 +202,7 @@ class _PrimaryAdapterServer:
     async def _start_async(self) -> None:
         self._nc = await nats.connect(self._nats_url)
         self._primary = VectorStorePrimaryAdapterNATS(
-            self._wrapped_adapter, self._jwt_secret
+            self._wrapped_adapter, self._verifier
         )
         await self._primary.start(self._nc)
 
@@ -348,8 +312,7 @@ class TestVectorStoreSecondaryAdapterNATSClient(GenericVectorStoreAdapterTest):
 
         client = VectorStoreSecondaryAdapterNATSClient(
             nats_url=nats_url,
-            jwt_secret=JWT_SECRET,
-            service_identity="api",
+            credentials=TEST_TOKENS.source("api"),
             timeout_seconds=10.0,
         )
         yield client
@@ -364,8 +327,7 @@ def test_wrong_secret_surfaces_as_runtime_error(nats_url):
     server.start()
     client = VectorStoreSecondaryAdapterNATSClient(
         nats_url=nats_url,
-        jwt_secret="a-completely-different-secret",
-        service_identity="api",
+        credentials=OTHER_TOKENS.source("api"),
         timeout_seconds=5.0,
     )
     try:
@@ -383,8 +345,7 @@ def test_search_round_trips_real_similarity_scores(nats_url):
     server.start()
     client = VectorStoreSecondaryAdapterNATSClient(
         nats_url=nats_url,
-        jwt_secret=JWT_SECRET,
-        service_identity="api",
+        credentials=TEST_TOKENS.source("api"),
         timeout_seconds=10.0,
     )
     try:
@@ -425,8 +386,7 @@ def test_list_vectors_stream_without_a_streaming_engine_raises(nats_url):
     # does not fall back to paging (NATS mode has no older engines).
     client = VectorStoreSecondaryAdapterNATSClient(
         nats_url=nats_url,
-        jwt_secret=JWT_SECRET,
-        service_identity="api",
+        credentials=TEST_TOKENS.source("api"),
         timeout_seconds=5.0,
     )
     try:
@@ -437,3 +397,10 @@ def test_list_vectors_stream_without_a_streaming_engine_raises(nats_url):
             list(documents)
     finally:
         client.close()
+
+
+def test_the_client_presents_its_credentials_token():
+    client = VectorStoreSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", StaticTokenSource("token-1", "api")
+    )
+    assert client._current_token() == "token-1"

@@ -14,7 +14,7 @@ import asyncio
 from typing import Any
 
 import numpy as np
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
 from naas_abi_core.services.vector_store.adapters.primary.vector_store__primary_adapter__NATS import (
     AUTH_HEADER,
@@ -30,7 +30,7 @@ from naas_abi_core.services.vector_store.IVectorStorePort import (
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 from naas_abi_proto.vector_store.values import decode_object, encode_object
 
-SECRET = "test-shared-secret"
+SECRET = TEST_TOKENS.verifier
 
 
 def _publishing_into(events: list) -> Any:
@@ -207,7 +207,7 @@ class _StubAdapter(IVectorStorePort):
 
 
 def _valid_token() -> str:
-    return issue_service_token("api", SECRET)
+    return TEST_TOKENS.token("api")
 
 
 def _list_collections_request() -> bytes:
@@ -258,7 +258,7 @@ def test_malformed_token_returns_unauthenticated():
 
 def test_token_signed_with_wrong_secret_returns_unauthenticated():
     adapter = VectorStorePrimaryAdapterNATS(_StubAdapter(), SECRET)
-    wrong_secret_token = issue_service_token("api", "a-different-secret")
+    wrong_secret_token = OTHER_TOKENS.token("api")
     request = _FakeRequest(
         data=_list_collections_request(), headers={AUTH_HEADER: wrong_secret_token}
     )

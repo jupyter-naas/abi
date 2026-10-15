@@ -5,6 +5,10 @@
 // (abi.iam.v1.authorize, abi.iam.v1.create_policy, ...).
 // Change events: abi.iam.v1.changed carries a ChangeEvent (core NATS fan-out).
 //
+// Token and Jwks need no credentials: a service key is exchanged at
+// abi.iam.v1.token for an abi:nats access token, and abi.iam.v1.jwks returns
+// the engine's public signing keys (RFC §8.2, §9.1).
+//
 // Decisions (Authorize, Filter, Explain without principal_id) are about the
 // caller the server verifies from the request's credentials, never about a
 // request field. Every other operation is authorized with IAM's own iam:*
@@ -137,6 +141,34 @@ message Explanation {
   string action = 3;
   string resource = 4;
   optional DecidingStatement statement = 5;
+}
+
+// A key's record; the key itself is only ever in CreateKeyResponse.value.
+// kind: service (abi_sk_) | personal (abi_pk_).
+message Key {
+  string key_id = 1;
+  string principal_id = 2;
+  string kind = 3;
+  string description = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  google.protobuf.Timestamp last_used_at = 7;
+  google.protobuf.Timestamp revoked_at = 8;
+}
+
+// A module's permission manifest version (RFC §8.3); document_json is the
+// policy document as submitted. status: pending | approved | rejected | superseded.
+message Manifest {
+  string principal_id = 1;
+  string sha256 = 2;
+  string module_id = 3;
+  string project = 4;
+  string document_json = 5;
+  string status = 6;
+  google.protobuf.Timestamp submitted_at = 7;
+  google.protobuf.Timestamp decided_at = 8;
+  optional string decided_by = 9;
+  string reason = 10;
 }
 
 // Published on abi.iam.v1.changed after every change; caches drop their
@@ -499,4 +531,139 @@ message RegisterCatalogResponse {
   abi.common.v1.CallError error = 1;
   // False when a higher version is already registered.
   bool registered = 2;
+}
+
+// -- tokens (RFC §8.2, §9.1) -----------------------------------------------------
+
+// abi.iam.v1.token: a service account's key for an access token. No
+// credentials: the key is one. Errors: UNAUTHENTICATED ("invalid key").
+message TokenRequest {
+  abi.common.v1.CallContext context = 1;
+  string key = 2;
+}
+message TokenResponse {
+  abi.common.v1.CallError error = 1;
+  string access_token = 2;
+  // Seconds; at most 600.
+  int32 expires_in = 3;
+  // The service account the token names.
+  string principal_id = 4;
+  string name = 5;
+}
+
+// abi.iam.v1.jwks: the public signing keys (RFC 7517) and the issuer, as JSON
+// {"issuer": ..., "keys": [...]}. No credentials.
+message JwksRequest {
+  abi.common.v1.CallContext context = 1;
+}
+message JwksResponse {
+  abi.common.v1.CallError error = 1;
+  string jwks_json = 2;
+}
+
+// -- service accounts and keys (RFC §8.1) ---------------------------------------------
+
+message FindServiceAccountRequest {
+  abi.common.v1.CallContext context = 1;
+  string name = 2;
+}
+message FindServiceAccountResponse {
+  abi.common.v1.CallError error = 1;
+  Principal principal = 2;
+}
+
+message CreateKeyRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+  string description = 3;
+  google.protobuf.Timestamp expires_at = 4;
+}
+message CreateKeyResponse {
+  abi.common.v1.CallError error = 1;
+  Key key = 2;
+  // The whole key, shown this once.
+  string value = 3;
+}
+
+message ListKeysRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+}
+message ListKeysResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Key keys = 2;
+}
+
+message RevokeKeyRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+  string key_id = 3;
+}
+message RevokeKeyResponse {
+  abi.common.v1.CallError error = 1;
+  Key key = 2;
+}
+
+// -- module manifests (RFC §8.3) -------------------------------------------------------
+
+// The calling module's own manifest: the caller must be the service account
+// module/<project>/<module_id>. approved_now: this call approved it (auto
+// approval), so connections opened before carry older broker permissions.
+// in_force: an approved version (this one or an earlier one) grants now.
+message SubmitManifestRequest {
+  abi.common.v1.CallContext context = 1;
+  string module_id = 2;
+  string project = 3;
+  string document_json = 4;
+}
+message SubmitManifestResponse {
+  abi.common.v1.CallError error = 1;
+  Manifest manifest = 2;
+  bool approved_now = 3;
+  bool in_force = 4;
+}
+
+// Without sha256: the latest version.
+message GetManifestRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+  optional string sha256 = 3;
+}
+message GetManifestResponse {
+  abi.common.v1.CallError error = 1;
+  Manifest manifest = 2;
+}
+
+message ListManifestsRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string principal_id = 2;
+  optional string status = 3;
+}
+message ListManifestsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Manifest manifests = 2;
+}
+
+// Without sha256: the latest pending version. document_json, when set,
+// narrows it: that document is approved instead.
+message ApproveManifestRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+  optional string sha256 = 3;
+  optional string document_json = 4;
+}
+message ApproveManifestResponse {
+  abi.common.v1.CallError error = 1;
+  Manifest manifest = 2;
+}
+
+message RejectManifestRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+  optional string sha256 = 3;
+  string reason = 4;
+}
+message RejectManifestResponse {
+  abi.common.v1.CallError error = 1;
+  Manifest manifest = 2;
 }

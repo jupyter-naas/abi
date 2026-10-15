@@ -14,7 +14,7 @@ from pathlib import Path
 
 import nats
 import pytest
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_credentials import issuer_source
 from naas_abi_core.engine.nats_test_server import native_nats_server, nats_server_binary
 from naas_abi_core.engine.nats_transfer import TransferError
 from naas_abi_core.proto.object_storage.v1 import object_storage_pb2
@@ -24,7 +24,6 @@ from nats.errors import NoRespondersError
 
 pytestmark = pytest.mark.integration
 
-SECRET = "engine-handover-test-secret-at-least-32-bytes"
 OBJECTS = "abi.svc.object_storage.v1.transfer"
 MODELS = "abi.svc.model_registry.v1"
 # Every transfer host a serving engine starts, with an operation it accepts.
@@ -61,21 +60,23 @@ def engine_dir(tmp_path, monkeypatch) -> Path:
     return work
 
 
-def new_engine(url: str, **engine):
+def new_engine(url: str, service_key: str = "", **engine):
     from naas_abi_core.engine.Engine import Engine
 
     settings = ", ".join(f"{key}: {value}" for key, value in engine.items())
+    key = f", service_key: {service_key}" if service_key else ""
     return Engine(
         "api: {}\n"
         "global_config: {ai_mode: cloud, skip_ontology_loading: true}\n"
         "modules: []\n"
         "services: {secret: {secret_adapters: []}}\n"
-        f"nats: {{nats_url: '{url}', jwt_secret: {SECRET}, engine: {{{settings}}}}}\n"
+        f"nats: {{nats_url: '{url}', engine: {{{settings}}}{key}}}\n"
     )
 
 
-def caller(nc):
-    headers = {"Nats-Auth-Token": issue_service_token("caller", SECRET)}
+def caller(nc, engine):
+    """Calls as ``api``, with a token of the engine's own IAM."""
+    headers = {"Nats-Auth-Token": engine.services.iam.issue_service_token("api").token}
 
     async def call(subject, request, response_type):
         request.context.timeout_ms = 5000
@@ -138,7 +139,7 @@ def test_every_session_the_engine_owns_carries_the_id_that_holds_the_lease(
 
     async def owners() -> set[str]:
         nc = await nats.connect(broker)
-        call = caller(nc)
+        call = caller(nc, engine)
         try:
             record = await (await JetStreamLease.open(nc)).read()
             assert record is not None
@@ -188,7 +189,7 @@ def test_a_transfer_in_progress_at_shutdown_completes(broker, engine_dir):
 
     async def read_during_shutdown() -> bytes:
         nc = await nats.connect(broker)
-        call = caller(nc)
+        call = caller(nc, engine)
         try:
             transfer = await open_object(call, "blob")
             fragments = transfer.fragments()
@@ -234,7 +235,7 @@ def test_a_stuck_transfer_is_closed_at_the_drain_deadline(broker, engine_dir):
 
     async def open_and_stall():
         nc = await nats.connect(broker)
-        transfer = await open_object(caller(nc), "blob")
+        transfer = await open_object(caller(nc, engine), "blob")
         await anext(transfer.fragments())
         return nc, transfer  # never read again, never closed
 
@@ -249,7 +250,7 @@ def test_a_stuck_transfer_is_closed_at_the_drain_deadline(broker, engine_dir):
         assert 1 <= elapsed < 8
         with pytest.raises(NoRespondersError):
             loop.run_until_complete(
-                caller(nc)(
+                caller(nc, engine)(
                     transfer_subject(OBJECTS, "read", transfer.id),
                     pb.ReadRequest(id=transfer.id, sequence=1),
                     pb.ReadResponse,
@@ -320,14 +321,17 @@ def test_a_one_shot_call_in_progress_at_shutdown_is_answered(
     store.set("slow", b"answered")
     next_engine = Mock(wraps=store)
     client = KeyValueSecondaryAdapterNATSClient(
-        broker, SECRET, "caller", timeout_seconds=20
+        broker, issuer_source(engine.services.iam, "api"), timeout_seconds=20
     )
     stopping = threading.Thread(target=engine.shutdown)
     try:
         with ThreadPoolExecutor(1) as calls:
             reading = calls.submit(client.get, "slow")
             assert handling.wait(10)
-            with serving(broker, KeyValuePrimaryAdapterNATS(next_engine, SECRET)):
+            with serving(
+                broker,
+                KeyValuePrimaryAdapterNATS(next_engine, engine.services.iam.verifier()),
+            ):
                 started = time.monotonic()
                 stopping.start()
                 # New calls stop reaching this engine...
@@ -357,9 +361,10 @@ def test_a_one_shot_call_in_progress_at_shutdown_is_answered(
 
 
 @contextmanager
-def document_owner(url: str, path: Path) -> Iterator[None]:
-    """The serving side of the one call a client engine makes while it loads:
-    its agents' memory collections, in the serving engine's document service."""
+def document_owner(url: str, path: Path) -> Iterator[str]:
+    """The serving side of the calls a client engine makes while it loads: IAM,
+    exchanging the engine's key (yielded) for tokens, and its agents' memory
+    collections, in the serving engine's document service."""
     from naas_abi_core.services.document.adapters.primary.document__primary_adapter__NATS import (
         DocumentPrimaryAdapterNATS,
     )
@@ -367,12 +372,25 @@ def document_owner(url: str, path: Path) -> Iterator[None]:
         DocumentSecondaryAdapterSQLite,
     )
     from naas_abi_core.services.document.DocumentService import DocumentService
-
-    primary = DocumentPrimaryAdapterNATS(
-        DocumentService._for_engine(DocumentSecondaryAdapterSQLite(str(path))), SECRET
+    from naas_abi_core.services.iam.adapters.primary.iam__primary_adapter__NATS import (
+        IAMPrimaryAdapterNATS,
     )
-    with serving(url, primary):
-        yield
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import (
+        IAMStoreMemory,
+    )
+    from naas_abi_core.services.iam.IAMService import IAMService
+
+    iam = IAMService(IAMStoreMemory())
+    iam.bootstrap()
+    documents = DocumentPrimaryAdapterNATS(
+        DocumentService._for_engine(DocumentSecondaryAdapterSQLite(str(path))),
+        iam.verifier(),
+    )
+    with (
+        serving(url, IAMPrimaryAdapterNATS(iam, iam.verifier())),
+        serving(url, documents),
+    ):
+        yield iam.engine_service_key()
 
 
 def test_a_client_engine_opens_no_local_backend(broker, engine_dir, tmp_path):
@@ -380,8 +398,8 @@ def test_a_client_engine_opens_no_local_backend(broker, engine_dir, tmp_path):
     from naas_abi_core.engine.nats_rpc import NatsRPCClient
     from nats.js.errors import BucketNotFoundError
 
-    with document_owner(broker, tmp_path / "documents.sqlite"):
-        engine = new_engine(broker, role="client")
+    with document_owner(broker, tmp_path / "documents.sqlite") as service_key:
+        engine = new_engine(broker, service_key, role="client")
         engine.load()
         try:
             assert list(engine_dir.rglob("*")) == []

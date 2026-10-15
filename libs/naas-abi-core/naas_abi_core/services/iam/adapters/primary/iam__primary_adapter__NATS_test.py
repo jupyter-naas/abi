@@ -5,11 +5,17 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.call_context import (
+    CallContext,
+    Principal,
+    as_service_account,
+    use_call_context,
+)
 from naas_abi_core.engine.nats_rpc_integration_test import (  # noqa: F401 - pytest fixture
     SECRET,
     broker,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.iam import roles
 from naas_abi_core.services.iam.adapters.primary.iam__primary_adapter__NATS import (
     IAMPrimaryAdapterNATS,
@@ -33,6 +39,25 @@ def test_sdk_modules_reach_iam_over_nats(broker):  # noqa: F811 - imported fixtu
     url, _ = broker
     service = IAMService(IAMStoreMemory())
     service.bootstrap()
+    # The module's account, with its manifest approved: its own collections.
+    with as_service_account("engine"):
+        account = service.create_service_account("module/acme/people")
+    with use_call_context(
+        CallContext(principal=Principal(account.id, "service_account", account.name))
+    ):
+        service.submit_manifest(
+            "people",
+            "acme",
+            document(
+                statement(
+                    "Allow",
+                    ["document:*"],
+                    ["abi:-:-:document:collection/${module.id}/*"],
+                )
+            ),
+        )
+    with as_service_account("engine"):
+        service.approve_manifest(account.id)
 
     async def scenario():
         import nats
@@ -40,8 +65,10 @@ def test_sdk_modules_reach_iam_over_nats(broker):  # noqa: F811 - imported fixtu
         nc = await nats.connect(url)
         primary = IAMPrimaryAdapterNATS(service, SECRET)
         await primary.start(nc)
-        engine = ABIClient(url, issue_service_token("engine", SECRET))
-        module = ABIClient(url, issue_service_token("people", SECRET))
+        engine = ABIClient(url, TEST_TOKENS.token("engine"))
+        module = ABIClient(
+            url, TEST_TOKENS.token("module/acme/people", subject=account.id)
+        )
         try:
             # An administrator (engine's transitional policy) sets things up.
             admin = ServicesProxy(engine, ModuleDependencies(), "admin").iam

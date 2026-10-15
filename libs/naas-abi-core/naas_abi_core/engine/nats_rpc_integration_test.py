@@ -12,6 +12,7 @@ from unittest.mock import Mock
 import nats
 import pytest
 from naas_abi_core.engine.nats_rpc import NatsRPCPayloadTooLargeError
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.bus.adapters.secondary.NATSJetStreamAdapter import (
     NATSJetStreamAdapter,
 )
@@ -23,7 +24,7 @@ from naas_abi_core.services.keyvalue.adapters.secondary.KeyValueSecondaryAdapter
 )
 from naas_abi_core.services.keyvalue.KeyValuePorts import IKeyValueAdapter
 
-SECRET = "rpc-integration-test-secret-32-bytes"
+SECRET = TEST_TOKENS.verifier
 pytestmark = pytest.mark.integration
 
 
@@ -86,7 +87,7 @@ def test_oversized_requests_and_replies_fail_then_connection_remains_usable(brok
         backend = Mock(spec=IKeyValueAdapter)
         backend.get.return_value = b"x" * limit
         primary = KeyValuePrimaryAdapterNATS(backend, SECRET)
-        client = KeyValueSecondaryAdapterNATSClient(url, SECRET, "test")
+        client = KeyValueSecondaryAdapterNATSClient(url, TEST_TOKENS.source("test"))
         try:
             await primary.start(nc)
             await nc.flush()
@@ -150,7 +151,7 @@ def test_timeout_does_not_duplicate_a_completed_remote_write(broker):
         backend.set.side_effect = slow_set
         backend.get.return_value = b"ready"
         primary = KeyValuePrimaryAdapterNATS(backend, SECRET)
-        client = KeyValueSecondaryAdapterNATSClient(url, SECRET, "test")
+        client = KeyValueSecondaryAdapterNATSClient(url, TEST_TOKENS.source("test"))
         try:
             await primary.start(nc)
             await nc.flush()
@@ -186,7 +187,6 @@ def test_values_above_the_broker_limit_overflow_both_ways(overflow_broker):
     import os
 
     from naas_abi_core.engine import nats_overflow
-    from naas_abi_core.engine.nats_auth import issue_service_token
     from naas_abi_core.engine.nats_overflow import OverflowHost
     from naas_abi_proto.keyvalue.v1 import keyvalue_pb2
     from naas_abi_sdk.transport import Transport
@@ -200,8 +200,8 @@ def test_values_above_the_broker_limit_overflow_both_ways(overflow_broker):
         backend.get.return_value = value
         primary = KeyValuePrimaryAdapterNATS(backend, SECRET)
         host = OverflowHost(SECRET)
-        client = KeyValueSecondaryAdapterNATSClient(url, SECRET, "test")
-        transport = Transport(url, issue_service_token("sdk", SECRET), timeout=10)
+        client = KeyValueSecondaryAdapterNATSClient(url, TEST_TOKENS.source("test"))
+        transport = Transport(url, TEST_TOKENS.token("sdk"), timeout=10)
         try:
             await primary.start(nc)
             await host.start(nc)

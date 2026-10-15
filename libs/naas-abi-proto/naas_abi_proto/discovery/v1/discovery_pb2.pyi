@@ -108,18 +108,20 @@ class ModuleDescriptor(_message.Message):
     def __init__(self, module_id: _Optional[str] = ..., package_version: _Optional[str] = ..., contract_major: _Optional[int] = ..., dependencies: _Optional[_Iterable[_Union[Dependency, _Mapping]]] = ..., agents: _Optional[_Iterable[_Union[AgentDescriptor, _Mapping]]] = ..., jobs: _Optional[_Iterable[_Union[JobDescriptor, _Mapping]]] = ..., models: _Optional[_Iterable[_Union[ModelDescriptor, _Mapping]]] = ..., apps: _Optional[_Iterable[_Union[AppDescriptor, _Mapping]]] = ...) -> None: ...
 
 class Instance(_message.Message):
-    __slots__ = ("descriptor", "instance_id", "status", "expires_at", "rollout_id")
+    __slots__ = ("descriptor", "instance_id", "status", "expires_at", "rollout_id", "service_account")
     DESCRIPTOR_FIELD_NUMBER: _ClassVar[int]
     INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
     EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
     ROLLOUT_ID_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_ACCOUNT_FIELD_NUMBER: _ClassVar[int]
     descriptor: ModuleDescriptor
     instance_id: str
     status: str
     expires_at: float
     rollout_id: str
-    def __init__(self, descriptor: _Optional[_Union[ModuleDescriptor, _Mapping]] = ..., instance_id: _Optional[str] = ..., status: _Optional[str] = ..., expires_at: _Optional[float] = ..., rollout_id: _Optional[str] = ...) -> None: ...
+    service_account: str
+    def __init__(self, descriptor: _Optional[_Union[ModuleDescriptor, _Mapping]] = ..., instance_id: _Optional[str] = ..., status: _Optional[str] = ..., expires_at: _Optional[float] = ..., rollout_id: _Optional[str] = ..., service_account: _Optional[str] = ...) -> None: ...
 
 class RegisterRequest(_message.Message):
     __slots__ = ("context", "descriptor", "instance_id", "lease_token", "rollout_id", "rollout_modules")

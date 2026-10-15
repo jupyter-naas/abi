@@ -2,6 +2,7 @@ import asyncio
 import threading
 
 import pytest
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.engine.nats_transfer import (
     TransferError,
     TransferHost,
@@ -185,7 +186,7 @@ def test_producer_failure_is_logged_without_a_followup_read(monkeypatch):
     asyncio.run(scenario())
 
 
-SECRET = "transfer-unit-test-secret-at-least-32-bytes"
+SECRET = TEST_TOKENS.verifier
 PREFIX = "abi.svc.object_storage.v1.transfer"
 
 
@@ -223,7 +224,7 @@ class _Caller:
         msg = SimpleNamespace(
             data=request.SerializeToString(),
             headers=self.headers,
-            reply="inbox",
+            reply="_INBOX.reply",
             respond=AsyncMock(),
             _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
         )
@@ -254,9 +255,8 @@ class _Caller:
 
 
 def _headers(caller="api"):
-    from naas_abi_core.engine.nats_auth import issue_service_token
 
-    return {"Nats-Auth-Token": issue_service_token(caller, SECRET)}
+    return {"Nats-Auth-Token": TEST_TOKENS.token(caller)}
 
 
 def test_a_session_span_continues_the_caller_and_parents_the_handler(spans):

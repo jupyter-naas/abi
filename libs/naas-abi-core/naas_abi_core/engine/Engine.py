@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import threading
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -60,6 +60,8 @@ class Engine(IEngine):
     __serving_lock: threading.RLock
     # Memory of agents built with memory=None, bound by load() (see context.py).
     __agent_checkpointer: BaseCheckpointSaver | None = None
+    # NATS mode: the engine's own tokens (see __engine_credentials).
+    __credentials: Any = None
 
     @property
     def configuration(self) -> EngineConfiguration:
@@ -176,7 +178,9 @@ class Engine(IEngine):
                 EngineNATSDependencies,
             )
 
-            self.__nats_dependencies = EngineNATSDependencies(self.__configuration.nats)
+            self.__nats_dependencies = EngineNATSDependencies(
+                self.__configuration.nats, self.__engine_credentials()
+            )
             dependencies = self.__nats_dependencies.build(self.__services)
             self.__services.wire_services(dependencies)
             self.__nats_runtime_started = True
@@ -284,7 +288,9 @@ class Engine(IEngine):
 
         assert self.__configuration.nats is not None
         services = self.__configuration.services
-        self.__nats_dependencies = EngineNATSDependencies(self.__configuration.nats)
+        self.__nats_dependencies = EngineNATSDependencies(
+            self.__configuration.nats, self.__engine_credentials(client=True)
+        )
         self.__nats_runtime_started = True
         return self.__nats_dependencies.build_clients(
             services.model_registry.load(),
@@ -311,7 +317,70 @@ class Engine(IEngine):
             with owned_by(self.__instance_id):
                 primaries = nats_loader.expose_services(self.__services)
                 primaries += nats_loader.expose_overflow(primaries)
+                primaries += nats_loader.expose_auth_callout(self.__services)
             self.__nats_primary_adapters = primaries
+            self.__keep_engine_key()
+
+    def service_credentials(self, name: str = "engine") -> Any:
+        """Tokens of the engine's own service account ``name`` (``engine``,
+        ``api``) for in-process callers over NATS, such as Nexus. Signed here
+        when this engine holds IAM; a client-role engine has ``engine`` only."""
+        from naas_abi_core.engine import nats_credentials
+        from naas_abi_core.services.iam.IAMService import IAMService
+
+        if name == "engine":
+            return self.__engine_credentials(
+                client=not isinstance(self.__services.iam, IAMService)
+            )
+        iam = self.__services.iam
+        holds_iam = isinstance(iam, IAMService)
+        if not holds_iam:
+            raise RuntimeError(f"Only an engine holding IAM signs tokens for {name!r}")
+        sources = self.__dict__.setdefault("_service_sources", {})
+        if name not in sources:
+            sources[name] = nats_credentials.issuer_source(cast(IAMService, iam), name)
+        return sources[name]
+
+    def __engine_credentials(self, client: bool = False) -> Any:
+        """The engine's own tokens (RFC §8.2): signed in this process when it
+        holds IAM; for a client-role engine, exchanged from the engine's key
+        (``nats.service_key``, else the one the serving engine keeps in the
+        secret service)."""
+        from naas_abi_core.engine import nats_credentials
+        from naas_abi_core.services.iam.IAMService import IAMService
+
+        if self.__credentials is not None:
+            return self.__credentials
+        nats = self.__configuration.nats
+        assert nats is not None
+        if not client and isinstance(self.__services.iam, IAMService):
+            self.__credentials = nats_credentials.issuer_source(
+                self.__services.iam, "engine"
+            )
+        else:
+            key = nats.service_key or self.__configuration.services.secret.local_value(
+                "iam/service-keys/engine"
+            )
+            if not key:
+                raise RuntimeError(
+                    "This engine is a client of the serving engine and holds no "
+                    "service key: start the serving engine first (it keeps the "
+                    "engine's key in the secret service), or set nats.service_key."
+                )
+            self.__credentials = nats_credentials.service_key_source(
+                nats.nats_url, key, identity="engine"
+            )
+        return self.__credentials
+
+    def __keep_engine_key(self) -> None:
+        """Keep the engine's key in the secret service, for client-role engines."""
+        from naas_abi_core.services.iam.IAMService import IAMService
+
+        if isinstance(self.__services.iam, IAMService):
+            try:
+                self.__services.iam.engine_service_key()
+            except Exception as exc:  # noqa: BLE001 - clients report it themselves
+                logger.warning(f"Could not keep the engine's service key: {exc}")
 
     def __stop_serving(self, drain_seconds: float = 0) -> None:
         """Stop every started primary adapter.
@@ -375,6 +444,9 @@ class Engine(IEngine):
         self.__job_loader = EngineJobLoader(
             self.__configuration.nats,
             iam=self.__services.iam if self.__services.iam_available() else None,
+            credentials=self.__engine_credentials()
+            if self.__configuration.nats is not None
+            else None,
         )
         self.__job_loader.start(
             self.job_owners(), document_available=self.__services.document_available()

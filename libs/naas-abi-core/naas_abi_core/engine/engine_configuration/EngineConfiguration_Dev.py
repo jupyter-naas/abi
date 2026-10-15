@@ -3,14 +3,20 @@
 The engine validates the block (so a typo fails at load) and otherwise ignores
 it: it is for the dev CLI, which spawns each enabled module as
 ``python -m <module> <args>`` with the dev broker's settings in its environment
-(``ABI_NATS_URL``, ``NATS_JWT_SECRET``, ``ABI_SERVICE_TOKEN``,
-``ABI_DISCOVERY_PROJECT``, and ``OTEL_EXPORTER_OTLP_ENDPOINT`` with tracing).
-``env`` values may name those as ``${VAR}``.
+(``ABI_NATS_URL``, ``ABI_SERVICE_KEY``, ``ABI_DISCOVERY_PROJECT``, and
+``OTEL_EXPORTER_OTLP_ENDPOINT`` with tracing). ``env`` values may name those
+as ``${VAR}``.
+
+Each module runs as the service account ``module/<project>/<module_id>``:
+``module_id`` is the module's own (``ABIModule.module_id``), the dev name when
+it is not set. ``abi dev up`` gives it a fresh key on every start, and the dev
+overlay approves its permission manifest as it submits it.
 
     dev:
       modules:
         - name: probe-researcher            # process name: logs, pid, --service
           module: operations.projects.nats_probe
+          module_id: acme.researcher        # its ABIModule.module_id (default: name)
           args: [researcher]
           env: {NATS_PROBE_DISCOVERY_PROJECT: "${ABI_DISCOVERY_PROJECT}"}
           restart: on-failure               # or always, never
@@ -31,10 +37,18 @@ class DevModuleConfiguration(BaseModel):
 
     name: str = Field(pattern=r"^[a-z][a-z0-9-]{0,62}$")
     module: str = Field(min_length=1)
+    # The module's own id: its service account is module/<project>/<module_id>.
+    module_id: str | None = Field(
+        default=None, pattern=r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$"
+    )
     args: list[str] = Field(default_factory=list)
     env: dict[str, str] = Field(default_factory=dict)
     enabled: bool = True
     restart: Literal["on-failure", "always", "never"] = "on-failure"
+
+    @property
+    def identity(self) -> str:
+        return self.module_id or self.name
 
 
 class DevConfiguration(BaseModel):

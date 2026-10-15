@@ -15,6 +15,9 @@ from naas_abi_core.services.iam.IAMPorts import (
     IAMConflictError,
     IAMNotFoundError,
     IAMStore,
+    KeyRecord,
+    ManifestRecord,
+    ManifestStatus,
     Page,
     Placement,
     Policy,
@@ -22,6 +25,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
     RevisionConflictError,
     ScopeRecord,
+    SigningKeyRecord,
 )
 
 
@@ -40,6 +44,9 @@ class IAMStoreMemory(IAMStore):
         self._placements: dict[tuple[str, str], Placement] = {}
         self._scopes: dict[tuple[str, str], ScopeRecord] = {}
         self._catalogs: dict[str, ActionCatalog] = {}
+        self._keys: dict[str, KeyRecord] = {}
+        self._manifests: dict[tuple[str, str], ManifestRecord] = {}
+        self._signing_keys: dict[str, SigningKeyRecord] = {}
         self._revision = 0
         self._install_id: str | None = None
         self._closed = False
@@ -408,6 +415,108 @@ class IAMStoreMemory(IAMStore):
     def list_catalogs(self) -> list[ActionCatalog]:
         with self._lock:
             return sorted(self._catalogs.values(), key=lambda c: c.service)
+
+    # -- keys -------------------------------------------------------------------------
+
+    def create_key(self, record: KeyRecord) -> KeyRecord:
+        with self._lock:
+            if record.principal_id not in self._principals:
+                raise IAMNotFoundError(f"Principal {record.principal_id} not found")
+            if record.key_id in self._keys:
+                raise IAMConflictError(f"Key {record.key_id} exists")
+            stored = replace(
+                record, created_at=record.created_at or _now(), last_used_at=None
+            )
+            self._write()
+            self._keys[record.key_id] = stored
+            return stored
+
+    def get_key(self, key_id: str) -> KeyRecord:
+        with self._lock:
+            try:
+                return self._keys[key_id]
+            except KeyError:
+                raise IAMNotFoundError(f"Key {key_id} not found") from None
+
+    def list_keys(self, principal_id: str | None = None) -> list[KeyRecord]:
+        with self._lock:
+            return sorted(
+                (
+                    k
+                    for k in self._keys.values()
+                    if principal_id in (None, k.principal_id)
+                ),
+                key=lambda k: (k.created_at, k.key_id),
+            )
+
+    def revoke_key(self, key_id: str, at: datetime) -> KeyRecord:
+        with self._lock:
+            current = self.get_key(key_id)
+            if current.revoked_at is None:
+                self._write()
+                current = self._keys[key_id] = replace(current, revoked_at=at)
+            return current
+
+    def touch_key(self, key_id: str, at: datetime) -> None:
+        with self._lock:
+            if key_id in self._keys:
+                self._keys[key_id] = replace(self._keys[key_id], last_used_at=at)
+
+    # -- manifests --------------------------------------------------------------------
+
+    def put_manifest(self, record: ManifestRecord) -> ManifestRecord:
+        with self._lock:
+            if record.principal_id not in self._principals:
+                raise IAMNotFoundError(f"Principal {record.principal_id} not found")
+            stored = replace(record, submitted_at=record.submitted_at or _now())
+            self._write()
+            self._manifests[(record.principal_id, record.sha256)] = stored
+            return stored
+
+    def get_manifest(self, principal_id: str, sha256: str) -> ManifestRecord:
+        with self._lock:
+            try:
+                return self._manifests[(principal_id, sha256)]
+            except KeyError:
+                raise IAMNotFoundError(
+                    f"Manifest {sha256} of {principal_id} not found"
+                ) from None
+
+    def list_manifests(
+        self, principal_id: str | None = None, status: ManifestStatus | None = None
+    ) -> list[ManifestRecord]:
+        with self._lock:
+            return sorted(
+                (
+                    m
+                    for m in self._manifests.values()
+                    if principal_id in (None, m.principal_id)
+                    and status in (None, m.status)
+                ),
+                key=lambda m: (m.submitted_at, m.principal_id, m.sha256),
+            )
+
+    # -- signing keys -------------------------------------------------------------------
+
+    def add_signing_key(self, record: SigningKeyRecord) -> None:
+        with self._lock:
+            if record.kid in self._signing_keys:
+                raise IAMConflictError(f"Signing key {record.kid} exists")
+            self._write()
+            self._signing_keys[record.kid] = record
+
+    def list_signing_keys(self) -> list[SigningKeyRecord]:
+        with self._lock:
+            return sorted(
+                self._signing_keys.values(), key=lambda k: (k.created_at, k.kid)
+            )
+
+    def retire_signing_key(self, kid: str, retires_at: datetime) -> None:
+        with self._lock:
+            current = self._signing_keys.get(kid)
+            if current is not None and current.retires_at is None:
+                self._write()
+                self._signing_keys[kid] = replace(current, retires_at=retires_at)
 
     # -- store ----------------------------------------------------------------------
 

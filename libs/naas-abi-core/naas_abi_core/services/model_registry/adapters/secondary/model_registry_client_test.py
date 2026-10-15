@@ -2,6 +2,7 @@ import asyncio
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.model_registry.adapters.secondary.model_registry_client import (
     ModelRegistryNATSClient,
 )
@@ -11,7 +12,9 @@ from naas_abi_sdk.transport import RPCError
 
 def test_local_bootstrap_and_remote_error_translation(monkeypatch):
     owner = Mock()
-    client = ModelRegistryNATSClient(owner, "nats://unused:4222", "test")
+    client = ModelRegistryNATSClient(
+        owner, "nats://unused:4222", TEST_TOKENS.source("engine")
+    )
     model = Mock()
     client.register("id", model)
     owner.register.assert_called_once_with("id", model)

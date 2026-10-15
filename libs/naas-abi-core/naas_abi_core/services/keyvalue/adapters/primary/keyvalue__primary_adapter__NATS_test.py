@@ -9,7 +9,7 @@ out for this adapter.
 import asyncio
 
 import pytest
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.proto.keyvalue.v1 import keyvalue_pb2
 from naas_abi_core.services.keyvalue.adapters.primary.keyvalue__primary_adapter__NATS import (
     AUTH_HEADER,
@@ -24,7 +24,7 @@ from naas_abi_core.services.keyvalue.KeyValuePorts import (
 )
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 
-SECRET = "test-shared-secret"
+SECRET = TEST_TOKENS.verifier
 
 
 class _FakeRequest:
@@ -67,9 +67,7 @@ class _StubAdapter(IKeyValueAdapter):
         if ttl is not None:
             self.ttls[key] = ttl
 
-    def set_if_not_exists(
-        self, key: str, value: bytes, ttl: int | None = None
-    ) -> bool:
+    def set_if_not_exists(self, key: str, value: bytes, ttl: int | None = None) -> bool:
         if key in self.values:
             return False
         self.values[key] = value
@@ -102,7 +100,7 @@ class _StubAdapter(IKeyValueAdapter):
 
 
 def _valid_token() -> str:
-    return issue_service_token("api", SECRET)
+    return TEST_TOKENS.token("api")
 
 
 def _get_request(key: str = "k") -> bytes:
@@ -151,7 +149,7 @@ def test_malformed_token_returns_unauthenticated():
 
 def test_token_signed_with_wrong_secret_returns_unauthenticated():
     adapter = KeyValuePrimaryAdapterNATS(_StubAdapter(), SECRET)
-    wrong_secret_token = issue_service_token("api", "a-different-secret")
+    wrong_secret_token = OTHER_TOKENS.token("api")
     request = _FakeRequest(
         data=_get_request(), headers={AUTH_HEADER: wrong_secret_token}
     )
@@ -233,9 +231,7 @@ def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():
             raise RuntimeError("some sensitive internal detail")
 
     adapter = KeyValuePrimaryAdapterNATS(_BoomAdapter(), SECRET)
-    request = _FakeRequest(
-        data=_get_request(), headers={AUTH_HEADER: _valid_token()}
-    )
+    request = _FakeRequest(data=_get_request(), headers={AUTH_HEADER: _valid_token()})
 
     asyncio.run(adapter._handle_get(request))
 
@@ -309,7 +305,9 @@ def test_stub_adapter_does_not_expose_client_side_only_lock_helper(method_name):
 
 
 def _authed(data: bytes, subject: str) -> _FakeRequest:
-    return _FakeRequest(data=data, headers={AUTH_HEADER: _valid_token()}, subject=subject)
+    return _FakeRequest(
+        data=data, headers={AUTH_HEADER: _valid_token()}, subject=subject
+    )
 
 
 def test_list_keys_pages_with_next_after():
@@ -331,7 +329,9 @@ def test_list_keys_pages_with_next_after():
     assert response.next_after == "app:b"
 
     last = _authed(
-        keyvalue_pb2.ListKeysRequest(prefix="app:", limit=2, after="app:b").SerializeToString(),
+        keyvalue_pb2.ListKeysRequest(
+            prefix="app:", limit=2, after="app:b"
+        ).SerializeToString(),
         "abi.svc.keyvalue.v1.list_keys",
     )
     asyncio.run(adapter._handle_list_keys(last))

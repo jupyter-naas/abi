@@ -9,10 +9,10 @@ Shared connection, token, timeout, and reply handling live in
 ``naas_abi_core.engine.nats_rpc.NatsRPCClient``. Calls are never replayed
 by the transport after failure; a timeout may hide a completed operation.
 
-Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): a JWT asserting
-``service_identity`` is issued once and attached on the ``Nats-Auth-Token``
-header of every request, reissued only when it is close to expiry rather
-than on every call. ``VectorStorePrimaryAdapterNATS`` must read the token
+Auth (see ``naas_abi_core.engine.nats_auth``): the client's credentials
+(the engine's own tokens, or a service key's) put an ES256 engine token on
+the ``Nats-Auth-Token`` header of every request, renewed at half its
+life. ``VectorStorePrimaryAdapterNATS`` must read the token
 from that exact header -- both sides read ``AUTH_HEADER`` from
 ``vector_store_nats_contract``, a neutral module neither adapter owns, so
 this file never has to import from the primary adapter's module (or vice
@@ -46,6 +46,7 @@ from contextlib import contextmanager
 from typing import Any
 
 import numpy as np
+from naas_abi_core.engine.nats_auth import TokenSource
 from naas_abi_core.engine.nats_rpc import NatsRPCClient, NatsRPCError
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
@@ -94,14 +95,12 @@ class VectorStoreSecondaryAdapterNATSClient(NatsRPCClient, IVectorStorePort):
     def __init__(
         self,
         nats_url: str,
-        jwt_secret: str,
-        service_identity: str,
+        credentials: TokenSource,
         timeout_seconds: float = 10.0,
     ) -> None:
         super().__init__(
             nats_url,
-            jwt_secret,
-            service_identity,
+            credentials,
             timeout_seconds,
             auth_header=AUTH_HEADER,
         )

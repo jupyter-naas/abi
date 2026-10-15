@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from queue import Queue
 from typing import BinaryIO
 
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.proto.object_storage.v1 import object_storage_pb2
 from naas_abi_core.services.object_storage.adapters.primary.object_storage__primary_adapter__NATS import (
     AUTH_HEADER,
@@ -25,7 +25,7 @@ from naas_abi_core.services.object_storage.ObjectStoragePort import (
     ObjectMetaData,
 )
 
-SECRET = "test-shared-secret"
+SECRET = TEST_TOKENS.verifier
 
 
 class _FakeRequest:
@@ -92,7 +92,7 @@ class _StubAdapter(IObjectStorageAdapter):
 
 
 def _valid_token() -> str:
-    return issue_service_token("api", SECRET)
+    return TEST_TOKENS.token("api")
 
 
 def _get_object_request(prefix: str = "p", key: str = "k") -> bytes:
@@ -145,7 +145,7 @@ def test_malformed_token_returns_unauthenticated():
 
 def test_token_signed_with_wrong_secret_returns_unauthenticated():
     adapter = ObjectStoragePrimaryAdapterNATS(_StubAdapter(), SECRET)
-    wrong_secret_token = issue_service_token("api", "a-different-secret")
+    wrong_secret_token = OTHER_TOKENS.token("api")
     request = _FakeRequest(
         data=_get_object_request(), headers={AUTH_HEADER: wrong_secret_token}
     )
@@ -330,7 +330,9 @@ def test_listing_a_file_maps_to_not_a_directory():
 
     adapter = ObjectStoragePrimaryAdapterNATS(_FileAdapter(), SECRET)
     request = _FakeRequest(
-        data=object_storage_pb2.ListObjectsRequest(prefix="drive/a.pdf").SerializeToString(),
+        data=object_storage_pb2.ListObjectsRequest(
+            prefix="drive/a.pdf"
+        ).SerializeToString(),
         headers={AUTH_HEADER: _valid_token()},
         subject="abi.svc.object_storage.v1.list_objects",
     )

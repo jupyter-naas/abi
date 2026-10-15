@@ -10,11 +10,11 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from naas_abi_core.engine import nats_runtime
 from naas_abi_core.engine.call_context import CallContext, Principal, use_call_context
-from naas_abi_core.engine.nats_auth import issue_service_token
 from naas_abi_core.engine.nats_rpc_integration_test import (  # noqa: F401 - pytest fixture
     SECRET,
     broker,
 )
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.services.iam import roles
 from naas_abi_core.services.iam.adapters.primary.iam__primary_adapter__NATS import (
     IAMPrimaryAdapterNATS,
@@ -54,8 +54,12 @@ def iam_host(broker):  # noqa: F811 - imported pytest fixture
     nats_runtime.run_coro(connection.flush())
     clients: list[IAMSecondaryAdapterNATSClient] = []
 
-    def client(identity: str, secret: str = SECRET) -> IAMSecondaryAdapterNATSClient:
-        found = IAMSecondaryAdapterNATSClient(url, secret, identity)
+    def client(
+        identity: str, tokens=TEST_TOKENS, subject: str | None = None
+    ) -> IAMSecondaryAdapterNATSClient:
+        found = IAMSecondaryAdapterNATSClient(
+            url, tokens.source(identity, subject=subject)
+        )
         clients.append(found)
         return found
 
@@ -126,8 +130,24 @@ def test_administration_round_trip(iam_host):
 
 @BROKER
 def test_decisions_are_about_the_verified_caller(iam_host):
-    module = iam_host.client("people")  # a remote module: transitional policy
+    engine = iam_host.client("engine")
+    account = engine.create_service_account("module/acme/people")
+    module = iam_host.client("module/acme/people", subject=account.id)
     own = "abi:-:-:document:collection/people/contacts"
+    assert not module.authorize("document:Find", own).allowed  # not approved yet
+    submitted = module.submit_manifest(
+        "people",
+        "acme",
+        document(
+            statement(
+                "Allow",
+                ["document:*"],
+                ["abi:-:-:document:collection/${module.id}/*"],
+            )
+        ),
+    )
+    assert submitted.manifest.status == "pending"
+    assert engine.approve_manifest(account.id).status == "approved"
     other = "abi:-:-:document:collection/billing/invoices"
     assert module.authorize("document:Find", own).allowed
     assert not module.authorize("document:Find", other).allowed
@@ -183,7 +203,7 @@ def test_invalid_policies_list_every_error(iam_host):
 
 @BROKER
 def test_a_wrong_secret_is_unauthenticated(iam_host):
-    impostor = iam_host.client("engine", secret="not-the-secret-not-the-secret-xx")
+    impostor = iam_host.client("engine", tokens=OTHER_TOKENS)
     with pytest.raises(RuntimeError, match="UNAUTHENTICATED"):
         impostor.authorize("triple_store:Query", graph("a"))
 
@@ -220,7 +240,7 @@ def test_malformed_requests_never_reach_the_service():
     primary = IAMPrimaryAdapterNATS(service, SECRET)
     request = SimpleNamespace(
         data=b"\xff",
-        headers={"Nats-Auth-Token": issue_service_token("engine", SECRET)},
+        headers={"Nats-Auth-Token": TEST_TOKENS.token("engine")},
         respond=AsyncMock(),
     )
     try:

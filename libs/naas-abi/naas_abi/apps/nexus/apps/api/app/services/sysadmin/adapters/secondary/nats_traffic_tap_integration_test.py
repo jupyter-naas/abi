@@ -10,6 +10,7 @@ import pytest
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.nats_traffic_tap import (
     NatsTrafficTap,
 )
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS
 
 pytestmark = pytest.mark.integration
 
@@ -43,7 +44,6 @@ def broker(tmp_path):
 
 def test_the_tap_sees_calls_errors_and_events_but_not_transfers(broker):
     import nats
-    from naas_abi_core.engine.nats_auth import issue_service_token
     from nats.micro import add_service
     from nats.micro.service import EndpointConfig, ServiceConfig
 
@@ -75,7 +75,7 @@ def test_the_tap_sees_calls_errors_and_events_but_not_transfers(broker):
         tap = NatsTrafficTap(connect)
         await tap.start(seen.append)
         await tap_connection.flush()
-        headers = {"Nats-Auth-Token": issue_service_token("nexus-api", "s" * 48)}
+        headers = {"Nats-Auth-Token": OTHER_TOKENS.token("nexus-api")}
         await caller.request("abi.svc.document.v1.get", b"q" * 7, timeout=2, headers=headers)
         await caller.request("abi.svc.document.v1.find", b"", timeout=2, headers=headers)
         await caller.request("abi.svc.object_storage.v1.transfer.read", b"", timeout=2)

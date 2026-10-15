@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from naas_abi_core.services.iam.catalog import ActionCatalog, ActionSpec, ResourceType
@@ -12,11 +13,14 @@ from naas_abi_core.services.iam.IAMPorts import (
     IAMConflictError,
     IAMNotFoundError,
     IAMStore,
+    KeyRecord,
+    ManifestRecord,
     Placement,
     Policy,
     PrincipalRecord,
     RevisionConflictError,
     ScopeRecord,
+    SigningKeyRecord,
     new_id,
 )
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
@@ -336,3 +340,92 @@ class IAMStoreContract(ABC):
     def test_install_id_is_stable(self, store: IAMStore):
         install_id = store.install_id()
         assert install_id and store.install_id() == install_id
+
+    # -- keys, manifests and signing keys -------------------------------------------
+
+    def test_keys_round_trip(self, store: IAMStore):
+        sa = store.create_principal(service_account())
+        expires = datetime(2030, 1, 1, tzinfo=UTC)
+        created = store.create_key(
+            KeyRecord(
+                "abcdefghijklmnop",
+                sa.id,
+                "a" * 64,
+                description="dev",
+                expires_at=expires,
+            )
+        )
+        assert created.created_at is not None and created.last_used_at is None
+        assert store.get_key("abcdefghijklmnop") == created
+        assert store.list_keys(sa.id) == [created]
+        assert store.list_keys(new_id("sa")) == []
+        with pytest.raises(IAMConflictError):
+            store.create_key(KeyRecord("abcdefghijklmnop", sa.id, "b" * 64))
+        with pytest.raises(IAMNotFoundError):
+            store.create_key(KeyRecord("qrstuvwxyz234567", new_id("sa"), "b" * 64))
+        with pytest.raises(IAMNotFoundError):
+            store.get_key("missingmissingmi")
+
+    def test_revoking_a_key_keeps_the_first_time(self, store: IAMStore):
+        sa = store.create_principal(service_account())
+        store.create_key(KeyRecord("abcdefghijklmnop", sa.id, "a" * 64))
+        first = datetime(2026, 1, 1, tzinfo=UTC)
+        start = store.revision()
+        assert store.revoke_key("abcdefghijklmnop", first).revoked_at == first
+        assert store.revision() > start
+        later = first + timedelta(days=1)
+        assert store.revoke_key("abcdefghijklmnop", later).revoked_at == first
+
+    def test_touching_a_key_is_not_a_change(self, store: IAMStore):
+        sa = store.create_principal(service_account())
+        store.create_key(KeyRecord("abcdefghijklmnop", sa.id, "a" * 64))
+        start = store.revision()
+        at = datetime(2026, 1, 1, tzinfo=UTC)
+        store.touch_key("abcdefghijklmnop", at)
+        assert store.get_key("abcdefghijklmnop").last_used_at == at
+        assert store.revision() == start
+
+    def test_manifests_round_trip(self, store: IAMStore):
+        sa = store.create_principal(service_account())
+        document = {"version": "2026-10-13", "statements": []}
+        pending = store.put_manifest(
+            ManifestRecord(sa.id, "f" * 64, "people", "acme", document)
+        )
+        assert pending.status == "pending" and pending.submitted_at is not None
+        assert store.get_manifest(sa.id, "f" * 64) == pending
+        approved = store.put_manifest(
+            ManifestRecord(
+                sa.id,
+                "f" * 64,
+                "people",
+                "acme",
+                document,
+                status="approved",
+                submitted_at=pending.submitted_at,
+                decided_at=datetime(2026, 1, 1, tzinfo=UTC),
+                decided_by="sa_admin",
+            )
+        )
+        assert store.list_manifests(sa.id) == [approved]
+        assert store.list_manifests(status="pending") == []
+        assert store.list_manifests(status="approved") == [approved]
+        with pytest.raises(IAMNotFoundError):
+            store.get_manifest(sa.id, "0" * 64)
+        with pytest.raises(IAMNotFoundError):
+            store.put_manifest(
+                ManifestRecord(new_id("sa"), "f" * 64, "x", "acme", document)
+            )
+
+    def test_signing_keys_round_trip(self, store: IAMStore):
+        now = datetime(2026, 10, 15, tzinfo=UTC)
+        record = SigningKeyRecord(
+            "20261015-0a1b2c3d", {"kty": "EC", "kid": "20261015-0a1b2c3d"}, now, now
+        )
+        store.add_signing_key(record)
+        assert store.list_signing_keys() == [record]
+        with pytest.raises(IAMConflictError):
+            store.add_signing_key(record)
+        retired = now + timedelta(minutes=20)
+        store.retire_signing_key(record.kid, retired)
+        store.retire_signing_key(record.kid, retired + timedelta(days=1))
+        assert store.list_signing_keys()[0].retires_at == retired

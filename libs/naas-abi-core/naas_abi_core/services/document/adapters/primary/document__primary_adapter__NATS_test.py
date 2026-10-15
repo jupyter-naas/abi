@@ -3,13 +3,13 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.document.adapters.primary.document__primary_adapter__NATS import (
     DocumentPrimaryAdapterNATS,
 )
 from naas_abi_proto.document.v1 import document_pb2 as pb
 
-SECRET = "document-primary-test-secret-32-bytes"
+SECRET = TEST_TOKENS.verifier
 
 
 @pytest.mark.parametrize(
@@ -30,9 +30,7 @@ def test_invalid_requests_never_reach_service(authenticated, payload, code):
     primary = DocumentPrimaryAdapterNATS(service, SECRET)
     request = SimpleNamespace(
         data=payload,
-        headers={"Nats-Auth-Token": issue_service_token("test", SECRET)}
-        if authenticated
-        else {},
+        headers={"Nats-Auth-Token": TEST_TOKENS.token("test")} if authenticated else {},
         respond=AsyncMock(),
     )
     asyncio.run(primary._handle(request, operation="get"))
@@ -45,7 +43,7 @@ def test_invalid_requests_never_reach_service(authenticated, payload, code):
 def _namespaces_request(identity):
     return SimpleNamespace(
         data=pb.NamespacesRequest().SerializeToString(),
-        headers={"Nats-Auth-Token": issue_service_token(identity, SECRET)},
+        headers={"Nats-Auth-Token": TEST_TOKENS.token(identity)},
         respond=AsyncMock(),
     )
 
@@ -110,7 +108,7 @@ def test_backend_error_is_not_leaked_or_retried():
         data=pb.GetRequest(
             namespace="module", collection="state", id="one"
         ).SerializeToString(),
-        headers={"Nats-Auth-Token": issue_service_token("test", SECRET)},
+        headers={"Nats-Auth-Token": TEST_TOKENS.token("test")},
         respond=AsyncMock(),
     )
     try:

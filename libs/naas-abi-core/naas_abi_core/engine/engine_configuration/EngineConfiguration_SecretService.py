@@ -6,9 +6,10 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
 )
+from naas_abi_core.engine.nats_credentials import rpc_client
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Only import for type checking, not at runtime
 if TYPE_CHECKING:
@@ -91,21 +92,24 @@ class SecretAdapterNATSConfiguration(BaseModel):
       - adapter: "nats_rpc"
         config:
           nats_url: "nats://127.0.0.1:4222"
-          jwt_secret: "{{ secret.NATS_SERVICE_JWT_SECRET }}"
-          service_identity: "api"
+          service_key: "{{ secret.ABI_UPSTREAM_SERVICE_KEY }}"
     """
+
     model_config = ConfigDict(extra="forbid")
 
     nats_url: str = "nats://127.0.0.1:4222"
-    jwt_secret: str
-    service_identity: str = "api"
+    # A key of the upstream engine (abi_sk_...), exchanged for its tokens.
+    service_key: str = Field(repr=False)
 
 
 class SecretAdapterConfiguration(GenericLoader):
     adapter: Literal["dotenv", "naas", "base64", "nats_rpc", "custom"]
     config: (
-        DotenvSecretConfiguration | NaasSecretConfiguration | Base64SecretConfiguration
-        | SecretAdapterNATSConfiguration | None
+        DotenvSecretConfiguration
+        | NaasSecretConfiguration
+        | Base64SecretConfiguration
+        | SecretAdapterNATSConfiguration
+        | None
     ) = None
 
     @model_validator(mode="after")
@@ -167,6 +171,14 @@ class SecretAdapterConfiguration(GenericLoader):
                 )
 
                 return NaasSecret(**self.config.model_dump())
+            elif self.adapter == "nats_rpc":
+                from naas_abi_core.services.secret.adaptors.secondary.SecretSecondaryAdapterNATSClient import (
+                    SecretSecondaryAdapterNATSClient,
+                )
+
+                return rpc_client(
+                    SecretSecondaryAdapterNATSClient, **self.config.model_dump()
+                )
             else:
                 raise ValueError(f"Unknown adapter: {self.adapter}")
         else:
@@ -185,3 +197,19 @@ class SecretServiceConfiguration(BaseModel):
 
     def load(self) -> Secret:
         return Secret(adapters=[adapter.load() for adapter in self.secret_adapters])
+
+    def load_local(self) -> Secret:
+        """The secret service of this host's own adapters, without ``nats_rpc``
+        ones: what an engine reads before it can call anything over NATS
+        (IAM's signing keys, the engine's own service key)."""
+        return Secret(
+            adapters=[
+                adapter.load()
+                for adapter in self.secret_adapters
+                if adapter.adapter != "nats_rpc"
+            ]
+        )
+
+    def local_value(self, name: str) -> str | None:
+        value = self.load_local().get(name)
+        return value if isinstance(value, str) and value else None

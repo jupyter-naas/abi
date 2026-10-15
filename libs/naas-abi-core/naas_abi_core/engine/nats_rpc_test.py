@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.dataset.v1 import dataset_pb2
 from naas_abi_core.proto.keyvalue.v1 import keyvalue_pb2
@@ -27,7 +27,7 @@ ADAPTERS = [
     ("triple_store", "TripleStore"),
     ("vector_store", "VectorStore"),
 ]
-SECRET = "rpc-test-secret-at-least-32-bytes-long"
+SECRET = TEST_TOKENS.verifier
 
 
 def adapter_class(domain, name, primary=False):
@@ -47,7 +47,7 @@ def adapter_class(domain, name, primary=False):
 def client(request, monkeypatch):
     monkeypatch.setattr("nats.connect", AsyncMock(side_effect=ConnectionClosedError()))
     cls = adapter_class(*request.param)
-    with cls("nats://unused:4222", SECRET, "test") as instance:
+    with cls("nats://unused:4222", TEST_TOKENS.source("test")) as instance:
         yield instance
 
 
@@ -161,7 +161,7 @@ def primary(request):
     instance = cls.__new__(cls)
     from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 
-    instance._jwt_secret = SECRET
+    instance._verifier = SECRET
     instance._dispatch = DomainRPCDispatcher(request.param[0])
     yield instance
     instance._dispatch.close()
@@ -192,7 +192,7 @@ def test_primary_returns_non_retryable_error_for_oversized_reply(primary):
 
     request = SimpleNamespace(
         data=keyvalue_pb2.GetRequest(key="k").SerializeToString(),
-        headers={"Nats-Auth-Token": issue_service_token("test", SECRET)},
+        headers={"Nats-Auth-Token": TEST_TOKENS.token("test")},
         subject="abi.test",
         respond=respond,
     )
@@ -219,7 +219,7 @@ def test_primary_rejects_malformed_protobuf_before_dispatch(primary):
     response_cls = response_class(primary)
     request = SimpleNamespace(
         data=b"\xff",
-        headers={"Nats-Auth-Token": issue_service_token("test", SECRET)},
+        headers={"Nats-Auth-Token": TEST_TOKENS.token("test")},
         subject="abi.test",
         respond=AsyncMock(),
     )
@@ -331,7 +331,7 @@ def test_simultaneous_first_requests_share_completed_connection(monkeypatch):
     nc.connect = AsyncMock(side_effect=connect)
     factory = Mock(return_value=nc)
     monkeypatch.setattr("naas_abi_core.engine.nats_rpc.NATSClient", factory)
-    client = NatsRPCClient("nats://unused:4222", SECRET, "test")
+    client = NatsRPCClient("nats://unused:4222", TEST_TOKENS.source("test"))
 
     async def scenario():
         connections = await asyncio.gather(
@@ -382,7 +382,7 @@ def overflow_host():
 def primary_request(data, **headers):
     return SimpleNamespace(
         data=data,
-        headers={"Nats-Auth-Token": issue_service_token("test", SECRET), **headers},
+        headers={"Nats-Auth-Token": TEST_TOKENS.token("test"), **headers},
         subject="abi.test",
         respond=AsyncMock(),
         # The connection it arrived on, as nats.micro's Request carries it.
@@ -604,7 +604,7 @@ def test_primary_counts_reply_headers_against_the_brokers_limit(primary):
 
     request = SimpleNamespace(
         data=keyvalue_pb2.GetRequest(key="k").SerializeToString(),
-        headers={"Nats-Auth-Token": issue_service_token("test", SECRET)},
+        headers={"Nats-Auth-Token": TEST_TOKENS.token("test")},
         subject="abi.test",
         respond=respond,
         _msg=SimpleNamespace(_client=SimpleNamespace(max_payload=limit)),
@@ -636,7 +636,7 @@ def test_uploads_are_regrouped_into_negotiated_chunks_lazily():
 def _api_client(identity: str = "api"):
     from naas_abi_core.engine.nats_rpc import NatsRPCClient
 
-    client = NatsRPCClient("nats://unused:4222", SECRET, identity)
+    client = NatsRPCClient("nats://unused:4222", TEST_TOKENS.source(identity))
     return client, connection(
         client,
         return_value=SimpleNamespace(
@@ -713,7 +713,7 @@ def test_overflow_chunks_travel_as_the_call_they_belong_to(monkeypatch):
     from naas_abi_proto.transfer.v1 import transfer_pb2
     from naas_abi_sdk.telemetry import TransferTrace
 
-    client = NatsRPCClient("nats://unused:4222", SECRET, "api")
+    client = NatsRPCClient("nats://unused:4222", TEST_TOKENS.source("api"))
     sent = []
 
     async def request(subject, payload, headers, **kwargs):
@@ -765,7 +765,7 @@ def test_a_stream_keeps_the_user_it_was_opened_for(monkeypatch):
     from naas_abi_core.engine.nats_rpc import NatsRPCClient
     from naas_abi_proto.transfer.v1 import transfer_pb2
 
-    client = NatsRPCClient("nats://unused:4222", SECRET, "api")
+    client = NatsRPCClient("nats://unused:4222", TEST_TOKENS.source("api"))
     users = []
     replies = {
         transfer_pb2.OpenResponse: transfer_pb2.OpenResponse(id="s", chunk_bytes=1024),

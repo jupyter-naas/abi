@@ -4,6 +4,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_VectorStoreSe
     VectorStoreAdapterQdrantConfiguration,
     VectorStoreServiceConfiguration,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_SERVICE_KEY
 from naas_abi_core.services.vector_store.adapters.secondary.VectorStoreSecondaryAdapterNATSClient import (
     VectorStoreSecondaryAdapterNATSClient,
 )
@@ -66,8 +67,7 @@ def test_vector_store_service_configuration_nats_rpc_is_lazy():
             # not a typed Union, deliberately -- see that field's docstring.
             config=VectorStoreAdapterNATSConfiguration(
                 nats_url="nats://127.0.0.1:4222",
-                jwt_secret="test-shared-secret",
-                service_identity="api",
+                service_key=TEST_SERVICE_KEY,
             ).model_dump(),
         )
     )

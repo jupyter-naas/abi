@@ -1,4 +1,4 @@
-"""Authenticated document RPCs; namespace scoping follows Stage 1 shared trust.
+"""Authenticated document RPCs; namespace scoping is not authorization yet.
 
 Every authenticated caller passes its namespace explicitly. Listing namespaces
 is platform administration: only ``admin_identities`` (the API and the engine
@@ -11,6 +11,7 @@ from functools import partial
 import nats.micro
 from google.protobuf.message import DecodeError
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
@@ -61,12 +62,12 @@ class DocumentPrimaryAdapterNATS(ServicePrimary):
     def __init__(
         self,
         service: DocumentService,
-        jwt_secret: str,
+        verifier: TokenVerifier,
         *,
         admin_identities: Iterable[str] = ADMIN_IDENTITIES,
     ) -> None:
         self._adapter = service
-        self._jwt_secret = jwt_secret
+        self._verifier = verifier
         self._admin_identities = frozenset(admin_identities)
         self._dispatch = DomainRPCDispatcher("document")
         self._service: Service | TracedService | None = None
@@ -93,12 +94,13 @@ class DocumentPrimaryAdapterNATS(ServicePrimary):
 
     async def _handle(self, request, *, operation: str) -> None:
         response_type = getattr(pb, OPERATIONS[operation] + "Response")
-        caller = await authenticate_request(request, self._jwt_secret, response_type)
+        caller = await authenticate_request(request, self._verifier, response_type)
         if caller is None:
             return
         if (
             operation in ADMIN_OPERATIONS
-            and caller.principal.id not in self._admin_identities
+            and not {caller.principal.id, caller.principal.name}
+            & self._admin_identities
         ):
             await respond_protobuf(
                 request,

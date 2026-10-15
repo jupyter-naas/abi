@@ -47,7 +47,8 @@ class _Snapshot:
     taken: float
     apps: list[RemoteApp]
     # (module_id, app) -> READY instance ids serving it
-    instances: dict[tuple[str, str], list[str]]
+    # (service account, instance id) of each ready instance: both name its subject.
+    instances: dict[tuple[str, str], list[tuple[str, str]]]
 
 
 class _Client:
@@ -97,7 +98,7 @@ class DiscoveryRemoteAppDirectory:
             if not fresh and current is not None and self._now() - current.taken < SNAPSHOT_SECONDS:
                 return current
             apps: dict[tuple[str, str], RemoteApp] = {}
-            instances: dict[tuple[str, str], list[str]] = {}
+            instances: dict[tuple[str, str], list[tuple[str, str]]] = {}
             after = ""
             while True:
                 page, after = await client.discovery.list_modules(
@@ -124,7 +125,9 @@ class DiscoveryRemoteAppDirectory:
                                 getattr(app, "max_upload_bytes", 0),
                             ),
                         )
-                        instances.setdefault(key, []).append(instance.instance_id)
+                        instances.setdefault(key, []).append(
+                            (instance.service_account, instance.instance_id)
+                        )
                 if not after:
                     break
             client.snapshot = _Snapshot(
@@ -183,9 +186,9 @@ class DiscoveryRemoteAppDirectory:
         random.shuffle(candidates)
         last = "No ready instance answered"
         try:
-            for instance_id in candidates[:2]:  # one retry, elsewhere
+            for instance in candidates[:2]:  # one retry, elsewhere
                 try:
-                    response = await self._send(client, instance_id, message, source)
+                    response = await self._send(client, instance, message, source)
                 except _Retry as exc:
                     last = exc.reason
                     client.snapshot = None  # that instance is gone or going
@@ -201,17 +204,23 @@ class DiscoveryRemoteAppDirectory:
             if source is not None:
                 await source.close()
 
-    async def _send(self, client: _Client, instance_id: str, message: Any, source: Any) -> Any:
+    async def _send(
+        self, client: _Client, instance: tuple[str, str], message: Any, source: Any
+    ) -> Any:
         from naas_abi_sdk.app_host import call_app
         from naas_abi_sdk.transport import RPCError
         from nats.errors import NoRespondersError
 
         call = self._call_app or call_app
         transport = client.transport if source is None else client.upload_transport
+        service_account, instance_id = instance
+        sent = call(
+            transport, client.project, instance_id, message, service_account=service_account
+        )
         try:
             if source is None:
-                return await call(transport, client.project, instance_id, message)
-            return await _upload(call(transport, client.project, instance_id, message), source)
+                return await sent
+            return await _upload(sent, source)
         except RPCError as exc:
             if exc.code in _RETRY_ELSEWHERE:
                 raise _Retry(str(exc)) from exc

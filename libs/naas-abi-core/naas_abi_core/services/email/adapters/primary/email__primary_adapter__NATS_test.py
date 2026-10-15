@@ -8,7 +8,7 @@ out for this adapter.
 
 import asyncio
 
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.proto.email.v1 import email_pb2
 from naas_abi_core.services.email.adapters.primary.email__primary_adapter__NATS import (
     AUTH_HEADER,
@@ -16,7 +16,7 @@ from naas_abi_core.services.email.adapters.primary.email__primary_adapter__NATS 
 )
 from naas_abi_core.services.email.EmailPorts import EmailAttachment, IEmailAdapter
 
-SECRET = "test-shared-secret"
+SECRET = TEST_TOKENS.verifier
 
 
 class _FakeRequest:
@@ -78,7 +78,7 @@ class _StubAdapter(IEmailAdapter):
 
 
 def _valid_token() -> str:
-    return issue_service_token("api", SECRET)
+    return TEST_TOKENS.token("api")
 
 
 def _send_request(
@@ -140,7 +140,7 @@ def test_malformed_token_returns_unauthenticated():
 
 def test_token_signed_with_wrong_secret_returns_unauthenticated():
     adapter = EmailPrimaryAdapterNATS(_StubAdapter(), SECRET)
-    wrong_secret_token = issue_service_token("api", "a-different-secret")
+    wrong_secret_token = OTHER_TOKENS.token("api")
     request = _FakeRequest(
         data=_send_request(), headers={AUTH_HEADER: wrong_secret_token}
     )

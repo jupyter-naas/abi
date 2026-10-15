@@ -41,7 +41,6 @@ def test_without_nats_every_nats_source_explains_why():
 
 def test_nats_mode_wires_the_real_adapters():
     nats = NATSConfiguration(
-        jwt_secret="s" * 48,
         nats_url="nats://nats:4222",
         discovery={"project": "zen"},
         monitoring_url="http://nats:8222",
@@ -54,7 +53,7 @@ def test_nats_mode_wires_the_real_adapters():
 
 
 def test_missing_discovery_or_monitoring_url_is_named():
-    service = build_sysadmin_service(_engine(NATSConfiguration(jwt_secret="s" * 48)))
+    service = build_sysadmin_service(_engine(NATSConfiguration()))
 
     assert "nats.discovery" in asyncio.run(service.modules()).sources["discovery"].reason
     with pytest.raises(SourceUnavailable, match="nats.monitoring_url"):
@@ -114,7 +113,7 @@ def test_live_traffic_prefers_traces_and_falls_back_to_nats():
         TelemetryConfiguration,
     )
 
-    nats = NATSConfiguration(jwt_secret="s" * 48)
+    nats = NATSConfiguration()
     engine = _engine(nats)
     engine.configuration.telemetry = TelemetryConfiguration(
         enabled=True, query_url="http://jaeger:16686", ui_url="http://localhost:16686"
@@ -288,7 +287,6 @@ def test_agents_in_nats_mode_read_the_engine_documents_and_discovery():
 
     nats = NS(
         nats_url="nats://localhost:4222",
-        jwt_secret="s" * 32,
         discovery=NS(project="zen"),
         monitoring_url=None,
     )

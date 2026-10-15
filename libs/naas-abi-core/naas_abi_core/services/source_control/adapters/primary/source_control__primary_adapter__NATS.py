@@ -7,9 +7,8 @@ contract and ``naas_abi_core/proto/README.md`` for why it lives there). This
 is the server side; the matching client is
 ``SourceControlSecondaryAdapterNATSClient``.
 
-Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): one shared
-secret, one claim -- which known first-party process holds the token. Every
-incoming request must carry a valid token in the ``Nats-Auth-Token`` header
+Auth (see ``naas_abi_core.engine.nats_auth``): every incoming request
+must carry an engine token, verified against the JWKS, in the ``Nats-Auth-Token`` header
 (``AUTH_HEADER``, imported from ``source_control_nats_contract`` below --
 that's a neutral module neither adapter owns, so this file and the client's
 don't depend on each other; see that module's docstring for why).
@@ -28,6 +27,7 @@ import nats
 import nats.micro
 from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
@@ -283,10 +283,10 @@ class SourceControlPrimaryAdapterNATS(ServicePrimary):
     def __init__(
         self,
         adapter: ISourceControlAdapter | SourceControlService,
-        jwt_secret: str,
+        verifier: TokenVerifier,
     ) -> None:
         self._adapter = adapter
-        self._jwt_secret = jwt_secret
+        self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
 
@@ -474,7 +474,7 @@ class SourceControlPrimaryAdapterNATS(ServicePrimary):
         response_cls: Callable[..., _ResponseT],
         call: Callable[[_RequestT], _ResponseT],
     ) -> None:
-        caller = await authenticate_request(request, self._jwt_secret, response_cls)
+        caller = await authenticate_request(request, self._verifier, response_cls)
         if caller is None:
             return
 

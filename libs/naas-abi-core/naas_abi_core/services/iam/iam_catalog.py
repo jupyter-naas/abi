@@ -34,7 +34,8 @@ def _action(
 
 CATALOG = ActionCatalog(
     service=SERVICE,
-    version=1,
+    # 2: SubmitManifest, and the subjects of keys and manifests (#60).
+    version=2,
     resource_types=(
         ResourceType("principal", id="opaque", placement="platform"),
         ResourceType("group", id="opaque", placement="platform"),
@@ -57,13 +58,13 @@ CATALOG = ActionCatalog(
         _action("ListGroups", "list", ("group",), "list_groups"),
         _action("ListPolicies", "list", ("policy",), "list_policies"),
         _action("ListAttachments", "list", ("attachment",), "list_attachments"),
-        _action("ListKeys", "list", ("key",)),
-        _action("ListManifests", "list", ("manifest",)),
+        _action("ListKeys", "list", ("key",), "list_keys"),
+        _action("ListManifests", "list", ("manifest",), "list_manifests"),
         _action("ListPlacements", "list", ("placement",), "list_placements"),
         _action("GetPrincipal", "read", ("principal",), "get_principal"),
         _action("GetGroup", "read", ("group",), "get_group"),
         _action("GetPolicy", "read", ("policy",), "get_policy"),
-        _action("GetManifest", "read", ("manifest",)),
+        _action("GetManifest", "read", ("manifest",), "get_manifest"),
         _action("Explain", "read", ("principal",), "explain"),
         _action("Simulate", "read", ("principal",)),
         _action("ExchangeToken", "write", ("audience",)),
@@ -90,10 +91,12 @@ CATALOG = ActionCatalog(
         _action("DeletePolicy", "admin", ("policy",), "delete_policy"),
         _action("AttachPolicy", "admin", ("attachment",), "attach_policy"),
         _action("DetachPolicy", "admin", ("attachment",), "detach_policy"),
-        _action("CreateKey", "admin", ("key",)),
-        _action("RevokeKey", "admin", ("key",)),
-        _action("ApproveManifest", "admin", ("manifest",)),
-        _action("RejectManifest", "admin", ("manifest",)),
+        _action("CreateKey", "admin", ("key",), "create_key", creates=True),
+        _action("RevokeKey", "admin", ("key",), "revoke_key"),
+        # A module submits its own manifest (builtin.module_bootstrap).
+        _action("SubmitManifest", "write", ("manifest",), "submit_manifest"),
+        _action("ApproveManifest", "admin", ("manifest",), "approve_manifest"),
+        _action("RejectManifest", "admin", ("manifest",), "reject_manifest"),
         _action("PutPlacement", "admin", ("placement",), "put_placement"),
         _action("DeletePlacement", "admin", ("placement",), "delete_placement"),
         _action("PutScope", "admin", ("scope",), "put_scope"),

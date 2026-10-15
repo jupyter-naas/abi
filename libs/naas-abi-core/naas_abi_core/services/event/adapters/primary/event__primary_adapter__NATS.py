@@ -5,9 +5,8 @@ Exposes the ``EventService`` durable log as a NATS micro-service (see
 ``naas_abi_core/proto/README.md`` for why it lives there). This is the
 server side; the matching client is ``EventSecondaryAdapterNATSClient``.
 
-Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): one shared
-secret, one claim -- which known first-party process holds the token. Every
-incoming request must carry a valid token in the ``Nats-Auth-Token`` header
+Auth (see ``naas_abi_core.engine.nats_auth``): every incoming request
+must carry an engine token, verified against the JWKS, in the ``Nats-Auth-Token`` header
 (``AUTH_HEADER``, imported from ``event_nats_contract`` below -- that's a
 neutral module neither adapter owns, so this file and the client's don't
 depend on each other; see that module's docstring for why).
@@ -34,6 +33,7 @@ from google.protobuf.message import DecodeError, Message
 from nats.micro.request import Request
 
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
@@ -153,18 +153,20 @@ class EventPrimaryAdapterNATS(ServiceWithTransfers):
     or a raw NATS-level error.
     """
 
-    def __init__(self, service: IEventService | IEventAdapter, jwt_secret: str) -> None:
+    def __init__(
+        self, service: IEventService | IEventAdapter, verifier: TokenVerifier
+    ) -> None:
         # A bare log (tests) is served through an EventService of its own.
         self._adapter = (
             service if isinstance(service, IEventService) else EventService(service)
         )
-        self._jwt_secret = jwt_secret
+        self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
         # Streamed queries (docs/adr/20261003_nats-streamed-results.md).
         self._transfer = TransferHost(
             TRANSFER_PREFIX,
-            jwt_secret,
+            verifier,
             self._transfer_frames,
             operations=("query",),
             chunk_bytes=1024 * 1024,
@@ -236,7 +238,7 @@ class EventPrimaryAdapterNATS(ServiceWithTransfers):
         response_cls: Callable[..., _ResponseT],
         call: Callable[[_RequestT], _ResponseT],
     ) -> None:
-        caller = await authenticate_request(request, self._jwt_secret, response_cls)
+        caller = await authenticate_request(request, self._verifier, response_cls)
         if caller is None:
             return
 

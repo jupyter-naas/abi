@@ -2,8 +2,8 @@ import asyncio
 
 import nats
 import pytest
-from naas_abi_core.engine.nats_auth import issue_service_token
 from naas_abi_core.engine.nats_rpc_integration_test import SECRET, broker  # noqa: F401
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.discovery.discovery_factory import start_discovery
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
@@ -33,7 +33,7 @@ def test_registry_auth_expiry_restart_and_sdk_dependency_runner(broker):  # noqa
         url, _ = broker
         nc = await nats.connect(url)
         primary = await start_discovery(nc, SECRET, lease_seconds=1)
-        transport = Transport(url, issue_service_token("test", SECRET), timeout=0.5)
+        transport = Transport(url, TEST_TOKENS.token("test"), timeout=0.5)
         client = DiscoveryClient(transport)
         provider_started, stop = asyncio.Event(), asyncio.Event()
         provider_task = None
@@ -146,7 +146,7 @@ def test_two_registry_owners_do_not_duplicate_mutations(broker):  # noqa: F811
         primaries = [await start_discovery(nc, SECRET) for _ in range(2)]
         for primary in primaries:
             primary.service.register = AsyncMock(wraps=primary.service.register)
-        transport = Transport(broker[0], issue_service_token("test", SECRET))
+        transport = Transport(broker[0], TEST_TOKENS.token("test"))
         try:
             for _ in range(4):
                 await transport.call(
@@ -212,11 +212,9 @@ def test_admins_evict_a_live_instance_which_registers_again(broker):  # noqa: F8
             nc, SECRET, project="evict", lease_seconds=2, iam=iam
         )
         module = transport_module.Transport(
-            url, issue_service_token("research", SECRET), timeout=2
+            url, TEST_TOKENS.token("research"), timeout=2
         )
-        admin = transport_module.Transport(
-            url, issue_service_token("api", SECRET), timeout=2
-        )
+        admin = transport_module.Transport(url, TEST_TOKENS.token("api"), timeout=2)
         session = discovery.DiscoverySession(
             discovery.DiscoveryClient(module, "evict"),
             pb.ModuleDescriptor(module_id="research", contract_major=1),
@@ -259,7 +257,7 @@ def test_concurrent_registrations_through_two_owners_all_succeed(broker):  # noq
     async def scenario():
         nc = await nats.connect(broker[0])
         primaries = [await start_discovery(nc, SECRET) for _ in range(2)]
-        transport = Transport(broker[0], issue_service_token("test", SECRET))
+        transport = Transport(broker[0], TEST_TOKENS.token("test"))
         try:
             responses = await asyncio.gather(
                 *(

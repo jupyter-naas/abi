@@ -51,13 +51,14 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
 )
+from naas_abi_core.engine.nats_credentials import rpc_client
 from naas_abi_core.services.cache.CachePort import (
     CachedData,
     CacheKeyPage,
     ICacheAdapter,
 )
 from naas_abi_core.services.cache.CacheService import CacheService
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 if TYPE_CHECKING:
     from naas_abi_core.engine.IEngine import IEngine
@@ -86,6 +87,7 @@ class CacheAdapterRedisConfiguration(BaseModel):
 
 class CacheAdapterObjectStorageConfiguration(BaseModel):
     """Object-storage adapter — ObjectStorageService injected at engine wiring time."""
+
     model_config = ConfigDict(extra="forbid")
     cache_prefix: str = "cache"
 
@@ -106,14 +108,14 @@ class CacheAdapterNATSConfiguration(BaseModel):
             tier: cold
             config:
               nats_url: "nats://127.0.0.1:4222"
-              jwt_secret: "{{ secret.NATS_SERVICE_JWT_SECRET }}"
-              service_identity: "api"
+              service_key: "{{ secret.ABI_UPSTREAM_SERVICE_KEY }}"
     """
+
     model_config = ConfigDict(extra="forbid")
 
     nats_url: str = "nats://127.0.0.1:4222"
-    jwt_secret: str
-    service_identity: str = "api"
+    # A key of the upstream engine (abi_sk_...), exchanged for its tokens.
+    service_key: str = Field(repr=False)
 
 
 # ---------------------------------------------------------------------------
@@ -130,12 +132,25 @@ class _NoOpCacheAdapter(ICacheAdapter):
             "Ensure engine.wire_services() is called before using the cache."
         )
 
-    def get(self, key: str) -> CachedData: return self._fail()  # type: ignore[return-value]
-    def set(self, key: str, value: CachedData) -> None: self._fail()
-    def set_if_absent(self, key: str, value: CachedData) -> bool: return self._fail()  # type: ignore[return-value]
-    def delete(self, key: str) -> None: self._fail()
-    def exists(self, key: str) -> bool: return self._fail()  # type: ignore[return-value]
-    def list_keys(self, prefix: str = "", *, limit: int = 100, after: str | None = None) -> CacheKeyPage: return self._fail()  # type: ignore[return-value]
+    def get(self, key: str) -> CachedData:
+        return self._fail()  # type: ignore[return-value]
+
+    def set(self, key: str, value: CachedData) -> None:
+        self._fail()
+
+    def set_if_absent(self, key: str, value: CachedData) -> bool:
+        return self._fail()  # type: ignore[return-value]
+
+    def delete(self, key: str) -> None:
+        self._fail()
+
+    def exists(self, key: str) -> bool:
+        return self._fail()  # type: ignore[return-value]
+
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> CacheKeyPage:
+        return self._fail()  # type: ignore[return-value]
 
 
 class ObjectStorageBackedAdapter(ICacheAdapter):
@@ -153,6 +168,7 @@ class ObjectStorageBackedAdapter(ICacheAdapter):
         from naas_abi_core.services.cache.adapters.secondary.CacheObjectStorageAdapter import (
             CacheObjectStorageAdapter,
         )
+
         self._inner = CacheObjectStorageAdapter(
             object_storage=services.object_storage,
             prefix=self._cache_prefix,
@@ -186,10 +202,12 @@ class ObjectStorageBackedAdapter(ICacheAdapter):
 
 class KeyValueBackedAdapter(ObjectStorageBackedAdapter):
     """Reuse lazy cache-port forwarding, backed by the injected KV service."""
+
     def wire_services(self, services: IEngine.Services) -> None:
         from naas_abi_core.services.cache.adapters.secondary.CacheKeyValueAdapter import (
             CacheKeyValueAdapter,
         )
+
         self._inner = CacheKeyValueAdapter(services.kv, prefix=self._cache_prefix)
 
 
@@ -210,7 +228,10 @@ class CacheAdapterEntry(GenericLoader):
         validators = {
             "fs": (CacheAdapterFSConfiguration, "fs"),
             "redis": (CacheAdapterRedisConfiguration, "redis"),
-            "object_storage": (CacheAdapterObjectStorageConfiguration, "object_storage"),
+            "object_storage": (
+                CacheAdapterObjectStorageConfiguration,
+                "object_storage",
+            ),
             "keyvalue": (CacheAdapterObjectStorageConfiguration, "keyvalue"),
             "nats_rpc": (CacheAdapterNATSConfiguration, "nats_rpc"),
         }
@@ -235,6 +256,7 @@ class CacheAdapterEntry(GenericLoader):
             from naas_abi_core.services.cache.adapters.secondary.CacheFSAdapter import (
                 CacheFSAdapter,
             )
+
             return CacheFSAdapter(cfg.base_path)
 
         if self.adapter == "redis":
@@ -242,6 +264,7 @@ class CacheAdapterEntry(GenericLoader):
             from naas_abi_core.services.cache.adapters.secondary.CacheRedisAdapter import (
                 CacheRedisAdapter,
             )
+
             return CacheRedisAdapter(
                 redis_url=redis_cfg.redis_url,
                 prefix=redis_cfg.prefix,
@@ -261,18 +284,18 @@ class CacheAdapterEntry(GenericLoader):
             from naas_abi_core.services.cache.adapters.secondary.CacheSecondaryAdapterNATSClient import (
                 CacheSecondaryAdapterNATSClient,
             )
-            return CacheSecondaryAdapterNATSClient(
+
+            return rpc_client(
+                CacheSecondaryAdapterNATSClient,
                 nats_url=nats_cfg.nats_url,
-                jwt_secret=nats_cfg.jwt_secret,
-                service_identity=nats_cfg.service_identity,
+                service_key=nats_cfg.service_key,
             )
 
         raise ValueError(f"Unknown cache adapter: {self.adapter!r}")
 
-
-# ---------------------------------------------------------------------------
-# Top-level service configuration
-# ---------------------------------------------------------------------------
+    # ---------------------------------------------------------------------------
+    # Top-level service configuration
+    # ---------------------------------------------------------------------------
 
     def local_storage(  # type: ignore[override]
         self, *, object_storage: str | None = None, keyvalue: str | None = None
@@ -302,7 +325,5 @@ class CacheServiceConfiguration(BaseModel):
 
     def load(self) -> CacheService:
         return CacheService(
-            adapters=[
-                (entry.tier, entry.load_adapter()) for entry in self.adapters
-            ]
+            adapters=[(entry.tier, entry.load_adapter()) for entry in self.adapters]
         )

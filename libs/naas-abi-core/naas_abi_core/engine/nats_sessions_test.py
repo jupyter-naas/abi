@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 
 import nats
 import pytest
-from naas_abi_core.engine.nats_auth import issue_service_token
 from naas_abi_core.engine.nats_sessions import (
     ServicePrimary,
     SessionHost,
@@ -15,6 +14,7 @@ from naas_abi_core.engine.nats_sessions import (
     wait_for_sessions,
 )
 from naas_abi_core.engine.nats_test_server import native_nats_server, nats_server_binary
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.engine.nats_tracing import add_traced_service
 from naas_abi_core.engine.nats_transfer import TransferError, TransferHost
 from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
@@ -24,7 +24,7 @@ from nats.errors import NoRespondersError
 from nats.errors import TimeoutError as NATSTimeoutError
 
 ENGINE = "0123456789abcdef0123456789abcdef"
-SECRET = "sessions-test-secret-at-least-32-bytes"
+SECRET = TEST_TOKENS.verifier
 PREFIX = "abi.svc.handover.v1.transfer"
 
 
@@ -279,7 +279,7 @@ def broker(tmp_path):
 
 
 def caller(nc):
-    headers = {"Nats-Auth-Token": issue_service_token("caller", SECRET)}
+    headers = {"Nats-Auth-Token": TEST_TOKENS.token("caller")}
 
     async def call(subject, request, response_type):
         reply = await nc.request(

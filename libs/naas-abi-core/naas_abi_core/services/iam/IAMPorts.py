@@ -6,6 +6,9 @@
   ``filter``, ``explain``), with a ``policy`` and an ``allow_all`` adapter.
 * ``PolicySource``: what the policy authorizer reads, implemented by
   ``IAMService`` over its cached store.
+* ``IAMSecrets``: where IAM keeps what must not sit in its own store: the
+  token signing keys and the engine's own service key (the secret service,
+  under ``iam/``, sealed to ``engine``).
 
 See docs/specs/rfcs/20261013_identity-and-authorization.md, §2, §3, §5 and §11.
 """
@@ -86,6 +89,16 @@ class PermissionDeniedError(IAMError, PermissionError):
         self.action = action
         self.resource = resource
         super().__init__(message or f"{action} is not allowed on {resource}")
+
+
+class KeyRefusedError(IAMError):
+    """A key that cannot be exchanged or connect: unknown, wrong, revoked,
+    expired, of another kind, or of an inactive principal. One message for
+    every cause: a caller learns nothing about which. Wire code
+    ``UNAUTHENTICATED``."""
+
+    def __init__(self, *_: object) -> None:
+        super().__init__("invalid key")
 
 
 class ResourceNotFoundError(IAMNotFoundError):
@@ -185,6 +198,98 @@ class ScopeRecord:
 class Page:
     items: list[Any]
     next_after: str | None = None
+
+
+KeyKind = Literal["service", "personal"]
+
+
+@dataclass(frozen=True)
+class KeyRecord:
+    """A key (RFC §8.1): only ``sha256(secret)`` is stored; the key is shown once.
+
+    ``kind``: ``service`` (``abi_sk_``, a service account's) or ``personal``
+    (``abi_pk_``, a user's, from #62).
+    """
+
+    key_id: str
+    principal_id: str
+    secret_hash: str
+    kind: KeyKind = "service"
+    description: str = ""
+    created_at: datetime | None = None
+    expires_at: datetime | None = None
+    last_used_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+    def usable(self, now: datetime) -> bool:
+        """Neither revoked nor expired at ``now``."""
+        if self.revoked_at is not None:
+            return False
+        return self.expires_at is None or now < self.expires_at
+
+
+ManifestStatus = Literal["pending", "approved", "rejected", "superseded"]
+
+
+@dataclass(frozen=True)
+class ManifestRecord:
+    """A module's permission manifest, one per submitted version (RFC §8.3).
+
+    ``document`` is the submitted policy document (JSON form), variables
+    unsubstituted. An approved version is also the managed policy
+    ``module.<project>.<module_id>``, possibly narrowed by the admin: that
+    policy, not this record, is what grants.
+    """
+
+    principal_id: str
+    sha256: str
+    module_id: str
+    project: str
+    document: dict[str, Any]
+    status: ManifestStatus = "pending"
+    submitted_at: datetime | None = None
+    decided_at: datetime | None = None
+    decided_by: str | None = None
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class CreatedKey:
+    """A new key: ``value`` is shown once and never stored."""
+
+    record: KeyRecord
+    value: str
+
+
+@dataclass(frozen=True)
+class ManifestSubmission:
+    """What a module learns when it submits its manifest.
+
+    ``approved_now``: this submission changed the account's approved policy
+    (auto-approval), so a connection opened before it carries older broker
+    permissions and should reconnect.
+    """
+
+    manifest: ManifestRecord
+    approved_now: bool = False
+    # An approved version (this one or an earlier one) grants now.
+    in_force: bool = False
+
+
+@dataclass(frozen=True)
+class SigningKeyRecord:
+    """The public half and the schedule of a token signing key (RFC §9.1).
+
+    It is published from ``created_at``, signs from ``activates_at``, and
+    stays published until ``retires_at`` (set when a newer key takes over).
+    The private half lives in ``IAMSecrets``, never in the store.
+    """
+
+    kid: str
+    public_jwk: dict[str, Any]
+    created_at: datetime
+    activates_at: datetime
+    retires_at: datetime | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -346,6 +451,57 @@ class IAMStore(ABC):
     @abstractmethod
     def list_catalogs(self) -> list[ActionCatalog]: ...
 
+    # -- keys -----------------------------------------------------------------
+
+    @abstractmethod
+    def create_key(self, record: KeyRecord) -> KeyRecord:
+        """``IAMConflictError`` for a taken key id; ``IAMNotFoundError`` when
+        the principal does not exist."""
+
+    @abstractmethod
+    def get_key(self, key_id: str) -> KeyRecord: ...
+
+    @abstractmethod
+    def list_keys(self, principal_id: str | None = None) -> list[KeyRecord]:
+        """By creation time, then key id."""
+
+    @abstractmethod
+    def revoke_key(self, key_id: str, at: datetime) -> KeyRecord:
+        """Set ``revoked_at`` once; revoking again keeps the first time."""
+
+    @abstractmethod
+    def touch_key(self, key_id: str, at: datetime) -> None:
+        """Record ``last_used_at``. Bookkeeping, not a grant: the revision stays."""
+
+    # -- manifests --------------------------------------------------------------
+
+    @abstractmethod
+    def put_manifest(self, record: ManifestRecord) -> ManifestRecord:
+        """Create or replace the manifest ``(principal_id, sha256)``."""
+
+    @abstractmethod
+    def get_manifest(self, principal_id: str, sha256: str) -> ManifestRecord: ...
+
+    @abstractmethod
+    def list_manifests(
+        self, principal_id: str | None = None, status: ManifestStatus | None = None
+    ) -> list[ManifestRecord]:
+        """By submission time."""
+
+    # -- signing keys -------------------------------------------------------------
+
+    @abstractmethod
+    def add_signing_key(self, record: SigningKeyRecord) -> None:
+        """``IAMConflictError`` for a taken kid."""
+
+    @abstractmethod
+    def list_signing_keys(self) -> list[SigningKeyRecord]:
+        """By creation time."""
+
+    @abstractmethod
+    def retire_signing_key(self, kid: str, retires_at: datetime) -> None:
+        """Set ``retires_at`` unless it is already set."""
+
     # -- store ----------------------------------------------------------------
 
     @abstractmethod
@@ -358,6 +514,21 @@ class IAMStore(ABC):
 
     @abstractmethod
     def close(self) -> None: ...
+
+
+class IAMSecrets(ABC):
+    """IAM's secrets outside its store: names under ``iam/`` in the secret
+    service, which seals them to ``engine`` (RFC §11.3)."""
+
+    @abstractmethod
+    def get(self, name: str) -> str | None: ...
+
+    @abstractmethod
+    def put(self, name: str, value: str) -> None: ...
+
+    @abstractmethod
+    def delete(self, name: str) -> None:
+        """Idempotent."""
 
 
 # ---------------------------------------------------------------------------
@@ -679,6 +850,72 @@ class IIAMService(ABC):
 
     @abstractmethod
     def register_catalog(self, catalog: Any) -> bool: ...
+
+    # -- service accounts, keys and manifests (RFC §8) ----------------------------------
+
+    @abstractmethod
+    def find_service_account(self, name: str) -> PrincipalRecord: ...
+
+    @abstractmethod
+    def create_key(
+        self,
+        principal_id: str,
+        *,
+        description: str = "",
+        expires_at: datetime | None = None,
+    ) -> CreatedKey: ...
+
+    @abstractmethod
+    def list_keys(self, principal_id: str) -> list[KeyRecord]: ...
+
+    @abstractmethod
+    def revoke_key(self, principal_id: str, key_id: str) -> KeyRecord: ...
+
+    def rotate_key(
+        self, principal_id: str, key_id: str, *, description: str | None = None
+    ) -> CreatedKey:
+        """A new key, then the old one revoked: deploy the new value at once."""
+        old = next(
+            (k for k in self.list_keys(principal_id) if k.key_id == key_id), None
+        )
+        if old is None:
+            raise IAMNotFoundError(f"Key {key_id} not found")
+        created = self.create_key(
+            principal_id,
+            description=old.description if description is None else description,
+            expires_at=old.expires_at,
+        )
+        self.revoke_key(principal_id, key_id)
+        return created
+
+    @abstractmethod
+    def submit_manifest(
+        self, module_id: str, project: str, document: Any
+    ) -> ManifestSubmission: ...
+
+    @abstractmethod
+    def get_manifest(
+        self, principal_id: str, sha256: str | None = None
+    ) -> ManifestRecord: ...
+
+    @abstractmethod
+    def list_manifests(
+        self, *, principal_id: str | None = None, status: ManifestStatus | None = None
+    ) -> list[ManifestRecord]: ...
+
+    @abstractmethod
+    def approve_manifest(
+        self, principal_id: str, sha256: str | None = None, *, document: Any = None
+    ) -> ManifestRecord: ...
+
+    @abstractmethod
+    def reject_manifest(
+        self, principal_id: str, sha256: str | None = None, *, reason: str = ""
+    ) -> ManifestRecord: ...
+
+    @abstractmethod
+    def jwks(self) -> dict[str, Any]:
+        """The engine's public signing keys and issuer. Public."""
 
     @abstractmethod
     def close(self) -> None: ...

@@ -12,6 +12,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     NATSConfiguration,
 )
 from naas_abi_core.engine.IEngine import IEngine
+from naas_abi_core.engine.nats_auth import TokenSource
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.activity_log.adapters.secondary.ActivityLogSecondaryAdapterNATSClient import (
     ActivityLogSecondaryAdapterNATSClient,
@@ -99,15 +100,19 @@ class RemoteTripleStoreService(TripleStoreService):
 
 
 class EngineNATSDependencies:
-    def __init__(self, config: NATSConfiguration):
+    """``credentials``: the engine's own tokens (``nats_credentials``): signed
+    in process by a serving engine, exchanged from the engine's key by a
+    client-role one."""
+
+    def __init__(self, config: NATSConfiguration, credentials: TokenSource):
         self.config = config
+        self.credentials = credentials
         self.clients: list[Any] = []
 
     def _client(self, cls, **kwargs):
         client = cls(
             self.config.nats_url,
-            self.config.jwt_secret,
-            "engine",
+            self.credentials,
             timeout_seconds=self.config.client_timeout_seconds,
             **kwargs,
         )
@@ -235,7 +240,7 @@ class EngineNATSDependencies:
             )
 
             models = ModelRegistryNATSClient(
-                owners.model_registry, self.config.nats_url, self.config.jwt_secret
+                owners.model_registry, self.config.nats_url, self.credentials
             )
             self.clients.append(models)
             values["model_registry"] = models
@@ -294,7 +299,7 @@ class EngineNATSDependencies:
         self.clients.append(bus_adapter)
         bus = BusService(bus_adapter, emit_message_events=emit_message_events)
         models = ModelRegistryNATSClient(
-            model_registry, self.config.nats_url, self.config.jwt_secret
+            model_registry, self.config.nats_url, self.credentials
         )
         self.clients.append(models)
         values: dict[str, Any] = {
