@@ -215,7 +215,8 @@ def test_config_superadmins_become_iam_platform_admins(monkeypatch: pytest.Monke
             on_behalf_of=Principal(id=nexus_user_id, kind="user"),
         )
         with use_call_context(ctx):
-            return iam.authorize("triple_store:DropGraph", "abi:-:-:triple_store:graph/g").allowed
+            # Outside the transitional grant every Nexus user holds until #65.
+            return iam.authorize("iam:ListPrincipals", "abi:-:-:iam:principal/x").allowed
 
     with as_service_account("api"):
         org_seed.sync_platform_admins(iam, rows)
