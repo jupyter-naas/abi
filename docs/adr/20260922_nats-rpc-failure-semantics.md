@@ -75,6 +75,9 @@ The new settings are independent opt-ins:
   `jwt_secret`, and `service_identity` (default `api`).
 - The bus's `adapter: nats_jetstream` selects the NATS/JetStream bus backend.
 
+(Since 2026-10-15, `jwt_secret` and `service_identity` are replaced by a `service_key`, exchanged for
+engine-signed tokens: `20261013_engine-tokens-service-accounts-broker.md`.)
+
 The repository and generated local Compose files put the broker behind the `nats`
 profile. Plain `docker compose up` / `abi stack start` leave it disabled. Start it
 explicitly with `docker compose up -d nats`, or include it in the stack with

@@ -1,6 +1,10 @@
 # The NATS broker admits only clients with a password
 
-Status: Accepted
+Status: Superseded in part by [`20261013_engine-tokens-service-accounts-broker.md`](20261013_engine-tokens-service-accounts-broker.md)
+(2026-10-15). The `abi` and `module` users are gone: the broker has the static users `engine` and `auth`
+(`NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`) and admits every other connection through the engine's auth
+callout, with the subjects of its service account. `NATS_JWT_SECRET` is removed. The rest (passwords in
+`.env`, ports on 127.0.0.1, the in-container empty-password check) still holds.
 
 Date: 2026-10-08
 

@@ -1,6 +1,10 @@
 # IAM starts enforcing-ready, with named transitional grants
 
-Status: Accepted
+Status: Accepted. Amended 2026-10-15 (#60): `builtin.transitional.module` and the implicit module policy
+are removed. A remote module is a service account `module/<project>/<module_id>`, holds
+`builtin.module_bootstrap` until its manifest is approved, and then its managed policy
+`module.<project>.<module_id>` (see
+[`20261013_engine-tokens-service-accounts-broker.md`](20261013_engine-tokens-service-accounts-broker.md)).
 
 Date: 2026-10-15
 

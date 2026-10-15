@@ -1281,6 +1281,40 @@ The flow:
 - The old `abi` and `module` users are removed. `nats.conf`, written by `abi dev`, the CLI deploy template
   and `.deploy/docker/nats/nats.conf`, declares `authorization { users, auth_callout { issuer, auth_users } }`.
 
+**As built in subtask 6** (ADR `20261013_engine-tokens-service-accounts-broker.md`, "As built"). Keys, exchange,
+manifests, the callout and §9.1 are implemented as specified, except:
+
+- **The manifest goes to IAM before registration.** The SDK calls `abi.iam.v1.submit_manifest` (`iam:SubmitManifest`
+  on `manifest/<sa>`, in `builtin.module_bootstrap` with `GetManifest`) and waits for approval before it
+  registers. `ModuleDescriptor` carries no manifest. An unapproved module therefore does not show in discovery.
+- **Inboxes.** The prefix is `_INBOX.<key id>` (a subject token, so `_INBOX.<key id>.>` matches it). Modules may
+  also publish to `_INBOX.>`, because apps' request bodies and agent-run updates are sent to inboxes the module is
+  handed.
+- **Always allowed.** Every IAM request subject, one by one, rather than the token, JWKS and exchange subjects
+  alone: IAM authorizes each of its operations itself. Never `abi.iam.v1.changed`. Also `abi.rpc.overflow.>`:
+  overflow sessions belong to their caller.
+- **Jobs and streams.** Job subjects come from job resources naming the module (`job/<project>/<module>/<job>`);
+  a module hosts the jobs its policy names. The engine creates every stream and consumer a module uses and writes
+  the jobs stream for it (triggers, schedules, cancels) through `abi.broker.v1.<operation>`, checking each request
+  with IAM on the concrete resource, within the module's grants: a module only fetches from and acknowledges its
+  consumers, and reads its claim checks through the engine (never by direct get). Every trigger, schedule and
+  cancel the engine writes is sealed, and a module's job host takes no other. Claim checks are scoped to the
+  topic or the module's jobs they travel with. Bus topics under `abi`, `evt`, `_INBOX`, `$` or `_`, or nested in
+  another approved topic, are refused.
+- **No response permissions; replies to inboxes only.** A callout user gets no `resp`, and every responder
+  answers only reply subjects under `_INBOX.`.
+- **Remaining gap.** The server answers a module's JetStream requests on the reply subject it chose, and streams
+  capture what lands there; what a module can still aim that way has fixed content (pub acks, empty answers,
+  its own messages under their own subject). NATS accounts would close it: proposed, pending #44's acceptance
+  (ADR `20261013_engine-tokens-service-accounts-broker.md`, "As built").
+- **Services without a registered catalog.** An allowed action grants the service's whole prefix,
+  `abi.svc.<service>.v1.>`, until the service registers its catalog subjects (#58). The event service adds
+  `evt.>`.
+- **The `engine` user** may use every subject but `$SYS.>`. It is not narrowed to the kernel subjects yet: the API,
+  Nexus and jobs run on it.
+- **Not built here.** The HTTP exchange (`POST /api/iam/token`), `abi.iam.v1.exchange_token` and personal keys
+  (#62).
+
 ### 9. Tokens
 
 #### 9.1 Engine-issued tokens and JWKS

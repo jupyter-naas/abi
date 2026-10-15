@@ -99,38 +99,41 @@ In this phase every engine keeps its services and adds NATS on top.
 
    Run `uv sync`, then rebuild the image.
 
-2. **Create the signing secret.** Add a random value of at least 32 bytes to
-   `.env`. Shorter keys trigger a warning.
+2. **Create the broker's credentials.** There is no shared signing secret: the
+   engine signs its tokens with ES256 keys it generates and keeps in the secret
+   service (`iam/signing-keys/<kid>`), and publishes their public half (JWKS)
+   at `abi.iam.v1.jwks` and `/.well-known/abi-jwks.json` on the API.
 
-   ```bash
-   echo "NATS_JWT_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" >> .env
-   ```
-
-   Every process that talks to NATS must use this same value.
-
-   `abi deploy local` also writes the broker's passwords to `.env`:
-   `NATS_ABI_PASSWORD` for the engine's process and `NATS_MODULE_PASSWORD` for
-   SDK modules. The `nats` service refuses to start without both. Run
-   `abi deploy local --regenerate` if your `.env` predates them.
+   `abi deploy local` writes the broker's credentials to `.env`:
+   `NATS_ENGINE_PASSWORD` for the engine's processes, `NATS_AUTH_PASSWORD` for
+   its auth callout responder, and `NATS_AUTH_CALLOUT_SEED` /
+   `NATS_AUTH_CALLOUT_ISSUER`, the key pair the engine signs the broker's users
+   with. The `nats` service refuses to start without them. Run
+   `abi deploy local --regenerate` if your `.env` predates them, and remove a
+   leftover `NATS_JWT_SECRET`, `NATS_ABI_PASSWORD` or `NATS_MODULE_PASSWORD`.
 
 3. **Add the `nats:` block** at the top level of `config.yaml`, next to `api:`,
    not under `services:`:
 
    ```yaml
    nats:
-     # The Compose service name, logged in as the broker user `abi`.
-     nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@nats:4222"
-     jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+     # The Compose service name, logged in as the broker user `engine`.
+     nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@nats:4222"
+     # The engine answers the broker's auth callout: every connection but
+     # `engine` and `auth` is admitted with its service account's subjects.
+     auth_callout:
+       nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@nats:4222"
+       issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
    ```
 
-   Use `nats://abi:{{ secret.NATS_ABI_PASSWORD }}@127.0.0.1:4222` when the
-   engine runs outside Docker on the same machine (the port listens on
-   127.0.0.1 only). SDK modules log in as `module`:
-   `ABI_NATS_URL=nats://module:<NATS_MODULE_PASSWORD>@nats:4222`.
-   `abi dev up` runs its own broker on 127.0.0.1 with the same two users and
-   passwords (NATS mode is its default, also for a project without the
-   block; `--without-nats` turns it off): its overlay logs the engine in as
-   `abi`, and the `dev.modules` it starts as `module`.
+   Use `127.0.0.1:4222` instead of `nats:4222` when the engine runs outside
+   Docker on the same machine (the port listens on 127.0.0.1 only). SDK modules
+   log in with their own service key (user `sa`, the key as password; the SDK
+   does it from `ABI_SERVICE_KEY`) on `ABI_NATS_URL=nats://nats:4222`.
+   `abi dev up` runs its own broker on 127.0.0.1 with the same users and callout
+   (NATS mode is its default, also for a project without the block;
+   `--without-nats` turns it off): its overlay logs the engine in as `engine`,
+   and hands each of the `dev.modules` it starts a key of its own.
 
 4. **Remove the `bus:` section** from `services:`. Configs created by
    `abi new project` declare one: `rabbitmq` in `config.local.yaml`,
@@ -145,7 +148,7 @@ In this phase every engine keeps its services and adds NATS on top.
          adapter: "nats_jetstream"
          config:
            # must equal nats.nats_url
-           nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@nats:4222"
+           nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@nats:4222"
    ```
 
 5. **Check the cache tiers.** Either all tiers are local or all are `nats_rpc`.
@@ -244,9 +247,10 @@ services:
     object_storage_adapter:
       adapter: "nats_rpc"
       config:
-        nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@nats:4222"
-        jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
-        service_identity: "dagster"   # name of the calling process
+        nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@nats:4222"
+        # A key of the owning engine's IAM, exchanged for its tokens:
+        # abi iam service-account create dagster --key
+        service_key: "{{ secret.DAGSTER_SERVICE_KEY }}"
 ```
 
 The same adapter exists for the activity log, cache, coding environment,
@@ -268,21 +272,30 @@ A module built with `naas-abi-sdk` runs as its own process and reaches the
 engine only through NATS. See `libs/naas-abi-sdk/README.md` and the example in
 `examples/standalone_module/`. In short:
 
-1. Issue a token for the module with the shared secret:
+1. Create its service account and a key (printed once):
 
-   ```python
-   from naas_abi_core.engine.nats_auth import issue_service_token
-
-   token = issue_service_token("my-module", nats_jwt_secret)  # valid 1 hour
+   ```bash
+   abi iam service-account create module/default/my_module --key
    ```
 
-   Give the module a fresh token before it expires. `run_module()` also accepts
-   a function that returns a new token on each call.
-2. Run the module with `ABI_NATS_URL` and `ABI_SERVICE_TOKEN` set:
+2. Run the module with `ABI_NATS_URL` (no login in it) and `ABI_SERVICE_KEY`
+   set:
 
    ```bash
    naas-abi-module my_module --config module.json
    ```
+
+   The SDK logs in with the key and exchanges it for tokens of ten minutes at
+   most, renewed at half their life.
+3. At start the module submits its permission manifest and waits. Approve it:
+
+   ```bash
+   abi iam module list --status pending
+   abi iam module approve module/default/my_module
+   ```
+
+   Until then the broker lets it reach IAM only. Revoke its key with
+   `abi iam key revoke`; the next exchange and the next connection fail.
 
 ### Discovery
 
@@ -291,8 +304,7 @@ discovery on exactly one engine per project:
 
 ```yaml
 nats:
-  nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@nats:4222"
-  jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+  nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@nats:4222"
   discovery:
     project: default
     lease_seconds: 20
@@ -325,13 +337,25 @@ version and running `abi deploy local --regenerate` again.
   replica. If that server stops, every NATS call fails.
 - Nothing checks where a service's owners run or whether they share the same
   data.
-- Projects are separated by subject prefix and the shared signing secret, not by
-  NATS accounts. The token proves which of your processes is calling; it does
-  not limit what that process can reach.
-- The broker's passwords keep out clients that don't have one. The `abi` and
-  `module` users have the same rights, and any process holding
-  `NATS_JWT_SECRET` can sign a token for any identity
-  (docs/adr/20261008_nats-broker-passwords.md).
+- Projects are separated by subject prefix, not by NATS accounts. Every
+  connection is in the same account.
+- Each module is confined by the broker to the subjects of its approved policy
+  (docs/adr/20261013_engine-tokens-service-accounts-broker.md). The `engine`
+  user reaches every subject but `$SYS`: keep its password to the engine's
+  processes.
+- A connection keeps the subjects it was admitted with until it reconnects: an
+  approval, a narrowed policy or a revoked key reaches the broker at the next
+  connection (services ask IAM on every call, so they apply it at once).
+- A `nats_rpc` adapter logs in with a broker password (`engine`); it does not
+  yet log in through the auth callout with its key.
+- The server answers a module's JetStream requests (pub acks, fetches) on the
+  reply subject the module chose, and streams capture what lands there: a
+  module can still drop a pub ack or an empty message on another topic. Job
+  hosts take only the triggers the engine sealed. Separate NATS accounts would
+  close this (proposed).
+- Remote modules must run the SDK of the same release as the engine: an older
+  SDK creates its own streams, consumers and job messages, which the broker now
+  refuses.
 - Traffic to the broker is not encrypted (no TLS). Keep the broker on a
   private network; a module on another machine should reach it through a
   VPN or an SSH tunnel.

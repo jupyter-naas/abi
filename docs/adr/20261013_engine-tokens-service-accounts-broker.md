@@ -93,3 +93,117 @@ It calls remote agents as the shared identity `api`, and passes the end user as 
   narrows further.
 - **Nexus's narrow tokens move to the engine issuer.** The 30-day coding-agent JWT (bug a) becomes a
   revocable environment key exchanged for 10-minute `abi:delegated:coding` tokens.
+
+## As built (2026-10-15, #60)
+
+Implemented as decided, with these differences:
+
+- **Signing keys.** `services/iam/tokens.py`: kid `<yyyymmdd>-<8 hex>`, rotation every 30 days
+  (`rotation_days`). The next key is published 15 minutes before it signs and the previous one stays in the
+  JWKS 20 minutes after. Private halves are in the secret service under `iam/signing-keys/<kid>`. The JWKS
+  names the issuer, `urn:abi:engine:<install id>`. Nexus serves it at `/.well-known/abi-jwks.json`.
+- **Who holds what.** The serving engine signs its own tokens and verifies against its own keys, with no NATS
+  hop. A client-role engine exchanges the engine account's key, which the serving engine keeps in
+  `iam/service-keys/engine` (one such key at a time), or `nats.service_key`. A `nats_rpc` adapter takes a
+  `service_key` of the owning engine's IAM.
+- **The manifest goes to IAM, not to discovery.** At start the SDK calls `abi.iam.v1.submit_manifest` and
+  waits for approval, then registers. A module's bootstrap policy (`builtin.module_bootstrap`) allows
+  registering, renewing and unregistering its own module record and submitting and reading its own manifest.
+  Module accounts are named `module/<project>/<module_id>`. Approval writes the managed policy
+  `module.<project>.<module_id>`, with `${module.id}` and `${module.project}` bound.
+  `services.iam.modules.auto_approve: true` approves every manifest on submission; only the `abi dev up`
+  overlay sets it.
+- **Broker logins.** Two static users skip the callout. `engine` reaches every subject but `$SYS`, not only
+  what the kernel serves: the API, Nexus and jobs run on it and use many subjects. Narrowing it is left for
+  later. `auth` answers the callout. Everyone else logs in as `sa`, with a key as password. The responder
+  signs the user with the account seed `NATS_AUTH_CALLOUT_SEED`, and the user expires within an hour
+  (`nats.auth_callout.user_ttl_seconds`).
+- **Subjects a module gets** (`services/iam/broker.py`). A permission ending in `*` also matches a client's
+  literal `>` or `*` token, so every grant keeps the account's own tokens before its first wildcard:
+  - IAM's request subjects, one by one (IAM authorizes each operation itself). Never `abi.iam.v1.changed`.
+    An engine treats a change notice as a hint: it reads the store's revision and drops its caches when that
+    differs from the last one it saw, whatever the notice says (a forged or huge revision stops nothing; a
+    restored store counts too);
+  - the engine's broker control `abi.broker.v1.<operation>` (below);
+  - publishing to `_INBOX.>`, since replies, apps' request bodies and run updates go to inboxes, and to
+    the RPC overflow host `abi.rpc.overflow.>`, whose sessions belong to the caller that opened them;
+  - **no response permissions.** With them a module could answer any reply subject of a message it receives,
+    and it picks the reply subject of what it sends itself (its inbox, its topic). It answers on `_INBOX.>`;
+  - subscribing to its own inbox prefix `_INBOX.<key id>` (the SDK sets it) and to its hosting subjects
+    `abi.agent.<project>.<sa>.>` and `abi.mod.<project>.<sa>.>`, where `<sa>` is the ULID part of its
+    `sa_` id;
+  - for each allowed action, the action's catalog subjects. A service without a registered catalog grants
+    its whole prefix `abi.svc.<service>.v1.>`. Discovery actions add the hosting subjects of the modules they
+    reach, in the module's project (for another account, the projects its resources name), and the event
+    service adds `evt.>`;
+  - **jobs**, only for job resources naming the module (`job/<project>/<module>/<job>`): the triggers and
+    cancels the engine publishes for it on that module's jobs (`<module hash>` subjects). A module hosts the
+    jobs its policy names: fetching from and acknowledging its consumers by exact name, its cancel subject.
+    It writes nothing into the jobs stream: schedules make the server allow rollups there (whatever the
+    stream's flag says), so one `Nats-Rollup: all` from a module would purge every module's triggers and
+    schedules. The default manifest names each job;
+  - **bus topics**, concrete, under no platform root (`abi`, `evt`, `_INBOX`, `$...`, `_...`) and nested in
+    no other approved topic (refused when a manifest is submitted or approved): the topic, and fetching from and
+    acknowledging the consumers of its queue stream;
+  - **claim checks** under the scope they travel with: `abi.cc.t.<topic hash>.>` for a topic,
+    `abi.cc.j.<project>.<module hash>.>` for a module's job triggers (writers: those who may trigger;
+    readers: the host). The SDK stores them in the stream `ABI_CLAIM_CHECKS`; a module reads chunks back
+    through the engine (`read_claim_check`, checked against what it may consume or host), never by direct get,
+    and checks them against a SHA-256 in the reference.
+- **The engine creates streams and consumers, and writes the jobs stream** (`engine/nats_broker_control.py`,
+  `naas_abi_sdk/broker_control.py`). A stream's subjects and a consumer's filter and delivery subject travel in
+  the request body, which the broker never reads, so a module creates none, and gets no stream info (a
+  subjects filter would list every module's subjects). It asks the engine at `abi.broker.v1.<operation>` with
+  its token: `ensure_topic`, `ensure_queue`, `ensure_job`, `set_schedules`, `trigger`, `cancel`,
+  `ensure_claim_checks`, `read_claim_check`, `verify_trigger`. The engine decides each request with IAM on its
+  concrete resource (`bus:Publish`/`bus:Consume` on the topic, `discovery:TriggerJob` on the job,
+  `discovery:CancelJobRun` on the run, ...), so a Deny on one job or topic counts, within the module's broker
+  grants (`broker_grants`, cached per principal until the store's revision changes). It aims schedules at the
+  job's own trigger, sets a trigger's kind (`event` for the job's own module only) and TTL, scopes a trigger's
+  `Nats-Msg-Id` to the caller and the job (JetStream dedups across the whole jobs stream: no module can make
+  another's trigger a duplicate), and passes through the trace and claim-check headers only. Without an engine
+  answering (a broker without the callout) the SDK does it itself, and remembers for a minute that none did.
+  The job host decides that a lost run's trigger expired from the expiry it recorded (`trigger_expires_at`),
+  not by reading the stream, and drops a trigger fired by another module's schedule (`Nats-Scheduler`).
+- **Sealed triggers.** Every trigger, schedule and cancel the engine writes carries a seal (`Abi-Job-Seal`, an
+  HMAC with a key in `IAMSecrets`, `iam/job-trigger-seal`) over where it is delivered, its kind, its body and its
+  claim-check headers (`naas_abi_sdk.jobs.seal_fields`). A fired schedule copies the seal of its schedule
+  message. A module's job host takes no trigger or cancel the engine did not seal: it asks the engine
+  (`verify_trigger`), and drops the rest. This is what stops a message that lands under a trigger subject by a
+  JetStream answer a module aimed there (see the remaining gap below). The SDK cannot verify an ES256
+  signature itself (its workers carry no crypto library), hence a seal the engine checks.
+- **Every responder answers only `_INBOX.` reply subjects** (`naas_abi_sdk.messages.reply_allowed`): the engine's
+  services drop a request asking for any other reply subject before running it (`nats_tracing.traced_handler`),
+  the SDK's hosts (agent, app, model hosts, app streams), discovery, transfer hosts and the broker control drop
+  such a request before doing anything. A reply subject is the sender's choice, and the engine answering with
+  its own rights on `$JS.API.STREAM.PURGE.<stream>` empties that stream (checked on a real server).
+- **Remaining gap: JetStream answers with fixed content where a module asks.** The server answers a module's
+  JetStream requests on the reply subject the module chose, with no permission check, and a stream captures
+  what lands on its subjects. With direct gets taken away, what a module can still aim that way has content it
+  does not choose: a pub ack (`{"stream":…,"seq":…}`, no headers), an acknowledgement's empty answer, a
+  fetch from its own consumer (delivered under its original subject, so no consumer filtering another subject
+  takes it, though a plain subscriber of the reply subject receives it). A job host drops such a trigger or
+  cancel (unsealed). Another topic's queue can still store a pub ack or an empty message, and another module's
+  subscriber can still receive one: bus messages are not authenticated. The JetStream API ignores such
+  deliveries (no purge or delete, checked).
+  - **Proposal, pending #44's acceptance:** NATS accounts for modules (modules in their own account, or one
+    each, with JetStream and the kernel reached through service exports and imports, replies mapped back into
+    the module's account). It would close this at the broker; it changes nats.conf in `abi dev`, the deploy
+    templates and the demo, and needs cross-account pull consumers.
+- **Upgrading remote modules.** A module on an SDK older than this change breaks behind the callout: it reads
+  stream info, creates its consumers and streams, publishes its triggers and schedules into the jobs stream and
+  reads claim checks by direct get, all refused now. Upgrade every remote module's `naas-abi-sdk` with the
+  engine. Its jobs stream settings are the engine's (no `allow_rollup_hdrs` asked: the server sets it with
+  schedules).
+- **Quotas.** `ABI_CLAIM_CHECKS` has no size limit beyond its seven-day age, and the overflow host's 64 sessions
+  and 1 GiB have no per-caller share: one module can fill either for everyone.
+- **Verifiers** keep the keys they know for 15 minutes past their cache when the JWKS cannot be read, back off
+  5 seconds between attempts, and fetch outside the lock every `verify` takes.
+- **Manifests.** Approving or rejecting without a version decides the pending one only. A superseded version
+  submitted again (a rollback) is pending again. `broker_permissions` reads policies from the store, never
+  from the cache.
+- **IAM changes reach other engines** on `abi.iam.v1.changed`. `abi iam` publishes it after each write. A
+  connected module keeps its broker permissions until it reconnects. The SDK reconnects once its manifest is
+  approved.
+- **Not in this change.** Personal keys (`abi_pk_`) and token exchange (#62); moving Nexus's narrow tokens
+  to the engine issuer; `nats_rpc` adapters logging in through the callout (they use the `engine` password).

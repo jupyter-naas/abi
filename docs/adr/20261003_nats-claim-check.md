@@ -1,6 +1,7 @@
 # Claim checks for published messages above the broker limit
 
-Status: Accepted
+Status: Accepted. Amended 2026-10-15 (#60): payloads are stored in the stream `ABI_CLAIM_CHECKS` under the
+scope they travel with, not in the object store `abi_claim_checks` (see the amendment at the end).
 
 Date: 2026-10-03
 
@@ -63,3 +64,26 @@ it. The broker's `max_payload` is the only limit anywhere (no hard-coded 8 MiB).
 - `naas_abi_core/engine/nats_send_sites_test.py` lists every raw NATS send in
   core, the SDK and Nexus with why it is safe; a new one fails the test until it
   goes through these helpers or is reviewed.
+
+## Amendment (2026-10-15): scoped claim checks
+
+Behind the broker's auth callout (`20261013_engine-tokens-service-accounts-broker.md`) a module may read only
+what it is granted. A shared object store cannot be granted per module: every object's chunks share one subject
+prefix, and reading any object means creating a consumer on the whole bucket. So:
+
+- `prepare(nc, payload, headers, scope=..., reserve=...)` stores a payload that does not fit as messages
+  `abi.cc.<scope>.<id>.<chunk>` in the stream `ABI_CLAIM_CHECKS` (7-day max age, direct gets allowed), each at
+  most the broker limit less 1 KiB. The reference carries `Abi-Claim-Check: abi.cc.<scope>.<id>`, the size, the
+  chunk count and a SHA-256.
+- The scope is what the message travels with: `topic_scope(topic)` (`t.<topic hash>`) for the bus, and
+  `job_scope(project, module_hash)` (`j.<project>.<module hash>`) for a module's job triggers. The broker grants a
+  module writes under the scopes of its topics and jobs only.
+- `resolve` reads each chunk by its exact subject and refuses a payload whose size or hash differs
+  (`ClaimCheckInvalid`): a writer to the same scope cannot substitute one. Behind the broker's auth callout a
+  module reads through the engine (`abi.broker.v1.read_claim_check`, `ThroughEngine`), which checks that the
+  caller may consume the topic or hosts the job: JetStream answers a direct get on the reply subject the
+  requester chose, and a stream there would store the chunk, headers and all.
+- Behind the broker's auth callout the engine creates the stream when a write finds it missing
+  (`abi.broker.v1.ensure_claim_checks`); a broker without confinement lets the first writer create it. References to the old object store are still read, for messages queued before the
+  upgrade.
+
