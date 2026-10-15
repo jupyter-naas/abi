@@ -805,7 +805,10 @@ def test_start_is_idempotent(monkeypatch):
 
     # Enough of a connection for the streamed-reads transfer host.
     nc = SimpleNamespace(
-        max_payload=1024 * 1024, subscribe=AsyncMock(), flush=AsyncMock()
+        max_payload=1024 * 1024,
+        subscribe=AsyncMock(),
+        _flush_pending=AsyncMock(),
+        flush=AsyncMock(),
     )
     adapter = TripleStorePrimaryAdapterNATS(_StubPort(), SECRET)
     asyncio.run(adapter.start(nc))
