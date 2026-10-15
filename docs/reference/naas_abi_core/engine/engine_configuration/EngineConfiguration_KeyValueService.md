@@ -1,46 +1,67 @@
 # EngineConfiguration_KeyValueService
 
 ## What it is
-Configuration models and loader logic for constructing a `KeyValueService` with a pluggable key-value adapter (`redis`, `python`, or `custom`), using Pydantic validation.
+Pydantic configuration models and loader logic for constructing a `KeyValueService` with a selectable key-value adapter (`redis`, `python`, `nats_rpc`, or `custom`).
 
 ## Public API
-- **`KeyValueAdapterRedisConfiguration` (pydantic `BaseModel`)**
+- **`KeyValueAdapterRedisConfiguration` (`pydantic.BaseModel`)**
   - Validates configuration for the Redis adapter.
   - Fields:
-    - `redis_url: str` (default: `"redis://localhost:6379"`)
-- **`KeyValueAdapterPythonConfiguration` (pydantic `BaseModel`)**
+    - `redis_url: str = "redis://localhost:6379"`
+  - Notes: `extra="forbid"` (unknown keys rejected).
+
+- **`KeyValueAdapterPythonConfiguration` (`pydantic.BaseModel`)**
   - Validates configuration for the Python adapter.
   - Fields:
-    - `persistence_path: str | None` (default: `None`)
-    - `journal_mode: Literal["DELETE","TRUNCATE","PERSIST","MEMORY","WAL","OFF"]` (default: `"WAL"`)
-    - `busy_timeout_ms: int` (default: `5000`)
+    - `persistence_path: str | None = None`
+    - `journal_mode: Literal["DELETE","TRUNCATE","PERSIST","MEMORY","WAL","OFF"] = "WAL"`
+    - `busy_timeout_ms: int = 5000`
+  - Notes: `extra="forbid"`.
+
+- **`KeyValueAdapterNATSConfiguration` (`pydantic.BaseModel`)**
+  - Validates configuration for the NATS RPC client adapter.
+  - Fields:
+    - `nats_url: str = "nats://127.0.0.1:4222"`
+    - `jwt_secret: str`
+    - `service_identity: str = "api"`
+  - Notes: `extra="forbid"`.
+
 - **`KeyValueAdapterConfiguration` (`GenericLoader`)**
-  - Selects an adapter type and validates/loads the corresponding adapter implementation.
-  - Attributes:
-    - `adapter: Literal["redis", "python", "custom"]`
-    - `config: dict | None`
+  - Selects and loads an `IKeyValueAdapter`.
+  - Fields:
+    - `adapter: Literal["redis", "python", "nats_rpc", "custom"]`
+    - `config: dict | None = None`
   - Methods:
     - `validate_adapter() -> KeyValueAdapterConfiguration` (Pydantic `@model_validator(mode="after")`)
-      - Enforces `config` presence unless `adapter == "custom"`.
-      - Validates `config` shape for `redis`/`python` via `pydantic_model_validator`.
+      - Requires `config` for all non-`custom` adapters.
+      - Validates `config` against the corresponding Pydantic config model.
     - `load() -> IKeyValueAdapter`
       - Lazily imports and instantiates:
-        - `RedisAdapter(**config)` when `adapter == "redis"`
-        - `PythonAdapter(**config)` when `adapter == "python"`
-      - Delegates to `GenericLoader.load()` when `adapter == "custom"`.
-- **`KeyValueServiceConfiguration` (pydantic `BaseModel`)**
-  - Wraps adapter configuration and constructs the `KeyValueService`.
-  - Attributes:
+        - `RedisAdapter(**config)` for `adapter="redis"`
+        - `PythonAdapter(**config)` for `adapter="python"`
+        - `KeyValueSecondaryAdapterNATSClient(**config)` for `adapter="nats_rpc"`
+      - Uses `GenericLoader.load()` for `adapter="custom"`.
+    - `local_storage() -> str | None`
+      - Returns a human-readable description of where keys live:
+        - For `python`: `"this process"` or `"this process, persisted to {path}"`
+        - For `custom`: delegates to `self.custom_local_storage()`
+        - Otherwise: `None`
+
+- **`KeyValueServiceConfiguration` (`pydantic.BaseModel`)**
+  - Fields:
     - `kv_adapter: KeyValueAdapterConfiguration`
   - Methods:
-    - `load() -> KeyValueService` — returns `KeyValueService(adapter=kv_adapter.load())`.
+    - `load() -> KeyValueService` — constructs `KeyValueService(adapter=kv_adapter.load())`.
 
 ## Configuration/Dependencies
-- **Pydantic** is used for schema validation; models use `extra="forbid"` for adapter-specific configs.
-- Adapter implementations are imported lazily from:
+- **Pydantic**: validation via `BaseModel`, `ConfigDict(extra="forbid")`, and `@model_validator`.
+- **GenericLoader framework**:
+  - `KeyValueAdapterConfiguration` extends `GenericLoader`.
+  - Uses `config_model(...)` to parse `python` adapter config for `local_storage()`.
+- **Lazy-loaded adapter implementations**:
   - `naas_abi_core.services.keyvalue.adapters.secondary.RedisAdapter.RedisAdapter`
   - `naas_abi_core.services.keyvalue.adapters.secondary.PythonAdapter.PythonAdapter`
-- `custom` adapter path relies on `GenericLoader` behavior (not defined in this file).
+  - `naas_abi_core.services.keyvalue.adapters.secondary.KeyValueSecondaryAdapterNATSClient.KeyValueSecondaryAdapterNATSClient`
 
 ## Usage
 ```python
@@ -49,7 +70,6 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueServi
     KeyValueAdapterConfiguration,
 )
 
-# Redis-backed KeyValueService
 cfg = KeyValueServiceConfiguration(
     kv_adapter=KeyValueAdapterConfiguration(
         adapter="redis",
@@ -66,14 +86,13 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueServi
     KeyValueAdapterConfiguration,
 )
 
-# Python-backed KeyValueService
 cfg = KeyValueServiceConfiguration(
     kv_adapter=KeyValueAdapterConfiguration(
-        adapter="python",
+        adapter="nats_rpc",
         config={
-            "persistence_path": None,
-            "journal_mode": "WAL",
-            "busy_timeout_ms": 5000,
+            "nats_url": "nats://127.0.0.1:4222",
+            "jwt_secret": "super-secret",
+            "service_identity": "api",
         },
     )
 )
@@ -82,6 +101,6 @@ service = cfg.load()
 ```
 
 ## Caveats
-- `config` is required for `adapter="redis"` and `adapter="python"`; it may be omitted only for `adapter="custom"`.
-- For adapter-specific config models, unknown keys are rejected (`extra="forbid"`).
-- `load()` raises `ValueError` for unknown non-custom adapter values.
+- `config` is required for `adapter in {"redis","python","nats_rpc"}` (asserted in validation and in `load()`).
+- Adapter-specific config models reject unknown keys (`extra="forbid"`).
+- `load()` raises `ValueError` for unknown non-`custom` adapter values.

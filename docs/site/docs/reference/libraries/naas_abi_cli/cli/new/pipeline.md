@@ -1,25 +1,31 @@
-# `pipeline` (new pipeline generator)
+# `new_pipeline`
 
 ## What it is
-- A small CLI-backed helper that scaffolds a new “pipeline” from a template directory into a target path.
-- Normalizes the pipeline name to PascalCase and copies template files using an internal `Copier`.
+- A helper (and Click subcommand) that scaffolds a new **pipeline** from the built-in template directory into a target path.
+- Normalizes the provided pipeline name to **PascalCase** and passes it into the template renderer/copy step.
 
 ## Public API
-- `new_pipeline(pipeline_name: str, pipeline_path: str = ".", extra_values: dict = {})`
-  - Creates the destination directory (if needed) and copies pipeline templates into it.
-  - Injects template values including `pipeline_name_pascal`.
+- `new_pipeline(pipeline_name: str, pipeline_path: str = ".", extra_values: dict | None = None)`
+  - Ensures the destination directory exists.
+  - Copies pipeline templates into `pipeline_path`.
+  - Provides template values:
+    - `pipeline_name_pascal` (PascalCase version of `pipeline_name`)
+    - plus any `extra_values` merged in.
 - CLI command: `new pipeline PIPELINE_NAME [PIPELINE_PATH]`
-  - Entry point registered via Click (`@new.command("pipeline")`), calls `new_pipeline(...)`.
+  - Implemented by `_new_pipeline(...)` (Click command function).
+  - Calls `refuse_in_remote_module("pipeline", pipeline_path)` then `new_pipeline(...)`.
 
 ## Configuration/Dependencies
 - **Dependencies**
-  - `click` for CLI command/arguments.
-  - `naas_abi_cli` to locate the built-in template directory.
-  - `naas_abi_cli.cli.utils.Copier.Copier` to perform the copy.
-  - `to_pascal_case` (local utility) for name normalization.
+  - `click` for CLI wiring.
+  - `naas_abi_cli` to locate the packaged templates.
+  - `naas_abi_cli.cli.utils.Copier.Copier` to copy/render templates.
+  - Local utilities:
+    - `to_pascal_case` (name normalization)
+    - `refuse_in_remote_module` (guards against running in a “remote module” context)
 - **Template location**
-  - Resolved at runtime to:  
-    `os.path.join(os.path.dirname(naas_abi_cli.__file__), "cli/new/templates/pipeline")`
+  - Resolved at runtime to:
+    - `os.path.join(os.path.dirname(naas_abi_cli.__file__), "cli/new/templates/pipeline")`
 
 ## Usage
 
@@ -36,5 +42,6 @@ new_pipeline("my_pipeline", ".")
 ```
 
 ## Caveats
-- `extra_values` has a mutable default (`{}`); avoid mutating it outside the function. Prefer passing a new dict explicitly.
-- If `pipeline_path` is `"."`, it resolves to the current working directory (`os.getcwd()`), and files will be copied there.
+- If `pipeline_path == "."`, it is replaced with `os.getcwd()`.
+- `extra_values` defaults to `None` (safe); a new dict is created internally when omitted.
+- The CLI command calls `refuse_in_remote_module(...)` before scaffolding; behavior depends on that function’s implementation.
