@@ -53,6 +53,9 @@ class IdentityProvider:
     scopes: tuple[str, ...] = ("openid", "email", "profile")
     provisioning: Provisioning = "none"
     display_name: str | None = None
+    # The provider only issues email addresses it controls (a company
+    # directory): its email counts as verified without an email_verified claim.
+    trust_email: bool = False
 
     def public(self) -> ProviderInfo:
         return ProviderInfo(

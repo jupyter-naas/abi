@@ -72,7 +72,9 @@ class OIDCHttpHttpx(OIDCHttpPort):
             response = self._client.post(
                 url,
                 data=dict(data),
-                auth=httpx.BasicAuth(*basic_auth) if basic_auth else None,
+                auth=httpx.BasicAuth(*basic_auth)
+                if basic_auth
+                else httpx.USE_CLIENT_DEFAULT,
             )
         except httpx.HTTPError as exc:
             raise ProviderUnavailableError(f"POST {url}: {exc}") from exc

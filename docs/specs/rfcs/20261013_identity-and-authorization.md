@@ -1659,6 +1659,18 @@ identity:
   - IAM suspension takes effect immediately.
   - There is no SCIM and no token introspection.
 
+**As built in subtask 7** ([ADR `20261015_nexus-oidc-sessions`](../../adr/20261015_nexus-oidc-sessions.md),
+guide [`docs/identity-providers.md`](../../identity-providers.md)):
+
+- `services/identity` is the kernel service that verifies, exposed as `abi.identity.v1.*` with its own
+  `identity:*` catalog. It also runs the provider side of a relying party's sign-in, so client secrets
+  never leave the engine.
+- A Nexus account per `(issuer, sub)` has the IAM principal id as its id. A verified email another account
+  holds refuses the sign-in. An unverified one is stored as `<principal id>@unverified.internal`.
+- The Nexus session is server-held (`auth_sessions`). The provider vouches again at most every 10 minutes,
+  an IAM suspension ends it within 5 s, and the CSRF token is an HMAC of the cookie's secret.
+- Until subtask 11, Nexus attaches `builtin.transitional.nexus_user` to each user it signs in.
+
 #### 12.2 Provisioning
 
 The `provisioning` port has one adapter per provider setting (subtask 10):

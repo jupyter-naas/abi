@@ -127,8 +127,7 @@ class FakeIdP:
 
     @property
     def issuer(self) -> str:
-        host, port = self._server.server_address[:2]
-        return f"http://{host}:{port}"
+        return f"http://127.0.0.1:{self._server.server_address[1]}"
 
     def start(self) -> Self:
         self._thread.start()

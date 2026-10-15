@@ -1,0 +1,56 @@
+name: Identity providers
+on:
+  pull_request:
+    paths:
+      - 'libs/naas-abi-core/naas_abi_core/services/identity/**'
+      - 'libs/naas-abi-core/naas_abi_core/services/iam/**'
+      - 'libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_Identity*.py'
+      - 'libs/naas-abi-proto/naas_abi_proto/identity/**'
+      - 'libs/naas-abi-sdk/naas_abi_sdk/services/identity.py'
+      - 'libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/oidc/**'
+      - 'libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/auth/**'
+      - 'libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/identity_events/**'
+      - 'libs/naas-abi/naas_abi/apps/nexus/apps/api/migrations/**'
+      - '.github/workflows/identity.yml'
+  workflow_dispatch:
+jobs:
+  zitadel:
+    name: Generic identity suite on Zitadel, and Nexus sign-in
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # A Zitadel or broker test skipped for want of its binary fails instead.
+      ABI_REQUIRE_ZITADEL: '1'
+      ABI_REQUIRE_NATS_SERVER: '1'
+      ABI_TEST_BINARIES_DIR: ${{ github.workspace }}/.cache/test-binaries
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+      - name: Cache the pinned Zitadel and PostgreSQL binaries
+        uses: actions/cache@v4
+        with:
+          path: .cache/test-binaries
+          key: identity-binaries-zitadel-v4.19.4-postgres-17.6.0-${{ runner.os }}-${{ runner.arch }}
+      - name: Install pinned native NATS server
+        run: |
+          curl --fail --location --retry 3 -o /tmp/nats-server.tar.gz https://github.com/nats-io/nats-server/releases/download/v2.14.7/nats-server-v2.14.7-linux-amd64.tar.gz
+          echo "e5c20b1cb2c0566b54c544312e91e011f9e130c5c80f16a14f4cf28ef30b8be2  /tmp/nats-server.tar.gz" | sha256sum --check
+          tar -xzf /tmp/nats-server.tar.gz -C /tmp
+          sudo install /tmp/nats-server-v2.14.7-linux-amd64/nats-server /usr/local/bin/nats-server
+      - name: Install dependencies
+        run: uv sync --python 3.12
+      - name: Fetch pinned Zitadel and PostgreSQL (SHA-256 checked)
+        run: uv run python -m naas_abi_core.services.identity.tests.zitadel_server --fetch
+      - name: Identity service, its NATS endpoints, and the generic suite (in-process provider and Zitadel)
+        run: |
+          uv run pytest --import-mode=importlib -q \
+            libs/naas-abi-core/naas_abi_core/services/identity \
+            libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_Identity_test.py
+      - name: Nexus sign-in through the providers (in-process provider and Zitadel)
+        run: |
+          uv run pytest --import-mode=importlib -q \
+            libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/oidc \
+            libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/auth \
+            libs/naas-abi/naas_abi/apps/nexus/apps/api/app/main_public_routes_test.py

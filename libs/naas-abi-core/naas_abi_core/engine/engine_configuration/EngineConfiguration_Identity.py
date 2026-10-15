@@ -11,6 +11,7 @@ identity:
       groups_claim: groups         # optional: the claim IAM maps to groups
       scopes: [openid, email, profile, groups, offline_access]
       provisioning: none           # builtin | zitadel | keycloak | none (subtask 10)
+      # trust_email: true          # its emails are verified without email_verified (Entra ID)
   verifier:                        # optional tuning
     clock_skew_seconds: 30
     jwks_cache_seconds: 300
@@ -58,6 +59,9 @@ class IdentityProviderConfiguration(BaseModel):
     provisioning: Literal["builtin", "zitadel", "keycloak", "none"] = "none"
     # Shown on the login page; the name when unset.
     display_name: str | None = None
+    # The provider only issues emails it controls (Entra ID sends no
+    # email_verified): its email then counts as verified.
+    trust_email: bool = False
 
     @field_validator("issuer")
     @classmethod
@@ -94,6 +98,7 @@ class IdentityProviderConfiguration(BaseModel):
             scopes=tuple(self.scopes),
             provisioning=self.provisioning,
             display_name=self.display_name,
+            trust_email=self.trust_email,
         )
 
 

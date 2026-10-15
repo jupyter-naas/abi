@@ -48,7 +48,10 @@ attached or implicit, each named TRANSITIONAL in the code, in its description an
      is attached to it.
    - Engine-hosted modules have no identity of their own: in process they act as their caller, and over
      NATS as `engine`. So they need nothing more.
-3. **Nexus users through a legacy issuer (TRANSITIONAL, until subtask 7).**
+3. **Nexus users through a legacy issuer (TRANSITIONAL, until subtask 13).** Users of an identity provider
+   are IAM users named by their principal id since subtask 7
+   ([`20261015_nexus-oidc-sessions.md`](20261015_nexus-oidc-sessions.md)); the built-in login's users keep
+   this issuer until they move to the built-in IdP.
    - A user named on a call by an id that is not an IAM id resolves to IAM's user of issuer
      `urn:abi:nexus` (`LEGACY_NEXUS_ISSUER`) with that id as subject.
    - Nexus seeding records its configured users that way. It attaches `builtin.platform_admin` to each
@@ -59,6 +62,8 @@ attached or implicit, each named TRANSITIONAL in the code, in its description an
      of a user who is not a platform admin would be denied once a service enforces.
    - It is held implicitly by a user Nexus names on a call: IAM's user of issuer `urn:abi:nexus`, or a Nexus
      id IAM has no record of. These are the legacy users of item 3.
+   - A user of an identity provider holds it by attachment: Nexus attaches it at each sign-in (subtask 7),
+     and subtask 11 detaches it with the rest.
    - It allows every action of the kernel services a module can declare, plus document and dataset, on any
      resource: Nexus keeps deciding what such a user may do, with its own membership checks, as before
      IAM. It allows nothing on `iam:*`. Seals and explicit Denies hold.

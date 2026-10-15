@@ -200,7 +200,10 @@ class MyService(ServiceBase):
   explicit Denies hold. Removed by subtask 11 (#65),
   which attaches the roles of each membership.
 - `LEGACY_NEXUS_ISSUER` (`urn:abi:nexus`): a Nexus user named on a call by its
-  Nexus id resolves to IAM's user of that issuer, until OIDC providers (#61).
+  Nexus id resolves to IAM's user of that issuer, until the built-in login's
+  users move to the built-in IdP (#67). Users of an identity provider are IAM
+  users named by their principal id (`services/identity`, #61); Nexus attaches
+  `builtin.transitional.nexus_user` to each at sign-in, for #65 to detach.
 
 ## Adapters and configuration
 

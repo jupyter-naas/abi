@@ -141,20 +141,27 @@ def _download(url: str, sha256: str, target: Path) -> None:
     partial.rename(target)
 
 
-def _safe_extract(archive: tarfile.TarFile, destination: Path) -> None:
+def _checked_members(
+    archive: tarfile.TarFile, destination: Path
+) -> list[tarfile.TarInfo]:
+    """Every member, once none escapes ``destination`` (by path or by link)."""
     root = destination.resolve()
-    for member in archive.getmembers():
-        if not (root / member.name).resolve().is_relative_to(root):
+    members = archive.getmembers()
+    for member in members:
+        target = (root / member.name).resolve()
+        if not target.is_relative_to(root):
             raise RuntimeError(f"Archive member escapes its directory: {member.name}")
         if member.issym() or member.islnk():
-            if (
-                not (root / member.name)
-                .parent.joinpath(member.linkname)
-                .resolve()
-                .is_relative_to(root)
-            ):
+            linked = (target.parent / member.linkname).resolve()
+            if not linked.is_relative_to(root):
                 raise RuntimeError(f"Archive link escapes its directory: {member.name}")
-    archive.extractall(destination)  # members checked above
+        if member.isdev():
+            raise RuntimeError(f"Archive holds a device file: {member.name}")
+    return members
+
+
+def _safe_extract(archive: tarfile.TarFile, destination: Path) -> None:
+    archive.extractall(destination, members=_checked_members(archive, destination))
 
 
 def fetch_zitadel() -> Path:

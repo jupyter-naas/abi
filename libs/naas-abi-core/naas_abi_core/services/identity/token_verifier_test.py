@@ -296,3 +296,14 @@ def test_a_dotted_groups_claim_reads_a_nested_claim(http, clock):
     v, _ = verifier(http, clock, provider)
     verified = v.verify(token(http, realm_access={"roles": ["editor"]}))
     assert verified.groups == ("editor",)
+
+
+def test_an_email_counts_as_verified_only_when_said_so_or_trusted(http, clock):
+    v, _ = verifier(http, clock)
+    assert not v.verify(token(http, email="a@acme.test")).email_verified
+    trusting = IdentityProvider(
+        name="entra", issuer=ISSUER, client_id="abi", trust_email=True
+    )
+    t, _ = verifier(http, clock, trusting)
+    assert t.verify(token(http, email="a@acme.test")).email_verified
+    assert not t.verify(token(http)).email_verified

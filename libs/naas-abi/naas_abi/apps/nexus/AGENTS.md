@@ -104,6 +104,25 @@ Everything below `organizations` is scoped to `workspace_id`: agents, conversati
 
 Do not add a second role check at the endpoint when the IAM service already does it. Duplicate checks are explicitly called out as anti-patterns in the migration doc.
 
+### Sign-in through identity providers
+
+`services/oidc/` makes Nexus an OIDC client of the engine's providers (`identity.providers`, guide
+`docs/identity-providers.md`, ADR `docs/adr/20261015_nexus-oidc-sessions.md`), next to the built-in login of
+`services/auth/`:
+
+- `/api/auth/oidc/{providers,route,login,callback,session,logout}`. The engine redeems the code: Nexus never
+  holds a client secret.
+- One `users` row per `(issuer, sub)`, whose id is the IAM principal id (`principal_id`, `idp_issuer`,
+  `idp_subject`). `AuthUserRecord.external` marks it: the built-in login never opens it.
+- The session is the `nexus_session` httpOnly cookie, stored in `auth_sessions` and resolved by
+  `RequestIdentityMiddleware`, which leaves it on `request.state.nexus_session`. `get_current_user` reads it
+  when there is no bearer token.
+- A cookie request that changes state needs `X-CSRF-Token` (from `GET /api/auth/oidc/session`); without it
+  `get_current_user_required` answers 403.
+- The web app's cookie sessions (`sessionKind: 'cookie'` in `stores/auth.ts`) keep no token: use `authFetch`,
+  or `withAuth` / `getAuthHeader(method)` + `authCredentials()` for a raw `fetch`, and `selectSession` /
+  `hasSession` to know whether someone is signed in. Never read `token` for that.
+
 ### Business workspace vs Code workspace
 
 These are distinct mental models. Do not conflate them in UI copy.

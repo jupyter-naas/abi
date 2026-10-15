@@ -150,7 +150,8 @@ class TokenVerifier:
             issued_at=issued_at,
             expires_at=expires_at,
             email=_string(claims.get("email")),
-            email_verified=_truthy(claims.get("email_verified")),
+            email_verified=_truthy(claims.get("email_verified"))
+            or (configured.trust_email and _string(claims.get("email")) is not None),
             display_name=_display_name(claims),
             groups=_groups(claims, configured),
             nonce=_string(claims.get("nonce")),

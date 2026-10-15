@@ -192,7 +192,7 @@ def sign_in(
 
 
 def _unique_email(prefix: str) -> str:
-    return f"{prefix}-{secrets.token_hex(4)}@abi.test"
+    return f"{prefix}-{secrets.token_hex(4)}@example.com"
 
 
 class IdentityProviderContract:
