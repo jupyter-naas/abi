@@ -22,10 +22,34 @@ def to_kebab_case(text: str) -> str:
 
 
 def module_package_name(path: Path) -> str | None:
-    """The package name of the module a scaffold lands in: the nearest package
-    at or above ``path`` (which may not exist yet) other than its ``apps`` or
-    ``agents`` folder. None outside a package."""
-    for folder in (path, *path.parents):
-        if folder.name not in ("apps", "agents") and (folder / "__init__.py").is_file():
-            return folder.name
-    return None
+    """The dotted package of the module a scaffold lands in: the nearest
+    package at or above ``path`` (which may not exist yet) whose
+    ``__init__.py`` defines ``ABIModule``, named from its outermost parent
+    package (``core.research`` for ``src/core/research``). Without one, the
+    nearest package other than an ``apps`` or ``agents`` folder. None outside a
+    package."""
+    folders = (path, *path.parents)
+    module = next(
+        (
+            f
+            for f in folders
+            if (f / "__init__.py").is_file()
+            and "class ABIModule" in (f / "__init__.py").read_text(encoding="utf-8")
+        ),
+        None,
+    ) or next(
+        (
+            f
+            for f in folders
+            if f.name not in ("apps", "agents") and (f / "__init__.py").is_file()
+        ),
+        None,
+    )
+    if module is None:
+        return None
+    names = [module.name]
+    for parent in module.parents:
+        if not (parent / "__init__.py").is_file():
+            break
+        names.append(parent.name)
+    return ".".join(reversed(names))
