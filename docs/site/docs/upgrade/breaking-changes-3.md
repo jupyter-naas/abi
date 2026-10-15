@@ -210,7 +210,7 @@ the upgrade test met is in this list.
   says (`1242d0f8a`).
 - **Migration:** drain RabbitMQ or `python_queue` before phase 2.
 
-### Nexus database migration `0048_agent_enabled_override`
+### Nexus database migration `0052_agent_enabled_override`
 - **What changed:** `agent_configs.enabled_override` (nullable), applied at
   startup and idempotent; 2.x ignores it after a rollback.
 - **Migration:** none.
