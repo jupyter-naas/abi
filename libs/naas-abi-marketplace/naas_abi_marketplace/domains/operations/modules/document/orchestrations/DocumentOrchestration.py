@@ -1,7 +1,10 @@
 import re
 
 import dagster as dg
-from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
+from naas_abi_core.orchestrations.DagsterOrchestration import (
+    DagsterOrchestration,
+    as_engine,
+)
 from naas_abi_marketplace.domains.operations.modules.document import (
     ABIModule,
     FileIngestionConfiguration,
@@ -61,6 +64,7 @@ def _build_file_ingestion_job_sensor(
     @dg.op(
         name=f"file_ingestion_{re.sub(r'[^a-zA-Z0-9]', '_', config.input_path.replace('/', '_'))}"
     )
+    @as_engine
     def file_ingestion_op():
         from naas_abi_marketplace.domains.operations.modules.document.pipelines.FilesIngestion.FilesIngestionPipeline import (
             FilesIngestionPipeline,
@@ -88,6 +92,7 @@ def _build_file_ingestion_job_sensor(
         job=job,
         minimum_interval_seconds=60,
     )
+    @as_engine
     def file_ingestion_sensor(context):
         from naas_abi_marketplace.domains.operations.modules.document.pipelines.FilesIngestion.FilesIngestionPipeline import (
             FilesIngestionPipeline,
@@ -119,6 +124,7 @@ def _build_file_ingestion_job_sensor(
 
 def _build_pdftomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefinition]:
     @dg.op(name="pdftomarkdown_pipeline")
+    @as_engine
     def pdftomarkdown_op():
         from naas_abi_marketplace.domains.operations.modules.document.pipelines.PdfToMarkdownPipeline import (
             PdfToMarkdownPipeline,
@@ -141,6 +147,7 @@ def _build_pdftomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefini
         job=job,
         minimum_interval_seconds=60,
     )
+    @as_engine
     def pdftomarkdown_sensor(context):
         if _has_in_progress_run(context, graph_name):
             return dg.SkipReason(f"Job '{graph_name}' is already running.")
@@ -153,6 +160,7 @@ def _build_pdftomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefini
 
 def _build_pdftohtml_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefinition]:
     @dg.op(name="pdftohtml_pipeline")
+    @as_engine
     def pdftohtml_op():
         from naas_abi_marketplace.domains.operations.modules.document.pipelines.PdfToHtmlPipeline import (
             PdfToHtmlPipeline,
@@ -196,6 +204,7 @@ def _build_pdftohtml_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefinition
         job=job,
         minimum_interval_seconds=60,
     )
+    @as_engine
     def pdftohtml_sensor(context):
         if _has_in_progress_run(context, graph_name):
             return dg.SkipReason(f"Job '{graph_name}' is already running.")
@@ -208,6 +217,7 @@ def _build_pdftohtml_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefinition
 
 def _build_docxtomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefinition]:
     @dg.op(name="docxtomarkdown_pipeline")
+    @as_engine
     def docxtomarkdown_op():
         from naas_abi_marketplace.domains.operations.modules.document.pipelines.DocxToMarkdownPipeline import (
             DocxToMarkdownPipeline,
@@ -230,6 +240,7 @@ def _build_docxtomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefin
         job=job,
         minimum_interval_seconds=60,
     )
+    @as_engine
     def docxtomarkdown_sensor(context):
         if _has_in_progress_run(context, graph_name):
             return dg.SkipReason(f"Job '{graph_name}' is already running.")
@@ -242,6 +253,7 @@ def _build_docxtomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefin
 
 def _build_pptxtomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefinition]:
     @dg.op(name="pptxtomarkdown_pipeline")
+    @as_engine
     def pptxtomarkdown_op():
         from naas_abi_marketplace.domains.operations.modules.document.pipelines.PptxToMarkdownPipeline import (
             PptxToMarkdownPipeline,
@@ -264,6 +276,7 @@ def _build_pptxtomarkdown_job_sensor() -> tuple[dg.JobDefinition, dg.SensorDefin
         job=job,
         minimum_interval_seconds=60,
     )
+    @as_engine
     def pptxtomarkdown_sensor(context):
         if _has_in_progress_run(context, graph_name):
             return dg.SkipReason(f"Job '{graph_name}' is already running.")
@@ -282,6 +295,7 @@ def _build_markdowntovector_job_sensor(
         safe_name += "_" + re.sub(r"[^a-zA-Z0-9]", "_", config.file_path)
 
     @dg.op(name=f"markdowntovector_{safe_name}")
+    @as_engine
     def markdowntovector_op():
         from naas_abi_marketplace.domains.operations.modules.document.pipelines.MarkdownToVectorPipeline import (
             MarkdownToVectorPipeline,
@@ -319,6 +333,7 @@ def _build_markdowntovector_job_sensor(
         job=job,
         minimum_interval_seconds=120,
     )
+    @as_engine
     def markdowntovector_sensor(context):
         from naas_abi_marketplace.domains.operations.modules.document.pipelines.MarkdownToVectorPipeline import (
             MarkdownToVectorPipeline,
@@ -360,6 +375,7 @@ def _build_htmltovector_job_sensor(
         safe_name += "_" + re.sub(r"[^a-zA-Z0-9]", "_", config.file_path)
 
     @dg.op(name=f"htmltovector_{safe_name}")
+    @as_engine
     def htmltovector_op():
         from naas_abi_marketplace.domains.operations.modules.document.pipelines.HtmlToVectorPipeline import (
             HtmlToVectorPipeline,
@@ -397,6 +413,7 @@ def _build_htmltovector_job_sensor(
         job=job,
         minimum_interval_seconds=120,
     )
+    @as_engine
     def htmltovector_sensor(context):
         from naas_abi_marketplace.domains.operations.modules.document.pipelines.HtmlToVectorPipeline import (
             HtmlToVectorPipeline,

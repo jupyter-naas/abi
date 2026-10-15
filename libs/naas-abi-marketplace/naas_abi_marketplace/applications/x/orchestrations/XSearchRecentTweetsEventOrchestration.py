@@ -36,7 +36,10 @@ import posixpath
 
 import dagster as dg
 from naas_abi_core import logger
-from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
+from naas_abi_core.orchestrations.DagsterOrchestration import (
+    DagsterOrchestration,
+    as_engine,
+)
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_marketplace.applications.x import (
     ABIModule,
@@ -277,15 +280,18 @@ def _build_search_recent_tweets_event_sensor(
     sensor_name = f"x_sensor_recent_tweets_put_{safe}"
 
     @dg.op(name=pipeline_op_name, config_schema=_PIPELINE_CONFIG_SCHEMA)
+    @as_engine
     def search_pipeline_op(context) -> dict:
         return _graph_ingest_search_envelope(context.op_config or {}, event_cfg)
 
     @dg.op(name=dataset_op_name, tags={"x_dataset_sync": "1"})
+    @as_engine
     def dataset_sync_op(context, ingested: dict) -> dict:
         module = ABIModule.get_instance()
         return _dataset_sync_search_envelope(module, ingested, context=context)
 
     @dg.op(name=app_op_name)
+    @as_engine
     def app_publish_op(_context, ingested: dict) -> dict:
         module = ABIModule.get_instance()
         return _app_publish_search_envelope(module, event_cfg, ingested)
@@ -314,6 +320,7 @@ def _build_search_recent_tweets_event_sensor(
         minimum_interval_seconds=event_cfg.interval_seconds,
         default_status=dg.DefaultSensorStatus.RUNNING,
     )
+    @as_engine
     def search_ingestion_sensor(context: dg.SensorEvaluationContext):
         from naas_abi_core.services.object_storage.ontologies.modules.ObjectStorageEventOntology import (
             ObjectPut,

@@ -22,7 +22,10 @@ from __future__ import annotations
 
 import dagster as dg
 from naas_abi_core import logger
-from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
+from naas_abi_core.orchestrations.DagsterOrchestration import (
+    DagsterOrchestration,
+    as_engine,
+)
 
 _JOB_NAME = "x_build_app_x_proxy"
 _OP_NAME = "x_build_app_x_proxy_op"
@@ -85,10 +88,12 @@ class XBuildAppOrchestration(DagsterOrchestration):
     @classmethod
     def New(cls) -> XBuildAppOrchestration:
         @dg.op(name=_OP_NAME)
+        @as_engine
         def build_op(_context) -> dict:
             return _run_build_cycle()
 
         @dg.op(name=_MEDIA_OP_NAME, tags={"x_dataset_media": "1"})
+        @as_engine
         def media_worker_op(_build_summary: dict) -> dict:
             return _run_media_batch()
 

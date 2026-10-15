@@ -55,7 +55,10 @@ from typing import TypeVar
 
 import dagster as dg
 from naas_abi_core import logger
-from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
+from naas_abi_core.orchestrations.DagsterOrchestration import (
+    DagsterOrchestration,
+    as_engine,
+)
 from naas_abi_marketplace.applications.x import (
     ABIModule,
     XSearchRecentTweetsFilesConfiguration,
@@ -953,6 +956,7 @@ def _build_reprocess_files_definitions(
     description = _trigger_description(config)
 
     @dg.op(name=op_name, config_schema=_FILES_CONFIG_SCHEMA)
+    @as_engine
     def reprocess_files_op(context) -> dict:
         run_id = str(getattr(context, "run_id", "unknown-run"))
         op_log = context.log.info

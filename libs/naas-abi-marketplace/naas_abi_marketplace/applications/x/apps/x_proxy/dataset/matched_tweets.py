@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import threading
 from typing import Any
 
@@ -112,5 +113,10 @@ def ensure_matched_tweet_ids_ready(dataset) -> None:
         if _rebuild_started or matched_index_ready(dataset):
             return
         _rebuild_started = True
-        thread = threading.Thread(target=_rebuild_worker, args=(dataset,), daemon=True)
+        # The caller's identity goes with the backfill (a new thread has none).
+        thread = threading.Thread(
+            target=contextvars.copy_context().run,
+            args=(_rebuild_worker, dataset),
+            daemon=True,
+        )
         thread.start()
