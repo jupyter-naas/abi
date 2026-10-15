@@ -14,6 +14,9 @@ class GraphQueryPort(Protocol):
     def query(self, query: str) -> Any: ...
 
 
+_LAYER_COLOR = re.compile(r"^#[0-9a-fA-F]{3,8}$")
+
+
 @dataclass(frozen=True)
 class GraphMapLayer:
     id: str
@@ -22,6 +25,9 @@ class GraphMapLayer:
     graph_uri: str
     feed: Callable[[GraphQueryPort], dict]
     icon: str = "MapPin"
+    # Optional #rgb / #rrggbb pin and cluster color. The web honors this
+    # (and each pin's color) instead of hashing a palette color.
+    color: str | None = None
 
 
 class MapsCatalog:
@@ -31,13 +37,18 @@ class MapsCatalog:
     def register(self, layer: GraphMapLayer) -> None:
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", layer.id):
             raise ValueError("Map layer ID must be route-safe")
+        if layer.color is not None and not _LAYER_COLOR.fullmatch(layer.color):
+            raise ValueError("Map layer color must be a #rgb or #rrggbb hex value")
         if layer.id in self.layers:
             raise ValueError("Map layer already registered: " + layer.id)
         self.layers[layer.id] = layer
 
     def list_layers(self, scope: GraphAccessScope) -> list[dict]:
-        return [
-            {
+        listed: list[dict] = []
+        for n, layer in enumerate(self.layers.values()):
+            if layer.graph_uri not in scope.readable:
+                continue
+            item: dict = {
                 "id": layer.id,
                 "title": layer.title,
                 "description": layer.description,
@@ -47,9 +58,10 @@ class MapsCatalog:
                 "order": n,
                 "runtime": True,
             }
-            for n, layer in enumerate(self.layers.values())
-            if layer.graph_uri in scope.readable
-        ]
+            if layer.color:
+                item["color"] = layer.color
+            listed.append(item)
+        return listed
 
     def feed(self, layer_id: str, scope: GraphAccessScope, store: GraphQueryPort) -> dict:
         layer = self.layers[layer_id]
