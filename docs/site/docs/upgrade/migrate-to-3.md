@@ -17,6 +17,9 @@ mode, with discovery on, and `abi new module` creates modules that run in their
 own process. This guide is for **existing projects**: ones created with 2.x,
 or with `abi new project --without-nats`.
 
+Not ready to move? 2.x gets bug and security fixes from the `v2` branch until
+2027-01-31: see [Staying on 2.x: v2 support](./v2-support).
+
 A deployment runs in NATS mode when its config has a top-level `nats:` block.
 Without that block, the engine keeps its in-process wiring, and agent memory,
 the activity log, the bus and Dagster stay as they were. `abi deploy local
