@@ -45,8 +45,12 @@ from naas_abi_core.services.activity_log.ActivityLogPort import ActivityLogQuery
 SERVICE = "activity_log"
 EVENT_ACTIONS: tuple[Action, ...] = ("read", "download")
 USER_PREFIX = "user:"  # actors recorded before IAM: user:<Nexus user id>
-# A user's principal id: a Nexus user id, or an IAM user id.
-_USER_ID = re.compile(r"^(user-[0-9A-Za-z_-]+|usr_[0-9a-z]{26})$")
+# A user's principal id: a Nexus user id (``user-…``, or the uuid4 of a user who
+# signed up, was invited or signed in by link), or an IAM user id.
+_USER_ID = re.compile(
+    r"^(user-[0-9A-Za-z_-]+|usr_[0-9a-z]{26}"
+    r"|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+)
 
 # ``{user id: (name, email)}`` for the ``user:<id>`` actors on a page.
 ActorNames = Callable[[list[str]], Awaitable[Mapping[str, tuple[str, str]]]]

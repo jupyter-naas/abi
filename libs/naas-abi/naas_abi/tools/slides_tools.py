@@ -114,9 +114,17 @@ def _ensure_coding_repo() -> str:
     owner, sep, name = repo_id.partition("/")
     if not sep or not owner or not name or "/" in name:
         return repo_id
+    from naas_abi_core.services.iam.IAMPorts import IAMError
+
+    from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
+        ensure_shared_repo,
+    )
+
     try:
-        _get_source_control().ensure_repo(owner=owner, name=name)
-    except SourceControlError:
+        # The deployment's shared repository: a platform container, ensured
+        # whatever workspace the chat request names.
+        ensure_shared_repo(_get_source_control(), owner=owner, name=name)
+    except (SourceControlError, IAMError):
         pass
     return repo_id
 

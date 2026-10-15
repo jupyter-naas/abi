@@ -221,3 +221,24 @@ def test_sql_actor_names_reads_the_users_table(tmp_path):
         return found
 
     assert asyncio.run(run()) == {"u1": ("Ada", "ada@example.com")}
+
+
+@pytest.mark.parametrize(
+    "actor, kind",
+    [
+        ("user-0123456789ab", "user"),
+        ("usr_01jabcdefghjkmnpqrstvwxyz0", "user"),
+        # Signup, invite and magic-link users have uuid4 ids.
+        ("3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b", "user"),
+        ("user:legacy-id", "user"),
+        ("api", "service"),
+        ("research-module", "service"),
+        ("anonymous", "anonymous"),
+    ],
+)
+def test_an_actor_is_classified_by_its_id(actor, kind):
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.activity_log_resources import (
+        actor_kind,
+    )
+
+    assert actor_kind(actor) == kind
