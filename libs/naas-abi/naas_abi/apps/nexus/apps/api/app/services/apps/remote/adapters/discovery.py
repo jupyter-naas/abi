@@ -43,6 +43,10 @@ REFRESH_SECONDS = 5.0
 # After a failed read, callers fail at once for this long instead of each
 # waiting for a read of its own.
 RETRY_AFTER_SECONDS = 5.0
+# An app a fresh read did not list is not looked up again for this long:
+# stale tabs polling a removed module must not hold the discovery lock.
+MISS_SECONDS = 5.0
+MAX_MISSES = 1024
 # After the last upload chunk, the module answers within its idle limit.
 ANSWER_AFTER_UPLOAD_SECONDS = 65.0
 # How long the module has to take the error of an upload the browser dropped.
@@ -73,6 +77,8 @@ class _Client:
         self.snapshot: _Snapshot | None = None
         self.failed_at: float | None = None
         self.lock = asyncio.Lock()
+        # (module_id, app) -> when a fresh read did not find it
+        self.misses: dict[tuple[str, str], float] = {}
 
 
 class _Retry(Exception):
@@ -191,14 +197,21 @@ class DiscoveryRemoteAppDirectory:
         from naas_abi_sdk.app_streams import BodySource
 
         client = self._client()
+        key = (module_id, app)
         snapshot = await self._snapshot(client)
-        candidates = list(snapshot.instances.get((module_id, app), ()))
-        if not candidates:
+        candidates = list(snapshot.instances.get(key, ()))
+        missed = client.misses.get(key)
+        if not candidates and (missed is None or self._now() - missed >= MISS_SECONDS):
             # Just started? Read discovery again before answering 404.
             snapshot = await self._snapshot(client, max_age=MISS_SNAPSHOT_SECONDS)
-            candidates = list(snapshot.instances.get((module_id, app), ()))
+            candidates = list(snapshot.instances.get(key, ()))
+            if not candidates:
+                if len(client.misses) >= MAX_MISSES:
+                    client.misses.clear()
+                client.misses[key] = self._now()
         if not candidates:
             raise RemoteAppUnavailable(404, "App not published by a ready module")
+        client.misses.pop(key, None)
         message = pb.HttpRequest(
             app=app,
             method=request.method,
@@ -373,8 +386,8 @@ class _Pulled:
         try:
             return await self.stream.__anext__()
         except RPCError as exc:
-            _log.warning("A remote app's response broke off: %s %s", exc.code, exc)
-            raise RemoteAppStreamFailed(str(exc)) from exc
+            # The server logs the abort, with this cause: logged once.
+            raise RemoteAppStreamFailed(f"{exc.code}: {exc}") from exc
 
     async def aclose(self) -> None:
         from naas_abi_sdk.app_streams import cancel_body

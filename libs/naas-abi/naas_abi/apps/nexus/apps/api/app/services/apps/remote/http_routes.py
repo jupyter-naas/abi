@@ -27,6 +27,7 @@ from urllib.parse import unquote_plus, urljoin, urlsplit
 
 from fastapi import HTTPException, Request
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
+from fastapi.security.utils import get_authorization_scheme_param
 from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote import access, revocation
@@ -55,6 +56,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
 from naas_abi_core.apps.api.abi_api_key_auth import (
     APP_HTML_TOKEN_COOKIE,
     extract_abi_api_token,
+    is_abi_api_token_valid,
 )
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -184,26 +186,50 @@ def _forwarded_headers(request: Request) -> tuple[tuple[str, str], ...]:
     headers = [
         (name, value) for name, value in request.headers.items() if _is_forwarded(name.lower())
     ]
+    # Only the app's own cookies pass, under their own names and with their
+    # values as the browser sent them (quoted ones included).
     cookies = "; ".join(
-        f"{name[len(APP_COOKIE_PREFIX) :]}={value}"
-        for name, value in request.cookies.items()
-        if name.startswith(APP_COOKIE_PREFIX) and len(name) > len(APP_COOKIE_PREFIX)
+        pair[len(APP_COOKIE_PREFIX) :]
+        for header in request.headers.getlist("cookie")
+        for pair in (part.strip() for part in header.split(";"))
+        if pair.startswith(APP_COOKIE_PREFIX) and pair.split("=", 1)[0].strip() != APP_COOKIE_PREFIX
     )
     if cookies:
         headers.append(("cookie", cookies))
     return tuple(headers)
 
 
-def _query(request: Request, *dropped: str) -> str:
-    """The query as the browser sent it, byte for byte, without ``token`` (an
-    access credential) and the ``dropped`` parameters (Nexus's own)."""
-    names = {"token", *dropped}
+def _bearer(request: Request) -> str:
+    scheme, token = get_authorization_scheme_param(request.headers.get("authorization"))
+    return token if scheme.lower() == "bearer" else ""
+
+
+def _is_nexus_credential(value: str, presented: tuple[str, ...]) -> bool:
+    """A credential the request was authenticated with, the ABI_API_KEY, or
+    any token Nexus signed, whatever else authenticated the request."""
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import decode_token
+
+    return value in presented or is_abi_api_token_valid(value) or decode_token(value) is not None
+
+
+def _query(
+    request: Request, *, presented: tuple[str, ...] = (), dropped: tuple[str, ...] = ()
+) -> str:
+    """The query as the browser sent it, byte for byte, less any Nexus
+    credential in ``token`` and the ``dropped`` parameters (Nexus's own). An
+    app's own ``token`` parameter is kept. ``presented`` are the credentials
+    that authenticated this request (never a value the query alone holds)."""
     raw = request.scope.get("query_string", b"").decode("latin-1")
-    return "&".join(
-        part
-        for part in raw.split("&")
-        if part and unquote_plus(part.partition("=")[0]) not in names
-    )
+    presented = tuple(p for p in presented if p)
+
+    def kept(part: str) -> bool:
+        name, _, value = part.partition("=")
+        name = unquote_plus(name)
+        if name in dropped:
+            return False
+        return name != "token" or not _is_nexus_credential(unquote_plus(value), presented)
+
+    return "&".join(part for part in raw.split("&") if part and kept(part))
 
 
 def _within(path: str, root: str) -> bool:
@@ -447,6 +473,7 @@ async def serve_remote_app(
         user_id=granted.user_id,
         workspace_id=granted.workspace_id,
         root=grant_root(grant, module_id, app),
+        presented=(grant, _bearer(request)),
     )
 
 
@@ -459,7 +486,10 @@ async def _forward(
     user_id: str,
     workspace_id: str,
     root: str,
+    presented: tuple[str, ...],
 ) -> Response:
+    """Send the request to the module's app. ``presented``: the credentials
+    that authenticated it, kept out of the query the app gets."""
     directory = get_remote_app_directory()
     try:
         limit = await directory.upload_limit(module_id, app)
@@ -471,10 +501,14 @@ async def _forward(
             status_code=413, detail=f"Upload exceeds {limit} bytes", headers=SECURITY_HEADERS
         )
     body, rest = await _read_head(request)
+    if len(body) > limit:  # chunked, so no Content-Length to refuse it by
+        raise HTTPException(
+            status_code=413, detail=f"Upload exceeds {limit} bytes", headers=SECURITY_HEADERS
+        )
     forwarded = AppRequest(
         method=request.method,
         path="/" + path,
-        query=_query(request),
+        query=_query(request, presented=presented),
         headers=_forwarded_headers(request),
         body=body,
         user_id=user_id,
@@ -573,13 +607,19 @@ async def open_remote_app(module_id: str, app: str, request: Request, path: str 
             user_id="",
             workspace_id="",
             root=RemoteApp(module_id, app).root_path,
+            presented=(extract_abi_api_token(request) or "", _bearer(request)),
         )
     workspace_id = await access.remote_app_workspace(
         user_id,
         RemoteApp(module_id, app).app_id,
         request.query_params.get("workspace_id") or None,
     )
-    query = _query(request, "workspace_id")
+    # The /app-html/ access check took this credential, from the query too.
+    query = _query(
+        request,
+        presented=(extract_abi_api_token(request) or "", _bearer(request)),
+        dropped=("workspace_id",),
+    )
     target = (
         remote_app_grant_url(user_id, module_id, app, not_after=expires, workspace_id=workspace_id)
         + path

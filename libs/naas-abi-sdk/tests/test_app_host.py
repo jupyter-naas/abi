@@ -2,6 +2,7 @@ import asyncio
 import json
 import sys
 import types
+from functools import partial
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -268,6 +269,23 @@ def test_a_failing_backend_is_an_app_error(tmp_path):
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("code", ["MODULE_UNAVAILABLE", "UNAVAILABLE", "LEASE_EXPIRED"])
+def test_an_rpc_error_raised_by_the_app_is_an_app_error(tmp_path, code):
+    """Nexus resends retryable codes elsewhere, assuming the app never ran: an
+    app whose own downstream call failed must not have its POST run twice."""
+
+    async def calls_downstream(scope, receive, send):
+        raise RPCError(code, "downstream module gone")
+
+    async def scenario():
+        response = await _send(
+            _host(tmp_path, calls_downstream), _request("/x", method="POST")
+        )
+        assert response.error.code == "APP_ERROR"
+
+    asyncio.run(scenario())
+
+
 def test_lifespan_runs_startup_and_shutdown(tmp_path):
     events = []
 
@@ -341,6 +359,158 @@ def test_draining_and_oversized_requests_are_refused(tmp_path):
         host.closing = True
         draining = await _send(host, _request("/"))
         assert draining.error.code == "MODULE_UNAVAILABLE"
+
+    asyncio.run(scenario())
+
+
+def _in_flight(host, request):
+    """Deliver ``request`` as the subscription does: in its own task."""
+    msg = FakeMsg(request)
+    host.subscriptions.append(
+        SimpleNamespace(drain=AsyncMock(), unsubscribe=AsyncMock())
+    )
+    return msg, host.calls.callback(partial(host._handle, "console"))(msg)
+
+
+def test_draining_lets_requests_in_progress_answer(tmp_path):
+    """On SIGTERM a request already running answers; Nexus does not wait 65 s
+    for a reply that never comes."""
+    release = asyncio.Event()
+
+    async def slow(scope, receive, send):
+        await release.wait()
+        await send({"type": "http.response.start", "status": 201, "headers": []})
+        await send({"type": "http.response.body", "body": b"done"})
+
+    async def scenario():
+        host = _host(tmp_path, slow)
+        msg, receive = _in_flight(host, _request("/x", method="POST"))
+        await receive
+        subscription = host.subscriptions[0]
+        drain = asyncio.create_task(host.drain(30))
+        await asyncio.sleep(0.05)
+        assert not drain.done()
+        subscription.drain.assert_awaited()  # new requests go elsewhere
+        release.set()
+        await asyncio.wait_for(drain, 5)
+        assert (msg.response.status, msg.response.body) == (201, b"done")
+        await host.close()
+
+    asyncio.run(scenario())
+
+
+def test_draining_gives_up_after_its_timeout(tmp_path):
+    async def stuck(scope, receive, send):
+        await asyncio.Event().wait()
+
+    async def scenario():
+        host = _host(tmp_path, stuck)
+        _, receive = _in_flight(host, _request("/x"))
+        await receive
+        await asyncio.wait_for(host.drain(0.05), 5)
+        await host.close()  # cancels what is still running
+
+    asyncio.run(scenario())
+
+
+class _QueuedSubscription:
+    """nats-py's drain: unsubscribe, then wait until the queued messages are
+    handed to the callback, one at a time."""
+
+    def __init__(self, cb, queued):
+        self.cb, self.queued = cb, list(queued)
+        self.unsubscribe = AsyncMock()
+
+    async def drain(self):
+        for msg in self.queued:
+            await self.cb(msg)
+
+
+def test_draining_keeps_to_its_deadline_with_calls_in_flight(tmp_path):
+    """Every slot busy, a request queued behind them: the queued one is refused
+    for another instance at once, and the drain ends at its timeout."""
+
+    running = asyncio.Event()
+
+    async def stuck(scope, receive, send):
+        running.set()
+        await asyncio.Event().wait()
+
+    async def scenario():
+        host = AppHost(
+            _session(),
+            {"console": (read_app(_site(tmp_path)), stuck)},
+            max_concurrency=1,
+        )
+        receive = host._receiver("console")
+        await receive(FakeMsg(_request("/x", method="POST")))  # takes the only slot
+        await asyncio.wait_for(running.wait(), 5)
+        queued = FakeMsg(_request("/y", method="POST"))
+        host.subscriptions.append(_QueuedSubscription(receive, [queued]))
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        await asyncio.wait_for(host.drain(0.3), 5)
+        assert loop.time() - started < 1.0
+        assert host.calls.in_flight == 1  # still running: close() cancels it
+        assert queued.response.error.code == "MODULE_UNAVAILABLE"
+        await host.close()
+
+    asyncio.run(scenario())
+
+
+def test_a_subscription_drain_that_hangs_does_not_outlast_the_timeout(tmp_path):
+    async def scenario():
+        host = _host(tmp_path)
+        host.subscriptions.append(
+            SimpleNamespace(drain=asyncio.Event().wait, unsubscribe=AsyncMock())
+        )
+        await asyncio.wait_for(host.drain(0.1), 2)
+        await host.close()
+
+    asyncio.run(scenario())
+
+
+def test_draining_with_nats_closed_still_waits_for_calls(tmp_path):
+    """nats-py refuses to drain on a closed or draining connection: the host
+    unsubscribes if it can and still lets the call in progress answer."""
+    from nats.errors import ConnectionClosedError
+
+    release = asyncio.Event()
+
+    async def slow(scope, receive, send):
+        await release.wait()
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    async def scenario():
+        host = _host(tmp_path, slow)
+        msg, receive = _in_flight(host, _request("/x"))
+        await receive
+        subscription = host.subscriptions[0]
+        subscription.drain.side_effect = ConnectionClosedError
+        subscription.unsubscribe.side_effect = ConnectionClosedError
+        drain = asyncio.create_task(host.drain(30))
+        await asyncio.sleep(0.05)
+        assert not drain.done()
+        subscription.unsubscribe.assert_awaited()
+        release.set()
+        await asyncio.wait_for(drain, 5)
+        assert msg.response.status == 200
+        await host.close()
+
+    asyncio.run(scenario())
+
+
+def test_one_host_failing_to_drain_does_not_stop_the_others():
+    from naas_abi_sdk.module import _drain_hosts
+
+    async def scenario():
+        app_host = SimpleNamespace(drain=AsyncMock(side_effect=RuntimeError("nats")))
+        agent_host = SimpleNamespace(drain=AsyncMock())
+        job_host = SimpleNamespace(drain=AsyncMock())
+        await _drain_hosts(agent_host, job_host, None, 1.0, app_host)
+        agent_host.drain.assert_awaited_once_with(1.0)
+        job_host.drain.assert_awaited_once_with(1.0)
 
     asyncio.run(scenario())
 

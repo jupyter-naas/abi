@@ -27,6 +27,7 @@ from typing import Any
 
 from naas_abi_proto.app.v1 import app_pb2 as pb
 from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
+from nats.errors import Error as NATSError
 from nats.errors import MaxPayloadError
 
 from naas_abi_sdk import overflow
@@ -153,6 +154,16 @@ class _AppFailed(Exception):
     """The app raised before it answered: never retried elsewhere, since it ran."""
 
 
+async def _drain_subscription(subscription: Any) -> None:
+    """Drain, or at least unsubscribe; nats-py raises when the connection is
+    closed or draining, or the subscription already gone."""
+    try:
+        await subscription.drain()
+    except NATSError:
+        with contextlib.suppress(NATSError):
+            await subscription.unsubscribe()
+
+
 class AppHost:
     def __init__(
         self,
@@ -206,13 +217,50 @@ class AppHost:
             await self.close()
             raise
 
+    async def drain(self, timeout: float) -> None:
+        """Stop taking requests and let those in progress finish, for up to
+        ``timeout`` seconds in all.
+
+        A request arriving now finds no responder, and Nexus sends it to
+        another instance; one cut off mid-call would wait out its timeout
+        (504). close() cancels whatever is still running afterwards. A NATS
+        connection already closed or draining does not stop the shutdown.
+        """
+        self.closing = True
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+
+        def remaining() -> float:
+            return max(0.0, deadline - loop.time())
+
+        subscriptions, self.subscriptions = self.subscriptions, []
+        steps = [
+            asyncio.ensure_future(
+                asyncio.gather(*(_drain_subscription(s) for s in subscriptions))
+            ),
+            asyncio.ensure_future(
+                asyncio.gather(self.calls.idle(), self.uploads.idle())
+            ),
+        ]
+        try:
+            for step in steps:
+                await asyncio.wait({step}, timeout=remaining())
+        finally:
+            for step in steps:
+                step.cancel()
+            await asyncio.gather(*steps, return_exceptions=True)
+        # Answered, but still reading an upload or streaming the response.
+        if self._streams and remaining() > 0:
+            await asyncio.wait(set(self._streams), timeout=remaining())
+
     async def close(self) -> None:
         """Stop serving. A response still streaming (a download, server-sent
         events) ends with an error its reader sees, not a clean end, and the
         host waits CLOSE_SECONDS at most for the readers to take it."""
         self.closing = True
         for subscription in self.subscriptions:
-            await subscription.unsubscribe()
+            with contextlib.suppress(Exception):
+                await subscription.unsubscribe()
         self.subscriptions.clear()
         await self.calls.cancel()
         await self.uploads.cancel()
@@ -280,12 +328,20 @@ class AppHost:
         task.add_done_callback(self._streams.discard)
 
     def _receiver(self, name: str) -> Callable[[Any], Awaitable[None]]:
-        """The app's subscription callback: uploads run on slots of their own."""
+        """The app's subscription callback: uploads run on slots of their own.
+
+        Once the host drains, a request still queued behind busy calls is
+        refused at once (MODULE_UNAVAILABLE: the app never ran, so Nexus may
+        send it to another instance) rather than waiting for a slot. The
+        subscription's drain waits for its queue to empty, so it ends quickly.
+        """
         call = self.calls.callback(partial(self._handle, name))
         upload = self.uploads.callback(partial(self._handle, name))
 
         async def receive(msg: Any) -> None:
-            if not _is_upload(msg):
+            if self.closing:
+                await self._refuse(msg, "MODULE_UNAVAILABLE", "App is draining")
+            elif not _is_upload(msg):
                 await call(msg)
             elif self.uploads.in_flight >= self.uploads.limit:
                 # Waiting for a slot would hold this subscription's other requests.
@@ -340,6 +396,8 @@ class AppHost:
             else:
                 response.body = answer.body
         except RPCError as exc:
+            # Raised by this host before the app ran (draining, unauthorized, a
+            # bad request): Nexus may retry the retryable ones elsewhere.
             response = pb.HttpResponse()
             response.error.code, response.error.message = exc.code, str(exc)
         except _AppFailed as exc:
