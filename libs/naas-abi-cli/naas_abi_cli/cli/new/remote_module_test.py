@@ -437,6 +437,10 @@ def test_new_app_in_a_remote_module_says_how_nexus_serves_it(tmp_path: Path) -> 
 
     assert result.exit_code == 0, result.output
     assert (apps / "reports" / "manifest.json").is_file()
+    # The module's name, not the placeholder, in what the scaffold writes.
+    for written in (apps / "reports" / "manifest.json", apps / "AGENTS.md"):
+        text = written.read_text()
+        assert "research" in text and "your_module_name" not in text
     assert "/app-html/remote/<module_id>/reports/" in result.output
     assert 'expose_app("reports", app)' in result.output
 

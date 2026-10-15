@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import click
 
@@ -7,7 +8,7 @@ from naas_abi_cli.cli.utils.Copier import Copier
 
 from .new import new
 from .remote_module import is_remote_module, target_dir
-from .utils import to_pascal_case
+from .utils import module_package_name, to_pascal_case
 
 
 @new.command("agent")
@@ -55,6 +56,8 @@ def new_agent(
     )
 
     if "module_name_snake" not in extra_values:
-        extra_values["module_name_snake"] = "your_module_name"
+        extra_values["module_name_snake"] = (
+            module_package_name(Path(agent_path).resolve()) or "your_module_name"
+        )
 
     copier.copy(values={"agent_name_pascal": to_pascal_case(agent_name)} | extra_values)

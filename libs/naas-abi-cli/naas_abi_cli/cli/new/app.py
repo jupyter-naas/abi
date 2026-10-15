@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import click
 
@@ -7,7 +8,7 @@ from naas_abi_cli.cli.utils.Copier import Copier
 
 from .new import new
 from .remote_module import is_remote_module, target_dir
-from .utils import to_kebab_case, to_pascal_case, to_snake_case
+from .utils import module_package_name, to_kebab_case, to_pascal_case, to_snake_case
 
 
 @new.command("app")
@@ -50,7 +51,9 @@ def new_app(app_name: str, app_path: str = ".", extra_values: dict | None = None
     )
 
     if "module_name_snake" not in extra_values:
-        extra_values["module_name_snake"] = "your_module_name"
+        extra_values["module_name_snake"] = (
+            module_package_name(Path(app_path).resolve()) or "your_module_name"
+        )
 
     copier.copy(
         values={
