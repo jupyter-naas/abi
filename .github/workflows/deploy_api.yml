@@ -11,9 +11,33 @@ on:
       - completed
 
 jobs:
-  build:
+  # Only a release cut from main deploys. A release from v2 (2.x fixes) or dev
+  # (prereleases) is built from a commit that main does not contain; its image
+  # never moves :latest, so there is nothing of it to deploy. The compare API
+  # answers "identical" or "ahead" when main contains the built commit.
+  gate:
     runs-on: ubuntu-latest
     if: github.repository == 'jupyter-naas/abi'
+    outputs:
+      from_main: ${{ steps.channel.outputs.from_main }}
+    steps:
+      - name: Check the release commit is on main
+        id: channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          STATUS=$(gh api "repos/${{ github.repository }}/compare/${RELEASE_SHA}...main" --jq .status)
+          echo "main compared with ${RELEASE_SHA}: ${STATUS}"
+          case "$STATUS" in
+            identical|ahead) echo "from_main=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "from_main=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  build:
+    runs-on: ubuntu-latest
+    needs: gate
+    if: needs.gate.outputs.from_main == 'true'
     timeout-minutes: 30
     steps:
       - name: Checkout repository
@@ -165,6 +189,8 @@ jobs:
 
   streamlit-demo:
     runs-on: ubuntu-latest
+    needs: gate
+    if: needs.gate.outputs.from_main == 'true'
     timeout-minutes: 10
     env:
       REGISTRY_NAME: ${{ github.event.repository.name }}-demo-streamlit

@@ -1,4 +1,9 @@
-name: Build ABI Container
+# 2.x maintenance line. Images are tagged :v2 and with the release tag, never
+# :latest, which belongs to main. The name differs from main's "Build ABI
+# Container" on purpose: deploy_api.yml listens for that name, and a
+# workflow_run workflow always runs from the default branch's file, so this
+# rename is what keeps a v2 release from deploying the API.
+name: Build ABI Container (v2)
 
 on:
   release:
@@ -40,10 +45,10 @@ jobs:
           pip install uv
           touch .env
           make build
-          docker tag abi:latest ghcr.io/${{ github.repository }}/abi:latest
+          docker tag abi:latest ghcr.io/${{ github.repository }}/abi:v2
           docker tag abi:latest ghcr.io/${{ github.repository }}/abi:${{ github.event.release.tag_name }}
 
       - name: Push Docker image to GitHub Container Registry
         run: |
           docker push ghcr.io/${{ github.repository }}/abi:${{ github.event.release.tag_name }}
-          docker push ghcr.io/${{ github.repository }}/abi:latest
+          docker push ghcr.io/${{ github.repository }}/abi:v2
