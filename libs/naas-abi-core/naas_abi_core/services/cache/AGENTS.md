@@ -146,7 +146,8 @@ configuration matching object-storage cache configuration. It uses KV atomic
 set-if-not-exists and maps missing keys to CacheNotFoundError. This is distinct
 from the cache's direct Redis adapter. The loader includes required KV/storage
 services transitively. In NATS mode those dependencies are network facades.
-Every configured local tier also serves `abi.svc.cache.v1.tier.<index>.*`; cold's
+Every configured local tier also serves `abi.svc.cache.v1.tier.<index>.*`, through
+`CacheService.tier_at(index)` (by position: two tiers may share a name); cold's
 original endpoint remains compatible. `DescribeRequest`/`DescribeResponse` add
 tier discovery without changing existing request shapes.
 

@@ -3,7 +3,11 @@
 Each request runs with a ``CallContext`` (``naas_abi_core.engine.call_context``):
 the ``api`` service account acting on behalf of the signed-in user. Every
 kernel call Nexus makes for the request carries it: in process directly, over
-NATS as the ``Abi-On-Behalf-Of`` header.
+NATS as the ``Abi-On-Behalf-Of`` header, which the kernel trusts from ``api``.
+So the user is named only as strictly as ``AuthService`` signs a user in: a
+session token (no ``scope``) whose ``jti`` is not revoked. A link token
+(app-html, preview, grants), a revoked token or no token leaves the request
+``ANONYMOUS``, not ``api``: a public route must never get ``api``'s rights.
 
 Pure ASGI, so the context is set in the request's own context: async
 endpoints, sync endpoints (Starlette copies the context into the threadpool)
@@ -11,8 +15,8 @@ and everything they await see it. ``EventService.publish()`` stamps the user
 and workspace on every event, and identity event capture uses the user for
 ``created_by``.
 
-The user is the verified bearer token's ``sub``. The workspace is the
-``/workspaces/{id}`` path segment, else a ``workspace_id`` query parameter.
+The workspace is the ``/workspaces/{id}`` path segment, else a
+``workspace_id`` query parameter.
 Handlers that learn the workspace from the body (chat) set
 ``agent_workspace_id`` themselves — a view of the same context.
 """
@@ -20,10 +24,13 @@ Handlers that learn the workspace from the body (chat) set
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from typing import Any
 from urllib.parse import parse_qs
 
+from naas_abi_core import logger
 from naas_abi_core.engine.call_context import (
+    ANONYMOUS,
     CallContext,
     service_account,
     use_call_context,
@@ -43,7 +50,55 @@ def _decode_token(token: str) -> dict[str, Any] | None:
     return decode_token(token)
 
 
+def _bearer(headers: Headers) -> str | None:
+    auth = headers.get("authorization") or ""
+    scheme, _, token = auth.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return None
+    return token.strip()
+
+
+async def _is_revoked(jti: str) -> bool:
+    from naas_abi.apps.nexus.apps.api.app.services.refresh_token import (
+        is_access_token_revoked,
+    )
+
+    return await is_access_token_revoked(jti)
+
+
+async def verified_user_id(headers: Headers) -> str | None:
+    """The signed-in user of a request, checked as ``AuthService`` does.
+
+    A session token only (not a scoped link token), not revoked. Fails
+    closed: a revocation lookup that fails names nobody.
+    """
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
+        is_session_token,
+    )
+
+    token = _bearer(headers)
+    if token is None:
+        return None
+    try:
+        payload = _decode_token(token)
+    except Exception:  # noqa: BLE001
+        return None
+    if not payload or not is_session_token(payload) or not payload.get("sub"):
+        return None
+    jti = payload.get("jti")
+    if jti:
+        try:
+            if await _is_revoked(str(jti)):
+                return None
+        except Exception as exc:  # noqa: BLE001 - fail closed
+            logger.warning(f"Revocation check failed; the request names no user: {exc}")
+            return None
+    return str(payload["sub"])
+
+
 def user_id_from_headers(headers: Headers) -> str | None:
+    """The bearer token's ``sub``, unchecked beyond its signature: a cache key
+    (settings_cache), never identity. Identity is ``verified_user_id``."""
     auth = headers.get("authorization") or ""
     scheme, _, token = auth.partition(" ")
     if scheme.lower() != "bearer" or not token.strip():
@@ -72,15 +127,17 @@ class RequestIdentityMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        with use_call_context(request_call_context(scope)):
+        with use_call_context(await request_call_context(scope)):
             await self.app(scope, receive, send)
 
 
-def request_call_context(scope: Scope) -> CallContext:
-    """``api`` on behalf of the request's signed-in user, if any."""
-    user_id = user_id_from_headers(Headers(scope=scope))
-    return CallContext(
-        principal=service_account(NEXUS_IDENTITY),
+async def request_call_context(scope: Scope) -> CallContext:
+    """``api`` on behalf of the request's verified signed-in user; without
+    one, ``ANONYMOUS`` (with the request's workspace and trigger)."""
+    user_id = await verified_user_id(Headers(scope=scope))
+    return replace(
+        ANONYMOUS,
+        principal=service_account(NEXUS_IDENTITY) if user_id else ANONYMOUS.principal,
         on_behalf_of=user(user_id) if user_id else None,
         workspace_id=workspace_id_from_request(
             scope.get("path", ""), scope.get("query_string", b"")

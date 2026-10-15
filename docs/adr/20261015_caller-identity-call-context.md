@@ -39,7 +39,10 @@ the same way for NATS, Nexus REST and in-process callers. Before this change:
    - `DomainRPCDispatcher.call` runs the worker in a copy of the context holding it, so it ends with the
      call.
    - Discovery, the model registry and transfer sessions use the same helper. A transfer session runs as
-     the caller who opened it, and only that actor acting for that same user may go on with it.
+     the caller who opened it, and only that actor acting for that same user may go on with it. Model
+     registry chat streams follow the same rule (`same_caller`).
+   - A client stream captures its user and trace once, when it opens: frames read later, or from another
+     thread, still belong to it.
    - `nats_rpc.authenticate_request` authenticates a `nats.micro` request and answers a refusal itself, so
      the primaries share one path.
 3. **Identity never comes from a request body.**
@@ -57,6 +60,11 @@ the same way for NATS, Nexus REST and in-process callers. Before this change:
 5. **Nexus runs each request as `api` on behalf of the signed-in user.** Its request middleware sets the
    context, and kernel calls carry it: directly in process, as the header over NATS. Work for no caller runs
    under `as_service_account`: engine-hosted jobs as `engine`, Nexus's configuration seeding as `api`.
+   - The kernel trusts that user from `api`, so the middleware names one only as strictly as `AuthService`
+     signs a user in: a session token (no `scope`) whose `jti` is not revoked. A failed revocation lookup
+     names nobody.
+   - A request with no such user (no token, a scoped link token, a revoked token) runs as `ANONYMOUS`, not
+     as `api`: a public route must never get the rights of Nexus's own service account.
 6. **The event actor variables are views of the context.**
    - `EventService.publish` stamps the call's user, workspace and `triggered_via`.
    - The old names keep a ContextVar-like `get`/`set`/`reset` for existing callers. Setting the user sets
@@ -69,7 +77,8 @@ the same way for NATS, Nexus REST and in-process callers. Before this change:
      `update_vector`, `delete_vectors`, `list_vectors`) that take the port's arguments as given. Its
      convenience methods validate, then call them; the NATS endpoints call them directly, so the port's
      contract holds over NATS.
-   - `SingleTierCacheService` gains `put_entry` and `put_entry_if_absent`.
+   - `SingleTierCacheService` gains `put_entry` and `put_entry_if_absent`. Each `tier.<index>` subject
+     serves `CacheService.tier_at(index)`, by position, since two tiers may share a name.
    - The services emit the mutation audit events, once. The primaries no longer take an event publisher.
 
 ## Consequences
@@ -81,6 +90,8 @@ the same way for NATS, Nexus REST and in-process callers. Before this change:
   by an untrusted identity, which no existing caller sends.
 - **Events published by the engine for a NATS call now carry the user** the caller acted for, and its target
   workspace. Before, they carried no actor.
+- **Events published during a Nexus request opened with a link token, or a revoked token, carry no actor.**
+  Before, any token signed with the Nexus key labelled them with its `sub`.
 - **Remote vector store calls keep the port's contract.** A remote `close` resets the service's
   initialization instead of leaving it holding a closed adapter.
 - **Sync engine clients keep the caller.** `nats_runtime.run_coro` schedules through

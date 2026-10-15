@@ -729,7 +729,7 @@ def test_overflow_chunks_travel_as_the_call_they_belong_to(monkeypatch):
         with use_call_context(caller):
             chunk = client._chunk_call(
                 {"Nats-Auth-Token": "t", **client._on_behalf_of()},
-                client._chunk_envelope(call_request),
+                call_request,
                 TransferTrace(None),
             )
         # Chunks run later, on the client's loop, outside the caller's context.
@@ -749,3 +749,53 @@ def test_overflow_chunks_travel_as_the_call_they_belong_to(monkeypatch):
             "ws-1",
         )
         assert headers["Abi-On-Behalf-Of"] == "u1"
+
+
+def test_a_stream_keeps_the_user_it_was_opened_for(monkeypatch):
+    """Frames read later, from another thread or after the caller's context
+    ended, still carry the opener's user: the host refuses any other."""
+    import threading
+
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.engine.nats_rpc import NatsRPCClient
+    from naas_abi_proto.transfer.v1 import transfer_pb2
+
+    client = NatsRPCClient("nats://unused:4222", SECRET, "api")
+    users = []
+    replies = {
+        transfer_pb2.OpenResponse: transfer_pb2.OpenResponse(id="s", chunk_bytes=1024),
+        transfer_pb2.StartResponse: transfer_pb2.StartResponse(),
+        transfer_pb2.ReadResponse: transfer_pb2.ReadResponse(done=True),
+        transfer_pb2.CloseResponse: transfer_pb2.CloseResponse(),
+    }
+
+    def fake_call(subject, request, response_cls, **kwargs):
+        headers = {**(kwargs.get("on_behalf_of") or client._on_behalf_of())}
+        users.append(headers.get("Abi-On-Behalf-Of"))
+        return replies[response_cls]
+
+    monkeypatch.setattr(client, "_call", fake_call)
+    monkeypatch.setattr(
+        client,
+        "_run_coro",
+        lambda coro, **_: (coro.close(), SimpleNamespace(max_payload=1 << 20))[1],
+    )
+    ada = CallContext(principal=service_account("api"), on_behalf_of=user("usr-ada"))
+    try:
+        with use_call_context(ada):
+            stream = client._transfer_stream("abi.t", "get", b"", lambda e: None)
+            frames = stream.__enter__()
+        # Read and close on another thread, outside the opener's context.
+        reader = threading.Thread(
+            target=lambda: (list(frames), stream.__exit__(None, None, None))
+        )
+        reader.start()
+        reader.join()
+    finally:
+        client.close()
+    assert users and set(users) == {"usr-ada"}

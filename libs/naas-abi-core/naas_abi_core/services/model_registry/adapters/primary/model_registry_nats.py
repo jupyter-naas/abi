@@ -12,13 +12,19 @@ from uuid import uuid4
 from google.protobuf.message import DecodeError
 from langchain_core.messages import AIMessage, AIMessageChunk
 from naas_abi_core import logger
-from naas_abi_core.engine.call_context import use_call_context
+from naas_abi_core.engine.call_context import (
+    ANONYMOUS,
+    CallContext,
+    service_account,
+    use_call_context,
+)
 from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
 from naas_abi_core.engine.nats_identity import caller_context, for_request, refusal
 from naas_abi_core.engine.nats_sessions import SessionHost, session_owner, until
 from naas_abi_core.engine.nats_transfer import (
     TransferHost,
     drain_shared,
+    same_caller,
     stream_thread,
 )
 from naas_abi_core.models.Model import ChatModel, EmbeddingModel
@@ -85,6 +91,10 @@ def _record_usage(span, usage):
             span.set_attribute(f"abi.model.usage.{key}", value)
 
 
+def _acting_for_nobody(caller: str) -> CallContext:
+    return CallContext(principal=service_account(caller)) if caller else ANONYMOUS
+
+
 @dataclass
 class _Stream:
     caller: str
@@ -94,6 +104,13 @@ class _Stream:
     sequence: int = 0
     reading: bool = False
     touched: float = 0
+    # Who opened it, user included: only the same caller may read or close it.
+    # By default ``caller`` acting for nobody, as ``_execute`` assumes.
+    context: CallContext | None = None
+
+    def __post_init__(self) -> None:
+        if self.context is None:
+            self.context = _acting_for_nobody(self.caller)
 
 
 class ModelRegistryNATS(SessionHost):
@@ -259,9 +276,10 @@ class ModelRegistryNATS(SessionHost):
                 self.deadline or float("inf"),
                 max(0.001, request.context.timeout_ms / 1000),
             )
-            with use_call_context(for_request(context, request)):
+            context = for_request(context, request)
+            with use_call_context(context):
                 response = await asyncio.wait_for(
-                    self._execute(operation, request, caller), timeout
+                    self._execute(operation, request, caller, context), timeout
                 )
         except InvalidServiceTokenError as exc:
             response.error.code, response.error.message = (
@@ -493,7 +511,19 @@ class ModelRegistryNATS(SessionHost):
                 await iterator.aclose()
                 _record_usage(span, usage)
 
-    async def _execute(self, operation, request, caller):
+    @staticmethod
+    def _owns(stream: _Stream, caller: str, context: CallContext) -> bool:
+        """The same actor acting for the same user as the stream's opener."""
+        return (
+            stream.caller == caller
+            and stream.context is not None
+            and same_caller(stream.context, context)
+        )
+
+    async def _execute(self, operation, request, caller, context=None):
+        """``context``: the verified caller; by default ``caller`` acting for nobody."""
+        if context is None:
+            context = _acting_for_nobody(caller)
         if operation == "list_models":
             entries = await asyncio.to_thread(self.registry.list_registered_models)
             return pb.ListModelsResponse(
@@ -507,13 +537,13 @@ class ModelRegistryNATS(SessionHost):
             return pb.ResolveResponse(model=self._descriptor(cid, model))
         if operation == "stream_close":
             stream = self.streams.get(request.stream_id)
-            if stream and stream.caller != caller:
+            if stream and not self._owns(stream, caller, context):
                 raise PermissionError()
             await self._close(request.stream_id)
             return pb.StreamCloseResponse()
         if operation == "stream_next":
             stream = self.streams[request.stream_id]
-            if stream.caller != caller:
+            if not self._owns(stream, caller, context):
                 raise PermissionError()
             if stream.reading or request.sequence != stream.sequence:
                 raise ValueError("Concurrent or out-of-order stream read")
@@ -581,7 +611,9 @@ class ModelRegistryNATS(SessionHost):
                     raise TypeError("Provider returned a non-AI message")
                 return pb.ChatResponse(message=encode_message(message))
             stream_id = f"{self.owner}:{uuid4().hex}"
-            stream = _Stream(caller, touched=asyncio.get_running_loop().time())
+            stream = _Stream(
+                caller, touched=asyncio.get_running_loop().time(), context=context
+            )
             self.streams[stream_id] = stream
             stream.task = asyncio.create_task(
                 self._produce(stream, model, messages, options)

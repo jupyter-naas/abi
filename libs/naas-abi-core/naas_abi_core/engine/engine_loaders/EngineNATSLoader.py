@@ -390,11 +390,12 @@ class EngineNATSLoader:
             started.append(primary_cache)
 
         if services.cache_available():
-            for index, (tier, adapter) in enumerate(services.cache.adapters):
+            for index, (_, adapter) in enumerate(services.cache.adapters):
                 if isinstance(adapter, CacheSecondaryAdapterNATSClient):
                     continue
                 primary_tier = CachePrimaryAdapterNATS(
-                    services.cache.tier(tier),
+                    # By position: two tiers may share a name.
+                    services.cache.tier_at(index),
                     nats_config.jwt_secret,
                     subject_prefix=f"abi.svc.cache.v1.tier.{index}",
                 )

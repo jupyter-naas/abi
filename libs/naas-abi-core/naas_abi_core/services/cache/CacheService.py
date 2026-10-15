@@ -396,13 +396,18 @@ class CacheService(ServiceBase, ICacheService):
         if not adapters:
             raise ValueError("CacheService requires at least one adapter")
         self._adapters: list[tuple[str, ICacheAdapter]] = adapters
-        self._tiers: dict[str, SingleTierCacheService] = {
-            tier: SingleTierCacheService(
+        # One view per configured adapter, in order: names may repeat (an
+        # entry's tier defaults to "cold"), positions never do.
+        self._views = [
+            SingleTierCacheService(
                 adapter,
                 tier_name=tier,
                 event_publisher=self.__publish_event,
             )
             for tier, adapter in adapters
+        ]
+        self._tiers: dict[str, SingleTierCacheService] = {
+            tier: view for (tier, _), view in zip(adapters, self._views)
         }
 
     @property
@@ -461,6 +466,11 @@ class CacheService(ServiceBase, ICacheService):
     def tier_names(self) -> tuple[str, ...]:
         """Configured tiers, in read order (hot first by convention)."""
         return tuple(tier for tier, _ in self._adapters)
+
+    def tier_at(self, index: int) -> SingleTierCacheService:
+        """The view of the ``index``-th configured adapter (``adapters`` order),
+        even when another tier has the same name."""
+        return self._views[index]
 
     def tier(self, name: str) -> SingleTierCacheService:
         """The view of one configured tier, by name."""

@@ -1436,7 +1436,7 @@ Every primary adapter sets it **only from verified credentials**:
 | Caller | Source | Result |
 |---|---|---|
 | NATS (kernel services, discovery, module hosts, the SDK) | The `Nats-Auth-Token` header, verified against the JWKS (§9.1), audience accepted by the endpoint (§9.3) | No `act`: principal = `sub`. With `act`: principal = `act.sub`, OBO = `sub`. Groups from IAM plus `grp`. Scope from `abi_scope`. Set by one shared helper in the NATS dispatch path, not per adapter. |
-| Nexus REST | The session cookie's `abi:session` token, or an `abi:delegated:*` token on routes that accept it | principal = `api`, OBO = the user (subtask 2). Every kernel call Nexus makes for the request then runs as `api` on behalf of the user, so the intersection rule (§5.3) applies. |
+| Nexus REST | The session cookie's `abi:session` token, or an `abi:delegated:*` token on routes that accept it | principal = `api`, OBO = the user (subtask 2). Every kernel call Nexus makes for the request then runs as `api` on behalf of the user, so the intersection rule (§5.3) applies. Until subtask 7, the user is named only for an unrevoked Nexus session token; a request without one (a link token included) is `ANONYMOUS`, never `api`. |
 | Nexus calling remote agents and apps | An `abi:delegated:agent` or `abi:delegated:app` token exchanged for the target (§9.4) | Sent in the `Nats-Auth-Token` header of the call, and handed to the agent host in `SubmitRequest.delegated_token` for the run's downstream calls |
 | In-process code | Inherits the caller's context. `asyncio.to_thread` copies it; executor submissions use `contextvars.copy_context().run` (already done by `DomainRPCDispatcher`). Background tasks capture it at creation or use `as_service_account`. | unchanged |
 | The SDK module host | Sets the SDK context from the verified incoming invocation. Downstream SDK calls send the delegated token from that context. | principal = the module's service account, OBO = the user |
@@ -1478,7 +1478,8 @@ refusal), and `for_request` adds the trace and target workspace of the request's
 `DomainRPCDispatcher.call(fn, request, caller)` runs the worker in a copy of the context holding that caller;
 discovery, the model registry and transfer sessions use it the same way. A transfer session runs as the caller
 who opened it and belongs to that actor acting for that user: the same actor for another user is refused.
-Overflow chunks carry their call's token, user, trace and workspace. So far `as_service_account` wraps
+Overflow chunks carry their call's token, user, trace and workspace; a client stream captures its user once,
+when it opens. Model registry chat streams are owned the same way as transfer sessions. So far `as_service_account` wraps
 engine-hosted jobs (`engine`) and Nexus's configuration seeding (`api`); engine boot still runs anonymous. The event, vector_store and cache
 endpoints call their domain services (`EventService`'s stored-level operations, `VectorStoreService`,
 `CacheService`'s tier views), so a check in the domain service covers them.

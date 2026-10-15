@@ -387,6 +387,30 @@ def test_cache_exposes_cold_tier_and_skips_remote_proxy(monkeypatch, remote):
         assert started[0]._adapter is services.cache.cold
 
 
+def test_each_cache_tier_subject_serves_its_own_adapter(monkeypatch):
+    """Tiers may share a name (an entry's tier defaults to "cold"): tier.<i>
+    serves the i-th configured adapter, through the CacheService's view."""
+    from naas_abi_core.services.cache.CacheService import CacheService
+
+    loader = EngineNATSLoader(
+        SimpleNamespace(nats=NATSConfiguration(jwt_secret="x" * 32))
+    )
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_runtime.run_coro", lambda coro: coro.close()
+    )
+    services = _services()
+    services.cache_available.return_value = True
+    first, second = MagicMock(), MagicMock()
+    services.cache = CacheService([("cold", first), ("cold", second)])
+
+    _, tier_0, tier_1 = loader.expose_services(services)
+
+    assert tier_0._adapter is services.cache.tier_at(0)
+    assert tier_1._adapter is services.cache.tier_at(1)
+    assert (tier_0._adapter.adapter, tier_1._adapter.adapter) == (first, second)
+
+
 def test_expose_model_registry_owner(monkeypatch):
     from naas_abi_core.services.model_registry.adapters.primary.model_registry_nats import (
         ModelRegistryNATS,

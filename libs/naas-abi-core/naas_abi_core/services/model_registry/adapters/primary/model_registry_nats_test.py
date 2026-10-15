@@ -39,6 +39,37 @@ def test_waiting_stream_wakes_on_producer_completion():
     asyncio.run(scenario())
 
 
+def test_a_stream_belongs_to_its_actor_and_the_user_it_acts_for():
+    from naas_abi_core.engine.call_context import CallContext, service_account, user
+
+    ada = CallContext(principal=service_account("api"), on_behalf_of=user("usr-ada"))
+    bob = CallContext(principal=service_account("api"), on_behalf_of=user("usr-bob"))
+
+    async def scenario():
+        primary = ModelRegistryNATS(Mock(), "test")
+        stream = _Stream("api", context=ada)
+        stream.task = asyncio.create_task(asyncio.sleep(0))
+        await stream.task
+        primary.streams["id"] = stream
+        for operation, request in (
+            ("stream_next", pb.StreamNextRequest(stream_id="id")),
+            ("stream_close", pb.StreamCloseRequest(stream_id="id")),
+        ):
+            with pytest.raises(PermissionError):
+                await primary._execute(operation, request, "api", bob)
+        assert "id" in primary.streams  # bob closed nothing
+        read = await primary._execute(
+            "stream_next", pb.StreamNextRequest(stream_id="id"), "api", ada
+        )
+        assert read.done
+        await primary._execute(
+            "stream_close", pb.StreamCloseRequest(stream_id="id"), "api", ada
+        )
+        assert "id" not in primary.streams
+
+    asyncio.run(scenario())
+
+
 def test_a_stream_open_at_the_handover_goes_on_until_it_ends():
     from unittest.mock import AsyncMock, MagicMock
 

@@ -78,13 +78,55 @@ def test_anonymous_requests_have_no_actor(monkeypatch) -> None:
     client = TestClient(_app())
 
     assert client.get("/api/files", headers={"Authorization": "Bearer bad"}).json()["user"] is None
+    # No verified user: anonymous, never Nexus's own trusted ``api``.
     assert client.get("/api/files").json() == {
         "user": None,
         "workspace": None,
         "via": "api",
-        "principal": "api",
+        "principal": "anonymous",
         "on_behalf_of": None,
     }
+
+
+def _seen_with(monkeypatch, payload, revoked=False):
+    monkeypatch.setattr(mw, "_decode_token", lambda token: payload)
+
+    async def is_revoked(jti):
+        if isinstance(revoked, Exception):
+            raise revoked
+        return revoked
+
+    monkeypatch.setattr(mw, "_is_revoked", is_revoked)
+    client = TestClient(_app())
+    return client.get("/api/files", headers={"Authorization": "Bearer t"}).json()
+
+
+def test_a_session_token_names_its_user(monkeypatch) -> None:
+    body = _seen_with(monkeypatch, {"sub": "usr-1", "jti": "j1"})
+    assert (body["principal"], body["on_behalf_of"], body["user"]) == (
+        "api",
+        "usr-1",
+        "usr-1",
+    )
+
+
+def test_a_scoped_link_token_names_no_user(monkeypatch) -> None:
+    body = _seen_with(monkeypatch, {"sub": "usr-1", "jti": "j1", "scope": "app-html"})
+    assert (body["principal"], body["on_behalf_of"], body["user"]) == (
+        "anonymous",
+        None,
+        None,
+    )
+
+
+def test_a_revoked_token_names_no_user(monkeypatch) -> None:
+    body = _seen_with(monkeypatch, {"sub": "usr-1", "jti": "j1"}, revoked=True)
+    assert (body["principal"], body["on_behalf_of"]) == ("anonymous", None)
+
+
+def test_a_failed_revocation_check_names_no_user(monkeypatch) -> None:
+    body = _seen_with(monkeypatch, {"sub": "usr-1", "jti": "j1"}, revoked=RuntimeError("db down"))
+    assert (body["principal"], body["on_behalf_of"]) == ("anonymous", None)
 
 
 def test_workspace_id_extraction() -> None:

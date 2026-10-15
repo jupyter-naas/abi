@@ -470,14 +470,19 @@ class NatsRPCClient:
         *,
         transfer: TransferTrace | None = None,
         timeout_seconds: float | None = None,
+        on_behalf_of: dict[str, str] | None = None,
     ) -> _ResponseT:
         """One request/reply. ``timeout_seconds`` replaces the client's default
         deadline for this call only (a long operation); overflow chunks keep
-        the default, each being small."""
+        the default, each being small. ``on_behalf_of``: the user header,
+        captured once for a whole stream; by default the current call's."""
         payload = request.SerializeToString()
         with self._call_lock:
             token = self._current_token()
-        headers = {self._auth_header: token, **self._on_behalf_of()}
+        if on_behalf_of is None:
+            on_behalf_of = self._on_behalf_of()
+        call_headers = {self._auth_header: token, **on_behalf_of}
+        headers = dict(call_headers)
         # The span starts in the calling thread, whose context holds the parent
         # (e.g. a request handler); the trace travels in the headers.
         with client_span(
@@ -498,11 +503,7 @@ class NatsRPCClient:
                 )
             headers[overflow.ACCEPT_HEADER] = "1"
             trace = TransferTrace(span)
-            chunk = self._chunk_call(
-                {self._auth_header: token, **self._on_behalf_of()},
-                self._chunk_envelope(request),
-                trace,
-            )
+            chunk = self._chunk_call(call_headers, request, trace)
             upload = None
             try:
                 try:
@@ -601,14 +602,18 @@ class NatsRPCClient:
     def _chunk_call(
         self,
         call_headers: dict[str, str],
-        envelope: common_pb2.CallContext,
+        call_request: Message,
         trace: TransferTrace,
     ) -> overflow.Call:
         """One overflow exchange, counted on the call's span (``trace``), sent
-        as the call it belongs to: its token, its user, its trace and workspace."""
+        as the call it belongs to: its token, its user, its trace and workspace.
+        The envelope is built on the first chunk: most calls never overflow."""
+        envelopes: list[common_pb2.CallContext] = []
 
         async def call(subject: str, request: Any, response_cls: Any) -> Any:
-            request.context.CopyFrom(envelope)
+            if not envelopes:
+                envelopes.append(self._chunk_envelope(call_request))
+            request.context.CopyFrom(envelopes[0])
             payload = request.SerializeToString()
             headers = dict(call_headers)
             with client_span(subject, headers, size=len(payload), transfer=trace):
@@ -687,7 +692,10 @@ class NatsRPCClient:
         # One span for the whole stream (totals as attributes), not one per frame.
         with transfer_span(prefix, operation) as trace:
             nc = self._run_coro(self._ensure_connection_async())
-            envelope = self._context()  # one trace for the whole stream
+            # One trace and one user for the whole stream, captured here: frames
+            # may be read from another thread, or after the caller's context.
+            envelope = self._context()
+            on_behalf_of = self._on_behalf_of()
 
             def exchange(request: Any, response_cls: Any) -> Any:
                 name = type(request).__name__.removesuffix("Request").lower()
@@ -697,6 +705,7 @@ class NatsRPCClient:
                     request,
                     response_cls,
                     transfer=trace,
+                    on_behalf_of=on_behalf_of,
                 )
                 if response.HasField("error"):
                     raise_error(response.error)

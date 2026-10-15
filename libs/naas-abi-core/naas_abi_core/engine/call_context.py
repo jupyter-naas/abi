@@ -9,7 +9,8 @@ Who sets it:
 
 * NATS primary adapters, from the verified ``Nats-Auth-Token`` and the
   ``Abi-On-Behalf-Of`` header (``naas_abi_core.engine.nats_identity``);
-* Nexus, per request: ``api`` on behalf of the signed-in user;
+* Nexus, per request: ``api`` on behalf of the signed-in user (an unrevoked
+  session token), else ``ANONYMOUS``;
 * in-process callers inherit their caller's context; work that runs for no
   caller uses ``as_service_account`` (engine-hosted jobs as ``engine``,
   Nexus's configuration seeding as ``api``).

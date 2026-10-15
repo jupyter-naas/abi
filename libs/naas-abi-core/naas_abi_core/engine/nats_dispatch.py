@@ -52,9 +52,10 @@ class DomainRPCDispatcher:
     ) -> Response:
         """Run ``function(request)`` on a worker, in a copy of this context.
 
-        ``caller``, the verified caller (``nats_identity.authenticated``), is
-        that copy's ``CallContext``, with the request's trace and workspace; it
-        ends with the call. Without it the worker inherits the current one.
+        ``caller``, the verified caller (``nats_rpc.authenticate_request``,
+        built on ``nats_identity.caller_context``), is that copy's
+        ``CallContext``, with the request's trace and workspace; it ends with
+        the call. Without it the worker inherits the current one.
         """
         # Called only on the primary's event loop. A distinct pool per primary
         # prevents waiting parents from consuming their dependencies' capacity.
