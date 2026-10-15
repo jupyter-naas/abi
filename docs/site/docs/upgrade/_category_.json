@@ -1,0 +1,8 @@
+{
+  "label": "Upgrade to 3.0",
+  "position": 1.5,
+  "link": {
+    "type": "generated-index",
+    "description": "Move a 2.x project to ABI 3.0: what breaks, the upgrade in three phases, rollback and known limits."
+  }
+}
