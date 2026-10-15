@@ -9,6 +9,7 @@ from .config import config
 from .deploy import deploy
 from .dev import dev
 from .docs import docs
+from .iam import iam
 from .init import init
 from .module import module
 from .new import new
@@ -47,6 +48,7 @@ _main.add_command(dev)
 _main.add_command(workspace)
 _main.add_command(user)
 _main.add_command(org)
+_main.add_command(iam)
 ran = False
 
 

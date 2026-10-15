@@ -60,11 +60,11 @@ from rich.table import Table
 from rich.text import Text
 
 from naas_abi_cli.cli.admin_credentials import (
-    NATS_USERS,
     ensure_admin_credentials,
     ensure_api_key,
+    ensure_nats_callout_seed,
     ensure_nats_passwords,
-    ensure_nats_secret,
+    nats_callout_issuer,
     nats_login,
 )
 from naas_abi_cli.cli.dev_modules import (
@@ -114,12 +114,12 @@ PORT_RELEASE_WAIT_SECONDS = 5.0
 
 # Per-service port bases — chosen so that base + offset ranges never overlap.
 SERVICE_PORT_BASES = {
-    "oxigraph": 7878,   # 7878..8777
-    "api": 9879,        # 9879..10778
-    "dagster": 11000,   # 11000..11899
-    "nexus-web": 12000, # 12000..12899
-    "nats": 13000,      # 13000..13899 (client port; see NATS_MONITOR_PORT_OFFSET)
-    "jaeger": 15000,    # 15000..15899 (query API + UI; see _jaeger_ports)
+    "oxigraph": 7878,  # 7878..8777
+    "api": 9879,  # 9879..10778
+    "dagster": 11000,  # 11000..11899
+    "nexus-web": 12000,  # 12000..12899
+    "nats": 13000,  # 13000..13899 (client port; see NATS_MONITOR_PORT_OFFSET)
+    "jaeger": 15000,  # 15000..15899 (query API + UI; see _jaeger_ports)
 }
 
 # nats-server needs two ports: the client port (allocated like every other
@@ -132,6 +132,7 @@ NATS_MONITOR_PORT_OFFSET = 1000
 
 def _nats_monitor_port(client_port: int) -> int:
     return client_port + NATS_MONITOR_PORT_OFFSET
+
 
 NEXUS_ROOT = Path("libs/naas-abi/naas_abi/apps/nexus")
 NEXUS_WEB_DIR = NEXUS_ROOT / "apps" / "web"
@@ -213,6 +214,7 @@ class ServiceSpec:
 # Project paths / instance allocation
 # =============================================================================
 
+
 def _project_root() -> Path:
     # The `abi` entrypoint chdir's to the project root before dispatching.
     return Path.cwd().resolve()
@@ -282,6 +284,7 @@ def _service_url(port: int) -> str:
 # Process helpers
 # =============================================================================
 
+
 def _port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         # Bind like the servers do: connections a stopped server closed linger in
@@ -325,8 +328,7 @@ def _find_free_port(service: str, preferred: int) -> int:
         if not _port_in_use(candidate):
             return candidate
     raise click.ClickException(
-        f"No free port in {service}'s range "
-        f"({base}..{base + PORT_OFFSET_RANGE - 1})."
+        f"No free port in {service}'s range ({base}..{base + PORT_OFFSET_RANGE - 1})."
     )
 
 
@@ -396,6 +398,7 @@ def _wait_until_ready(port: int, max_wait: float = 90.0, path: str = "/") -> boo
 # =============================================================================
 # Per-service launchers
 # =============================================================================
+
 
 def _oxigraph_url(ports: dict[str, int]) -> str:
     # Server-to-server (api/dagster -> oxigraph), same host, never a browser.
@@ -479,40 +482,51 @@ def _jaeger_ports(query_port: int) -> dict[str, int]:
 def _write_dev_overlay(
     ports: dict[str, int],
     *,
-    nats_secret: str | None,
-    nats_password: str | None = None,
+    nats_passwords: dict[str, str] | None = None,
+    callout_seed: str | None = None,
     tracing: bool = False,
     nats_off: bool = False,
 ) -> Path:
     """The blocks the engine merges over the project config (ABI_CONFIG_OVERLAY).
 
-    `nats:` (and the JetStream bus) when `nats_secret` is given, logged in as the
-    broker user `abi` with `nats_password`; `nats: null` with `nats_off`, which
-    turns a project's own block off (`--without-nats`); `telemetry:` when
-    `tracing`. JSON is valid YAML, so no YAML writer is needed. Holds the JWT
-    secret and the password: owner-only.
+    `nats:` (and the JetStream bus) when `nats_passwords` are given: the engine
+    logs in as the broker user `engine` and answers the auth callout as `auth`,
+    signing admitted modules with `callout_seed`; module manifests are approved
+    as they come (`services.iam.modules.auto_approve`, dev only). `nats: null`
+    with `nats_off`, which turns a project's own block off (`--without-nats`);
+    `telemetry:` when `tracing`. JSON is valid YAML, so no YAML writer is
+    needed. Holds passwords and the seed: owner-only.
     """
     overlay: dict = {}
     if nats_off:
         overlay["nats"] = None
-    if nats_secret is not None:
-        if not nats_password:
-            raise ValueError("The dev broker needs the engine's password (NATS_ABI_PASSWORD)")
-        nats_url = nats_login(_nats_url(ports), "abi", nats_password)
+    if nats_passwords is not None:
+        if not callout_seed:
+            raise ValueError("The dev broker's auth callout needs its seed")
+        nats_url = nats_login(
+            _nats_url(ports), "engine", nats_passwords["NATS_ENGINE_PASSWORD"]
+        )
         overlay["nats"] = {
             "nats_url": nats_url,
-            "jwt_secret": nats_secret,
+            "auth_callout": {
+                "nats_url": nats_login(
+                    _nats_url(ports), "auth", nats_passwords["NATS_AUTH_PASSWORD"]
+                ),
+                "issuer_seed": callout_seed,
+            },
             "discovery": {"project": _discovery_project()},
             "monitoring_url": f"http://{PROBE_HOST}:{_nats_monitor_port(ports['nats'])}",
         }
-        # NATS mode runs the bus on JetStream (replaces the project's bus adapter).
         overlay["services"] = {
+            # NATS mode runs the bus on JetStream (replaces the project's bus adapter).
             "bus": {
                 "bus_adapter": {
                     "adapter": "nats_jetstream",
                     "config": {"nats_url": nats_url},
                 }
-            }
+            },
+            # dev.modules start without review (never in a deployed config).
+            "iam": {"modules": {"auto_approve": True}},
         }
     if tracing:
         jaeger = _jaeger_ports(ports["jaeger"])
@@ -554,9 +568,9 @@ extensions:
     storage:
       traces: memstore
     http:
-      endpoint: {BIND_HOST}:{ports['query']}
+      endpoint: {BIND_HOST}:{ports["query"]}
     grpc:
-      endpoint: {BIND_HOST}:{ports['grpc']}
+      endpoint: {BIND_HOST}:{ports["grpc"]}
   jaeger_storage:
     backends:
       memstore:
@@ -566,7 +580,7 @@ receivers:
   otlp:
     protocols:
       http:
-        endpoint: {BIND_HOST}:{ports['otlp']}
+        endpoint: {BIND_HOST}:{ports["otlp"]}
 processors:
   batch:
     timeout: 200ms
@@ -595,19 +609,31 @@ def _launch_jaeger(spec: ServiceSpec) -> int:
     return _spawn(spec, [binary, "--config", str(config_path)], _project_root(), env)
 
 
-def _nats_server_config(passwords: dict[str, str]) -> str:
+def _nats_server_config(passwords: dict[str, str], issuer: str) -> str:
     """Body of the nats.conf handed to nats-server with -c. Ports, bind
     address and JetStream stay on the command line (flags override the file),
-    so this only carries what has no flag: max_payload, and the broker's users
-    with their `passwords` (by .env key), as in the Docker stack. A client
-    without a valid user and password is refused."""
-    users = "\n".join(
-        f"    {{ user: {json.dumps(user)}, password: {json.dumps(passwords[key])} }}"
-        for user, key in NATS_USERS.items()
-    )
+    so this only carries what has no flag: max_payload, and the broker's
+    authorization, as in the Docker stack (RFC §8.4):
+
+    * `engine` (the engine's processes) may use everything but `$SYS`;
+    * `auth` answers the auth callout and nothing else;
+    * every other connection is asked of the engine (`auth_callout`, trusted
+      account key `issuer`): a module logs in as `sa` with its service key and
+      gets the subjects its approved policy allows.
+    """
+    engine = json.dumps(passwords["NATS_ENGINE_PASSWORD"])
+    auth = json.dumps(passwords["NATS_AUTH_PASSWORD"])
     return (
         f"max_payload: {NATS_MAX_PAYLOAD}\n\n"
-        f"authorization {{\n  users = [\n{users}\n  ]\n}}\n"
+        "authorization {\n"
+        "  users = [\n"
+        f"    {{ user: engine, password: {engine}, permissions: "
+        '{ publish: { deny: ["$SYS.>"] }, subscribe: { deny: ["$SYS.>"] } } }\n'
+        f"    {{ user: auth, password: {auth}, permissions: "
+        '{ subscribe: "$SYS.REQ.USER.AUTH", allow_responses: true } }\n'
+        "  ]\n"
+        f"  auth_callout {{ issuer: {issuer}, auth_users: [engine, auth] }}\n"
+        "}\n"
     )
 
 
@@ -646,8 +672,10 @@ def _launch_nats(spec: ServiceSpec) -> int:
     config_path = store_path / "nats.conf"
     config_path.touch(mode=0o600, exist_ok=True)
     config_path.chmod(0o600)
-    passwords = ensure_nats_passwords(_project_root() / ".env")
-    config_path.write_text(_nats_server_config(passwords), encoding="utf-8")
+    env_path = _project_root() / ".env"
+    passwords = ensure_nats_passwords(env_path)
+    issuer = nats_callout_issuer(ensure_nats_callout_seed(env_path))
+    config_path.write_text(_nats_server_config(passwords, issuer), encoding="utf-8")
     env = os.environ.copy()
     cmd = [
         binary,
@@ -792,10 +820,7 @@ def _launch_nexus_web(spec: ServiceSpec, ports: dict[str, int]) -> int:
             "nexus-web: node_modules missing — running `pnpm install` "
             f"in {NEXUS_ROOT} (this can take a few minutes the first time)..."
         )
-        result = subprocess.run(
-            [pnpm, "install"],
-            cwd=str(nexus_root),
-        check=False)
+        result = subprocess.run([pnpm, "install"], cwd=str(nexus_root), check=False)
         if result.returncode != 0:
             raise click.ClickException(
                 f"`pnpm install` failed (exit {result.returncode}). "
@@ -830,7 +855,8 @@ def _ensure_nexus_web_sources(project_root: Path) -> None:
             result = subprocess.run(
                 ["git", "submodule", "update", "--init", "--recursive", ".abi"],
                 cwd=str(project_root),
-            check=False)
+                check=False,
+            )
             if result.returncode != 0:
                 raise click.ClickException(
                     "Failed to initialize `.abi` submodule. "
@@ -904,8 +930,7 @@ def _start_service(
     actual = _find_free_port(name, preferred)
     if actual != preferred:
         click.echo(
-            f"{name}: port {preferred} busy, "
-            f"using {actual} instead",
+            f"{name}: port {preferred} busy, using {actual} instead",
         )
         ports[name] = actual
         # Update instance.json so `status`, `logs`, `down`, etc. see the
@@ -1004,6 +1029,7 @@ def _stop_service(name: str, port: int, force: bool = False) -> None:
 # dev.modules: SDK modules run next to the engine (dev_modules.py)
 # =============================================================================
 
+
 def _dev_modules(strict: bool = True) -> dict:
     """The enabled `dev.modules` by name. ``strict=False`` (stopping, status)
     reports an invalid block and carries on without modules."""
@@ -1060,15 +1086,41 @@ def _module_overlay(config_overlay: Path | None) -> dict:
     return overlay
 
 
+def _module_key(module, overlay: dict) -> str:
+    """A fresh service key for the dev module's account, created when missing
+    (``module/<project>/<module_id>``), in the project's IAM store."""
+    from naas_abi_core.engine.call_context import as_service_account
+
+    from naas_abi_cli.cli.iam import open_project_iam, provision_dev_modules
+
+    project = overlay["nats"]["discovery"]["project"]
+    try:
+        iam, notify = open_project_iam()
+    except Exception as exc:
+        raise click.ClickException(
+            f"{module.name}: cannot open IAM for its key: {exc}"
+        ) from exc
+    try:
+        with as_service_account("engine"):
+            key = provision_dev_modules(iam, project, {module.name: module.identity})
+        notify()
+    finally:
+        iam.close()
+    return key[module.name]
+
+
 def _start_module(module, overlay: dict) -> ServiceSpec:
     spec = _module_spec(module.name)
     existing = _read_pid(spec)
     if existing and _pid_alive(existing):
         click.echo(f"{module.name}: already running (pid {existing})")
         return spec
-    password = ensure_nats_passwords(_project_root() / ".env")["NATS_MODULE_PASSWORD"]
     env = module_environment(
-        module, overlay, _project_root(), os.environ, nats_password=password
+        module,
+        overlay,
+        _project_root(),
+        os.environ,
+        service_key=_module_key(module, overlay),
     )
     pid = _spawn(spec, module_command(module), _project_root(), env)
     _pid_path(spec).write_text(f"{pid}\n")
@@ -1381,6 +1433,7 @@ class _KeyboardReader:
 
 RECENT_DUMP_LINES = 30
 
+
 def _ensure_default_admin_env() -> tuple[str, str]:
     """Return the seeded admin's ``(email, password)``, generating the password.
 
@@ -1514,9 +1567,9 @@ def _follow_until_interrupt(
     which service streams; 0 returns to interleaved.
     """
     console = Console()
-    outer_stop_event = threading.Event()           # keyboard + probe + main loop
-    threads: list[threading.Thread] = []           # health probe
-    log_threads: list[threading.Thread] = []       # streamer threads (per session)
+    outer_stop_event = threading.Event()  # keyboard + probe + main loop
+    threads: list[threading.Thread] = []  # health probe
+    log_threads: list[threading.Thread] = []  # streamer threads (per session)
     # Streamers share this event; restarting the stack swaps it for a fresh one
     # so the new generation of streamers doesn't inherit a set() event.
     session_stop_holder: dict[str, threading.Event] = {"value": threading.Event()}
@@ -1631,9 +1684,7 @@ def _follow_until_interrupt(
                 return
             restart_in_progress["value"] = True
         try:
-            console.print(
-                Text("── restarting services... ──", style="bold yellow")
-            )
+            console.print(Text("── restarting services... ──", style="bold yellow"))
 
             # 1. Kill streamer threads. New event will be installed below so
             #    later streamers don't inherit this one (already set).
@@ -1653,7 +1704,9 @@ def _follow_until_interrupt(
             with health_lock:
                 for name in health_state:
                     health_state[name] = {
-                        "pid": None, "alive": False, "ready": False,
+                        "pid": None,
+                        "alive": False,
+                        "ready": False,
                     }
 
             # 4. Re-spawn services in the original order.
@@ -1665,23 +1718,23 @@ def _follow_until_interrupt(
                 spec = _start_service(name, ports, log_level, selected_names)
                 started.append(spec)
                 # Same boot-dependency wait as the initial `dev_up`.
-                if name == "oxigraph" and any(
-                    n in selected_names for n in ("api", "dagster")
-                ) and not _wait_until_ready(
-                    spec.port, max_wait=15.0, path="/health"
+                if (
+                    name == "oxigraph"
+                    and any(n in selected_names for n in ("api", "dagster"))
+                    and not _wait_until_ready(spec.port, max_wait=15.0, path="/health")
                 ):
-                    console.print(Text(
-                        "⚠ oxigraph not ready in 15s; continuing anyway",
-                        style="yellow",
-                    ))
+                    console.print(
+                        Text(
+                            "⚠ oxigraph not ready in 15s; continuing anyway",
+                            style="yellow",
+                        )
+                    )
 
             # 5. Fresh event, fresh streamers.
             session_stop_holder["value"] = threading.Event()
             _spawn_streamers()
 
-            console.print(
-                Text("── restart complete ──", style="bold green")
-            )
+            console.print(Text("── restart complete ──", style="bold green"))
         except Exception as exc:  # pragma: no cover - defensive  # noqa: BLE001
             console.print(Text(f"restart failed: {exc}", style="red"))
         finally:
@@ -1808,6 +1861,7 @@ def _follow_until_interrupt(
 # =============================================================================
 # CLI
 # =============================================================================
+
 
 def _validate_services(selected: tuple[str, ...]) -> list[str]:
     if not selected:
@@ -1949,17 +2003,21 @@ def dev_up(
     started: list[ServiceSpec] = []
     try:
         for name in selected:
-            if (with_nats or with_tracing or nats_off) and name in ("api", "dagster") and config_overlay is None:
+            if (
+                (with_nats or with_tracing or nats_off)
+                and name in ("api", "dagster")
+                and config_overlay is None
+            ):
                 # Written once nats/jaeger are up, with the ports they actually bound.
                 env_path = _project_root() / ".env"
-                secret = ensure_nats_secret(env_path) if with_nats else None
-                password = (
-                    ensure_nats_passwords(env_path)["NATS_ABI_PASSWORD"] if with_nats else None
-                )
                 config_overlay = _write_dev_overlay(
                     ports,
-                    nats_secret=secret,
-                    nats_password=password,
+                    nats_passwords=ensure_nats_passwords(env_path)
+                    if with_nats
+                    else None,
+                    callout_seed=ensure_nats_callout_seed(env_path)
+                    if with_nats
+                    else None,
                     tracing=with_tracing,
                     nats_off=nats_off,
                 )
@@ -1980,9 +2038,7 @@ def dev_up(
                     )
             # api & dagster connect to the oxigraph HTTP endpoint at engine
             # boot; block briefly until it answers so they don't race-crash.
-            if name == "oxigraph" and any(
-                n in selected for n in ("api", "dagster")
-            ):
+            if name == "oxigraph" and any(n in selected for n in ("api", "dagster")):
                 click.echo("oxigraph: waiting for readiness...")
                 if not _wait_until_ready(spec.port, max_wait=15.0, path="/health"):
                     click.echo(
@@ -2025,7 +2081,9 @@ def dev_up(
                 f"monitoring http://{BROWSER_HOST}:{_nats_monitor_port(ports['nats'])})"
             )
         if nats_off:
-            click.echo("  in-process: the config's `nats:` block is off (--without-nats)")
+            click.echo(
+                "  in-process: the config's `nats:` block is off (--without-nats)"
+            )
         if with_tracing:
             click.echo(f"  tracing to Jaeger: http://{BROWSER_HOST}:{ports['jaeger']}")
 
@@ -2117,10 +2175,13 @@ def dev_status() -> None:
         else:
             pid_status = f"{pid} (dead)"
         ready_port = _ready_probe_port(name, port)
-        http = "ready" if _http_ready(ready_port, path=SERVICE_READY_PATHS.get(name, "/")) else "down"
+        http = (
+            "ready"
+            if _http_ready(ready_port, path=SERVICE_READY_PATHS.get(name, "/"))
+            else "down"
+        )
         click.echo(
-            f"{name:<12} {port:<7} {pid_status:<10} {http:<13} "
-            f"{_service_url(port)}"
+            f"{name:<12} {port:<7} {pid_status:<10} {http:<13} {_service_url(port)}"
         )
     modules = _dev_modules(strict=False)
     if modules:
@@ -2192,9 +2253,9 @@ def dev_ports() -> None:
 
 # What `abi dev nuke` removes. Paths are relative to project root.
 _NUKE_TARGETS: tuple[str, ...] = (
-    "storage",       # SQLite DBs, oxigraph store, vector store, kv, bus, email
-    ".dagster",      # Dagster home (run history, logs)
-    ".abi/dev/logs", # Per-session log files
+    "storage",  # SQLite DBs, oxigraph store, vector store, kv, bus, email
+    ".dagster",  # Dagster home (run history, logs)
+    ".abi/dev/logs",  # Per-session log files
 )
 
 
@@ -2218,7 +2279,8 @@ def _running_services(ports: dict[str, int]) -> list[str]:
 
 @dev.command("nuke")
 @click.option(
-    "-y", "--yes",
+    "-y",
+    "--yes",
     is_flag=True,
     default=False,
     help="Skip the confirmation prompt.",
@@ -2288,7 +2350,9 @@ def dev_nuke(yes: bool, start: bool, reset_env: bool) -> None:
                 # Blank line after the comment ends the block.
                 dropping = False
                 continue
-            if dropping or re.match(r"NEXUS_USER_[A-Z0-9_]+_(EMAIL|PASSWORD)=", stripped):
+            if dropping or re.match(
+                r"NEXUS_USER_[A-Z0-9_]+_(EMAIL|PASSWORD)=", stripped
+            ):
                 env_admin_lines.append(raw)
                 continue
             kept.append(raw)
@@ -2323,10 +2387,14 @@ def dev_nuke(yes: bool, start: bool, reset_env: bool) -> None:
 
     if env_admin_lines and env_path is not None:
         # Re-read kept (in case the file changed between scan and write).
-        new_body = "\n".join(
-            line for line in env_path.read_text().splitlines()
-            if line not in env_admin_lines
-        ).rstrip() + "\n"
+        new_body = (
+            "\n".join(
+                line
+                for line in env_path.read_text().splitlines()
+                if line not in env_admin_lines
+            ).rstrip()
+            + "\n"
+        )
         env_path.write_text(new_body)
         click.echo(f"removed admin credentials from {env_path.relative_to(root)}")
 

@@ -488,16 +488,18 @@ services:
     pull_policy: always
     restart: unless-stopped
     environment:
-      # The broker's users (nats.conf). `abi deploy local` generates them in .env.
-      - NATS_ABI_PASSWORD=${NATS_ABI_PASSWORD:-}
-      - NATS_MODULE_PASSWORD=${NATS_MODULE_PASSWORD:-}
+      # The broker's static users and its auth callout's trusted key (nats.conf).
+      # `abi deploy local` generates them in .env.
+      - NATS_ENGINE_PASSWORD=${NATS_ENGINE_PASSWORD:-}
+      - NATS_AUTH_PASSWORD=${NATS_AUTH_PASSWORD:-}
+      - NATS_AUTH_CALLOUT_ISSUER=${NATS_AUTH_CALLOUT_ISSUER:-}
     # nats-server takes an empty password as is, which would let anyone log in
-    # as that user: refuse to start without both.
+    # as that user: refuse to start without all three.
     command:
       - sh
       - -c
       - |
-        for key in NATS_ABI_PASSWORD NATS_MODULE_PASSWORD; do
+        for key in NATS_ENGINE_PASSWORD NATS_AUTH_PASSWORD NATS_AUTH_CALLOUT_ISSUER; do
           [ -n "$$(printenv $$key)" ] || { echo "$$key is empty: run abi deploy local" >&2; exit 1; }
         done
         exec nats-server -c /etc/nats/nats.conf -js -sd /data -m 8222

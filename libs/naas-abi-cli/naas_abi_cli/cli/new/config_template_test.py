@@ -191,21 +191,28 @@ def test_nats_configs_pass_the_engine_validation(filename: str) -> None:
     assert nats.discovery.project == "demo"
     # Outlives an engine restart, so remote modules renew instead of dropping out.
     assert nats.discovery.lease_seconds == 180
-    assert nats.jwt_secret == "{{ secret.NATS_JWT_SECRET }}"
+    # No signing secret: the engine answers the broker's auth callout.
+    assert nats.auth_callout is not None
+    assert nats.auth_callout.issuer_seed == "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
 
 
 @pytest.mark.parametrize("filename", sorted(_NATS_HOSTS))
-def test_nats_engines_log_in_as_the_abi_user(filename: str) -> None:
+def test_nats_engines_log_in_as_the_engine_and_auth_users(filename: str) -> None:
     nats = _render(filename)["nats"]
 
     assert nats["nats_url"] == (
-        "nats://abi:{{ secret.NATS_ABI_PASSWORD }}" + _NATS_HOSTS[filename]
+        "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}" + _NATS_HOSTS[filename]
+    )
+    assert nats["auth_callout"]["nats_url"] == (
+        "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}" + _NATS_HOSTS[filename]
     )
     assert nats["monitoring_url"].endswith(":8222")
 
 
 def test_the_remote_config_reads_the_broker_url_from_a_secret() -> None:
-    assert _render("config.remote.yaml")["nats"]["nats_url"] == "{{ secret.NATS_URL }}"
+    nats = _render("config.remote.yaml")["nats"]
+    assert nats["nats_url"] == "{{ secret.NATS_URL }}"
+    assert nats["auth_callout"]["nats_url"] == "{{ secret.NATS_AUTH_URL }}"
 
 
 @pytest.mark.parametrize("filename", _ALL_CONFIGS)

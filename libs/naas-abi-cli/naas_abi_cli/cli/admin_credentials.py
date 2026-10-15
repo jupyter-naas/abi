@@ -20,12 +20,17 @@ ADMIN_PASSWORD_KEY = f"NEXUS_USER_{_ADMIN_PREFIX}_PASSWORD"
 # Written by older `abi deploy local` templates; nothing reads it any more.
 _LEGACY_ADMIN_PASSWORD_KEY = "NEXUS_USER_ADMIN_PASSWORD"
 API_KEY = "ABI_API_KEY"
-NATS_SECRET = "NATS_JWT_SECRET"
-# The broker's users and the .env keys of their passwords: the engine's process
-# (abi), and the SDK modules joining it (module). Docker reads them in
-# .deploy/docker/nats/nats.conf, `abi dev` writes them into its own nats.conf.
-NATS_USERS = {"abi": "NATS_ABI_PASSWORD", "module": "NATS_MODULE_PASSWORD"}
+# The broker's static users and the .env keys of their passwords: the engine's
+# processes (engine), and the engine's auth callout responder (auth). Every
+# other connection (modules, scripts) logs in with a service key and is
+# admitted by the callout. Docker reads them in .deploy/docker/nats/nats.conf,
+# `abi dev` writes them into its own nats.conf.
+NATS_USERS = {"engine": "NATS_ENGINE_PASSWORD", "auth": "NATS_AUTH_PASSWORD"}
 NATS_PASSWORDS = tuple(NATS_USERS.values())
+# The seed of the account key the callout signs admitted users with, and its
+# public half, which nats.conf names (auth_callout.issuer, $NATS_AUTH_CALLOUT_ISSUER).
+NATS_CALLOUT_SEED = "NATS_AUTH_CALLOUT_SEED"
+NATS_CALLOUT_ISSUER = "NATS_AUTH_CALLOUT_ISSUER"
 _MIN_NATS_PASSWORD = 16
 
 # Values older CLI versions wrote. Mirrors the Nexus auth list in
@@ -44,7 +49,9 @@ def generate_admin_password() -> str:
 
 
 def _read(env_path: Path) -> list[str]:
-    return env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
+    return (
+        env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
+    )
 
 
 def _value(lines: list[str], key: str) -> str | None:
@@ -110,18 +117,33 @@ def ensure_api_key(env_path: Path) -> str:
     return key
 
 
-def ensure_nats_secret(env_path: Path) -> str:
-    """Return ``NATS_JWT_SECRET`` from ``.env``, generating it when missing or short.
+def ensure_nats_callout_seed(env_path: Path) -> str:
+    """Return ``NATS_AUTH_CALLOUT_SEED`` from ``.env``, generating it when missing
+    or not an account seed. Its public key is ``nats_callout_issuer(seed)``."""
+    from naas_abi_core.engine.nats_nkeys import PREFIX_ACCOUNT, KeyPair, NKeyError
 
-    Signs the service tokens of the dev engine and of any module joining its NATS.
-    """
     lines = _read(env_path)
-    secret = _value(lines, NATS_SECRET)
-    if secret and len(secret) >= 32:
-        return secret
-    secret = secrets.token_urlsafe(48)
-    _write(env_path, _set(lines, NATS_SECRET, secret))
-    return secret
+    original = list(lines)
+    seed = _value(lines, NATS_CALLOUT_SEED) or ""
+    try:
+        pair = KeyPair.from_seed(seed)
+        if pair.prefix != PREFIX_ACCOUNT:
+            raise NKeyError("not an account seed")
+    except NKeyError:
+        pair = KeyPair.create(PREFIX_ACCOUNT)
+        lines = _set(lines, NATS_CALLOUT_SEED, pair.seed)
+    if _value(lines, NATS_CALLOUT_ISSUER) != pair.public_key:
+        lines = _set(lines, NATS_CALLOUT_ISSUER, pair.public_key)
+    if lines != original:
+        _write(env_path, lines)
+    return pair.seed
+
+
+def nats_callout_issuer(seed: str) -> str:
+    """The account public key nats.conf trusts as the callout's issuer."""
+    from naas_abi_core.engine.nats_nkeys import KeyPair
+
+    return KeyPair.from_seed(seed).public_key
 
 
 def generate_nats_password() -> str:

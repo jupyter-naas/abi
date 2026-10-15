@@ -34,8 +34,7 @@ api:
   title: "demo"
 
 nats:
-  nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@127.0.0.1:4222"
-  jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+  nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@127.0.0.1:4222"
   discovery:
     project: "acme"
 
@@ -94,7 +93,6 @@ def test_a_new_module_is_a_remote_module_in_the_project_src(tmp_path: Path) -> N
     for name in (
         "__init__.py",
         "__main__.py",
-        "service_token.py",
         "jobs.py",
         "agents/ResearchAgent.py",
         "tests/module_test.py",
@@ -166,6 +164,8 @@ def test_the_module_is_run_by_abi_dev_up_not_loaded_by_the_engine(
     assert [(m.name, m.module, m.args) for m in dev.modules] == [
         ("research", "research", [])
     ]
+    # Its service account is module/<project>/<module_id>.
+    assert dev.modules[0].module_id == "demo.research"
     config = yaml.safe_load((root / "config.yaml").read_text())
     # It registers itself through discovery.
     assert [m["module"] for m in config["modules"]] == ["demo"]
@@ -184,10 +184,13 @@ def test_the_module_gets_a_compose_service_in_the_override(tmp_path: Path) -> No
         "abi_proto": "./.abi/libs/naas-abi-proto",
         "abi_sdk": "./.abi/libs/naas-abi-sdk",
     }
-    assert (
-        "ABI_NATS_URL=nats://module:${NATS_MODULE_PASSWORD}@nats:4222"
-        in service["environment"]
+    # No login and no signing secret: the module brings its own key.
+    assert "ABI_NATS_URL=nats://nats:4222" in service["environment"]
+    assert any(
+        entry.startswith("ABI_SERVICE_KEY=${RESEARCH_SERVICE_KEY:?")
+        for entry in service["environment"]
     )
+    assert not any("NATS_JWT_SECRET" in entry for entry in service["environment"])
     assert "ABI_DISCOVERY_PROJECT=acme" in service["environment"]
     assert service["depends_on"] == {"abi": {"condition": "service_healthy"}}
     # docker-compose.yml, which --regenerate rewrites, is left alone.

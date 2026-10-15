@@ -1,4 +1,12 @@
-"""Run a broker, an engine, and a wheel-installed worker as separate processes."""
+"""Run a broker, an engine, and wheel-installed modules as separate processes.
+
+The broker admits two static users, ``engine`` and ``auth``, and asks the
+engine (auth callout) about every other connection: each module logs in with
+its own service key and gets the subjects its approved manifest allows. No
+module holds a signing secret: the engine host creates one service account
+and key per module (keys.json) and approves their manifests itself
+(``iam.modules.auto_approve``, as ``abi dev up`` does).
+"""
 
 from __future__ import annotations
 
@@ -36,6 +44,13 @@ def main():
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
         url = f"nats://127.0.0.1:{port}"
+        from naas_abi_core.engine.nats_nkeys import KeyPair
+
+        engine_password, auth_password = (
+            secrets.token_urlsafe(24),
+            secrets.token_urlsafe(24),
+        )
+        callout = KeyPair.create()
         wheels = root / "wheels"
         for package in ("proto", "sdk"):
             run(
@@ -59,11 +74,18 @@ def main():
         )
         (root / "nats.conf").write_text(
             f'host: 127.0.0.1\nport: {port}\nmax_payload: 8388608\njetstream {{ store_dir: "{root}/jetstream" }}\n'
+            "authorization {\n"
+            "  users = [\n"
+            f'    {{ user: engine, password: "{engine_password}", permissions: {{ publish: {{ deny: ["$SYS.>"] }}, subscribe: {{ deny: ["$SYS.>"] }} }} }}\n'
+            f'    {{ user: auth, password: "{auth_password}", permissions: {{ subscribe: "$SYS.REQ.USER.AUTH", allow_responses: true }} }}\n'
+            "  ]\n"
+            f"  auth_callout {{ issuer: {callout.public_key}, auth_users: [engine, auth] }}\n"
+            "}\n"
         )
         clean_env = {
             k: v
             for k, v in os.environ.items()
-            if k not in ("PYTHONPATH", "ABI_SERVICE_TOKEN", "DEMO_SIGNING_KEY")
+            if k not in ("PYTHONPATH", "ABI_SERVICE_KEY", "DEMO_CALLOUT_SEED")
         }
         with (
             (root / "broker.log").open("w") as broker_log,
@@ -89,8 +111,9 @@ def main():
                 env = dict(
                     clean_env,
                     DEMO_DATA=tmp,
-                    DEMO_NATS_URL=url,
-                    DEMO_SIGNING_KEY=secrets.token_urlsafe(48),
+                    DEMO_NATS_URL=f"nats://engine:{engine_password}@127.0.0.1:{port}",
+                    DEMO_AUTH_URL=f"nats://auth:{auth_password}@127.0.0.1:{port}",
+                    DEMO_CALLOUT_SEED=callout.seed,
                     PYTHONPATH=str(HERE),
                 )
                 engine = subprocess.Popen(
@@ -110,16 +133,25 @@ def main():
                         )
                     time.sleep(0.2)
                 report_path = root / "report.json"
+                keys = json.loads((root / "keys.json").read_text())
+                # The modules see the broker without a login: each brings its key.
                 worker_env = dict(
                     clean_env,
                     ABI_NATS_URL=url,
-                    ABI_SERVICE_TOKEN=(root / "token").read_text(),
                     DEMO_REPORT=str(report_path),
                 )
+
+                def as_module(module_id, **extra):
+                    return dict(worker_env, ABI_SERVICE_KEY=keys[module_id], **extra)
+
                 subprocess.run(
                     [worker_python, "-I", str(HERE / "discovery_demo.py")],
                     cwd=root,
-                    env=dict(worker_env, DISCOVERY_REPORT_DIR=str(root)),
+                    env=dict(
+                        worker_env,
+                        DISCOVERY_REPORT_DIR=str(root),
+                        DEMO_KEYS=str(root / "keys.json"),
+                    ),
                     timeout=60,
                     check=True,
                 )
@@ -127,7 +159,7 @@ def main():
                 ergonomic = subprocess.run(
                     [worker_python, "-I", str(HERE / "user_module.py")],
                     cwd=root,
-                    env=dict(worker_env, DEMO_REPORT=str(ergonomic_path)),
+                    env=as_module("demo.ergonomic", DEMO_REPORT=str(ergonomic_path)),
                     timeout=180,
                     check=False,
                 )
@@ -137,7 +169,7 @@ def main():
                 result = subprocess.run(
                     [worker_python, "-I", str(HERE / "worker.py")],
                     cwd=root,
-                    env=worker_env,
+                    env=as_module("standalone-demo"),
                     timeout=180,
                     check=False,
                 )
@@ -158,7 +190,7 @@ def main():
                 subprocess.run(
                     [model_python, "-I", str(HERE / "model_module.py")],
                     cwd=root,
-                    env=dict(worker_env, DEMO_REPORT=str(model_report)),
+                    env=as_module("demo.models", DEMO_REPORT=str(model_report)),
                     timeout=60,
                     check=True,
                 )
@@ -166,8 +198,8 @@ def main():
                 subprocess.run(
                     [sys.executable, "-I", str(HERE / "core_agent_consumer.py")],
                     cwd=root,
-                    env=dict(
-                        worker_env,
+                    env=as_module(
+                        "demo.agent-consumer",
                         DEMO_REPORT=str(agent_report),
                         DEMO_MODEL_PROVIDER_PID=str(engine.pid),
                     ),

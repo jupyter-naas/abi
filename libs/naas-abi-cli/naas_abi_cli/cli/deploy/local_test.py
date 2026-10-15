@@ -55,7 +55,9 @@ def test_a_generated_stack_runs_on_nats_by_default(tmp_path: Path) -> None:
     for name, service in services.items():
         if name != "nats" and not service.get("profiles"):
             assert service.get("image") or service.get("build"), name
-    assert len(_env_values(tmp_path / ".env")["NATS_JWT_SECRET"]) >= 32
+    env = _env_values(tmp_path / ".env")
+    assert env["NATS_AUTH_CALLOUT_SEED"].startswith("SA")
+    assert "NATS_JWT_SECRET" not in env
 
 
 def test_a_classic_stack_keeps_nats_opt_in(tmp_path: Path) -> None:
@@ -67,6 +69,8 @@ def test_a_classic_stack_keeps_nats_opt_in(tmp_path: Path) -> None:
     assert "profiles" not in services["rabbitmq"]
     assert services["abi"]["depends_on"]["rabbitmq"] == {"condition": "service_healthy"}
     assert "NATS_JWT_SECRET" not in _env_values(tmp_path / ".env")
+    # The broker's users exist even with the nats profile off.
+    assert _env_values(tmp_path / ".env")["NATS_ENGINE_PASSWORD"]
 
 
 def _write_config(project: Path, *, nats: bool) -> None:
@@ -99,7 +103,7 @@ def test_regenerating_a_nats_project_keeps_it_on_nats(tmp_path: Path, capsys) ->
 
 def test_project_mode_is_read_from_the_compose_config_first(tmp_path: Path) -> None:
     assert project_uses_nats(str(tmp_path)) is None
-    (tmp_path / "config.yaml").write_text("nats:\n  jwt_secret: x\n")
+    (tmp_path / "config.yaml").write_text("nats:\n  nats_url: x\n")
     assert project_uses_nats(str(tmp_path)) is True
     # docker-compose runs config.local.yaml, so it decides.
     _write_config(tmp_path, nats=False)
@@ -442,7 +446,10 @@ def test_setup_local_deploy_replaces_a_shipped_default_admin_password(
     )
 
 
-NATS_USERS = {"abi": "NATS_ABI_PASSWORD", "module": "NATS_MODULE_PASSWORD"}
+NATS_USERS = {"engine": "NATS_ENGINE_PASSWORD", "auth": "NATS_AUTH_PASSWORD"}
+# What the broker container needs from .env: both passwords and the callout's
+# trusted key.
+BROKER_ENV = (*NATS_USERS.values(), "NATS_AUTH_CALLOUT_ISSUER")
 
 
 def _nats_service(compose: Path) -> dict:
@@ -463,6 +470,7 @@ def test_setup_local_deploy_generates_the_broker_passwords(tmp_path: Path) -> No
 
     for key in NATS_USERS.values():
         assert len(env[key]) >= 32
+    assert env["NATS_AUTH_CALLOUT_ISSUER"].startswith("A")
 
 
 def test_the_broker_requires_a_password_and_listens_on_localhost(
@@ -475,7 +483,10 @@ def test_the_broker_requires_a_password_and_listens_on_localhost(
         service = _nats_service(root / "docker-compose.yml")
         conf = (root / ".deploy/docker/nats/nats.conf").read_text(encoding="utf-8")
         for user, key in NATS_USERS.items():
-            assert f"{{ user: {user}, password: ${key} }}" in conf
+            assert f"{{ user: {user}, password: ${key}," in conf
+        assert "issuer: $NATS_AUTH_CALLOUT_ISSUER" in conf
+        assert "auth_users: [ engine, auth ]" in conf
+        for key in BROKER_ENV:
             assert f"{key}=${{{key}:-}}" in service["environment"]
         assert all(port.startswith("127.0.0.1:") for port in service["ports"])
         assert (
@@ -485,11 +496,11 @@ def test_the_broker_requires_a_password_and_listens_on_localhost(
         )
 
 
-@pytest.mark.parametrize("missing", list(NATS_USERS.values()))
+@pytest.mark.parametrize("missing", BROKER_ENV)
 def test_the_broker_does_not_start_without_a_password(tmp_path: Path, missing) -> None:
     """nats-server takes an empty $VAR as an empty password: anyone could log in."""
     setup_local_deploy(str(tmp_path), base_domain="localhost")
-    env = {key: "p" * 32 for key in NATS_USERS.values()} | {missing: ""}
+    env = {key: "p" * 32 for key in BROKER_ENV} | {missing: ""}
 
     result = subprocess.run(
         ["sh", "-c", _nats_guard(_nats_service(tmp_path / "docker-compose.yml"))],
@@ -529,7 +540,7 @@ def test_the_generated_broker_admits_only_its_users(tmp_path: Path) -> None:
             "-sd",
             str(tmp_path / "jetstream"),
         ],
-        env={**os.environ, **{key: env[key] for key in NATS_USERS.values()}},
+        env={**os.environ, **{key: env[key] for key in BROKER_ENV}},
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -542,13 +553,20 @@ def test_the_generated_broker_admits_only_its_users(tmp_path: Path) -> None:
         )
 
     async def scenario() -> None:
-        for credentials in ("", "abi:wrong@", f"intruder:{env['NATS_ABI_PASSWORD']}@"):
-            with pytest.raises(NATSError, match="Authorization Violation"):
+        # Nobody answers the callout here: only the static users get in.
+        for credentials in (
+            "",
+            "engine:wrong@",
+            f"intruder:{env['NATS_ENGINE_PASSWORD']}@",
+        ):
+            with pytest.raises((NATSError, TimeoutError)):
                 await connect(credentials)
         for user, key in NATS_USERS.items():
             nc = await connect(f"{user}:{env[key]}@")
-            # Both users share the default account, so its JetStream too.
-            await nc.jetstream().account_info()
+            if (
+                user == "engine"
+            ):  # the engine reaches JetStream; auth answers callouts only
+                await nc.jetstream().account_info()
             await nc.close()
 
     try:

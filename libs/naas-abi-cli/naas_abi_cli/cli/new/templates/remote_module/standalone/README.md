@@ -18,14 +18,21 @@ uv run pytest
 
 ## Run it against a project
 
-From the project's `.env`, the module needs the broker password of the user
-`module` and the token signing secret:
+The module needs its own service key, never a signing secret. In the project,
+create its account and key (shown once), then approve its permission manifest
+once it has submitted it:
 
 ```bash
-export ABI_NATS_URL="nats://module:<NATS_MODULE_PASSWORD>@127.0.0.1:4222"
-export NATS_JWT_SECRET="<NATS_JWT_SECRET>"
+uv run abi iam service-account create module/<project>/{{module_id}} --key
+```
+
+```bash
+export ABI_NATS_URL="nats://127.0.0.1:4222"
+export ABI_SERVICE_KEY="abi_sk_..."
 export ABI_DISCOVERY_PROJECT="<the project's nats.discovery.project>"
 uv run python -m {{module_name_snake}}
+# waits for approval, logged; in the project:
+uv run abi iam module approve module/<project>/{{module_id}}
 ```
 
 It is up when it logs `READY`. Its agent then appears in Nexus. Stop it with
@@ -33,10 +40,9 @@ Ctrl+C or SIGTERM: it finishes running work and unregisters.
 
 | Variable | Default | What |
 |---|---|---|
-| `ABI_NATS_URL` | `nats://127.0.0.1:4222` | the broker, logged in as `module` |
+| `ABI_NATS_URL` | `nats://127.0.0.1:4222` | the broker (no login: the key logs in) |
+| `ABI_SERVICE_KEY` | required | the module's service key, `abi_sk_...` |
 | `ABI_DISCOVERY_PROJECT` | `{{discovery_project}}` | the engine's discovery project |
-| `ABI_SERVICE_TOKEN` | | an issued service token; else one is signed from `NATS_JWT_SECRET` |
-| `ABI_MODULE_IDENTITY` | `{{module_name}}` | the token's subject |
 | `{{module_name_upper}}_CHAT_MODEL` | the engine's default | chat model id |
 | `ABI_HEALTH_PORT` | off | `/health` and `/ready` probes |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | off | trace export |
@@ -46,8 +52,8 @@ Ctrl+C or SIGTERM: it finishes running work and unregisters.
 ```bash
 docker build -t {{module_name}} .
 docker run --rm --network <project>_abi-network \
-  -e ABI_NATS_URL="nats://module:<NATS_MODULE_PASSWORD>@nats:4222" \
-  -e NATS_JWT_SECRET="<NATS_JWT_SECRET>" \
+  -e ABI_NATS_URL="nats://nats:4222" \
+  -e ABI_SERVICE_KEY="abi_sk_..." \
   -e ABI_DISCOVERY_PROJECT="<project>" \
   {{module_name}}
 ```

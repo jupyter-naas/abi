@@ -10,8 +10,8 @@ from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
-from naas_abi_core.engine.nats_auth import issue_service_token
 from naas_abi_core.engine.nats_rpc_integration_test import SECRET, broker  # noqa: F401
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.models.Model import ChatModel, EmbeddingModel
 from naas_abi_core.services.agent.Agent import Agent, AgentSharedState
 from naas_abi_core.services.agent.IntentAgent import IntentAgent
@@ -119,7 +119,7 @@ def test_models_and_real_agents(broker):  # noqa: F811
         nc = await nats.connect(url)
         primary = ModelRegistryNATS(owner, SECRET, stream_ttl=0.2)
         await primary.start(nc)
-        token = issue_service_token("model-test", SECRET)
+        token = TEST_TOKENS.token("model-test")
 
         class Consumer(BaseModule):
             dependencies = ModuleDependencies(services=("model_registry",))
@@ -195,7 +195,7 @@ def test_models_and_real_agents(broker):  # noqa: F811
                     await client.model_registry.list_models(pb.ListModelsRequest())
             async with (
                 ABIClient(url, token) as client,
-                ABIClient(url, issue_service_token("other", SECRET)) as other,
+                ABIClient(url, TEST_TOKENS.token("other")) as other,
             ):
                 request = pb.StreamOpenRequest(
                     chat=pb.ChatRequest(
@@ -253,7 +253,7 @@ def test_stream_deadlines_cleanup_and_provider_errors(broker):  # noqa: F811
         await host.start(nc)
         try:
             async with ABIClient(
-                broker[0], issue_service_token("caller", SECRET), timeout=2
+                broker[0], TEST_TOKENS.token("caller"), timeout=2
             ) as client:
                 facade = RegistryFacade(client.model_registry)
                 model = (await facade.get_chat_model("slow")).model

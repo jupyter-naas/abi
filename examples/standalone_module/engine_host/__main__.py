@@ -7,10 +7,21 @@ import threading
 from pathlib import Path
 
 from naas_abi_core import logger
+from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.engine.Engine import Engine
-from naas_abi_core.engine.nats_auth import issue_service_token
 
-logger.remove()  # Configuration debug logging can contain the demo signing key.
+# The modules of the demo, each with its own service account in project
+# "default" (module/default/<id>) and its own key.
+MODULES = (
+    "standalone-demo",
+    "demo.ergonomic",
+    "demo.models",
+    "demo.agent-consumer",
+    "demo.research",
+    "demo.consumer",
+)
+
+logger.remove()  # Configuration debug logging can contain the broker passwords.
 logger.add(lambda message: print(message, end="", flush=True), level="WARNING")
 root = Path(os.environ["DEMO_DATA"])
 url = os.environ["DEMO_NATS_URL"]
@@ -23,10 +34,18 @@ engine = Engine(
             "modules": [{"module": "engine_host", "enabled": True}],
             "nats": {
                 "nats_url": url,
-                "jwt_secret": os.environ["DEMO_SIGNING_KEY"],
+                "auth_callout": {
+                    "nats_url": os.environ["DEMO_AUTH_URL"],
+                    "issuer_seed": os.environ["DEMO_CALLOUT_SEED"],
+                },
                 "discovery": {"lease_seconds": 2},
             },
             "services": {
+                # Approve the modules' manifests as they submit them, as abi dev does.
+                "iam": {
+                    "store": {"adapter": "memory"},
+                    "modules": {"auto_approve": True},
+                },
                 "secret": {
                     "secret_adapters": [
                         {
@@ -161,11 +180,15 @@ try:
 
     engine.services.bus.subscribe("demo.inbox", "echo", echo)
     engine.services.bus.dequeue("demo.jobs", "work", work)
-    token = root / "token"
-    token.touch(mode=0o600)
-    token.write_text(
-        issue_service_token("standalone-demo", os.environ["DEMO_SIGNING_KEY"])
-    )
+    iam = engine.services.iam
+    keys = {}
+    with as_service_account("engine"):
+        for module_id in MODULES:
+            account = iam.create_service_account(f"module/default/{module_id}")
+            keys[module_id] = iam.create_key(account.id, description="demo").value
+    key_file = root / "keys.json"
+    key_file.touch(mode=0o600)
+    key_file.write_text(json.dumps(keys))
     (root / "ready.json").write_text(
         json.dumps(
             {

@@ -41,6 +41,8 @@ class ReportWriter:
 
 
 class ABIModule(BaseModule):
+    module_id = "demo.ergonomic"
+
     @dataclass
     class Configuration(ModuleConfiguration):
         prefix: str = "ergonomic"
@@ -222,11 +224,11 @@ class ABIModule(BaseModule):
         await vectors.delete_documents("ergonomic", [vid])
         await vectors.delete_collection("ergonomic")
 
-        # IAM answers for this module's own identity (its token names
-        # "standalone-demo"), with no dependency declaration. Until manifests,
-        # a remote module holds its own namespaces and the kernel services.
+        # IAM answers for this module's own identity (its service account,
+        # module/default/demo.ergonomic), with no dependency declaration: its
+        # approved manifest grants its own document namespace.
         iam = services.iam
-        own = "abi:-:-:document:collection/standalone-demo/runs"
+        own = "abi:-:-:document:collection/demo.ergonomic/runs"
         other = "abi:-:-:document:collection/someone-else/runs"
         assert (await iam.authorize("document:Find", own)).allowed
         assert not (await iam.authorize("document:Find", other)).allowed
@@ -247,7 +249,7 @@ async def main():
     report = await run_module(
         ABIModule,
         url=os.environ["ABI_NATS_URL"],
-        token=os.environ["ABI_SERVICE_TOKEN"],
+        token=os.environ["ABI_SERVICE_KEY"],
         timeout=30,
     )
     Path(os.environ["DEMO_REPORT"]).write_text(json.dumps(report))

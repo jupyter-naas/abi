@@ -170,10 +170,12 @@ async def main():
     if len(sys.argv) == 1:
         await orchestrate()
     else:
+        module = Provider if sys.argv[1] == "provider" else Consumer
+        keys = json.loads(Path(os.environ["DEMO_KEYS"]).read_text())
         await run_module(
-            Provider if sys.argv[1] == "provider" else Consumer,
+            module,
             url=os.environ["ABI_NATS_URL"],
-            token=os.environ["ABI_SERVICE_TOKEN"],
+            token=keys[module.module_id],
             timeout=1,
             discovery=DiscoveryConfiguration(startup_timeout=15, refresh_seconds=0.05),
         )

@@ -98,6 +98,7 @@ def test_git_init_is_skipped_when_already_a_repo(tmp_path, monkeypatch) -> None:
 # (submodule clone, `uv add`, `abi config validate`) stubbed out.
 # =============================================================================
 
+
 def _run_new_project(tmp_path, monkeypatch, *extra_args, submodule_ok: bool):
     import tomllib
 
@@ -117,8 +118,14 @@ def _run_new_project(tmp_path, monkeypatch, *extra_args, submodule_ok: bool):
 
     result = CliRunner().invoke(
         project.new_project,
-        ["demo", str(tmp_path), "--domain", "localhost",
-         "--without-local-deploy", *extra_args],
+        [
+            "demo",
+            str(tmp_path),
+            "--domain",
+            "localhost",
+            "--without-local-deploy",
+            *extra_args,
+        ],
     )
     assert result.exit_code == 0, result.output
 
@@ -147,8 +154,14 @@ def _invoke_new_project(tmp_path, monkeypatch, *extra_args, commands=None):
 
     return CliRunner().invoke(
         project.new_project,
-        ["demo", str(tmp_path), "--domain", "localhost", "--without-local-deploy",
-         *extra_args],
+        [
+            "demo",
+            str(tmp_path),
+            "--domain",
+            "localhost",
+            "--without-local-deploy",
+            *extra_args,
+        ],
     )
 
 
@@ -197,6 +210,7 @@ def test_new_project_without_the_submodule_flag_uses_pypi(
 # where the caller stands.
 # =============================================================================
 
+
 def test_next_steps_report_the_project_path_and_how_to_start(
     tmp_path, monkeypatch
 ) -> None:
@@ -236,7 +250,6 @@ def test_cd_target_is_quoted_when_the_path_has_spaces(tmp_path, monkeypatch) -> 
     assert project._cd_argument(str(tmp_path / "my demo")) == "'my demo'"
 
 
-
 def test_new_project_generates_the_admin_password_in_env(tmp_path, monkeypatch) -> None:
     result = _invoke_new_project(tmp_path, monkeypatch)
     assert result.exit_code == 0, result.output
@@ -257,9 +270,12 @@ def test_new_project_generates_the_admin_password_in_env(tmp_path, monkeypatch) 
 # NATS is the default; --without-nats keeps the classic in-process project.
 # =============================================================================
 
+
 def _env(tmp_path) -> dict[str, str]:
     lines = (tmp_path / "demo" / ".env").read_text(encoding="utf-8").splitlines()
-    return dict(line.split("=", 1) for line in lines if "=" in line and not line.startswith("#"))
+    return dict(
+        line.split("=", 1) for line in lines if "=" in line and not line.startswith("#")
+    )
 
 
 def _config(tmp_path, name: str = "config.yaml") -> str:
@@ -278,8 +294,9 @@ def test_new_project_runs_on_nats_by_default(tmp_path, monkeypatch) -> None:
     for name in ("config.yaml", "config.local.yaml", "config.remote.yaml"):
         assert "\nnats:\n" in _config(tmp_path, name), name
     env = _env(tmp_path)
-    assert len(env["NATS_JWT_SECRET"]) >= 32
-    assert env["NATS_ABI_PASSWORD"] and env["NATS_MODULE_PASSWORD"]
+    assert "NATS_JWT_SECRET" not in env
+    assert env["NATS_ENGINE_PASSWORD"] and env["NATS_AUTH_PASSWORD"]
+    assert env["NATS_AUTH_CALLOUT_SEED"].startswith("SA")
     assert "naas-abi-sdk[agent]" in _uv_add(commands)
     assert "nats-server" in result.output
     # The project's own module holds the default agent the engine loads.
@@ -298,7 +315,7 @@ def test_new_project_without_nats_is_the_classic_project(tmp_path, monkeypatch) 
     for name in ("config.yaml", "config.local.yaml", "config.remote.yaml"):
         assert "\nnats:" not in _config(tmp_path, name), name
     assert 'adapter: "python_queue"' in _config(tmp_path)
-    assert "NATS_JWT_SECRET" not in _env(tmp_path)
+    assert "NATS_AUTH_CALLOUT_SEED" not in _env(tmp_path)
     assert not any("naas-abi-sdk" in arg for arg in _uv_add(commands))
     assert "nats-server" not in result.output
 

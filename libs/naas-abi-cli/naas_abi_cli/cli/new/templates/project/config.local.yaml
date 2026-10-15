@@ -21,9 +21,13 @@ global_config:
 # go through the `nats` service. Remote modules (`abi new module`) run in their
 # own containers and register here.
 nats:
-  # The Compose service, logged in as the broker user `abi` (nats.conf).
-  nats_url: "nats://abi:{% raw %}{{ secret.NATS_ABI_PASSWORD }}{% endraw %}@nats:4222"
-  jwt_secret: "{% raw %}{{ secret.NATS_JWT_SECRET }}{% endraw %}"
+  # The Compose service, logged in as the broker user `engine` (nats.conf);
+  # the engine answers the broker's auth callout as `auth`, admitting each
+  # module with the subjects its approved permission manifest allows.
+  nats_url: "nats://engine:{% raw %}{{ secret.NATS_ENGINE_PASSWORD }}{% endraw %}@nats:4222"
+  auth_callout:
+    nats_url: "nats://auth:{% raw %}{{ secret.NATS_AUTH_PASSWORD }}{% endraw %}@nats:4222"
+    issuer_seed: "{% raw %}{{ secret.NATS_AUTH_CALLOUT_SEED }}{% endraw %}"
   # One engine per project hosts the module registry: the `abi` service. The
   # stack runs no second engine (no Dagster: module jobs replace it).
   discovery:

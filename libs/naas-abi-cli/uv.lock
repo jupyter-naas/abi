@@ -2744,7 +2744,7 @@ nats = [
     { name = "naas-abi-proto" },
     { name = "naas-abi-sdk", extra = ["models"] },
     { name = "nats-py" },
-    { name = "pyjwt" },
+    { name = "pyjwt", extra = ["crypto"] },
 ]
 qdrant = [
     { name = "qdrant-client" },
@@ -2798,8 +2798,8 @@ requires-dist = [
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.0.0" },
     { name = "pydantic", specifier = ">=2.11.5" },
     { name = "pydash", specifier = ">=8.0.5" },
-    { name = "pyjwt", marker = "extra == 'nats'", specifier = ">=2.11.0" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.11.0" },
+    { name = "pyjwt", extras = ["crypto"], marker = "extra == 'nats'", specifier = ">=2.11.0" },
     { name = "pyoxigraph", specifier = ">=0.5.5" },
     { name = "pytz", specifier = ">=2025.2" },
     { name = "pyyaml", specifier = ">=6.0.3" },

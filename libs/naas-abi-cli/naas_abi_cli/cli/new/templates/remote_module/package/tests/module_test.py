@@ -3,10 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
-import hashlib
-import hmac
-import json
 import os
 import signal
 import subprocess
@@ -15,9 +11,8 @@ import sys
 import pytest
 
 from {{module_name_snake}} import MODULE_ID, ABIModule
-from {{module_name_snake}}.__main__ import configuration_from, run_until_signalled
+from {{module_name_snake}}.__main__ import configuration_from, main, run_until_signalled
 from {{module_name_snake}}.agents.{{module_name_pascal}}Agent import NAME
-from {{module_name_snake}}.service_token import ServiceToken, token_source
 
 
 def test_the_module_declares_its_agent_services_and_job() -> None:
@@ -51,38 +46,18 @@ def test_the_module_never_imports_abi_core() -> None:
     assert result.returncode == 0, result.stderr
 
 
-def _claims(token: str) -> dict:
-    payload = token.split(".")[1]
-    return json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+def test_the_module_needs_its_service_key() -> None:
+    # It holds a key, never a signing secret: no key, no start.
+    for env in ({}, {"ABI_SERVICE_KEY": "a-token"}):
+        with pytest.raises(SystemExit, match="ABI_SERVICE_KEY"):
+            main(env)
 
 
-def test_the_signed_token_has_the_engine_claims() -> None:
-    token = ServiceToken("{{module_name}}", "s" * 48, clock=lambda: 1000.0)()
+def test_its_manifest_defaults_from_its_dependencies() -> None:
+    from naas_abi_sdk.permissions import module_manifest
 
-    header, payload, signature = token.split(".")
-    expected = hmac.new(
-        b"s" * 48, f"{header}.{payload}".encode(), hashlib.sha256
-    ).digest()
-    assert base64.urlsafe_b64encode(expected).rstrip(b"=").decode() == signature
-    assert _claims(token) == {"sub": "{{module_name}}", "iat": 1000, "exp": 4600}
-
-
-def test_the_token_is_refreshed_at_half_its_lifetime() -> None:
-    now = [1000.0]
-    token = ServiceToken("{{module_name}}", "s" * 48, clock=lambda: now[0])
-    first = token()
-    now[0] += 1799
-    assert token() == first
-    now[0] += 1
-    assert _claims(token())["iat"] == 2800
-
-
-def test_an_issued_token_wins_over_signing() -> None:
-    env = {"ABI_SERVICE_TOKEN": "issued", "NATS_JWT_SECRET": "s" * 48}
-    assert token_source(env, "{{module_name}}") == "issued"
-    assert isinstance(token_source({"NATS_JWT_SECRET": "s" * 48}, "x"), ServiceToken)
-    with pytest.raises(RuntimeError, match="NATS_JWT_SECRET"):
-        token_source({}, "x")
+    actions = {a for s in module_manifest(ABIModule)["statements"] for a in s["actions"]}
+    assert {"document:*", "model_registry:*"} <= actions
 
 
 def test_sigterm_cancels_the_module_before_it_runs() -> None:

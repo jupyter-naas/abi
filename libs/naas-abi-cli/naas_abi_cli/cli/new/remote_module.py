@@ -217,10 +217,12 @@ def _with_dev_module(text: str, entry: str) -> str | None:
     return "".join(lines[:last] + [entry] + lines[last:])
 
 
-def add_dev_module(config: Path, name: str, module: str) -> bool:
-    """Add ``name`` (``python -m module``) to ``dev.modules`` in ``config``,
-    keeping the file's comments and templating. False when it could not: the
-    file is then left as it was."""
+def add_dev_module(
+    config: Path, name: str, module: str, module_id: str | None = None
+) -> bool:
+    """Add ``name`` (``python -m module``, of id ``module_id``) to
+    ``dev.modules`` in ``config``, keeping the file's comments and templating.
+    False when it could not: the file is then left as it was."""
     from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
         load_dev_configuration,
     )
@@ -231,9 +233,11 @@ def add_dev_module(config: Path, name: str, module: str) -> bool:
             return True
     except _CONFIG_ERRORS:
         return False
-    updated = _with_dev_module(
-        original, f"    - name: {name}\n      module: {module}\n"
-    )
+    entry = f"    - name: {name}\n      module: {module}\n"
+    if module_id is not None:
+        # Its service account is module/<project>/<module_id>.
+        entry += f"      module_id: {module_id}\n"
+    updated = _with_dev_module(original, entry)
     if updated is None:
         return False
     config.write_text(updated, encoding="utf-8")
@@ -244,6 +248,11 @@ def add_dev_module(config: Path, name: str, module: str) -> bool:
     if not added:
         config.write_text(original, encoding="utf-8")
     return added
+
+
+def service_key_variable(name: str) -> str:
+    """The .env variable holding the module's service key in Docker."""
+    return re.sub(r"[^A-Z0-9]", "_", name.upper()) + "_SERVICE_KEY"
 
 
 def compose_service(
@@ -261,10 +270,10 @@ def compose_service(
         },
         "restart": "unless-stopped",
         "environment": [
-            "ABI_NATS_URL=nats://module:${NATS_MODULE_PASSWORD}@nats:4222",
-            "NATS_JWT_SECRET=${NATS_JWT_SECRET}",
+            # No login in the URL: the module logs in with its own key.
+            "ABI_NATS_URL=nats://nats:4222",
+            f"ABI_SERVICE_KEY=${{{service_key_variable(name)}:?create it: abi iam service-account create <account> --key}}",
             f"ABI_DISCOVERY_PROJECT={discovery_project}",
-            f"ABI_MODULE_IDENTITY={name}",
             "LOG_LEVEL=${LOG_LEVEL:-INFO}",
         ],
         # Its first calls need the engine's model registry and documents.
@@ -335,7 +344,7 @@ def create_in_project(project: Project, module_name: str, package: Path) -> None
         "It runs in its own process and registers itself in discovery "
         f"(project {discovery_project!r}), so it is not added to `modules:`."
     )
-    if add_dev_module(project.config, name, dotted):
+    if add_dev_module(project.config, name, dotted, module_id):
         click.echo(
             f"- `abi dev up` runs it: added to dev.modules in {project.config.name}."
         )
@@ -344,6 +353,7 @@ def create_in_project(project: Project, module_name: str, package: Path) -> None
             f"- Could not edit dev.modules in {project.config.name}; add this "
             "for `abi dev up` to run it:\n\n"
             f"dev:\n  modules:\n    - name: {name}\n      module: {dotted}\n"
+            f"      module_id: {module_id}\n"
         )
 
     service = compose_service(project, name, package, discovery_project)
@@ -359,8 +369,13 @@ def create_in_project(project: Project, module_name: str, package: Path) -> None
             f"service for {COMPOSE_OVERRIDE}:\n\n" + compose_snippet(name, service)
         )
     elif add_compose_service(project, name, service):
+        account = f"module/{discovery_project}/{module_id}"
         click.echo(
-            f"- `abi start` runs it: added the '{name}' service to {COMPOSE_OVERRIDE}."
+            f"- `abi start` runs it: added the '{name}' service to {COMPOSE_OVERRIDE}. "
+            f"Give it its key first, as {service_key_variable(name)} in .env:\n"
+            f"    uv run abi iam service-account create {account} --key\n"
+            f"  and approve its manifest once it has submitted it:\n"
+            f"    uv run abi iam module approve {account}"
         )
     else:
         click.echo(f"- {COMPOSE_OVERRIDE} already has a '{name}' service; left as is.")
@@ -390,7 +405,7 @@ def create_standalone(module_name: str, repository: Path, abi_git_ref: str) -> N
     click.echo(f"  cd {repository}")
     click.echo("  git init && uv sync && uv run pytest")
     click.echo(
-        f"  ABI_NATS_URL=... NATS_JWT_SECRET=... ABI_DISCOVERY_PROJECT=... "
+        f"  ABI_NATS_URL=... ABI_SERVICE_KEY=abi_sk_... ABI_DISCOVERY_PROJECT=... "
         f"uv run python -m {snake}   # see README.md\n"
     )
 

@@ -11,8 +11,11 @@ root), plus `nats-server` on PATH with JetStream support. No Docker or external
 API credentials are required. The runner builds the proto and SDK wheels, installs
 them into a fresh worker virtualenv, and starts a broker and engine, then isolated SDK worker processes:
 
-1. A loopback-only NATS/JetStream broker on a temporary port.
-2. A real ABI Engine with all remotely supported services loaded.
+1. A loopback-only NATS/JetStream broker on a temporary port, with the static
+   users `engine` and `auth` and an auth callout for everyone else.
+2. A real ABI Engine with all remotely supported services loaded. It answers the
+   callout, creates a service account (`module/default/<module id>`) and a key for
+   each worker, and approves their manifests as they submit them.
 3. `user_module.py`, exercising the Python service facades without protobuf imports.
 4. `worker.py`, exercising every low-level protobuf endpoint.
 
@@ -30,8 +33,9 @@ A successful run has no missing operations and only four worker packages:
 `naas-abi-sdk`, `naas-abi-proto`, `nats-py`, and `protobuf`.
 
 Engine data and credentials live in a temporary directory and are removed on exit;
-processes are stopped even on failure. The module receives only an issued token,
-not the signing key. Only test data is used. Coding environments and source control
+processes are stopped even on failure. Each worker receives only its service key
+(`ABI_SERVICE_KEY`), never a signing key; the broker confines it to the subjects of
+its approved permissions. Only test data is used. Coding environments and source control
 use the engine's in-memory adapters; email uses its filesystem adapter. The runner
 independently checks that email persisted. No external email is sent.
 

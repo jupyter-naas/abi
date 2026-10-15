@@ -19,12 +19,17 @@ global_config:
 {% endraw %}{% if nats %}
 # NATS mode: kernel services, the bus (JetStream), module jobs and discovery
 # go through the broker. Remote modules (`abi new module`) run in their own
-# process and register here. `abi dev up` starts its own broker and overlays
-# the URL, password and monitoring port it bound (.abi/dev/dev.overlay.yaml);
-# these values fit an engine run outside Docker against `abi start`'s broker.
+# process, each logged in with its own service key, and register here. `abi
+# dev up` starts its own broker and overlays the URLs, passwords and
+# monitoring port it bound (.abi/dev/dev.overlay.yaml); these values fit an
+# engine run outside Docker against `abi start`'s broker.
 nats:
-  nats_url: "nats://abi:{% raw %}{{ secret.NATS_ABI_PASSWORD }}{% endraw %}@127.0.0.1:4222"
-  jwt_secret: "{% raw %}{{ secret.NATS_JWT_SECRET }}{% endraw %}"
+  # The broker user `engine`, and the auth callout the engine answers as
+  # `auth`: every other connection (modules) is admitted by the engine.
+  nats_url: "nats://engine:{% raw %}{{ secret.NATS_ENGINE_PASSWORD }}{% endraw %}@127.0.0.1:4222"
+  auth_callout:
+    nats_url: "nats://auth:{% raw %}{{ secret.NATS_AUTH_PASSWORD }}{% endraw %}@127.0.0.1:4222"
+    issuer_seed: "{% raw %}{{ secret.NATS_AUTH_CALLOUT_SEED }}{% endraw %}"
   # One engine per project hosts the module registry: this one.
   discovery:
     project: "{{ project_name_snake }}"

@@ -10,6 +10,7 @@ from naas_abi_sdk import BaseModule, ModuleDependencies, run_module
 
 
 class ABIModule(BaseModule):
+    module_id = "demo.models"
     dependencies = ModuleDependencies(services=("model_registry",))
 
     async def run(self):
@@ -36,7 +37,7 @@ async def main():
     result = await run_module(
         ABIModule,
         url=os.environ["ABI_NATS_URL"],
-        token=os.environ["ABI_SERVICE_TOKEN"],
+        token=os.environ["ABI_SERVICE_KEY"],
         timeout=120,
     )
     Path(os.environ["DEMO_REPORT"]).write_text(json.dumps(result))

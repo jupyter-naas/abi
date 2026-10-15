@@ -5,7 +5,6 @@ import pytest
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
     DevModuleConfiguration,
 )
-from naas_abi_core.engine.nats_auth import verify_service_token
 
 from naas_abi_cli.cli.dev_modules import (
     load_dev_modules,
@@ -14,13 +13,11 @@ from naas_abi_cli.cli.dev_modules import (
     read_overlay,
 )
 
-SECRET = "s" * 48
-MODULE_PASSWORD = "nats-" + "m" * 40
+KEY = "abi_sk_abcdefghijklmnop_c2VjcmV0"
 OVERLAY = {
     "nats": {
-        # The engine's login; a module logs in as `module` instead.
-        "nats_url": "nats://abi:nats-engine-password@127.0.0.1:13042",
-        "jwt_secret": SECRET,
+        # The engine's login; a module logs in with its own key instead.
+        "nats_url": "nats://engine:nats-engine-password@127.0.0.1:13042",
         "discovery": {"project": "zen"},
     }
 }
@@ -32,21 +29,39 @@ MODULE = DevModuleConfiguration(
 )
 
 
-def test_a_module_gets_the_dev_broker_and_a_service_token(tmp_path):
-    env = module_environment(
-        MODULE, OVERLAY, tmp_path, {"HOME": "/home/me"}, nats_password=MODULE_PASSWORD
-    )
+def test_a_module_gets_the_dev_broker_and_its_own_key_only(tmp_path):
+    base = {
+        "HOME": "/home/me",
+        "NATS_ENGINE_PASSWORD": "engine-pw",
+        "NATS_AUTH_CALLOUT_SEED": "SA-seed",
+        "iam/signing-keys/20261015-0a1b2c3d": "private",
+        "ABI_SERVICE_KEY": "abi_sk_someone-elses",
+    }
+    env = module_environment(MODULE, OVERLAY, tmp_path, base, service_key=KEY)
 
     assert env["HOME"] == "/home/me"
-    assert env["ABI_NATS_URL"] == f"nats://module:{MODULE_PASSWORD}@127.0.0.1:13042"
-    assert env["NATS_JWT_SECRET"] == SECRET
+    assert env["ABI_NATS_URL"] == "nats://127.0.0.1:13042"
+    assert env["ABI_SERVICE_KEY"] == KEY
     assert env["ABI_DISCOVERY_PROJECT"] == "zen"
-    assert verify_service_token(env["ABI_SERVICE_TOKEN"], SECRET) == "probe-researcher"
+    # No signing secret, broker login or other credential reaches it.
+    for withheld in (
+        "NATS_ENGINE_PASSWORD",
+        "NATS_AUTH_CALLOUT_SEED",
+        "NATS_JWT_SECRET",
+    ):
+        assert withheld not in env
+    assert not any(key.startswith("iam/") for key in env)
     assert "OTEL_EXPORTER_OTLP_ENDPOINT" not in env
 
 
+def test_a_module_runs_as_its_own_module_id():
+    assert MODULE.identity == "probe-researcher"
+    named = DevModuleConfiguration(name="people", module="m", module_id="acme.people")
+    assert named.identity == "acme.people"
+
+
 def test_module_env_names_the_dev_settings(tmp_path):
-    env = module_environment(MODULE, OVERLAY, tmp_path, {}, nats_password=MODULE_PASSWORD)
+    env = module_environment(MODULE, OVERLAY, tmp_path, {}, service_key=KEY)
 
     assert env["NATS_PROBE_DISCOVERY_PROJECT"] == "zen"
     assert env["KEEP"] == "$1"
@@ -60,7 +75,7 @@ def test_tracing_and_the_src_layout_reach_the_module(tmp_path):
     }
 
     env = module_environment(
-        MODULE, overlay, tmp_path, {"PYTHONPATH": "/x"}, nats_password=MODULE_PASSWORD
+        MODULE, overlay, tmp_path, {"PYTHONPATH": "/x"}, service_key=KEY
     )
 
     assert env["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://127.0.0.1:16000"

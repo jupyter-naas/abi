@@ -17,13 +17,18 @@ global_config:
   ai_mode: "cloud"
   public_api_host: "{{ secret.PUBLIC_API_HOST }}"
 {% endraw %}{% if nats %}
-# NATS mode. The broker runs next to the deployment; put its URL in
-# .env.remote as NATS_URL, logged in as the broker user `abi`:
-#   NATS_URL=nats://abi:<NATS_ABI_PASSWORD>@<host>:4222
-# Keep the broker on a private network: its traffic is not encrypted.
+# NATS mode. The broker runs next to the deployment; put its URLs in
+# .env.remote, logged in as the broker users `engine` and `auth`:
+#   NATS_URL=nats://engine:<NATS_ENGINE_PASSWORD>@<host>:4222
+#   NATS_AUTH_URL=nats://auth:<NATS_AUTH_PASSWORD>@<host>:4222
+# and NATS_AUTH_CALLOUT_SEED, the account seed whose public key the broker's
+# nats.conf names as auth_callout issuer. Keep the broker on a private
+# network: its traffic is not encrypted.
 nats:
   nats_url: "{% raw %}{{ secret.NATS_URL }}{% endraw %}"
-  jwt_secret: "{% raw %}{{ secret.NATS_JWT_SECRET }}{% endraw %}"
+  auth_callout:
+    nats_url: "{% raw %}{{ secret.NATS_AUTH_URL }}{% endraw %}"
+    issuer_seed: "{% raw %}{{ secret.NATS_AUTH_CALLOUT_SEED }}{% endraw %}"
   # Exactly one engine per project hosts the module registry. Give any other
   # engine a config without this block.
   discovery:

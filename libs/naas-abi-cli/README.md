@@ -30,8 +30,11 @@ Creates a new ABI project with all necessary starter files and dependencies.
 
 **NATS by default.** The project runs the engine on NATS: every config has a
 `nats:` block with discovery on (project = the project name), the bus is
-JetStream, and `.env` holds `NATS_JWT_SECRET` and the broker passwords
-(`NATS_ABI_PASSWORD`, `NATS_MODULE_PASSWORD`). The Docker stack starts the
+JetStream, and `.env` holds the broker passwords of the engine and of its auth
+callout (`NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`) and the callout's signing
+seed (`NATS_AUTH_CALLOUT_SEED`, `NATS_AUTH_CALLOUT_ISSUER`). Modules log in with
+their own service keys, and the engine gives each connection the subjects its
+approved policy allows. The Docker stack starts the
 `nats` service, keeps RabbitMQ behind the `rabbitmq` profile and runs no
 Dagster: one engine hosts discovery, and module jobs replace Dagster's
 schedules. Check the broker with `curl -s localhost:8222/healthz` and
@@ -55,8 +58,9 @@ Creates a module. By default a **remote module**: a `naas-abi-sdk` package that
 runs in its own process, reaches the engine only through NATS, and never
 imports `naas_abi_core`. It has an agent (an SDK `IntentAgent` on the engine's
 default models, its memory in the Document Service), an hourly `@job`, a
-`python -m <name>` entrypoint with discovery and SIGTERM handling, a service
-token signer, an app scaffold and offline tests.
+`python -m <name>` entrypoint with discovery and SIGTERM handling, an app
+scaffold and offline tests. It runs on a service key (`ABI_SERVICE_KEY`) and
+holds no signing secret.
 
 - **In a project** (a folder with `config.yaml` and `pyproject.toml`), it goes
   to `src/<name>/` with an SDK-only `Dockerfile`, gets a `dev.modules` entry in
@@ -174,12 +178,41 @@ dev:
   modules:
     - name: probe-researcher                # logs, pid, --service name
       module: operations.projects.nats_probe  # run as `python -m <module> <args>`
+      module_id: acme.researcher            # its ABIModule.module_id (default: name)
       args: [researcher]
       env: {NATS_PROBE_DISCOVERY_PROJECT: "${ABI_DISCOVERY_PROJECT}"}
       restart: on-failure                   # or always, never
 ```
 
-Each module gets `ABI_NATS_URL`, `NATS_JWT_SECRET`, `ABI_SERVICE_TOKEN` (for `python -m naas_abi_sdk.module_runner`), `ABI_DISCOVERY_PROJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT` with tracing, and the project's `src/` on `PYTHONPATH`; `env` values may name them as `${VAR}`. A module is addressed like a service: `abi dev up --service probe-researcher -d` (it joins the running NATS stack and starts no broker of its own), `abi dev logs probe-researcher -f`, `abi dev down --service probe-researcher`. `abi dev down` stops modules before the stack. The engine validates the block and otherwise ignores it.
+Each module runs as the service account `module/<project>/<module_id>` (`module_id` in the entry, else its `name`): `abi dev up` creates it, revokes the key the last run had, hands the module a fresh one and approves its permission manifest (`services.iam.modules.auto_approve` in the dev overlay). Each module gets `ABI_NATS_URL` (without broker login), `ABI_SERVICE_KEY`, `ABI_DISCOVERY_PROJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT` with tracing, and the project's `src/` on `PYTHONPATH`; `env` values may name them as `${VAR}`. A module is addressed like a service: `abi dev up --service probe-researcher -d` (it joins the running NATS stack and starts no broker of its own), `abi dev logs probe-researcher -f`, `abi dev down --service probe-researcher`. `abi dev down` stops modules before the stack. The engine validates the block and otherwise ignores it.
+
+### Service accounts, keys and module permissions
+
+`abi iam` works on the project's IAM store (`services.iam.store`, sqlite or
+PostgreSQL) and tells a running engine to reload (`abi.iam.v1.changed`). A key
+is printed once, at creation; only its hash is stored.
+
+```bash
+abi iam service-account create ci/nightly --key   # the account and a first key
+abi iam service-account list
+abi iam service-account delete ci/nightly         # its keys stop working
+
+abi iam key create module/default/research --description prod
+abi iam key list module/default/research
+abi iam key rotate module/default/research <key id>   # a new key; the old one revoked
+abi iam key revoke module/default/research <key id>
+
+abi iam module list --status pending              # manifests waiting for approval
+abi iam module show module/default/research
+abi iam module approve module/default/research [--document narrowed.yaml]
+abi iam module reject module/default/research --reason "asks for every document"
+```
+
+An account holds at most five active keys; `ci/*` keys expire after 90 days. A
+revoked key fails its next exchange and its next broker connection; tokens
+already issued expire within ten minutes. A remote module in Docker reads its key
+from `<NAME>_SERVICE_KEY` in `.env` (`docker-compose.override.yml` refuses to
+start without it).
 
 ### Deployment
 

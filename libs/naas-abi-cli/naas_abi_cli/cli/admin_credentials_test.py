@@ -41,7 +41,9 @@ def test_each_project_gets_a_different_password(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("default", ["Admin1234!", "admin"])
-def test_a_shipped_default_password_is_replaced_in_place(tmp_path: Path, default: str) -> None:
+def test_a_shipped_default_password_is_replaced_in_place(
+    tmp_path: Path, default: str
+) -> None:
     env = tmp_path / ".env"
     env.write_text(
         "OTHER=1\n"
@@ -89,27 +91,35 @@ def test_a_custom_api_key_is_kept(tmp_path: Path) -> None:
     assert ensure_api_key(env) == "configured-key"
 
 
-def test_ensure_nats_secret_generates_once_and_keeps_it(tmp_path):
-    from naas_abi_cli.cli.admin_credentials import ensure_nats_secret
+def test_the_callout_seed_is_generated_once_with_its_issuer(tmp_path):
+    from naas_abi_cli.cli.admin_credentials import (
+        ensure_nats_callout_seed,
+        nats_callout_issuer,
+    )
 
     env = tmp_path / ".env"
     env.write_text("OTHER=1\n")
 
-    first = ensure_nats_secret(env)
-    second = ensure_nats_secret(env)
+    first = ensure_nats_callout_seed(env)
+    second = ensure_nats_callout_seed(env)
 
-    assert first == second and len(first) >= 32
-    assert "OTHER=1" in env.read_text()
-    assert f"NATS_JWT_SECRET={first}" in env.read_text()
+    assert first == second and first.startswith("SA")
+    issuer = nats_callout_issuer(first)
+    assert issuer.startswith("A") and len(issuer) == 56
+    text = env.read_text()
+    assert f"NATS_AUTH_CALLOUT_SEED={first}" in text
+    assert f"NATS_AUTH_CALLOUT_ISSUER={issuer}" in text
+    assert "OTHER=1" in text
 
 
-def test_ensure_nats_secret_keeps_an_existing_value(tmp_path):
-    from naas_abi_cli.cli.admin_credentials import ensure_nats_secret
+def test_a_seed_that_is_not_an_account_seed_is_replaced(tmp_path):
+    from naas_abi_cli.cli.admin_credentials import ensure_nats_callout_seed
 
     env = tmp_path / ".env"
-    env.write_text("NATS_JWT_SECRET=" + "k" * 40 + "\n")
+    env.write_text("NATS_AUTH_CALLOUT_SEED=not-a-seed\n")
 
-    assert ensure_nats_secret(env) == "k" * 40
+    assert ensure_nats_callout_seed(env).startswith("SA")
+    assert env.read_text().count("NATS_AUTH_CALLOUT_SEED=") == 1
 
 
 def test_ensure_nats_passwords_generates_each_broker_user_once(tmp_path):
@@ -122,8 +132,8 @@ def test_ensure_nats_passwords_generates_each_broker_user_once(tmp_path):
     second = ensure_nats_passwords(env)
 
     assert first == second
-    assert set(first) == {"NATS_ABI_PASSWORD", "NATS_MODULE_PASSWORD"}
-    assert first["NATS_ABI_PASSWORD"] != first["NATS_MODULE_PASSWORD"]
+    assert set(first) == {"NATS_ENGINE_PASSWORD", "NATS_AUTH_PASSWORD"}
+    assert first["NATS_ENGINE_PASSWORD"] != first["NATS_AUTH_PASSWORD"]
     for key, password in first.items():
         assert f"{key}={password}" in env.read_text()
         # nats.conf reads it as a config value ($VAR): it must start with a
@@ -139,13 +149,13 @@ def test_ensure_nats_passwords_replaces_an_empty_or_short_password(tmp_path, val
     from naas_abi_cli.cli.admin_credentials import ensure_nats_passwords
 
     env = tmp_path / ".env"
-    env.write_text(f"NATS_ABI_PASSWORD={value}\nNATS_MODULE_PASSWORD={'m' * 40}\n")
+    env.write_text(f"NATS_ENGINE_PASSWORD={value}\nNATS_AUTH_PASSWORD={'m' * 40}\n")
 
     passwords = ensure_nats_passwords(env)
 
-    assert len(passwords["NATS_ABI_PASSWORD"]) >= 32
-    assert passwords["NATS_MODULE_PASSWORD"] == "m" * 40
-    assert env.read_text().count("NATS_ABI_PASSWORD=") == 1
+    assert len(passwords["NATS_ENGINE_PASSWORD"]) >= 32
+    assert passwords["NATS_AUTH_PASSWORD"] == "m" * 40
+    assert env.read_text().count("NATS_ENGINE_PASSWORD=") == 1
 
 
 @pytest.mark.parametrize(
@@ -154,4 +164,7 @@ def test_ensure_nats_passwords_replaces_an_empty_or_short_password(tmp_path, val
 def test_nats_login_puts_the_user_and_password_in_the_url(url):
     from naas_abi_cli.cli.admin_credentials import nats_login
 
-    assert nats_login(url, "module", "nats-pw_1") == "nats://module:nats-pw_1@127.0.0.1:13042"
+    assert (
+        nats_login(url, "module", "nats-pw_1")
+        == "nats://module:nats-pw_1@127.0.0.1:13042"
+    )

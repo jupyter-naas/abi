@@ -46,10 +46,21 @@ registry (discovery), and their agents show up in Nexus next to the engine's.
   modules listed under `dev.modules` in `config.yaml`.
 - `abi start` (Docker) runs the `nats` service; the modules you add run in
   their own containers, declared in `docker-compose.override.yml`.
-- The broker only admits clients with a password: the engine logs in as `abi`
-  (`NATS_ABI_PASSWORD`), modules as `module` (`NATS_MODULE_PASSWORD`). Calls
-  carry tokens signed with `NATS_JWT_SECRET`. All three were generated in
-  `.env`; every process of the project must use the same values.
+- The broker admits two static users, generated in `.env`: the engine logs in
+  as `engine` (`NATS_ENGINE_PASSWORD`) and answers the broker's auth callout as
+  `auth` (`NATS_AUTH_PASSWORD`, `NATS_AUTH_CALLOUT_SEED`).
+- Every module runs as its own service account, `module/<project>/<module_id>`,
+  with its own key (`ABI_SERVICE_KEY`): it logs in to the broker with it and
+  gets only the subjects its approved permission manifest allows. No module
+  holds a signing secret.
+- `abi dev up` creates the accounts and keys of `dev.modules` and approves
+  their manifests itself. Elsewhere, create them and approve:
+
+  ```bash
+  uv run abi iam service-account create module/<project>/<module_id> --key
+  uv run abi iam module list --status pending
+  uv run abi iam module approve module/<project>/<module_id>
+  ```
 
 `abi dev up --without-nats` runs the engine in-process instead, without a
 broker or the modules.
@@ -69,9 +80,9 @@ A module that registered logs `READY`. The [NATS CLI](https://github.com/nats-io
 lists the registry and the kernel services:
 
 ```bash
-export $(grep ^NATS_ABI_PASSWORD= .env)
-nats --server "nats://abi:$NATS_ABI_PASSWORD@localhost:4222" kv ls
-nats --server "nats://abi:$NATS_ABI_PASSWORD@localhost:4222" micro list
+export $(grep ^NATS_ENGINE_PASSWORD= .env)
+nats --server "nats://engine:$NATS_ENGINE_PASSWORD@localhost:4222" kv ls
+nats --server "nats://engine:$NATS_ENGINE_PASSWORD@localhost:4222" micro list
 ```
 
 ### Add a module that runs on its own

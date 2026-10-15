@@ -4,8 +4,8 @@ import asyncio
 
 import nats
 import pytest
-from naas_abi_core.engine.nats_auth import issue_service_token
 from naas_abi_core.engine.nats_rpc_integration_test import SECRET, broker  # noqa: F401
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.discovery.discovery_factory import start_discovery
 from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterNATSClient_test import (
     document_host,  # noqa: F401
@@ -32,7 +32,7 @@ def test_run_events_are_pushed_and_status_is_read_once(document_host):  # noqa: 
         nc = await nats.connect(document_host)
         registry = await start_discovery(nc, SECRET)
         stop = asyncio.Event()
-        token = issue_service_token("agent-updates-test", SECRET)
+        token = TEST_TOKENS.token("agent-updates-test")
         # Every agent request crossing the broker, by operation.
         requests: dict[str, int] = {}
 

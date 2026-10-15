@@ -5,14 +5,16 @@ Each runs as `python -m <module> <args>` under `dev_supervisor`, which restarts
 it when it exits on its own. Its environment carries the dev broker from the
 overlay `abi dev up` generates:
 
-- ``ABI_NATS_URL``, logged in as the broker user ``module``,
-  ``NATS_JWT_SECRET`` and ``ABI_DISCOVERY_PROJECT``;
-- ``ABI_SERVICE_TOKEN``, a service token for the module's name, as
-  ``python -m naas_abi_sdk.module_runner`` expects;
+- ``ABI_NATS_URL``, the broker with no login: the module brings its key;
+- ``ABI_SERVICE_KEY``, a fresh key of its service account
+  (``module/<project>/<module_id>``), as ``python -m naas_abi_sdk.module_runner``
+  expects, and ``ABI_DISCOVERY_PROJECT``;
 - ``OTEL_EXPORTER_OTLP_ENDPOINT`` with ``--with-tracing``;
 - the project's ``src/`` first on ``PYTHONPATH``.
 
-The module's own ``env`` comes last; its values may name the above as ``${VAR}``.
+No signing secret, broker password or other key reaches it: the CLI's own
+``NATS_*`` variables and ``iam/`` secrets are left out. The module's own
+``env`` comes last; its values may name the above as ``${VAR}``.
 """
 
 from __future__ import annotations
@@ -22,19 +24,17 @@ import os
 import string
 import sys
 from collections.abc import Mapping
-from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
-
-from naas_abi_cli.cli.admin_credentials import nats_login
+from urllib.parse import urlsplit, urlunsplit
 
 if TYPE_CHECKING:
     from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
         DevModuleConfiguration,
     )
 
-# A dev process's token. Modules holding NATS_JWT_SECRET can issue their own.
-SERVICE_TOKEN_TTL = timedelta(days=7)
+# Never passed on to a module: broker logins, the callout seed, IAM's secrets.
+_WITHHELD_PREFIXES = ("NATS_", "iam/", "ABI_SERVICE_KEY")
 
 
 def load_dev_modules() -> dict[str, DevModuleConfiguration]:
@@ -85,26 +85,31 @@ def read_overlay(path: Path) -> dict:
     return json.loads(body)
 
 
+def without_login(url: str) -> str:
+    """``url`` with its ``user:password@`` removed."""
+    parts = urlsplit(url)
+    return urlunsplit(parts._replace(netloc=parts.netloc.rpartition("@")[2]))
+
+
 def module_environment(
     module: DevModuleConfiguration,
     overlay: dict,
     project_root: Path,
     base: Mapping[str, str],
     *,
-    nats_password: str,
+    service_key: str,
 ) -> dict[str, str]:
-    """``nats_password``: the broker user ``module``'s (NATS_MODULE_PASSWORD)."""
-    from naas_abi_core.engine.nats_auth import issue_service_token
-
+    """``service_key``: the module's own (``abi dev up`` creates it)."""
     nats = overlay["nats"]
-    env = dict(base)
+    env = {
+        key: value
+        for key, value in base.items()
+        if not key.startswith(_WITHHELD_PREFIXES)
+    }
     env.update(
-        ABI_NATS_URL=nats_login(nats["nats_url"], "module", nats_password),
-        NATS_JWT_SECRET=nats["jwt_secret"],
+        ABI_NATS_URL=without_login(nats["nats_url"]),
+        ABI_SERVICE_KEY=service_key,
         ABI_DISCOVERY_PROJECT=nats["discovery"]["project"],
-        ABI_SERVICE_TOKEN=issue_service_token(
-            module.name, nats["jwt_secret"], ttl=SERVICE_TOKEN_TTL
-        ),
     )
     src = project_root / "src"
     if src.is_dir():

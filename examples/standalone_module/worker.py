@@ -23,13 +23,32 @@ from naas_abi_sdk.module import (
     ModuleDependencies,
     run_module,
 )
+from naas_abi_sdk.permissions import default_manifest
+
+DEPENDENCIES = ModuleDependencies(services=(*OPERATIONS, "bus"))
+# Bus topics have no default: the manifest names the ones this module uses.
+BUS_TOPICS = ("demo.inbox", "demo.reply", "demo.jobs", "demo.outbox")
 
 
 class ABIModule(BaseModule):
+    module_id = "standalone-demo"
+
     class Configuration(ModuleConfiguration):
         pass
 
-    dependencies = ModuleDependencies(services=(*OPERATIONS, "bus"))
+    dependencies = DEPENDENCIES
+    permissions = {
+        **default_manifest(DEPENDENCIES),
+        "statements": [
+            *default_manifest(DEPENDENCIES)["statements"],
+            {
+                "sid": "DemoBus",
+                "effect": "Allow",
+                "actions": ["bus:*"],
+                "resources": [f"abi:-:-:bus:topic/{topic}" for topic in BUS_TOPICS],
+            },
+        ],
+    }
 
     @property
     def client(self):
@@ -694,7 +713,9 @@ class ABIModule(BaseModule):
         document_json = json.dumps(
             {
                 "version": "2026-10-13",
-                "statements": [{"effect": "Allow", "actions": ["*"], "resources": ["*"]}],
+                "statements": [
+                    {"effect": "Allow", "actions": ["*"], "resources": ["*"]}
+                ],
             }
         )
         refused = {
@@ -711,15 +732,29 @@ class ABIModule(BaseModule):
             "add_group_member": {"group_id": group, "member_id": user},
             "remove_group_member": {"group_id": group, "member_id": user},
             "list_group_members": {"group_id": group},
-            "map_idp_group": {"provider": "acme", "claim_value": "Sales", "group_id": group},
-            "unmap_idp_group": {"provider": "acme", "claim_value": "Sales", "group_id": group},
+            "map_idp_group": {
+                "provider": "acme",
+                "claim_value": "Sales",
+                "group_id": group,
+            },
+            "unmap_idp_group": {
+                "provider": "acme",
+                "claim_value": "Sales",
+                "group_id": group,
+            },
             "list_idp_group_mappings": {"group_id": group},
             "create_policy": {"name": "everything", "document_json": document_json},
             "get_policy": {"policy_id": "builtin.platform_admin"},
             "update_policy": {"policy_id": "builtin.viewer", "expected_revision": 1},
             "delete_policy": {"policy_id": "builtin.viewer"},
-            "attach_policy": {"policy_id": "builtin.platform_admin", "principal_id": user},
-            "detach_policy": {"policy_id": "builtin.platform_admin", "principal_id": user},
+            "attach_policy": {
+                "policy_id": "builtin.platform_admin",
+                "principal_id": user,
+            },
+            "detach_policy": {
+                "policy_id": "builtin.platform_admin",
+                "principal_id": user,
+            },
             "put_placement": {
                 "placement": pb.Placement(
                     service="document", id_key="standalone-demo", org="-", workspace="-"
@@ -734,11 +769,29 @@ class ABIModule(BaseModule):
                     version=1,
                     resource_types=[pb.ResourceType(name="item", id="opaque")],
                     actions=[
-                        pb.ActionSpec(name="GetItem", level="read", resource_types=["item"])
+                        pb.ActionSpec(
+                            name="GetItem", level="read", resource_types=["item"]
+                        )
                     ],
                 )
             },
         }
+        refused.update(
+            {
+                "find_service_account": {"name": "engine"},
+                "create_key": {"principal_id": user},
+                "revoke_key": {"principal_id": user, "key_id": "a" * 16},
+                "get_manifest": {"principal_id": user},
+                "approve_manifest": {"principal_id": user},
+                "reject_manifest": {"principal_id": user},
+                # A module submits its own manifest, never another module's.
+                "submit_manifest": {
+                    "module_id": "someone-else",
+                    "project": "default",
+                    "document_json": document_json,
+                },
+            }
+        )
         for operation, fields in refused.items():
             try:
                 await self.call("iam", operation, **fields)
@@ -747,6 +800,19 @@ class ABIModule(BaseModule):
                 self.seen.add(("iam", operation))
             else:
                 raise AssertionError(f"iam.{operation} answered a module identity")
+        # Lists of others' keys and manifests are empty to it.
+        assert not (await self.call("iam", "list_keys", principal_id=user)).keys
+        assert not (await self.call("iam", "list_manifests")).manifests
+        # The JWKS is public; a key that is not one is refused.
+        jwks = json.loads((await self.call("iam", "jwks")).jwks_json)
+        assert jwks["issuer"].startswith("urn:abi:engine:") and jwks["keys"]
+        try:
+            await self.call("iam", "token", key="abi_sk_aaaaaaaaaaaaaaaa_not-a-key")
+        except RPCError as exc:
+            assert exc.code == "UNAUTHENTICATED", exc
+            self.seen.add(("iam", "token"))
+        else:
+            raise AssertionError("iam.token exchanged an unknown key")
 
     async def identity(self):
         """A module holds no identity:* grant: it sees no provider, and every
@@ -880,7 +946,7 @@ async def main():
     assert importlib.util.find_spec("naas_abi_core") is None, (
         "Worker must not have core installed"
     )
-    token = os.environ["ABI_SERVICE_TOKEN"]
+    token = os.environ["ABI_SERVICE_KEY"]
     report = await run_module(
         ABIModule, url=os.environ["ABI_NATS_URL"], token=token, timeout=30
     )

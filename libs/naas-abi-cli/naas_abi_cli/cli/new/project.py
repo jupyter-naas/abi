@@ -11,8 +11,8 @@ import naas_abi_cli
 from naas_abi_cli.cli.admin_credentials import (
     ADMIN_PASSWORD_KEY,
     ensure_admin_credentials,
+    ensure_nats_callout_seed,
     ensure_nats_passwords,
-    ensure_nats_secret,
 )
 from naas_abi_cli.cli.deploy.local import _build_hosts_from_domain, setup_local_deploy
 from naas_abi_cli.cli.utils.Copier import Copier
@@ -271,10 +271,11 @@ def new_project(
     # The one seeded account gets a password generated for this project only.
     admin_email, _password = ensure_admin_credentials(env_path)
     if with_nats:
-        # The configs name these: the token signing secret, and the broker
-        # users' passwords (the engine logs in as `abi`, modules as `module`).
-        ensure_nats_secret(env_path)
+        # The configs name these: the broker users' passwords (the engine logs
+        # in as `engine`, its auth callout as `auth`) and the callout's account
+        # seed. Modules log in with their own service keys.
         ensure_nats_passwords(env_path)
+        ensure_nats_callout_seed(env_path)
 
     # Run dependency install without shell to avoid quoting issues on paths with spaces.
     # ai-openrouter is the marketplace extra the generated config.yaml enables:

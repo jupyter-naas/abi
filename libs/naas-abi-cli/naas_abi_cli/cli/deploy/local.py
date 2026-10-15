@@ -13,8 +13,8 @@ import naas_abi_cli
 
 from ..admin_credentials import (
     ensure_admin_credentials,
+    ensure_nats_callout_seed,
     ensure_nats_passwords,
-    ensure_nats_secret,
     generate_admin_password,
 )
 from ..utils.Copier import Copier
@@ -589,11 +589,10 @@ def setup_local_deploy(
 
     # Generated per project; a password an older CLI wrote is replaced.
     ensure_admin_credentials(Path(local_env_target_path))
-    # The NATS broker's users (nats.conf), also when the nats profile is off.
+    # The NATS broker's users (nats.conf), also when the nats profile is off,
+    # and the account seed its auth callout signs admitted modules with.
     ensure_nats_passwords(Path(local_env_target_path))
-    if nats:
-        # Signs the service tokens of the engine and of the modules joining it.
-        ensure_nats_secret(Path(local_env_target_path))
+    ensure_nats_callout_seed(Path(local_env_target_path))
 
     persisted_public_api_host = (
         _get_env_var(local_env_target_path, "PUBLIC_API_HOST")
