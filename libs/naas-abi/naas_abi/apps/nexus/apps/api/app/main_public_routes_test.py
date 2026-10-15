@@ -74,11 +74,13 @@ def routes() -> dict[tuple[str, str], set]:
 
 def _auth_guards() -> set:
     from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
+        get_current_user_released,
         get_current_user_required,
     )
     from naas_abi_core.apps.api.abi_api_key_auth import require_abi_api_token
 
-    return {get_current_user_required, require_abi_api_token}
+    # get_current_user_released checks the same token on its own session.
+    return {get_current_user_required, get_current_user_released, require_abi_api_token}
 
 
 def test_every_route_requires_a_signed_in_caller_unless_listed(routes) -> None:
