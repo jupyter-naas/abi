@@ -44,7 +44,8 @@ run with no new event, and any run without a deadline. An unstreamed run (invoke
 mode, or a handler without `stream_invoke`) reports nothing until it returns, so
 its deadline alone bounds it. Core Agent/IntentAgent compatibility belongs in core's
 RemoteAgentAdapter; only agent_tools imports optional LangChain dependencies.
-Agent streaming preserves string event/data pairs and sequence-based replay.
+Agent streaming preserves string event/data pairs, a tool response's `chat_source: False`
+opt-out, and sequence-based replay.
 
 A rollout id (`DiscoveryConfiguration.rollout_id`, or `ABI_ROLLOUT_ID`) marks
 processes that cut over together. `rollout_modules` (or `ABI_ROLLOUT_MODULES`,

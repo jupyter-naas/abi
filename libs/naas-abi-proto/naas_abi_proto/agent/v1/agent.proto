@@ -1,7 +1,15 @@
 syntax = "proto3";
 package abi.agent.v1;
 import "naas_abi_proto/common/v1/common.proto";
-message AgentEvent { uint64 sequence = 1; string event = 2; string data = 3; uint32 parts = 4; }
+message AgentEvent {
+  uint64 sequence = 1;
+  string event = 2;
+  string data = 3;
+  uint32 parts = 4;
+  // False on a tool_response whose tool opted out of chat sources
+  // (metadata {"chat_source": false}); unset otherwise.
+  optional bool chat_source = 5;
+}
 message Invocation {
   string invocation_id = 1;
   string thread_id = 2;

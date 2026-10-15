@@ -87,6 +87,23 @@ def test_maps_agent_events_like_in_process_agents():
     ]
 
 
+def test_a_tool_that_opts_out_of_chat_sources_stays_out_of_them():
+    chunks = _run(
+        _Directory(
+            [
+                {"event": "tool_response", "data": "https://a.example"},
+                {"event": "tool_response", "data": "https://b.example", "chat_source": False},
+                {"event": "ai_message", "data": "answer"},
+            ]
+        )
+    )
+
+    assert chunks[:2] == [
+        {"event": "tool_response", "output": "https://a.example"},
+        {"event": "tool_response", "output": "https://b.example", "chat_source": False},
+    ]
+
+
 def test_sdk_agents_that_only_send_message_events_still_answer():
     answer = [{"event": "message", "data": "line 1"}, {"event": "message", "data": "line 2"}]
 

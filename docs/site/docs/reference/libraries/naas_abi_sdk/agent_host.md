@@ -99,7 +99,8 @@ async def main(session, documents):
   - If a claim owner disappears from discovery, the invocation is marked `FAILED` with `OWNER_GONE` and is **not replayed**.
   - Cancellation is only allowed when this process still owns the live run; lease expiry does **not** imply cancel.
 - **Streaming handler contract** (`stream_invoke` if present and `mode="stream"`):
-  - Must yield dicts exactly shaped like `{"event": str, "data": str}`.
+  - Must yield dicts shaped like `{"event": str, "data": str}`, optionally with `"chat_source": False` on a `tool_response` whose tool opted out of chat sources (as core's `stream_invoke` does). Any other key, or a non-boolean `chat_source`, fails the run with `INVALID_STREAM`.
+  - The flag is stored with the event and reaches callers as `AgentEvent.chat_source` and in the dicts of `InvocationHandle.events()` and `AgentProxy.stream_invoke()`.
   - `event` length must be `<= 64`.
   - Must not yield events after a `"done"` event; host will error with `INVALID_STREAM`.
   - Host will append a final `{"event": "done", "data": "[DONE]"}` if missing.
