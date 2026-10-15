@@ -6,6 +6,12 @@ Command Line Interface (CLI) tool for building and managing ABI (Agentic Brain I
 
 `naas-abi-cli` provides a comprehensive set of commands to create, configure, deploy, and interact with ABI projects. It serves as the primary entry point for developers working with the ABI framework, enabling quick project setup, agent interaction, and cloud deployment.
 
+Since 3.0, `abi new project` creates projects that run on NATS and `abi new
+module` creates remote modules (`naas-abi-sdk`). Dagster and RabbitMQ are
+legacy extras for projects without NATS, removed in the next major. Upgrading
+a 2.x project: [Migrate from 2.x to 3.0](../../docs/site/docs/upgrade/migrate-to-3.md).
+Every command: [CLI Reference](../../docs/site/docs/capabilities/developer-toolchain/cli.md).
+
 ## Installation
 
 Install the CLI tool using pip:
@@ -131,6 +137,18 @@ Lists all available agents across all loaded modules.
 abi agent list
 ```
 
+#### `abi agent migrate-memory [--from postgres|documents-v1] [--thread <id>]... [--apply]`
+Copies agent memory into the Document Service (checkpoint schema 2), from
+LangGraph's PostgreSQL tables (`--source-url`, default `$POSTGRES_URL`) or from
+document schema 1. A dry run unless `--apply`; running it again copies only
+what is missing. Stop the engines first. In NATS mode the engine runs the same
+copy as the `agent_memory_migrate` job.
+
+#### `abi agent prune-memory [--keep-last N] [--min-age S] [--thread <id>]... [--apply]`
+Deletes old checkpoints, keeping each thread's newest `--keep-last` (default
+20); the conversation stays whole in them. A dry run unless `--apply`. In NATS
+mode the engine runs it daily as the `agent_memory_prune` job.
+
 ### Configuration Management
 
 #### `abi config validate [--configuration-file <path>]`
@@ -197,6 +215,27 @@ dev:
 Each module gets `ABI_NATS_URL`, `ABI_MODULE_KEY` (the key of its module id, which discovery registers it under: its `identity:`, else the `module_id` of the `ABIModule` its package exports; `abi dev up` refuses a module whose id it cannot tell), `ABI_SERVICE_TOKEN` signed with that key (for modules that read only that; the SDK prefers the key), `ABI_DISCOVERY_PROJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT` with tracing, and the project's `src/` on `PYTHONPATH`; `env` values may name them as `${VAR}`. A module is addressed like a service: `abi dev up --service probe-researcher -d` (it joins the running NATS stack and starts no broker of its own), `abi dev logs probe-researcher -f`, `abi dev down --service probe-researcher`. `abi dev down` stops modules before the stack. The engine validates the block and otherwise ignores it.
 
 ### Deployment
+
+#### `abi deploy local [--regenerate] [--no-backup] [--headscale] [--coding]`
+Writes the project's Docker Compose stack (`docker-compose.yml`, `.deploy/`).
+`--regenerate` re-renders it from the current templates, after a backup.
+
+- A project with a `nats:` block gets the NATS stack: a `nats` service the
+  engine waits for, no Dagster, RabbitMQ behind the `rabbitmq` profile.
+- A project without one keeps the classic stack (Dagster and RabbitMQ, legacy)
+  with a `nats` service behind the `nats` profile, and `uv add`s the
+  `naas-abi-core[dagster,rabbitmq]` extras it needs (commit `pyproject.toml`
+  and `uv.lock`).
+- It writes `.deploy/docker/nats/nats.conf` (the broker users `abi` and
+  `module`, and the module user's permissions) and generates
+  `NATS_ABI_PASSWORD` and `NATS_MODULE_PASSWORD` in `.env`. Regenerate after
+  each CLI upgrade.
+- It stops before writing anything when `.env` is not writable, and prints the
+  `chown` to run.
+- `docker-compose.override.yml` (remote modules) is never rewritten.
+
+`abi deploy local-up [-d]`, `local-down` and `local-logs` run Docker Compose
+with the override file.
 
 #### `abi deploy naas [-e/--env <environment>]`
 Deploys your ABI project to Naas cloud infrastructure.

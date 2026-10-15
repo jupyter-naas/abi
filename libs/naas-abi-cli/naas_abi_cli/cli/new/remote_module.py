@@ -24,6 +24,7 @@ from naas_abi_cli.cli.admin_credentials import (
     ensure_module_key,
     module_key_variable,
 )
+from naas_abi_cli.cli.deploy.local import MIGRATE_TO_NATS_DOC
 from naas_abi_cli.cli.utils.Copier import Copier
 
 from .utils import to_pascal_case, to_snake_case
@@ -406,8 +407,9 @@ def create_in_project(project: Project, module_name: str, package: Path) -> None
     if not project.nats():
         click.echo(
             "- This project's Docker config has no `nats:` block, so its Docker "
-            "stack has no broker for the module. See docs/migrate-to-nats.md; then add "
-            f"this service to {COMPOSE_OVERRIDE}:\n\n" + compose_snippet(name, service)
+            f"stack has no broker for the module. See {MIGRATE_TO_NATS_DOC}; "
+            f"then add this service to {COMPOSE_OVERRIDE}:\n\n"
+            + compose_snippet(name, service)
         )
     elif not (project.root / "docker-compose.yml").exists():
         click.echo(

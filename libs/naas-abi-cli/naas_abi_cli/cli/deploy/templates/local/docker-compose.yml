@@ -502,7 +502,7 @@ services:
   nats:
 {% else %}
   # Opt-in: this project runs without NATS (no `nats:` block in its config).
-  # See docs/migrate-to-nats.md to move it over.
+  # To move it over: https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md
   nats:
     profiles: ["nats"]
 {% endif %}
