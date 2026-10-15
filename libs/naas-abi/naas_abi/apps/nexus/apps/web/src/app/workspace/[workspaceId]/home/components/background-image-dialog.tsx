@@ -4,7 +4,7 @@ import { ModalBackdrop } from '@/components/ui/dialogs';
 import { MAX_BACKGROUND_IMAGE_BYTES } from '@/lib/home-background';
 import { BackgroundImageEditor } from './background-image-editor';
 
-/** Home → File → Edit background image: the shared wallpaper editor in a dialog. */
+/** Home → Edit → Desktop wallpaper: the shared wallpaper editor in a dialog. */
 export function BackgroundImageDialog({
   open,
   workspaceId,

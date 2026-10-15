@@ -28,7 +28,7 @@ const ZOOM_STEP = 0.25;
 const KEY_PAN_PX = 16;
 
 /**
- * The desk wallpaper editor, shared by Home (File → Edit background image, in a
+ * The desk wallpaper editor, shared by Home (Edit → Desktop wallpaper, in a
  * dialog) and Settings → Theme (inline). Opens on the current wallpaper when
  * there is one. A new image (local file or URL) is staged by the API in
  * `.home/tmp` and previewed from there. Drag to move, wheel or the controls to

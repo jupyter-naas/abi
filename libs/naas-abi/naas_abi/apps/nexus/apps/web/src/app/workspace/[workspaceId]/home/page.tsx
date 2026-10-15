@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { File, Folder, MessageSquare } from 'lucide-react';
 import { appsPath } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
@@ -17,7 +17,9 @@ import { fetchCurrentBackgroundImage, parseBackgroundImageUrl } from '@/lib/home
 import { BackgroundImageDialog } from './components/background-image-dialog';
 import { DeskWallpaper } from './components/desk-wallpaper';
 import { HomeMenuBar } from './components/home-menu-bar';
+import { buildHomeFileMenuRows } from './home-desk-nav';
 import { deskSurfaceIcons, resolveDeskImageUrl, type DeskSurfaceId } from './home-desk';
+import type { StarredItem } from '@/stores/files';
 
 export default function HomePage() {
   const router = useRouter();
@@ -75,12 +77,77 @@ export default function HomePage() {
   const desktopApps = apps.filter((a) => a.enabled && a.installed && a.url);
   const desktopFiles = starredItems.filter((item) => item.workspaceId === currentWorkspaceId);
 
-  const openSurface = (section: DeskSurfaceId) => {
-    if (!currentWorkspaceId) return;
-    setActivePanelSection(section);
-    if (section === 'files') setActiveSource('my-drive');
-    router.push(getWorkspacePath(currentWorkspaceId, `/${section}`));
-  };
+  const openSurface = useCallback(
+    (section: DeskSurfaceId) => {
+      if (!currentWorkspaceId) return;
+      setActivePanelSection(section);
+      if (section === 'files') setActiveSource('my-drive');
+      router.push(getWorkspacePath(currentWorkspaceId, `/${section}`));
+    },
+    [currentWorkspaceId, router, setActivePanelSection, setActiveSource],
+  );
+
+  const openApp = useCallback(
+    (appId: string) => {
+      if (!currentWorkspaceId) return;
+      setActivePanelSection(null);
+      setKeepPanelClosedOnNextRoute(true);
+      router.push(appsPath(currentWorkspaceId, appId));
+    },
+    [currentWorkspaceId, router, setActivePanelSection, setKeepPanelClosedOnNextRoute],
+  );
+
+  const openStarred = useCallback(
+    (item: StarredItem) => {
+      if (!currentWorkspaceId) return;
+      if (item.type === 'folder') {
+        setStarredNavigation({ source: item.source, path: item.path });
+      } else {
+        const parentPath = item.path.includes('/')
+          ? item.path.substring(0, item.path.lastIndexOf('/'))
+          : '';
+        setStarredNavigation({
+          source: item.source,
+          path: parentPath,
+          previewPath: item.path,
+        });
+      }
+      setActivePanelSection('files');
+      router.push(
+        isMobile ? filesBrowsePath(currentWorkspaceId) : getWorkspacePath(currentWorkspaceId, '/files'),
+      );
+    },
+    [
+      currentWorkspaceId,
+      isMobile,
+      router,
+      setActivePanelSection,
+      setStarredNavigation,
+    ],
+  );
+
+  const fileMenuRows = useMemo(() => {
+    if (!currentWorkspaceId) return [];
+    return buildHomeFileMenuRows({
+      workspaceId: currentWorkspaceId,
+      isMobile,
+      surfaces: surfaceIcons,
+      apps,
+      starredItems: desktopFiles,
+      onOpenSurface: openSurface,
+      onOpenApp: openApp,
+      onOpenStarred: openStarred,
+    });
+  }, [
+    currentWorkspaceId,
+    isMobile,
+    surfaceIcons,
+    apps,
+    desktopFiles,
+    openSurface,
+    openApp,
+    openStarred,
+  ]);
 
   return (
     <div className="flex h-full flex-col">
@@ -88,6 +155,7 @@ export default function HomePage() {
         title={workspace?.name || 'Home'}
         nav={
           <HomeMenuBar
+            fileMenuRows={fileMenuRows}
             canEditBackground={canEditBackground}
             onEditBackground={() => setBackgroundDialogOpen(true)}
           />
@@ -133,19 +201,7 @@ export default function HomePage() {
               key={app.app_id}
               type="button"
               className="flex w-[88px] flex-col items-center gap-3 text-white"
-              onClick={() => {
-                if (!currentWorkspaceId) return;
-                // Launching an app from the desk hands the content area to
-                // the app: close the feature column so it opens at full width.
-                // The dock stays — collapsing it only swaps one panel for a
-                // second identical PanelLeft button in the topnav. `null` keeps
-                // lastActivePanelSection, so reopening restores the section.
-                // The route sync would reopen the Apps column on /apps, so
-                // it is told to keep it closed for this navigation.
-                setActivePanelSection(null);
-                setKeepPanelClosedOnNextRoute(true);
-                router.push(appsPath(currentWorkspaceId, app.app_id));
-              }}
+              onClick={() => openApp(app.app_id)}
               title={app.name}
             >
               {app.avatar_url ? (
@@ -172,26 +228,7 @@ export default function HomePage() {
               key={`${item.workspaceId}:${item.source}:${item.path}`}
               type="button"
               className="flex w-[88px] flex-col items-center gap-3 text-white"
-              onClick={() => {
-                if (item.type === 'folder') {
-                  setStarredNavigation({ source: item.source, path: item.path });
-                } else {
-                  const parentPath = item.path.includes('/')
-                    ? item.path.substring(0, item.path.lastIndexOf('/'))
-                    : '';
-                  setStarredNavigation({
-                    source: item.source,
-                    path: parentPath,
-                    previewPath: item.path,
-                  });
-                }
-                setActivePanelSection('files');
-                router.push(
-                  isMobile
-                    ? filesBrowsePath(currentWorkspaceId)
-                    : getWorkspacePath(currentWorkspaceId, '/files'),
-                );
-              }}
+              onClick={() => openStarred(item)}
               title={item.path}
             >
               <span className="flex h-14 w-14 items-center justify-center bg-black/35 shadow-lg">
