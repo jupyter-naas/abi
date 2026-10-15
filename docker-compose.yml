@@ -159,10 +159,14 @@ services:
         condition: service_healthy
     command:
       ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.mcp.mcp_server"]
+    # The repository, as the abi service mounts it (it is healthy first).
+    volumes:
+      - .:/app
     environment:
       - ABI_API_BASE=http://abi:9879
       - ABI_API_KEY=abi
       - MCP_TRANSPORT=http
+      - MCP_HOST=0.0.0.0
     ports:
       - 8000:8000
     networks:
