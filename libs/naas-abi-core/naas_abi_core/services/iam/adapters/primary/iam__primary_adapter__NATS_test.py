@@ -48,10 +48,14 @@ def test_sdk_modules_reach_iam_over_nats(broker):  # noqa: F811 - imported fixtu
             bob = await admin.ensure_user("https://idp.example", "bob")
             policy = await admin.create_policy(
                 "read graphs",
-                document(statement("Allow", ["iam:GetPolicy"], ["*"], sid="ReadPolicies")),
+                document(
+                    statement("Allow", ["iam:GetPolicy"], ["*"], sid="ReadPolicies")
+                ),
             )
             assert policy["document"]["statements"][0]["sid"] == "ReadPolicies"
-            attachment = await admin.attach_policy(roles.VIEWER, bob["id"], "abi:org-1:ws-1")
+            attachment = await admin.attach_policy(
+                roles.VIEWER, bob["id"], "abi:org-1:ws-1"
+            )
             assert attachment["scope"] == "abi:org-1:ws-1"
             explanation = await admin.explain(
                 "iam:ListAttachments",
@@ -75,7 +79,9 @@ def test_sdk_modules_reach_iam_over_nats(broker):  # noqa: F811 - imported fixtu
                 await iam.require("document:Find", other)
             # IAM's own operations need iam:* actions the module lacks.
             with pytest.raises(NotFound):
-                await iam.create_policy("mine", document(statement("Allow", ["*"], ["*"])))
+                await iam.create_policy(
+                    "mine", document(statement("Allow", ["*"], ["*"]))
+                )
             with pytest.raises((NotFound, PermissionDenied)):
                 await iam.attach_policy(roles.PLATFORM_ADMIN, bob["id"])
         finally:

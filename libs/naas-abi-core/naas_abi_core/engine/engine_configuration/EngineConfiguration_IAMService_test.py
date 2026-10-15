@@ -115,7 +115,10 @@ def test_postgres_takes_a_dsn_and_a_schema():
         ("config.yaml", "sqlite"),
         ("config.local.yaml", "postgres"),
         ("config.remote.yaml", "postgres"),
-        ("libs/naas-abi-cli/naas_abi_cli/cli/new/templates/project/config.yaml", "sqlite"),
+        (
+            "libs/naas-abi-cli/naas_abi_cli/cli/new/templates/project/config.yaml",
+            "sqlite",
+        ),
         (
             "libs/naas-abi-cli/naas_abi_cli/cli/new/templates/project/config.local.yaml",
             "postgres",
@@ -134,7 +137,10 @@ def test_shipped_configurations_choose_the_store_and_enforce(path, adapter):
         "services", {}
     )
     block = IAMServiceConfiguration.model_validate(
-        {**services["iam"], "store": {**services["iam"]["store"], "dsn": "postgresql://x"}}
+        {
+            **services["iam"],
+            "store": {**services["iam"]["store"], "dsn": "postgresql://x"},
+        }
         if adapter == "postgres"
         else services["iam"]
     )

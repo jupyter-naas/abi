@@ -110,20 +110,13 @@ class IAMServiceConfiguration(BaseModel):
 
     def load(self) -> IAMService:
         """The service, bootstrapped: the engine's root of trust is in place."""
-        factory = None
-        if self.authorizer == "allow_all":
-            from naas_abi_core.services.iam.adapters.secondary.authorizer__allow_all import (
-                AllowAllAuthorizer,
-            )
+        from naas_abi_core.services.iam import IAMFactory
 
-            def factory(_source):
-                return AllowAllAuthorizer()
-
-        service = IAMService(
-            self.store.load(), factory, cache_ttl_seconds=self.cache_ttl_seconds
+        return IAMFactory.build(
+            self.store.load(),
+            self.authorizer,
+            cache_ttl_seconds=self.cache_ttl_seconds,
         )
-        service.bootstrap()
-        return service
 
     def local_storage(self) -> str | None:
         return self.store.local_storage()

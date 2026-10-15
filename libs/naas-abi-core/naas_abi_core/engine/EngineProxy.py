@@ -17,8 +17,8 @@ from naas_abi_core.services.dataset.DatasetService import DatasetService
 from naas_abi_core.services.document.DocumentService import DocumentService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
-from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.iam.IAMPorts import IIAMService
+from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.model_registry.ModelRegistryService import (
     ModelRegistryService,
 )

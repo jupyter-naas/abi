@@ -12,7 +12,7 @@ import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import yaml
 
@@ -203,7 +203,7 @@ def _statement(
     if len(errors) != before:
         return None
     return Statement(
-        effect=effect,
+        effect=cast(Effect, effect),
         actions=tuple(actions),
         resources=tuple(resources),
         sid=sid,

@@ -9,7 +9,6 @@ import json
 from datetime import datetime
 from typing import Any
 
-from google.protobuf.timestamp_pb2 import Timestamp
 from naas_abi_core.services.iam.catalog import (
     ActionCatalog,
     ActionSpec,
@@ -115,12 +114,12 @@ def raise_for(error: Any) -> None:
 # -- helpers ---------------------------------------------------------------------
 
 
-def _timestamp(value: datetime | None) -> Timestamp | None:
-    if value is None:
-        return None
-    stamp = Timestamp()
-    stamp.FromDatetime(value)
-    return stamp
+def _stamped(message: Any, **times: datetime | None) -> Any:
+    """``message`` with its Timestamp fields set from ``times`` (None stays unset)."""
+    for field, value in times.items():
+        if value is not None:
+            getattr(message, field).FromDatetime(value)
+    return message
 
 
 def _datetime(message: Any, field: str) -> datetime | None:
@@ -139,7 +138,7 @@ def _optional(message: Any, field: str) -> Any:
 
 
 def principal_to_pb(record: PrincipalRecord) -> pb.Principal:
-    return pb.Principal(
+    message = pb.Principal(
         id=record.id,
         kind=record.kind,
         status=record.status,
@@ -152,9 +151,8 @@ def principal_to_pb(record: PrincipalRecord) -> pb.Principal:
         display_name=record.display_name,
         org=record.org,
         owner_id=record.owner_id,
-        created_at=_timestamp(record.created_at),
-        updated_at=_timestamp(record.updated_at),
     )
+    return _stamped(message, created_at=record.created_at, updated_at=record.updated_at)
 
 
 def principal_from_pb(message: pb.Principal) -> PrincipalRecord:
@@ -177,16 +175,15 @@ def principal_from_pb(message: pb.Principal) -> PrincipalRecord:
 
 
 def policy_to_pb(policy: Policy) -> pb.Policy:
-    return pb.Policy(
+    message = pb.Policy(
         id=policy.id,
         name=policy.name,
         description=policy.description,
         document_json=policy.document.to_json(),
         managed=policy.managed,
         revision=policy.revision,
-        created_at=_timestamp(policy.created_at),
-        updated_at=_timestamp(policy.updated_at),
     )
+    return _stamped(message, created_at=policy.created_at, updated_at=policy.updated_at)
 
 
 def policy_from_pb(message: pb.Policy) -> Policy:
@@ -203,13 +200,13 @@ def policy_from_pb(message: pb.Policy) -> Policy:
 
 
 def attachment_to_pb(attachment: Attachment) -> pb.Attachment:
-    return pb.Attachment(
+    message = pb.Attachment(
         id=attachment.id,
         policy_id=attachment.policy_id,
         principal_id=attachment.principal_id,
         scope=attachment.scope,
-        created_at=_timestamp(attachment.created_at),
     )
+    return _stamped(message, created_at=attachment.created_at)
 
 
 def attachment_from_pb(message: pb.Attachment) -> Attachment:

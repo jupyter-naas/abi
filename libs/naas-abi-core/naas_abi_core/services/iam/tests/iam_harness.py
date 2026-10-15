@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from contextlib import AbstractContextManager
 
 from naas_abi_core.engine.call_context import (
     CallContext,
@@ -105,7 +105,10 @@ class IAMHarness:
         else:
             assert record is not None
             principal = Principal(
-                id=record.id, kind=record.kind, name=record.name, groups=groups
+                id=record.id,
+                kind=record.kind,  # type: ignore[arg-type]  # users and accounts only
+                name=record.name,
+                groups=groups,
             )
         obo = (
             Principal(id=on_behalf_of.id, kind="user", groups=groups)
@@ -114,7 +117,7 @@ class IAMHarness:
         )
         return CallContext(principal=principal, on_behalf_of=obo, scope=scope)
 
-    def as_(self, record=None, **kwargs) -> Iterator[CallContext]:
+    def as_(self, record=None, **kwargs) -> AbstractContextManager[CallContext]:
         return use_call_context(self.context(record, **kwargs))
 
     def allowed(self, action: str, resource: str, record=None, **kwargs) -> bool:
