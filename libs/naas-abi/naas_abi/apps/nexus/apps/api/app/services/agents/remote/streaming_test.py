@@ -103,3 +103,34 @@ def test_works_with_the_in_memory_directory():
         return f"fact: {prompt}"
 
     assert _run(InMemoryRemoteAgentDirectory({RESEARCHER: answer})) == ["fact: what is JetStream?"]
+
+
+def test_a_chat_completion_joins_the_remote_agents_text(monkeypatch):
+    # POST /api/chat/complete: the same stream, its text without the steps.
+    from naas_abi.apps.nexus.apps.api.app.services import provider_runtime
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote import factory
+
+    directory = _Directory(
+        [
+            {"event": "ai_message", "data": "Jet"},
+            {"event": "tool_usage", "data": "search"},
+            {"event": "ai_message", "data": "Stream"},
+            {"event": "done", "data": "[DONE]"},
+        ]
+    )
+    monkeypatch.setattr(factory, "get_remote_agent_directory", lambda: directory)
+
+    text = asyncio.run(
+        provider_runtime.complete_chat(
+            [Message(role="user", content="what is JetStream?")],
+            _config(),
+            None,
+            thread_id="conv-1",
+            injection_preamble="USER PROFILE",
+        )
+    )
+
+    assert text == "JetStream"
+    assert directory.calls == [
+        (RESEARCHER.key, "USER PROFILE\n\nwhat is JetStream?", "conv-1", None)
+    ]

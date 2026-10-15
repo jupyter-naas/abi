@@ -1261,6 +1261,13 @@ class ChatService:
                         context=context,
                         client_context=request.context,
                     )
+                elif provider.type == "remote":
+                    injection_preamble = await self.build_remote_agent_preamble(
+                        prior_messages=prior_messages,
+                        user_id=context.actor_user_id,
+                        workspace_id=request.workspace_id,
+                        conversation_id=conversation_id,
+                    )
 
                 from naas_abi.agents.feature import bind_feature_context
                 from naas_abi.agents.slides import (

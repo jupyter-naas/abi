@@ -727,8 +727,40 @@ async def complete_chat(
             thread_id=thread_id,
             injection_preamble=injection_preamble,
         )
+    elif config.type == "remote":
+        return await complete_with_remote_agent(
+            messages, config, thread_id=thread_id, injection_preamble=injection_preamble
+        )
     else:
         raise ValueError(f"Unknown provider type: {config.type}")
+
+
+async def complete_with_remote_agent(
+    messages: list[Message],
+    config: ProviderConfig,
+    *,
+    thread_id: str | None,
+    injection_preamble: str | None,
+) -> str:
+    """The streamed answer of an agent published by a remote module, whole:
+    its text chunks joined, its step events left out."""
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote.streaming import (
+        stream_with_remote_agent,
+    )
+
+    if not thread_id:
+        raise ValueError("A remote agent needs a conversation (thread_id)")
+    parts: list[str] = []
+    async for chunk in stream_with_remote_agent(
+        messages,
+        config,
+        thread_id,
+        user_context_preamble=injection_preamble,
+        invocation_id=None,
+    ):
+        if isinstance(chunk, str):
+            parts.append(chunk)
+    return "".join(parts)
 
 
 async def complete_with_abi(
