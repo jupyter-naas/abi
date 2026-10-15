@@ -51,8 +51,9 @@ engine's, and other modules reach them through
   cancelled (cooperatively).
 - Repeating a submission with the same invocation id and the same input returns
   the stored run; changed input fails with `INVOCATION_CONFLICT`.
-- A conversation runs one turn at a time (a conversation claim). A module runs
-  at most 32 agent runs at once.
+- A conversation runs one turn at a time (a conversation claim). A module
+  process runs at most 200 agent runs at once, shared by every agent it hosts;
+  a submission past that fails with `AGENT_BUSY`.
 - A run stops after 300 seconds without new output
   (`run_module(..., agent_idle_timeout_seconds=...)`); there is no total limit.
 - In the chat API (`POST /api/chat/stream`, `/api/chat/complete`), a remote

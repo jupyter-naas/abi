@@ -342,7 +342,8 @@ services:
 ### Another engine's service
 
 In NATS mode, an engine can use a service another engine owns with the
-`nats_rpc` adapter (every kernel service except the model registry):
+`nats_rpc` adapter (every kernel service except the model registry and the
+bus, which is the broker's JetStream in NATS mode):
 
 ```yaml
 services:

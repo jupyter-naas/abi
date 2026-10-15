@@ -39,7 +39,7 @@ Every change, with what it means for your code, scripts and API clients, is in
 
 | | NATS off (phase 1) | NATS on (phase 2) |
 |---|---|---|
-| Install | Keep the `.abi` submodule (`naas-abi-proto` and `naas-abi-sdk` are published with 3.0). Add `naas-abi-core[dagster,rabbitmq]` (`abi deploy local` does it). | Same, plus the `[tool.uv.sources]` entries for `naas-abi-proto` and `naas-abi-sdk`. |
+| Install | Keep the `.abi` submodule: `naas-abi-proto` and `naas-abi-sdk` are not on PyPI before the 3.0 release. Add `naas-abi-core[dagster,rabbitmq]` (`abi deploy local` does it). | Same, plus the `[tool.uv.sources]` entries for `naas-abi-proto` and `naas-abi-sdk`. |
 | Deploy files | `abi deploy local --regenerate`, then `docker compose up -d --build --force-recreate`. | `nats:` block, no `bus:` section, `abi deploy local --regenerate`, `docker compose up -d --force-recreate --remove-orphans`. |
 | Data | Nothing moves. | Run `agent_memory_migrate` and `activity_log_migrate` before users chat. |
 | Scheduling | Dagster as before. | Module jobs; Dagster is not in the NATS stack. |
