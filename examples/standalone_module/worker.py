@@ -415,6 +415,17 @@ class ABIModule(BaseModule):
             r.name == repo.name
             for r in (await self.call(domain, "list_repos")).repos.repos
         )
+        # create_repo only creates: a name that exists, in any case, is refused.
+        created = await self.call(
+            domain, "create_repo", owner="demo", name="fresh", auto_init=True
+        )
+        assert not created.HasField("error") and created.repo.name == "fresh"
+        try:
+            await self.call(domain, "create_repo", owner="demo", name="FRESH")
+        except RPCError as exc:
+            assert exc.code == "REPO_EXISTS", exc
+        else:
+            raise AssertionError("create_repo returned a repository that exists")
 
         async def call(op, **fields):
             return await self.call(domain, op, repo_id="demo/repo", **fields)
