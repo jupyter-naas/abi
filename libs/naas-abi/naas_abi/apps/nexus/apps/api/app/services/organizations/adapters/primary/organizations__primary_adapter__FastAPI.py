@@ -12,7 +12,10 @@ from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     KNOWN_FEATURE_KEYS,
+    effective_workspace_overrides,
+    enabled_feature_catalog,
     resolve_role_baseline,
+    workspace_features,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth import avatar_store, user_drive_profile
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
@@ -53,10 +56,12 @@ from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
     WorkspaceSecondaryAdapterPostgres,
 )
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import WorkspaceUpdateInput
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
     WorkspaceMemberAlreadyExistsError,
     WorkspaceService,
 )
+from naas_abi.apps.nexus.apps.api.app.utils.public_urls import resolve_stored_asset_url
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from pydantic import BaseModel, Field
@@ -297,6 +302,19 @@ class OrganizationMemberWorkspacesUpdate(BaseModel):
 
 class OrganizationRoleFeaturesUpdate(BaseModel):
     role_baseline: dict[str, list[FeatureKey]]
+
+
+class OrganizationWorkspacesBulkUpdate(BaseModel):
+    """One property set on several workspaces at once (only the group for now)."""
+
+    workspace_ids: list[str] = Field(..., min_length=1, max_length=500)
+    # Blank clears the group (the workspaces list under "Others").
+    workspace_group: str = Field(..., max_length=100)
+
+
+class WorkspaceFeatureOverridesUpdate(BaseModel):
+    # None drops the saved overrides: the deployment config applies again.
+    overrides: dict[FeatureKey, bool] | None = None
 
 
 class OrganizationDomain(BaseModel):
@@ -570,12 +588,24 @@ async def upload_org_logo_rectangle(
     return {"logo_rectangle_url": updated.logo_rectangle_url}
 
 
+# Settings always stays reachable, so it cannot be overridden per workspace.
+_PINNED_FEATURES = ("settings",)
+
+
 def _workspace_payload(
     ws: OrganizationWorkspaceRecord,
     *,
     org_logo_url: str | None,
     org_logo_rect_url: str | None,
+    organization_override: dict[str, list[str]] | None = None,
 ) -> dict:
+    flags = settings.feature_flags
+    overrides, overrides_source = effective_workspace_overrides(
+        flags,
+        workspace_slug=ws.slug,
+        workspace_id=ws.id,
+        workspace_override=ws.feature_overrides,
+    )
     return {
         "id": ws.id,
         "name": ws.name,
@@ -584,12 +614,57 @@ def _workspace_payload(
         "organization_id": ws.organization_id,
         "created_at": ws.created_at,
         "updated_at": ws.updated_at,
-        "logo_url": ws.logo_url,
+        "logo_url": resolve_stored_asset_url(ws.logo_url),
         "logo_emoji": ws.logo_emoji,
         "workspace_group": ws.workspace_group,
-        "organization_logo_url": org_logo_url,
-        "organization_logo_rectangle_url": org_logo_rect_url,
+        "organization_logo_url": resolve_stored_asset_url(org_logo_url),
+        "organization_logo_rectangle_url": resolve_stored_asset_url(org_logo_rect_url),
+        # Features on for at least one role, after the overrides.
+        "features": workspace_features(
+            roles=_BASELINE_ROLES,
+            feature_flags_config=flags,
+            workspace_slug=ws.slug,
+            workspace_id=ws.id,
+            organization_id=ws.organization_id,
+            organization_override=organization_override,
+            workspace_override=ws.feature_overrides,
+        ),
+        "feature_overrides": overrides,
+        "feature_overrides_source": overrides_source,
     }
+
+
+async def _org_role_override(
+    org_id: str, service: OrganizationService
+) -> dict[str, list[str]] | None:
+    stored = await service.get_role_features(org_id=org_id)
+    return stored.role_baseline if stored is not None else None
+
+
+async def _org_workspace_payloads(
+    org_id: str,
+    service: OrganizationService,
+    workspaces: list[OrganizationWorkspaceRecord],
+) -> list[dict]:
+    org = await service.get_organization(org_id=org_id)
+    organization_override = await _org_role_override(org_id, service)
+    return [
+        _workspace_payload(
+            ws,
+            org_logo_url=org.logo_url if org else None,
+            org_logo_rect_url=org.logo_rectangle_url if org else None,
+            organization_override=organization_override,
+        )
+        for ws in workspaces
+    ]
+
+
+async def _require_org_admin(
+    user_id: str, org_id: str, service: OrganizationService, action: str
+) -> None:
+    role = await require_org_access(user_id, org_id, service)
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail=f"Only admins can {action}")
 
 
 @router.get("/{org_id}/workspaces")
@@ -600,20 +675,109 @@ async def list_org_workspaces(
 ) -> list[dict]:
     role = await require_org_access(current_user.id, org_id, service)
 
-    org = await service.get_organization(org_id=org_id)
-    org_logo_url = org.logo_url if org else None
-    org_logo_rect_url = org.logo_rectangle_url if org else None
-
     # Org owners/admins manage the full org catalog; members only see workspaces
     # they already belong to.
     if role in ("owner", "admin"):
         workspaces = await service.list_all_workspaces(org_id=org_id)
     else:
         workspaces = await service.list_workspaces(org_id=org_id, user_id=current_user.id)
-    return [
-        _workspace_payload(ws, org_logo_url=org_logo_url, org_logo_rect_url=org_logo_rect_url)
-        for ws in workspaces
+    return await _org_workspace_payloads(org_id, service, workspaces)
+
+
+@router.post("/{org_id}/workspaces/bulk-update")
+async def bulk_update_org_workspaces(
+    org_id: str,
+    body: OrganizationWorkspacesBulkUpdate,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+    workspace_service: WorkspaceService = Depends(get_workspace_service_for_org_invite),
+) -> dict:
+    """Set the group of several workspaces of this organization at once."""
+    await _require_org_admin(current_user.id, org_id, service, "edit workspaces")
+    org_workspaces = {ws.id: ws for ws in await service.list_all_workspaces(org_id=org_id)}
+    requested = list(dict.fromkeys(body.workspace_ids))
+    unknown = sorted(set(requested) - set(org_workspaces))
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Workspaces not in this organization: {', '.join(unknown)}",
+        )
+    for workspace_id in requested:
+        await workspace_service.update_workspace(
+            workspace_id=workspace_id,
+            updates=WorkspaceUpdateInput(workspace_group=body.workspace_group),
+        )
+    refreshed = [
+        ws for ws in await service.list_all_workspaces(org_id=org_id) if ws.id in set(requested)
     ]
+    return {
+        "updated": len(requested),
+        "workspaces": await _org_workspace_payloads(org_id, service, refreshed),
+    }
+
+
+@router.get("/{org_id}/workspace-features")
+async def get_org_workspace_features(
+    org_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+) -> dict:
+    """What the workspace features modal needs: the catalog and the role defaults."""
+    await _require_org_admin(current_user.id, org_id, service, "view workspace features")
+    flags = settings.feature_flags
+    role_baseline = resolve_role_baseline(
+        flags,
+        organization_id=org_id,
+        organization_override=await _org_role_override(org_id, service),
+    )
+    catalog = enabled_feature_catalog(flags)
+    return {
+        "catalog": catalog,
+        "pinned": [key for key in _PINNED_FEATURES if key in catalog],
+        "roles": list(_BASELINE_ROLES),
+        "role_baseline": {
+            role_name: [key for key in role_baseline.get(role_name, []) if key in catalog]
+            for role_name in _BASELINE_ROLES
+        },
+    }
+
+
+@router.put("/{org_id}/workspaces/{workspace_id}/features")
+async def update_org_workspace_features(
+    org_id: str,
+    workspace_id: str,
+    body: WorkspaceFeatureOverridesUpdate,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+    workspace_service: WorkspaceService = Depends(get_workspace_service_for_org_invite),
+) -> dict:
+    """Save a workspace's feature overrides; ``overrides: null`` restores the config ones."""
+    await _require_org_admin(current_user.id, org_id, service, "edit workspace features")
+    org_workspaces = {ws.id: ws for ws in await service.list_all_workspaces(org_id=org_id)}
+    if workspace_id not in org_workspaces:
+        raise HTTPException(status_code=404, detail="Workspace not found in this organization")
+    overrides = None
+    if body.overrides is not None:
+        catalog = set(enabled_feature_catalog(settings.feature_flags))
+        outside = sorted(key for key in body.overrides if key not in catalog)
+        if outside:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Features not enabled in deployment catalog: {', '.join(outside)}",
+            )
+        pinned = sorted(key for key in body.overrides if key in _PINNED_FEATURES)
+        if pinned:
+            raise HTTPException(
+                status_code=400, detail=f"Features always on: {', '.join(pinned)}"
+            )
+        overrides = {str(key): bool(value) for key, value in body.overrides.items()}
+    await workspace_service.set_workspace_feature_overrides(
+        workspace_id=workspace_id, overrides=overrides
+    )
+    refreshed = [
+        ws for ws in await service.list_all_workspaces(org_id=org_id) if ws.id == workspace_id
+    ]
+    return (await _org_workspace_payloads(org_id, service, refreshed))[0]
 
 
 @router.get("/{org_id}/member-workspaces")
@@ -625,16 +789,10 @@ async def list_org_member_workspaces(
     role = await require_org_access(current_user.id, org_id, service)
     if role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Only admins can list member workspaces")
-    org = await service.get_organization(org_id=org_id)
-    org_logo_url = org.logo_url if org else None
-    org_logo_rect_url = org.logo_rectangle_url if org else None
     workspaces = await service.list_all_workspaces(org_id=org_id)
     memberships = await service.list_workspace_memberships(org_id=org_id)
     return {
-        "workspaces": [
-            _workspace_payload(ws, org_logo_url=org_logo_url, org_logo_rect_url=org_logo_rect_url)
-            for ws in workspaces
-        ],
+        "workspaces": await _org_workspace_payloads(org_id, service, workspaces),
         "memberships": [
             {
                 "user_id": row.user_id,

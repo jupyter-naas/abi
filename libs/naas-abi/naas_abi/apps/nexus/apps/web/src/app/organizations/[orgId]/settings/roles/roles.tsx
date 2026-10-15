@@ -9,6 +9,7 @@ import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { OrgSettingsSectionCard } from '../components/org-settings-section-card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { SettingsFilterSelect, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
+import { FEATURE_LABELS } from '../lib/feature-labels';
 import '../components/org-settings-components.css';
 import './roles.css';
 
@@ -28,23 +29,6 @@ const ROLE_LABELS: Record<RoleName, string> = {
   admin: 'Admin',
   member: 'Member',
   viewer: 'Viewer',
-};
-
-const FEATURE_LABELS: Record<string, string> = {
-  maps: 'Maps',
-  chat: 'Chat',
-  files: 'Files',
-  agents: 'Agents',
-  skills: 'Skills',
-  apps: 'Apps',
-  marketplace: 'Marketplace',
-  search: 'Search',
-  ontology: 'Ontology',
-  graph: 'Graph',
-  datasets: 'Datasets',
-  settings: 'Settings',
-  code: 'Code',
-  slides: 'Slides',
 };
 
 function emptyBaseline(roles: RoleName[]): Record<RoleName, string[]> {

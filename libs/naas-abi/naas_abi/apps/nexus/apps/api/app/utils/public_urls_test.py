@@ -135,3 +135,18 @@ def test_loopback_without_scheme_uses_http() -> None:
 
 def test_empty_config_and_no_port_is_none() -> None:
     assert resolve_public_api_host(None) is None
+
+
+def test_resolve_stored_asset_url_passes_urls_through_and_maps_module_paths(monkeypatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.utils import public_urls
+
+    monkeypatch.setattr(public_urls, "public_api_host", lambda: "https://api.example.com")
+
+    assert public_urls.resolve_stored_asset_url(None) is None
+    assert public_urls.resolve_stored_asset_url("https://x.test/a.png") == "https://x.test/a.png"
+    assert public_urls.resolve_stored_asset_url("/api/workspaces/ws-1/logo") == (
+        "/api/workspaces/ws-1/logo"
+    )
+    assert public_urls.resolve_stored_asset_url(
+        "src/external/axa/assets/public/axa-logo.png"
+    ).startswith("https://api.example.com/modules/")

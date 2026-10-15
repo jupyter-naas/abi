@@ -86,18 +86,17 @@ _WORKSPACE_FIELDS = (
 
 
 def _apply_workspace_seed_fields(workspace: Any, workspace_cfg: WorkspaceSeedConfig) -> None:
-    """Copy seed branding onto an existing workspace.
+    """Fill the seed's name and branding into an existing workspace, bootstrap only.
 
-    ``background_image_url`` is special: most seeds omit it, and a wallpaper
-    chosen in the app is stored on the workspace drive (``.home``) with only
-    the URL kept here. Writing the seed's empty value on every boot would
-    drop that choice while leaving the file in place.
+    A field is written only when the workspace has no value for it yet, so a
+    name, logo, colour or wallpaper changed in the app survives restarts (logos
+    and wallpapers chosen in the app live in the workspace drive and only their
+    URL is kept here). To force a config value, clear the field in the app.
     """
     for field in _WORKSPACE_FIELDS:
         value = getattr(workspace_cfg, field)
-        if field == "background_image_url" and not value:
-            continue
-        setattr(workspace, field, value)
+        if value and not getattr(workspace, field, None):
+            setattr(workspace, field, value)
 
 
 def _normalize_email(email: str) -> str:
@@ -404,10 +403,14 @@ async def _upsert_workspace(
             organization.slug,
         )
     else:
-        workspace.owner_id = owner.id
-        workspace.organization_id = organization.id
+        # Bootstrap only, like the branding below: an owner or organization
+        # changed in the app is kept, the config only fills a missing one.
+        if not workspace.owner_id:
+            workspace.owner_id = owner.id
+        if not workspace.organization_id:
+            workspace.organization_id = organization.id
         _apply_workspace_seed_fields(workspace, workspace_cfg)
-        if workspace_cfg.group and not workspace.workspace_group:
+        if workspace_cfg.group and not getattr(workspace, "workspace_group", None):
             workspace.workspace_group = workspace_cfg.group
         workspace.updated_at = now
         logger.info(
@@ -416,7 +419,7 @@ async def _upsert_workspace(
             organization.slug,
         )
 
-    await _ensure_workspace_member(session, workspace.id, owner.id, "owner")
+    await _ensure_workspace_member(session, workspace.id, workspace.owner_id, "owner")
     _warn_ignored_members("workspace", workspace_cfg.slug, len(workspace_cfg.members))
 
     await _seed_workspace_apps(session, workspace.id, workspace_cfg.apps)

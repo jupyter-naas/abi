@@ -36,3 +36,11 @@
     min-height: 100px;
   }
 }
+
+/* Help under a field (the read-only slug), in the label style but not shouted. */
+.workspace-general-hint {
+  margin-top: var(--space-1);
+  font-weight: var(--font-weight-normal, 400);
+  text-transform: none;
+  letter-spacing: normal;
+}

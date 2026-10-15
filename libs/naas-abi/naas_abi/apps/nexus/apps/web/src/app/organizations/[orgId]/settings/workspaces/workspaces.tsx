@@ -12,11 +12,13 @@ import {
   ExternalLink,
   Filter,
   FolderKanban,
+  Pencil,
   Plus,
 } from 'lucide-react';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
 import { SearchBox } from '@/components/settings/search-box';
 import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
@@ -27,6 +29,13 @@ import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { rowMatchesColumnFilter } from '../users/users-table-filter';
 import { downloadTableExport, type UsersExportFormat } from '../users/users-table-export';
 import { isOrgAdminRole, orgSettingsSectionPath } from '../lib/nav';
+import { featureLabel } from '../lib/feature-labels';
+import { BulkEditModal } from './bulk-edit-modal';
+import {
+  WorkspaceFeaturesModal,
+  type OverridesSource,
+  type WorkspaceFeatureCatalog,
+} from './workspace-features-modal';
 import '../components/org-settings-components.css';
 import '../users/users.css';
 import './workspaces.css';
@@ -43,9 +52,13 @@ interface OrgWorkspace {
   workspace_group?: string | null;
   organization_logo_url?: string | null;
   organization_logo_rectangle_url?: string | null;
+  /** Features on for at least one role, after the overrides. */
+  features?: string[];
+  feature_overrides?: Record<string, boolean>;
+  feature_overrides_source?: OverridesSource;
 }
 
-type ColumnId = 'workspace' | 'group' | 'owner' | 'members' | 'created';
+type ColumnId = 'workspace' | 'group' | 'owner' | 'members' | 'features' | 'created';
 type SortDir = 'asc' | 'desc';
 
 const COLUMNS: { id: ColumnId; label: string; filterable: boolean }[] = [
@@ -53,6 +66,7 @@ const COLUMNS: { id: ColumnId; label: string; filterable: boolean }[] = [
   { id: 'group', label: 'Group', filterable: true },
   { id: 'owner', label: 'Owner', filterable: true },
   { id: 'members', label: 'Members', filterable: false },
+  { id: 'features', label: 'Features', filterable: true },
   { id: 'created', label: 'Created', filterable: false },
 ];
 
@@ -63,6 +77,40 @@ function groupOf(workspace: OrgWorkspace): string {
 function assetUrl(url?: string | null): string {
   if (!url) return '';
   return url.startsWith('/') ? `${getApiUrl()}${url}` : url;
+}
+
+/** Feature chips shown in a row; the rest collapses into "+N" (all in the tooltip). */
+const FEATURES_SHOWN = 3;
+
+function featuresOf(workspace: OrgWorkspace): string[] {
+  return (workspace.features ?? []).map(featureLabel);
+}
+
+/** Workspace logo, else the org logo, else the emoji or initial (also when an image fails). */
+function WorkspaceLogo({ workspace }: { workspace: OrgWorkspace }) {
+  const candidates = [
+    assetUrl(workspace.logo_url),
+    assetUrl(workspace.organization_logo_url),
+    assetUrl(workspace.organization_logo_rectangle_url),
+  ].filter(Boolean);
+  const [failed, setFailed] = useState(0);
+  const src = candidates[failed];
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt=""
+        className="org-settings-users-avatar-image org-workspaces-logo"
+        onError={() => setFailed((count) => count + 1)}
+      />
+    );
+  }
+  return (
+    <div className="org-settings-users-avatar org-workspaces-logo">
+      {workspace.logo_emoji || workspace.name.charAt(0).toUpperCase()}
+    </div>
+  );
 }
 
 function countFacets(values: string[]): FacetBucket[] {
@@ -76,7 +124,9 @@ function countFacets(values: string[]): FacetBucket[] {
 /**
  * Organization Settings > Workspaces: every workspace of the organization in a
  * table (search, sort, filters, export), like Organization Settings > Users.
- * Click a row to open the workspace's settings.
+ * Click a row to open the workspace's settings. Admins can select rows to
+ * bulk edit their group, and click a workspace's features to manage its
+ * feature overrides.
  */
 export default function OrganizationWorkspacesPage() {
   const params = useParams();
@@ -98,6 +148,10 @@ export default function OrganizationWorkspacesPage() {
   const [openFilter, setOpenFilter] = useState<{ id: ColumnId; left: number; top: number } | null>(
     null
   );
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [featuresWorkspaceId, setFeaturesWorkspaceId] = useState<string | null>(null);
+  const [featureCatalog, setFeatureCatalog] = useState<WorkspaceFeatureCatalog | null>(null);
   const canManage = isOrgAdminRole(viewerRole);
 
   useEffect(() => {
@@ -119,6 +173,9 @@ export default function OrganizationWorkspacesPage() {
         setViewerRole(role);
         if (isOrgAdminRole(role)) {
           void fetchMembers(orgId);
+          void authFetch(`/api/organizations/${orgId}/workspace-features`).then(async (res) => {
+            if (res.ok && !cancelled) setFeatureCatalog(await res.json());
+          });
           const membersRes = await authFetch(`/api/organizations/${orgId}/member-workspaces`);
           if (membersRes.ok && !cancelled) {
             const data: { memberships: { workspace_id: string }[] } = await membersRes.json();
@@ -157,6 +214,10 @@ export default function OrganizationWorkspacesPage() {
     (workspace: OrgWorkspace, columnId: ColumnId): string[] => {
       if (columnId === 'workspace') return [workspace.name, workspace.slug];
       if (columnId === 'group') return [groupOf(workspace)];
+      if (columnId === 'features') {
+        const features = featuresOf(workspace);
+        return features.length ? features : ['None'];
+      }
       if (columnId === 'owner') return [ownerName(workspace)];
       if (columnId === 'members') {
         return [memberCounts ? String(memberCounts[workspace.id] || 0) : '—'];
@@ -189,6 +250,8 @@ export default function OrganizationWorkspacesPage() {
         }
         cmp = ga.localeCompare(gb) || a.name.localeCompare(b.name);
       }
+      else if (sortKey === 'features')
+        cmp = featuresOf(a).length - featuresOf(b).length || a.name.localeCompare(b.name);
       else if (sortKey === 'owner') cmp = ownerName(a).localeCompare(ownerName(b));
       else if (sortKey === 'members')
         cmp = (memberCounts?.[a.id] || 0) - (memberCounts?.[b.id] || 0);
@@ -201,7 +264,8 @@ export default function OrganizationWorkspacesPage() {
   const loadFacets = useCallback(
     async (columnId: string, query: string): Promise<FacetBucket[]> => {
       const needle = query.trim().toLowerCase();
-      const values = workspaces.map((workspace) => cellValues(workspace, columnId as ColumnId)[0]);
+      // Every value counts (a workspace has several features).
+      const values = workspaces.flatMap((workspace) => cellValues(workspace, columnId as ColumnId));
       return countFacets(values).filter((bucket) => bucket.value.toLowerCase().includes(needle));
     },
     [workspaces, cellValues]
@@ -228,13 +292,14 @@ export default function OrganizationWorkspacesPage() {
   const exportVisible = (format: UsersExportFormat) => {
     const date = new Date().toISOString().slice(0, 10);
     downloadTableExport(
-      ['Name', 'Slug', 'Group', 'Owner', 'Members', 'Created'],
+      ['Name', 'Slug', 'Group', 'Owner', 'Members', 'Features', 'Created'],
       visibleWorkspaces.map((workspace) => [
         workspace.name,
         workspace.slug,
         groupOf(workspace),
         ownerName(workspace),
         cellValues(workspace, 'members')[0],
+        featuresOf(workspace).join(', '),
         cellValues(workspace, 'created')[0],
       ]),
       format,
@@ -245,6 +310,80 @@ export default function OrganizationWorkspacesPage() {
 
   const createHref = `${orgSettingsSectionPath(orgId, 'workspaces')}/new`;
 
+  // Selection is of visible rows: filtering hides a row, so it leaves the selection.
+  const visibleIds = useMemo(() => visibleWorkspaces.map((w) => w.id), [visibleWorkspaces]);
+  const selectedVisible = visibleIds.filter((id) => selected.has(id));
+  const allSelected = visibleIds.length > 0 && selectedVisible.length === visibleIds.length;
+  const someSelected = selectedVisible.length > 0 && !allSelected;
+
+  const toggleAll = () =>
+    setSelected(allSelected ? new Set() : new Set(visibleIds));
+
+  const toggleOne = (workspaceId: string, checked: boolean) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (checked) next.add(workspaceId);
+      else next.delete(workspaceId);
+      return next;
+    });
+
+  const mergeWorkspaces = (updated: OrgWorkspace[]) => {
+    const byId = new Map(updated.map((workspace) => [workspace.id, workspace]));
+    setWorkspaces((current) => current.map((workspace) => byId.get(workspace.id) ?? workspace));
+  };
+
+  const existingGroups = useMemo(
+    () =>
+      [...new Set(workspaces.map((w) => w.workspace_group?.trim()).filter(Boolean) as string[])].sort(
+        (a, b) => a.localeCompare(b)
+      ),
+    [workspaces]
+  );
+
+  const applyBulkEdit = async (_property: 'workspace_group', value: string) => {
+    const res = await authFetch(`/api/organizations/${orgId}/workspaces/bulk-update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace_ids: selectedVisible, workspace_group: value }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error(
+        typeof data?.detail === 'string' ? data.detail : `Failed to update (HTTP ${res.status}).`
+      );
+    }
+    const data: { workspaces: OrgWorkspace[] } = await res.json();
+    mergeWorkspaces(data.workspaces);
+    setSelected(new Set());
+    setBulkOpen(false);
+  };
+
+  const featuresWorkspace = workspaces.find((w) => w.id === featuresWorkspaceId) ?? null;
+  const featuresOverrides = useMemo(
+    () => featuresWorkspace?.feature_overrides ?? {},
+    [featuresWorkspace]
+  );
+
+  const saveFeatures = async (overrides: Record<string, boolean> | null) => {
+    if (!featuresWorkspace) return;
+    const res = await authFetch(
+      `/api/organizations/${orgId}/workspaces/${featuresWorkspace.id}/features`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ overrides }),
+      }
+    );
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error(
+        typeof data?.detail === 'string' ? data.detail : `Failed to save (HTTP ${res.status}).`
+      );
+    }
+    mergeWorkspaces([await res.json()]);
+    setFeaturesWorkspaceId(null);
+  };
+
   return (
     <div className="org-settings-users-page">
       <div className="org-settings-users-main">
@@ -254,6 +393,22 @@ export default function OrganizationWorkspacesPage() {
           subtitle="Workspaces of this organization. Click a row to open its settings."
           actions={
             <>
+              {canManage && (
+                <button
+                  type="button"
+                  className="org-settings-users-secondary-button"
+                  onClick={() => setBulkOpen(true)}
+                  disabled={selectedVisible.length === 0}
+                  title={
+                    selectedVisible.length === 0
+                      ? 'Select workspaces with the checkboxes first'
+                      : undefined
+                  }
+                >
+                  <Pencil size={16} />
+                  Edit{selectedVisible.length ? ` (${selectedVisible.length})` : ''}
+                </button>
+              )}
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger asChild>
                   <button
@@ -351,6 +506,20 @@ export default function OrganizationWorkspacesPage() {
             <table className="org-settings-users-table">
               <thead>
                 <tr>
+                  {canManage && (
+                    <th className="org-workspaces-select">
+                      <Checkbox
+                        checked={allSelected}
+                        ref={(element) => {
+                          if (element) element.indeterminate = someSelected;
+                        }}
+                        onCheckedChange={toggleAll}
+                        disabled={visibleIds.length === 0}
+                        aria-label={allSelected ? 'Deselect all' : 'Select all'}
+                        title={allSelected ? 'Deselect all' : 'Select all'}
+                      />
+                    </th>
+                  )}
                   {COLUMNS.map((column) => {
                     const sorted = sortKey === column.id;
                     const active = !isBlank(columnFilters[column.id]);
@@ -415,35 +584,39 @@ export default function OrganizationWorkspacesPage() {
               <tbody>
                 {visibleWorkspaces.length === 0 && (
                   <tr>
-                    <td colSpan={COLUMNS.length + 1} className="org-settings-users-no-match">
+                    <td
+                      colSpan={COLUMNS.length + (canManage ? 2 : 1)}
+                      className="org-settings-users-no-match"
+                    >
                       No workspaces match the current search and filters
                     </td>
                   </tr>
                 )}
                 {visibleWorkspaces.map((workspace) => {
-                  const logo =
-                    assetUrl(workspace.logo_url) ||
-                    assetUrl(workspace.organization_logo_url) ||
-                    assetUrl(workspace.organization_logo_rectangle_url);
+                  const features = featuresOf(workspace);
                   return (
                     <tr
                       key={workspace.id}
-                      className="org-settings-users-row-link"
+                      className={`org-settings-users-row-link${
+                        selected.has(workspace.id) ? ' org-workspaces-row-selected' : ''
+                      }`}
                       onClick={(event) => {
-                        if ((event.target as HTMLElement).closest('a, button')) return;
+                        if ((event.target as HTMLElement).closest('a, button, input, label')) return;
                         router.push(`/workspace/${workspace.id}/settings`);
                       }}
                     >
+                      {canManage && (
+                        <td className="org-workspaces-select">
+                          <Checkbox
+                            checked={selected.has(workspace.id)}
+                            onCheckedChange={(checked) => toggleOne(workspace.id, checked)}
+                            aria-label={`Select ${workspace.name}`}
+                          />
+                        </td>
+                      )}
                       <td>
                         <div className="org-settings-users-row-start">
-                          {logo ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={logo} alt="" className="org-settings-users-avatar-image" />
-                          ) : (
-                            <div className="org-settings-users-avatar">
-                              {workspace.logo_emoji || workspace.name.charAt(0).toUpperCase()}
-                            </div>
-                          )}
+                          <WorkspaceLogo workspace={workspace} />
                           <div className="org-settings-users-identity">
                             <p className="org-settings-users-name">{workspace.name}</p>
                             <p className="org-settings-users-email">/{workspace.slug}</p>
@@ -463,6 +636,45 @@ export default function OrganizationWorkspacesPage() {
                       </td>
                       <td>{ownerName(workspace)}</td>
                       <td>{cellValues(workspace, 'members')[0]}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="org-workspaces-features"
+                          onClick={() => setFeaturesWorkspaceId(workspace.id)}
+                          title={`${features.join(', ') || 'No features'}\n${
+                            canManage ? 'Click to manage feature overrides' : 'Click to show features'
+                          }`}
+                        >
+                          {features.length ? (
+                            <>
+                              {features.slice(0, FEATURES_SHOWN).map((feature) => (
+                                <span key={feature} className="org-workspaces-feature">
+                                  {feature}
+                                </span>
+                              ))}
+                              {features.length > FEATURES_SHOWN && (
+                                <span className="org-workspaces-feature org-workspaces-feature-more">
+                                  +{features.length - FEATURES_SHOWN}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="org-settings-users-email">None</span>
+                          )}
+                          {workspace.feature_overrides_source && (
+                            <span
+                              className="org-workspaces-feature-source"
+                              title={
+                                workspace.feature_overrides_source === 'database'
+                                  ? 'Overrides saved in the app'
+                                  : 'Overrides from the deployment config'
+                              }
+                            >
+                              {workspace.feature_overrides_source === 'database' ? 'custom' : 'config'}
+                            </span>
+                          )}
+                        </button>
+                      </td>
                       <td>
                         <span className="org-settings-users-email">
                           {cellValues(workspace, 'created')[0]}
@@ -487,8 +699,27 @@ export default function OrganizationWorkspacesPage() {
 
         <p className="org-settings-footnote">
           Members counts workspace members; org owners and admins reach every workspace anyway.
-          Workspaces inherit the organization branding unless they set their own logo.
+          Workspaces inherit the organization branding unless they set their own logo. Features
+          lists what at least one role can open; click it to override the role defaults.
         </p>
+
+        <BulkEditModal
+          open={bulkOpen}
+          count={selectedVisible.length}
+          groups={existingGroups}
+          onClose={() => setBulkOpen(false)}
+          onApply={applyBulkEdit}
+        />
+        <WorkspaceFeaturesModal
+          open={featuresWorkspace !== null}
+          workspaceName={featuresWorkspace?.name ?? ''}
+          overrides={featuresOverrides}
+          source={featuresWorkspace?.feature_overrides_source ?? null}
+          catalog={featureCatalog}
+          canEdit={canManage}
+          onClose={() => setFeaturesWorkspaceId(null)}
+          onSave={saveFeatures}
+        />
       </div>
     </div>
   );

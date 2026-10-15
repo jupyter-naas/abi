@@ -5,6 +5,10 @@ from datetime import datetime
 from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
+    dump_feature_overrides,
+    parse_feature_overrides,
+)
 from naas_abi.apps.nexus.apps.api.app.core.workspace_access import (
     INHERITED_FROM_ORG,
     accessible_workspace_ids,
@@ -77,6 +81,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             font_family=model.font_family,
             description=model.description,
             workspace_group=model.workspace_group,
+            feature_overrides=parse_feature_overrides(getattr(model, "feature_overrides", None)),
             platform_drive_enabled=bool(model.platform_drive_enabled),
             system_drive_enabled=bool(model.system_drive_enabled),
             created_at=model.created_at,
@@ -173,6 +178,8 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             background_image_url=workspace.background_image_url,
             sidebar_color=workspace.sidebar_color,
             font_family=workspace.font_family,
+            description=(workspace.description or "").strip() or None,
+            workspace_group=(workspace.workspace_group or "").strip() or None,
             created_at=now,
             updated_at=now,
         )
@@ -188,6 +195,20 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
         )
         await self.db.flush()
         return self._to_workspace_record(workspace_model)
+
+    async def set_workspace_feature_overrides(
+        self, workspace_id: str, overrides: dict[str, bool] | None
+    ) -> WorkspaceRecord | None:
+        result = await self.db.execute(
+            select(WorkspaceModel).where(WorkspaceModel.id == workspace_id)
+        )
+        workspace = result.scalar_one_or_none()
+        if workspace is None:
+            return None
+        workspace.feature_overrides = dump_feature_overrides(overrides)
+        workspace.updated_at = datetime.now(UTC).replace(tzinfo=None)
+        await self.db.flush()
+        return self._to_workspace_record(workspace)
 
     async def delete_workspace(self, workspace_id: str) -> bool:
         result = await self.db.execute(

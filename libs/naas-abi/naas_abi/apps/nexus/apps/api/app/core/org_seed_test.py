@@ -128,10 +128,13 @@ def test_reseed_keeps_a_wallpaper_the_config_does_not_set(monkeypatch: pytest.Mo
     )
 
     assert workspace.background_image_url == saved
-    assert workspace.primary_color == "#0057B8"
+    # Bootstrap only: the colour already on the workspace wins over the config.
+    assert workspace.primary_color == "#000000"
 
 
-def test_reseed_applies_a_wallpaper_the_config_sets(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_reseed_keeps_a_wallpaper_set_in_the_app_over_the_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     workspace = SimpleNamespace(
         id="ws-1",
         owner_id="user-1",
@@ -170,7 +173,7 @@ def test_reseed_applies_a_wallpaper_the_config_sets(monkeypatch: pytest.MonkeyPa
         )
     )
 
-    assert workspace.background_image_url == seeded
+    assert workspace.background_image_url == "/api/workspaces/ws-1/background-image?v=custom.png"
 
 
 def test_an_existing_admin_with_a_real_password_is_left_alone(seed_admin) -> None:
@@ -301,3 +304,107 @@ def test_reseed_sets_the_group_only_when_the_workspace_has_none(
     )
 
     assert workspace.workspace_group == expected
+
+
+def test_reseed_keeps_name_logo_and_colours_set_in_the_ui(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = SimpleNamespace(
+        id="ws-1",
+        owner_id="user-1",
+        organization_id="org-1",
+        name="Orange (renamed in the UI)",
+        logo_url="/api/workspaces/ws-1/logo",
+        logo_emoji=None,
+        primary_color="#123456",
+        accent_color=None,
+        background_color=None,
+        background_image_url=None,
+        sidebar_color=None,
+        font_family=None,
+        workspace_group=None,
+        updated_at=None,
+    )
+    session = MagicMock()
+    session.execute = AsyncMock(
+        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=workspace))
+    )
+    _patch_member_helpers(monkeypatch, SimpleNamespace(id="user-1"))
+    cfg = WorkspaceSeedConfig(
+        name="Orange",
+        slug="orange",
+        owner_email=ADMIN,
+        logo_url="https://example.com/orange.png",
+        primary_color="#22c55e",
+        accent_color="#ff7900",
+    )
+
+    asyncio.run(
+        org_seed._upsert_workspace(
+            session, cfg, SimpleNamespace(id="org-1", owner_id="user-1", slug="forvis"), {}
+        )
+    )
+
+    # Values already on the workspace win; the seed only fills empty ones.
+    assert workspace.name == "Orange (renamed in the UI)"
+    assert workspace.logo_url == "/api/workspaces/ws-1/logo"
+    assert workspace.primary_color == "#123456"
+    assert workspace.accent_color == "#ff7900"
+    assert workspace.background_image_url is None
+
+
+def test_reseed_keeps_the_workspace_owner_and_organization_set_in_the_app(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = SimpleNamespace(
+        id="ws-1",
+        owner_id="user-2",
+        organization_id="org-2",
+        background_image_url=None,
+        workspace_group=None,
+        updated_at=None,
+    )
+    session = MagicMock()
+    session.execute = AsyncMock(
+        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=workspace))
+    )
+    ensured = _patch_member_helpers(monkeypatch, SimpleNamespace(id="user-1"))
+    cfg = WorkspaceSeedConfig(name="Valeo", slug="valeo", owner_email=ADMIN)
+
+    asyncio.run(
+        org_seed._upsert_workspace(
+            session, cfg, SimpleNamespace(id="org-1", owner_id="user-1", slug="forvis"), {}
+        )
+    )
+
+    assert (workspace.owner_id, workspace.organization_id) == ("user-2", "org-2")
+    # The owner membership follows the workspace's actual owner, not the config.
+    assert ensured == [("workspace", "ws-1", "user-2", "owner")]
+
+
+def test_reseed_fills_a_missing_workspace_owner_and_organization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = SimpleNamespace(
+        id="ws-1",
+        owner_id=None,
+        organization_id=None,
+        background_image_url=None,
+        workspace_group=None,
+        updated_at=None,
+    )
+    session = MagicMock()
+    session.execute = AsyncMock(
+        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=workspace))
+    )
+    ensured = _patch_member_helpers(monkeypatch, SimpleNamespace(id="user-1"))
+    cfg = WorkspaceSeedConfig(name="Valeo", slug="valeo", owner_email=ADMIN)
+
+    asyncio.run(
+        org_seed._upsert_workspace(
+            session, cfg, SimpleNamespace(id="org-1", owner_id="user-1", slug="forvis"), {}
+        )
+    )
+
+    assert (workspace.owner_id, workspace.organization_id) == ("user-1", "org-1")
+    assert ensured == [("workspace", "ws-1", "user-1", "owner")]

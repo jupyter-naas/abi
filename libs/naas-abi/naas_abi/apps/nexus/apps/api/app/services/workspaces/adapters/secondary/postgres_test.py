@@ -148,3 +148,49 @@ async def test_group_is_saved_and_a_blank_group_clears_it(db) -> None:
         workspace_id="ws-1", updates=WorkspaceUpdateInput(workspace_group="  ")
     )
     assert cleared.workspace_group is None
+
+
+@pytest.mark.asyncio
+async def test_create_saves_the_description_and_a_trimmed_group(db) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import WorkspaceCreateInput
+
+    adapter = WorkspaceSecondaryAdapterPostgres(db=db)
+
+    created = await adapter.create_workspace(
+        WorkspaceCreateInput(
+            name="Two",
+            slug="two",
+            owner_id="founder",
+            organization_id="org-1",
+            description="Second workspace",
+            workspace_group=" Key Accounts ",
+        )
+    )
+    assert (created.slug, created.description, created.workspace_group) == (
+        "two",
+        "Second workspace",
+        "Key Accounts",
+    )
+
+    ungrouped = await adapter.create_workspace(
+        WorkspaceCreateInput(
+            name="Three", slug="three", owner_id="founder", workspace_group="  "
+        )
+    )
+    assert ungrouped.workspace_group is None
+
+
+@pytest.mark.asyncio
+async def test_feature_overrides_are_saved_and_none_restores_the_config(db) -> None:
+    adapter = WorkspaceSecondaryAdapterPostgres(db=db)
+
+    saved = await adapter.set_workspace_feature_overrides("ws-1", {"maps": False, "graph": True})
+    assert saved.feature_overrides == {"graph": True, "maps": False}
+    assert (await adapter.get_workspace_by_id("ws-1")).feature_overrides == {
+        "graph": True,
+        "maps": False,
+    }
+
+    cleared = await adapter.set_workspace_feature_overrides("ws-1", None)
+    assert cleared.feature_overrides is None
+    assert await adapter.set_workspace_feature_overrides("ws-missing", {}) is None

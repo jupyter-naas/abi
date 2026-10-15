@@ -74,7 +74,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
     WorkspaceSlugAlreadyExistsError,
 )
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
-    resolve_public_module_asset_url,
+    resolve_stored_asset_url,
 )
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
@@ -145,6 +145,8 @@ class WorkspaceCreate(BaseModel):
     background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    description: str | None = Field(default=None, max_length=200)
+    workspace_group: str | None = Field(default=None, max_length=100)
 
 
 class WorkspaceUpdate(BaseModel):
@@ -246,14 +248,7 @@ async def _load_org_role_overrides(
 
 def _workspace_public_asset_url(raw: str | None) -> str | None:
     """Rewrite module asset paths (``src/external/…/assets/public/…``) to API URLs."""
-    if not raw:
-        return raw
-    if raw.startswith(("http://", "https://", "/uploads/", "/api/")):
-        return raw
-    try:
-        return resolve_public_module_asset_url(raw, abi_module_path=None)
-    except Exception:
-        return raw
+    return resolve_stored_asset_url(raw)
 
 
 def _to_schema(
@@ -293,6 +288,7 @@ def _to_schema(
             workspace_id=record.id,
             organization_id=record.organization_id,
             organization_override=organization_override,
+            workspace_override=record.feature_overrides,
         ),
     )
 
@@ -386,6 +382,8 @@ async def create_workspace(
                 background_image_url=workspace.background_image_url,
                 sidebar_color=workspace.sidebar_color,
                 font_family=workspace.font_family,
+                description=workspace.description,
+                workspace_group=workspace.workspace_group,
             )
         )
     except WorkspaceSlugAlreadyExistsError as exc:

@@ -181,6 +181,23 @@ def resolve_public_module_asset_url(
         return asset_path
 
 
+def resolve_stored_asset_url(raw: str | None) -> str | None:
+    """A logo or wallpaper URL as stored on a workspace, made loadable by a browser.
+
+    Absolute URLs and API paths (``/api/…``, ``/uploads/…``) pass through;
+    module asset paths (``src/external/<module>/assets/public/…``, as the
+    config seeds them) become public ``/modules/`` URLs.
+    """
+    if not raw:
+        return raw
+    if raw.startswith(("http://", "https://", "/uploads/", "/api/")):
+        return raw
+    try:
+        return resolve_public_module_asset_url(raw, abi_module_path=None)
+    except Exception:
+        return raw
+
+
 def public_modules_url(path: str) -> str:
     """Absolute public-API URL for a module asset under ``/modules/<path>``.
 

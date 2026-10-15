@@ -91,6 +91,27 @@ and per-member workspace assignment.
    group is edited in Workspace Settings > General, and a blank value clears
    it. The config `group:` key is bootstrap only: it is applied when a
    workspace has no group yet, so a group changed in the UI stays.
+   Create workspace (Organization Settings > Workspaces > Create) uses the
+   General layout and sets the group, description and colours at creation.
+   The slug is chosen there and is read-only in General afterwards, because
+   the seed and graph policies match workspaces by slug. `/workspace/<slug>`
+   opens a workspace like its id. Org owners and admins can set the group of
+   several workspaces at once (`POST /api/organizations/{org}/workspaces/bulk-update`).
+11. **Workspace feature overrides are bootstrap only.** The org Workspaces
+   table lists each workspace's features (on for at least one role). Clicking
+   them edits the overrides (Default / On / Off per feature), saved in
+   `workspaces.feature_overrides` (JSON, migration 0056) via
+   `PUT /api/organizations/{org}/workspaces/{id}/features`. Once saved, they
+   replace the config `feature_flags.workspace_overrides` entry for that
+   workspace. Saving `null` ("Use config") applies the config again. Settings
+   cannot be overridden.
+10. **Workspace name and branding are bootstrap only.** On an existing
+   workspace the seed fills `name`, `logo_url`, `logo_emoji`, the colours,
+   `background_image_url` and `font_family` only where the workspace has no
+   value yet. Renames, logos and colours changed in the app survive restarts.
+   To re-apply a config value, clear the field in the app and restart. The
+   workspace `owner_id` and `organization_id` follow the same rule, and the
+   owner membership the seed ensures is the workspace's actual owner.
 
 ## Consequences
 

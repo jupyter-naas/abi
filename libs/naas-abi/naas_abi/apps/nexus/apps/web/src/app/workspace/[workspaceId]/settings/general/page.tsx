@@ -56,9 +56,10 @@ async function readApiError(response: Response, fallback: string): Promise<strin
 }
 
 /**
- * Settings → General: the workspace's identity (name, and logo stored in the
- * workspace drive like account avatars), its desk wallpaper (the same editor as
- * Home → File → Edit background image) and its colors.
+ * Settings → General: the workspace's identity (name, group, slug, description,
+ * and logo stored in the workspace drive like account avatars), its desk
+ * wallpaper (the same editor as Home → File → Edit background image) and its
+ * colors.
  */
 export default function GeneralSettingsPage() {
   const workspaces = useWorkspaceStore((state) => state.workspaces);
@@ -298,6 +299,7 @@ export default function GeneralSettingsPage() {
         <div className="min-w-0">
           <h3 className="account-profile-avatar-info-name">{workspace.name}</h3>
           <p className="account-profile-avatar-info-email">
+            {workspace.slug ? `/${workspace.slug} · ` : ''}
             {workspace.id}
             {workspace.currentUserRole ? ` · Your role: ${workspace.currentUserRole}` : ''}
           </p>
@@ -348,6 +350,23 @@ export default function GeneralSettingsPage() {
               disabled={!canEdit || saving}
               className="account-profile-field-input"
             />
+          </div>
+          <div className="account-profile-field">
+            <label className="account-profile-field-label" htmlFor="workspace-slug">
+              Slug
+            </label>
+            <input
+              id="workspace-slug"
+              type="text"
+              value={workspace.slug ?? ''}
+              readOnly
+              disabled
+              className="account-profile-field-input"
+            />
+            <span className="account-profile-field-label workspace-general-hint">
+              Set at creation. /workspace/{workspace.slug || '<slug>'} opens this workspace like
+              its id.
+            </span>
           </div>
         </div>
         <div className="account-profile-field">

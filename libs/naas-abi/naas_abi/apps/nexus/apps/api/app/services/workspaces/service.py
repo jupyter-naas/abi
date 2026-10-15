@@ -78,6 +78,13 @@ class WorkspaceService:
     ) -> WorkspaceRecord | None:
         return await self.adapter.update_workspace(workspace_id=workspace_id, updates=updates)
 
+    async def set_workspace_feature_overrides(
+        self, workspace_id: str, overrides: dict[str, bool] | None
+    ) -> WorkspaceRecord | None:
+        return await self.adapter.set_workspace_feature_overrides(
+            workspace_id=workspace_id, overrides=overrides
+        )
+
     async def get_workspace_stats(self, workspace_id: str) -> WorkspaceStatsRecord | None:
         return await self.adapter.get_workspace_stats(workspace_id=workspace_id)
 

@@ -22,6 +22,8 @@ class WorkspaceRecord:
     font_family: str | None = None
     description: str | None = None
     workspace_group: str | None = None
+    # Saved in Organization Settings > Workspaces; None = config overrides apply.
+    feature_overrides: dict[str, bool] | None = None
     platform_drive_enabled: bool = False
     system_drive_enabled: bool = False
     created_at: datetime | None = None
@@ -44,6 +46,8 @@ class WorkspaceCreateInput:
     background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    description: str | None = None
+    workspace_group: str | None = None
 
 
 @dataclass
@@ -165,6 +169,13 @@ class WorkspacePermissionPort(ABC):
     async def update_workspace(
         self, workspace_id: str, updates: WorkspaceUpdateInput
     ) -> WorkspaceRecord | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def set_workspace_feature_overrides(
+        self, workspace_id: str, overrides: dict[str, bool] | None
+    ) -> WorkspaceRecord | None:
+        """Save the workspace's feature overrides; ``None`` restores the config ones."""
         raise NotImplementedError
 
     @abstractmethod

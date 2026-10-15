@@ -1,19 +1,26 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { AlertCircle, ArrowLeft, Camera, FolderPlus, X } from 'lucide-react';
+import { Brush, Camera, Check, Image as ImageIcon, Palette, Save, Trash2, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { SettingsField, SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
+import { OTHERS_GROUP } from '@/lib/workspace-picker';
 import { authFetch } from '@/stores/auth';
+import { DEFAULT_THEME, PRESET_COLORS } from '@/stores/workspace';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
 import { orgSettingsSectionPath } from '../../lib/nav';
 import { slugify, WORKSPACE_SLUG } from './slug';
 import '@/app/account/profile/profile.css';
-import '../../users/users.css';
+import '@/app/workspace/[workspaceId]/settings/general/general.css';
+import '../workspaces.css';
 
 const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
+/** Same limit as the API (WorkspaceCreate.description). */
+const DESCRIPTION_MAX_LENGTH = 200;
 
 async function readApiError(response: Response, fallback: string): Promise<string> {
   try {
@@ -26,9 +33,12 @@ async function readApiError(response: Response, fallback: string): Promise<strin
 }
 
 /**
- * Create workspace (Organization Settings > Workspaces). The logo is picked
- * here and uploaded right after the workspace exists, into the workspace drive
- * (``.settings/logos/logo.<ext>``, previous logos archived), like account avatars.
+ * Create workspace (Organization Settings > Workspaces), laid out like
+ * Workspace Settings > General: logo, name, group, slug, description and
+ * colors. Save (top right) creates it; the cross closes without saving. The
+ * logo is uploaded right after the workspace exists, into the workspace drive
+ * (``.settings/logos/logo.<ext>``). The desk wallpaper needs the workspace
+ * drive, so it is set in General afterwards.
  */
 export default function OrgCreateWorkspacePage() {
   const params = useParams();
@@ -37,8 +47,12 @@ export default function OrgCreateWorkspacePage() {
   const listHref = orgSettingsSectionPath(orgId, 'workspaces');
 
   const [name, setName] = useState('');
+  const [group, setGroup] = useState('');
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
+  const [description, setDescription] = useState('');
+  const [primaryColor, setPrimaryColor] = useState(DEFAULT_THEME.primaryColor);
+  const [accentColor, setAccentColor] = useState(DEFAULT_THEME.accentColor ?? '');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState('');
   const [error, setError] = useState('');
@@ -55,9 +69,10 @@ export default function OrgCreateWorkspacePage() {
     return () => URL.revokeObjectURL(url);
   }, [logoFile]);
 
+  const trimmedName = name.trim();
   const effectiveSlug = slugEdited ? slug : slugify(name);
   const slugValid = WORKSPACE_SLUG.test(effectiveSlug);
-  const canCreate = name.trim().length > 0 && slugValid && !creating;
+  const canCreate = trimmedName.length > 0 && slugValid && !creating;
 
   const pickLogo = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -83,7 +98,15 @@ export default function OrgCreateWorkspacePage() {
       const res = await authFetch('/api/workspaces', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), slug: effectiveSlug, organization_id: orgId }),
+        body: JSON.stringify({
+          name: trimmedName,
+          slug: effectiveSlug,
+          organization_id: orgId,
+          workspace_group: group.trim() || null,
+          description: description.trim() || null,
+          primary_color: primaryColor,
+          accent_color: accentColor || null,
+        }),
       });
       if (!res.ok) {
         throw new Error(await readApiError(res, `Failed to create the workspace (HTTP ${res.status}).`));
@@ -112,44 +135,44 @@ export default function OrgCreateWorkspacePage() {
     }
   };
 
-  return (
-    <div className="account-profile-page">
-      <Link href={listHref} className="org-member-detail-back">
-        <ArrowLeft size={14} />
-        Workspaces
-      </Link>
+  const selectedRing = 'ring-2 ring-foreground ring-offset-2 ring-offset-background';
+  const isCustomColor = !PRESET_COLORS.some((c) => c.value === primaryColor);
 
+  return (
+    <div
+      className="workspace-general space-y-6"
+      // Focus rings and Save follow the colour picked below.
+      style={{ '--workspace-accent': primaryColor } as CSSProperties}
+    >
       <AccountPageHeader
         title="Create workspace"
         subtitle="Add a workspace to this organization. You become its owner; org owners and admins reach it too."
         actions={
-          <div className="org-member-detail-actions">
-            <button
-              type="button"
-              onClick={() => router.push(listHref)}
-              className="org-member-detail-cancel-button"
-            >
-              Cancel
-            </button>
+          <div className="org-create-workspace-actions">
             <button
               type="button"
               onClick={() => void handleCreate()}
               disabled={!canCreate}
-              className="account-profile-save-button"
+              className="account-profile-save-button workspace-general-save"
             >
-              <FolderPlus size={16} />
+              <Save size={16} />
               {creating ? 'Creating...' : 'Create workspace'}
             </button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => router.push(listHref)}
+              disabled={creating}
+              title="Close without creating"
+              aria-label="Close without creating"
+            >
+              <X size={18} />
+            </Button>
           </div>
         }
       />
 
-      {error && (
-        <div className="org-settings-users-alert" role="alert">
-          <AlertCircle size={16} />
-          <span>{error}</span>
-        </div>
-      )}
+      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
 
       <div className="account-profile-avatar-section">
         <div className="account-profile-avatar-wrapper">
@@ -162,10 +185,17 @@ export default function OrgCreateWorkspacePage() {
           />
           {logoPreview ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoPreview} alt="" className="account-profile-avatar-image" />
+            <img
+              src={logoPreview}
+              alt=""
+              className="account-profile-avatar-image workspace-logo-square"
+            />
           ) : (
-            <div className="account-profile-avatar-placeholder">
-              {(name.trim() || '?').charAt(0).toUpperCase()}
+            <div
+              className="account-profile-avatar-placeholder workspace-logo-square"
+              style={{ backgroundColor: primaryColor, color: '#fff' }}
+            >
+              {(trimmedName || '?').charAt(0).toUpperCase()}
             </div>
           )}
           <button
@@ -174,27 +204,28 @@ export default function OrgCreateWorkspacePage() {
             disabled={creating}
             className="account-profile-avatar-upload-button"
             title="Choose a logo"
+            aria-label="Choose a logo"
           >
             <Camera size={16} />
           </button>
         </div>
-        <div>
-          <h3 className="account-profile-avatar-info-name">{name.trim() || 'New workspace'}</h3>
+        <div className="min-w-0">
+          <h3 className="account-profile-avatar-info-name">{trimmedName || 'New workspace'}</h3>
           <p className="account-profile-avatar-info-email">/{effectiveSlug || 'slug'}</p>
           <p className="account-profile-avatar-info-hint">
-            Workspace logo (PNG, JPG, GIF, WEBP or SVG, max 5MB), uploaded when the workspace is
-            created. Without one, the organization logo is shown.
+            Logo: PNG, JPG, GIF, WEBP or SVG, max 5MB, uploaded when the workspace is created.
+            Without a logo, the first letter of the name is shown.
           </p>
-          {logoFile ? (
+          {logoFile && (
             <button
               type="button"
               onClick={() => setLogoFile(null)}
-              className="account-profile-avatar-remove-button"
+              className="mt-1 flex items-center gap-1.5 px-3 py-2 text-sm text-red-500 transition-colors hover:bg-red-500/10"
             >
-              <X size={12} />
+              <Trash2 size={14} />
               Remove logo
             </button>
-          ) : null}
+          )}
         </div>
       </div>
 
@@ -202,7 +233,7 @@ export default function OrgCreateWorkspacePage() {
         <div className="account-profile-form-grid">
           <div className="account-profile-field">
             <label className="account-profile-field-label" htmlFor="create-workspace-name">
-              Name
+              Workspace name
             </label>
             <input
               id="create-workspace-name"
@@ -211,8 +242,24 @@ export default function OrgCreateWorkspacePage() {
               onChange={(event) => setName(event.target.value)}
               placeholder="Workspace name"
               maxLength={200}
+              disabled={creating}
               className="account-profile-field-input"
               autoFocus
+            />
+          </div>
+          <div className="account-profile-field">
+            <label className="account-profile-field-label" htmlFor="create-workspace-group">
+              Group
+            </label>
+            <input
+              id="create-workspace-group"
+              type="text"
+              value={group}
+              onChange={(event) => setGroup(event.target.value)}
+              placeholder={`${OTHERS_GROUP} when empty`}
+              maxLength={100}
+              disabled={creating}
+              className="account-profile-field-input"
             />
           </div>
           <div className="account-profile-field">
@@ -229,17 +276,131 @@ export default function OrgCreateWorkspacePage() {
               }}
               placeholder="workspace-slug"
               maxLength={100}
+              disabled={creating}
               className="account-profile-field-input"
             />
-            {effectiveSlug && !slugValid && (
+            {effectiveSlug && !slugValid ? (
               <span className="account-profile-field-label org-create-workspace-hint">
                 Lowercase letters, digits and dashes; at least two characters, no dash at either
                 end.
               </span>
+            ) : (
+              <span className="account-profile-field-label workspace-general-hint">
+                Fixed once created. /workspace/{effectiveSlug || '<slug>'} opens the workspace
+                like its id.
+              </span>
             )}
           </div>
         </div>
+        <div className="account-profile-field">
+          <div className="account-profile-bio-header">
+            <label className="account-profile-field-label" htmlFor="create-workspace-description">
+              Description
+            </label>
+            <span className="account-profile-bio-count">
+              {description.length} / {DESCRIPTION_MAX_LENGTH}
+            </span>
+          </div>
+          <textarea
+            id="create-workspace-description"
+            value={description}
+            onChange={(event) => setDescription(event.target.value.slice(0, DESCRIPTION_MAX_LENGTH))}
+            placeholder="What is this workspace for?"
+            rows={4}
+            maxLength={DESCRIPTION_MAX_LENGTH}
+            disabled={creating}
+            className="account-profile-field-textarea"
+          />
+        </div>
       </AccountSectionCard>
+
+      <SettingsSection
+        title={
+          <span className="flex items-center gap-2">
+            <ImageIcon size={16} className="text-muted-foreground" />
+            Desktop wallpaper
+          </span>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          The wallpaper is stored in the workspace drive: set it in Settings → General once the
+          workspace is created.
+        </p>
+      </SettingsSection>
+
+      <SettingsSection
+        title={
+          <span className="flex items-center gap-2">
+            <Palette size={16} className="text-muted-foreground" />
+            Colors
+          </span>
+        }
+      >
+        <div className="space-y-6">
+          <SettingsField label="Primary Color" hint={`Current: ${primaryColor}`}>
+            <div className="flex flex-wrap gap-3">
+              {PRESET_COLORS.map((color) => (
+                <button
+                  key={color.value}
+                  type="button"
+                  onClick={() => setPrimaryColor(color.value)}
+                  className={cn(
+                    'flex h-10 w-10 items-center justify-center transition-transform hover:scale-110',
+                    primaryColor === color.value && selectedRing
+                  )}
+                  style={{ backgroundColor: color.value }}
+                  title={color.name}
+                >
+                  {primaryColor === color.value && <Check size={18} className="text-white" />}
+                </button>
+              ))}
+
+              <div className="relative">
+                <input
+                  type="color"
+                  value={primaryColor}
+                  onChange={(e) => setPrimaryColor(e.target.value)}
+                  className="absolute inset-0 h-10 w-10 cursor-pointer opacity-0"
+                  title="Custom color"
+                />
+                <div
+                  className={cn(
+                    'flex h-10 w-10 items-center justify-center border-2 border-dashed border-muted-foreground/50',
+                    isCustomColor && selectedRing
+                  )}
+                  style={{ backgroundColor: isCustomColor ? primaryColor : 'transparent' }}
+                >
+                  {isCustomColor ? (
+                    <Check size={18} className="text-white" />
+                  ) : (
+                    <Brush size={16} className="text-muted-foreground" />
+                  )}
+                </div>
+              </div>
+            </div>
+          </SettingsField>
+
+          <SettingsField label="Accent Color" hint={`Current: ${accentColor || 'Not set'}`}>
+            <div className="flex flex-wrap gap-3">
+              {PRESET_COLORS.map((color) => (
+                <button
+                  key={color.value}
+                  type="button"
+                  onClick={() => setAccentColor(color.value)}
+                  className={cn(
+                    'flex h-10 w-10 items-center justify-center transition-transform hover:scale-110',
+                    accentColor === color.value && selectedRing
+                  )}
+                  style={{ backgroundColor: color.value }}
+                  title={color.name}
+                >
+                  {accentColor === color.value && <Check size={16} className="text-white" />}
+                </button>
+              ))}
+            </div>
+          </SettingsField>
+        </div>
+      </SettingsSection>
     </div>
   );
 }

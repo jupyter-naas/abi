@@ -108,6 +108,8 @@ class OrganizationWorkspaceRecord:
     logo_url: str | None = None
     logo_emoji: str | None = None
     workspace_group: str | None = None
+    # Saved in Organization Settings > Workspaces; None = config overrides apply.
+    feature_overrides: dict[str, bool] | None = None
 
 
 @dataclass

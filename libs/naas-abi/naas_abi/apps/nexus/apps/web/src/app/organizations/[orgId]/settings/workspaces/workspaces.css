@@ -13,3 +13,74 @@
   letter-spacing: normal;
   color: var(--destructive-hex);
 }
+
+/* Create workspace header: Save, then the close cross at the far right. */
+.org-create-workspace-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.org-create-workspace-actions .account-profile-save-button {
+  width: auto;
+  white-space: nowrap;
+}
+
+/* Row selection (bulk edit). */
+.org-workspaces-select {
+  width: 2.25rem;
+  padding-right: 0 !important;
+}
+
+.org-workspaces-row-selected {
+  background-color: color-mix(in srgb, var(--color-primary, #22c55e) 8%, transparent);
+}
+
+/* Logos keep their aspect ratio inside the square (wide brand logos). */
+.org-workspaces-logo {
+  border-radius: 0 !important;
+  object-fit: contain;
+  background-color: var(--background, #fff);
+}
+
+/* Features cell: the enabled features as chips; click opens the overrides. */
+.org-workspaces-features {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: 22rem;
+  padding: 2px;
+  border: 1px solid transparent;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.org-workspaces-features:hover {
+  border-color: var(--border-hex, var(--border));
+}
+
+.org-workspaces-feature {
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  color: var(--foreground-hex, inherit);
+  background-color: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.org-workspaces-feature-source {
+  padding: 1px 6px;
+  font-size: 10px;
+  line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-primary, #22c55e);
+  border: 1px solid currentColor;
+}
+
+.org-workspaces-feature-more {
+  color: var(--muted-foreground-hex, inherit);
+}

@@ -154,6 +154,8 @@ export const PRESET_COLORS = [
 export interface Workspace {
   id: string;
   name: string;
+  /** Unique URL name: /workspace/<slug> opens the workspace like its id. */
+  slug?: string;
   description?: string;
   /** Workspace group (Settings → General); empty shows under "Others". */
   group?: string;
@@ -1396,6 +1398,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       const workspaces: Workspace[] = apiWorkspaces.map((ws: any) => ({
         id: ws.id,
         name: ws.name,
+        slug: ws.slug || undefined,
         description: ws.description,
         group: ws.workspace_group || undefined,
         organizationId: ws.organization_id || undefined,

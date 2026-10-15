@@ -5,6 +5,7 @@ from collections.abc import Callable
 from datetime import datetime
 from uuid import uuid4
 
+from naas_abi.apps.nexus.apps.api.app.core.feature_flags import parse_feature_overrides
 from naas_abi.apps.nexus.apps.api.app.models import (
     OrganizationDomainModel,
     OrganizationMemberModel,
@@ -287,6 +288,7 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             logo_url=row.logo_url,
             logo_emoji=row.logo_emoji,
             workspace_group=row.workspace_group,
+            feature_overrides=parse_feature_overrides(getattr(row, "feature_overrides", None)),
         )
 
     async def list_organization_members(self, org_id: str) -> list[OrganizationMemberRecord]:
