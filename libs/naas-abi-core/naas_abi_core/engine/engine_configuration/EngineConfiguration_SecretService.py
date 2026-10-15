@@ -24,11 +24,17 @@ class DotenvSecretConfiguration(BaseModel):
       - adapter: "dotenv"
         config:
           path: ".env"
+          # A file another process owns: read, never written.
+          read_only: false
+          # Read the process environment before the file.
+          environment_first: false
     """
 
     model_config = ConfigDict(extra="forbid")
 
     path: str = ".env"
+    read_only: bool = False
+    environment_first: bool = False
 
 
 class NaasSecretConfiguration(BaseModel):

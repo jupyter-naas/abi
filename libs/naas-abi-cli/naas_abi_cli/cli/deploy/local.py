@@ -249,17 +249,21 @@ def ensure_legacy_extras(project_path: str) -> None:
         )
 
 
+def compose_project_name(project_path: str) -> str:
+    """Compose's default project name: the directory basename, lowercased,
+    with non-``[a-z0-9_-]`` stripped."""
+    base = os.path.basename(os.path.abspath(project_path)).lower()
+    return re.sub(r"[^a-z0-9_-]", "", base) or "abi"
+
+
 def _compose_project_network(project_path: str) -> str:
     """The docker network the coding workspaces attach to.
 
-    Compose derives its default project name from the directory basename
-    (lowercased, non-``[a-z0-9_-]`` stripped); the bridge network is then
-    ``<project>_abi-network``. Users can override CODING_WORKSPACE_DOCKER_NETWORK
-    in .env (e.g. when they set COMPOSE_PROJECT_NAME).
+    The bridge network is ``<compose project>_abi-network``. Users can override
+    CODING_WORKSPACE_DOCKER_NETWORK in .env (e.g. when they set
+    COMPOSE_PROJECT_NAME).
     """
-    base = os.path.basename(os.path.abspath(project_path)).lower()
-    project = re.sub(r"[^a-z0-9_-]", "", base) or "abi"
-    return f"{project}_abi-network"
+    return f"{compose_project_name(project_path)}_abi-network"
 
 
 def _copy_coding_templates(deploy_path: str, values: dict[str, object]) -> None:
