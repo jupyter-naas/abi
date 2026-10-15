@@ -4,6 +4,7 @@ import importlib
 import sys
 
 import pytest
+
 from naas_abi_core.utils.LegacyExtras import (
     MissingLegacyExtra,
     legacy_extra_of,
