@@ -26,6 +26,7 @@ NONE = "-"
 # which no workspace id can be. Only org-wide attachments are named with it, so
 # "abi:<org>:*" patterns reach them and "abi:<org>:-:" ones never do.
 ALL_WORKSPACES = "%2A"
+ORG_WIDE_TYPE = ("iam", "attachment")
 PREFIX = "abi:"
 PLATFORM_SCOPE = "abi:-:-"
 
@@ -110,11 +111,11 @@ def resource_name(
 ) -> str:
     """Build a canonical name, platform-level unless ``org``/``workspace`` say otherwise."""
     _check_scope_id(org, "org")
-    _check_workspace(workspace, org)
     if not _SERVICE.match(service):
         raise ValueError(f"Invalid service name {service!r}")
     if not _SERVICE.match(type):
         raise ValueError(f"Invalid resource type {type!r}")
+    _check_workspace(workspace, org, service, type)
     return f"abi:{org}:{workspace}:{service}:{type}/{encode_id(parts, kind)}"
 
 
@@ -130,11 +131,11 @@ def parse_resource_name(name: str) -> ResourceName:
     if not slash or not id_:
         raise ValueError(f"A resource name ends with <type>/<id>: {name!r}")
     _check_scope_id(org, "org")
-    _check_workspace(workspace, org)
     if not _SERVICE.match(service):
         raise ValueError(f"Invalid service in {name!r}")
     if not _SERVICE.match(type_):
         raise ValueError(f"Invalid resource type in {name!r}")
+    _check_workspace(workspace, org, service, type_)
     if id_ != NONE and not _ID.match(id_):
         raise ValueError(f"The id of {name!r} is not canonically encoded")
     return ResourceName(org, workspace, service, type_, id_)
@@ -170,8 +171,14 @@ def scope_fields(scope: str) -> tuple[str, str]:
     return org, workspace
 
 
-def _check_workspace(workspace: str, org: str) -> None:
+def _check_workspace(workspace: str, org: str, service: str, type: str) -> None:
     if workspace == ALL_WORKSPACES:
+        # Only org-wide attachments span every workspace of an org (RFC §6.4).
+        if (service, type) != ORG_WIDE_TYPE:
+            raise ValueError(
+                f"Workspace {ALL_WORKSPACES} names org-wide attachments only, "
+                f"not {service}:{type}"
+            )
         if org == NONE:
             raise ValueError("Every workspace of an org needs an org")
         return

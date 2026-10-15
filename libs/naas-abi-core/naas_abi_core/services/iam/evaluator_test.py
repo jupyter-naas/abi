@@ -686,3 +686,65 @@ def test_a_malformed_token_scope_narrows_to_nothing(h, malformed):
     # The malformed statement is dropped: the token allows nothing at all.
     assert not h.allowed(QUERY, graph("a"), bob, scope=(malformed,))
     assert not h.allowed(INSERT, graph("b"), bob, scope=(malformed,))
+
+
+# -- review round 2: confinement holds where statements are evaluated ----------------
+
+
+def test_a_confined_policy_rewritten_behind_iams_back_stays_in_its_scope(h):
+    bob = h.user()
+    scope = "abi:acme:ws1"
+    policy = h.admin(
+        "create_policy",
+        "read here",
+        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"])),
+    )
+    h.attach(policy.id, bob.id, scope)
+    inside, outside = graph("g", org="acme", workspace="ws1"), graph("g", org="other")
+    assert h.allowed(QUERY, inside, bob)
+    # Rewritten straight in the store, then cached state dropped.
+    from dataclasses import replace
+
+    from naas_abi_core.services.iam.policy import parse_policy_document
+
+    widened = parse_policy_document(
+        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*", "*"]))
+    )
+    h.iam.store.update_policy(replace(policy, document=widened), expected_revision=1)
+    h.iam.invalidate()
+    assert h.allowed(QUERY, inside, bob)
+    assert not h.allowed(QUERY, outside, bob)
+    explanation = h.iam.authorizer.explain(h.context(bob), QUERY, inside)
+    assert explanation.statement is not None
+    assert explanation.statement.policy_id == policy.id
+
+
+def test_a_scoped_attachment_of_an_unconfined_policy_grants_nothing_outside(h):
+    from naas_abi_core.services.iam.IAMPorts import Attachment, new_id
+
+    bob = h.user()
+    h.iam.store.attach(
+        Attachment(new_id("att"), "builtin.platform_admin", bob.id, "abi:acme:ws1")
+    )
+    h.iam.invalidate()
+    assert not h.allowed("iam:CreatePolicy", "abi:-:-:iam:policy/p", bob)
+    assert not h.allowed("triple_store:DropGraph", graph("g", org="other"), bob)
+    assert not h.allowed(
+        "triple_store:DropGraph", graph("g", org="acme", workspace="ws2"), bob
+    )
+
+
+def test_a_deny_keeps_a_policy_confined_and_still_narrows(h):
+    bob = h.user()
+    scope = "abi:acme:ws1"
+    policy = h.admin(
+        "create_policy",
+        "read here but no hr",
+        document(
+            statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"]),
+            statement("Deny", [QUERY], ["abi:*:*:triple_store:graph/hr*"]),
+        ),
+    )
+    h.attach(policy.id, bob.id, scope)
+    assert h.allowed(QUERY, graph("sales", org="acme", workspace="ws1"), bob)
+    assert not h.allowed(QUERY, graph("hr", org="acme", workspace="ws1"), bob)

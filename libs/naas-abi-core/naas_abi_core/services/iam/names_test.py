@@ -136,3 +136,17 @@ def test_every_workspace_of_an_org_has_its_own_name():
     assert not matches("abi:acme:-:*", name)
     with pytest.raises(ValueError):
         resource_name("svc", "t", "x", workspace=ALL_WORKSPACES)
+
+
+def test_every_workspace_is_refused_outside_iam_attachments():
+    from naas_abi_core.services.iam.names import ALL_WORKSPACES
+
+    for service, type_ in (
+        ("iam", "scope"),
+        ("iam", "placement"),
+        ("document", "attachment"),
+    ):
+        with pytest.raises(ValueError):
+            resource_name(service, type_, "x", org="acme", workspace=ALL_WORKSPACES)
+        with pytest.raises(ValueError):
+            parse_resource_name(f"abi:acme:%2A:{service}:{type_}/x")

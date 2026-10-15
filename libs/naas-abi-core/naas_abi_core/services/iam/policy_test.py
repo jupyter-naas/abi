@@ -224,3 +224,30 @@ def test_scope_confinement():
     assert not doc("${scope}:svc:t/*", "*").confined_to_scope
     assert not doc("${scope}*").confined_to_scope
     assert not doc("abi:acme:ws1:svc:t/*").confined_to_scope
+
+
+def test_deny_statements_never_make_a_policy_unconfined():
+    document = parse_policy_document(
+        {
+            "version": POLICY_VERSION,
+            "statements": [
+                {
+                    "effect": "Allow",
+                    "actions": ["*"],
+                    "resources": ["${scope}:svc:t/*"],
+                },
+                {"effect": "Deny", "actions": ["*"], "resources": ["abi:*:*:secret:*"]},
+            ],
+        }
+    )
+    assert document.confined_to_scope
+
+
+def test_within_scope():
+    from naas_abi_core.services.iam.policy import Statement, within_scope
+
+    allow = Statement("Allow", ("*",), ("${scope}:svc:t/*", "*", "abi:x:y:svc:t/*"))
+    assert within_scope(allow) == Statement("Allow", ("*",), ("${scope}:svc:t/*",))
+    assert within_scope(Statement("Allow", ("*",), ("*",))) is None
+    deny = Statement("Deny", ("*",), ("*",))
+    assert within_scope(deny) is deny

@@ -506,3 +506,74 @@ def test_attachment_names_for_org_wide_scopes_differ_from_org_level_ones():
     org_level = attachment_resource("p", "u", "abi:acme:-")
     assert org_wide == "abi:acme:%2A:iam:attachment/p/u"
     assert org_level == "abi:acme:-:iam:attachment/p/u"
+
+
+# -- review round 2 --------------------------------------------------------------------
+
+
+def test_a_policy_attached_at_a_scope_cannot_be_updated_out_of_it(h):
+    bob = h.user()
+    policy = h.admin(
+        "create_policy",
+        "read here",
+        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"])),
+    )
+    h.attach(policy.id, bob.id, "abi:acme:ws1")
+    with pytest.raises(ValueError, match=r"\$\{scope\}"):
+        h.admin(
+            "update_policy",
+            policy.id,
+            expected_revision=1,
+            document=document(statement("Allow", ["*"], ["*"])),
+        )
+    narrowed = h.admin(
+        "update_policy",
+        policy.id,
+        expected_revision=1,
+        document=document(
+            statement("Allow", [QUERY], ["${scope}:triple_store:graph/a"])
+        ),
+    )
+    assert narrowed.revision == 2
+    # Unattached at any scope, a policy may name anything.
+    free = h.admin(
+        "create_policy", "free", document(statement("Allow", [QUERY], ["*"]))
+    )
+    h.admin(
+        "update_policy",
+        free.id,
+        expected_revision=1,
+        document=document(statement("Allow", ["*"], ["*"])),
+    )
+
+
+def test_every_workspace_is_a_name_for_org_wide_attachments_only(h):
+    with pytest.raises(ValueError):
+        h.admin("put_scope", "acme", "%2A")
+    with pytest.raises(ValueError):
+        h.admin("put_placement", "document", "nexus-ws-1/*", "acme", "%2A")
+    assert h.iam.workspace_org("%2A") is None
+
+
+def test_the_ensure_user_race_authorizes_the_existing_principal(h):
+    bob = h.user("bob", email="bob@example.com")
+    clerk = h.service_account("ci/clerk")
+    h.grant(
+        clerk.id,
+        statement("Allow", ["iam:CreateUser"], ["abi:-:-:iam:principal/*"]),
+        statement("Deny", ["iam:CreateUser"], [f"abi:-:-:iam:principal/{bob.id}"]),
+    )
+    store = h.iam.store
+    original = store.find_user
+    misses = iter([None])
+
+    def late_find(issuer, subject):
+        return next(misses, None) or original(issuer, subject)
+
+    store.find_user = late_find  # type: ignore[method-assign]
+    try:
+        with h.as_(clerk), pytest.raises((IAMNotFoundError, PermissionDeniedError)):
+            h.iam.ensure_user("https://idp.example", "bob", email="mallory@example.com")
+    finally:
+        store.find_user = original  # type: ignore[method-assign]
+    assert store.get_principal(bob.id).email == "bob@example.com"

@@ -203,9 +203,11 @@ The serialized document is at most 32 KiB.
 
 An attachment binds a policy to a principal (user, group or service account), with an optional `scope`.
 
-A policy attached at a scope must start every resource pattern with `${scope}:`. The scope only fills
-`${scope}`, so any other pattern would let whoever may attach at that scope grant beyond it; IAM refuses
-such an attachment.
+A policy attached at a scope must start every Allow resource pattern with `${scope}:` (a Deny only
+narrows, so it may name anything). The scope only fills `${scope}`, so any other pattern would let
+whoever may attach at that scope grant beyond it. IAM refuses such an attachment, refuses to update a
+policy attached at a scope beyond it, and enforces the rule when it evaluates: a statement reached through
+a scoped attachment keeps only its `${scope}:` Allow patterns, whatever the policy says.
 
 | `scope` | Meaning | `${scope}` expands to |
 |---|---|---|

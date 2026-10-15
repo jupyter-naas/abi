@@ -109,17 +109,43 @@ class PolicyDocument:
 
     @property
     def confined_to_scope(self) -> bool:
-        """Whether every resource pattern starts with ``${scope}:``.
+        """Whether every Allow resource pattern starts with ``${scope}:``.
 
         Only such a policy may be attached at a scope: the scope fills
-        ``${scope}`` and nothing else, so a statement naming anything outside it
-        would let whoever may attach at a scope grant beyond it.
+        ``${scope}`` and nothing else, so an Allow naming anything outside it
+        would let whoever may attach at a scope grant beyond it. A Deny only
+        narrows, so it may name anything.
         """
         return all(
             pattern.startswith(SCOPE_PREFIX)
             for statement in self.statements
+            if statement.effect == "Allow"
             for pattern in statement.resources
         )
+
+
+def within_scope(statement: Statement) -> Statement | None:
+    """``statement`` as a scoped attachment may grant it (None: it grants nothing).
+
+    Evaluation applies this to every statement reached through a scoped
+    attachment, whatever the policy says now: an Allow keeps only its
+    ``${scope}:`` patterns, so a policy edited after it was attached, or an
+    attachment written to the store by other means, still cannot reach past
+    its scope. A Deny is kept whole: it only narrows.
+    """
+    if statement.effect == "Deny":
+        return statement
+    kept = tuple(r for r in statement.resources if r.startswith(SCOPE_PREFIX))
+    if not kept:
+        return None
+    if kept == statement.resources:
+        return statement
+    return Statement(
+        effect=statement.effect,
+        actions=statement.actions,
+        resources=kept,
+        sid=statement.sid,
+    )
 
 
 def parse_policy_document(

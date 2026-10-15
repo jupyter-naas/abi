@@ -71,6 +71,7 @@ from naas_abi_core.services.iam.names import (
 from naas_abi_core.services.iam.policy import (
     PolicyDocument,
     parse_policy_document,
+    within_scope,
 )
 
 # TRANSITIONAL (until subtask 7, #61): a Nexus user is named on a call by its
@@ -289,17 +290,25 @@ class IAMService(IIAMService, PolicySource):
         policy = self._cached_policy(policy_id)
         if policy is None:
             return []
-        return [
-            EffectiveStatement(
-                statement=statement,
-                policy_id=policy.id,
-                statement_index=index,
-                attachment_id=attachment.id if attachment else None,
-                scope=attachment.scope if attachment else None,
-                via_group=group,
+        scope = attachment.scope if attachment else None
+        effective: list[EffectiveStatement] = []
+        for index, statement in enumerate(policy.document.statements):
+            # A scoped attachment grants within its scope only, whatever the
+            # policy says now (attach_policy refuses the rest up front).
+            granted = within_scope(statement) if scope is not None else statement
+            if granted is None:
+                continue
+            effective.append(
+                EffectiveStatement(
+                    statement=granted,
+                    policy_id=policy.id,
+                    statement_index=index,
+                    attachment_id=attachment.id if attachment else None,
+                    scope=scope,
+                    via_group=group,
+                )
             )
-            for index, statement in enumerate(policy.document.statements)
-        ]
+        return effective
 
     def _cached_policy(self, policy_id: str) -> Policy | None:
         def load() -> Policy | None:
@@ -503,10 +512,12 @@ class IAMService(IIAMService, PolicySource):
                     )
                 )
             except IAMConflictError:
-                # Another first sighting of the same identity created it.
+                # Another first sighting of the same identity created it: the
+                # profile update below is authorized on that principal.
                 existing = self.store.find_user(issuer, subject)
                 if existing is None:
                     raise
+                self.require("iam:CreateUser", principal_resource(existing.id))
             else:
                 self._changed()
                 return record
@@ -774,6 +785,15 @@ class IAMService(IIAMService, PolicySource):
             if document is not None
             else current.document,
         )
+        if not updated.document.confined_to_scope and any(
+            a.scope is not None
+            for a in self.store.list_attachments(policy_id=policy_id)
+        ):
+            # Evaluation would ignore the rest at those scopes: say so instead.
+            raise ValueError(
+                f"{policy_id} is attached at a scope: every Allow resource must "
+                "start with ${scope}:"
+            )
         policy = self.store.update_policy(updated, expected_revision)
         self._changed()
         return policy

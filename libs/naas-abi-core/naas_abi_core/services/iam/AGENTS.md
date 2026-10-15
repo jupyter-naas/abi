@@ -100,8 +100,11 @@ attachments and memberships), groups (`create_group`, `add_group_member`,
 validated against the registered catalogs, `update_policy(expected_revision=)`;
 managed policies are IAM's alone), `attach_policy`/`detach_policy` (idempotent;
 a policy naming `${scope}` needs a scoped attachment, and only a policy whose
-every resource pattern starts with `${scope}:` may be attached at a scope, so
-whoever may attach at a scope cannot grant beyond it), placements
+every Allow resource pattern starts with `${scope}:` may be attached at a scope,
+so whoever may attach at a scope cannot grant beyond it; `update_policy` refuses
+to widen a policy attached at a scope, and evaluation enforces the rule anyway:
+a statement reached through a scoped attachment keeps only its `${scope}:`
+Allow patterns, `policy.within_scope`), placements
 (`put_placement`, `resolve_placement`: exact key, then the longest prefix, else
 platform), scopes (`put_scope`, `workspace_org`), `register_catalog` (highest
 version wins; refuses dropping an action a policy names).
@@ -109,7 +112,7 @@ version wins; refuses dropping an action a policy names).
 Lists page after filtering. Names: `principal_resource`, `group_resource`,
 `policy_resource`, `attachment_resource` (at the attachment's scope; an org-wide
 one in workspace `%2A`, `names.ALL_WORKSPACES`, which `abi:<org>:*` grants reach
-and org-level `abi:<org>:-` ones do not), `placement_resource`, `scope_resource`,
+and org-level `abi:<org>:-` ones do not; no other resource may use `%2A`), `placement_resource`, `scope_resource`,
 `catalog_resource`.
 
 **Caching.** Effective statements per principal, policies and placements are
