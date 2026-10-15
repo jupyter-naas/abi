@@ -37,14 +37,18 @@ class CanonicalModelId(StrEnum):
     """
 
     # Chat — Anthropic family
+    CLAUDE_FABLE_5_1 = "claude-fable-5-1"
+    CLAUDE_OPUS_5_5 = "claude-opus-5-5"
+    CLAUDE_OPUS_4_7 = "claude-opus-4.7"
+    CLAUDE_OPUS_4_1 = "claude-opus-4.1"
+    CLAUDE_OPUS_4 = "claude-opus-4"
+    CLAUDE_SONNET_5_5 = "claude-sonnet-5-5"
     CLAUDE_SONNET_5 = "claude-sonnet-5"
     CLAUDE_SONNET_4_6 = "claude-sonnet-4.6"
     CLAUDE_SONNET_4_5 = "claude-sonnet-4.5"
     CLAUDE_SONNET_4 = "claude-sonnet-4"
     CLAUDE_SONNET_3_7 = "claude-sonnet-3.7"
-    CLAUDE_OPUS_4_7 = "claude-opus-4.7"
-    CLAUDE_OPUS_4_1 = "claude-opus-4.1"
-    CLAUDE_OPUS_4 = "claude-opus-4"
+    CLAUDE_HAIKU_5_5 = "claude-haiku-5-5"
     CLAUDE_HAIKU_4_5 = "claude-haiku-4.5"
     CLAUDE_HAIKU_3_5 = "claude-haiku-3.5"
 

@@ -285,14 +285,10 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
         <Link
           href={basePath}
           onClick={() => forgetAppsLastOpen(currentWorkspaceId)}
-          className={cn(
-            'flex w-full items-center gap-1 rounded-md px-2 py-1.5 apps-sidebar-list-row transition-colors',
-            isOnApps && !openAppModule
-              ? 'bg-muted text-foreground font-medium'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-          )}
+          aria-current={isOnApps && !openAppModule ? 'page' : undefined}
+          className="shell-sidebar-home"
         >
-          <LayoutGrid size={14} />
+          <LayoutGrid size={14} aria-hidden="true" />
           <span>All apps</span>
         </Link>
         {appLinks}

@@ -71,7 +71,7 @@ Everything below is `config.yaml`. Nothing here needs a code change.
 | Section | What it controls |
 |---|---|
 | `brand` | Name, description, the letter used when no logo is set, **and the logo and favicon files** (named relative to `web/assets/`) |
-| `theme.css_variables` | Every colour, font and width, applied to `:root` |
+| `theme.css_variables` | Every colour, font and width, applied to `:root`; plus optional chrome — page surface, a fixed-height topbar with a logo/name divider, logo sizes, a card top edge (listed at the top of `web/css/app.css`; unset, each keeps the default look) |
 | `app.pages` | Which of the three pages exist, their labels, URL segments and order |
 | `search` | Which fields are searchable and how heavily they weight, the facet field and its label, snippet length, autocomplete threshold, page size, the example queries on the home page |
 | `profile.facts` | The row under the name on a profile |
@@ -132,8 +132,8 @@ goes to the Nexus web host and 404s. An instance shown in Nexus therefore also
 mounts itself beside its page, at `/app-html/<module>/<app>/api`, and its page
 sets `data-people-api-base` on `<html>` to that mount before loading the shell.
 `web/lib/config.js` reads it, and `apiUrl()` moves URLs the data states under the
-declared prefix (portraits) onto it. The Forvis Mazars instance in bob
-(`intelligence.people_intelligence.apps.people`, `web/boot.js`) does exactly this.
+declared prefix (portraits) onto it. A deployment's own instance does this from its
+`web/boot.js`.
 
 Everything per-instance is resolved against the folder holding the config: brand
 files, `data.graph.file`, and `data.portrait_prefix`. Run one locally with

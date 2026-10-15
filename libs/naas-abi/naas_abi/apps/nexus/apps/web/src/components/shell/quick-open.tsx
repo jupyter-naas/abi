@@ -9,6 +9,7 @@ import { markAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
 import { useFeature } from '@/hooks/use-feature';
 import { getWorkspaceHomePath } from '@/lib/feature-access';
+import { TOPNAV_HEIGHT } from '@/lib/shell-columns';
 import {
   buildQuickOpenItems,
   conversationUpdatedAtMs,
@@ -104,6 +105,12 @@ export function QuickOpen() {
       return;
     }
     const rect = wrapRef.current.getBoundingClientRect();
+    if (rect.width === 0) {
+      // Trigger hidden on a narrow topnav (⌘P still opens): centre under the bar.
+      const width = Math.min(480, window.innerWidth - 32);
+      setListBox({ top: TOPNAV_HEIGHT + 4, left: (window.innerWidth - width) / 2, width });
+      return;
+    }
     setListBox({ top: rect.bottom + 4, left: rect.left, width: rect.width });
   }, [open]);
 

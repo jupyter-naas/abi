@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { Map as LeafletMap } from 'leaflet';
-import { MAPS_PUBLIC_FEEDS } from '../lib/datasets';
 import type { MapsPinMarker } from '../lib/leaflet-map';
 import { coverageCountries, coverageCountry, type CountryBorders } from '../lib/maps-coverage';
 
@@ -24,7 +23,7 @@ export function MapsCoverageLayer({ map, leaflet: L, pins, selectedCountry, onSe
     let active = true;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
-    fetch(MAPS_PUBLIC_FEEDS.naturalEarth, { signal: controller.signal })
+    fetch('/api/maps/natural-earth', { signal: controller.signal })
       .then(async response => {
         if (!response.ok) throw new Error('Country borders unavailable');
         const data = await response.json();

@@ -8,4 +8,3 @@ class Portrait(_Portrait):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

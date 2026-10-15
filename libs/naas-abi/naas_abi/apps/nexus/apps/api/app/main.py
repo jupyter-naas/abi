@@ -125,7 +125,26 @@ async def _sync_identity_graph() -> None:
                     module_config_getter=lambda: ABIModule.get_instance().configuration,
                 ),
             )
-            result = await service.sync()
+            # Boot races Fuseki writes from schema load and seeds. A single
+            # CLEAR/DROP can lose the dataset lock; retry rather than skip.
+            delays = (0.0, 2.0, 8.0)
+            result = None
+            for attempt, delay in enumerate(delays):
+                if delay:
+                    await asyncio.sleep(delay)
+                try:
+                    result = await service.sync()
+                    break
+                except Exception:
+                    if attempt == len(delays) - 1:
+                        raise
+                    _log.warning(
+                        "Identity graph sync failed (attempt %d/%d); retrying",
+                        attempt + 1,
+                        len(delays),
+                        exc_info=True,
+                    )
+        assert result is not None
         _log.info(
             "✓ Identity graph synced (%d users, %d organizations, %d workspaces, %d memberships, %d triples)",
             result.users,
@@ -164,8 +183,8 @@ def _install_drive_writers() -> None:
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule
-        from naas_abi.apps.nexus.apps.api.app.services.files.my_drive import MyDriveWriter
-        from naas_abi.apps.nexus.apps.api.app.services.files.workspace_drive import (
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.my_drive import MyDriveWriter
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.workspace_drive import (
             WorkspaceDriveWriter,
         )
 
@@ -180,13 +199,18 @@ def _install_drive_writers() -> None:
 
 
 async def _backfill_drives() -> None:
-    """Write the manifest and default folders of every workspace drive and My Drive lacking them."""
+    """Write missing workspace and My Drive defaults, and the platform drive's staff folders."""
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule
         from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-        from naas_abi.apps.nexus.apps.api.app.services.files.my_drive import backfill_my_drives
-        from naas_abi.apps.nexus.apps.api.app.services.files.workspace_drive import (
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.my_drive import (
+            backfill_my_drives,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.platform_drive import (
+            backfill_platform_drive,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.workspace_drive import (
             backfill_workspace_drives,
         )
 
@@ -194,8 +218,14 @@ async def _backfill_drives() -> None:
         async with AsyncSessionLocal() as session:
             workspaces = await backfill_workspace_drives(session, storage)
             users = await backfill_my_drives(session, storage)
-        if any(workspaces.values()) or any(users.values()):
-            _log.info("✓ Drives backfilled: workspaces %s, my drives %s", workspaces, users)
+        platform = await backfill_platform_drive(storage)
+        if any(workspaces.values()) or any(users.values()) or any(platform.values()):
+            _log.info(
+                "✓ Drives backfilled: workspaces %s, my drives %s, platform %s",
+                workspaces,
+                users,
+                platform,
+            )
     except Exception:
         _log.exception("Drive backfill failed")
 
@@ -319,6 +349,29 @@ async def _startup(app: FastAPI) -> None:
         await apply_configuration_seeds(getattr(app.state, "secret_service", None))
     finally:
         event_triggered_via.reset(via)
+
+    # Maps feeds, layers and basemaps declared by modules (artifacts/maps/{layers/**,basemaps/*}/manifest.json),
+    # then config Maps ids (workspaces[].maps) that nothing provides. Both only
+    # log errors, never fail the start.
+    from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.workspace_defaults import (  # noqa: E501
+        report_unknown_workspace_map_ids,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.maps.manifests import (
+        register_module_manifests,
+    )
+
+    try:
+        from naas_abi import ABIModule
+
+        abi_module = ABIModule.get_instance()
+        modules = [
+            abi_module,
+            *(m for m in abi_module.engine.modules.values() if m is not abi_module),
+        ]
+    except Exception:  # noqa: BLE001 - standalone Nexus: no ABI engine, no module manifests
+        modules = []
+    register_module_manifests(app, modules)
+    report_unknown_workspace_map_ids(app)
 
     # An ABI restart clears the settings pages' 24h API cache (after seeds, which
     # may have changed users, workspaces and organizations).
@@ -653,6 +706,16 @@ async def serve_provider_logo(provider_id: str) -> FileResponse:
 def _register_routes(app: FastAPI) -> None:
     # Include API router
     app.include_router(api_router, prefix="/api")
+    # Graph map layers: always mounted (empty until a module registers one), so
+    # the web's request is a list, not a 404. Needs the ABI engine.
+    try:
+        from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.fastapi import (
+            install_maps_layers,
+        )
+
+        install_maps_layers(app)
+    except ValueError:
+        logging.getLogger(__name__).info("Maps graph layers: no ABI engine, not mounted")
 
     app.add_api_route("/health", health_check, methods=["GET"])
     from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (

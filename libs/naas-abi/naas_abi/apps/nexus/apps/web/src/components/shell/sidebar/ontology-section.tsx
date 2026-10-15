@@ -215,7 +215,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
       collapsed={collapsed}
       detailOnly={detailOnly}
     >
-      <button type="button" className="ontology-dashboard-home" aria-current={searchParams?.get('view') === 'overview' ? 'page' : undefined}
+      <button type="button" className="shell-sidebar-home" aria-current={searchParams?.get('view') === 'overview' ? 'page' : undefined}
         onClick={() => router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${dashboardRoute(routeQuery)}`), {scroll: false})}>
         <LayoutGrid size={14} aria-hidden="true" /><span>Dashboard</span>
       </button>

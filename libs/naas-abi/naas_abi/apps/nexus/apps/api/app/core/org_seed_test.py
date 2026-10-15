@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import bcrypt
 import pytest
 from naas_abi.apps.nexus.apps.api.app.core import org_seed
-from naas_abi.apps.nexus.apps.api.app.core.config import UserSeedConfig
+from naas_abi.apps.nexus.apps.api.app.core.config import UserSeedConfig, WorkspaceSeedConfig
 
 ADMIN = "admin@example.com"
 PASSWORD_KEY = "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD"
@@ -84,6 +85,92 @@ def test_an_existing_admin_with_a_default_password_is_rotated(seed_admin, defaul
 
     assert not _matches(default, user.hashed_password)
     assert _matches(secrets.values[PASSWORD_KEY], user.hashed_password)
+
+
+def test_reseed_keeps_a_wallpaper_the_config_does_not_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    saved = "/api/workspaces/ws-1/background-image?v=abc.png"
+    workspace = SimpleNamespace(
+        id="ws-1",
+        owner_id="user-1",
+        organization_id="org-1",
+        background_image_url=saved,
+        primary_color="#000000",
+        updated_at=None,
+    )
+    session = MagicMock()
+    session.execute = AsyncMock(
+        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=workspace))
+    )
+    owner = SimpleNamespace(id="user-1")
+
+    async def owner_lookup(*_args, **_kwargs):
+        return owner
+
+    async def noop(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(org_seed, "_resolve_user", owner_lookup)
+    monkeypatch.setattr(org_seed, "_get_user_by_id", owner_lookup)
+    monkeypatch.setattr(org_seed, "_ensure_workspace_member", noop)
+    monkeypatch.setattr(org_seed, "_seed_workspace_apps", noop)
+
+    cfg = WorkspaceSeedConfig(
+        name="Forvis Mazars France",
+        slug="forvis-mazars-france",
+        owner_email=ADMIN,
+        primary_color="#0057B8",
+    )
+
+    asyncio.run(
+        org_seed._upsert_workspace(
+            session, cfg, SimpleNamespace(id="org-1", owner_id="user-1", slug="forvis"), {}
+        )
+    )
+
+    assert workspace.background_image_url == saved
+    assert workspace.primary_color == "#0057B8"
+
+
+def test_reseed_applies_a_wallpaper_the_config_sets(monkeypatch: pytest.MonkeyPatch) -> None:
+    workspace = SimpleNamespace(
+        id="ws-1",
+        owner_id="user-1",
+        organization_id="org-1",
+        background_image_url="/api/workspaces/ws-1/background-image?v=custom.png",
+        updated_at=None,
+    )
+    session = MagicMock()
+    session.execute = AsyncMock(
+        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=workspace))
+    )
+    owner = SimpleNamespace(id="user-1")
+
+    async def owner_lookup(*_args, **_kwargs):
+        return owner
+
+    async def noop(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(org_seed, "_resolve_user", owner_lookup)
+    monkeypatch.setattr(org_seed, "_get_user_by_id", owner_lookup)
+    monkeypatch.setattr(org_seed, "_ensure_workspace_member", noop)
+    monkeypatch.setattr(org_seed, "_seed_workspace_apps", noop)
+
+    seeded = "src/external/valeo/assets/public/cover.webp"
+    cfg = WorkspaceSeedConfig(
+        name="Valeo",
+        slug="valeo",
+        owner_email=ADMIN,
+        background_image_url=seeded,
+    )
+
+    asyncio.run(
+        org_seed._upsert_workspace(
+            session, cfg, SimpleNamespace(id="org-1", owner_id="user-1", slug="forvis"), {}
+        )
+    )
+
+    assert workspace.background_image_url == seeded
 
 
 def test_an_existing_admin_with_a_real_password_is_left_alone(seed_admin) -> None:

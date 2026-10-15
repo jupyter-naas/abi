@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from naas_abi.apps.nexus.apps.api.app.core.secret_key import INSECURE_SECRET_KEYS
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
+from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -212,17 +213,37 @@ class MarketplaceConfig(BaseModel):
     # Prices in USD per 1M tokens (May 2026 rates).
     model_pricing: dict[str, ModelPricingEntry] = Field(
         default_factory=lambda: {
-            "gpt-4o":           ModelPricingEntry(input_per_million=2.50,  output_per_million=10.00, label="GPT-4o"),
-            "gpt-4o-mini":      ModelPricingEntry(input_per_million=0.15,  output_per_million=0.60,  label="GPT-4o mini"),
-            "gpt-4":            ModelPricingEntry(input_per_million=30.00, output_per_million=60.00, label="GPT-4"),
-            "gpt-3.5-turbo":    ModelPricingEntry(input_per_million=0.50,  output_per_million=1.50,  label="GPT-3.5 Turbo"),
-            "o1":               ModelPricingEntry(input_per_million=15.00, output_per_million=60.00, label="o1"),
-            "o3-mini":          ModelPricingEntry(input_per_million=1.10,  output_per_million=4.40,  label="o3-mini"),
-            "claude-opus":      ModelPricingEntry(input_per_million=15.00, output_per_million=75.00, label="Claude Opus"),
-            "claude-sonnet":    ModelPricingEntry(input_per_million=3.00,  output_per_million=15.00, label="Claude Sonnet"),
-            "claude-haiku":     ModelPricingEntry(input_per_million=0.25,  output_per_million=1.25,  label="Claude Haiku"),
-            "gemini-1.5-pro":   ModelPricingEntry(input_per_million=3.50,  output_per_million=10.50, label="Gemini 1.5 Pro"),
-            "gemini-1.5-flash": ModelPricingEntry(input_per_million=0.075, output_per_million=0.30,  label="Gemini Flash"),
+            "gpt-4o": ModelPricingEntry(
+                input_per_million=2.50, output_per_million=10.00, label="GPT-4o"
+            ),
+            "gpt-4o-mini": ModelPricingEntry(
+                input_per_million=0.15, output_per_million=0.60, label="GPT-4o mini"
+            ),
+            "gpt-4": ModelPricingEntry(
+                input_per_million=30.00, output_per_million=60.00, label="GPT-4"
+            ),
+            "gpt-3.5-turbo": ModelPricingEntry(
+                input_per_million=0.50, output_per_million=1.50, label="GPT-3.5 Turbo"
+            ),
+            "o1": ModelPricingEntry(input_per_million=15.00, output_per_million=60.00, label="o1"),
+            "o3-mini": ModelPricingEntry(
+                input_per_million=1.10, output_per_million=4.40, label="o3-mini"
+            ),
+            "claude-opus": ModelPricingEntry(
+                input_per_million=15.00, output_per_million=75.00, label="Claude Opus"
+            ),
+            "claude-sonnet": ModelPricingEntry(
+                input_per_million=3.00, output_per_million=15.00, label="Claude Sonnet"
+            ),
+            "claude-haiku": ModelPricingEntry(
+                input_per_million=0.25, output_per_million=1.25, label="Claude Haiku"
+            ),
+            "gemini-1.5-pro": ModelPricingEntry(
+                input_per_million=3.50, output_per_million=10.50, label="Gemini 1.5 Pro"
+            ),
+            "gemini-1.5-flash": ModelPricingEntry(
+                input_per_million=0.075, output_per_million=0.30, label="Gemini Flash"
+            ),
         }
     )
 
@@ -307,16 +328,32 @@ class FeatureFlagsConfig(BaseModel):
                 "documents",
                 "sheets",
             ],
-            "member": ["maps", "chat", "files", "datasets", "skills", "slides", "documents", "sheets"],
-            "viewer": ["maps", "chat", "files", "datasets", "skills", "slides", "documents", "sheets"],
+            "member": [
+                "maps",
+                "chat",
+                "files",
+                "datasets",
+                "skills",
+                "slides",
+                "documents",
+                "sheets",
+            ],
+            "viewer": [
+                "maps",
+                "chat",
+                "files",
+                "datasets",
+                "skills",
+                "slides",
+                "documents",
+                "sheets",
+            ],
         }
     )
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
     # Per-organization role_baseline overlays. Does not replace deployment
     # role_baseline; keyed by organization id.
-    organization_overrides: dict[str, dict[str, list[FeatureKey]]] = Field(
-        default_factory=dict
-    )
+    organization_overrides: dict[str, dict[str, list[FeatureKey]]] = Field(default_factory=dict)
 
 
 class UserSeedConfig(BaseModel):
@@ -380,6 +417,8 @@ class WorkspaceSeedConfig(BaseModel):
     ontologies: list[str] | None = Field(default_factory=list)
     # Exact data graph grants. Missing policy exposes owned graphs only.
     graphs: WorkspaceGraphPolicyConfig = Field(default_factory=WorkspaceGraphPolicyConfig)
+    # Initial Maps feeds and custom basemaps (see WorkspaceMapsSeedConfig).
+    maps: WorkspaceMapsSeedConfig | None = None
 
 
 class OrganizationSeedConfig(BaseModel):
@@ -438,24 +477,16 @@ class Settings(BaseSettings):
 
     # Extra Slides seed trees for the template picker. Additive: ABI's own
     # seeds are always served, so this list holds only what a deploy adds.
-    slides_template_sources: list[SlidesTemplateSourceConfig] = Field(
-        default_factory=list
-    )
-    documents_template_sources: list[DocumentsTemplateSourceConfig] = Field(
-        default_factory=list
-    )
+    slides_template_sources: list[SlidesTemplateSourceConfig] = Field(default_factory=list)
+    documents_template_sources: list[DocumentsTemplateSourceConfig] = Field(default_factory=list)
     # Empty keeps ABI's own seed as the New Document default. A deploy that
     # adds sources can point this at one of those ids so a plain create
     # matches the picker, without ABI naming that source.
-    documents_default_template_id: str | None = Field(
-        default=None, max_length=96
-    )
+    documents_default_template_id: str | None = Field(default=None, max_length=96)
     # Qualified ids or bare stems omitted from the Documents picker. Create
     # and apply still accept them, so existing documents keep working.
     documents_hidden_template_ids: list[str] = Field(default_factory=list)
-    sheets_template_sources: list[SheetsTemplateSourceConfig] = Field(
-        default_factory=list
-    )
+    sheets_template_sources: list[SheetsTemplateSourceConfig] = Field(default_factory=list)
 
     # User seed configs (upserted by email on startup)
     users: list[UserSeedConfig] = Field(default_factory=list)
@@ -547,7 +578,7 @@ class Settings(BaseSettings):
     # Use only inline styles (no CSS {{ }} blocks) — templates use str.format_map.
     magic_link_email_html_template: str = (
         '<!DOCTYPE html><html><body style="margin:0;padding:0;'
-        'background-color:{background_color};'
+        "background-color:{background_color};"
         'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="background-color:{background_color};padding:48px 16px;">'
