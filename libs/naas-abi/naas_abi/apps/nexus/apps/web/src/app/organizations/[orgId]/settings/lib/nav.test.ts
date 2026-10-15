@@ -17,9 +17,10 @@ describe('org settings nav', () => {
     );
   });
 
-  it('hides branding, domains, servers, services, and billing from the sidebar', () => {
+  it('shows branding to admins and hides domains, servers, services, and billing', () => {
     expect(orgSettingsNavForRole('owner').map((item) => item.slug)).toEqual([
       'general',
+      'branding',
       'workspaces',
       'users',
       'roles',

@@ -22,8 +22,8 @@ export type OrgSettingsNavItem = {
 
 export const orgSettingsNav: OrgSettingsNavItem[] = [
   { slug: 'general', label: 'General', icon: Building2 },
+  { slug: 'branding', label: 'Branding', icon: Paintbrush, adminOnly: true },
   { slug: 'workspaces', label: 'Workspaces', icon: FolderKanban },
-  { slug: 'branding', label: 'Branding', icon: Paintbrush, adminOnly: true, hidden: true },
   { slug: 'users', label: 'Users', icon: Users, adminOnly: true },
   { slug: 'roles', label: 'Roles', icon: Shield, adminOnly: true },
   { slug: 'domains', label: 'Domains', icon: Globe, adminOnly: true, hidden: true },

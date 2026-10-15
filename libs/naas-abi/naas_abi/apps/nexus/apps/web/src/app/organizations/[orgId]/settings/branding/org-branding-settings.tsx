@@ -301,7 +301,7 @@ export const OrgBrandingSettings = forwardRef<
   }
 
   return (
-    <div className="org-settings-branding-page org-settings-branding-embedded">
+    <div className="org-settings-branding-form">
       {uploadError && <SettingsNotice tone="error">{uploadError}</SettingsNotice>}
 
       <div className="space-y-6 border bg-card p-6">

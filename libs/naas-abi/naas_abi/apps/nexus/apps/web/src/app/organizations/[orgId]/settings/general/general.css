@@ -5,11 +5,3 @@
   flex-direction: column;
   gap: var(--space-8);
 }
-
-.org-settings-general-branding-heading {
-  margin-bottom: calc(-1 * var(--space-4));
-}
-
-.org-settings-branding-embedded {
-  gap: var(--space-6);
-}
