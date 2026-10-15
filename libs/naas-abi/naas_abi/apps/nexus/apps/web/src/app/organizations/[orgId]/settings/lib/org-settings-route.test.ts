@@ -84,6 +84,18 @@ describe('parseOrgSettingsRoute', () => {
     ).toBe('Workspaces');
   });
 
+  it('still labels hidden sections for deep links', () => {
+    expect(parseOrgSettingsRoute('/organizations/org-1/settings/domains').sectionLabel).toBe(
+      'Domains'
+    );
+    expect(parseOrgSettingsRoute('/organizations/org-1/settings/services').sectionLabel).toBe(
+      'Services'
+    );
+    expect(parseOrgSettingsRoute('/organizations/org-1/settings/billing').sectionLabel).toBe(
+      'Billing'
+    );
+  });
+
   it('does not claim the organizations picker or tenant portal', () => {
     expect(parseOrgSettingsRoute('/organizations').isOrgSettingsRoute).toBe(false);
     expect(parseOrgSettingsRoute('/org/acme/auth/login').isOrgSettingsRoute).toBe(false);

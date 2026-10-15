@@ -27,10 +27,17 @@
   white-space: nowrap;
 }
 
-/* Row selection (bulk edit). */
+/* Row selection (bulk edit): checkboxes centred in their column. */
 .org-workspaces-select {
-  width: 2.25rem;
+  width: 2.5rem;
+  padding-left: 0 !important;
   padding-right: 0 !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.org-workspaces-select > span {
+  vertical-align: middle;
 }
 
 .org-workspaces-row-selected {
