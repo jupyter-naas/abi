@@ -670,7 +670,7 @@ class EngineConfiguration(BaseModel):
             # The Document Service default is for NATS mode, where engines share
             # it. Without NATS, keep the 2.x SQLite default: it would otherwise
             # load the Document Service, and agent memory would follow it
-            # (docs/breaking-changes-3.0.md). Still an engine default, not config.
+            # (docs/site/docs/upgrade/breaking-changes-3.md). Still an engine default, not config.
             self.services.activity_log = ActivityLogServiceConfiguration(
                 activity_log_adapter=ActivityLogAdapterConfiguration(
                     adapter="sqlite",
