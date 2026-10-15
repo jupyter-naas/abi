@@ -394,3 +394,32 @@ def test_a_nats_project_stops_when_the_clone_fails(tmp_path, monkeypatch) -> Non
     # The half-made project is removed, so the same command can run again.
     assert not (tmp_path / "demo").exists()
 
+
+def test_a_config_that_does_not_validate_is_reported_not_raised(
+    tmp_path, monkeypatch
+) -> None:
+    """Without a TTY, a secret the config names but nobody set (OPENROUTER_API_KEY)
+    fails the closing `abi config validate`: say what to do, not a traceback."""
+    from click.testing import CliRunner
+
+    def fake_run(cmd, **_kwargs):
+        if "submodule" in cmd:
+            (tmp_path / "demo" / project.ABI_SUBMODULE_PATH / "libs").mkdir(
+                parents=True, exist_ok=True
+            )
+        if "validate" in cmd:
+            raise subprocess.CalledProcessError(1, cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(project.subprocess, "run", fake_run)
+    monkeypatch.setattr(project.shutil, "which", lambda _cmd: "/usr/bin/git")
+
+    result = CliRunner().invoke(
+        project.new_project,
+        ["demo", str(tmp_path), "--domain", "localhost", "--without-local-deploy"],
+    )
+
+    assert result.exit_code == 1
+    assert not isinstance(result.exception, subprocess.CalledProcessError)
+    assert str(tmp_path / "demo") in result.output
+    assert "abi config validate" in result.output

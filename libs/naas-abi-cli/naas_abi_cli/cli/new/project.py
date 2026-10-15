@@ -341,10 +341,19 @@ def new_project(
         check=True,
     )
 
-    subprocess.run(
-        ["uv", "run", "abi", "config", "validate"],
-        cwd=project_path,
-        check=True,
-    )
+    try:
+        subprocess.run(
+            ["uv", "run", "abi", "config", "validate"],
+            cwd=project_path,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        # Without a TTY a secret the config names but nobody set (the AI
+        # provider's key) cannot be prompted for. The project is complete.
+        raise click.ClickException(
+            f"The project was created at {project_path}, but its configuration "
+            "does not load (see above). If a secret is missing, add it to the "
+            "project's .env (or export it), then run `abi config validate` there."
+        ) from exc
 
     _print_next_steps(project_path, admin_email, with_nats)
