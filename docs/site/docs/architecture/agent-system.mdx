@@ -38,10 +38,10 @@ ABI provides the same for AI:
 |---|---|
 | File system | Knowledge graph (triple store) |
 | Process model | Agent runtime (LangGraph state machines) |
-| IPC / messaging | Bus service (RabbitMQ or in-memory) |
+| IPC / messaging | NATS: kernel services, the JetStream bus, discovery |
 | Package manager | Module system (installable, versioned capabilities) |
 | Shell / CLI | `abi chat`, MCP server, REST API |
-| Scheduler | Dagster pipelines and workflow triggers |
+| Scheduler | Module jobs (JetStream schedules and event triggers) |
 
 You bring the domain. ABI provides the runtime.
 

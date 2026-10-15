@@ -7,7 +7,7 @@ const ports = [
   { id: 'triple',  angle: -90, label: 'Triple Store\nFuseki TDB2 · Oxigraph\nNeptune · FS' },
   { id: 'vector',  angle: -30, label: 'Vector Store\nQdrant · in-memory' },
   { id: 'obj',     angle:  30, label: 'Object Storage\nMinIO / S3 · FS · Naas' },
-  { id: 'bus',     angle:  90, label: 'Message Bus\nRabbitMQ · Python queue' },
+  { id: 'bus',     angle:  90, label: 'Message Bus\nNATS JetStream' },
   { id: 'kv',      angle: 150, label: 'KV + Cache\nRedis · in-memory · FS' },
   { id: 'secret',  angle: 210, label: 'Secret\ndotenv · Naas · Base64' },
 ];

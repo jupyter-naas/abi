@@ -10,16 +10,20 @@ ABI is configured through `config.yaml`. This page documents every top-level sec
 
 ## Environment files
 
-ABI loads a config file based on the `ABI_ENV` environment variable:
+A project keeps one config file per environment. The engine reads
+`config.<ENV>.yaml` when the `ENV` environment variable names a file that
+exists, else `config.yaml`:
 
-| `ABI_ENV` | Config file loaded |
-|-----------|-------------------|
-| (unset) | `config.yaml` |
-| `development` | `config.development.yaml` |
-| `production` | `config.production.yaml` |
-| `airgap` | `config.airgap.yaml` |
+| File | Read by |
+|---|---|
+| `config.yaml` | `abi dev up`, the CLI (`abi chat`, `abi run`), scripts |
+| `config.local.yaml` | The Docker Compose stack (its `abi` service sets `ENV=local`) |
+| `config.remote.yaml` | A remote deployment (`ENV=remote`) |
 
-Secrets belong in `.env` (gitignored). Config belongs in `config.yaml` (can be committed, no secrets).
+`ABI_CONFIG_OVERLAY` names a YAML file merged over the config; `abi dev up`
+uses it (`.abi/dev/dev.overlay.yaml`) for the broker it runs. Secrets belong in
+`.env` (gitignored) and are referenced as `{{ secret.NAME }}`. Config belongs in
+the config files (committed, no secrets).
 
 ---
 
@@ -33,21 +37,40 @@ api:
     - "http://localhost:9879"
 
 global_config:
-  ai_mode: "cloud"       # "cloud" or "local"
+  ai_mode: "cloud"       # "cloud", "local" or "airgap"
+
+nats:                    # NATS mode (new projects); omit for in-process wiring
+  nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@127.0.0.1:4222"
+  jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+  discovery:
+    project: "my_ai"
+    lease_seconds: 180
+
+telemetry:               # OpenTelemetry tracing (optional)
+  enabled: false
 
 services:
   triple_store: ...
   vector_store: ...
   object_storage: ...
+  document: ...
+  dataset: ...
   secret: ...
-  bus: ...
   kv: ...
   cache: ...
 
 modules:
-  - module: "naas_abi_core.modules.templatablesparqlquery"
+  - module: "naas_abi"
     enabled: true
+
+dev:                     # remote modules `abi dev up` runs
+  modules:
+    - name: research
+      module: research
 ```
+
+`nats`, `telemetry` and `dev` are new in 3.0: a config that used one of these
+names for something else must rename it.
 
 ---
 
@@ -71,6 +94,86 @@ api:
 ```yaml
 global_config:
   ai_mode: "cloud"   # "cloud" uses OpenRouter; "local" uses Ollama
+```
+
+---
+
+## nats
+
+A top-level `nats:` block puts the engine in NATS mode: it serves its kernel
+services on the broker, the bus is JetStream, module jobs run, and remote
+modules register through discovery. See [NATS and the Kernel Services](/architecture/nats).
+
+```yaml
+nats:
+  # The broker, logged in as the engine's user `abi`. `nats` is the Compose
+  # service; use 127.0.0.1 in config.yaml (`abi dev up` overlays its own URL).
+  nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@nats:4222"
+  # Signs every service token: 32 bytes or more, never given to modules.
+  jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+  # One engine per project hosts the module registry.
+  discovery:
+    project: "my_ai"
+    lease_seconds: 180
+  # The broker's monitoring endpoint, for the Nexus System app. No auth.
+  monitoring_url: "http://nats:8222"
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `client_timeout_seconds` | 10 | How long the engine's service calls wait for a reply. |
+| `max_concurrent_requests` | 64 | Calls each kernel service handles at once. |
+| `discovery.project`, `discovery.lease_seconds` | `default`, 20 | The discovery project, a module instance's lease. |
+| `object_storage_streaming.chunk_bytes`, `.max_sessions`, `.max_upload_bytes`, `.idle_seconds` | 64 KiB, 32, none, 60 | Chunked object transfers. |
+| `models.generation_timeout_seconds`, `models.streaming.max_upload_bytes`, `.max_buffered_upload_bytes` | none, 16 MiB, 64 MiB | Remote model calls. |
+| `rpc_overflow.enabled`, `.max_value_bytes`, `.max_sessions` | on, 256 MiB, 64 | Requests and replies above the broker limit. |
+| `jobs.enabled` | true | Host module jobs in this engine (`false` on one-off engines). |
+| `jobs.interrupt_grace_seconds` | 5 | Before a timed-out synchronous job is interrupted (`null`: never). |
+| `jobs.retention.max_age_days`, `.max_runs_per_job`, `.skipped_max_age_minutes`, `.interval_minutes` | 7, 1000, 60, 10 | Finished job runs kept. |
+| `engine.role` | `serve` | `serve`, `client` or `auto` (`ABI_ENGINE_ROLE` overrides). |
+| `engine.rollout_id` | empty | Deploys without downtime (`ABI_ROLLOUT_ID` overrides). |
+| `engine.lease_seconds`, `.standby_timeout_seconds`, `.drain_seconds` | 20, 900, 60 | The serving engine's lease, a standby's wait, the drain at shutdown. |
+| `monitoring_url` | none | The broker's HTTP monitoring endpoint. |
+
+In NATS mode, an explicit `services.bus` must use `nats_jetstream` on the same
+URL (or be omitted), and cache tiers are all local or all `nats_rpc`.
+
+---
+
+## telemetry
+
+OpenTelemetry tracing across processes (needs `naas-abi-core[otel]`, part of
+`[all]`). See [Observability](/architecture/observability).
+
+```yaml
+telemetry:
+  enabled: true
+  otlp_endpoint: "http://jaeger:4318"   # OTLP/HTTP
+  service_name: "abi-engine"
+  sample_ratio: 1.0
+  ui_url: "http://localhost:16686"      # the trace viewer the System app links to
+  query_url: "http://jaeger:16686"      # where the API reads spans (default: ui_url)
+```
+
+`abi dev up --with-tracing` adds this block to its overlay.
+
+---
+
+## dev
+
+The remote modules `abi dev up` runs next to the engine in NATS mode. `abi new
+module` adds an entry. The engine validates the block and otherwise ignores it.
+
+```yaml
+dev:
+  modules:
+    - name: research                  # process name: logs, --service
+      module: research                # run as `python -m research`
+      identity: my_ai.research        # its module id (default: its ABIModule's)
+      args: []
+      env: {RESEARCH_CHAT_MODEL: ""}  # may name ${ABI_NATS_URL}, ${ABI_DISCOVERY_PROJECT}...
+      enabled: true
+      restart: on-failure             # or always, never
 ```
 
 ---
@@ -159,25 +262,28 @@ services:
 
 ### Message Bus
 
-Default is **`python_queue`** (SQLite-backed queue under `storage/bus/`). Use **`rabbitmq`** for production deployments.
+In NATS mode the bus is NATS JetStream: omit the `bus:` section, or keep it
+only for `emit_message_events`, with the `nats_jetstream` adapter on the same
+URL as `nats.nats_url`:
 
 ```yaml
 services:
   bus:
+    emit_message_events: true
     bus_adapter:
-      adapter: "python_queue"
-      config: {}
+      adapter: "nats_jetstream"
+      config:
+        nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@nats:4222"
 ```
 
-RabbitMQ for production:
+Without NATS, the default is **`python_queue`** (SQLite-backed, under
+`storage/bus/`). The **`rabbitmq`** adapter is **legacy**: it needs the
+`naas-abi-core[rabbitmq]` extra and is removed in the next major.
 
 ```yaml
       adapter: "rabbitmq"
       config:
-        host: "localhost"
-        port: 5672
-        username: "guest"
-        password: "guest"
+        rabbitmq_url: "{{ secret.RABBITMQ_URL }}"
 ```
 
 ### Key-Value Store
@@ -194,15 +300,59 @@ services:
 
 ### Cache
 
-Optional; add a `cache` section when you need a dedicated cache layer. A typical local choice is **`fs`** with a path under `storage/`.
+Optional; a list of tiers read in order (`hot` first, `cold` by default). Adapters: **`fs`**, **`redis`**, **`object_storage`**, **`keyvalue`**, and **`nats_rpc`** for another engine's cache. In NATS mode, tiers are all local or all `nats_rpc`.
 
 ```yaml
 services:
   cache:
-    cache_adapter:
-      adapter: "fs"
+    adapters:
+      - adapter: redis
+        tier: hot
+        config:
+          redis_url: "{{ secret.REDIS_URL }}"
+          prefix: "naas:cache"
+      - adapter: fs
+        tier: cold
+        config:
+          base_path: "storage/cache"
+```
+
+### Document and Dataset
+
+The Document Service holds agent memory, job runs and the activity log in NATS
+mode; the dataset service holds tabular data (DuckLake). `abi new project`
+configures both: SQLite files for `config.yaml`, PostgreSQL for
+`config.local.yaml`.
+
+```yaml
+services:
+  document:
+    document_adapter:
+      adapter: "postgresql"
       config:
-        base_path: "storage/cache"
+        dsn: "postgresql://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/{{ secret.POSTGRES_DB }}"
+  dataset:
+    dataset_adapter:
+      adapter: "ducklake"
+      config:
+        catalog: "sqlite:storage/datasets.sqlite"
+        data_path: "storage/datasets/"
+```
+
+### Another engine's service
+
+In NATS mode, an engine can use a service another engine owns with the
+`nats_rpc` adapter (every kernel service except the model registry):
+
+```yaml
+services:
+  object_storage:
+    object_storage_adapter:
+      adapter: "nats_rpc"
+      config:
+        nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@nats:4222"
+        jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+        service_identity: "worker"
 ```
 
 ---
@@ -215,16 +365,19 @@ modules:
     enabled: true
     config: {}
 
-  - module: "naas_abi.modules.core.abi"
+  - module: "naas_abi"
+    enabled: true
+
+  - module: "naas_abi_marketplace.ai.openrouter"
     enabled: true
     config:
-      github_repository: "jupyter-naas/abi"
-
-  - module: "naas_abi_marketplace.modules.linkedin"
-    enabled: false                  # Enable when LINKEDIN_API_KEY is set
+      openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
 ```
 
-Modules are loaded in dependency order. Disabled modules and their dependencies are skipped.
+These are the modules the engine loads (in-engine modules). Modules are loaded
+in dependency order. Disabled modules and their dependencies are skipped.
+Remote modules are not listed here: they run in their own process and register
+through discovery (see `dev:` above).
 
 ---
 
@@ -244,4 +397,15 @@ POSTGRES_URL=postgresql://abi_user:abi_password@localhost:5432/abi_memory
 
 # Naas platform (optional, for cloud storage and publishing)
 NAAS_API_KEY=...
+
+# NATS (written by `abi new project`, `abi deploy local` and `abi dev up`)
+NATS_JWT_SECRET=...          # signs every service token; never given to modules
+NATS_ABI_PASSWORD=...        # the broker user `abi` (the engine)
+NATS_MODULE_PASSWORD=...     # the broker user `module` (remote modules)
+ABI_MODULE_KEY_RESEARCH=...  # a remote module's key (`abi module key <module_id>`)
 ```
+
+Process variables of 3.0: `ABI_ENGINE_ROLE` and `ABI_ROLLOUT_ID` (the engine's
+role and rollout), `ABI_CONFIG_OVERLAY`, and for remote modules `ABI_NATS_URL`,
+`ABI_MODULE_KEY`, `ABI_DISCOVERY_PROJECT`, `ABI_HEALTH_PORT` and
+`OTEL_EXPORTER_OTLP_ENDPOINT`.

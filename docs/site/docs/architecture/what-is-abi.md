@@ -40,13 +40,25 @@ It is not a low-code platform. ABI is a Python framework for teams that want to 
 
 It is not cloud-locked. The full stack runs locally with Docker, entirely air-gapped, or on your own infrastructure. MIT licensed: your data, your models, your infrastructure, permanently.
 
+Upgrading from 2.x? Read [Migrate from 2.x to 3.0](/upgrade/migrate-to-3).
+
 ---
 
 ## Guide to the Architecture
 
 This section is written for engineers, architects, and technical decision-makers evaluating or deploying ABI. Each page covers a distinct slice of the architecture:
 
-**[The ABI Stack](./the-stack)** covers how the three open-source packages constitute an enterprise AI operating system: the module as the atomic unit, the five runtime layers, the package structure, and what runs in production. Start here for a complete picture of the system.
+**[The ABI Stack](./the-stack)** covers how the open-source packages constitute an enterprise AI operating system: the module as the atomic unit, the five runtime layers, the package structure, and what runs in production. Start here for a complete picture of the system.
+
+**[NATS and the Kernel Services](./nats)** explains the runtime of ABI 3.0: the engine serves its kernel services on a NATS broker, JetStream carries the bus and the jobs, discovery registers the modules that run in their own process, and one engine serves at a time, handing over without downtime.
+
+**[Remote Modules and Jobs](./remote-modules)** covers modules built with `naas-abi-sdk` that run in their own process (their agents, models and apps) and module jobs, which replace Dagster: triggers, idempotency, retries, retention.
+
+**[Remote Apps and Large Payloads](./remote-apps)** shows how a module serves a web app through Nexus over NATS, and how transfers, RPC overflow, streamed results and claim checks carry values larger than one NATS message.
+
+**[Security Model](./security)** describes broker passwords, service tokens and module keys, remote app grants, and the known limits of 3.0.
+
+**[Observability](./observability)** covers the Nexus System app (Data, Jobs, Agents, Modules, NATS, Live traffic, Traces) and OpenTelemetry tracing across processes.
 
 **[The Ontology System](./knowledge-graph)** explains how ABI models the operational world as typed entities and relationships using ISO open standards (BFO/OWL/SPARQL): the Language, Engine, and Toolchain that make the knowledge graph a first-class architectural component rather than a reporting layer.
 
@@ -54,7 +66,7 @@ This section is written for engineers, architects, and technical decision-makers
 
 **[Interoperability](./interoperability)** documents every integration point: SPARQL endpoints, S3-compatible object storage, MCP tool registration, OpenAI-compatible model interfaces, standard JWT auth, and the Python SDK.
 
-**[The Runtime](./deployment-models)** covers how ABI is operated in practice: Docker Compose as the infrastructure substrate, the four deployment topologies (local, on-premises, air-gapped, managed), and how configuration drives environment differences.
+**[The Runtime](./deployment-models)** covers how ABI is operated in practice: Docker Compose and `abi dev up`, the four deployment topologies (local, on-premises, air-gapped, managed), and how configuration drives environment differences.
 
 **[The Agent System](./agent-system)** explains how agents are structured as LangGraph state machines, how intent routing dispatches requests to the right domain agent, how agents compose into delegation hierarchies, and how they are exposed simultaneously via REST, MCP, and CLI.
 
