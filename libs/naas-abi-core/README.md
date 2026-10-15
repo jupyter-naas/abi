@@ -15,7 +15,7 @@ The ABI Library is the core implementation of ABI's concepts, designed to build 
 - **Applications**: Ready-to-use interfaces (REST API, Terminal, MCP Protocol)
 - **NATS mode** (3.0): the engine serves its kernel services on a NATS broker, the bus is JetStream, module jobs replace Dagster, and modules can run in their own process with `naas-abi-sdk`
 
-Upgrading from 2.x: [Migrate from 2.x to 3.0](../../docs/site/docs/upgrade/migrate-to-3.md) and [Breaking changes in 3.0](../../docs/site/docs/upgrade/breaking-changes-3.md).
+Upgrading from 2.x: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md) and [Breaking changes in 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/breaking-changes-3.md).
 
 ## Installation
 
@@ -68,8 +68,8 @@ nats:
   handovers); discovery registers remote modules.
 - Agent memory and the activity log live in the Document Service.
 
-Architecture: [NATS and the Kernel Services](../../docs/site/docs/architecture/nats.md),
-[Remote Modules and Jobs](../../docs/site/docs/architecture/remote-modules.md).
+Architecture: [NATS and the Kernel Services](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/architecture/nats.md),
+[Remote Modules and Jobs](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/architecture/remote-modules.md).
 
 ## Core Architecture
 
@@ -552,7 +552,7 @@ modules:
 ```
 
 The full reference, with every service and the `nats:`, `telemetry:` and
-`dev:` blocks: [Configuration Reference](../../docs/site/docs/get-started/configuration.md).
+`dev:` blocks: [Configuration Reference](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/get-started/configuration.md).
 
 ## Key Dependencies
 
@@ -613,9 +613,9 @@ uv build
 
 ## See Also
 
-- [ABI Main README](../../README.md) - Complete ABI framework documentation
-- [naas-abi-cli](../naas-abi-cli/) - CLI tool for ABI projects
-- [naas-abi-marketplace](../naas-abi-marketplace/) - Marketplace modules and agents
+- [ABI Main README](https://github.com/jupyter-naas/abi/blob/main/README.md) - Complete ABI framework documentation
+- [naas-abi-cli](https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-cli) - CLI tool for ABI projects
+- [naas-abi-marketplace](https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-marketplace) - Marketplace modules and agents
 
 ## License
 
