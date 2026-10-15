@@ -473,6 +473,12 @@ class NexusConfig(BaseModel):
     rate_limit_ip_attempts: int = 20
     rate_limit_window_seconds: int = 300
 
+    # Sign-in through the engine's identity providers (identity.providers).
+    oidc_session_cookie: str = Field(default="nexus_session", pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    oidc_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    oidc_session_max_age_hours: int = Field(default=7 * 24, ge=1, le=90 * 24)
+    oidc_redirect_uri: str | None = None
+
     enable_security_headers: bool = True
     content_security_policy: str | None = None
 
