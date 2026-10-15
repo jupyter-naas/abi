@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Protocol
 from uuid import uuid4
@@ -10,7 +10,7 @@ from uuid import uuid4
 import numpy as np
 from naas_abi.agents.conversation_title import conversation_title_from_prompt
 from naas_abi.agents.feature.context import render_feature_context_block
-from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthPersistencePort
+from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthPersistencePort, AuthUserRecord
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     CompleteChatInput,
     CompleteChatResult,
@@ -670,7 +670,30 @@ class ChatService:
             return ""
         if user is None:
             return ""
+        if workspace_id:
+            user = await self._with_member_profile(user, workspace_id)
         return render_user_context_block(user, workspace_id, conversation_id)
+
+    async def _with_member_profile(self, user: AuthUserRecord, workspace_id: str) -> AuthUserRecord:
+        """Org admins prep a member's profile (Organization Settings > Users): the
+        values set by the workspace's organization win, the account fills the rest."""
+        try:
+            profile = await self.auth_adapter.get_workspace_member_profile(  # type: ignore[union-attr]
+                user.id, workspace_id
+            )
+        except Exception:
+            logger.warning("Failed to load organization member profile", exc_info=True)
+            return user
+        if not profile:
+            return user
+        return replace(
+            user,
+            **{
+                field: profile[field]
+                for field in ("organization", "job_title", "bio")
+                if profile.get(field)
+            },
+        )
 
     def _inject_chat_vector_context(
         self,

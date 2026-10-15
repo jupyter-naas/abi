@@ -402,6 +402,29 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
             for avatar, organization, job_title in rows.all()
         ]
 
+    async def get_workspace_member_profile(
+        self, user_id: str, workspace_id: str
+    ) -> dict[str, str | None] | None:
+        row = (
+            await self.db.execute(
+                select(
+                    OrganizationMemberModel.organization_name,
+                    OrganizationMemberModel.job_title,
+                    OrganizationMemberModel.bio,
+                )
+                .join(
+                    WorkspaceModel,
+                    WorkspaceModel.organization_id == OrganizationMemberModel.organization_id,
+                )
+                .where(WorkspaceModel.id == workspace_id)
+                .where(OrganizationMemberModel.user_id == user_id)
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        organization, job_title, bio = row
+        return {"organization": organization, "job_title": job_title, "bio": bio}
+
     async def set_user_superadmin(
         self, user_id: str, is_superadmin: bool, now: datetime
     ) -> AuthUserRecord | None:

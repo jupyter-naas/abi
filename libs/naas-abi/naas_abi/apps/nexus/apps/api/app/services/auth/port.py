@@ -192,6 +192,14 @@ class AuthPersistencePort(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def get_workspace_member_profile(
+        self, user_id: str, workspace_id: str
+    ) -> dict[str, str | None] | None:
+        """The user's member profile (organization, job_title, bio) in the
+        organization owning ``workspace_id``; None outside an organization."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def set_user_superadmin(
         self, user_id: str, is_superadmin: bool, now: datetime
     ) -> AuthUserRecord | None:

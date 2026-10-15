@@ -994,6 +994,53 @@ async def test_build_system_prompt_injects_user_on_first_turn() -> None:
 
 
 @pytest.mark.asyncio
+async def test_build_system_prompt_uses_the_workspace_organization_member_profile() -> None:
+    auth_adapter = SimpleNamespace(
+        get_user_by_id=AsyncMock(
+            return_value=_user_record(organization="Own Co", job_title="Dev", bio="Account bio.")
+        ),
+        get_workspace_member_profile=AsyncMock(
+            return_value={"organization": "Acme", "job_title": "CTO", "bio": None}
+        ),
+    )
+    service = ChatService(adapter=SimpleNamespace(), auth_adapter=auth_adapter)
+
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt=None,
+        prior_messages=[ChatInputMessage(role="user", content="hi")],
+        user_id="user-1",
+        workspace_id="ws-1",
+    )
+
+    assert "Organization: Acme" in prompt
+    assert "Job title: CTO" in prompt
+    # No bio set by the organization: the account bio is kept.
+    assert "Bio: Account bio." in prompt
+    assert "Own Co" not in prompt
+    auth_adapter.get_workspace_member_profile.assert_awaited_once_with("user-1", "ws-1")
+
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_keeps_the_account_when_the_member_profile_lookup_fails() -> None:
+    auth_adapter = SimpleNamespace(
+        get_user_by_id=AsyncMock(return_value=_user_record(job_title="Dev")),
+        get_workspace_member_profile=AsyncMock(side_effect=RuntimeError("db down")),
+    )
+    service = ChatService(adapter=SimpleNamespace(), auth_adapter=auth_adapter)
+
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt=None,
+        prior_messages=[ChatInputMessage(role="user", content="hi")],
+        user_id="user-1",
+        workspace_id="ws-1",
+    )
+
+    assert "Job title: Dev" in prompt
+
+
+@pytest.mark.asyncio
 async def test_build_system_prompt_omits_empty_user_fields() -> None:
     auth_adapter = SimpleNamespace(
         get_user_by_id=AsyncMock(return_value=_user_record())

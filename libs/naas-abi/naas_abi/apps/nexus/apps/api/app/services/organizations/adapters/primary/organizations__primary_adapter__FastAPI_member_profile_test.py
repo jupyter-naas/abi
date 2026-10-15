@@ -149,9 +149,9 @@ def test_admin_sets_the_org_avatar_in_the_members_drive() -> None:
     )
 
     assert resp.status_code == 200
-    assert storage.paths() == {"naas_abi/my-drive/user-2/.settings/avatar/avatar_org.png"}
+    assert storage.paths() == {"naas_abi/my-drive/user-2/.settings/avatar/avatar_org_org-1.png"}
     assert adapter.set_organization_member_avatar.await_args.kwargs["avatar"].startswith(
-        "/api/auth/avatar/user/user-2/org?v="
+        "/api/auth/avatar/user/user-2/org/org-1?v="
     )
     # The account picture and the account itself are never touched.
     assert auth_service.mock_calls == []
@@ -161,7 +161,9 @@ def test_removing_the_org_avatar_archives_it() -> None:
     from naas_abi.apps.nexus.apps.api.app.services.auth.avatar_store_test import MemoryStorage
 
     storage = MemoryStorage()
-    storage.put_object("naas_abi/my-drive/user-2/.settings/avatar", "avatar_org.png", b"org")
+    storage.put_object("naas_abi/my-drive/user-2/.settings/avatar", "avatar_org_org-1.png", b"org")
+    # Another organization's picture of the same person.
+    storage.put_object("naas_abi/my-drive/user-2/.settings/avatar", "avatar_org_org-2.png", b"o2")
     storage.put_object("naas_abi/my-drive/user-2/.settings/avatar", "avatar.png", b"account")
     client, auth_service, adapter = _client(viewer_role="admin")
     client.app.dependency_overrides[org_api._get_object_storage] = lambda: storage
@@ -173,9 +175,10 @@ def test_removing_the_org_avatar_archives_it() -> None:
         org_id="org-1", user_id="user-2", avatar=None
     )
     paths = storage.paths()
-    assert "naas_abi/my-drive/user-2/.settings/avatar/avatar_org.png" not in paths
+    assert "naas_abi/my-drive/user-2/.settings/avatar/avatar_org_org-1.png" not in paths
+    assert "naas_abi/my-drive/user-2/.settings/avatar/avatar_org_org-2.png" in paths
     assert "naas_abi/my-drive/user-2/.settings/avatar/avatar.png" in paths
-    assert any(p.endswith("_avatar_org.png") and "/archives/" in p for p in paths)
+    assert any(p.endswith("_avatar_org_org-1.png") and "/archives/" in p for p in paths)
     assert auth_service.mock_calls == []
 
 

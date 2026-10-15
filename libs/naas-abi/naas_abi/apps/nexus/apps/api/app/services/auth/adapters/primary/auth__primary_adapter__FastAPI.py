@@ -619,8 +619,20 @@ async def get_user_org_avatar(
     user_id: str,
     object_storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> Response:
-    """The organization member picture (``avatar_org.*``) from the user's drive. Public."""
+    """Legacy organization member picture (``avatar_org.*``, shared by every org). Public."""
     return _drive_avatar_response(object_storage, user_id, avatar_store.ORG_AVATAR_BASENAME)
+
+
+@router.get("/avatar/user/{user_id}/org/{org_id}")
+async def get_user_org_avatar_for_org(
+    user_id: str,
+    org_id: str,
+    object_storage: ObjectStorageService = Depends(_get_object_storage),
+) -> Response:
+    """The member picture one organization set (``avatar_org_<org_id>.*``). Public."""
+    if not is_safe_drive_id(org_id):
+        raise HTTPException(status_code=404, detail="Avatar not found")
+    return _drive_avatar_response(object_storage, user_id, avatar_store.org_avatar_basename(org_id))
 
 
 @router.get("/avatar/{filename}")

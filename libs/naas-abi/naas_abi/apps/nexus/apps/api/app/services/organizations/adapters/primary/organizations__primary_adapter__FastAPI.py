@@ -1227,17 +1227,18 @@ async def upload_org_member_avatar(
     if len(content) > MAX_AVATAR_SIZE:
         raise HTTPException(status_code=400, detail="File too large (max 2MB)")
 
-    # In the member's own drive as avatar_org.<ext>, the previous one archived
-    # (avatar_store). The account shows it when it has no picture of its own.
+    # In the member's own drive as avatar_org_<org_id>.<ext>, one per organization,
+    # the previous one archived (avatar_store). The account shows it when it has
+    # no picture of its own.
     saved = avatar_store.save_avatar(
         object_storage,
         user_id,
         content,
         ext,
         datetime.now(UTC),
-        basename=avatar_store.ORG_AVATAR_BASENAME,
+        basename=avatar_store.org_avatar_basename(org_id),
     )
-    avatar_url = avatar_store.avatar_url(user_id, saved.digest, avatar_store.ORG_AVATAR_BASENAME)
+    avatar_url = avatar_store.org_avatar_url(user_id, org_id, saved.digest)
     previous_avatar = await service.set_member_avatar(
         org_id=org_id, user_id=user_id, avatar=avatar_url
     )
@@ -1269,7 +1270,10 @@ async def remove_org_member_avatar(
 
     previous_avatar = await service.set_member_avatar(org_id=org_id, user_id=user_id, avatar=None)
     avatar_store.remove_avatar(
-        object_storage, user_id, datetime.now(UTC), basename=avatar_store.ORG_AVATAR_BASENAME
+        object_storage,
+        user_id,
+        datetime.now(UTC),
+        basename=avatar_store.org_avatar_basename(org_id),
     )
     _delete_old_avatar(object_storage, previous_avatar)
     member = await service.get_organization_member(org_id=org_id, user_id=user_id)

@@ -4,11 +4,13 @@ Layout (``naas_abi/my-drive/<user_id>/`` is the personal drive, see
 ``files.drives.utils.drive_roots``)::
 
     .settings/avatar/avatar.<ext>                      the account picture
-    .settings/avatar/avatar_org.<ext>                  the organization member picture
+    .settings/avatar/avatar_org_<org_id>.<ext>         the member picture set by one organization
+    .settings/avatar/avatar_org.<ext>                  legacy, shared by every organization
     .settings/avatar/archives/<ts>_<name>.<ext>        previous pictures
 
-The organization picture is set by org admins (Organization Settings > Users);
-the account shows it when the account has no picture of its own.
+The organization picture is set by org admins (Organization Settings > Users),
+one file per organization so an organization never replaces or removes the
+picture another one set. The account shows it when it has no picture of its own.
 
 An upload whose bytes match the current picture (same SHA-256) changes nothing.
 Otherwise the current picture is copied to ``archives/`` first, so replacing or
@@ -25,6 +27,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import ObjectSto
 
 AVATAR_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 AVATAR_BASENAME = "avatar"
+# Legacy: one member picture shared by every organization (served at .../org).
 ORG_AVATAR_BASENAME = "avatar_org"
 SECTION = "avatar"
 
@@ -40,6 +43,16 @@ def avatar_url(user_id: str, digest: str, basename: str = AVATAR_BASENAME) -> st
     """URL stored on the user (or member); the digest changes with the picture, so caches refresh."""
     suffix = "/org" if basename == ORG_AVATAR_BASENAME else ""
     return f"/api/auth/avatar/user/{user_id}{suffix}?v={digest[:12]}"
+
+
+def org_avatar_basename(org_id: str) -> str:
+    """The member picture set by ``org_id``: ``avatar_org_<org_id>``."""
+    return f"{ORG_AVATAR_BASENAME}_{org_id}"
+
+
+def org_avatar_url(user_id: str, org_id: str, digest: str) -> str:
+    """URL stored on the membership; the digest changes with the picture, so caches refresh."""
+    return f"/api/auth/avatar/user/{user_id}/org/{org_id}?v={digest[:12]}"
 
 
 def read_avatar(

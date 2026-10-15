@@ -7,6 +7,8 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.avatar_store import (
     ORG_AVATAR_BASENAME,
     avatar_prefix,
     avatar_url,
+    org_avatar_basename,
+    org_avatar_url,
     read_avatar,
     remove_avatar,
     save_avatar,
@@ -114,22 +116,42 @@ def test_works_with_the_filesystem_storage(tmp_path) -> None:
 
 def test_org_picture_lives_next_to_the_account_picture() -> None:
     storage = MemoryStorage()
+    org_1 = org_avatar_basename("org-1")
     save_avatar(storage, "user-1", b"account", ".png", T1)
 
-    save_avatar(storage, "user-1", b"org-1", ".png", T1, basename=ORG_AVATAR_BASENAME)
-    result = save_avatar(storage, "user-1", b"org-2", ".jpg", T2, basename=ORG_AVATAR_BASENAME)
+    save_avatar(storage, "user-1", b"org-1", ".png", T1, basename=org_1)
+    result = save_avatar(storage, "user-1", b"org-1b", ".jpg", T2, basename=org_1)
 
-    assert result.archived_key == "20261014T100005Z_avatar_org.png"
+    assert result.archived_key == "20261014T100005Z_avatar_org_org-1.png"
     assert storage.paths() == {
         "naas_abi/my-drive/user-1/.settings/avatar/avatar.png",
-        "naas_abi/my-drive/user-1/.settings/avatar/avatar_org.jpg",
-        "naas_abi/my-drive/user-1/.settings/avatar/archives/20261014T100005Z_avatar_org.png",
+        "naas_abi/my-drive/user-1/.settings/avatar/avatar_org_org-1.jpg",
+        "naas_abi/my-drive/user-1/.settings/avatar/archives/20261014T100005Z_avatar_org_org-1.png",
     }
     assert read_avatar(storage, "user-1").content == b"account"
-    assert read_avatar(storage, "user-1", ORG_AVATAR_BASENAME).extension == ".jpg"
+    assert read_avatar(storage, "user-1", org_1).extension == ".jpg"
+    assert org_avatar_url("user-1", "org-1", "abcdef0123456789") == (
+        "/api/auth/avatar/user/user-1/org/org-1?v=abcdef012345"
+    )
+    assert remove_avatar(storage, "user-1", T2, basename=org_1)
+    assert read_avatar(storage, "user-1", org_1) is None
+    assert read_avatar(storage, "user-1").content == b"account"
+
+
+def test_each_organization_keeps_its_own_member_picture() -> None:
+    storage = MemoryStorage()
+    org_a, org_b = org_avatar_basename("org-a"), org_avatar_basename("org-b")
+
+    save_avatar(storage, "user-1", b"from-a", ".png", T1, basename=org_a)
+    save_avatar(storage, "user-1", b"from-b", ".png", T1, basename=org_b)
+    assert read_avatar(storage, "user-1", org_a).content == b"from-a"
+
+    remove_avatar(storage, "user-1", T2, basename=org_b)
+    assert read_avatar(storage, "user-1", org_a).content == b"from-a"
+    assert read_avatar(storage, "user-1", org_b) is None
+
+
+def test_legacy_shared_org_picture_url_still_resolves() -> None:
     assert avatar_url("user-1", "abcdef0123456789", ORG_AVATAR_BASENAME) == (
         "/api/auth/avatar/user/user-1/org?v=abcdef012345"
     )
-    assert remove_avatar(storage, "user-1", T2, basename=ORG_AVATAR_BASENAME)
-    assert read_avatar(storage, "user-1", ORG_AVATAR_BASENAME) is None
-    assert read_avatar(storage, "user-1").content == b"account"

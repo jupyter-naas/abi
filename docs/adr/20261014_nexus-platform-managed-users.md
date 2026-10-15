@@ -65,8 +65,11 @@ and per-member workspace assignment.
    from the organization the person joined first. An organization never shows
    the account's values for these fields. The full name is always the account
    name (`users.name`), and bio still falls back to the account. The picture is stored in the person's drive as
-   `.settings/avatar/avatar_org.<ext>`, next to the account picture
-   `avatar.<ext>`.
+   `.settings/avatar/avatar_org_<org_id>.<ext>` (one file per organization,
+   so an organization never replaces or removes another one's picture), next
+   to the account picture `avatar.<ext>`. Chat's first-turn profile block uses
+   the organization, job title and bio set by the workspace's organization,
+   and the account values where that organization set none.
 7. **Profile files in the personal drive.** After each profile change,
    `naas_abi/my-drive/<user_id>/` gets `.settings/user/user.json` (the
    account), `.settings/user/org_member.json` (the memberships) and `.USER.md`
