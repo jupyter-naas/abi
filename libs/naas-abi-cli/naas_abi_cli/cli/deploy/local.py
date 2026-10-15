@@ -178,6 +178,19 @@ def project_uses_nats(project_path: str) -> bool | None:
     return None
 
 
+def any_config_uses_nats(project_path: str) -> bool:
+    """Whether ``config.local.yaml`` or ``config.yaml`` has a top-level
+    ``nats:`` block: a project run natively on NATS (`abi dev up` reads
+    ``config.yaml``) may keep a classic Docker config."""
+    for name in _PROJECT_CONFIGS:
+        path = os.path.join(project_path, name)
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as config_file:
+                if _NATS_BLOCK.search(config_file.read()):
+                    return True
+    return False
+
+
 def _print_classic_stack_notice() -> None:
     print(
         "This project runs without NATS (its config has no `nats:` block), so "

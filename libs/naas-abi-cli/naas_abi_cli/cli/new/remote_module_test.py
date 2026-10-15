@@ -250,6 +250,24 @@ def test_a_classic_project_gets_an_in_engine_module_by_default(
     assert load_dev_configuration(str(root / "config.yaml")).modules == []
 
 
+def test_a_project_on_nats_natively_gets_a_remote_module(tmp_path: Path) -> None:
+    """The guide puts the `nats:` block in config.yaml for `abi dev up`; the
+    Docker config (config.local.yaml) may stay classic."""
+    root = _project(tmp_path, nats=True)
+    (root / "config.local.yaml").write_text(_CLASSIC_CONFIG, encoding="utf-8")
+
+    result = _invoke(_new_module, root, "research")
+
+    assert result.exit_code == 0, result.output
+    assert "naas_abi_sdk" in (root / "src" / "research" / "__init__.py").read_text()
+    assert [
+        m.name for m in load_dev_configuration(str(root / "config.yaml")).modules
+    ] == ["research"]
+    # Its Docker stack has no broker: the service is printed, not added.
+    assert not (root / COMPOSE_OVERRIDE).exists()
+    assert "Docker config has no `nats:` block" in result.output
+
+
 def test_a_remote_module_in_a_classic_project_gets_no_compose_service(
     tmp_path: Path,
 ) -> None:

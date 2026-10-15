@@ -130,7 +130,9 @@ def new_module(
     module_name = to_kebab_case(module_name)
     project = find_project(Path(os.getcwd()))
     if kind is None:
-        classic = project is not None and not standalone and not project.nats()
+        classic = (
+            project is not None and not standalone and not project.nats_anywhere()
+        )
         kind = "in-engine" if classic else "remote"
         if classic:
             click.echo(
@@ -203,7 +205,7 @@ def new_module(
     )
 
     if orchestration is None:
-        orchestration = project is None or not project.nats()
+        orchestration = project is None or not project.nats_anywhere()
     if orchestration:
         new_orchestration(
             module_name,
