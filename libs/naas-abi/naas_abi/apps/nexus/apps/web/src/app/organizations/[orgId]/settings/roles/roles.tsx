@@ -338,10 +338,6 @@ export default function OrgRolesPage() {
     }
   };
 
-  const grantCount = roles.reduce(
-    (total, role) => total + (baseline[role] || []).length,
-    0
-  );
   const hasActiveFilters =
     columns.some((column) => !isBlank(columnFilters[column.id])) ||
     searchQuery.trim().length > 0;
@@ -361,7 +357,7 @@ export default function OrgRolesPage() {
       <div className="org-settings-users-main">
       <OrgSettingsPageHeader
         title="Roles"
-        badge={`${grantCount} enabled`}
+        badge={`${roles.length} ${roles.length === 1 ? 'role' : 'roles'}`}
         subtitle="Define which workspace features each role can access. Owner access is fixed."
         actions={
           canManage ? (
