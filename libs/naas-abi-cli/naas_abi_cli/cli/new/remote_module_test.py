@@ -122,6 +122,10 @@ def test_a_remote_module_never_imports_abi_core(tmp_path: Path) -> None:
     assert "naas-abi-sdk[agent,otel]" in dockerfile
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 12),
+    reason="generated modules need Python 3.12 (projects and their images do)",
+)
 def test_the_generated_module_passes_its_own_tests(tmp_path: Path) -> None:
     """Its tests include the check that importing it loads no naas_abi_core."""
     root = _project(tmp_path)
