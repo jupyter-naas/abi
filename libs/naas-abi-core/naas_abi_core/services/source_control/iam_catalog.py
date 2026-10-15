@@ -57,7 +57,14 @@ CATALOG = ActionCatalog(
     ),
     actions=(
         _action("ListRepos", "list", ("repo",), "list_repos"),
-        _action("EnsureRepo", "write", ("repo",), "ensure_repo", creates=True),
+        _action(
+            "EnsureRepo",
+            "write",
+            ("repo",),
+            "ensure_repo",
+            "create_repo",
+            creates=True,
+        ),
         _action("DeleteRepo", "admin", ("repo",), "delete_repo"),
         _action("AddCollaborator", "admin", ("repo",), "add_collaborator"),
         _action("SetBranchProtection", "admin", ("branch",), "set_branch_protection"),

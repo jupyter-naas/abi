@@ -9,6 +9,7 @@ from naas_abi_core.engine.call_context import (
     service_account,
     use_call_context,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.email.adapters.primary.email__primary_adapter__NATS import (
     EmailPrimaryAdapterNATS,
 )
@@ -52,7 +53,7 @@ class EmailContract(AuthorizationContract):
 
     def facade(self, nats_url, identity):
         return EmailService(
-            EmailSecondaryAdapterNATSClient(nats_url, JWT_SECRET, identity)
+            EmailSecondaryAdapterNATSClient(nats_url, TEST_TOKENS.source(identity))
         )
 
 

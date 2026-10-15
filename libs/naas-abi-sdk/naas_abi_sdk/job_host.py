@@ -868,7 +868,9 @@ class JobHost:
         if run_id not in self._running or job not in self.handlers:
             return
         try:
-            sealed = await self._sealed(msg.subject, "cancel", msg.data, msg.headers)
+            sealed = await self._sealed(
+                getattr(msg, "subject", ""), "cancel", msg.data, msg.headers
+            )
         except Exception:  # noqa: BLE001 - a cancel is best effort
             logger.warning("Could not check a cancel's seal; ignored", exc_info=True)
             return

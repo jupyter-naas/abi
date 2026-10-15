@@ -196,11 +196,23 @@ def test_a_nexus_user_holds_the_transitional_kernel_grant(h):
         ).allowed
 
 
+def _approved_module(h, document_, name="module/default/research"):
+    account = h.service_account(name)
+    project, module_id = name.split("/")[1:]
+    with h.as_(account):
+        h.iam.submit_manifest(module_id, project, document_)
+    h.admin("approve_manifest", account.id)
+    return account
+
+
 def test_a_remote_module_cannot_evict_registrations(h):
-    """TRANSITIONAL: a module holds the kernel services, never eviction."""
-    module = "abi:-:-:discovery:module/default/other"
-    assert h.allowed("discovery:Register", module, actor="some-module")
-    assert not h.allowed("discovery:Evict", module, actor="some-module")
+    """Its bootstrap registers its own module; no manifest grants eviction."""
+    account = _approved_module(h, document(statement("Allow", ["discovery:*"], ["*"])))
+    own = "abi:-:-:discovery:module/default/research"
+    other = "abi:-:-:discovery:module/default/other"
+    assert h.allowed("discovery:Register", own, account)
+    assert not h.allowed("discovery:Evict", own, account)
+    assert not h.allowed("discovery:Evict", other, account)
 
 
 RUN = "abi:-:-:discovery:run/{owner}/default/inv-1"
@@ -227,15 +239,21 @@ def test_a_nexus_user_reaches_only_their_own_agent_runs(h, action):
 def test_a_module_acting_for_a_user_follows_that_users_runs(h, action):
     """A run started for a user is the user's: a module delegating for that
     user (a delegated token, #62) follows it, and still no one else's."""
+    from naas_abi_sdk.module import ModuleDependencies
+    from naas_abi_sdk.permissions import default_manifest
+
     from naas_abi_core.engine.call_context import (
         CallContext,
         Principal,
         use_call_context,
     )
 
+    account = _approved_module(
+        h, default_manifest(ModuleDependencies(modules=("other",)))
+    )
     ada = "user-aaaaaaaaaaaa"
     delegated = CallContext(
-        principal=Principal(id="research", kind="service_account", name="research"),
+        principal=Principal(id=account.id, kind="service_account", name=account.name),
         on_behalf_of=Principal(id=ada, kind="user"),
     )
     with use_call_context(delegated):
@@ -249,9 +267,15 @@ def test_a_module_acting_for_a_user_follows_that_users_runs(h, action):
     "action", ["discovery:GetAgentRun", "discovery:CancelAgentRun"]
 )
 def test_a_remote_module_reaches_only_its_own_agent_runs(h, action):
-    assert h.allowed(action, RUN.format(owner="research"), actor="research")
-    assert not h.allowed(action, RUN.format(owner="user-1"), actor="research")
-    assert not h.allowed(action, RUN.format(owner="other"), actor="research")
+    from naas_abi_sdk.module import ModuleDependencies
+    from naas_abi_sdk.permissions import default_manifest
+
+    account = _approved_module(
+        h, default_manifest(ModuleDependencies(modules=("other",)))
+    )
+    assert h.allowed(action, RUN.format(owner=account.id), account)
+    assert not h.allowed(action, RUN.format(owner="user-1"), account)
+    assert not h.allowed(action, RUN.format(owner="other"), account)
 
 
 def test_an_iam_user_holds_no_transitional_grant(h):

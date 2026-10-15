@@ -10,6 +10,7 @@ from naas_abi_core.engine.call_context import (
     service_account,
     use_call_context,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.iam.IAMPorts import (
     PermissionDeniedError,
     ResourceNotFoundError,
@@ -48,7 +49,7 @@ REPO_NAME = "abi:-:-:source_control:repo/acme%2Fproj"
 
 def _facade(nats_url: str, identity: str) -> SourceControlService:
     return SourceControlService(
-        SourceControlSecondaryAdapterNATSClient(nats_url, JWT_SECRET, identity)
+        SourceControlSecondaryAdapterNATSClient(nats_url, TEST_TOKENS.source(identity))
     )
 
 

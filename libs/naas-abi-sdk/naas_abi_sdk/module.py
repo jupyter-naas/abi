@@ -159,6 +159,14 @@ class EngineProxy:
         )
         self.services = ServicesProxy(client, dependencies, module_name)
         self.rpc = RPCServicesProxy(client, dependencies, module_name)
+        self._client = client
+
+    @property
+    def principal_id(self) -> str:
+        """The service account this module runs as (its ``sa_`` id), known once
+        its key was exchanged; empty for a transport holding a plain token."""
+        credentials = getattr(self._client._transport, "credentials", None)
+        return getattr(credentials, "principal_id", "") or ""
 
 
 Config = TypeVar("Config", bound=ModuleConfiguration)

@@ -9,6 +9,7 @@ from langchain_core.messages import HumanMessage
 from naas_abi_proto.model_registry.v1 import model_registry_pb2 as pb
 
 from naas_abi_core.engine.call_context import as_service_account
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.models.Model import ChatModel, EmbeddingModel
 from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_core.services.iam.tests.authorization_contract import (
@@ -65,7 +66,10 @@ class ModelRegistryContract(AuthorizationContract):
 
     def facade(self, nats_url, identity):
         return ModelRegistryNATSClient(
-            ModelRegistryService(), nats_url, JWT_SECRET, identity=identity
+            ModelRegistryService(),
+            nats_url,
+            TEST_TOKENS.source(identity),
+            identity=identity,
         )
 
     def resource(self, owner):

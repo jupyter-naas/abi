@@ -40,7 +40,8 @@ def test_module_dependencies_reach_those_modules_only():
         in (statements["UseDependencies"]["resources"])
     )
     assert statements["FollowOwnRuns"]["resources"] == [
-        "abi:-:-:discovery:run/${principal.id}/*"
+        "abi:-:-:discovery:run/${principal.id}/*",
+        "abi:-:-:discovery:run/${user.id}/*",
     ]
 
 

@@ -50,6 +50,7 @@ from naas_abi_core.engine.nats_test_server import (
     native_nats_server,
     nats_server_binary,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
 from naas_abi_core.services.iam.IAMPorts import (
     PermissionDeniedError,
@@ -61,7 +62,9 @@ from naas_abi_core.services.iam.kernel_catalogs import kernel_catalogs
 from naas_abi_core.services.iam.names import parse_resource_name
 from naas_abi_core.services.iam.tests.iam_harness import IAMHarness, statement
 
-JWT_SECRET = "authorization-contract-secret"
+# What every primary of these tests verifies with (engine tokens of one test
+# issuer): a client's token names its identity (``TEST_TOKENS.source``).
+JWT_SECRET = TEST_TOKENS.verifier
 TRANSPORTS = ("in_process", "nats")
 CALLERS = ("user_via_api", "service_account")
 SERVICE_ACCOUNT = "contract-module"

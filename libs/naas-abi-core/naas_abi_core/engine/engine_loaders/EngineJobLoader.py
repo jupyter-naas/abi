@@ -82,13 +82,13 @@ def _default_documents(transport: Any, module_id: str) -> Any:
     return DocumentService(DocumentClient(transport).for_namespace(module_id))
 
 
-def job_authorizer(iam: Any, secret: str, project: str, module_id: str) -> Any:
+def job_authorizer(iam: Any, verifier: Any, project: str, module_id: str) -> Any:
     """An engine job host's authorizer: the check discovery runs for a module's
     host (``discovery_service.require_job``), in process.
 
     The caller is the one the trigger or cancel message names (its token, as of
-    when the trigger was stored, and its on-behalf-of user), verified with the
-    engine's secret. A refusal is an ``RPCError`` the host records; IAM is asked
+    when the trigger was stored, and its on-behalf-of user), verified against
+    the engine's JWKS (``verifier``). A refusal is an ``RPCError`` the host records; IAM is asked
     off the jobs loop.
     """
     from naas_abi_core.engine.call_context import ON_BEHALF_OF_HEADER, use_call_context
@@ -107,7 +107,7 @@ def job_authorizer(iam: Any, secret: str, project: str, module_id: str) -> Any:
             caller = caller_of(
                 headers.get("Nats-Auth-Token", ""),
                 headers.get(ON_BEHALF_OF_HEADER, ""),
-                secret,
+                verifier,
                 at=stored_at.timestamp() if stored_at is not None else None,
             )
         except InvalidServiceTokenError as exc:
@@ -250,7 +250,7 @@ class EngineJobLoader:
                 else {
                     "authorize": job_authorizer(
                         self.iam,
-                        self.configuration.jwt_secret,
+                        self._verifier(),
                         self.project,
                         module_id,
                     )
@@ -266,6 +266,16 @@ class EngineJobLoader:
         if hasattr(module, "_bind_job_host"):
             module._bind_job_host(host, self._loop.loop)
             self._bound.append(module)
+
+    def _verifier(self) -> Any:
+        """IAM's own verifier in the serving engine, else its JWKS over NATS."""
+        verifier = getattr(self.iam, "verifier", None)
+        if callable(verifier):
+            return verifier()
+        from naas_abi_core.engine.nats_credentials import nats_verifier
+
+        assert self.configuration is not None
+        return nats_verifier(self.configuration.nats_url)
 
     def stop(self) -> None:
         """Stop every host (running jobs get their grace period), then the loop."""

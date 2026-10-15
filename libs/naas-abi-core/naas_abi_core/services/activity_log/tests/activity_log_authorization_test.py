@@ -11,6 +11,7 @@ from naas_abi_core.engine.call_context import (
     use_call_context,
     user,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.activity_log.ActivityLogPort import ActivityEvent
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.activity_log.adapters.primary.activity_log__primary_adapter__NATS import (
@@ -50,7 +51,9 @@ class ActivityLogContract(AuthorizationContract):
 
     def facade(self, nats_url, identity):
         return ActivityLogService(
-            ActivityLogSecondaryAdapterNATSClient(nats_url, JWT_SECRET, identity)
+            ActivityLogSecondaryAdapterNATSClient(
+                nats_url, TEST_TOKENS.source(identity)
+            )
         )
 
     def close_facade(self, facade):

@@ -100,7 +100,12 @@ def default_manifest(
             _statement(
                 "FollowOwnRuns",
                 ["discovery:GetAgentRun", "discovery:CancelAgentRun"],
-                ["abi:-:-:discovery:run/${principal.id}/*"],
+                # Its own runs, and those of the user it acts for: a run started
+                # for a user is that user's (RFC §6.4).
+                [
+                    "abi:-:-:discovery:run/${principal.id}/*",
+                    "abi:-:-:discovery:run/${user.id}/*",
+                ],
             )
         )
     names = ["*"] if jobs is True else sorted(set(jobs or ()))

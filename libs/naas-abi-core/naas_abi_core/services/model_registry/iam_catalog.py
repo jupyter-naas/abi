@@ -11,6 +11,14 @@ from naas_abi_core.services.iam.catalog import ActionCatalog, ActionSpec, Resour
 SERVICE = "model_registry"
 SUBJECT_PREFIX = "abi.svc.model_registry.v1"
 
+# A large chat, stream or embedding call goes through a transfer session
+# (docs/adr/20261003_nats-streamed-results.md); the operation it opens is
+# checked by the registry like the direct call.
+TRANSFER = tuple(
+    f"{SUBJECT_PREFIX}.transfer.{operation}"
+    for operation in ("open", "*.write", "*.start", "*.read", "*.close")
+)
+
 
 def _action(
     name: str,
@@ -46,7 +54,7 @@ CATALOG = ActionCatalog(
     actions=(
         _action("ListModels", "list", ("model",), "list_models"),
         _action("Resolve", "read", ("model",), "resolve"),
-        _action("Chat", "read", ("model",), "chat"),
+        _action("Chat", "read", ("model",), "chat", *TRANSFER),
         _action(
             "ChatStream",
             "read",
@@ -54,7 +62,8 @@ CATALOG = ActionCatalog(
             "stream_open",
             "*.stream_next",
             "*.stream_close",
+            *TRANSFER,
         ),
-        _action("Embed", "read", ("model",), "embed"),
+        _action("Embed", "read", ("model",), "embed", *TRANSFER),
     ),
 )

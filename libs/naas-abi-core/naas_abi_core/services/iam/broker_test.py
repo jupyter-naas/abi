@@ -4,6 +4,7 @@ from naas_abi_core.services.iam import broker
 from naas_abi_core.services.iam.adapters import iam_nats_codec
 from naas_abi_core.services.iam.catalog import CatalogRegistry
 from naas_abi_core.services.iam.IAMPorts import EffectiveStatement
+from naas_abi_core.services.iam.kernel_catalogs import kernel_catalogs
 from naas_abi_core.services.iam.policy import Statement
 
 ACCOUNT = "sa_01jabcdefghjkmnpqrstvwxyz0"
@@ -11,14 +12,21 @@ SA = "01jabcdefghjkmnpqrstvwxyz0"
 KEY = "abcdefghijklmnop"
 
 
-def derive(*statements: Statement, module=("acme", "people")):
+def derive(*statements: Statement, module=("acme", "people"), catalogs=None):
     return broker.derive(
         principal_id=ACCOUNT,
         key_id=KEY,
         statements=[EffectiveStatement(s, "p", i) for i, s in enumerate(statements)],
-        catalogs=CatalogRegistry(),
+        catalogs=catalogs or CatalogRegistry(),
         module=module,
     )
+
+
+def kernel() -> CatalogRegistry:
+    registry = CatalogRegistry()
+    for catalog in kernel_catalogs():
+        registry.register(catalog)
+    return registry
 
 
 def allow(actions, resources=("*",)):
@@ -88,6 +96,27 @@ def test_a_service_wildcard_reaches_the_service_and_its_live_subjects():
     permissions = derive(allow(["event:*"]))
     assert "abi.svc.event.v1.>" in permissions.publish
     assert "evt.>" in permissions.subscribe
+
+
+def test_a_catalogued_action_reaches_every_subject_its_endpoint_serves():
+    """Catalog subjects are all a module gets: an action reaches its call, its
+    variants and the transfer session a large call goes through."""
+    permissions = derive(
+        allow(["model_registry:Chat", "source_control:EnsureRepo"]),
+        catalogs=kernel(),
+    )
+    for subject in (
+        "abi.svc.model_registry.v1.chat",
+        "abi.svc.model_registry.v1.transfer.open",
+        "abi.svc.model_registry.v1.transfer.c0c0.write",
+        "abi.svc.source_control.v1.ensure_repo",
+        "abi.svc.source_control.v1.create_repo",
+    ):
+        assert any(broker.subject_matches(p, subject) for p in permissions.publish), (
+            subject
+        )
+    assert "abi.svc.model_registry.v1.>" not in permissions.publish
+    assert "abi.svc.source_control.v1.delete_repo" not in permissions.publish
 
 
 def test_a_deny_on_everything_takes_the_service_back():

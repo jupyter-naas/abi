@@ -11,6 +11,7 @@ from naas_abi_core.engine.call_context import (
     service_account,
     use_call_context,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.coding_environment.adapters.primary.coding_environment__primary_adapter__NATS import (
     CodingEnvironmentPrimaryAdapterNATS,
 )
@@ -51,7 +52,9 @@ class CodingEnvironmentContract(AuthorizationContract):
 
     def facade(self, nats_url, identity):
         return CodingEnvironmentService(
-            CodingEnvironmentSecondaryAdapterNATSClient(nats_url, JWT_SECRET, identity)
+            CodingEnvironmentSecondaryAdapterNATSClient(
+                nats_url, TEST_TOKENS.source(identity)
+            )
         )
 
 

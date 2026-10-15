@@ -13,6 +13,7 @@ from naas_abi_core.engine.call_context import (
     as_service_account,
     use_call_context,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.event.adapters.primary.event__primary_adapter__NATS import (
     EventPrimaryAdapterNATS,
 )
@@ -68,7 +69,7 @@ class EventContract(AuthorizationContract):
 
     def facade(self, nats_url, identity):
         return EventService(
-            EventSecondaryAdapterNATSClient(nats_url, JWT_SECRET, identity)
+            EventSecondaryAdapterNATSClient(nats_url, TEST_TOKENS.source(identity))
         )
 
 

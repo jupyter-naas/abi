@@ -58,13 +58,16 @@ model_registry, discovery (agents, models, apps, jobs), source_control and codin
    and a `module/<project>/<module_id>` account (#60) registers only its own module. A strict
    "token subject equals module id" rule would break every existing module, whose generated ids are
    `<project>.<name>`. Renewing or unregistering an instance needs its lease. Until #60, a module id that
-   nobody holds can still be registered by any module. `Evict` is a policy, `discovery:Evict`; the
+   nobody holds can still be registered by any module. Since #60, a module runs on its own
+   `module/<project>/<module_id>` account, whose bootstrap policy registers that module only. `Evict` is a policy, `discovery:Evict`; the
    transitional module policy denies it, and a discovery with no IAM lets only `api` and `engine` evict.
 8. **Jobs.** A manual trigger or a cancel carries its caller's credentials in the stored message. The job
    host asks discovery (`authorize_job`) before running it, with the token checked as of the time JetStream
    stored the message, since a trigger may be consumed after its token expired. Engine-hosted jobs run the
    same check in process. Scheduled and event triggers are the host's own and are trusted until #60's
-   broker permissions restrict who may publish on trigger subjects.
+   broker permissions restrict who may publish on trigger subjects. Since #60, only the engine writes
+   triggers: it verifies the caller's credentials, stores them in the trigger and seals it, and a job host
+   runs no trigger the engine did not seal (`20261013_engine-tokens-service-accounts-broker.md`).
 9. **Models.** Resolving needs `Resolve` and lists are filtered by `ListModels`. In process, each chat
    invocation needs `Chat` in the invoking call's context, through a callback on the models the registry
    hands out, so an agent built at boot is still checked per user. Over NATS, `Chat`, `ChatStream` and

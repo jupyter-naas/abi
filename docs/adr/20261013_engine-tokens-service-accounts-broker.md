@@ -133,7 +133,9 @@ Implemented as decided, with these differences:
     `abi.agent.<project>.<sa>.>` and `abi.mod.<project>.<sa>.>`, where `<sa>` is the ULID part of its
     `sa_` id;
   - for each allowed action, the action's catalog subjects. A service without a registered catalog grants
-    its whole prefix `abi.svc.<service>.v1.>`. Discovery actions add the hosting subjects of the modules they
+    its whole prefix `abi.svc.<service>.v1.>`. A catalog therefore lists every subject an action's endpoint
+    serves, its transfer session included (`abi.svc.<service>.v1.transfer.open`, `*.write`, ...): a subject
+    missing there is one no module reaches. Discovery actions add the hosting subjects of the modules they
     reach, in the module's project (for another account, the projects its resources name), and the event
     service adds `evt.>`;
   - **jobs**, only for job resources naming the module (`job/<project>/<module>/<job>`): the triggers and
@@ -161,7 +163,10 @@ Implemented as decided, with these differences:
   grants (`broker_grants`, cached per principal until the store's revision changes). It aims schedules at the
   job's own trigger, sets a trigger's kind (`event` for the job's own module only) and TTL, scopes a trigger's
   `Nats-Msg-Id` to the caller and the job (JetStream dedups across the whole jobs stream: no module can make
-  another's trigger a duplicate), and passes through the trace and claim-check headers only. Without an engine
+  another's trigger a duplicate), and passes through the trace and claim-check headers only. The caller's
+  credentials (its token and, for `api`, the user it acts for) come as request headers; the engine verifies
+  them and stores them in the trigger or cancel, so the job host authorizes the run against the caller as of
+  when it was stored (`authorize_job`), never against a header the module wrote. Without an engine
   answering (a broker without the callout) the SDK does it itself, and remembers for a minute that none did.
   The job host decides that a lost run's trigger expired from the expiry it recorded (`trigger_expires_at`),
   not by reading the stream, and drops a trigger fired by another module's schedule (`Nats-Scheduler`).

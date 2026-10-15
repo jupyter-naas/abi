@@ -49,9 +49,14 @@ from typing import Any
 
 import nats
 from naas_abi_core import logger
-from naas_abi_core.engine.call_context import CallContext, Principal, use_call_context
+from naas_abi_core.engine.call_context import (
+    ON_BEHALF_OF_HEADER,
+    CallContext,
+    Principal,
+    use_call_context,
+)
 from naas_abi_core.engine.nats_auth import InvalidServiceTokenError, TokenVerifier
-from naas_abi_core.engine.nats_identity import caller_context
+from naas_abi_core.engine.nats_identity import AUTH_HEADER, caller_context
 from naas_abi_core.engine.nats_naming import connection_name
 from naas_abi_core.services.iam import broker
 from naas_abi_core.services.iam.IAMPorts import IAMError
@@ -145,7 +150,8 @@ class BrokerControl:
     async def handle(self, operation: str, headers: Any, data: bytes) -> dict[str, Any]:
         """Do ``operation`` for the verified caller (what it answers, besides
         ``ok``); ``Refused`` otherwise."""
-        caller = caller_context(headers, self.verifier).principal
+        context = caller_context(headers, self.verifier)
+        caller = context.principal
         try:
             fields = json.loads(data or b"{}")
         except ValueError:
@@ -158,6 +164,13 @@ class BrokerControl:
         request = _Request(
             self, caller, None if trusted else await self._grants_of(caller)
         )
+        # The verified credentials the job's host authorizes a trigger or a
+        # cancel with (discovery:TriggerJob, CancelJobRun), as of when stored.
+        request.credentials = {AUTH_HEADER: headers.get(AUTH_HEADER, "")}
+        if context.on_behalf_of is not None:
+            request.credentials[ON_BEHALF_OF_HEADER] = headers.get(
+                ON_BEHALF_OF_HEADER, ""
+            )
         js = self._nc.jetstream()
         if operation in ("ensure_topic", "ensure_queue"):
             await self._queue(js, operation, fields, request)
@@ -262,6 +275,7 @@ class BrokerControl:
                     [request.caller.id, subjects.trigger, headers["Nats-Msg-Id"]]
                 ).encode()
             ).hexdigest()
+        headers.update(request.credentials)
         headers.update({TRIGGER_HEADER: kind, "Nats-TTL": TRIGGER_TTLS[kind]})
         headers[SEAL_HEADER] = self._seal(subjects.trigger, kind, body, headers)
         stream = stream_name(project)
@@ -297,7 +311,10 @@ class BrokerControl:
         await self._nc.publish(
             subject,
             body,
-            headers={SEAL_HEADER: self._seal(subject, "cancel", body, {})},
+            headers={
+                **request.credentials,
+                SEAL_HEADER: self._seal(subject, "cancel", body, {}),
+            },
         )
 
     async def _job(
@@ -467,6 +484,7 @@ class _Request:
         grants: broker.BrokerPermissions | None,
     ) -> None:
         self.control, self.caller, self.grants = control, caller, grants
+        self.credentials: dict[str, str] = {}
 
     @property
     def trusted(self) -> bool:
