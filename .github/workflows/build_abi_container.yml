@@ -35,15 +35,35 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.ACCESS_TOKEN }}
 
+      - name: Check the release commit is on main
+        id: channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Only a release cut from main moves :latest. A release from v2 (2.x
+          # fixes, which runs its own copy of this workflow) or dev (prereleases)
+          # carries a commit main does not contain. The compare API answers
+          # "identical" or "ahead" when main contains the tagged commit.
+          STATUS=$(gh api "repos/${{ github.repository }}/compare/${{ github.sha }}...main" --jq .status)
+          echo "main compared with ${{ github.sha }}: ${STATUS}"
+          case "$STATUS" in
+            identical|ahead) echo "latest=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "latest=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
       - name: Build Docker image
         run: |
           pip install uv
           touch .env
           make build
-          docker tag abi:latest ghcr.io/${{ github.repository }}/abi:latest
           docker tag abi:latest ghcr.io/${{ github.repository }}/abi:${{ github.event.release.tag_name }}
+          if [ "${{ steps.channel.outputs.latest }}" = "true" ]; then
+            docker tag abi:latest ghcr.io/${{ github.repository }}/abi:latest
+          fi
 
       - name: Push Docker image to GitHub Container Registry
         run: |
           docker push ghcr.io/${{ github.repository }}/abi:${{ github.event.release.tag_name }}
-          docker push ghcr.io/${{ github.repository }}/abi:latest
+          if [ "${{ steps.channel.outputs.latest }}" = "true" ]; then
+            docker push ghcr.io/${{ github.repository }}/abi:latest
+          fi
