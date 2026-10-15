@@ -58,6 +58,21 @@ jobs:
           # uses while loading commit_author. Pin GitPython until PSR is updated.
           python -m pip install "python-semantic-release==10.5.2" "GitPython>=3.1.43,<3.1.60"
 
+      # v2 is the 2.x line. A BREAKING CHANGE footer there would compute
+      # 3.0.0, and before main releases 3.0.0 nothing else would stop it from
+      # being published from 2.x code.
+      - name: Guard | v2 releases 2.x versions only
+        if: github.ref_name == 'v2'
+        run: |
+          for dir in "$naas_abi_core_dir" "$naas_abi_dir" "$naas_abi_cli_dir"; do
+            next=$(cd "$dir" && semantic-release --noop version --print | tail -n 1)
+            echo "$dir: next version ${next}"
+            case "$next" in
+              2.*) ;;
+              *) echo "::error::$dir would release ${next} from v2; v2 only releases 2.x"; exit 1 ;;
+            esac
+          done
+
       # ------------------------------------------------------------------- #
       # Note the use of different IDs to distinguish which submodule was    #
       # identified to be released. The subsequent actions then reference    #
