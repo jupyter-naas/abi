@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+### Upgrade notes (3.0)
+
+- `naas-abi` requires `naas-abi-core[nats]` instead of `naas-abi-core[dagster]`:
+  a project without NATS adds the legacy `naas-abi-core[dagster,rabbitmq]`
+  extras itself.
+- Nexus lists and chats with remote modules' agents (the chat API takes a
+  remote agent's id), serves their apps sandboxed under a per-user,
+  per-workspace grant (`POST /api/apps/remote-grant`), and has the super-admin
+  System app (`/api/admin/system/`).
+- App link tokens (`POST /api/apps/access-token`) no longer authenticate
+  `/api/*`; a user's agent toggle now sticks across config syncs (migration
+  `0048_agent_enabled_override`).
+- Guide: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
+  Every change: [Breaking changes in 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/breaking-changes-3.md).
+
 ## v2.81.0 (2026-10-07)
 
 ### Bug Fixes

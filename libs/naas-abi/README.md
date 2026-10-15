@@ -19,6 +19,28 @@ Multi-agent orchestrator and knowledge graph management system for AI orchestrat
 pip install naas-abi
 ```
 
+`naas-abi` requires `naas-abi-core[nats]` (the SDK and protobuf contracts are
+installed in every mode). It no longer pulls Dagster: a project without NATS
+adds the legacy `naas-abi-core[dagster,rabbitmq]` extras itself. Upgrade
+`naas-abi`, `naas-abi-core` and `naas-abi-cli` to 3.0 together; see
+[Migrate from 2.x to 3.0](../../docs/site/docs/upgrade/migrate-to-3.md).
+
+## Nexus in 3.0
+
+In a NATS deployment, Nexus (the web app and its API, in `naas_abi/apps/nexus`)
+also:
+
+- lists the agents of remote modules next to the engine's, and chats with them
+  (`POST /api/chat/stream` and `/api/chat/complete` take a remote agent's id);
+- serves remote modules' apps over NATS, sandboxed under a per-user,
+  per-workspace grant (`/app-html/remote/<module_id>/<app>/`,
+  `POST /api/apps/remote-grant`);
+- has the super-admin **System** app (Overview, Services, Data, Jobs, Agents,
+  Modules, NATS, Live traffic, Traces), backed by `/api/admin/system/`.
+
+See [Remote Apps](../../docs/site/docs/architecture/remote-apps.md) and
+[Observability](../../docs/site/docs/architecture/observability.md).
+
 ## Core Components
 
 ### ABIModule
@@ -370,6 +392,8 @@ python -m naas_abi.cli create-ontology
 ```
 
 Each command provides an interactive wizard to guide you through the creation process.
+
+In a project, prefer the `abi` CLI (`naas-abi-cli`): `abi new module <name>` creates a remote module in a NATS project, and `abi new module <name> --in-engine` a module the engine loads.
 
 ## Usage Examples
 
