@@ -302,9 +302,11 @@ message NamespaceVersionRequest {
   string namespace = 2;
 }
 message NamespaceVersionResponse {
-  // Unset when the namespace never held a dataset.
-  optional int64 version = 1;
-  optional DatasetError error = 2;
+  // Neither set: the namespace never held a dataset.
+  oneof result {
+    int64 version = 1;
+    DatasetError error = 2;
+  }
 }
 
 // -----------------------------------------------------------------------
