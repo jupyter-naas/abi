@@ -188,6 +188,26 @@ def ensure_nats_passwords(env_path: Path) -> dict[str, str]:
     return passwords
 
 
+RABBITMQ_USER = "RABBITMQ_USER"
+RABBITMQ_PASSWORD = "RABBITMQ_PASSWORD"
+
+
+def ensure_rabbitmq_credentials(env_path: Path) -> tuple[str, str]:
+    """Return ``(user, password)`` of the legacy RabbitMQ bus from ``.env``,
+    generating what is missing or a shipped default."""
+    lines = _read(env_path)
+    original = list(lines)
+    user = _value(lines, RABBITMQ_USER) or "abi"
+    lines = _set(lines, RABBITMQ_USER, user)
+    password = _value(lines, RABBITMQ_PASSWORD)
+    if not password or _is_shipped_default(password):
+        password = secrets.token_urlsafe(24)
+        lines = _set(lines, RABBITMQ_PASSWORD, password)
+    if lines != original:
+        _write(env_path, lines)
+    return user, password
+
+
 def nats_login(url: str, user: str, password: str) -> str:
     """``url`` logged in as ``user``: nats-py reads ``user:password@`` from it."""
     parts = urlsplit(url)

@@ -7,8 +7,8 @@ thin so this logic stays unit-testable.
 
 What is captured:
   * the stateful Docker volumes (``postgres_data``, ``minio_data``,
-    ``fuseki_data``, ``qdrant_storage``, ``redis_data``, ``rabbitmq_data``,
-    ``headscale_data``) -- copied cold as zstd-compressed tarballs so each
+    ``fuseki_data``, ``qdrant_storage``, ``redis_data``, ``nats_data``,
+    ``rabbitmq_data``, ``headscale_data``) -- copied cold as zstd-compressed tarballs so each
     engine's on-disk state is consistent;
   * the host ``storage/`` directory (the durable SQLite event log, the SQLite
     DuckLake catalog, and DuckLake data files). Because the stack is stopped,
@@ -36,10 +36,11 @@ from .bootstrap import find_abi_project_root
 from .stack_runtime import run_compose
 
 # Stateful volumes worth snapshotting, by their docker-compose volume key.
-# redis runs with --appendonly yes (durable KV, not just a cache); rabbitmq
-# holds durable queues (see the hostname note in docker-compose.yml -- the node
-# name must be stable for its data to survive a restore); headscale_data holds
-# the users/nodes SQLite DB + noise key. The headscale_run socket dir, caddy
+# redis runs with --appendonly yes (durable KV, not just a cache); nats_data
+# holds JetStream (the bus, KV buckets, the module registry and job schedules);
+# rabbitmq (legacy) holds durable queues (see the hostname note in
+# docker-compose.yml -- the node name must be stable for its data to survive a
+# restore); headscale_data holds the users/nodes SQLite DB + noise key. The headscale_run socket dir, caddy
 # certs, dagster run history, and build/model caches are intentionally excluded.
 DATA_VOLUMES: tuple[str, ...] = (
     "postgres_data",
@@ -47,6 +48,7 @@ DATA_VOLUMES: tuple[str, ...] = (
     "fuseki_data",
     "qdrant_storage",
     "redis_data",
+    "nats_data",
     "rabbitmq_data",
     "headscale_data",
 )

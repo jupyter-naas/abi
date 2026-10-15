@@ -1476,6 +1476,21 @@ def _ensure_default_api_key_env() -> str:
     return os.environ["ABI_API_KEY"]
 
 
+def _ensure_project_nats_env() -> None:
+    """Generate the secrets a project config's `nats:` block names into `.env`
+    (the broker's passwords, ``NATS_JWT_SECRET``), as for the admin password.
+
+    The engine renders the whole config before it merges the dev overlay, and
+    a missing ``{{ secret.X }}`` fails without a TTY: needed in NATS mode, and
+    with `--without-nats` too, whose overlay only turns the block off.
+    """
+    if not _project_declares_nats():
+        return
+    env_path = _project_root() / ".env"
+    ensure_nats_passwords(env_path)
+    ensure_nats_secret(env_path)
+
+
 def _stream_log_to_console(
     spec: ServiceSpec,
     buffer: collections.deque,
@@ -1531,6 +1546,8 @@ def _open_letter_map(started: list[ServiceSpec]) -> dict[str, str]:
     seen: dict[str, str | None] = {}
     for spec in started:
         if not spec.port:  # a dev module: nothing to open
+            continue
+        if spec.name == "nats":  # a client port, no web page: keeps `n` for nexus-web
             continue
         first = spec.name[:1].lower()
         if not first.isalpha():
@@ -1931,7 +1948,8 @@ def dev() -> None:
     help=(
         "Limit to the given service(s) or dev module(s). Repeat the flag. "
         "Default in NATS mode: oxigraph, nats, api, nexus-web, then every "
-        "`dev.modules` entry; in-process: oxigraph, api, dagster, nexus-web."
+        "`dev.modules` entry; in-process (legacy): oxigraph, api, dagster "
+        "(legacy), nexus-web."
     ),
 )
 @click.option(
@@ -1947,7 +1965,7 @@ def dev() -> None:
     type=click.Choice(LOG_LEVELS, case_sensitive=False),
     default=None,
     help=(
-        "LOG_LEVEL for the api and dagster processes. "
+        "LOG_LEVEL for the api and (legacy) dagster processes. "
         f"Default: $LOG_LEVEL, else {DEFAULT_LOG_LEVEL} "
         "(engine boot phases are logged at DEBUG)."
     ),
@@ -1961,9 +1979,10 @@ def dev() -> None:
         "config plus a generated `nats:` overlay (discovery, monitoring, jobs), "
         "then the SDK modules of `dev.modules`; dagster is left out unless "
         "selected with --service. Needs `nats-server` on PATH. "
-        "--without-nats runs the engine in-process, as before NATS, even when "
-        "the project config has a `nats:` block, with dagster when the project "
-        "installs the legacy naas-abi-core[dagster] extra. "
+        "--without-nats (legacy, to be removed in the next major) runs the "
+        "engine in-process, as before NATS, even when the project config has a "
+        "`nats:` block, with dagster when the project installs the legacy "
+        "naas-abi-core[dagster] extra. "
         "Default: NATS mode when the project config has a `nats:` block, "
         "in-process otherwise."
     ),
@@ -2029,6 +2048,7 @@ def dev_up(
     # the api process spawns and reads .env via the dotenv adapter.
     admin_email, admin_password = _ensure_default_admin_env()
     _ensure_default_api_key_env()
+    _ensure_project_nats_env()
 
     started: list[ServiceSpec] = []
     try:

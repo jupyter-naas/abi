@@ -1,11 +1,20 @@
+import json
+import os
 import webbrowser
 from functools import lru_cache
-from urllib.parse import urlencode
+from pathlib import Path
+from urllib.parse import quote, urlencode
 
 import click
 from rich.console import Console
 from rich.table import Table
 
+from .admin_credentials import (
+    ensure_nats_passwords,
+    ensure_nats_secret,
+    ensure_rabbitmq_credentials,
+)
+from .deploy.local import project_uses_nats
 from .stack_runtime import (
     ComposeServiceState,
     compose_logs_follow,
@@ -16,6 +25,16 @@ from .stack_runtime import (
 )
 from .stack_services import SERVICE_CATALOG, evaluate_service_readiness
 from .stack_tui import StackTUI
+
+# Dagster and the RabbitMQ bus, legacy: the ABI repository's docker-compose.yml
+# keeps them behind this profile.
+LEGACY_PROFILE = "legacy"
+# The compose variable the repository's abi and dagster services pass on to the
+# engine as ABI_CONFIG_OVERLAY. Its own name, so a shell's ABI_CONFIG_OVERLAY
+# (a host path) never reaches the containers.
+STACK_OVERLAY_ENV = "ABI_STACK_CONFIG_OVERLAY"
+# Relative to the project, which the containers mount as their working directory.
+LEGACY_OVERLAY = Path(".abi/stack/legacy.overlay.yaml")
 
 
 @lru_cache(maxsize=1)
@@ -100,7 +119,89 @@ def _show_error_logs(error_services: list[str]) -> None:
             click.echo("No logs were returned for this service.")
 
 
-def _start_stack() -> None:
+def _ensure_stack_secrets(project: Path) -> None:
+    """Generate the broker's passwords and the engine's NATS secret into
+    ``.env`` before Compose reads it, when the project runs on NATS: the `nats`
+    service refuses to start without its passwords, and the engine cannot
+    render its `nats:` block without them. Kept when already set."""
+    if not project_uses_nats(str(project)):
+        return
+    env_path = project / ".env"
+    ensure_nats_passwords(env_path)
+    ensure_nats_secret(env_path)
+
+
+def _use_profile(profile: str) -> None:
+    """Activate a Compose profile for every compose call of this command."""
+    active = [p for p in os.environ.get("COMPOSE_PROFILES", "").split(",") if p]
+    if profile not in active:
+        os.environ["COMPOSE_PROFILES"] = ",".join([*active, profile])
+
+
+def _require_legacy_profile() -> None:
+    result = run_compose(["config", "--profiles"], capture_output=True)
+    if LEGACY_PROFILE not in result.stdout.split():
+        raise click.ClickException(
+            f"This docker-compose.yml has no `{LEGACY_PROFILE}` profile. A generated "
+            "project picks its stack when it is created (`abi new project "
+            "--without-nats`, legacy) or deployed (`abi deploy local`)."
+        )
+
+
+def _write_legacy_overlay(project: Path) -> Path:
+    """The engine config overlay of the legacy stack: the `nats:` block off,
+    and the bus on the `rabbitmq` service. Holds the RabbitMQ password, so it is
+    readable by its owner only."""
+    user, password = ensure_rabbitmq_credentials(project / ".env")
+    overlay = {
+        "nats": None,
+        "services": {
+            "bus": {
+                "bus_adapter": {
+                    "adapter": "rabbitmq",
+                    "config": {
+                        "rabbitmq_url": (
+                            f"amqp://{quote(user, safe='')}:{quote(password, safe='')}"
+                            "@rabbitmq:5672"
+                        )
+                    },
+                }
+            }
+        },
+    }
+    path = project / LEGACY_OVERLAY
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch(mode=0o600, exist_ok=True)
+    path.chmod(0o600)
+    path.write_text(
+        "# Written by `abi stack start --legacy`: the engine without NATS, its bus\n"
+        "# on RabbitMQ. Rewritten on every legacy start; JSON is YAML.\n"
+        + json.dumps(overlay, indent=2)
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _start_legacy_stack(project: Path) -> None:
+    """Start the `legacy` profile too (Dagster, RabbitMQ) and run the engine
+    without NATS, its bus on RabbitMQ."""
+    _require_legacy_profile()
+    overlay = _write_legacy_overlay(project)
+    _use_profile(LEGACY_PROFILE)
+    os.environ[STACK_OVERLAY_ENV] = overlay.relative_to(project).as_posix()
+    click.echo(
+        "Legacy stack: Dagster and the RabbitMQ bus, with the engine's `nats:` block "
+        f"off ({LEGACY_OVERLAY}). They are legacy and will be removed in the next "
+        "major."
+    )
+
+
+def _start_stack(legacy: bool = False) -> None:
+    project = Path.cwd()
+    _ensure_stack_secrets(project)
+    if legacy:
+        _start_legacy_stack(project)
     max_retries = 2
     for attempt in range(max_retries + 1):
         try:
@@ -136,6 +237,8 @@ def _start_stack() -> None:
 
 
 def _stop_stack(volumes: bool) -> None:
+    # Containers of the legacy profile too, whichever way they were started.
+    _use_profile(LEGACY_PROFILE)
     arguments = ["down"]
     if volumes:
         arguments.append("-v")
@@ -175,8 +278,19 @@ def stack() -> None:
 
 
 @stack.command("start")
-def stack_start() -> None:
-    _start_stack()
+@click.option(
+    "--legacy",
+    is_flag=True,
+    default=False,
+    help=(
+        "Legacy, to be removed in the next major: also start the `legacy` "
+        "profile (Dagster, RabbitMQ) and run the engine without NATS, its bus on "
+        "RabbitMQ. Default: the stack on NATS."
+    ),
+)
+def stack_start(legacy: bool) -> None:
+    """Start the local Docker stack, on NATS."""
+    _start_stack(legacy)
 
 
 @stack.command("stop")
@@ -215,8 +329,19 @@ def stack_tui(interval: float) -> None:
 
 
 @click.command("start")
-def start() -> None:
-    _start_stack()
+@click.option(
+    "--legacy",
+    is_flag=True,
+    default=False,
+    help=(
+        "Legacy, to be removed in the next major: also start the `legacy` "
+        "profile (Dagster, RabbitMQ) and run the engine without NATS, its bus on "
+        "RabbitMQ. Default: the stack on NATS."
+    ),
+)
+def start(legacy: bool) -> None:
+    """Start the local Docker stack, on NATS."""
+    _start_stack(legacy)
 
 
 @click.command("stop")

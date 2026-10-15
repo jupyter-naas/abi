@@ -839,6 +839,8 @@ def test_the_overlay_turns_tracing_on_when_asked(monkeypatch, tmp_path) -> None:
 
     monkeypatch.setattr(dev, "_project_root", lambda: tmp_path / "zen")
     monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path / "dev")
+    # No discovery project in a config: the service is named after the folder.
+    monkeypatch.setattr(dev, "_project_nats", lambda: None)
 
     path = dev._write_dev_overlay(
         {"nats": 13042, "jaeger": 15042}, nats_secret="s" * 48, nats_password="pw", tracing=True
@@ -1024,6 +1026,34 @@ def test_without_nats_turns_off_the_project_nats_block(
     assert overlay == {"nats": None}
     assert deep_merge({"nats": {"jwt_secret": "x"}}, overlay)["nats"] is None
     assert "--without-nats" in result.output
+
+
+@pytest.mark.parametrize("mode", ["--with-nats", "--without-nats"])
+def test_up_seeds_the_secrets_of_the_project_nats_block(
+    stack, monkeypatch, tmp_path, mode
+) -> None:
+    """The engine renders the config's `nats:` block before the overlay turns
+    it off, and a missing secret fails without a TTY: seeded in both modes."""
+    from naas_abi_cli.cli import admin_credentials
+
+    monkeypatch.setattr(dev, "_project_nats", lambda: {"jwt_secret": ""})
+    monkeypatch.setattr(dev, "ensure_nats_secret", admin_credentials.ensure_nats_secret)
+    monkeypatch.setattr(dev, "_dev_modules", lambda strict=True: {})
+
+    result = _abi("up", mode, "-d")
+
+    assert result.exit_code == 0, result.output
+    env = (tmp_path / ".env").read_text()
+    for key in ("NATS_ABI_PASSWORD", "NATS_MODULE_PASSWORD", "NATS_JWT_SECRET"):
+        assert f"{key}=" in env
+
+
+def test_up_writes_no_nats_secret_for_a_project_without_nats(stack, tmp_path) -> None:
+    result = _abi("up", "-d")
+
+    assert result.exit_code == 0, result.output
+    env = tmp_path / ".env"
+    assert not env.exists() or "NATS_" not in env.read_text()
 
 
 def test_up_fails_before_starting_anything_without_nats_server(
@@ -1228,3 +1258,13 @@ def test_a_module_is_ready_when_alive_and_has_no_url() -> None:
     assert table.row_count == 2
     assert dev._display_url(started[1]) == "dev module"
     assert dev._open_letter_map(started) == {"a": "api"}
+
+
+def test_nexus_web_keeps_its_open_key_next_to_nats() -> None:
+    """nats has no web page on its client port: `n` opens Nexus web."""
+    started = [
+        dev._service_spec(name, port)
+        for name, port in (("nats", 13042), ("api", 9879), ("nexus-web", 12042))
+    ]
+
+    assert dev._open_letter_map(started) == {"a": "api", "n": "nexus-web"}

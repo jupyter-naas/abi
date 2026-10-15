@@ -20,6 +20,26 @@ global_config:
   ai_mode: "cloud"
   public_api_host: "{{ secret.NEXUS_API_URL }}"
 
+# NATS mode: kernel services, the bus (JetStream), module jobs and discovery go
+# through the broker, and remote modules run in their own process. `abi dev up`
+# starts its own nats-server and overlays the URL, password and monitoring port
+# it bound (.abi/dev/dev.overlay.yaml); these values fit an engine run outside
+# `abi dev` (`abi chat`, `make api`) against the Docker stack's broker
+# (`abi stack start`). Both secrets are generated into .env on first run.
+# `abi dev up --without-nats` runs the legacy in-process engine instead.
+nats:
+  nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@127.0.0.1:4222"
+  jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+  # One engine per project hosts the module registry: this one.
+  discovery:
+    project: "abi"
+    # Outlives an engine restart: remote modules renew instead of dropping
+    # out. A crashed module stays listed up to this long; a clean stop
+    # (SIGTERM) unregisters at once.
+    lease_seconds: 180
+  # The broker's HTTP monitoring port, read by the Nexus System app. No auth.
+  monitoring_url: "http://127.0.0.1:8222"
+
 opencode:
   auth_file_path: "~/.local/share/opencode/auth.json"
   providers:
@@ -224,13 +244,9 @@ services:
         persistence_path: "storage/vectorstore/vectors.sqlite3"
         journal_mode: "WAL"
         busy_timeout_ms: 5000
-  bus:
-    bus_adapter:
-      adapter: "python_queue"
-      config:
-        persistence_path: "storage/bus/python_queue.sqlite3"
-        journal_mode: "WAL"
-        busy_timeout_ms: 5000
+  # No `bus:` block: in NATS mode the bus is JetStream on the broker above.
+  # Without NATS (`abi dev up --without-nats`) the engine falls back to the
+  # SQLite-backed "python_queue" bus in storage/bus/.
   kv:
     kv_adapter:
       adapter: "python"

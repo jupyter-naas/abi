@@ -33,12 +33,6 @@ def _assert_nats_is_opt_in(services: dict) -> None:
             assert "nats" not in service.get("depends_on", {})
 
 
-def test_nats_stays_opt_in_in_the_repository_compose() -> None:
-    """The ABI repository's own stack is not a generated project."""
-    repo_root = Path(__file__).resolve().parents[5]
-    _assert_nats_is_opt_in(_services(repo_root / "docker-compose.yml"))
-
-
 def test_a_generated_stack_runs_on_nats_by_default(tmp_path: Path) -> None:
     setup_local_deploy(str(tmp_path), base_domain="localhost", nats=True)
     services = _services(tmp_path / "docker-compose.yml")

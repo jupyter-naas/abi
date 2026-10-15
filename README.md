@@ -157,7 +157,9 @@ abi/
 
 ## Working on ABI (development)
 
-`abi dev` is a no-docker dev runtime for hacking on the project itself. It spawns the API, Nexus web, and a bundled Oxigraph SPARQL server as native processes, sharing one terminal. In a NATS project (a `nats:` block in `config.yaml`, as `abi new project` writes) it also runs `nats-server` and the remote modules listed under `dev.modules`; without one (this repository's config), it runs the engine in-process, with Dagster when the legacy `naas-abi-core[dagster]` extra is installed. `--with-nats` and `--without-nats` choose, and `--with-tracing` adds Jaeger. Parallel branches (git worktrees) get their own deterministic ports automatically — no collisions, no `docker compose` shuffling.
+This repository runs what a project from `abi new project` runs: NATS by default, with Dagster and the RabbitMQ bus as opt-in legacy, to be removed in the next major.
+
+`abi dev` is a no-docker dev runtime for hacking on the project itself. It spawns the API, Nexus web, a bundled Oxigraph SPARQL server and `nats-server` as native processes, sharing one terminal, then the remote modules listed under `dev.modules`: this repository's `config.yaml` has a `nats:` block, like a generated project's. `abi dev up --without-nats` runs the legacy in-process engine instead, with Dagster when the legacy `naas-abi-core[dagster]` extra is installed, and `--with-tracing` adds Jaeger. Parallel branches (git worktrees) get their own deterministic ports automatically — no collisions, no `docker compose` shuffling.
 
 ### One-time setup
 
@@ -170,6 +172,9 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Node toolchain for the Nexus web app (Node.js 18+, pnpm 8.15+ — required by `abi dev up`)
 brew install pnpm        # or: npm install -g pnpm
+
+# NATS broker, 2.14 or later (required by `abi dev up`)
+brew install nats-server # or a release binary: https://github.com/nats-io/nats-server/releases
 
 # Install all libs in editable mode
 uv sync
@@ -188,14 +193,14 @@ You'll see a status table pinned at the bottom of the terminal with live health 
 
 ```
 oxigraph   http://127.0.0.1:7878   ● ready
+nats       http://127.0.0.1:13000  ● ready
 api        http://127.0.0.1:9879   ● ready
-dagster    http://127.0.0.1:11000  ● ready
 nexus-web  http://127.0.0.1:12000  ● ready
 
 Login: admin@example.com / <generated password>
 ```
 
-The admin password is generated for this project and written to `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`; the Nexus seed picks it up on first boot. There is no default password.
+The admin password is generated for this project and written to `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`; the Nexus seed picks it up on first boot. There is no default password. The broker's passwords (`NATS_ABI_PASSWORD`, `NATS_MODULE_PASSWORD`) and `NATS_JWT_SECRET` are generated into `.env` the same way.
 
 ### Hotkeys
 
@@ -205,7 +210,7 @@ While `abi dev up` is running:
 |---|---|
 | `1` / `2` / `3` / `4` | Filter logs to one service (other services still log to files) |
 | `0` | Back to interleaved output |
-| `o` / `a` / `d` / `n` | Open Oxigraph / API / Dagster / Nexus web in the browser |
+| `o` / `a` / `n` | Open Oxigraph / API / Nexus web in the browser (`d`: Dagster, legacy) |
 | `r` | Restart the whole stack in place (no need to quit) |
 | `q` / `Ctrl+C` | Graceful stop (SIGTERM, 10s grace, then SIGKILL) |
 | `Q` | Force kill (SIGKILL immediately) |
@@ -246,11 +251,11 @@ If the deterministic port is busy (stale process, three-way collision), the CLI 
 | Triple store | Apache Jena Fuseki | Bundled Oxigraph HTTP server (`pyoxigraph`) |
 | Vector store | Qdrant server | SQLite + `sqlite-vec` extension |
 | Key-value | Redis | SQLite (WAL) |
-| Message bus | NATS JetStream | `nats-server` (NATS mode) or SQLite (in-process) |
+| Message bus | NATS JetStream | `nats-server` (default) or SQLite (`--without-nats`, legacy) |
 | Object storage | MinIO / S3 | Local filesystem (`storage/datastore/`) |
 | Email | SMTP | Filesystem (`storage/email/*.eml`) |
 
-All adapters are interface-compatible — `config.yaml` selects which one. For changes touching schema, concurrency, or filter semantics, also run `abi start` (the full docker stack) before opening a PR.
+All adapters are interface-compatible — `config.yaml` selects which one. For changes touching schema, concurrency, or filter semantics, also run `abi stack start` (the full docker stack, on NATS; `config.local.yaml`) before opening a PR. `abi stack start --legacy` adds Dagster and the RabbitMQ bus, behind the `legacy` compose profile.
 
 ### Logs
 
@@ -258,7 +263,7 @@ Live, written to disk regardless of foreground/background mode:
 
 ```
 .abi/dev/logs/api.log
-.abi/dev/logs/dagster.log
+.abi/dev/logs/nats.log
 .abi/dev/logs/nexus-web.log
 .abi/dev/logs/oxigraph.log
 ```

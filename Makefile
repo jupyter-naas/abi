@@ -147,13 +147,20 @@ help:
 	@echo "  build                    Build Docker image (alias for build.linux.x86_64)"
 	@echo "  build.linux.x86_64       Build Docker image for Linux x86_64 architecture"
 	@echo ""
+	@echo "DEV RUNTIME (no Docker, needs nats-server on PATH):"
+	@echo "  dev-up                   Start oxigraph, nats, api and nexus-web in the background (abi dev up -d)"
+	@echo "  dev-down                 Stop the dev services (abi dev down)"
+	@echo "  dev-status               Show the dev services and their ports (abi dev status)"
+	@echo "  dev-up-legacy            Legacy: in-process engine, no NATS (abi dev up -d --without-nats)"
+	@echo ""
 	@echo "DOCKER COMPOSE MANAGEMENT:"
 	@echo "  check-docker             Check if Docker is running"
 	@echo "  docker-cleanup           Clean up Docker conflicts and stuck containers"
 	@echo "  oxigraph-up              Start Oxigraph knowledge graph database"
 	@echo "  oxigraph-down            Stop Oxigraph database"
 	@echo "  oxigraph-status          Check Oxigraph container status"
-	@echo "  local-up                 Start all local development services"
+	@echo "  local-up                 Start the local Docker stack on NATS (abi stack start)"
+	@echo "  local-up-legacy          Legacy: the stack with Dagster and the RabbitMQ bus (abi stack start --legacy)"
 	@echo "  local-logs               View logs from all local services"
 	@echo "  local-stop               Stop all local services without removing containers"
 	@echo "  local-down               Stop and remove all local service containers"
@@ -164,9 +171,9 @@ help:
 	@echo "  model-down               Stop Docker model"
 	@echo "  model-status             Check Docker model status"
 	@echo ""
-	@echo "DAGSTER DATA ORCHESTRATION:"
-	@echo "  dagster-dev              Start Dagster development server (foreground)"
-	@echo "  dagster-up               Start Dagster in background mode"
+	@echo "DAGSTER DATA ORCHESTRATION (legacy, to be removed in the next major; module jobs replace it):"
+	@echo "  dagster-dev              Start Dagster development server (foreground, legacy profile)"
+	@echo "  dagster-up               Start Dagster in background mode (legacy profile)"
 	@echo "  dagster-down             Stop Dagster background service"
 	@echo "  dagster-logs             View Dagster service logs"
 	@echo "  dagster-ui               Open Dagster web interface"
@@ -196,8 +203,9 @@ help:
 	@echo ""
 	@echo "QUICK START:"
 	@echo "  1. make deps             # Set up environment"
-	@echo "  2. make local-up         # Start local services"
+	@echo "  2. make local-up         # Start the local Docker stack (on NATS)"
 	@echo "  3. make                  # Start ABI agent (default)"
+	@echo "  Without Docker: make dev-up (needs nats-server on PATH)"
 	@echo ""
 	@echo "TROUBLESHOOTING:"
 	@echo "  If 'make' hangs or times out:"
@@ -803,7 +811,7 @@ docker-cleanup: check-docker
 	@chmod +x ./docker/scripts/cleanup.sh 2>/dev/null || true
 	@./docker/scripts/cleanup.sh || ( \
 		echo "🔧 Fallback cleanup for WSL/Windows..."; \
-		docker compose --profile local down --remove-orphans || true; \
+		docker compose --profile legacy down --remove-orphans || true; \
 		docker container prune -f || true; \
 		docker network prune -f || true; \
 		echo "✅ Cleanup complete"; \
@@ -824,45 +832,51 @@ oxigraph-status: check-docker
 	@echo "Oxigraph status:"
 	@docker compose --profile local ps oxigraph
 
-# Start all local development services
+# Start the local Docker stack, on NATS. `abi stack start` generates the
+# broker's passwords and NATS_JWT_SECRET into .env before Compose reads it.
 local-up: check-docker
 	@echo "🚀 Starting local services..."
-	@if ! docker compose --profile local up -d --timeout 60; then \
+	@if ! uv run abi stack start; then \
 		echo "❌ Failed to start services. Running cleanup..."; \
 		./docker/scripts/cleanup.sh; \
 		echo "🔄 Retrying..."; \
-		docker compose --profile local up -d --timeout 60 || (echo "❌ Still failing. Check Docker Desktop status."; exit 1); \
+		uv run abi stack start || (echo "❌ Still failing. Check Docker Desktop status."; exit 1); \
 	fi
 	@echo "✓ Local containers started"
 	@echo ""
 	@echo "🌟 Local environment ready!"
 	@echo "✓ Services available at:"
-	@echo "  - Oxigraph (Knowledge Graph): http://localhost:7878"
+	@echo "  - Fuseki (Knowledge Graph): http://localhost:3030"
 	@echo "  - YasGUI (SPARQL Editor): http://localhost:3000"
 	@echo "  - PostgreSQL (Agent Memory): localhost:5432"
-	@echo "  - Dagster (Orchestration): http://localhost:3001"
+	@echo "  - NATS (monitoring): http://localhost:8222"
 	@echo "  - Docker Models (Airgapped AI): ai/gemma3 ready via 'docker model run'"
+
+# Legacy, to be removed in the next major: the stack with Dagster and the
+# RabbitMQ bus, the engine without NATS.
+local-up-legacy: check-docker
+	@uv run abi stack start --legacy
 
 # View logs from all local services
 local-logs: check-docker
-	@docker compose --profile local logs -f
+	@docker compose --profile legacy logs -f
 
 # Stop all local services without removing containers
 local-stop: check-docker
-	@docker compose --profile local stop
+	@docker compose --profile legacy stop
 	@echo "✓ All local services stopped"
 
 # Stop and remove all local service containers
 local-down: check-docker
-	@docker compose --profile local down --timeout 10 || true
+	@docker compose --profile legacy down --timeout 10 || true
 	@echo "✓ All local services stopped"
 
 local-clean: check-docker
-	@docker compose --profile local down -v --timeout 10 || true
+	@docker compose --profile legacy down -v --timeout 10 || true
 	@echo "✓ All local services stopped and volumes removed"
 
 local-reload: check-docker
-	@docker compose --profile local down -v
+	@docker compose --profile legacy down -v
 	@make local-up
 	@echo "✓ Local services reloaded"
 
@@ -897,48 +911,68 @@ model-status: check-docker
 	@docker model ls
 
 # =============================================================================
-# DAGSTER DATA ORCHESTRATION
+# DEV RUNTIME (no Docker)
 # =============================================================================
+
+# oxigraph, nats, api and nexus-web as native processes; needs nats-server on PATH.
+dev-up: deps
+	@uv run abi dev up -d
+
+dev-down:
+	@uv run abi dev down
+
+dev-status:
+	@uv run abi dev status
+
+# Legacy, to be removed in the next major: the engine in-process, without NATS.
+dev-up-legacy: deps
+	@uv run abi dev up -d --without-nats
+
+# =============================================================================
+# DAGSTER DATA ORCHESTRATION (legacy, to be removed in the next major)
+# =============================================================================
+# Behind the `legacy` compose profile. Next to the engine on NATS, Dagster joins
+# as a client; `make local-up-legacy` runs the whole legacy stack instead.
 
 # Start Dagster development server in foreground
 dagster-dev:
 	@echo "🚀 Starting Dagster development server..."
-	@docker compose --profile local up dagster
+	@docker compose --profile legacy up dagster
 
 # Start Dagster in background mode
 dagster-up:
 	@echo "🚀 Starting Dagster in background..."
-	@docker compose --profile local up -d dagster
+	@docker compose --profile legacy up -d dagster
 	@echo "✓ Dagster started on http://localhost:3001"
 	@echo "📝 Logs: make dagster-logs"
 
 # Stop Dagster background service
 dagster-down:
 	@echo "🛑 Stopping Dagster..."
-	@docker compose --profile local down dagster
+	@docker compose --profile legacy down dagster
 	@echo "✓ Dagster stopped"
 
 # View Dagster service logs
 dagster-logs:
 	@echo "📄 Showing Dagster logs..."
-	@docker compose --profile local logs -f dagster
+	@docker compose --profile legacy logs -f dagster
 
 # Open Dagster web interface
 dagster-ui:
 	@echo "🌐 Opening Dagster web interface..."
 	@echo "📍 Visit: http://localhost:3001"
 	@command -v open >/dev/null 2>&1 && open "http://localhost:3001" || echo "Open the URL manually in your browser"
-	@docker compose --profile local up dagster
+	@docker compose --profile legacy up dagster
 
 # Check status of Dagster assets
 dagster-status:
 	@echo "📊 Checking Dagster asset status..."
-	@docker compose --profile local exec dagster uv run dagster asset list -m src.marketplace.__demo__.orchestration.definitions
+	@docker compose --profile legacy exec dagster uv run dagster asset list -m src.marketplace.__demo__.orchestration.definitions
 
 # Materialize all Dagster assets
 dagster-materialize:
 	@echo "⚙️ Materializing all Dagster assets..."
-	@docker compose --profile local exec dagster uv run dagster asset materialize --select "*" -m src.marketplace.__demo__.orchestration.definitions
+	@docker compose --profile legacy exec dagster uv run dagster asset materialize --select "*" -m src.marketplace.__demo__.orchestration.definitions
 
 # =============================================================================
 # DATA MANAGEMENT & OPERATIONS
@@ -1059,7 +1093,7 @@ clean:
 # =============================================================================
 # Declare all targets as phony to avoid conflicts with files of the same name
 
-.PHONY: ollama-models test test-local-embedded-core test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology docs docs-clean
+.PHONY: ollama-models test test-local-embedded-core test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-up-legacy local-down dev-up dev-down dev-status dev-up-legacy container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology docs docs-clean
 
 .PHONY: test-sdk demo-sdk
 test-sdk:

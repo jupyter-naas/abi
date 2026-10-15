@@ -12,8 +12,9 @@ readme = "README.md"
 dependencies = [
     "naas-abi",
     "naas-abi-cli",
-    # This repository runs without NATS (config.yaml), with Dagster and
-    # RabbitMQ, and tests them: the legacy extras are not in [all].
+    # This repository runs on NATS, but tests Dagster and RabbitMQ and runs
+    # them in its legacy stack (`abi stack start --legacy`, `abi dev up
+    # --without-nats`): the legacy extras are not in [all].
     "naas-abi-core[all,dagster,rabbitmq]",
     "naas-abi-marketplace[ai-chatgpt]",
     "naas-abi-marketplace[ai-claude]",

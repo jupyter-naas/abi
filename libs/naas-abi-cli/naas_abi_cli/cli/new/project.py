@@ -173,10 +173,11 @@ def _print_next_steps(project_path: str, admin_email: str, nats: bool) -> None:
     help=(
         "Run the project on NATS (default): kernel services, the bus, jobs and "
         "module discovery go through a NATS broker, and modules can run in "
-        "their own process. --without-nats creates the classic in-process "
-        "project (RabbitMQ in docker-compose, Dagster, no broker for `abi "
-        "dev`), with the naas-abi-core[dagster,rabbitmq] extras. Dagster and "
-        "RabbitMQ are legacy and will be removed in the next major."
+        "their own process. --without-nats (legacy) creates the classic "
+        "in-process project (RabbitMQ in docker-compose, Dagster, no broker "
+        "for `abi dev`), with the legacy naas-abi-core[dagster,rabbitmq] "
+        "extras. Dagster, RabbitMQ and --without-nats are legacy and will be "
+        "removed in the next major."
     ),
 )
 @click.option(
