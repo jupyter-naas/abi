@@ -9,7 +9,7 @@ dependencies = [
     # nats: Nexus imports naas_abi_core.engine.nats_transfer (naas-abi-proto, naas-abi-sdk).
     # Not dagster: DemoOrchestration imports it only when used, and a project
     # without NATS adds the legacy naas-abi-core[dagster] extra itself.
-    "naas-abi-core[nats]>=1.4.0",
+    "naas-abi-core[nats]>=3.0.0",
     "naas-abi-marketplace>=1.3.3",
     # --- Nexus API runtime dependencies ---
     "fastapi>=0.109.0",

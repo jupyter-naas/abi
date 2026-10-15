@@ -23,7 +23,7 @@ pip install naas-abi
 installed in every mode). It no longer pulls Dagster: a project without NATS
 adds the legacy `naas-abi-core[dagster,rabbitmq]` extras itself. Upgrade
 `naas-abi`, `naas-abi-core` and `naas-abi-cli` to 3.0 together; see
-[Migrate from 2.x to 3.0](../../docs/site/docs/upgrade/migrate-to-3.md).
+[Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
 
 ## Nexus in 3.0
 
@@ -38,8 +38,8 @@ also:
 - has the super-admin **System** app (Overview, Services, Data, Jobs, Agents,
   Modules, NATS, Live traffic, Traces), backed by `/api/admin/system/`.
 
-See [Remote Apps](../../docs/site/docs/architecture/remote-apps.md) and
-[Observability](../../docs/site/docs/architecture/observability.md).
+See [Remote Apps](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/architecture/remote-apps.md) and
+[Observability](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/architecture/observability.md).
 
 ## Core Components
 
@@ -588,10 +588,10 @@ pytest naas_abi/pipelines/ -v
 
 ## See Also
 
-- [ABI Main README](../../README.md) - Complete ABI framework documentation
-- [naas-abi-core](../naas-abi-core/) - Core engine documentation
-- [naas-abi-cli](../naas-abi-cli/) - CLI tool documentation
-- [naas-abi-marketplace](../naas-abi-marketplace/) - Marketplace modules
+- [ABI Main README](https://github.com/jupyter-naas/abi/blob/main/README.md) - Complete ABI framework documentation
+- [naas-abi-core](https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-core) - Core engine documentation
+- [naas-abi-cli](https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-cli) - CLI tool documentation
+- [naas-abi-marketplace](https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-marketplace) - Marketplace modules
 
 ## License
 
