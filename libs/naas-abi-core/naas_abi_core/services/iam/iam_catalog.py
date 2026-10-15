@@ -1,0 +1,112 @@
+"""IAM's own catalog (RFC §6.4, "iam") and the seals of RFC §11.3.
+
+IAM authorizes its own operations with these actions, like any other service.
+Every resource type is platform-level except ``attachment``, which is named at
+its attachment's scope, so a workspace admin can manage that workspace's roles.
+"""
+
+from __future__ import annotations
+
+from naas_abi_core.services.iam.catalog import ActionCatalog, ActionSpec, ResourceType
+from naas_abi_core.services.iam.IAMPorts import Seal
+
+SERVICE = "iam"
+SUBJECT_PREFIX = "abi.iam.v1"
+
+
+def _action(
+    name: str,
+    level: str,
+    types: tuple[str, ...],
+    subject: str | None = None,
+    *,
+    creates: bool = False,
+) -> ActionSpec:
+    subjects = (f"{SUBJECT_PREFIX}.{subject}",) if subject else ()
+    return ActionSpec(
+        name=name,
+        level=level,  # type: ignore[arg-type]
+        resource_types=types,
+        creates=creates,
+        subjects=subjects,
+    )
+
+
+CATALOG = ActionCatalog(
+    service=SERVICE,
+    version=1,
+    resource_types=(
+        ResourceType("principal", id="opaque", placement="platform"),
+        ResourceType("group", id="opaque", placement="platform"),
+        ResourceType("policy", id="opaque", placement="platform"),
+        ResourceType(
+            "attachment",
+            id="path",
+            placement="placed",
+            description="attachment/<policy id>/<principal id>, at its scope.",
+        ),
+        ResourceType("key", id="path", placement="platform", personal=True),
+        ResourceType("manifest", id="opaque", placement="platform"),
+        ResourceType("placement", id="path", placement="platform"),
+        ResourceType("scope", id="path", placement="platform"),
+        ResourceType("catalog", id="opaque", placement="platform"),
+        ResourceType("audience", id="opaque", placement="platform"),
+    ),
+    actions=(
+        _action("ListPrincipals", "list", ("principal",), "list_principals"),
+        _action("ListGroups", "list", ("group",), "list_groups"),
+        _action("ListPolicies", "list", ("policy",), "list_policies"),
+        _action("ListAttachments", "list", ("attachment",), "list_attachments"),
+        _action("ListKeys", "list", ("key",)),
+        _action("ListManifests", "list", ("manifest",)),
+        _action("ListPlacements", "list", ("placement",), "list_placements"),
+        _action("GetPrincipal", "read", ("principal",), "get_principal"),
+        _action("GetGroup", "read", ("group",), "get_group"),
+        _action("GetPolicy", "read", ("policy",), "get_policy"),
+        _action("GetManifest", "read", ("manifest",)),
+        _action("Explain", "read", ("principal",), "explain"),
+        _action("Simulate", "read", ("principal",)),
+        _action("ExchangeToken", "write", ("audience",)),
+        _action("CreateUser", "admin", ("principal",), "ensure_user", creates=True),
+        _action(
+            "CreateServiceAccount",
+            "admin",
+            ("principal",),
+            "create_service_account",
+            creates=True,
+        ),
+        _action("DeletePrincipal", "admin", ("principal",), "delete_principal"),
+        _action("SuspendPrincipal", "admin", ("principal",), "suspend_principal"),
+        _action("ResumePrincipal", "admin", ("principal",), "resume_principal"),
+        _action("LinkUser", "admin", ("principal",)),
+        _action("CreateGroup", "admin", ("group",), "create_group", creates=True),
+        _action("DeleteGroup", "admin", ("group",), "delete_group"),
+        _action("AddGroupMember", "admin", ("group",), "add_group_member"),
+        _action("RemoveGroupMember", "admin", ("group",), "remove_group_member"),
+        _action("MapIdpGroup", "admin", ("group",), "map_idp_group"),
+        _action("UnmapIdpGroup", "admin", ("group",), "unmap_idp_group"),
+        _action("CreatePolicy", "admin", ("policy",), "create_policy", creates=True),
+        _action("UpdatePolicy", "admin", ("policy",), "update_policy"),
+        _action("DeletePolicy", "admin", ("policy",), "delete_policy"),
+        _action("AttachPolicy", "admin", ("attachment",), "attach_policy"),
+        _action("DetachPolicy", "admin", ("attachment",), "detach_policy"),
+        _action("CreateKey", "admin", ("key",)),
+        _action("RevokeKey", "admin", ("key",)),
+        _action("ApproveManifest", "admin", ("manifest",)),
+        _action("RejectManifest", "admin", ("manifest",)),
+        _action("PutPlacement", "admin", ("placement",), "put_placement"),
+        _action("DeletePlacement", "admin", ("placement",), "delete_placement"),
+        _action("PutScope", "admin", ("scope",), "put_scope"),
+        _action("DeleteScope", "admin", ("scope",), "delete_scope"),
+        _action("RegisterCatalog", "admin", ("catalog",), "register_catalog"),
+    ),
+)
+
+# Sealed in code (RFC §11.3): no policy, no API and no OBO user opens them.
+SEALS: tuple[Seal, ...] = (
+    Seal("abi:-:-:document:namespace/idp", "idp"),
+    Seal("abi:-:-:document:collection/idp/*", "idp"),
+    Seal("abi:-:-:document:document/idp/*", "idp"),
+    Seal("abi:-:-:secret:secret/idp%2F*", "idp"),
+    Seal("abi:-:-:secret:secret/iam%2F*", "engine"),
+)
