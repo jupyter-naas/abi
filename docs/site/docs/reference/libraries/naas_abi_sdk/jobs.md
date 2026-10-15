@@ -94,6 +94,7 @@ Type alias:
     Publishes a trigger to JetStream (manual trigger). Supports dedup via `idempotency_key`.
 - `JobRun`  
   Handle to a triggered run.
+  - `.run_id -> str`, `.duplicate -> bool`: `duplicate` is true when the trigger repeated an `idempotency_key` within the duplicate window (the first trigger's run, nothing stored)
   - `status() -> dict[str, Any]`: fetch run record (or `QUEUED` if not created yet)
   - `wait(*, timeout: float | None = None, poll_seconds: float = 0.5) -> dict[str, Any]`: poll until terminal status
   - `cancel() -> None`: cooperative cancel by publishing to the job’s cancel subject

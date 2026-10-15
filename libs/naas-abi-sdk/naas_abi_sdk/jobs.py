@@ -540,7 +540,11 @@ class JobContext:
 
 
 class JobRun:
-    """A triggered run: read its record, wait for it, or ask its host to cancel it."""
+    """A triggered run: read its record, wait for it, or ask its host to cancel it.
+
+    ``duplicate`` is true when the trigger repeated an ``idempotency_key``
+    within the stream's duplicate window: JetStream stored nothing, and this
+    is the first trigger's run."""
 
     def __init__(
         self,
@@ -550,9 +554,12 @@ class JobRun:
         job_name: str,
         run_id: str,
         documents: Any = None,
+        *,
+        duplicate: bool = False,
     ):
         self.transport, self.project, self.module_id = transport, project, module_id
         self.job, self.run_id = job_name, run_id
+        self.duplicate = duplicate
         self._documents = documents
 
     def _docs(self) -> Any:
@@ -625,7 +632,8 @@ class JobProxy:
     ) -> JobRun:
         """Store a trigger; the run starts when a host takes it. A repeated
         ``idempotency_key`` within the stream's duplicate window (2 minutes) is
-        the same run (JetStream message-id dedup)."""
+        the same run (JetStream message-id dedup), returned with ``duplicate``
+        set."""
         from naas_abi_sdk import claim_check  # needs nats; keep jobs.py nats-free
 
         nc = await self.transport.connect()
@@ -653,4 +661,5 @@ class JobProxy:
             self.name,
             run_key(self.name, ack.seq),
             self._documents,
+            duplicate=bool(ack.duplicate),
         )

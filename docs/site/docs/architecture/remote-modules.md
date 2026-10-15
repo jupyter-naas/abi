@@ -157,7 +157,7 @@ published, so a filtered event writes no run at all:
   lost acknowledgement. Write handlers that tolerate a repeat.
 - `idempotency_key` deduplicates manual triggers: within the jobs stream's
   duplicate window (2 minutes), a repeated key is the same trigger and returns
-  the same run.
+  the same run, with `JobRun.duplicate` set.
 - A missed cron tick fires once when the broker comes back, not once per
   missed tick. Daylight saving changes can skip or repeat a tick.
 - `OnEvent` is at most once from the event to the trigger: events published
