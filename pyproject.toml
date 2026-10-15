@@ -115,7 +115,7 @@ dependencies = [
 [project.scripts]
 abi = "naas_abi_cli.cli:main"
 api = "naas_abi_core.apps.api.api:api"
-mcp-server = "naas_abi_core.apps.mcp_server:run"
+mcp-server = "naas_abi_core.apps.mcp.mcp_server:run"
 
 [project.optional-dependencies]
 dev = [
