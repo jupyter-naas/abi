@@ -73,6 +73,10 @@
   letter-spacing: 0.04em;
 }
 
+.org-settings-roles-col-readonly {
+  background-color: var(--muted-bg-hex);
+}
+
 .org-settings-roles-table tbody th {
   text-align: left;
   font-weight: var(--font-weight-medium);

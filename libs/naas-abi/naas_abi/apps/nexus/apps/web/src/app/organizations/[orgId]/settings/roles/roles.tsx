@@ -9,7 +9,7 @@ import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { OrgSettingsSectionCard } from '../components/org-settings-section-card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { SettingsFilterSelect, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
-import { FEATURE_LABELS } from '../lib/feature-labels';
+import { FEATURE_LABELS, featureLabel, sortFeaturesByName } from '../lib/feature-labels';
 import '../components/org-settings-components.css';
 import './roles.css';
 
@@ -30,6 +30,17 @@ const ROLE_LABELS: Record<RoleName, string> = {
   member: 'Member',
   viewer: 'Viewer',
 };
+
+/** Matrix column order (least to most privileged). */
+const ROLE_MATRIX_ORDER: RoleName[] = ['viewer', 'member', 'admin', 'owner'];
+
+/** Owner baseline comes from deployment; it is shown but not editable here. */
+const ROLE_MATRIX_READ_ONLY: RoleName = 'owner';
+
+function orderRolesForMatrix(roles: RoleName[]): RoleName[] {
+  const known = new Set(roles);
+  return ROLE_MATRIX_ORDER.filter((role) => known.has(role));
+}
 
 function emptyBaseline(roles: RoleName[]): Record<RoleName, string[]> {
   return {
@@ -60,12 +71,9 @@ export default function OrgRolesPage() {
   const [accessFilter, setAccessFilter] = useState('all');
   const [persistence, setPersistence] = useState('deployment');
   const [features, setFeatures] = useState<string[]>([]);
-  const [roles, setRoles] = useState<RoleName[]>([
-    'owner',
-    'admin',
-    'member',
-    'viewer',
-  ]);
+  const [roles, setRoles] = useState<RoleName[]>(() =>
+    orderRolesForMatrix(['owner', 'admin', 'member', 'viewer'])
+  );
   const [baseline, setBaseline] = useState<Record<RoleName, string[]>>(
     emptyBaseline(['owner', 'admin', 'member', 'viewer'])
   );
@@ -107,8 +115,8 @@ export default function OrgRolesPage() {
         for (const role of nextRoles) {
           nextBaseline[role] = [...(data.role_baseline?.[role] || [])];
         }
-        setRoles(nextRoles);
-        setFeatures(nextFeatures);
+        setRoles(orderRolesForMatrix(nextRoles));
+        setFeatures(sortFeaturesByName(nextFeatures));
         setBaseline(nextBaseline);
         setInitialBaseline({
           owner: [...nextBaseline.owner],
@@ -130,15 +138,17 @@ export default function OrgRolesPage() {
   }, [orgId]);
 
   const dirty = useMemo(() => {
-    return roles.some((role) => {
-      const a = [...(baseline[role] || [])].sort().join(',');
-      const b = [...(initialBaseline[role] || [])].sort().join(',');
-      return a !== b;
-    });
+    return roles
+      .filter((role) => role !== ROLE_MATRIX_READ_ONLY)
+      .some((role) => {
+        const a = [...(baseline[role] || [])].sort().join(',');
+        const b = [...(initialBaseline[role] || [])].sort().join(',');
+        return a !== b;
+      });
   }, [baseline, initialBaseline, roles]);
 
   const toggleFeature = (role: RoleName, feature: string) => {
-    if (!canManage) return;
+    if (!canManage || role === ROLE_MATRIX_READ_ONLY) return;
     setBaseline((current) => {
       const existing = new Set(current[role] || []);
       if (existing.has(feature)) {
@@ -224,7 +234,7 @@ export default function OrgRolesPage() {
     if (accessFilter === 'restricted' && (granted === roles.length || granted === 0)) return false;
     if (accessFilter === 'nobody' && granted !== 0) return false;
     if (accessFilter.startsWith('role:') && !(baseline[accessFilter.slice(5) as RoleName] || []).includes(feature)) return false;
-    const label = (FEATURE_LABELS[feature] || feature).toLowerCase();
+    const label = featureLabel(feature).toLowerCase();
     return !featureQuery || label.includes(featureQuery) || feature.toLowerCase().includes(featureQuery);
   });
   const grantCount = roles.reduce((total, role) => total + (baseline[role] || []).length, 0);
@@ -288,8 +298,8 @@ export default function OrgRolesPage() {
           <div>
             <p className="org-settings-roles-card-title">Feature access matrix</p>
             <p className="org-settings-roles-card-subtitle">
-              Driven by nexus_config.feature_flags (owner / admin / member /
-              viewer). Custom named roles are deferred.
+              Driven by nexus_config.feature_flags (viewer / member / admin /
+              owner). Owner access is fixed and cannot be changed here.
             </p>
           </div>
         </div>
@@ -300,7 +310,20 @@ export default function OrgRolesPage() {
               <tr>
                 <th scope="col">Feature</th>
                 {roles.map((role) => (
-                  <th key={role} scope="col">
+                  <th
+                    key={role}
+                    scope="col"
+                    className={
+                      role === ROLE_MATRIX_READ_ONLY
+                        ? 'org-settings-roles-col-readonly'
+                        : undefined
+                    }
+                    title={
+                      role === ROLE_MATRIX_READ_ONLY
+                        ? 'Owner access cannot be changed'
+                        : undefined
+                    }
+                  >
                     {ROLE_LABELS[role] || role}
                   </th>
                 ))}
@@ -319,12 +342,18 @@ export default function OrgRolesPage() {
                   <th scope="row">{FEATURE_LABELS[feature] || feature}</th>
                   {roles.map((role) => {
                     const checked = (baseline[role] || []).includes(feature);
+                    const readOnly = role === ROLE_MATRIX_READ_ONLY;
                     return (
-                      <td key={`${role}-${feature}`}>
+                      <td
+                        key={`${role}-${feature}`}
+                        className={
+                          readOnly ? 'org-settings-roles-col-readonly' : undefined
+                        }
+                      >
                         <label className="org-settings-roles-check">
                           <Checkbox
                             checked={checked}
-                            disabled={!canManage}
+                            disabled={!canManage || readOnly}
                             onCheckedChange={() => toggleFeature(role, feature)}
                             aria-label={`${ROLE_LABELS[role]} can access ${FEATURE_LABELS[feature] || feature}`}
                           />

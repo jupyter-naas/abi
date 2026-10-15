@@ -21,3 +21,9 @@ export const FEATURE_LABELS: Record<string, string> = {
 export function featureLabel(feature: string): string {
   return FEATURE_LABELS[feature] || feature;
 }
+
+export function sortFeaturesByName(features: string[]): string[] {
+  return [...features].sort((a, b) =>
+    featureLabel(a).localeCompare(featureLabel(b), undefined, { sensitivity: 'base' })
+  );
+}
