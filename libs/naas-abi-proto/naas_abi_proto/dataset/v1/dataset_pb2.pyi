@@ -338,6 +338,22 @@ class ListSnapshotsResponse(_message.Message):
     error: DatasetError
     def __init__(self, snapshots: _Optional[_Union[DatasetSnapshotInfoList, _Mapping]] = ..., error: _Optional[_Union[DatasetError, _Mapping]] = ...) -> None: ...
 
+class NamespaceVersionRequest(_message.Message):
+    __slots__ = ("context", "namespace")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    namespace: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., namespace: _Optional[str] = ...) -> None: ...
+
+class NamespaceVersionResponse(_message.Message):
+    __slots__ = ("version", "error")
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    version: int
+    error: DatasetError
+    def __init__(self, version: _Optional[int] = ..., error: _Optional[_Union[DatasetError, _Mapping]] = ...) -> None: ...
+
 class DropRequest(_message.Message):
     __slots__ = ("context", "name", "namespace")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]

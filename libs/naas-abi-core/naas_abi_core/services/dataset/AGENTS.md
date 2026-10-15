@@ -53,6 +53,7 @@ class IDatasetPort:
     def flush(name, *, namespace="default", timeout_seconds=None) -> QueryResult
     def inlined_row_count(name, *, namespace="default") -> int
     def list_snapshots() -> list[DatasetSnapshotInfo]
+    def namespace_version(namespace) -> int | None
     def drop(name, *, namespace="default") -> None
 ```
 

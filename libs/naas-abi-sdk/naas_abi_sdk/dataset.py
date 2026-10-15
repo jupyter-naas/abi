@@ -57,6 +57,13 @@ class DatasetClient:
             "abi.svc.dataset.v1.list_snapshots", request, pb.ListSnapshotsResponse
         )
 
+    async def namespace_version(
+        self, request: pb.NamespaceVersionRequest
+    ) -> pb.NamespaceVersionResponse:
+        return await self._transport.call(
+            "abi.svc.dataset.v1.namespace_version", request, pb.NamespaceVersionResponse
+        )
+
     async def drop(self, request: pb.DropRequest) -> pb.DropResponse:
         return await self._transport.call(
             "abi.svc.dataset.v1.drop", request, pb.DropResponse
