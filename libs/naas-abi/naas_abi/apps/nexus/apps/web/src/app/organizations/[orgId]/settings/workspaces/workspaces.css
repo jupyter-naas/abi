@@ -84,3 +84,8 @@
 .org-workspaces-feature-more {
   color: var(--muted-foreground-hex, inherit);
 }
+
+/* Create workspace: the new group name field under the Group dropdown. */
+.org-create-workspace-new-group {
+  margin-top: var(--space-2);
+}

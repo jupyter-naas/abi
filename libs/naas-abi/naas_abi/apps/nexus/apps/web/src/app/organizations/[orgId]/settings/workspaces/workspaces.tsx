@@ -393,20 +393,15 @@ export default function OrganizationWorkspacesPage() {
           subtitle="Workspaces of this organization. Click a row to open its settings."
           actions={
             <>
-              {canManage && (
+              {/* Bulk edit: only shown once rows are selected with the checkboxes. */}
+              {canManage && selectedVisible.length > 0 && (
                 <button
                   type="button"
                   className="org-settings-users-secondary-button"
                   onClick={() => setBulkOpen(true)}
-                  disabled={selectedVisible.length === 0}
-                  title={
-                    selectedVisible.length === 0
-                      ? 'Select workspaces with the checkboxes first'
-                      : undefined
-                  }
                 >
                   <Pencil size={16} />
-                  Edit{selectedVisible.length ? ` (${selectedVisible.length})` : ''}
+                  Edit ({selectedVisible.length})
                 </button>
               )}
               <DropdownMenu.Root>

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Brush, Camera, Check, Image as ImageIcon, Palette, Save, Trash2, X } from 'lucide-react';
+import { Brush, Camera, Check, Palette, Save, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { SettingsField, SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
@@ -21,6 +21,8 @@ const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
 /** Same limit as the API (WorkspaceCreate.description). */
 const DESCRIPTION_MAX_LENGTH = 200;
+/** Group dropdown value that switches to typing a new group. */
+const NEW_GROUP = '__new__';
 
 async function readApiError(response: Response, fallback: string): Promise<string> {
   try {
@@ -36,9 +38,11 @@ async function readApiError(response: Response, fallback: string): Promise<strin
  * Create workspace (Organization Settings > Workspaces), laid out like
  * Workspace Settings > General: logo, name, group, slug, description and
  * colors. Save (top right) creates it; the cross closes without saving. The
- * logo is uploaded right after the workspace exists, into the workspace drive
- * (``.settings/logos/logo.<ext>``). The desk wallpaper needs the workspace
- * drive, so it is set in General afterwards.
+ * slug follows the name until edited. The group is picked from the
+ * organization's groups, or typed as a new one. The logo is uploaded right
+ * after the workspace exists, into the workspace drive
+ * (``.settings/logos/logo.<ext>``); the desk wallpaper is set in General
+ * once the workspace exists.
  */
 export default function OrgCreateWorkspacePage() {
   const params = useParams();
@@ -48,6 +52,8 @@ export default function OrgCreateWorkspacePage() {
 
   const [name, setName] = useState('');
   const [group, setGroup] = useState('');
+  const [newGroup, setNewGroup] = useState(false);
+  const [existingGroups, setExistingGroups] = useState<string[]>([]);
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
   const [description, setDescription] = useState('');
@@ -58,6 +64,27 @@ export default function OrgCreateWorkspacePage() {
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Groups already used in this organization, for the Group dropdown.
+  useEffect(() => {
+    if (!orgId) return;
+    let cancelled = false;
+    void authFetch(`/api/organizations/${orgId}/workspaces`)
+      .then(async (res) => {
+        if (!res.ok || cancelled) return;
+        const rows: { workspace_group?: string | null }[] = await res.json();
+        const groups = new Set(
+          rows.map((row) => row.workspace_group?.trim()).filter(Boolean) as string[]
+        );
+        setExistingGroups([...groups].sort((a, b) => a.localeCompare(b)));
+      })
+      .catch(() => {
+        // No suggestions: "New group" still works.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId]);
 
   useEffect(() => {
     if (!logoFile) {
@@ -251,16 +278,42 @@ export default function OrgCreateWorkspacePage() {
             <label className="account-profile-field-label" htmlFor="create-workspace-group">
               Group
             </label>
-            <input
+            <select
               id="create-workspace-group"
-              type="text"
-              value={group}
-              onChange={(event) => setGroup(event.target.value)}
-              placeholder={`${OTHERS_GROUP} when empty`}
-              maxLength={100}
+              value={newGroup ? NEW_GROUP : group}
+              onChange={(event) => {
+                if (event.target.value === NEW_GROUP) {
+                  setNewGroup(true);
+                  setGroup('');
+                  return;
+                }
+                setNewGroup(false);
+                setGroup(event.target.value);
+              }}
               disabled={creating}
               className="account-profile-field-input"
-            />
+            >
+              <option value="">{OTHERS_GROUP} (no group)</option>
+              {existingGroups.map((existing) => (
+                <option key={existing} value={existing}>
+                  {existing}
+                </option>
+              ))}
+              <option value={NEW_GROUP}>+ New group…</option>
+            </select>
+            {newGroup && (
+              <input
+                type="text"
+                value={group}
+                onChange={(event) => setGroup(event.target.value)}
+                placeholder="New group name"
+                aria-label="New group name"
+                maxLength={100}
+                disabled={creating}
+                className="account-profile-field-input org-create-workspace-new-group"
+                autoFocus
+              />
+            )}
           </div>
           <div className="account-profile-field">
             <label className="account-profile-field-label" htmlFor="create-workspace-slug">
@@ -279,15 +332,10 @@ export default function OrgCreateWorkspacePage() {
               disabled={creating}
               className="account-profile-field-input"
             />
-            {effectiveSlug && !slugValid ? (
+            {effectiveSlug && !slugValid && (
               <span className="account-profile-field-label org-create-workspace-hint">
                 Lowercase letters, digits and dashes; at least two characters, no dash at either
                 end.
-              </span>
-            ) : (
-              <span className="account-profile-field-label workspace-general-hint">
-                Fixed once created. /workspace/{effectiveSlug || '<slug>'} opens the workspace
-                like its id.
               </span>
             )}
           </div>
@@ -313,20 +361,6 @@ export default function OrgCreateWorkspacePage() {
           />
         </div>
       </AccountSectionCard>
-
-      <SettingsSection
-        title={
-          <span className="flex items-center gap-2">
-            <ImageIcon size={16} className="text-muted-foreground" />
-            Desktop wallpaper
-          </span>
-        }
-      >
-        <p className="text-sm text-muted-foreground">
-          The wallpaper is stored in the workspace drive: set it in Settings → General once the
-          workspace is created.
-        </p>
-      </SettingsSection>
 
       <SettingsSection
         title={
