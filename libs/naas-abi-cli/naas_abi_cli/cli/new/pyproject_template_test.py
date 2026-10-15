@@ -88,3 +88,14 @@ def test_project_metadata_is_unaffected_by_the_switch() -> None:
         doc, _ = _render(use_local_abi_sources=use_local)
         assert doc["project"]["name"] == "demo"
         assert doc["build-system"]["build-backend"] == "setuptools.build_meta"
+
+
+def test_uv_run_pytest_finds_the_module_tests() -> None:
+    """The project's docs say `uv run pytest`: pytest must be installed, and a
+    remote module's `tests/module_test.py` collected (not `test_*.py` only)."""
+    for use_local in (True, False):
+        doc, _ = _render(use_local_abi_sources=use_local)
+        assert any(dep.startswith("pytest") for dep in doc["dependency-groups"]["dev"])
+        options = doc["tool"]["pytest"]["ini_options"]
+        assert options["testpaths"] == ["src"]
+        assert "*_test.py" in options["python_files"]

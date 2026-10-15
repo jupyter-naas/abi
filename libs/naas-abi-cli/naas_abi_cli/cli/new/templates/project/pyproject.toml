@@ -7,12 +7,20 @@ requires-python = ">=3.12"
 dependencies = [
 ]
 
+# `uv run pytest` runs the tests under src/ (`uv sync --no-dev` leaves it out).
+[dependency-groups]
+dev = ["pytest>=8"]
+
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["src"]
+python_files = ["*_test.py", "test_*.py"]
 
 [tool.uv]
 # onnxruntime 1.26.0 ships no cp312 macOS wheel; pin it until upstream
