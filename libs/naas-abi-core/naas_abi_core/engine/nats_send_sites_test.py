@@ -46,6 +46,10 @@ REVIEWED = {
         2,
         "engine lease record: one holder description, a few hundred bytes",
     ),
+    "naas-abi-core/naas_abi_core/services/iam/adapters/primary/iam__primary_adapter__NATS.py": (
+        1,
+        "abi.iam.v1.changed: a ChangeEvent holding one int64 revision",
+    ),
     "naas-abi-core/naas_abi_core/services/bus/adapters/secondary/NATSJetStreamAdapter.py": (
         2,
         "bus publish/enqueue: claim_check.prepare (JetStream header reserved)",
