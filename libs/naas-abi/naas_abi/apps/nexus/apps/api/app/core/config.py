@@ -350,6 +350,9 @@ class FeatureFlagsConfig(BaseModel):
             ],
         }
     )
+    # Deprecated: workspace feature overrides are managed in Organization
+    # Settings > Workspaces (workspaces.feature_overrides). Still read as a
+    # fallback for workspaces that never saved any.
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
     # Per-organization role_baseline overlays. Does not replace deployment
     # role_baseline; keyed by organization id.
@@ -394,8 +397,11 @@ class WorkspaceSeedConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str
     slug: str
+    # Name, owner, group and branding are managed in the app; config.workspaces.yaml
+    # snapshots them (core/workspaces_import replays it). Still accepted here,
+    # bootstrap only; a workspace created without a name is named after its slug.
+    name: str | None = None
     # Defaults to the organization owner. Org owners and admins reach every
     # workspace of their org without a membership row.
     owner_email: EmailStr | None = None

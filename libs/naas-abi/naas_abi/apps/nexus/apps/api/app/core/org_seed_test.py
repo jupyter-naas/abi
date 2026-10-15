@@ -408,3 +408,23 @@ def test_reseed_fills_a_missing_workspace_owner_and_organization(
 
     assert (workspace.owner_id, workspace.organization_id) == ("user-1", "org-1")
     assert ensured == [("workspace", "ws-1", "user-1", "owner")]
+
+
+def test_a_workspace_seeded_without_a_name_is_named_after_its_slug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = MagicMock()
+    session.execute = AsyncMock(
+        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+    )
+    _patch_member_helpers(monkeypatch, SimpleNamespace(id="user-1"))
+    cfg = WorkspaceSeedConfig(slug="valeo", apps=["naas_abi.apps:example"])
+
+    asyncio.run(
+        org_seed._upsert_workspace(
+            session, cfg, SimpleNamespace(id="org-1", owner_id="user-1", slug="forvis"), {}
+        )
+    )
+
+    created = session.add.call_args.args[0]
+    assert (created.slug, created.name, created.owner_id) == ("valeo", "valeo", "user-1")

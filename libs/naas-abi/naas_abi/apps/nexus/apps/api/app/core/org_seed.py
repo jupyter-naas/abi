@@ -396,6 +396,8 @@ async def _upsert_workspace(
             workspace_group=workspace_cfg.group,
             **{field: getattr(workspace_cfg, field) for field in _WORKSPACE_FIELDS},
         )
+        # The name is managed in the app (config.workspaces.yaml snapshot).
+        workspace.name = workspace_cfg.name or workspace_cfg.slug
         session.add(workspace)
         logger.info(
             "Created workspace slug=%s under org=%s",

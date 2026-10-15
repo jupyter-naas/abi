@@ -105,6 +105,18 @@ and per-member workspace assignment.
    replace the config `feature_flags.workspace_overrides` entry for that
    workspace. Saving `null` ("Use config") applies the config again. Settings
    cannot be overridden.
+12. **Config workspaces only seed resources.** The bob configs keep, per
+   workspace, `slug` plus the seeding keys (`default_agent`, `agents`, `apps`,
+   `ontologies`, `graphs`, `maps`). Name, owner, group, description, branding
+   and feature overrides are managed in the app. `feature_flags.workspace_overrides`
+   is removed from the configs (still accepted, as a deprecated fallback).
+   `config.workspaces.yaml` (and `.base` / `.remote`) snapshot those values.
+   They are not read on boot: `python -m
+   naas_abi.apps.nexus.apps.api.app.core.workspaces_import <file>` replays one
+   fill-only. It creates missing workspaces and fills only empty values (a
+   name equal to the slug counts as empty). It writes feature overrides only
+   where none were saved, and never deletes anything. A workspace the seed
+   creates without a name is named after its slug.
 10. **Workspace name and branding are bootstrap only.** On an existing
    workspace the seed fills `name`, `logo_url`, `logo_emoji`, the colours,
    `background_image_url` and `font_family` only where the workspace has no
@@ -118,8 +130,9 @@ and per-member workspace assignment.
 - People and roles changed in the UI survive restarts.
 - Removing `members:` from a config does not revoke access. Revoke access in the
   platform.
-- A fresh database gets only the bootstrap users. Run the importer to restore a
-  snapshot.
+- A fresh database gets only the bootstrap users, and workspaces named after
+  their slugs. Run `users_import` and `workspaces_import` to restore the
+  snapshots.
 - A config-listed superadmin who is demoted in the UI is promoted again on the
   next boot. This is intended as a lock-out guard, and the way to demote them
   for good is to remove them from `users:`.
