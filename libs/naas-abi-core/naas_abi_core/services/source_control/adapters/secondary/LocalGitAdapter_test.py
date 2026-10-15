@@ -7,6 +7,7 @@ from naas_abi_core.services.source_control.adapters.secondary.LocalGitAdapter im
 from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
     FileWrite,
+    RepoExistsError,
     RepoNotFoundError,
 )
 from naas_abi_core.services.source_control.tests.source_control__secondary_adapter__generic_test import (
@@ -33,6 +34,15 @@ def test_ensure_repo_and_list_contents(adapter: LocalGitAdapter) -> None:
     file = adapter.get_file(repo_id=repo_id, path="README.md")
     assert file.text is not None
     assert "demo" in file.text
+
+
+@pytest.mark.parametrize("name", ["demo", "Demo"])
+def test_create_repo_never_returns_an_existing_repository(
+    adapter: LocalGitAdapter, name: str
+) -> None:
+    adapter.create_repo(owner="abi", name="demo")
+    with pytest.raises(RepoExistsError):
+        adapter.create_repo(owner="abi", name=name)
 
 
 def _seed_deck(adapter: LocalGitAdapter, repo_id: str, root: str) -> None:

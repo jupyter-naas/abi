@@ -35,6 +35,7 @@ from naas_abi_core.services.source_control.adapters.secondary.SourceControlSecon
 from naas_abi_core.services.source_control.SourceControlPorts import (
     AccessDeniedError,
     BranchNotFoundError,
+    RepoExistsError,
     RepoNotFoundError,
 )
 from naas_abi_core.services.source_control.SourceControlService import (
@@ -196,6 +197,59 @@ def test_a_repository_that_predates_iam_stays_on_the_platform():
     ):
         sc.ensure_repo(owner="acme", name="legacy")
     assert h.iam.resolve_placement("source_control", "acme%2Flegacy") == ("-", "-")
+
+
+@pytest.mark.parametrize("transport", ["in_process", "nats"])
+def test_create_repo_never_hands_back_an_existing_repository(transport):
+    """Regression (security review): a repository that exists, in any letter
+    case, is never returned by create_repo, and nothing is placed for it."""
+    sc, h, adapter = _service()
+    adapter.ensure_repo(owner="platform", name="Secret")
+    h.admin("put_scope", "org-1", "ws-b")
+
+    def create(service):
+        with use_call_context(
+            CallContext(principal=service_account("api"), workspace_id="ws-b")
+        ):
+            return service.create_repo(owner="platform", name="secret")
+
+    if transport == "in_process":
+        with pytest.raises(RepoExistsError):
+            create(sc)
+    else:
+        with nats_server() as url:
+            server = PrimaryServer(url, SourceControlPrimaryAdapterNATS(sc, JWT_SECRET))
+            server.start()
+            facade = _facade(url, "api")
+            try:
+                with pytest.raises(RepoExistsError):
+                    create(facade)
+            finally:
+                facade.adapter.close()
+                server.stop()
+    assert h.iam.placement_of("source_control", "platform%2Fsecret") is None
+
+
+def test_repository_names_ignore_case():
+    """The forge looks repositories up case-insensitively, so IAM names them in
+    lowercase: a grant on one spelling covers every other."""
+    sc, h, adapter = _service()
+    adapter.ensure_repo(owner="acme", name="Mixed")
+    bob = h.user("bob")
+    h.grant(
+        bob.id,
+        statement(
+            "Allow",
+            ["source_control:GetFile", "source_control:ListContents"],
+            ["abi:-:-:source_control:repo/acme%2Fmixed"],
+        ),
+    )
+    with h.as_(actor="api", on_behalf_of=bob):
+        # Checked on the lowercase name, whatever the spelling asked for.
+        sc.list_contents(repo_id="acme/Mixed")
+        assert sc._guard.name("repo", "acme/MIXED".lower()) == (
+            "abi:-:-:source_control:repo/acme%2Fmixed"
+        )
 
 
 def test_lists_keep_what_the_caller_may_list():

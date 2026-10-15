@@ -51,6 +51,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Proposal,
     ProposalNotFoundError,
     Repo,
+    RepoExistsError,
     RepoNotFoundError,
     Review,
     ValidationError,
@@ -213,6 +214,8 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     """
     status = error.status if error.HasField("status") else None
     raise_authorization_error(error.code, error.message)
+    if error.code == "REPO_EXISTS":
+        raise RepoExistsError(error.message, status=status)
     if error.code == "REPO_NOT_FOUND":
         raise RepoNotFoundError(error.message, status=status)
     if error.code == "BRANCH_NOT_FOUND":
@@ -302,6 +305,25 @@ class SourceControlSecondaryAdapterNATSClient(NatsRPCClient, ISourceControlAdapt
             f"{SUBJECT_PREFIX}.ensure_repo",
             request,
             source_control_pb2.EnsureRepoResponse,
+        )
+        if response.HasField("error"):
+            _raise_for_error(response.error)
+        return _pb_to_repo(response.repo)
+
+    def create_repo(
+        self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
+    ) -> Repo:
+        request = source_control_pb2.CreateRepoRequest(
+            context=self._context(),
+            owner=owner,
+            name=name,
+            private=private,
+            auto_init=auto_init,
+        )
+        response = self._call(
+            f"{SUBJECT_PREFIX}.create_repo",
+            request,
+            source_control_pb2.CreateRepoResponse,
         )
         if response.HasField("error"):
             _raise_for_error(response.error)

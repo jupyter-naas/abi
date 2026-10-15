@@ -39,6 +39,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Proposal,
     ProposalNotFoundError,
     Repo,
+    RepoExistsError,
     RepoNotFoundError,
     Review,
     SourceControlError,
@@ -307,10 +308,34 @@ class ForgejoAdapter(ISourceControlAdapter):
         )
         return self._to_repo(created)
 
+    def create_repo(
+        self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
+    ) -> Repo:
+        # Forgejo refuses a name that exists in any case (it keys repos by
+        # lower_name) with 409: never hand back an existing repository.
+        try:
+            created = self._request(
+                "POST",
+                f"/admin/users/{owner}/repos",
+                json={"name": name, "private": private, "auto_init": auto_init},
+            )
+        except SourceControlError as exc:
+            if exc.status == 409:
+                raise RepoExistsError(f"Repository {owner}/{name} exists") from exc
+            raise
+        return self._to_repo(created)
+
     def list_repos(self) -> list[Repo]:
-        result = self._request("GET", "/repos/search?limit=100")
-        items = result.get("data", []) if isinstance(result, dict) else result
-        return [self._to_repo(r) for r in (items or [])]
+        # Every page: the server caps a page (MAX_RESPONSE_ITEMS, 50 by default).
+        repos: list[Repo] = []
+        page = 1
+        while True:
+            result = self._request("GET", f"/repos/search?limit=50&page={page}")
+            items = (result.get("data", []) if isinstance(result, dict) else result) or []
+            repos += [self._to_repo(r) for r in items]
+            if len(items) < 50:
+                return repos
+            page += 1
 
     def add_collaborator(
         self, *, repo_id: str, username: str, permission: str = "write"

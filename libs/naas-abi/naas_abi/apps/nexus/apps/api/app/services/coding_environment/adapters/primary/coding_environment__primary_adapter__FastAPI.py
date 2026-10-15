@@ -25,6 +25,7 @@ import secrets
 import time
 import urllib.error
 import urllib.request
+from dataclasses import replace
 from datetime import timedelta
 from urllib.parse import quote
 
@@ -44,14 +45,15 @@ from naas_abi.apps.nexus.apps.api.app.models import (
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import create_access_token
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
     AuthorizationUnavailable,
+    RepoNameTaken,
     RepoNotInWorkspace,
     RepoWriteDenied,
     authorize_repo,
     belongs_to_workspace,
     grant_write,
-    place_in_workspace,
-    placement_workspace,
+    place_created_repo,
 )
+from naas_abi_core.engine.call_context import current_call_context, use_call_context
 from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter import (
     _sanitize_coder_username,
 )
@@ -71,14 +73,20 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
 from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
-from naas_abi_core.services.iam.IAMPorts import IIAMService
+from naas_abi_core.services.iam.IAMPorts import (
+    IIAMService,
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
     Repo,
+    RepoExistsError,
     SourceControlError,
 )
 from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
+    repo_key,
 )
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
@@ -527,35 +535,38 @@ async def create_repo(
         raise HTTPException(status_code=403, detail="Viewers cannot create repositories.")
     username = _forge_username(current_user.name or "", str(current_user.email))
     repo_id = f"{_repo_owner()}/{body.name}"
-    placed = await run_in_threadpool(placement_workspace, iam, repo_id)
-    if placed is not None and placed.workspace != body.workspace_id:
-        raise HTTPException(status_code=409, detail="That repository name is taken.")
-    if placed is None:
-        existing = await run_in_threadpool(source_control.list_repos)
-        if any(f"{r.owner}/{r.name}" == repo_id for r in existing):
-            # It predates IAM, or belongs to no workspace: never claimed here.
-            raise HTTPException(status_code=409, detail="That repository name is taken.")
     row = (
         await db.execute(select(WorkspaceModel).where(WorkspaceModel.id == body.workspace_id))
     ).scalar_one_or_none()
-    try:
-        # auto_init=False -> a truly empty repo, so an existing local history can
-        # be pushed to it (the "create new repo, then push" onboarding flow).
-        repo = await run_in_threadpool(
-            source_control.ensure_repo,
-            owner=_repo_owner(),
-            name=body.name,
-            private=body.private,
-            auto_init=body.auto_init,
-        )
-        if placed is None:
-            await run_in_threadpool(
-                place_in_workspace,
-                iam,
-                repo_id,
-                body.workspace_id,
-                getattr(row, "organization_id", None),
+    taken = HTTPException(status_code=409, detail="That repository name is taken.")
+
+    def create() -> Repo:
+        # Created on the platform, then moved to the workspace once it is proven
+        # new: ``create_repo`` never returns a repository that existed, in any
+        # letter case, so nothing that existed is ever placed here or granted.
+        context = current_call_context()
+        with use_call_context(replace(context, workspace_id=None)):
+            return source_control.create_repo(
+                owner=_repo_owner(),
+                name=body.name,
+                private=body.private,
+                # auto_init=False -> a truly empty repo, so an existing local
+                # history can be pushed to it (the "create new repo, then push"
+                # onboarding flow).
+                auto_init=body.auto_init,
             )
+
+    try:
+        repo = await run_in_threadpool(create)
+        if repo_key(f"{repo.owner}/{repo.name}") != repo_key(repo_id):
+            raise taken
+        await run_in_threadpool(
+            place_created_repo,
+            iam,
+            repo,
+            body.workspace_id,
+            getattr(row, "organization_id", None),
+        )
         await _authorize_repo(iam, repo_id, body.workspace_id, role, write=True)
         # Repos are owned by the platform account, so grant the creator write
         # access — otherwise their push is rejected as "repository not found".
@@ -566,6 +577,8 @@ async def create_repo(
             username=username,
         )
         await run_in_threadpool(grant_write, source_control, repo_id, username)
+    except (RepoExistsError, RepoNameTaken, PermissionDeniedError, ResourceNotFoundError):
+        raise taken from None
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return _to_repo_item(repo)

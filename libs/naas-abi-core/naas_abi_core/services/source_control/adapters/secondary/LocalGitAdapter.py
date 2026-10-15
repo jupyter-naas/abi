@@ -23,6 +23,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     MergeResult,
     Proposal,
     Repo,
+    RepoExistsError,
     RepoNotFoundError,
     Review,
     SourceControlError,
@@ -152,6 +153,19 @@ class LocalGitAdapter(ISourceControlAdapter):
                 self._run("add", "README.md", cwd=path, env=env)
                 self._run("commit", "-m", "Initial commit", cwd=path, env=env)
         return self._to_repo(repo_id)
+
+    def create_repo(
+        self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
+    ) -> Repo:
+        repo_id = f"{owner}/{name}"
+        if self._repo_exists(repo_id) or any(
+            f"{repo.owner}/{repo.name}".lower() == repo_id.lower()
+            for repo in self.list_repos()
+        ):
+            raise RepoExistsError(f"Repository {repo_id} exists")
+        return self.ensure_repo(
+            owner=owner, name=name, private=private, auto_init=auto_init
+        )
 
     def list_repos(self) -> list[Repo]:
         repos: list[Repo] = []

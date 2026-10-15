@@ -65,6 +65,9 @@ class _BlockedMergeAdapter(ISourceControlAdapter):
     def find_user(self, **kwargs) -> str | None:
         return None
 
+    def create_repo(self, **kwargs) -> Repo:
+        return self.ensure_repo(**kwargs)
+
     def ensure_repo(self, **kwargs) -> Repo:
         return Repo(
             id="repo-1",

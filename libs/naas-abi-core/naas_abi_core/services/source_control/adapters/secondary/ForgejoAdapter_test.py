@@ -15,6 +15,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     MergeBlockedError,
     MergeConflictError,
     ProposalNotFoundError,
+    RepoExistsError,
     RepoNotFoundError,
 )
 from naas_abi_core.services.source_control.tests.source_control__secondary_adapter__generic_test import (
@@ -374,6 +375,37 @@ def test_a_new_username_renames_the_principals_account() -> None:
     rename = session.find("POST", "/admin/users/al/rename")
     assert rename is not None and rename["json"] == {"new_username": "alice"}
     assert session.find("POST", "/admin/users?") is None  # no second account
+
+
+def test_create_repo_maps_an_existing_name_to_repo_exists() -> None:
+    session = FakeSession(
+        [
+            (
+                "POST",
+                "/admin/users/platform/repos",
+                FakeResponse(409, {"message": "exists"}, "repository already exists"),
+            )
+        ]
+    )
+    with pytest.raises(RepoExistsError):
+        _adapter(session).create_repo(owner="platform", name="secret")
+    assert session.find("GET", "/repos/platform/secret") is None  # never looked up
+
+
+def test_list_repos_reads_every_page() -> None:
+    pages = {
+        1: [{"name": f"r{i}", "owner": {"login": "o"}} for i in range(50)],
+        2: [{"name": "last", "owner": {"login": "o"}}],
+    }
+
+    class Paged(FakeSession):
+        def request(self, method, url, headers=None, json=None, timeout=None):
+            self.calls.append({"method": method, "url": url, "json": json})
+            page = int(url.rsplit("page=", 1)[1])
+            return FakeResponse(200, {"data": pages.get(page, [])})
+
+    names = [r.name for r in _adapter(Paged([])).list_repos()]
+    assert len(names) == 51 and names[-1] == "last"
 
 
 def test_find_user_reads_the_newest_binding_back() -> None:

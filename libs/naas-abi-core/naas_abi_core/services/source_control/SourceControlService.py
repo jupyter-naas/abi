@@ -50,12 +50,18 @@ def _proposal_missing(repo_id: str, number: int | str):
     return lambda: ProposalNotFoundError(f"Proposal {number} not found in {repo_id}")
 
 
+def repo_key(repo_id: str) -> str:
+    """A repository's id as IAM names and places it: lowercase, because forges
+    look repositories up case-insensitively (``Acme/Repo`` is ``acme/repo``)."""
+    return repo_id.lower()
+
+
 def _branch(repo_id: str, name: str) -> list[str]:
-    return [repo_id, name]
+    return [repo_key(repo_id), name]
 
 
 def _proposal(repo_id: str, number: int | str) -> list[str]:
-    return [repo_id, str(number)]
+    return [repo_key(repo_id), str(number)]
 
 
 class SourceControlService(ServiceBase):
@@ -102,7 +108,9 @@ class SourceControlService(ServiceBase):
     # -- checks -----------------------------------------------------------------
 
     def _repo(self, action: str, repo_id: str) -> None:
-        self._guard.require(action, "repo", repo_id, not_found=_repo_missing(repo_id))
+        self._guard.require(
+            action, "repo", repo_key(repo_id), not_found=_repo_missing(repo_id)
+        )
 
     def _on_branch(self, action: str, repo_id: str, name: str) -> None:
         self._guard.require(
@@ -126,7 +134,7 @@ class SourceControlService(ServiceBase):
         iam = self._guard.iam
         if iam is None:
             return
-        name = self._guard.name("repo", repo_id)
+        name = self._guard.name("repo", repo_key(repo_id))
         if not iam.authorize("source_control:ListContents", name).visible:
             raise _repo_missing(repo_id)()
 
@@ -188,7 +196,7 @@ class SourceControlService(ServiceBase):
         if iam is not None and self._exists(repo_id):
             # Not a create: an existing repository is ensured where it is
             # placed, whatever the call's target workspace.
-            canonical = self._guard.canonical_id("repo", repo_id)
+            canonical = self._guard.canonical_id("repo", repo_key(repo_id))
             if iam.placement_of("source_control", canonical) is None:
                 # It predates IAM: the platform's, so no workspace claims it.
                 with as_service_account(PLACEMENT_WRITER):
@@ -199,9 +207,29 @@ class SourceControlService(ServiceBase):
                 owner=owner, name=name, private=private, auto_init=auto_init
             )
         creation = self._guard.create(
-            "EnsureRepo", "repo", repo_id, not_found=_repo_missing(repo_id)
+            "EnsureRepo", "repo", repo_key(repo_id), not_found=_repo_missing(repo_id)
         )
         repo = self._adapter.ensure_repo(
+            owner=owner, name=name, private=private, auto_init=auto_init
+        )
+        creation.record()
+        return repo
+
+    def create_repo(
+        self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
+    ) -> Repo:
+        """Create a new repository, placed in the call's target workspace.
+
+        Unlike ``ensure_repo``, it never hands back a repository that exists:
+        one with that id in any letter case raises ``RepoExistsError``, and
+        nothing is placed. A caller may then place or grant access to what it
+        gets back, knowing it created it.
+        """
+        repo_id = f"{owner}/{name}"
+        creation = self._guard.create(
+            "EnsureRepo", "repo", repo_key(repo_id), not_found=_repo_missing(repo_id)
+        )
+        repo = self._adapter.create_repo(
             owner=owner, name=name, private=private, auto_init=auto_init
         )
         creation.record()
@@ -219,13 +247,13 @@ class SourceControlService(ServiceBase):
             "ListRepos",
             "repo",
             self._adapter.list_repos(),
-            lambda repo: f"{repo.owner}/{repo.name}",
+            lambda repo: repo_key(f"{repo.owner}/{repo.name}"),
         )
 
     def delete_repo(self, *, repo_id: str) -> None:
         self._repo("DeleteRepo", repo_id)
         self._adapter.delete_repo(repo_id=repo_id)
-        self._guard.forget("repo", repo_id)
+        self._guard.forget("repo", repo_key(repo_id))
 
     def add_collaborator(
         self, *, repo_id: str, username: str, permission: str = "write"

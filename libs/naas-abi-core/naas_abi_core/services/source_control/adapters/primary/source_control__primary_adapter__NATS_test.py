@@ -39,6 +39,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Proposal,
     ProposalNotFoundError,
     Repo,
+    RepoExistsError,
     RepoNotFoundError,
     Review,
     ValidationError,
@@ -141,6 +142,15 @@ class _StubAdapter(ISourceControlAdapter):
 
     def find_user(self, *, external_id: str) -> str | None:
         return None
+
+    def create_repo(
+        self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
+    ) -> Repo:
+        if any(r.lower() == f"{owner}/{name}".lower() for r in self.repos):
+            raise RepoExistsError(f"{owner}/{name} exists")
+        return self.ensure_repo(
+            owner=owner, name=name, private=private, auto_init=auto_init
+        )
 
     def ensure_repo(
         self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
@@ -1057,6 +1067,24 @@ def test_not_implemented_maps_to_unimplemented_not_retryable():
 
     assert response.error.code == "UNIMPLEMENTED"
     assert response.error.retryable is False
+
+
+def test_create_repo_maps_repo_exists_both_ways():
+    adapter = SourceControlPrimaryAdapterNATS(_StubAdapter(), SECRET)
+    first = _call(
+        adapter,
+        "create_repo",
+        source_control_pb2.CreateRepoRequest(owner="alice", name="Proj"),
+        source_control_pb2.CreateRepoResponse,
+    )
+    assert first.repo.name == "Proj"
+    again = _call(
+        adapter,
+        "create_repo",
+        source_control_pb2.CreateRepoRequest(owner="alice", name="proj"),
+        source_control_pb2.CreateRepoResponse,
+    )
+    assert again.error.code == "REPO_EXISTS"
 
 
 def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():

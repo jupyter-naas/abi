@@ -25,6 +25,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Proposal,
     ProposalNotFoundError,
     Repo,
+    RepoExistsError,
     RepoNotFoundError,
     Review,
     SourceControlError,
@@ -119,6 +120,16 @@ class InMemoryAdapter(ISourceControlAdapter):
                 "files": {"README.md": f"# {name}\n"} if auto_init else {},
             }
         return self._to_repo(self._repos[repo_id])
+
+    def create_repo(
+        self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
+    ) -> Repo:
+        repo_id = f"{owner}/{name}"
+        if any(existing.lower() == repo_id.lower() for existing in self._repos):
+            raise RepoExistsError(f"Repository {repo_id} exists")
+        return self.ensure_repo(
+            owner=owner, name=name, private=private, auto_init=auto_init
+        )
 
     def list_contents(
         self, *, repo_id: str, path: str = "", ref: str | None = None

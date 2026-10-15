@@ -546,6 +546,46 @@ def test_a_member_cannot_take_another_workspaces_repository_name(
     assert _collaborators(client, "abi/theirs") == {}
 
 
+@pytest.mark.parametrize("name", ["secret", "SECRET", "sEcReT"])
+def test_a_different_case_name_never_hands_over_another_workspaces_repository(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    """Regression (security review): the forge looks repositories up without
+    case, so ``abi/secret`` is workspace A's ``abi/Secret``. A member of B
+    asking to create it gets 409, no grant, and A's placement stays."""
+    client = _client(monkeypatch, role="member")
+    iam = client.iam  # type: ignore[attr-defined]
+    with as_service_account("engine"):
+        client.source_control.ensure_repo(owner="abi", name="Secret")  # type: ignore[attr-defined]
+        iam.put_placement("source_control", "abi%2Fsecret", "-", "other-ws")
+        iam.put_placement("source_control", "abi%2Fsecret/*", "-", "other-ws")
+    resp = client.post("/coding-environments/repos", json={"workspace_id": "org", "name": name})
+    assert resp.status_code == 409, resp.text
+    assert _collaborators(client, "abi/Secret") == {}
+    assert iam.resolve_placement("source_control", "abi%2Fsecret") == ("-", "other-ws")
+    resp = client.post(
+        "/coding-environments/git-token",
+        json={"workspace_id": "org", "repo_id": f"abi/{name}"},
+    )
+    assert resp.status_code == 404, resp.text
+    assert _collaborators(client, "abi/Secret") == {}
+
+
+@pytest.mark.parametrize("name", ["legacy", "Legacy"])
+def test_a_repository_that_predates_iam_is_never_claimed(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    """Regression (security review): a repository with no placement is not
+    free; asking to create it, in any case, places nothing and grants nothing."""
+    client = _client(monkeypatch, role="member")
+    with as_service_account("engine"):
+        client.source_control.adapter.ensure_repo(owner="abi", name="legacy")  # type: ignore[attr-defined]
+    resp = client.post("/coding-environments/repos", json={"workspace_id": "org", "name": name})
+    assert resp.status_code == 409, resp.text
+    assert _collaborators(client, "abi/legacy") == {}
+    assert client.iam.placement_of("source_control", "abi%2Flegacy") is None  # type: ignore[attr-defined]
+
+
 def test_a_viewer_gets_no_write_access(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _client(monkeypatch, role="viewer")
     resp = client.post(

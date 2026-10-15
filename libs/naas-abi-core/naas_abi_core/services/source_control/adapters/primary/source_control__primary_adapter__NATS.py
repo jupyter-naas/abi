@@ -70,6 +70,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Proposal,
     ProposalNotFoundError,
     Repo,
+    RepoExistsError,
     RepoNotFoundError,
     Review,
     ValidationError,
@@ -316,6 +317,11 @@ class SourceControlPrimaryAdapterNATS(ServicePrimary):
             handler=self._handle_ensure_repo,
         )
         await service.add_endpoint(
+            name="create_repo",
+            subject=f"{SUBJECT_PREFIX}.create_repo",
+            handler=self._handle_create_repo,
+        )
+        await service.add_endpoint(
             name="list_repos",
             subject=f"{SUBJECT_PREFIX}.list_repos",
             handler=self._handle_list_repos,
@@ -506,6 +512,16 @@ class SourceControlPrimaryAdapterNATS(ServicePrimary):
                 retryable=False,
             )
             return
+        except RepoExistsError as exc:
+            await self._respond_error(
+                request,
+                response_cls,
+                "REPO_EXISTS",
+                str(exc),
+                retryable=False,
+                status=exc.status,
+            )
+            return
         except RepoNotFoundError as exc:
             await self._respond_error(
                 request,
@@ -655,6 +671,22 @@ class SourceControlPrimaryAdapterNATS(ServicePrimary):
             owner=req.owner, name=req.name, private=req.private, auto_init=req.auto_init
         )
         return source_control_pb2.EnsureRepoResponse(repo=_repo_to_pb(repo))
+
+    async def _handle_create_repo(self, request: Request) -> None:
+        await self._handle(
+            request,
+            source_control_pb2.CreateRepoRequest,
+            source_control_pb2.CreateRepoResponse,
+            self._call_create_repo,
+        )
+
+    def _call_create_repo(
+        self, req: source_control_pb2.CreateRepoRequest
+    ) -> source_control_pb2.CreateRepoResponse:
+        repo = self._adapter.create_repo(
+            owner=req.owner, name=req.name, private=req.private, auto_init=req.auto_init
+        )
+        return source_control_pb2.CreateRepoResponse(repo=_repo_to_pb(repo))
 
     async def _handle_list_repos(self, request: Request) -> None:
         await self._handle(

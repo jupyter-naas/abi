@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import mimetypes
+from dataclasses import replace
 from pathlib import Path
 from urllib.error import URLError
 from urllib.parse import urlencode, urlparse
@@ -11,7 +12,7 @@ from urllib.request import Request, urlopen
 
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService, MagicLinkChallenge
-from naas_abi_core.engine.call_context import as_service_account
+from naas_abi_core.engine.call_context import as_service_account, use_call_context
 from naas_abi_core.services.email.EmailPorts import EmailAttachment
 from naas_abi_core.services.email.EmailService import EmailService
 
@@ -287,8 +288,13 @@ async def send_invite_sign_in_email(
         otp_code=challenge.otp_code,
     )
     # Nexus's own mail, sent as its account (RFC §7: mail is sent by api,
-    # engine and idp): a sign-in request has no signed-in user to act for.
-    with as_service_account("api"):
+    # engine and idp): a sign-in request has no signed-in user to act for. Its
+    # kept copy holds a sign-in link or code, so it belongs to no workspace,
+    # whatever workspace the (unauthenticated) request names.
+    with (
+        as_service_account("api") as context,
+        use_call_context(replace(context, workspace_id=None)),
+    ):
         email_service.send(
             to_email=to_email,
             subject=subject,

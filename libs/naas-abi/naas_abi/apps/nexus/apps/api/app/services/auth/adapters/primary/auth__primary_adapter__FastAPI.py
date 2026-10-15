@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import replace
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import Response
@@ -59,7 +60,7 @@ from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
     get_rate_limit_identifier,
     record_attempt,
 )
-from naas_abi_core.engine.call_context import as_service_account
+from naas_abi_core.engine.call_context import as_service_account, use_call_context
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions as StorageExceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
@@ -662,8 +663,13 @@ async def _send_magic_link_email(
         otp_code=otp_code,
     )
     # Nexus's own mail, sent as its account (RFC §7: mail is sent by api,
-    # engine and idp): a sign-in request has no signed-in user to act for.
-    with as_service_account("api"):
+    # engine and idp): a sign-in request has no signed-in user to act for. Its
+    # kept copy holds a sign-in link or code, so it belongs to no workspace,
+    # whatever workspace the (unauthenticated) request names.
+    with (
+        as_service_account("api") as context,
+        use_call_context(replace(context, workspace_id=None)),
+    ):
         email_service.send(
             to_email=to_email,
             subject=subject,

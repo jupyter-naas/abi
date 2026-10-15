@@ -204,3 +204,33 @@ def test_apply_dev_subject_prefix_is_idempotent(monkeypatch) -> None:
     monkeypatch.setattr(settings, "nexus_env", "local")
     once = sign_in_email.apply_dev_subject_prefix("[DEV] Already marked")
     assert once == "[DEV] Already marked"
+
+
+@pytest.mark.asyncio
+async def test_sign_in_mail_belongs_to_no_workspace_whatever_the_request_names(
+    monkeypatch,
+) -> None:
+    """Security review: the kept copy holds a sign-in code, so a workspace an
+    unauthenticated request names must never receive it."""
+    from naas_abi_core.engine.call_context import (
+        ANONYMOUS,
+        current_call_context,
+        use_call_context,
+    )
+
+    monkeypatch.setattr(
+        sign_in_email,
+        "render_sign_in_email",
+        lambda **_: ("subject", "text", "<p>html</p>", []),
+    )
+    seen = []
+    email_service = MagicMock()
+    email_service.send.side_effect = lambda **_: seen.append(current_call_context())
+    from dataclasses import replace
+
+    with use_call_context(replace(ANONYMOUS, workspace_id="ws-victim")):
+        sent = await sign_in_email.send_invite_sign_in_email(
+            "user@example.com", CHALLENGE, email_service
+        )
+    assert sent is True
+    assert [(c.principal.name, c.workspace_id) for c in seen] == [("api", None)]

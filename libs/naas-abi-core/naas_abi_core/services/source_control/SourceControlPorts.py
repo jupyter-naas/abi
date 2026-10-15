@@ -203,6 +203,10 @@ class ProposalNotFoundError(SourceControlError):
     """The requested proposal (pull/merge request) does not exist."""
 
 
+class RepoExistsError(SourceControlError):
+    """A repository with that id exists already, in any letter case."""
+
+
 class BranchNameConflictError(SourceControlError):
     """A branch with that name already exists."""
 
@@ -264,6 +268,19 @@ class ISourceControlAdapter(ABC):
 
         ``auto_init=False`` creates a truly empty repo (no initial commit) so an
         existing local history can be pushed to it.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def create_repo(
+        self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
+    ) -> Repo:
+        """Create a new repository; return it.
+
+        Never returns one that exists already: a repository with that id, in
+        any letter case (forges look names up case-insensitively), raises
+        ``RepoExistsError``. A caller that places or grants access to what it
+        created relies on that.
         """
         raise NotImplementedError()
 

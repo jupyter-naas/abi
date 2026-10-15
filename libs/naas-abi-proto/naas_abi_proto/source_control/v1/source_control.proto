@@ -253,6 +253,24 @@ message EnsureRepoResponse {
 }
 
 // ---------------------------------------------------------------------------
+// create_repo: never returns an existing repository (error REPO_EXISTS)
+// ---------------------------------------------------------------------------
+
+message CreateRepoRequest {
+  abi.common.v1.CallContext context = 1;
+  string owner = 2;
+  string name = 3;
+  bool private = 4;
+  bool auto_init = 5;
+}
+message CreateRepoResponse {
+  oneof result {
+    Repo repo = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // list_repos
 // ---------------------------------------------------------------------------
 

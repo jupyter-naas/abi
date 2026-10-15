@@ -35,6 +35,7 @@ from naas_abi_core.services.source_control.iam_catalog import CATALOG
 from naas_abi_core.services.source_control.SourceControlPorts import Repo
 from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
+    repo_key,
 )
 
 SERVICE = "source_control"
@@ -55,7 +56,8 @@ class RepoWriteDenied(PermissionError):
 
 
 def canonical_repo_id(repo_id: str) -> str:
-    return encode_segment(repo_id)
+    """The id IAM places a repository under: lowercase, as the forge looks it up."""
+    return encode_segment(repo_key(repo_id))
 
 
 def belongs_to_workspace(iam: IIAMService, repo_id: str, workspace_id: str) -> bool:
@@ -64,7 +66,7 @@ def belongs_to_workspace(iam: IIAMService, repo_id: str, workspace_id: str) -> b
     if workspace == workspace_id:
         return True
     return bool(settings.coding_repo_id) and (
-        repo_id == settings.coding_repo_id and workspace == NONE
+        repo_key(repo_id) == repo_key(settings.coding_repo_id) and workspace == NONE
     )
 
 
@@ -86,7 +88,7 @@ def authorize_repo(
         return
     if role not in WRITE_ROLES:
         raise RepoWriteDenied("Viewers cannot write to repositories")
-    name = ServiceGuard(CATALOG, lambda: iam).name("repo", repo_id)
+    name = ServiceGuard(CATALOG, lambda: iam).name("repo", repo_key(repo_id))
     if not iam.authorize("source_control:UpsertFile", name).allowed:
         raise RepoWriteDenied(f"Writing {repo_id} is not allowed")
 
@@ -106,13 +108,27 @@ def ensure_shared_repo(sc: SourceControlService, *, owner: str, name: str) -> Re
         return sc.ensure_repo(owner=owner, name=name)
 
 
-def place_in_workspace(
-    iam: IIAMService, repo_id: str, workspace_id: str, organization_id: str | None
+class RepoNameTaken(LookupError):
+    """The repository name is held by another repository or placement."""
+
+
+def place_created_repo(
+    iam: IIAMService, repo: Repo, workspace_id: str, organization_id: str | None
 ) -> None:
-    """Place a repository Nexus created for a workspace there (RFC §4.4,
-    explicit placement), with its branches and proposals."""
+    """Place a repository this request just created (``create_repo``) in its
+    workspace, with its branches and proposals (RFC §4.4, explicit placement).
+
+    It replaces only the platform placement the create recorded for this very
+    repository; any other placement means the name is not this request's to
+    place, and nothing is changed.
+    """
+    canonical = canonical_repo_id(f"{repo.owner}/{repo.name}")
+    current = iam.placement_of(SERVICE, canonical)
+    if current is not None and (
+        current.id_key != canonical or (current.org, current.workspace) != (NONE, NONE)
+    ):
+        raise RepoNameTaken(canonical)
     org = organization_id if organization_id and _SCOPE_ID.match(organization_id) else NONE
-    canonical = canonical_repo_id(repo_id)
     with as_service_account("api"):
         iam.put_placement(SERVICE, canonical, org, workspace_id)
         iam.put_placement(SERVICE, f"{canonical}/*", org, workspace_id)
