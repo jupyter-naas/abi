@@ -15,6 +15,7 @@ An async Python client for the `abi.svc.dataset.v1` dataset service. It delegate
   - `async inlined_row_count(request: pb.InlinedRowCountRequest) -> pb.InlinedRowCountResponse`: Return the inlined row count.
   - `async compact(request: pb.CompactRequest) -> pb.CompactResponse`: Compact dataset storage.
   - `async list_snapshots(request: pb.ListSnapshotsRequest) -> pb.ListSnapshotsResponse`: List dataset snapshots.
+  - `async namespace_version(request: pb.NamespaceVersionRequest) -> pb.NamespaceVersionResponse`: The last snapshot that changed a namespace (unset when it never held a dataset).
   - `async drop(request: pb.DropRequest) -> pb.DropResponse`: Drop/delete a dataset.
 
 ## Configuration/Dependencies

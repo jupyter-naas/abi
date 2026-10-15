@@ -11,7 +11,7 @@
 // this contract defines its own DatasetError wrapper: a CallError plus a `oneof detail`
 // of small per-exception detail messages. Every response in this file reports its error
 // as one DatasetError (not a bare CallError) -- one error shape, reused unchanged across
-// all ten methods, whether or not a given method can actually raise the detailed
+// all eleven methods, whether or not a given method can actually raise the detailed
 // exceptions (unused detail arms are simply left unset) -- rather than a bespoke
 // oneof-of-error-types per response message that would vary method to method for no
 // benefit.
@@ -26,6 +26,7 @@
 //   abi.svc.dataset.v1.inlined_row_count
 //   abi.svc.dataset.v1.compact
 //   abi.svc.dataset.v1.list_snapshots
+//   abi.svc.dataset.v1.namespace_version
 //   abi.svc.dataset.v1.drop
 syntax = "proto3";
 
@@ -290,6 +291,20 @@ message ListSnapshotsResponse {
     DatasetSnapshotInfoList snapshots = 1;
     DatasetError error = 2;
   }
+}
+
+// -----------------------------------------------------------------------
+// namespace_version
+// -----------------------------------------------------------------------
+
+message NamespaceVersionRequest {
+  abi.common.v1.CallContext context = 1;
+  string namespace = 2;
+}
+message NamespaceVersionResponse {
+  // Unset when the namespace never held a dataset.
+  optional int64 version = 1;
+  optional DatasetError error = 2;
 }
 
 // -----------------------------------------------------------------------

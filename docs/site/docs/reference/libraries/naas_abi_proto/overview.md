@@ -49,7 +49,7 @@ service token in its headers.
 | `activity_log` | `record`, `query`, `list_actors`, `shutdown` |
 | `cache` | `get`, `set`, `set_if_absent`, `delete`, `exists`, `describe`, `list_keys` |
 | `coding_environment` | `ensure_user`, `list_templates`, `provision`, `start`, `stop`, `delete`, `list_environments`, `list_all_environments`, `get_status`, `get_logs`, `get_access` |
-| `dataset` | `create`, `describe`, `list`, `write`, `query`, `flush`, `inlined_row_count`, `compact`, `list_snapshots`, `drop` |
+| `dataset` | `create`, `describe`, `list`, `write`, `query`, `flush`, `inlined_row_count`, `compact`, `list_snapshots`, `namespace_version`, `drop` |
 | `document` | `ensure_collection`, `drop_collection`, `collections`, `collection_spec`, `namespaces`, `put`, `get`, `delete`, `find`, `count` |
 | `email` | `send`, `list_sent`, `get_sent`, `delete_sent` |
 | `event` | `append`, `query`, `max_seq`, `get_cursor`, `set_cursor`, `query_for_consumer`, `list_event_types` |
