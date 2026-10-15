@@ -2,8 +2,8 @@
 
 Small, async Python clients for ABI engine services over NATS, and the runtime
 of remote modules: modules that run in their own process and reach the engine
-only through NATS. Guide: [Build a Remote Module](../../docs/site/docs/capabilities/sdk/build-a-remote-module.md);
-architecture: [Remote Modules and Jobs](../../docs/site/docs/architecture/remote-modules.md). Runtime dependencies:
+only through NATS. Guide: [Build a Remote Module](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/capabilities/sdk/build-a-remote-module.md);
+architecture: [Remote Modules and Jobs](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/architecture/remote-modules.md). Runtime dependencies:
 `naas-abi-proto`, `protobuf` (transitive), and `nats-py`. No ABI core, LangChain,
 Dagster, RDF library, database drivers, or HTTP framework.
 
