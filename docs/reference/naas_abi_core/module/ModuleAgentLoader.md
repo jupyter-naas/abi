@@ -1,23 +1,29 @@
 # ModuleAgentLoader
 
 ## What it is
-- Utility loader that discovers and imports “agent” classes from an `agents/` package located next to a given class’s module root.
-- Returns agent classes that subclass `naas_abi_core.utils.Expose.Expose`.
+- Discovers and imports “agent” classes from an `agents/` directory under a given class’s module root.
+- Collects classes that subclass `naas_abi_core.utils.Expose.Expose` and belong to the same top-level package as the input class.
 
 ## Public API
 - `class ModuleAgentLoader`
-  - `@classmethod load_agents(class_: type) -> List[type[Expose]]`
-    - Scans `<module_root>/agents/*.py` (excluding `*test.py`), imports each module, and collects classes that:
-      - are `type` objects,
-      - are subclasses of `Expose`,
-      - belong to the same top-level package as `class_` (same first segment of `__module__`).
-    - If an agent module defines `create_agent`, it is attached to each discovered agent class as `New` (via `setattr`) when the (incorrectly implemented) guard passes.
+  - `@classmethod load_agents(class_: type) -> list[type[Expose]]`
+    - Resolves the module root directory for `class_`.
+    - Looks for `<module_root>/agents`.
+    - For each `*.py` file in `agents/` (excluding files ending with `test.py`):
+      - Imports `<module_package(class_)>.agents.<module_name>`.
+      - Scans module globals and collects values that:
+        - are classes (`isinstance(value, type)`),
+        - subclass `Expose`,
+        - have the same top-level package as `class_` (`__module__.split(".")[0]`).
+      - If the agent module defines `create_agent`, attempts to attach it as `New` on each discovered agent class (see caveats).
+    - Returns a list of discovered agent classes.
 
 ## Configuration/Dependencies
-- Filesystem structure:
-  - Requires an `agents/` directory under the module root returned by `find_class_module_root_path(class_)`.
-- Dependencies:
+- Expected filesystem layout:
+  - `find_class_module_root_path(class_) / "agents"` must exist to load agents.
+- Imports/Dependencies:
   - `naas_abi_core.module.ModuleUtils.find_class_module_root_path`
+  - `naas_abi_core.module.ModuleUtils.module_package`
   - `naas_abi_core.utils.Expose.Expose`
   - `naas_abi_core.utils.Logger.logger`
   - Standard library: `importlib`, `os`
@@ -25,17 +31,14 @@
 ## Usage
 ```python
 from naas_abi_core.module.ModuleAgentLoader import ModuleAgentLoader
-
-# Any class within your package/module tree
 from mypkg.some_module import SomeClass
 
 agents = ModuleAgentLoader.load_agents(SomeClass)
-
-for AgentCls in agents:
-    print(AgentCls.__name__, AgentCls)
+for agent_cls in agents:
+    print(agent_cls.__name__)
 ```
 
-Expected package layout (example):
+Example package layout:
 ```
 mypkg/
   some_module.py          # defines SomeClass
@@ -45,6 +48,6 @@ mypkg/
 ```
 
 ## Caveats
-- Only `.py` files in `agents/` are considered; files ending with `test.py` are skipped.
-- Imported agents are filtered to the same top-level package as `class_` (based on `__module__.split(".")[0]`).
-- The guard `if not hasattr(key, "New") ...` checks the *string name* (`key`), not the class; as written it is effectively always true for `"New"` and does not correctly detect whether the class already has `New`.
+- Only direct `.py` files in `agents/` are considered; files ending with `test.py` are skipped.
+- Agents are filtered to the same *top-level* package as `class_` (based on `__module__.split(".")[0]`).
+- The `New` attachment guard uses `hasattr(key, "New")` where `key` is a string; this does not actually check whether the class already has `New` and may behave unexpectedly.

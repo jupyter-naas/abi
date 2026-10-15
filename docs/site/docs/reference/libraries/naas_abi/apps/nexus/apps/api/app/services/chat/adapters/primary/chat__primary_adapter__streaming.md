@@ -1,51 +1,72 @@
 # `stream_chat_response`
 
 ## What it is
-- An async FastAPI-compatible server-sent events (SSE) streaming handler that:
-  - Resolves a chat provider based on the request/user context.
-  - Builds provider-ready messages (including multi-agent and optional search context).
-  - Streams model output chunks to the client as `text/event-stream`.
-  - Persists streaming content incrementally and on completion (best-effort).
+- An async FastAPI-compatible Server-Sent Events (SSE) streaming handler for chat responses.
+- Responsibilities:
+  - Resolve the effective chat agent (optionally rewriting based on workspace + open Office context).
+  - Resolve a provider capable of streaming and build provider-ready messages (including agent/tool context and vector context).
+  - Stream model output and tool/agent events as SSE frames (`text/event-stream`).
+  - Best-effort persistence of:
+    - Message pair pre-creation (user + assistant placeholders).
+    - Incremental assistant content during streaming.
+    - Final metadata (execution time, steps, sources, llm_model).
+    - Regeneration bookkeeping (marking old message superseded).
 
 ## Public API
 - `async stream_chat_response(request: ChatRequest, current_user: User) -> StreamingResponse`
-  - Main entrypoint returning a `fastapi.responses.StreamingResponse` producing SSE events.
-  - Emits SSE frames with JSON payloads, plus a terminal `data: [DONE]`.
+  - Entry point returning `fastapi.responses.StreamingResponse` producing SSE frames.
+  - First frame includes identifiers and the effective LLM model used:
+    - `conversation_id`
+    - `assistant_message_id`
+    - `llm_model` (may differ from request due to routing/model overrides)
 
-### SSE events emitted
-- `{"conversation_id": "<id>"}` (first event)
-- `{"sources": ...}` (only if vector context sources are available)
-- `{"search": true}` (only if search context was added)
-- `{"content": "<text chunk>"}` (for each streamed text chunk)
-- `{"error": "<message>"}` (on errors or unsupported/no provider cases)
-- `[DONE]` (always emitted at end of stream)
+### SSE frames emitted (payloads are JSON unless `[DONE]`)
+- First frame:
+  - `{"conversation_id": "...", "assistant_message_id": "...", "llm_model": "..."}`
+- Optional sources frames:
+  - `{"sources": ["https://...", ...]}` (may be sent early and again at end; merges vector context sources + URLs extracted from tool responses)
+- Content frames:
+  - `{"content": "<text chunk>"}` (for each streamed text chunk)
+- Tool/agent event frames (dict chunks passthrough from provider streams)
+  - Events are also ingested server-side into a `steps` accumulator for metadata persistence (mirrors frontend behavior).
+- Error frame (on failure):
+  - `{"error": "<escaped message>"}`
+- Terminal frame (always):
+  - `[DONE]`
 
 ## Configuration/Dependencies
-- Provider resolution and message preparation:
-  - `resolve_provider(...)`
-  - `build_provider_messages_with_agents(...)`
-  - `get_or_create_conversation(...)`
-  - `run_search_if_needed(request)`
-  - `AGENT_SYSTEM_PROMPTS` (system prompt lookup)
-  - Adds `MULTI_AGENT_NOTICE` to system prompt if any prior assistant messages exist in the request.
 - Database/session:
   - `AsyncSessionLocal`
-  - `bind_registry(db)` and registry methods:
-    - `registry.chat.create_streaming_message_pair(...)` (best-effort pre-persist)
-    - `registry.chat._inject_chat_vector_context(...)`
-  - Persistence during/after streaming:
-    - `persist_stream_content(...)` (incremental flush and final write)
-- Streaming backends (selected by `provider.type`):
+  - Registry binding: `bind_registry(db)`
+  - Persistence helpers:
+    - `get_or_create_conversation(...)`
+    - `persist_stream_content(...)`
+    - `persist_stream_metadata(...)`
+    - `mark_message_superseded(...)`
+- Provider resolution and message preparation:
+  - `resolve_provider(context, request.provider, has_images, agent_id, workspace_id)`
+  - `build_provider_messages_with_agents(...)`
+  - Vector context injection: `registry.chat._inject_chat_vector_context(...)`
+  - System prompt/preamble:
+    - `registry.chat.build_system_prompt(...)`
+    - `registry.chat.build_remote_agent_preamble(...)` (for `provider.type == "remote"`)
+    - `registry.chat.build_abi_injection_preamble(...)` (otherwise)
+- Supported streaming backends:
   - `"ollama"` → `stream_with_ollama(...)`
   - `"cloudflare"` → `stream_with_cloudflare(...)`
-  - `"abi"` → `stream_with_abi_inprocess(...)` (requires emitting at least one chunk)
-  - OpenAI-compatible types (`xai`, `openai`, `anthropic`, `mistral`, `google`, `openrouter`, `perplexity`)
-    → `stream_with_openai_compatible(...)`
-- Supported streaming provider types are controlled by:
-  - `SUPPORTED_STREAMING = ["ollama", "cloudflare", "abi", *OPENAI_COMPATIBLE]`
+  - `"abi"` → `stream_with_abi_inprocess(...)` (requires `endpoint` starting with `inprocess://` for model routing; must emit at least one chunk)
+  - `"remote"` → `stream_with_remote_agent(...)`
+  - OpenAI-compatible types:
+    - `["xai", "openai", "anthropic", "mistral", "google", "openrouter", "perplexity"]`
+    - → `stream_with_openai_compatible(...)`
+- Provider type allowlist:
+  - `SUPPORTED_STREAMING = ["ollama", "cloudflare", "abi", "remote", *OPENAI_COMPATIBLE]`
+- Office/coding context integration (optional; driven by `request.context`):
+  - Auto-title for open documents/slides: `_apply_office_auto_title(...)` (best-effort, runs in threadpool)
+  - Binds agent execution context variables (user/workspace/chat ids, open document/deck/sheet slugs, sidecar credentials, coding repo bindings, feature context, research policies).
 
 ## Usage
-Minimal FastAPI endpoint that returns the SSE stream:
+Minimal FastAPI endpoint returning the SSE stream:
 
 ```python
 from fastapi import APIRouter, Depends
@@ -68,9 +89,11 @@ async def chat_stream(request: ChatRequest, current_user: User = Depends(get_cur
 ```
 
 ## Caveats
-- If no provider is resolved, the stream returns an SSE error message suggesting installing/pulling an Ollama model and then `[DONE]`.
-- If `provider.type` is not in `SUPPORTED_STREAMING`, the stream returns an SSE error and `[DONE]`.
-- Streaming persistence is **best-effort**:
-  - Incremental flush occurs only when an assistant message ID was created and thresholds are met (≥512 chars or ≥0.75s since last flush).
-  - Failures to pre-persist or flush content are logged and do not necessarily stop streaming.
-- For `"abi"` provider type, the in-process stream must emit at least one chunk; otherwise a `RuntimeError` is raised and sent as an SSE error payload.
+- If no provider can be resolved, the stream emits an SSE error hinting to install/pull an Ollama model (`DEFAULT_CHAT_MODEL_TAG`), then `[DONE]`.
+- If `provider.type` is not in `SUPPORTED_STREAMING`, the stream emits an SSE error and `[DONE]`.
+- Persistence is best-effort:
+  - Pre-creation of message IDs can fail; streaming still proceeds (but incremental flush/metadata persistence are skipped without `assistant_msg_id`).
+  - Incremental flush occurs only when both conditions are met:
+    - buffered ≥ 512 chars **or** ≥ 0.75s since last flush.
+- For `provider.type == "abi"` using in-process streaming: if the stream yields no chunks, a `RuntimeError` is raised and returned as an SSE error payload.
+- On errors during streaming, partial content/metadata persistence is attempted, then an error frame and `[DONE]` are emitted.

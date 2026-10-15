@@ -1,28 +1,30 @@
 # `{{orchestration_name_pascal}}Orchestration`
 
 ## What it is
-- A Dagster-based orchestration template class.
-- Subclasses `naas_abi_core.orchestrations.DagsterOrchestration.DagsterOrchestration`.
-- Provides a factory constructor that creates an instance with an empty `dagster.Definitions` (no assets, schedules, jobs, or sensors).
+- A minimal Dagster orchestration template.
+- Implements Dagster `Definitions` wiring via `DagsterOrchestration`.
+- Intended for projects **without NATS** (legacy; marked for removal in the next major).
 
 ## Public API
 - `class {{orchestration_name_pascal}}Orchestration(DagsterOrchestration)`
   - `@classmethod New() -> "{{orchestration_name_pascal}}Orchestration"`
-    - Creates and returns a new orchestration instance configured with:
+    - Returns a new instance configured with:
       - `dg.Definitions(assets=[], schedules=[], jobs=[], sensors=[])`
 
 ## Configuration/Dependencies
-- Dependencies:
+- Requires:
   - `dagster` (imported as `dg`)
   - `naas_abi_core.orchestrations.DagsterOrchestration.DagsterOrchestration`
-- No runtime configuration in this template; all Dagster definition lists are initialized empty.
+- Notes:
+  - Docstring indicates it needs the `naas-abi-core[dagster]` extra.
 
 ## Usage
 ```python
 from your_module_path import {{orchestration_name_pascal}}Orchestration
 
-orch = {{orchestration_name_pascal}}Orchestration.New()
+orchestration = {{orchestration_name_pascal}}Orchestration.New()
 ```
 
 ## Caveats
-- The returned orchestration has no assets, schedules, jobs, or sensors; it is a blank starting point that must be extended/populated elsewhere to do meaningful work.
+- `New()` creates an orchestration with **no assets, schedules, jobs, or sensors**; it is a blank starting point.
+- Marked as **legacy** (“to be removed in the next major”).
