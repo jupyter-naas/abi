@@ -521,7 +521,7 @@ mcp-http: deps
 # Run MCP server validation tests
 mcp-test: deps
 	@echo "🔍 Running MCP Server validation tests..."
-	uv run python -m src.mcp_server_test
+	uv run python libs/naas-abi-core/naas_abi_core/apps/mcp/mcp_server_test.py
 
 # Interactive SPARQL terminal for querying the knowledge graph
 sparql-terminal: deps
