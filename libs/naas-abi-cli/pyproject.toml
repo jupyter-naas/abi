@@ -64,6 +64,11 @@ match = "^dev"
 prerelease = true
 prerelease_token = "dev"
 
+# 2.x maintenance line: bug and security fixes only, until 2027-01-31.
+[tool.semantic_release.branches.v2]
+match = "^v2$"
+prerelease = false
+
 [tool.hatch.build.targets.wheel]
 force-include = {"naas_abi_cli/cli/new/templates/project/config.yaml" = "naas_abi_cli/cli/new/templates/project/config.yaml", "naas_abi_cli/cli/deploy/templates/local/.env" = "naas_abi_cli/cli/deploy/templates/local/.env", "naas_abi_cli/cli/deploy/templates/local/docker/headscale/config.yaml" = "naas_abi_cli/cli/deploy/templates/local/docker/headscale/config.yaml", "naas_abi_cli/cli/deploy/templates/local/docker/headscale/extra-records.json" = "naas_abi_cli/cli/deploy/templates/local/docker/headscale/extra-records.json", "naas_abi_cli/cli/setup/headscale/templates/config/config.yaml" = "naas_abi_cli/cli/setup/headscale/templates/config/config.yaml", "naas_abi_cli/cli/setup/headscale/templates/config/extra-records.json" = "naas_abi_cli/cli/setup/headscale/templates/config/extra-records.json"}
 

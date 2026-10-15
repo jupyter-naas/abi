@@ -4,6 +4,9 @@ on:
     branches:
       - dev
       - main
+      # 2.x maintenance line: patch releases of naas-abi-core, naas-abi and
+      # naas-abi-cli only. naas-abi-marketplace is released from main alone.
+      - v2
 
 permissions:
   contents: write
@@ -68,6 +71,7 @@ jobs:
 
       - name: Release naas-abi-marketplace
         id: release-naas-abi-marketplace
+        if: github.ref_name != 'v2'
         working-directory: ${{ env.naas_abi_marketplace_dir }}
         run: semantic-release -v version
 
