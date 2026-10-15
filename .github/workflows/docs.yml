@@ -1,9 +1,10 @@
 name: Docs site
 
 # Builds the Docusaurus site (docs/site) on every change to it: broken links and
-# anchors fail the build. Publishing is by hand (Run workflow), to the
-# Cloudflare Pages project `abi-docs` (abi-docs.pages.dev). docs.naas.ai is
-# served by another site and does not change.
+# anchors fail the build. Publishing is not this workflow's: the Cloudflare
+# Pages project `abi-docs` builds the site from the repository itself, `main` to
+# abi-docs-76c.pages.dev and a preview per branch. docs.naas.ai is served by
+# another site.
 
 on:
   push:
@@ -45,13 +46,3 @@ jobs:
       - name: Build the site
         working-directory: docs/site
         run: npm run build
-
-      # cloudflare/pages-action no longer exists; GitHub resolves every action
-      # of a job before it runs, so it failed the build even when skipped.
-      - name: Deploy to Cloudflare Pages
-        if: github.event_name == 'workflow_dispatch' && github.repository == 'jupyter-naas/abi'
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy docs/site/build --project-name=abi-docs
