@@ -9,6 +9,8 @@ title: "`abi stack` CLI for Docker Service Management"
 - **Status:** Accepted
 - **Date:** 2026-02-16
 
+> **Since 3.0** the generated stack runs NATS instead of RabbitMQ and Dagster, which are legacy. See [ABI 3.0](/updates/abi-3-0-nats).
+
 ## Context
 
 Developers working on ABI locally needed to orchestrate multiple Docker services (Postgres, Fuseki, RabbitMQ, MinIO, Nexus web, Nexus API, etc.). This required memorizing and composing raw `docker compose` commands, with no unified way to check service readiness, tail logs by logical name, or get a health overview. Onboarding friction was high.

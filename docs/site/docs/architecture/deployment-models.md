@@ -9,24 +9,20 @@ ABI runs on Docker. Every service in the stack is a standard container orchestra
 
 This is an intentional design choice. Abstracting infrastructure into a managed runtime delivers security and availability guarantees but removes operator visibility and control. ABI makes the opposite tradeoff: the infrastructure is yours to inspect, modify, extend, and replace. You own operations; in return, there are no accreditation dependencies, no vendor upgrade cycles, and no egress charges.
 
-The same Docker Compose manifest runs on a developer laptop and in a production data center. The only differences between environments are the `config.yaml` overrides that select service backends, the model provider, and the LLM routing configuration.
+The same project runs on a developer laptop and in a production data center. The only differences between environments are the config files that select service backends, the model provider, and the LLM routing configuration.
+
+Since 3.0 every deployment runs on a [NATS broker](./nats): the engine serves its kernel services over it, the bus and the [module jobs](./remote-modules#module-jobs) use JetStream, and remote modules run in their own containers next to the engine.
 
 ---
 
 ## Local development
 
-The simplest deployment: everything runs on your machine with Docker.
+Two ways to run a project on your machine:
 
-- Triple store: Apache Jena Fuseki (or Oxigraph for lighter footprint)
-- Message bus: in-process Python queue (no RabbitMQ required)
-- Key-value: in-memory dictionary
-- Embeddings: OpenRouter or local Ollama model
+- **Native, no Docker:** `abi dev up` starts `nats-server`, an Oxigraph server, the API, Nexus web and the remote modules listed under `dev.modules`, as native processes with file-based backends (SQLite, the file system). Each git worktree gets its own ports. It needs `nats-server` 2.14 or later on `PATH`, and `jaeger` for `--with-tracing`.
+- **Docker Compose:** `abi deploy local` writes the project's stack, and `docker compose up -d` (or `abi stack start`) starts it: NATS, PostgreSQL, Fuseki, Qdrant, MinIO, Redis, the API, Nexus web, the MCP server and Caddy. Remote modules each get a service in `docker-compose.override.yml`.
 
-Start everything with one command:
-
-```bash
-abi stack start
-```
+See the [Quickstart](/get-started/quickstart).
 
 ---
 
@@ -35,9 +31,16 @@ abi stack start
 The production configuration. All services run in your infrastructure, nothing leaves your network.
 
 - Your Kubernetes cluster or bare-metal Docker Compose
-- Your Postgres, RabbitMQ, MinIO instances
+- Your NATS server (2.14 or later, JetStream on), PostgreSQL, MinIO or S3, Redis, Fuseki and Qdrant
 - Your LLM infrastructure (Ollama cluster or private API endpoints)
 - Your SSL/TLS termination
+
+Things to plan for:
+
+- **One serving engine.** One engine serves the kernel services per NATS account. For deploys without downtime, set `ABI_ROLLOUT_ID` per deploy and use shared backends (no SQLite or local files): the new engine stands by and takes over when the old one stops. See [one serving engine](./nats#one-serving-engine).
+- **A supervisor.** The API and remote modules exit when the broker is unreachable for about two minutes; Docker (`restart: unless-stopped`) or Kubernetes restarts them.
+- **The broker stays private.** Traffic to NATS is not encrypted, and its monitoring port has no authentication. See [Security model](./security).
+- **Remote modules** scale on their own: several replicas of a module share its agent runs and its jobs.
 
 This is the configuration naas.ai deploys for enterprise customers who require data residency compliance.
 
@@ -71,16 +74,15 @@ See [naas.ai/enterprise](https://naas.ai/enterprise) for details.
 
 ## Configuration per environment
 
-ABI supports environment-specific config files:
+A project made by `abi new project` keeps one config file per environment:
 
 ```bash
-config.yaml              # Default / shared
-config.development.yaml  # Local dev overrides
-config.production.yaml   # Production overrides
-config.airgap.yaml       # Air-gapped overrides
+config.yaml          # Default: what `abi dev up` and the CLI read
+config.local.yaml    # The Docker Compose stack (its `abi` service sets ENV=local)
+config.remote.yaml   # A remote deployment
 ```
 
-The active environment is selected via the `ABI_ENV` environment variable. See [Configuration Reference](/get-started/configuration).
+The engine reads `config.<ENV>.yaml` when the `ENV` environment variable names one that exists, else `config.yaml`. `ABI_CONFIG_OVERLAY` merges a YAML file over it (`abi dev up` uses it for its broker settings). See [Configuration Reference](/get-started/configuration).
 
 ---
 

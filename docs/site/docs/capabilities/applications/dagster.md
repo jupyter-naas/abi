@@ -1,10 +1,30 @@
-# Dagster
+# Dagster (legacy)
 
-Dagster is ABI's orchestration layer for scheduled jobs, data pipelines, and asset materialization.
+:::warning Legacy
+Dagster is a **legacy, optional extra** since ABI 3.0 and will be removed in the next major. New projects run on NATS, where [module jobs](/architecture/remote-modules#module-jobs) replace it: each module declares its jobs and runs them in its own process, and JetStream schedules them. Move orchestrations to module jobs before you turn NATS on: [Migrate from 2.x to 3.0](/upgrade/migrate-to-3).
+:::
+
+Dagster schedules jobs, data pipelines, and asset materialization for projects **without NATS** (no `nats:` block in the config, or `abi new project --without-nats`).
+
+---
+
+## Installing the legacy extra
+
+`naas-abi-core` no longer installs Dagster, and `naas-abi-core[all]` does not include it. A project without NATS needs the `dagster` extra (and `rabbitmq` for a RabbitMQ bus):
+
+```bash
+uv add 'naas-abi-core[all,dagster,rabbitmq]'
+```
+
+`abi new project --without-nats` and `abi deploy local` (for a project without a `nats:` block) add it for you. Without it, `DagsterOrchestration.New()`, the RabbitMQ bus adapter and the Dagster app raise `MissingLegacyExtra` (a `ModuleNotFoundError` that prints the `uv add` command), the engine leaves out modules' Dagster orchestrations (one INFO line per module), and `abi dev up` leaves Dagster out with a notice. The extra keeps SQLAlchemy below 2.1, which breaks Dagster 1.13's PostgreSQL storage.
+
+In NATS mode one engine serves the kernel services, so Dagster, a second engine, cannot run next to the API (`EngineAlreadyServing`): the NATS stack has no Dagster service, and `abi dev up` leaves it out.
 
 ---
 
 ## Starting Dagster
+
+In a project without NATS, `abi dev up` starts Dagster natively, and the classic Docker Compose stack (`abi deploy local`) runs it as the `dagster` service. In the ABI repository:
 
 ```bash
 make dagster-dev           # Development server with live reload
@@ -26,6 +46,8 @@ Dagster orchestrates ABI pipelines as **assets** - materialized data artifacts w
 ---
 
 ## Defining a Dagster asset from a pipeline
+
+The module equivalent is a job: see [From Dagster to module jobs](/architecture/remote-modules#from-dagster-to-module-jobs).
 
 ```python
 # orchestrations/MyOrchestration.py

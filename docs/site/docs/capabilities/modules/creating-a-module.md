@@ -4,6 +4,21 @@ Modules are the primary extension unit of ABI. A module packages a set of relate
 
 ---
 
+## Two kinds of modules
+
+Since 3.0 a module either loads **inside the engine** (this page), or runs **in its own process** as a remote module built with `naas-abi-sdk`:
+
+| | In-engine module | Remote module |
+|---|---|---|
+| Create it | `abi new module <name> --in-engine` | `abi new module <name>` (in a NATS project) |
+| Runs | In the engine process; listed under `modules:` | Its own process: `abi dev up`, a Compose service |
+| Imports | `naas_abi_core` | `naas_abi_sdk` only |
+| Has | Agents, integrations, pipelines, workflows, ontologies, apps, jobs | Agents, apps, jobs |
+
+Choose a remote module for work that should deploy, restart or scale on its own; see [Build a Remote Module](/capabilities/sdk/build-a-remote-module). In a project, `abi new module <name> --in-engine` writes the module to `src/<name>/`.
+
+---
+
 ## Module tiers
 
 Choose the right location for your module:
@@ -135,6 +150,25 @@ dependencies = ModuleDependencies(
 ```
 
 The Engine loads your module even if the soft dependency is absent.
+
+---
+
+## Scheduled work: module jobs
+
+In NATS mode, an in-engine module declares jobs the same way remote modules do, and the engine runs them; handlers may be synchronous (they run in a worker thread):
+
+```python
+from datetime import timedelta
+from naas_abi_core.module.jobs import Cron, JobContext, job
+
+class ABIModule(BaseModule):
+    @job(triggers=(Cron("0 0 2 * * *", time_zone="UTC"),), timeout=timedelta(hours=1))
+    def nightly_sync(self, ctx: JobContext) -> dict:
+        ...
+        return {"synced": 42}
+```
+
+`Cron` takes six fields, seconds first. Without NATS, declared jobs are logged and not run; Dagster orchestrations (`orchestrations/`) are the [legacy](/capabilities/applications/dagster) way to schedule work there. See [Module jobs](/architecture/remote-modules#module-jobs).
 
 ---
 

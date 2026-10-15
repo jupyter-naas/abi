@@ -9,6 +9,8 @@ title: "BusService and KeyValueService as First-Class Platform Services"
 - **Status:** Accepted
 - **Date:** 2026-02-05
 
+> **Superseded in 3.0.** In NATS mode the bus is always NATS JetStream; the `rabbitmq` adapter is a legacy extra, removed in the next major. See [ABI 3.0](/updates/abi-3-0-nats).
+
 ## Context
 
 ABI's engine had growing needs for async event passing (pipelines triggering downstream workflows) and lightweight ephemeral state storage (caching, session data, intent mappings). These were being handled ad hoc - direct in-process calls, local file writes, or implicit Dagster job coupling - with no consistent abstraction.
