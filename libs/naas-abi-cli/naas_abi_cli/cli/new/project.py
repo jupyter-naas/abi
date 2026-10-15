@@ -40,8 +40,8 @@ NATS_NEEDS_SUBMODULE = (
 )
 
 
-def _add_abi_submodule(project_path: str) -> bool:
-    """Add the upstream ABI repo as a git submodule at `.abi/`.
+def _add_abi_submodule(project_path: str, source: str = ABI_SUBMODULE_URL) -> bool:
+    """Add the ABI repo (``source``, GitHub by default) as a git submodule at `.abi/`.
 
     Agents working in the scaffolded project can then read framework
     docs/source locally instead of fetching them over the network, and
@@ -56,11 +56,12 @@ def _add_abi_submodule(project_path: str) -> bool:
         click.secho(
             "  git not found on PATH; skipping .abi submodule. "
             "Add it later with: git submodule add "
-            f"{ABI_SUBMODULE_URL} {ABI_SUBMODULE_PATH}",
+            f"{source} {ABI_SUBMODULE_PATH}",
             fg="yellow",
         )
         return False
 
+    url, git_options = _submodule_source(source)
     if not os.path.isdir(os.path.join(project_path, ".git")):
         subprocess.run(["git", "init", "-q"], cwd=project_path, check=True)
 
@@ -68,11 +69,12 @@ def _add_abi_submodule(project_path: str) -> bool:
         subprocess.run(
             [
                 "git",
+                *git_options,
                 "submodule",
                 "add",
                 "--depth",
                 "1",
-                ABI_SUBMODULE_URL,
+                url,
                 ABI_SUBMODULE_PATH,
             ],
             cwd=project_path,
@@ -82,7 +84,7 @@ def _add_abi_submodule(project_path: str) -> bool:
         click.secho(
             f"  failed to add .abi submodule ({e}); continuing without it. "
             "Add it later with: git submodule add "
-            f"{ABI_SUBMODULE_URL} {ABI_SUBMODULE_PATH}",
+            f"{url} {ABI_SUBMODULE_PATH}",
             fg="yellow",
         )
         return False
@@ -90,6 +92,21 @@ def _add_abi_submodule(project_path: str) -> bool:
     # A clone that succeeded but landed an unexpected layout is still unusable
     # as a dependency source, so check for the directory uv will be told about.
     return os.path.isdir(os.path.join(project_path, ABI_SUBMODULE_PATH, "libs"))
+
+
+def _submodule_source(source: str) -> tuple[str, list[str]]:
+    """The URL to clone ``source`` from, and the git options it needs.
+
+    A local checkout is passed by absolute path: git resolves a relative
+    submodule URL against the superproject's remote, not the caller's
+    directory. And git refuses the file transport for submodules unless allowed.
+    """
+    if not os.path.isdir(os.path.expanduser(source)):
+        return source, []
+    return os.path.abspath(os.path.expanduser(source)), [
+        "-c",
+        "protocol.file.allow=always",
+    ]
 
 
 def _cd_argument(project_path: str) -> str:
@@ -168,6 +185,16 @@ def _print_next_steps(project_path: str, admin_email: str, nats: bool) -> None:
     ),
 )
 @click.option(
+    "--abi-source",
+    default=ABI_SUBMODULE_URL,
+    show_default=True,
+    help=(
+        "Git URL or local checkout the .abi submodule is cloned from (its "
+        "HEAD). A local ABI checkout tests framework changes that are not "
+        "on GitHub yet."
+    ),
+)
+@click.option(
     "--with-nats/--without-nats",
     default=True,
     help=(
@@ -199,6 +226,7 @@ def new_project(
     with_headscale: bool,
     with_coding: bool,
     with_abi_submodule: bool,
+    abi_source: str,
     with_nats: bool,
     base_domain: str,
 ):
@@ -228,7 +256,9 @@ def new_project(
     # Added before the templates are rendered: whether `.abi/libs` exists is
     # what decides if `pyproject.toml` resolves the framework from source or
     # from PyPI, and that has to be baked into the file we are about to write.
-    abi_submodule_added = with_abi_submodule and _add_abi_submodule(project_path)
+    abi_submodule_added = with_abi_submodule and _add_abi_submodule(
+        project_path, abi_source
+    )
     if with_nats and not abi_submodule_added:
         if created:
             shutil.rmtree(project_path, ignore_errors=True)

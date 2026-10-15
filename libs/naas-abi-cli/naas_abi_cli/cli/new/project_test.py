@@ -90,6 +90,58 @@ def test_git_init_is_skipped_when_already_a_repo(tmp_path, monkeypatch) -> None:
     assert not any("init" in cmd for cmd in calls)
 
 
+def _git(*args, cwd) -> None:
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+    )
+
+
+def test_the_submodule_clones_a_local_checkout(tmp_path) -> None:
+    """`--abi-source <checkout>` tests a framework that is not on GitHub yet.
+
+    Git refuses the file transport for submodules unless told otherwise
+    (`transport 'file' not allowed`), so this runs the real git.
+    """
+    checkout = tmp_path / "abi"
+    (checkout / "libs" / "naas-abi-sdk").mkdir(parents=True)
+    (checkout / "libs" / "naas-abi-sdk" / "pyproject.toml").write_text("")
+    _git("init", "-q", cwd=checkout)
+    _git("add", ".", cwd=checkout)
+    _git("commit", "-q", "-m", "init", cwd=checkout)
+    target = tmp_path / "project"
+    target.mkdir()
+
+    assert project._add_abi_submodule(str(target), str(checkout)) is True
+    assert (_submodule_dir(target) / "naas-abi-sdk" / "pyproject.toml").is_file()
+
+
+def test_a_relative_source_is_cloned_from_where_the_command_ran(
+    tmp_path, monkeypatch
+) -> None:
+    """git resolves a submodule's relative URL against the superproject's
+    remote, not the caller's directory: pass it the absolute path."""
+    (tmp_path / "abi").mkdir()
+    monkeypatch.chdir(tmp_path)
+    commands = []
+    _invoke_new_project(tmp_path, monkeypatch, "--abi-source", "abi", commands=commands)
+
+    [clone] = [cmd for cmd in commands if "submodule" in cmd]
+    assert str(tmp_path / "abi") in clone
+    assert "protocol.file.allow=always" in clone
+
+
+def test_the_submodule_comes_from_github_by_default(tmp_path, monkeypatch) -> None:
+    commands = []
+    _invoke_new_project(tmp_path, monkeypatch, commands=commands)
+
+    [clone] = [cmd for cmd in commands if "submodule" in cmd]
+    assert project.ABI_SUBMODULE_URL in clone
+    assert "protocol.file.allow=always" not in clone
+
+
 # =============================================================================
 # End-to-end wiring: `abi new project` must actually emit the live sources.
 #
@@ -341,3 +393,4 @@ def test_a_nats_project_stops_when_the_clone_fails(tmp_path, monkeypatch) -> Non
     assert "naas-abi-sdk" in result.output
     # The half-made project is removed, so the same command can run again.
     assert not (tmp_path / "demo").exists()
+
