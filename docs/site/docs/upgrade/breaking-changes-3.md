@@ -7,7 +7,7 @@ title: "Breaking changes in 3.0"
 
 What changes for a project moving from the released 2.x to 3.0 of
 `naas-abi-core`, `naas-abi` and `naas-abi-cli`. `naas-abi-proto` and
-`naas-abi-sdk` are new (0.x). `naas-abi-marketplace` keeps its own versions.
+`naas-abi-sdk` are new (0.1.0). `naas-abi-marketplace` keeps its own versions.
 
 The steps to upgrade a deployment are in [Migrate from 2.x to 3.0](./migrate-to-3):
 phase 1 upgrades the code with NATS off, phase 2 turns NATS on. This list says
