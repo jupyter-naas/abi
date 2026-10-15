@@ -1,6 +1,9 @@
 # naas-abi-sdk
 
-Small, async Python clients for ABI engine services over NATS. Runtime dependencies:
+Small, async Python clients for ABI engine services over NATS, and the runtime
+of remote modules: modules that run in their own process and reach the engine
+only through NATS. Guide: [Build a Remote Module](../../docs/site/docs/capabilities/sdk/build-a-remote-module.md);
+architecture: [Remote Modules and Jobs](../../docs/site/docs/architecture/remote-modules.md). Runtime dependencies:
 `naas-abi-proto`, `protobuf` (transitive), and `nats-py`. No ABI core, LangChain,
 Dagster, RDF library, database drivers, or HTTP framework.
 
@@ -32,7 +35,7 @@ internal. Argument names and defaults follow the corresponding core methods wher
 the v1 contract supports them. No core classes are imported.
 
 Explicit protobuf access remains available through `engine.rpc` or the low-level
-`ABIClient`. Those clients cover all 117 v1 RPC endpoints in `catalog.py`.
+`ABIClient`. Those clients cover every v1 RPC endpoint listed in `catalog.py`.
 Services: activity_log, cache, coding_environment, dataset, document, email, event,
 keyvalue, object_storage, secret, source_control, triple_store, vector_store.
 The bus retains its native publish/subscribe and enqueue/dequeue API, including
@@ -162,6 +165,43 @@ separately from those framework-specific components.
 engine's `services.cache.adapters` list. The default `client.cache` remains the
 v1 cold endpoint. Tier contracts use the same protobuf messages, with subjects
 `abi.svc.cache.v1.tier.<index>.<method>`.
+
+## Jobs
+
+A module declares jobs and runs them in its own process; JetStream schedules
+and delivers the triggers (docs/adr/20261001_nats-jobs.md). One replica takes
+each trigger, and delivery is at least once.
+
+```python
+from datetime import timedelta
+from naas_abi_sdk.jobs import Cron, Every, JobContext, OnEvent, job
+
+
+class ABIModule(BaseModule):
+    @job(triggers=(Every("1h"),), timeout=timedelta(minutes=5), max_attempts=3)
+    async def refresh(self, ctx: JobContext) -> dict:
+        if not await self.has_work():
+            ctx.skip("nothing to do")  # SKIPPED, hidden by default
+            return {}
+        ctx.log("refreshing")
+        return {"ok": True}  # stored on the run record
+```
+
+- Triggers: `Cron` (six fields, seconds first, optional `time_zone`), `Every`
+  (a Go duration or a timedelta, at least 1 s), `OnEvent(subject)` or
+  `OnEvent(event_type=..., filter={...})`.
+- `max_concurrency` (default 1: no overlap), `timeout` (sets `ctx.cancelled`),
+  `max_attempts` (default 1).
+- `self.trigger_job(name, payload, idempotency_key=...)` (sync) or
+  `await self.atrigger_job(...)` triggers the module's own jobs; another
+  module's: `await self.engine.modules[id].get_job(name)`, then
+  `run = await job.trigger(payload)` and `run.status()`, `run.wait()`,
+  `run.cancel()`. A repeated `idempotency_key` within 2 minutes is the same run.
+- Runs are documents in the module's namespace (`QUEUED`, `RUNNING`,
+  `RETRYING`, `SUCCEEDED`, `SKIPPED`, `FAILED`, `TIMED_OUT`, `CANCELLED`),
+  pruned after 7 days (1 hour for skipped runs, at most 1,000 per job). Modules
+  host jobs only with discovery; the engine that hosts it creates the jobs
+  stream.
 
 ## Document state and LangGraph checkpoints
 
