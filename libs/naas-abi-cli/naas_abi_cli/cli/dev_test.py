@@ -205,6 +205,24 @@ def test_dagster_binds_the_ipv4_literal(monkeypatch) -> None:
     assert cmd[cmd.index("--host") + 1] == "127.0.0.1"
 
 
+def test_dagster_renders_the_same_public_hosts_as_the_api(monkeypatch) -> None:
+    # Project configs template {{ secret.PUBLIC_WEB_HOST }}; without it the
+    # code server fails to load its definitions (no TTY to prompt).
+    envs: dict = {}
+    monkeypatch.setattr(
+        dev,
+        "_spawn",
+        lambda spec, cmd, cwd, env: envs.update({spec.name: env}) or 1234,
+    )
+    monkeypatch.setattr(dev, "ensure_api_key", lambda path: "key")
+
+    dev._launch_api(_spec("api", PORTS["api"]), PORTS)
+    dev._launch_dagster(_spec("dagster", PORTS["dagster"]), PORTS)
+
+    for key in ("PUBLIC_WEB_HOST", "PUBLIC_API_HOST", "FRONTEND_URL", "NEXUS_API_URL"):
+        assert envs["dagster"][key] == envs["api"][key]
+
+
 # =============================================================================
 # Boot visibility
 #

@@ -763,6 +763,15 @@ def _launch_api(
         if origin not in extra_list:
             extra_list.append(origin)
     env["ABI_CORS_EXTRA_ORIGINS"] = ",".join(extra_list)
+    _set_public_hosts(env, nexus_port, spec.port)
+    cmd = ["uv", "run", "python", "-m", "naas_abi_core.apps.api.api"]
+    return _spawn(spec, cmd, _project_root(), env)
+
+
+def _set_public_hosts(env: dict[str, str], nexus_port: int, api_port: int) -> None:
+    """The stack's public origins, for every engine process: configs render
+    {{ secret.PUBLIC_WEB_HOST }} and {{ secret.PUBLIC_API_HOST }}, and a
+    missing secret fails the config without a TTY."""
     # Ensure Nexus API builds magic-link URLs against the dynamically allocated
     # local web port used by `abi dev up`.
     # Must match the origin the browser is actually on, or the magic link
@@ -775,12 +784,10 @@ def _launch_api(
     # prefers .env over process env, so PUBLIC_API_HOST / NEXUS_API_URL here
     # only win when those keys are absent from .env. ABI_DEV_PUBLIC_API_ORIGIN
     # is read by public_api_host() from the process env and is never a secret.
-    api_origin = f"http://{BROWSER_HOST}:{spec.port}"
+    api_origin = f"http://{BROWSER_HOST}:{api_port}"
     env["ABI_DEV_PUBLIC_API_ORIGIN"] = api_origin
-    env["PUBLIC_API_HOST"] = f"{BROWSER_HOST}:{spec.port}"
+    env["PUBLIC_API_HOST"] = f"{BROWSER_HOST}:{api_port}"
     env["NEXUS_API_URL"] = api_origin
-    cmd = ["uv", "run", "python", "-m", "naas_abi_core.apps.api.api"]
-    return _spawn(spec, cmd, _project_root(), env)
 
 
 def _launch_dagster(
@@ -807,6 +814,7 @@ def _launch_dagster(
     # `--log-level` (left at its default so the daemon doesn't drown the pane).
     env["LOG_LEVEL"] = _resolve_log_level(log_level)
     env["OXIGRAPH_URL"] = _oxigraph_url(ports)
+    _set_public_hosts(env, ports["nexus-web"], ports["api"])
     cmd = [
         "uv",
         "run",
