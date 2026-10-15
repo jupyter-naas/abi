@@ -267,7 +267,8 @@ def test_attachment_names_sit_at_their_scope():
         "abi:org-1:ws-1:iam:attachment/builtin.viewer/usr_x"
     )
     assert (
-        attachment_resource("p", "u", "abi:org-1:*") == "abi:org-1:-:iam:attachment/p/u"
+        attachment_resource("p", "u", "abi:org-1:*")
+        == "abi:org-1:%2A:iam:attachment/p/u"
     )
     assert attachment_resource("p", "u", None) == "abi:-:-:iam:attachment/p/u"
 
@@ -407,3 +408,101 @@ def test_listeners_hear_every_change(h):
     h.iam.add_change_listener(lambda _revision: 1 / 0)  # never fails a write
     h.user("new")
     assert heard and heard[-1] == h.iam.store.revision()
+
+
+# -- review round 1 --------------------------------------------------------------------
+
+
+def test_a_clear_during_a_lookup_keeps_its_stale_value_out_of_the_cache():
+    from naas_abi_core.services.iam.IAMService import _TTLCache
+
+    cache = _TTLCache(60, 10)
+    calls: list[str] = []
+
+    def stale():
+        calls.append("stale")
+        cache.clear()  # a change lands while the old state is being read
+        return "stale"
+
+    assert cache.get("k", stale) == "stale"
+    assert cache.get("k", lambda: "fresh") == "fresh"
+    assert cache.get("k", lambda: "never") == "fresh"
+
+
+def test_a_suspension_during_a_check_applies_to_the_next_one(h):
+    bob = h.user()
+    h.attach(roles.PLATFORM_ADMIN, bob.id)
+    store = h.iam.store
+    original = store.attachments_for
+    suspended = False
+
+    def racing(principal_ids):
+        nonlocal suspended
+        found = original(principal_ids)
+        if not suspended:
+            suspended = True
+            h.admin("suspend_principal", bob.id)
+        return found
+
+    store.attachments_for = racing  # type: ignore[method-assign]
+    try:
+        h.allowed(QUERY, graph("a"), bob)  # reads the pre-suspension state
+    finally:
+        store.attachments_for = original  # type: ignore[method-assign]
+    assert not h.allowed(QUERY, graph("a"), bob)
+
+
+def test_ensure_user_survives_a_concurrent_first_sighting(h):
+    store = h.iam.store
+    first = h.user("bob")
+    original = store.find_user
+    misses = iter([None])
+
+    def late_find(issuer, subject):
+        # The first lookup misses: another request is creating the same user.
+        return next(misses, None) or original(issuer, subject)
+
+    store.find_user = late_find  # type: ignore[method-assign]
+    try:
+        again = h.user("bob")
+    finally:
+        store.find_user = original  # type: ignore[method-assign]
+    assert again.id == first.id
+
+
+def test_explain_reveals_nothing_without_iam_explain(h):
+    carol = h.user("carol")
+    group = h.group("secret-team")
+    errors = []
+    for principal_id in (group.id, "usr_" + "0" * 26, h.user("bob").id):
+        with h.as_(carol), pytest.raises(IAMNotFoundError) as refused:
+            h.iam.explain(QUERY, graph("a"), principal_id=principal_id)
+        errors.append(type(refused.value))
+    assert len(set(errors)) == 1
+
+
+def test_a_caller_who_may_list_nothing_never_scans_the_store(h):
+    for i in range(5):
+        h.user(f"u{i}")
+    store = h.iam.store
+    original = store.list_principals
+    calls = []
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    store.list_principals = counting  # type: ignore[method-assign]
+    try:
+        with h.as_(actor="some-module"):
+            assert h.iam.list_principals(limit=10).items == []
+    finally:
+        store.list_principals = original  # type: ignore[method-assign]
+    assert calls == []
+
+
+def test_attachment_names_for_org_wide_scopes_differ_from_org_level_ones():
+    org_wide = attachment_resource("p", "u", "abi:acme:*")
+    org_level = attachment_resource("p", "u", "abi:acme:-")
+    assert org_wide == "abi:acme:%2A:iam:attachment/p/u"
+    assert org_level == "abi:acme:-:iam:attachment/p/u"

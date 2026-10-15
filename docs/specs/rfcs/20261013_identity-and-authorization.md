@@ -203,6 +203,10 @@ The serialized document is at most 32 KiB.
 
 An attachment binds a policy to a principal (user, group or service account), with an optional `scope`.
 
+A policy attached at a scope must start every resource pattern with `${scope}:`. The scope only fills
+`${scope}`, so any other pattern would let whoever may attach at that scope grant beyond it; IAM refuses
+such an attachment.
+
 | `scope` | Meaning | `${scope}` expands to |
 |---|---|---|
 | `abi:<org>:<workspace>` | One workspace | `abi:<org>:<workspace>` |
@@ -234,7 +238,7 @@ whose policies are being evaluated, `X` in `principal_decision(X)` (§5.3): the 
 ```abnf
 resource-name = "abi:" org ":" workspace ":" service ":" type "/" id
 org           = scope-id / "-"
-workspace     = scope-id / "-"
+workspace     = scope-id / "-" / "%2A"                    ; %2A: every workspace, org-wide attachments only
 scope-id      = 1*64( %x61-7A / DIGIT / "-" / "_" )   ; lowercase id, never exactly "-"
 service       = %x61-7A *( %x61-7A / DIGIT / "_" )     ; catalog name
 type          = %x61-7A *( %x61-7A / DIGIT / "_" )     ; declared in the service catalog
@@ -247,6 +251,7 @@ pct-encoded   = "%" 2HEXDIG                              ; uppercase hex
 - `org` and `workspace` are the stable Nexus ids (`org-<12 hex>`, `ws-<12 hex>`), never slugs. Renames
   change no names.
 - `-` in `org` or `workspace` means "none".
+- `%2A` as the `workspace` means every workspace of the org. Only org-wide attachments are named with it (§6.4).
 - `-` as the whole `id` names a singleton (§4.3).
 
 #### 4.2 Levels
@@ -969,8 +974,10 @@ Resource types:
 - `principal/<id>`
 - `group/<id>`
 - `policy/<id>`
-- `attachment/<policy id>/<principal id>`, at the attachment's scope (§3.4); an org-wide attachment is
-  named at `abi:<org>:-`
+- `attachment/<policy id>/<principal id>`, at the attachment's scope (§3.4). An org-wide attachment
+  (`abi:<org>:*`) is named in workspace `%2A`, the encoded `*` that no workspace id can be:
+  `abi:<org>:%2A:iam:attachment/…`. An `abi:<org>:*` grant reaches it and an org-level `abi:<org>:-` grant
+  does not, so an org admin cannot attach itself to every workspace.
 - `key/<principal id>/<key id>`, `personal: true` for personal keys
 - `manifest/<service account id>`
 - `placement/<service>/<id-key>`

@@ -117,3 +117,22 @@ def test_actions():
     for bad in ("triple_store", "Triple:Get", "svc:get", "svc:Get*"):
         with pytest.raises(ValueError):
             split_action(bad)
+
+
+def test_every_workspace_of_an_org_has_its_own_name():
+    from naas_abi_core.services.iam.names import ALL_WORKSPACES
+
+    name = resource_name(
+        "iam",
+        "attachment",
+        ["p", "u"],
+        kind="path",
+        org="acme",
+        workspace=ALL_WORKSPACES,
+    )
+    assert name == "abi:acme:%2A:iam:attachment/p/u"
+    assert parse_resource_name(name).workspace == ALL_WORKSPACES
+    assert matches("abi:acme:*", name)
+    assert not matches("abi:acme:-:*", name)
+    with pytest.raises(ValueError):
+        resource_name("svc", "t", "x", workspace=ALL_WORKSPACES)

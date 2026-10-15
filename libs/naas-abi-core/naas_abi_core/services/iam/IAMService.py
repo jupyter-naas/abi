@@ -62,6 +62,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     new_id,
 )
 from naas_abi_core.services.iam.names import (
+    ALL_WORKSPACES,
     NONE,
     resource_name,
     scope_fields,
@@ -95,10 +96,16 @@ def policy_resource(policy_id: str) -> str:
 
 
 def attachment_resource(policy_id: str, principal_id: str, scope: str | None) -> str:
-    """Named at the attachment's scope; an org-wide one at ``abi:<org>:-`` (§6.4)."""
+    """Named at the attachment's scope (§6.4).
+
+    An org-wide one (``abi:<org>:*``) is named in workspace ``%2A``
+    (``ALL_WORKSPACES``): an ``abi:<org>:*`` grant reaches it, an org-level
+    ``abi:<org>:-`` one does not, so an org admin cannot widen itself to every
+    workspace.
+    """
     org, workspace = scope_fields(scope) if scope else (NONE, NONE)
     if workspace == "*":
-        workspace = NONE
+        workspace = ALL_WORKSPACES
     return resource_name(
         "iam",
         "attachment",
@@ -123,12 +130,18 @@ def catalog_resource(service: str) -> str:
 
 
 class _TTLCache:
-    """A bounded LRU whose entries expire."""
+    """A bounded LRU whose entries expire.
+
+    ``clear`` bumps a generation: a value computed while a clear happened is
+    returned to its caller but never stored, so a change cannot be undone by a
+    lookup that read the store just before it.
+    """
 
     def __init__(self, ttl_seconds: float, size: int) -> None:
         self._ttl = ttl_seconds
         self._size = size
         self._entries: OrderedDict[Any, tuple[float, Any]] = OrderedDict()
+        self._generation = 0
         self._lock = threading.Lock()
 
     def get(self, key: Any, compute: Callable[[], _T]) -> _T:
@@ -138,8 +151,11 @@ class _TTLCache:
             if found is not None and found[0] > now:
                 self._entries.move_to_end(key)
                 return found[1]
+            generation = self._generation
         value = compute()
         with self._lock:
+            if generation != self._generation:
+                return value
             self._entries[key] = (now + self._ttl, value)
             self._entries.move_to_end(key)
             while len(self._entries) > self._size:
@@ -148,6 +164,7 @@ class _TTLCache:
 
     def clear(self) -> None:
         with self._lock:
+            self._generation += 1
             self._entries.clear()
 
 
@@ -193,20 +210,21 @@ class IAMService(IIAMService, PolicySource):
 
         Needs ``iam:Explain`` on the principal asked about.
         """
-        if principal_id is None:
-            ctx = current_call_context()
-            subject_id = ctx.principal.id
-        else:
-            record = self._get_principal(principal_id)
-            if record.kind == "group":
-                raise ValueError("Explain a user or a service account, not a group")
-            ctx = CallContext(principal=_call_principal(record))
-            subject_id = record.id
+        current = current_call_context()
+        subject_id = principal_id if principal_id is not None else current.principal.id
+        # Authorized before anything is read: a caller without iam:Explain learns
+        # nothing about the principal, not even whether it exists or is a group.
         self.require(
             "iam:Explain",
             principal_resource(subject_id),
             not_found=lambda: IAMNotFoundError(f"Principal {subject_id} not found"),
         )
+        if principal_id is None:
+            return self.authorizer.explain(current, action, resource)
+        record = self._get_principal(principal_id)
+        if record.kind == "group":
+            raise ValueError("Explain a user or a service account, not a group")
+        ctx = CallContext(principal=_call_principal(record))
         return self.authorizer.explain(ctx, action, resource)
 
     # =========================================================================
@@ -474,17 +492,24 @@ class IAMService(IIAMService, PolicySource):
             "display_name": display_name,
         }
         if existing is None:
-            record = self.store.create_principal(
-                PrincipalRecord(
-                    id=principal_id,
-                    kind="user",
-                    issuer=issuer,
-                    subject=subject,
-                    **profile,  # type: ignore[arg-type]
+            try:
+                record = self.store.create_principal(
+                    PrincipalRecord(
+                        id=principal_id,
+                        kind="user",
+                        issuer=issuer,
+                        subject=subject,
+                        **profile,  # type: ignore[arg-type]
+                    )
                 )
-            )
-            self._changed()
-            return record
+            except IAMConflictError:
+                # Another first sighting of the same identity created it.
+                existing = self.store.find_user(issuer, subject)
+                if existing is None:
+                    raise
+            else:
+                self._changed()
+                return record
         if all(getattr(existing, k) == v for k, v in profile.items()):
             return existing
         record = self.store.update_principal(replace(existing, **profile))  # type: ignore[arg-type]
@@ -803,6 +828,12 @@ class IAMService(IIAMService, PolicySource):
             raise IAMConflictError(f"Principal {principal_id} is deleted")
         if scope is None and policy.document.uses_scope:
             raise ValueError(f"{policy_id} uses ${{scope}}: attach it at a scope")
+        if scope is not None and not policy.document.confined_to_scope:
+            # A scope only fills ${scope}: anything else would reach past it.
+            raise ValueError(
+                f"{policy_id} names resources outside ${{scope}}: "
+                "only a policy confined to its scope is attached at one"
+            )
         existing = self._find_attachment(policy_id, principal_id, scope)
         if existing is not None:
             return existing
@@ -961,6 +992,9 @@ class IAMService(IIAMService, PolicySource):
         """A page of allowed items; paging applies after filtering (RFC §5.5)."""
         if not 1 <= limit <= 1000:
             raise ValueError("limit must be between 1 and 1000")
+        if not self.filter(action, ()).prefix_hints:
+            # No Allow of the caller's can admit an item: nothing to scan for.
+            return Page([], None)
         items: list[Any] = []
         cursor = after
         while True:

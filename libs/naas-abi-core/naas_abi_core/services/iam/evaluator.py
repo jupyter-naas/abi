@@ -15,7 +15,7 @@ number of Allows; on behalf of a user, actor and user must both be allowed.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
@@ -275,20 +275,34 @@ def _principal_decision(
     return _Verdict("implicit_deny")
 
 
+def _patterns(value: object) -> tuple[str, ...]:
+    """A list or tuple of strings, else nothing.
+
+    A bare string is refused: iterated, ``"svc:Get*"`` would become one pattern
+    per character, ``"*"`` among them, and the token would stop narrowing.
+    """
+    if not isinstance(value, (list, tuple)):
+        return ()
+    if not all(isinstance(item, str) for item in value):
+        return ()
+    return tuple(value)
+
+
 def _token_statements(ctx: CallContext) -> list[Statement]:
     """The token's ``abi_scope``: Allow statements only; anything else matches nothing."""
     statements: list[Statement] = []
     for raw in ctx.scope or ():
         if not isinstance(raw, Mapping) or raw.get("effect") != "Allow":
             continue
-        actions, resources = raw.get("actions"), raw.get("resources")
-        if not isinstance(actions, Sequence) or not isinstance(resources, Sequence):
+        actions = _patterns(raw.get("actions"))
+        resources = _patterns(raw.get("resources"))
+        if not actions or not resources:
             continue
         statements.append(
             Statement(
                 effect="Allow",
-                actions=tuple(str(a) for a in actions),
-                resources=tuple(str(r) for r in resources),
+                actions=actions,
+                resources=resources,
                 sid=raw.get("sid") if isinstance(raw.get("sid"), str) else None,
             )
         )

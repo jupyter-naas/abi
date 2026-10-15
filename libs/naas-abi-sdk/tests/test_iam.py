@@ -100,7 +100,9 @@ def test_catalogs_register_from_the_rfc_format():
         "service": "people",
         "version": 1,
         "resource_types": [{"name": "person", "id": "opaque", "placement": "placed"}],
-        "actions": [{"name": "GetPerson", "level": "read", "resource_types": ["person"]}],
+        "actions": [
+            {"name": "GetPerson", "level": "read", "resource_types": ["person"]}
+        ],
     }
     assert run(IAMService(client).register_catalog(catalog)) is True
     sent = client.register_catalog.call_args.args[0].catalog
@@ -114,3 +116,29 @@ def test_iam_needs_no_dependency_declaration():
     assert isinstance(services.iam, IAMService)
     with pytest.raises(ValueError):
         services.document  # noqa: B018 - undeclared services stay closed
+
+
+def test_every_iam_operation_has_a_facade_method():
+    from naas_abi_sdk.catalog import OPERATIONS
+
+    missing = [op for op in OPERATIONS["iam"] if not hasattr(IAMService, op)]
+    assert missing == []
+
+
+def test_listing_mappings_and_placements_and_deleting_scopes():
+    client = AsyncMock()
+    client.list_idp_group_mappings.return_value = pb.ListIdpGroupMappingsResponse(
+        mappings=[pb.GroupMapping(provider="acme", claim_value="Sales", group_id="g")]
+    )
+    client.list_placements.return_value = pb.ListPlacementsResponse(
+        placements=[
+            pb.Placement(service="document", id_key="n/*", org="o", workspace="w")
+        ]
+    )
+    client.delete_scope.return_value = pb.DeleteScopeResponse(deleted=True)
+    iam = IAMService(client)
+    assert run(iam.list_idp_group_mappings("g")) == [
+        {"provider": "acme", "claim_value": "Sales", "group_id": "g"}
+    ]
+    assert run(iam.list_placements("document"))[0]["id_key"] == "n/*"
+    assert run(iam.delete_scope("o", "w")) is True

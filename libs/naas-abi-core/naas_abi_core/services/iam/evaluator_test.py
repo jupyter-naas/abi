@@ -15,7 +15,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     ResourceNotFoundError,
 )
 from naas_abi_core.services.iam.IAMService import IAMService
-from naas_abi_core.services.iam.tests.iam_harness import graph, statement
+from naas_abi_core.services.iam.tests.iam_harness import document, graph, statement
 
 QUERY = "triple_store:Query"
 INSERT = "triple_store:Insert"
@@ -606,3 +606,83 @@ def test_allow_all_allows_everything_and_says_so(caplog):
             graph("b"),
         ]
         service.require("anything:Goes", "*")
+
+
+# -- review round 1: no escalation through attachments, no fail-open tokens -----------
+
+
+@pytest.mark.parametrize(
+    "policy_id", ["builtin.platform_admin", "builtin.engine", "builtin.api", "custom"]
+)
+def test_a_workspace_owner_cannot_attach_an_unconfined_policy_at_its_scope(
+    h, policy_id
+):
+    owner = h.user("owner")
+    scope = "abi:acme:ws1"
+    h.attach("builtin.owner", owner.id, scope)
+    if policy_id == "custom":
+        policy_id = h.admin(
+            "create_policy", "everything", document(statement("Allow", ["*"], ["*"]))
+        ).id
+    with h.as_(owner), pytest.raises(ValueError, match="outside"):
+        h.iam.attach_policy(policy_id, owner.id, scope)
+    assert not h.allowed("iam:CreatePolicy", "abi:-:-:iam:policy/p", owner)
+    assert not h.allowed("triple_store:DropGraph", graph("g", org="other"), owner)
+
+
+def test_a_workspace_owner_attaches_policies_confined_to_its_scope(h):
+    owner, bob = h.user("owner"), h.user("bob")
+    scope = "abi:acme:ws1"
+    h.attach("builtin.owner", owner.id, scope)
+    confined = h.admin(
+        "create_policy",
+        "read here",
+        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"])),
+    )
+    with h.as_(owner):
+        h.iam.attach_policy(confined.id, bob.id, scope)
+    assert h.allowed(QUERY, graph("g", org="acme", workspace="ws1"), bob)
+    assert not h.allowed(QUERY, graph("g", org="acme", workspace="ws2"), bob)
+
+
+@pytest.mark.parametrize("role", ["builtin.admin", "builtin.owner"])
+def test_an_org_level_role_cannot_widen_itself_to_every_workspace(h, role):
+    admin = h.user("org-admin")
+    h.attach(role, admin.id, "abi:acme:-")
+    drop = graph("g", org="acme", workspace="ws2")
+    assert not h.allowed("triple_store:DropGraph", drop, admin)
+    for target in ("builtin.admin", "builtin.member", "builtin.viewer"):
+        with h.as_(admin), pytest.raises((IAMNotFoundError, PermissionDeniedError)):
+            h.iam.attach_policy(target, admin.id, "abi:acme:*")
+    assert not h.allowed("triple_store:DropGraph", drop, admin)
+
+
+def test_an_org_wide_owner_manages_org_wide_roles(h):
+    owner, bob = h.user("owner"), h.user("bob")
+    h.attach("builtin.owner", owner.id, "abi:acme:*")
+    with h.as_(owner):
+        h.iam.attach_policy("builtin.viewer", bob.id, "abi:acme:*")
+    assert h.allowed(QUERY, graph("g", org="acme", workspace="ws9"), bob)
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        {
+            "effect": "Allow",
+            "actions": "triple_store:Query*",
+            "resources": [graph("a")],
+        },
+        {"effect": "Allow", "actions": [QUERY], "resources": "abi:*"},
+        {"effect": "Allow", "actions": [QUERY, 7], "resources": [graph("a")]},
+        {"effect": "Allow", "actions": b"*", "resources": [graph("a")]},
+    ],
+)
+def test_a_malformed_token_scope_narrows_to_nothing(h, malformed):
+    bob = h.user()
+    h.grant(bob.id, statement("Allow", [QUERY, INSERT], ["*"]))
+    as_list = ({"effect": "Allow", "actions": [QUERY], "resources": [graph("a")]},)
+    assert not h.allowed(INSERT, graph("b"), bob, scope=as_list)
+    # The malformed statement is dropped: the token allows nothing at all.
+    assert not h.allowed(QUERY, graph("a"), bob, scope=(malformed,))
+    assert not h.allowed(INSERT, graph("b"), bob, scope=(malformed,))

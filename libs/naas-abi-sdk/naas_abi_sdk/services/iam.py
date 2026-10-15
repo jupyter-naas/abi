@@ -65,12 +65,12 @@ class IAMService(ServiceProxy):
             raise PermissionDenied(
                 "PERMISSION_DENIED", f"{action} is not allowed on {resource}"
             )
-        raise not_found() if not_found else NotFound("NOT_FOUND", f"{resource} not found")
+        raise (
+            not_found() if not_found else NotFound("NOT_FOUND", f"{resource} not found")
+        )
 
     async def filter(self, action: str, resources: Iterable[str]) -> FilterResult:
-        result = await self._request(
-            "filter", action=action, resources=list(resources)
-        )
+        result = await self._request("filter", action=action, resources=list(resources))
         return FilterResult(list(result["allowed"]), list(result["prefix_hints"]))
 
     async def explain(
@@ -105,7 +105,9 @@ class IAMService(ServiceProxy):
     async def create_service_account(
         self, name: str, *, owner_id: str | None = None
     ) -> dict[str, Any]:
-        return await self._request("create_service_account", name=name, owner_id=owner_id)
+        return await self._request(
+            "create_service_account", name=name, owner_id=owner_id
+        )
 
     async def get_principal(self, principal_id: str) -> dict[str, Any]:
         return await self._request("get_principal", principal_id=principal_id)
@@ -114,7 +116,9 @@ class IAMService(ServiceProxy):
         self, kind: str | None = None, *, limit: int = 100, after: str | None = None
     ) -> dict[str, Any]:
         """``{"principals": [...], "next_after": ...}``."""
-        return await self._request("list_principals", kind=kind, limit=limit, after=after)
+        return await self._request(
+            "list_principals", kind=kind, limit=limit, after=after
+        )
 
     async def suspend_principal(self, principal_id: str) -> dict[str, Any]:
         return await self._request("suspend_principal", principal_id=principal_id)
@@ -127,7 +131,9 @@ class IAMService(ServiceProxy):
 
     # -- groups ---------------------------------------------------------------------
 
-    async def create_group(self, name: str, *, org: str | None = None) -> dict[str, Any]:
+    async def create_group(
+        self, name: str, *, org: str | None = None
+    ) -> dict[str, Any]:
         return await self._request("create_group", name=name, org=org)
 
     async def get_group(self, group_id: str) -> dict[str, Any]:
@@ -156,16 +162,24 @@ class IAMService(ServiceProxy):
         self, provider: str, claim_value: str, group_id: str
     ) -> dict[str, Any]:
         return await self._request(
-            "map_idp_group", provider=provider, claim_value=claim_value, group_id=group_id
+            "map_idp_group",
+            provider=provider,
+            claim_value=claim_value,
+            group_id=group_id,
         )
 
-    async def unmap_idp_group(self, provider: str, claim_value: str, group_id: str) -> bool:
+    async def unmap_idp_group(
+        self, provider: str, claim_value: str, group_id: str
+    ) -> bool:
         return await self._request(
             "unmap_idp_group",
             provider=provider,
             claim_value=claim_value,
             group_id=group_id,
         )
+
+    async def list_idp_group_mappings(self, group_id: str) -> list[dict[str, Any]]:
+        return await self._request("list_idp_group_mappings", group_id=group_id)
 
     # -- policies and attachments ------------------------------------------------------
 
@@ -252,8 +266,14 @@ class IAMService(ServiceProxy):
     async def delete_placement(self, service: str, id_key: str) -> bool:
         return await self._request("delete_placement", service=service, id_key=id_key)
 
+    async def list_placements(self, service: str | None = None) -> list[dict[str, Any]]:
+        return await self._request("list_placements", service=service)
+
     async def put_scope(self, org: str, workspace: str = "-") -> dict[str, Any]:
         return await self._request("put_scope", org=org, workspace=workspace)
+
+    async def delete_scope(self, org: str, workspace: str = "-") -> bool:
+        return await self._request("delete_scope", org=org, workspace=workspace)
 
     async def register_catalog(self, catalog: Mapping[str, Any]) -> bool:
         """Register a service's action catalog (RFC §6.2 format, as a mapping)."""

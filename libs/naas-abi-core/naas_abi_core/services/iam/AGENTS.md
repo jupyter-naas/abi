@@ -69,7 +69,8 @@ port, from `authorize`.
 - An inactive actor or OBO user (`suspended`, `deleted`) is denied everything.
 - A sealed resource opens to its owner only (the actor, never through OBO).
 - On behalf of a user both sides must be allowed; a token's `abi_scope`
-  (`CallContext.scope`, Allow statements only) narrows further.
+  (`CallContext.scope`, Allow statements whose `actions` and `resources` are
+  lists of strings; anything else matches nothing) narrows further.
 - Variables: `${scope}` (the attachment's), `${principal.id}` (the principal
   being evaluated, never a group, percent-encoded as one segment), `${user.id}`
   (the call's user). An unresolved variable makes its pattern match nothing.
@@ -83,12 +84,12 @@ port, from `authorize`.
 ## Service API
 
 ```python
-iam = engine.services.iam               # IIAMService, no dependency declaration needed
+iam = engine.services.iam  # IIAMService, no dependency declaration needed
 
 iam.require("triple_store:Query", name, not_found=lambda: GraphNotFound(iri))
 allowed = iam.filter("triple_store:ListGraphs", names).allowed
-iam.authorize(action, resource)          # Decision
-iam.explain(action, resource, principal_id=...)   # needs iam:Explain on the principal
+iam.authorize(action, resource)  # Decision
+iam.explain(action, resource, principal_id=...)  # needs iam:Explain on the principal
 ```
 
 Administration (each needs its `iam:*` action): `ensure_user`,
@@ -98,14 +99,18 @@ attachments and memberships), groups (`create_group`, `add_group_member`,
 `map_idp_group`, ...; groups cannot contain groups), policies (`create_policy`
 validated against the registered catalogs, `update_policy(expected_revision=)`;
 managed policies are IAM's alone), `attach_policy`/`detach_policy` (idempotent;
-a policy naming `${scope}` needs a scoped attachment), placements
+a policy naming `${scope}` needs a scoped attachment, and only a policy whose
+every resource pattern starts with `${scope}:` may be attached at a scope, so
+whoever may attach at a scope cannot grant beyond it), placements
 (`put_placement`, `resolve_placement`: exact key, then the longest prefix, else
 platform), scopes (`put_scope`, `workspace_org`), `register_catalog` (highest
 version wins; refuses dropping an action a policy names).
 
 Lists page after filtering. Names: `principal_resource`, `group_resource`,
-`policy_resource`, `attachment_resource` (at the attachment's scope; org-wide at
-`abi:<org>:-`), `placement_resource`, `scope_resource`, `catalog_resource`.
+`policy_resource`, `attachment_resource` (at the attachment's scope; an org-wide
+one in workspace `%2A`, `names.ALL_WORKSPACES`, which `abi:<org>:*` grants reach
+and org-level `abi:<org>:-` ones do not), `placement_resource`, `scope_resource`,
+`catalog_resource`.
 
 **Caching.** Effective statements per principal, policies and placements are
 cached for at most `cache_ttl_seconds` (60) and dropped on every change made
@@ -148,9 +153,9 @@ services:
       # dsn: "postgresql://..."   # postgres: an existing database
       # schema: abi_iam
     authorizer: policy             # policy (default) | allow_all (explicit opt-out; warns at boot)
-    modules:
+    modules:                       # reserved for #60: validated, not read yet
       auto_approve: false
-    tokens:
+    tokens:                        # reserved for #60 and #62: validated, not read yet
       access_ttl_seconds: 600
       key_rotation_days: 30
     cache_ttl_seconds: 60

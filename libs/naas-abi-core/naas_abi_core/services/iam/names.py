@@ -22,6 +22,10 @@ from urllib.parse import quote, unquote
 IdKind = Literal["opaque", "path", "singleton"]
 
 NONE = "-"
+# The workspace field of what spans every workspace of an org: the encoded "*",
+# which no workspace id can be. Only org-wide attachments are named with it, so
+# "abi:<org>:*" patterns reach them and "abi:<org>:-:" ones never do.
+ALL_WORKSPACES = "%2A"
 PREFIX = "abi:"
 PLATFORM_SCOPE = "abi:-:-"
 
@@ -106,7 +110,7 @@ def resource_name(
 ) -> str:
     """Build a canonical name, platform-level unless ``org``/``workspace`` say otherwise."""
     _check_scope_id(org, "org")
-    _check_scope_id(workspace, "workspace")
+    _check_workspace(workspace, org)
     if not _SERVICE.match(service):
         raise ValueError(f"Invalid service name {service!r}")
     if not _SERVICE.match(type):
@@ -126,7 +130,7 @@ def parse_resource_name(name: str) -> ResourceName:
     if not slash or not id_:
         raise ValueError(f"A resource name ends with <type>/<id>: {name!r}")
     _check_scope_id(org, "org")
-    _check_scope_id(workspace, "workspace")
+    _check_workspace(workspace, org)
     if not _SERVICE.match(service):
         raise ValueError(f"Invalid service in {name!r}")
     if not _SERVICE.match(type_):
@@ -164,6 +168,14 @@ def scope_fields(scope: str) -> tuple[str, str]:
     """The ``(org, workspace)`` of a valid scope (``workspace`` may be ``*``)."""
     org, workspace = validate_scope(scope)[len(PREFIX) :].split(":")
     return org, workspace
+
+
+def _check_workspace(workspace: str, org: str) -> None:
+    if workspace == ALL_WORKSPACES:
+        if org == NONE:
+            raise ValueError("Every workspace of an org needs an org")
+        return
+    _check_scope_id(workspace, "workspace")
 
 
 def _check_scope_id(value: str, field: str) -> None:

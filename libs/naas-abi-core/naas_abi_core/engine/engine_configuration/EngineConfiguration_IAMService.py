@@ -8,12 +8,15 @@ services:
       path: storage/iam/iam.sqlite
       # dsn: "{{ secret.IAM_POSTGRES_DSN }}"
     authorizer: policy             # policy (default) | allow_all (explicit opt-out; warns at boot)
-    modules:
+    modules:                       # reserved: read from subtask 6 (#60) on
       auto_approve: false          # true only in the abi dev overlay
-    tokens:
+    tokens:                        # reserved: read from subtasks 6 and 8 (#60, #62) on
       access_ttl_seconds: 600      # capped at 600
       key_rotation_days: 30
 ```
+
+``modules`` and ``tokens`` are validated now, so a configuration written for the
+next subtasks fails early when it is wrong, but nothing reads them yet.
 
 ``authorizer: allow_all`` is never a default: it must be written down, and the
 engine warns at every boot that runs with it.
@@ -84,6 +87,8 @@ class IAMStoreConfiguration(BaseModel):
 
 
 class IAMModulesConfiguration(BaseModel):
+    """Reserved: manifest approval reads it from subtask 6 (#60) on."""
+
     model_config = ConfigDict(extra="forbid")
 
     # Approve module permission manifests without review (subtask 6, #60):
@@ -92,6 +97,8 @@ class IAMModulesConfiguration(BaseModel):
 
 
 class IAMTokensConfiguration(BaseModel):
+    """Reserved: the token issuer reads it from subtasks 6 and 8 (#60, #62) on."""
+
     model_config = ConfigDict(extra="forbid")
 
     access_ttl_seconds: int = Field(default=600, ge=1, le=600)

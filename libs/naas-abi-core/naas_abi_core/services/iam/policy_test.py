@@ -194,3 +194,33 @@ def test_catalogs_validate_themselves():
         "triple_store:ListGraphs",
     ]
     assert found.matching("triple_store:List*") == ["triple_store:ListGraphs"]
+
+
+def test_an_unquoted_yaml_version_reads_as_the_version():
+    document = parse_policy_document(
+        "version: 2026-10-13\nstatements:\n"
+        "  - {effect: Allow, actions: ['*'], resources: ['*']}\n"
+    )
+    assert document.version == POLICY_VERSION
+    with pytest.raises(PolicyValidationError, match="version must be"):
+        parse_policy_document(
+            "version: 2012-10-17\nstatements:\n"
+            "  - {effect: Allow, actions: ['*'], resources: ['*']}\n"
+        )
+
+
+def test_scope_confinement():
+    def doc(*resources):
+        return parse_policy_document(
+            {
+                "version": POLICY_VERSION,
+                "statements": [
+                    {"effect": "Allow", "actions": ["*"], "resources": list(resources)}
+                ],
+            }
+        )
+
+    assert doc("${scope}:svc:t/*", "${scope}:svc:u/${principal.id}").confined_to_scope
+    assert not doc("${scope}:svc:t/*", "*").confined_to_scope
+    assert not doc("${scope}*").confined_to_scope
+    assert not doc("abi:acme:ws1:svc:t/*").confined_to_scope

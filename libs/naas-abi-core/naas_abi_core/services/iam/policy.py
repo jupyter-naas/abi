@@ -12,6 +12,7 @@ import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Literal, cast
 
 import yaml
@@ -33,6 +34,8 @@ Effect = Literal["Allow", "Deny"]
 
 # Variables a stored policy may use in its resources (RFC §3.4).
 POLICY_VARIABLES = frozenset({"scope", "principal.id", "user.id"})
+# What a policy attached at a scope must start each resource pattern with.
+SCOPE_PREFIX = "${scope}:"
 
 _SID = re.compile(r"^[A-Za-z0-9]{1,64}$")
 _ACTION_PATTERN = re.compile(r"^(\*|[a-z?*][a-z0-9_?*]*:[A-Za-z0-9?*]+)$")
@@ -104,6 +107,20 @@ class PolicyDocument:
         """Whether a statement names ``${scope}``: then it needs a scoped attachment."""
         return any(s.uses_scope for s in self.statements)
 
+    @property
+    def confined_to_scope(self) -> bool:
+        """Whether every resource pattern starts with ``${scope}:``.
+
+        Only such a policy may be attached at a scope: the scope fills
+        ``${scope}`` and nothing else, so a statement naming anything outside it
+        would let whoever may attach at a scope grant beyond it.
+        """
+        return all(
+            pattern.startswith(SCOPE_PREFIX)
+            for statement in self.statements
+            for pattern in statement.resources
+        )
+
 
 def parse_policy_document(
     data: Mapping[str, Any] | str | PolicyDocument,
@@ -142,6 +159,8 @@ def parse_policy_document(
     for key in sorted(set(data) - _DOCUMENT_KEYS):
         errors.append(f"unknown field {key!r}")
     version = data.get("version")
+    if isinstance(version, date) and version.isoformat() == POLICY_VERSION:
+        version = POLICY_VERSION  # unquoted in YAML, it parses as a date
     if version is None:
         errors.append("version is required")
     elif version != POLICY_VERSION:
