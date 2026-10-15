@@ -1,6 +1,5 @@
 import {
   AppWindow,
-  Boxes,
   Bot,
   BrainCircuit,
   Network,
@@ -8,7 +7,6 @@ import {
   Cpu,
   Download,
   HardDrive,
-  Server,
   Shield,
   Users,
   Zap,
@@ -44,8 +42,6 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     items: [
       { href: '/settings/general', label: 'General', icon: SlidersHorizontal },
       { href: '/settings/members', label: 'Members', icon: Users },
-      { href: '/settings/servers', label: 'Servers', icon: Server },
-      { href: '/settings/services', label: 'Services', icon: Boxes },
       { href: '/settings/secrets', label: 'Secrets', icon: Shield },
       { href: '/settings/export', label: 'Data Export', icon: Download },
     ],

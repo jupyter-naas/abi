@@ -7,6 +7,8 @@ import {
   FolderKanban,
   CreditCard,
   Shield,
+  Server,
+  Boxes,
 } from 'lucide-react';
 
 export type OrgSettingsNavItem = {
@@ -23,6 +25,8 @@ export const orgSettingsNav: OrgSettingsNavItem[] = [
   { slug: 'users', label: 'Users', icon: Users, adminOnly: true },
   { slug: 'roles', label: 'Roles', icon: Shield, adminOnly: true },
   { slug: 'domains', label: 'Domains', icon: Globe, adminOnly: true },
+  { slug: 'servers', label: 'Servers', icon: Server, adminOnly: true },
+  { slug: 'services', label: 'Services', icon: Boxes, adminOnly: true },
   { slug: 'billing', label: 'Billing', icon: CreditCard, adminOnly: true },
 ];
 

@@ -157,6 +157,8 @@ export interface Workspace {
   description?: string;
   /** Workspace group (Settings → General); empty shows under "Others". */
   group?: string;
+  /** Organization the workspace belongs to (Organization Settings links). */
+  organizationId?: string;
   icon?: string;
   color?: string;
   theme: WorkspaceTheme;
@@ -1396,6 +1398,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         name: ws.name,
         description: ws.description,
         group: ws.workspace_group || undefined,
+        organizationId: ws.organization_id || undefined,
         icon: ws.icon || ws.logo_emoji,
         color: ws.color,
         theme: {
