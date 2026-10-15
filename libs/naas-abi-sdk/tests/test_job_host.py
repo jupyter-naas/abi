@@ -381,7 +381,8 @@ def test_event_bridge_turns_an_event_into_a_trigger():
 
 def _closing_scenario(handler, **kwargs):
     docs = Documents()
-    host = _host(docs, close_grace_seconds=0.05, **kwargs)
+    kwargs.setdefault("close_grace_seconds", 0.05)
+    host = _host(docs, **kwargs)
     started = asyncio.Event()
 
     async def wrapped(ctx):
@@ -409,6 +410,19 @@ def test_shutdown_is_not_a_user_cancel_the_run_is_retried():
     assert run["status"] == "RETRYING"
     assert run["error"] == "Interrupted by host shutdown"
     assert msg.calls[-1][0] == "nak"
+
+
+def test_a_run_that_ends_within_the_grace_keeps_its_outcome():
+    async def short(ctx):
+        await asyncio.sleep(0.02)  # never looks at ctx.cancelled
+        return {"done": True}
+
+    run, msg = _closing_scenario(short, close_grace_seconds=1)
+
+    assert run["status"] == "SUCCEEDED"
+    assert run["result"] == {"done": True}
+    assert not run.get("error")
+    assert msg.calls[-1][0] == "ack"
 
 
 def test_close_cancels_jobs_still_running_after_the_grace_period():
