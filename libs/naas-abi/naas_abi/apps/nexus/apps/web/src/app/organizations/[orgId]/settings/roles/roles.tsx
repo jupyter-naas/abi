@@ -1,16 +1,21 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { AlertCircle, Save, Shield } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Filter, Save } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
-import { OrgSettingsSectionCard } from '../components/org-settings-section-card';
+import { SearchBox } from '@/components/settings/search-box';
+import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
 import { Checkbox } from '@/components/ui/checkbox';
-import { SettingsFilterSelect, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
+import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
+import type { FacetBucket } from '@/lib/graph-query/types';
+import { matchesSearch } from '@/app/settings/lib/search';
+import { rowMatchesColumnFilter } from '../users/users-table-filter';
 import { FEATURE_LABELS, featureLabel, sortFeaturesByName } from '../lib/feature-labels';
 import '../components/org-settings-components.css';
+import '../users/users.css';
 import './roles.css';
 
 type RoleName = 'owner' | 'admin' | 'member' | 'viewer';
@@ -52,6 +57,21 @@ function emptyBaseline(roles: RoleName[]): Record<RoleName, string[]> {
   } as Record<RoleName, string[]>;
 }
 
+type ColumnId = 'feature' | RoleName;
+type SortDir = 'asc' | 'desc';
+
+const GRANT_LABEL = { granted: 'Granted', denied: 'Not granted' } as const;
+
+function countFacets(values: string[]): FacetBucket[] {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([value, count]) => ({ value, count }));
+}
+
 export default function OrgRolesPage() {
   const params = useParams();
   const orgId = params.orgId as string;
@@ -68,7 +88,16 @@ export default function OrgRolesPage() {
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [accessFilter, setAccessFilter] = useState('all');
+  const [sortKey, setSortKey] = useState<ColumnId>('feature');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [columnFilters, setColumnFilters] = useState<
+    Partial<Record<ColumnId, ColumnFilterState>>
+  >({});
+  const [openFilter, setOpenFilter] = useState<{
+    id: ColumnId;
+    left: number;
+    top: number;
+  } | null>(null);
   const [persistence, setPersistence] = useState('deployment');
   const [features, setFeatures] = useState<string[]>([]);
   const [roles, setRoles] = useState<RoleName[]>(() =>
@@ -163,6 +192,99 @@ export default function OrgRolesPage() {
     });
   };
 
+  const columns = useMemo(
+    (): { id: ColumnId; label: string }[] => [
+      { id: 'feature', label: 'Feature' },
+      ...roles.map((role) => ({ id: role, label: ROLE_LABELS[role] || role })),
+    ],
+    [roles]
+  );
+
+  const cellValues = useCallback(
+    (feature: string, columnId: ColumnId): string[] => {
+      if (columnId === 'feature') {
+        return [featureLabel(feature), feature];
+      }
+      const granted = (baseline[columnId] || []).includes(feature);
+      return [granted ? GRANT_LABEL.granted : GRANT_LABEL.denied];
+    },
+    [baseline]
+  );
+
+  const loadFacets = useCallback(
+    async (columnId: string, search: string): Promise<FacetBucket[]> => {
+      const needle = search.trim().toLowerCase();
+      const values = features.flatMap((feature) =>
+        cellValues(feature, columnId as ColumnId)
+      );
+      return countFacets(values).filter((bucket) =>
+        bucket.value.toLowerCase().includes(needle)
+      );
+    },
+    [features, cellValues]
+  );
+
+  const visibleFeatures = useMemo(() => {
+    const query = searchQuery.trim();
+    const rows = features.filter(
+      (feature) =>
+        matchesSearch(
+          columns.flatMap((column) => cellValues(feature, column.id)),
+          query
+        ) &&
+        columns.every((column) =>
+          rowMatchesColumnFilter(
+            cellValues(feature, column.id),
+            columnFilters[column.id]
+          )
+        )
+    );
+    rows.sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === 'feature') {
+        cmp = featureLabel(a).localeCompare(featureLabel(b));
+      } else {
+        const aGranted = (baseline[sortKey] || []).includes(a);
+        const bGranted = (baseline[sortKey] || []).includes(b);
+        cmp =
+          Number(aGranted) - Number(bGranted) ||
+          featureLabel(a).localeCompare(featureLabel(b));
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return rows;
+  }, [
+    features,
+    searchQuery,
+    columns,
+    cellValues,
+    columnFilters,
+    sortKey,
+    sortDir,
+    baseline,
+  ]);
+
+  const toggleSort = (columnId: ColumnId) => {
+    if (sortKey === columnId) {
+      setSortDir((current) => (current === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortKey(columnId);
+    setSortDir(columnId === 'feature' ? 'asc' : 'desc');
+  };
+
+  const setFilter = (columnId: ColumnId, next: ColumnFilterState) => {
+    setColumnFilters((current) => ({ ...current, [columnId]: next }));
+  };
+
+  const clearFilter = (columnId: ColumnId) => {
+    setColumnFilters((current) => {
+      const next = { ...current };
+      delete next[columnId];
+      return next;
+    });
+  };
+
   const handleSave = async () => {
     if (!orgId || !canManage || !dirty) return;
     setSaving(true);
@@ -216,6 +338,14 @@ export default function OrgRolesPage() {
     }
   };
 
+  const grantCount = roles.reduce(
+    (total, role) => total + (baseline[role] || []).length,
+    0
+  );
+  const hasActiveFilters =
+    columns.some((column) => !isBlank(columnFilters[column.id])) ||
+    searchQuery.trim().length > 0;
+
   if (loading) {
     return <div className="org-settings-loading">Loading roles...</div>;
   }
@@ -226,25 +356,13 @@ export default function OrgRolesPage() {
       ? 'Role feature access for this organization is saved in the database and applies across API workers and restarts.'
       : 'Role feature access currently uses the deployment baseline from nexus_config.feature_flags. Save writes a durable organization overlay.');
 
-  const featureQuery = searchQuery.trim().toLowerCase();
-  const rolesWith = (feature: string) => roles.filter((role) => (baseline[role] || []).includes(feature)).length;
-  const filteredFeatures = features.filter((feature) => {
-    const granted = rolesWith(feature);
-    if (accessFilter === 'everyone' && granted !== roles.length) return false;
-    if (accessFilter === 'restricted' && (granted === roles.length || granted === 0)) return false;
-    if (accessFilter === 'nobody' && granted !== 0) return false;
-    if (accessFilter.startsWith('role:') && !(baseline[accessFilter.slice(5) as RoleName] || []).includes(feature)) return false;
-    const label = featureLabel(feature).toLowerCase();
-    return !featureQuery || label.includes(featureQuery) || feature.toLowerCase().includes(featureQuery);
-  });
-  const grantCount = roles.reduce((total, role) => total + (baseline[role] || []).length, 0);
-
   return (
-    <div className="org-settings-roles-page">
+    <div className="org-settings-roles-page org-settings-users-page">
+      <div className="org-settings-users-main">
       <OrgSettingsPageHeader
         title="Roles"
         badge={`${grantCount} enabled`}
-        subtitle="Define which workspace features each role can access"
+        subtitle="Define which workspace features each role can access. Owner access is fixed."
         actions={
           canManage ? (
             <button
@@ -265,110 +383,162 @@ export default function OrgRolesPage() {
       />
 
       {error && (
-        <div className="org-settings-roles-alert" role="alert">
+        <div className="org-settings-users-alert" role="alert">
           <AlertCircle size={16} />
           <span>{error}</span>
         </div>
       )}
 
-      <SettingsTableToolbar
-        search={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder="Search features..."
-        filters={
-          <SettingsFilterSelect
-            label="Access"
-            value={accessFilter}
-            onChange={setAccessFilter}
-            options={[
-              { value: 'all', label: 'All features' },
-              { value: 'everyone', label: 'Granted to every role' },
-              { value: 'restricted', label: 'Granted to some roles' },
-              { value: 'nobody', label: 'Granted to no role' },
-              ...roles.map((role) => ({ value: `role:${role}`, label: `Granted to ${ROLE_LABELS[role] || role}` })),
-            ]}
-          />
-        }
-        meta={`${countLabel(filteredFeatures.length, features.length, 'feature')} · ${roles.length} roles · ${grantCount} access grants${dirty ? ' · unsaved changes' : ''}`}
+      <SearchBox
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search features..."
+        label="Search features"
       />
 
-      <OrgSettingsSectionCard flush overflowHidden>
-        <div className="org-settings-roles-card-heading">
-          <Shield size={18} />
-          <div>
-            <p className="org-settings-roles-card-title">Feature access matrix</p>
-            <p className="org-settings-roles-card-subtitle">
-              Driven by nexus_config.feature_flags (viewer / member / admin /
-              owner). Owner access is fixed and cannot be changed here.
-            </p>
-          </div>
-        </div>
+      {hasActiveFilters && (
+        <p className="org-settings-users-filter-meta">
+          {visibleFeatures.length} of {features.length}{' '}
+          {features.length === 1 ? 'feature' : 'features'}
+          {dirty ? ' · unsaved changes' : ''}
+          <button
+            type="button"
+            className="org-settings-users-filter-clear"
+            onClick={() => {
+              setSearchQuery('');
+              setColumnFilters({});
+            }}
+          >
+            Clear search and filters
+          </button>
+        </p>
+      )}
 
-        <div className="org-settings-roles-table-wrap">
-          <table className="org-settings-roles-table">
-            <thead>
-              <tr>
-                <th scope="col">Feature</th>
-                {roles.map((role) => (
+      <div className="org-settings-users-table-wrap">
+        <table className="org-settings-users-table org-settings-roles-table">
+          <thead>
+            <tr>
+              {columns.map((column) => {
+                const sorted = sortKey === column.id;
+                const active = !isBlank(columnFilters[column.id]);
+                const readOnlyHeader =
+                  column.id !== 'feature' && column.id === ROLE_MATRIX_READ_ONLY;
+                return (
                   <th
-                    key={role}
+                    key={column.id}
                     scope="col"
                     className={
-                      role === ROLE_MATRIX_READ_ONLY
-                        ? 'org-settings-roles-col-readonly'
-                        : undefined
+                      column.id === 'feature'
+                        ? undefined
+                        : readOnlyHeader
+                          ? 'org-settings-roles-col-readonly org-settings-roles-role-col'
+                          : 'org-settings-roles-role-col'
                     }
                     title={
-                      role === ROLE_MATRIX_READ_ONLY
-                        ? 'Owner access cannot be changed'
-                        : undefined
+                      readOnlyHeader ? 'Owner access cannot be changed' : undefined
                     }
                   >
-                    {ROLE_LABELS[role] || role}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredFeatures.length === 0 && (
-                <tr>
-                  <td colSpan={roles.length + 1} className="org-settings-roles-no-match">
-                    No features match the current search and filters
-                  </td>
-                </tr>
-              )}
-              {filteredFeatures.map((feature) => (
-                <tr key={feature}>
-                  <th scope="row">{FEATURE_LABELS[feature] || feature}</th>
-                  {roles.map((role) => {
-                    const checked = (baseline[role] || []).includes(feature);
-                    const readOnly = role === ROLE_MATRIX_READ_ONLY;
-                    return (
-                      <td
-                        key={`${role}-${feature}`}
-                        className={
-                          readOnly ? 'org-settings-roles-col-readonly' : undefined
-                        }
+                    <div
+                      className={
+                        column.id === 'feature'
+                          ? 'org-settings-users-th'
+                          : 'org-settings-users-th org-settings-roles-role-header'
+                      }
+                    >
+                      <button
+                        type="button"
+                        className="org-settings-users-sort"
+                        onClick={() => toggleSort(column.id)}
+                        title="Sort"
                       >
-                        <label className="org-settings-roles-check">
-                          <Checkbox
-                            checked={checked}
-                            disabled={!canManage || readOnly}
-                            onCheckedChange={() => toggleFeature(role, feature)}
-                            aria-label={`${ROLE_LABELS[role]} can access ${FEATURE_LABELS[feature] || feature}`}
-                          />
-                        </label>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </OrgSettingsSectionCard>
+                        <span>{column.label}</span>
+                        {sorted && sortDir === 'asc' && <ChevronUp size={12} />}
+                        {sorted && sortDir === 'desc' && <ChevronDown size={12} />}
+                      </button>
+                      <button
+                        type="button"
+                        className={`org-settings-users-filter${active ? ' is-active' : ''}`}
+                        data-filter-trigger=""
+                        title="Filter"
+                        onClick={(event) => {
+                          if (openFilter?.id === column.id) {
+                            setOpenFilter(null);
+                            return;
+                          }
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          setOpenFilter({
+                            id: column.id,
+                            left: rect.left,
+                            top: rect.bottom + 4,
+                          });
+                        }}
+                      >
+                        <Filter size={11} />
+                      </button>
+                    </div>
+                    {openFilter?.id === column.id && (
+                      <ColumnFilterPopover
+                        columnId={column.id}
+                        label={column.label}
+                        datatype="string"
+                        facetable
+                        anchor={{ left: openFilter.left, top: openFilter.top }}
+                        state={columnFilters[column.id]}
+                        onChange={(next) => setFilter(column.id, next)}
+                        onClear={() => clearFilter(column.id)}
+                        loadFacets={loadFacets}
+                        onClose={() => setOpenFilter(null)}
+                      />
+                    )}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {visibleFeatures.length === 0 && (
+              <tr>
+                <td colSpan={columns.length} className="org-settings-users-no-match">
+                  No features match the current search and filters
+                </td>
+              </tr>
+            )}
+            {visibleFeatures.map((feature) => (
+              <tr key={feature}>
+                <td className="org-settings-roles-feature-cell">
+                  {FEATURE_LABELS[feature] || feature}
+                </td>
+                {roles.map((role) => {
+                  const checked = (baseline[role] || []).includes(feature);
+                  const readOnly = role === ROLE_MATRIX_READ_ONLY;
+                  return (
+                    <td
+                      key={`${role}-${feature}`}
+                      className={
+                        readOnly
+                          ? 'org-settings-roles-col-readonly org-settings-roles-role-col'
+                          : 'org-settings-roles-role-col'
+                      }
+                    >
+                      <label className="org-settings-roles-check">
+                        <Checkbox
+                          checked={checked}
+                          disabled={!canManage || readOnly}
+                          onCheckedChange={() => toggleFeature(role, feature)}
+                          aria-label={`${ROLE_LABELS[role]} can access ${FEATURE_LABELS[feature] || feature}`}
+                        />
+                      </label>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <p className="org-settings-footnote">{footnote}</p>
+      </div>
     </div>
   );
 }
