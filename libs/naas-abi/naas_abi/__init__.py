@@ -328,6 +328,8 @@ class WorkspaceSeedConfig(BaseModel):
     slug: str
     owner_email: EmailStr | None = None
     members: list[WorkspaceMemberSeedConfig] = Field(default_factory=list)
+    # Group in the workspace lists ("Others" when empty); bootstrap only.
+    group: str | None = Field(default=None, max_length=100)
 
     # Workspace-level theming
     logo_url: str | None = None

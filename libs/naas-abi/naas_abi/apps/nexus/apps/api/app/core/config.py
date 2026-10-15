@@ -410,6 +410,9 @@ class WorkspaceSeedConfig(BaseModel):
     background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    # Group in the workspace lists ("Others" when empty). Bootstrap only: applied
+    # when the workspace has no group yet, so a group changed in the UI stays.
+    group: str | None = Field(default=None, max_length=100)
     default_agent: str | None = None
     agents: list[str] | None = None
     apps: list[str] | None = None

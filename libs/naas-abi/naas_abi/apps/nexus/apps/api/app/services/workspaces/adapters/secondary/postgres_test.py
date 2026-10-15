@@ -113,3 +113,38 @@ async def test_org_admin_lists_every_org_workspace(db) -> None:
     assert [w.id for w in await adapter.list_workspaces_for_user("org-admin")] == ["ws-1"]
     assert await adapter.list_workspaces_for_user("org-member") == []
     assert await adapter.get_workspace_role("org-admin", "ws-1") == "admin"
+
+
+@pytest.mark.asyncio
+async def test_description_is_saved_and_can_be_cleared(db) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import WorkspaceUpdateInput
+
+    adapter = WorkspaceSecondaryAdapterPostgres(db=db)
+
+    updated = await adapter.update_workspace(
+        workspace_id="ws-1",
+        updates=WorkspaceUpdateInput(name="Audit FR", description="Audit engagements in France"),
+    )
+    assert (updated.name, updated.description) == ("Audit FR", "Audit engagements in France")
+
+    cleared = await adapter.update_workspace(
+        workspace_id="ws-1", updates=WorkspaceUpdateInput(description="")
+    )
+    assert (cleared.name, cleared.description) == ("Audit FR", "")
+
+
+@pytest.mark.asyncio
+async def test_group_is_saved_and_a_blank_group_clears_it(db) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import WorkspaceUpdateInput
+
+    adapter = WorkspaceSecondaryAdapterPostgres(db=db)
+
+    grouped = await adapter.update_workspace(
+        workspace_id="ws-1", updates=WorkspaceUpdateInput(workspace_group=" Key Accounts ")
+    )
+    assert grouped.workspace_group == "Key Accounts"
+
+    cleared = await adapter.update_workspace(
+        workspace_id="ws-1", updates=WorkspaceUpdateInput(workspace_group="  ")
+    )
+    assert cleared.workspace_group is None

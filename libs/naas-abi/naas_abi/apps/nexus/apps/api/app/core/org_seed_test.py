@@ -259,3 +259,45 @@ def test_workspace_seed_only_ensures_the_owner_and_ignores_members(
 
     assert ensured == [("workspace", "ws-1", "user-1", "owner")]
     assert "members" in caplog.text and "valeo" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("current", "expected"),
+    [(None, "Key Accounts"), ("", "Key Accounts"), ("Renamed in the UI", "Renamed in the UI")],
+)
+def test_reseed_sets_the_group_only_when_the_workspace_has_none(
+    monkeypatch: pytest.MonkeyPatch, current: str | None, expected: str
+) -> None:
+    workspace = SimpleNamespace(
+        id="ws-1",
+        owner_id="user-1",
+        organization_id="org-1",
+        background_image_url=None,
+        workspace_group=current,
+        updated_at=None,
+    )
+    session = MagicMock()
+    session.execute = AsyncMock(
+        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=workspace))
+    )
+    owner = SimpleNamespace(id="user-1")
+
+    async def owner_lookup(*_args, **_kwargs):
+        return owner
+
+    async def noop(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(org_seed, "_resolve_user", owner_lookup)
+    monkeypatch.setattr(org_seed, "_get_user_by_id", owner_lookup)
+    monkeypatch.setattr(org_seed, "_ensure_workspace_member", noop)
+    monkeypatch.setattr(org_seed, "_seed_workspace_apps", noop)
+
+    cfg = WorkspaceSeedConfig(name="Orange", slug="orange", owner_email=ADMIN, group="Key Accounts")
+    asyncio.run(
+        org_seed._upsert_workspace(
+            session, cfg, SimpleNamespace(id="org-1", owner_id="user-1", slug="forvis"), {}
+        )
+    )
+
+    assert workspace.workspace_group == expected

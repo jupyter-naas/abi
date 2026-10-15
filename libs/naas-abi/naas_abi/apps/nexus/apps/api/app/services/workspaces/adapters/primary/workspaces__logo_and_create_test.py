@@ -95,3 +95,12 @@ def test_logo_route_rejects_ids_that_are_not_plain_ids() -> None:
     assert not is_safe_drive_id("..")
     assert not is_safe_drive_id("a/b")
     assert not is_safe_drive_id("")
+
+
+def test_workspace_description_is_limited_to_200_characters() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    assert ws_api.WorkspaceUpdate(description="x" * 200).description == "x" * 200
+    with pytest.raises(ValidationError):
+        ws_api.WorkspaceUpdate(description="x" * 201)

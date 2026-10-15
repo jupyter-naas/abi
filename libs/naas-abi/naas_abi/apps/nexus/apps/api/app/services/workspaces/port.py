@@ -20,6 +20,8 @@ class WorkspaceRecord:
     background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    description: str | None = None
+    workspace_group: str | None = None
     platform_drive_enabled: bool = False
     system_drive_enabled: bool = False
     created_at: datetime | None = None
@@ -55,6 +57,8 @@ class WorkspaceUpdateInput:
     background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    description: str | None = None
+    workspace_group: str | None = None
     platform_drive_enabled: bool | None = None
     system_drive_enabled: bool | None = None
 

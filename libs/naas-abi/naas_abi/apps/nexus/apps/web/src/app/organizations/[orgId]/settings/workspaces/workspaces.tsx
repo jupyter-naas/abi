@@ -22,6 +22,7 @@ import { SearchBox } from '@/components/settings/search-box';
 import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
 import type { FacetBucket } from '@/lib/graph-query/types';
 import { matchesSearch } from '@/app/settings/lib/search';
+import { OTHERS_GROUP } from '@/lib/workspace-picker';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { rowMatchesColumnFilter } from '../users/users-table-filter';
 import { downloadTableExport, type UsersExportFormat } from '../users/users-table-export';
@@ -39,19 +40,25 @@ interface OrgWorkspace {
   created_at: string;
   logo_url?: string | null;
   logo_emoji?: string | null;
+  workspace_group?: string | null;
   organization_logo_url?: string | null;
   organization_logo_rectangle_url?: string | null;
 }
 
-type ColumnId = 'workspace' | 'owner' | 'members' | 'created';
+type ColumnId = 'workspace' | 'group' | 'owner' | 'members' | 'created';
 type SortDir = 'asc' | 'desc';
 
 const COLUMNS: { id: ColumnId; label: string; filterable: boolean }[] = [
   { id: 'workspace', label: 'Workspace', filterable: true },
+  { id: 'group', label: 'Group', filterable: true },
   { id: 'owner', label: 'Owner', filterable: true },
   { id: 'members', label: 'Members', filterable: false },
   { id: 'created', label: 'Created', filterable: false },
 ];
+
+function groupOf(workspace: OrgWorkspace): string {
+  return workspace.workspace_group?.trim() || OTHERS_GROUP;
+}
 
 function assetUrl(url?: string | null): string {
   if (!url) return '';
@@ -149,6 +156,7 @@ export default function OrganizationWorkspacesPage() {
   const cellValues = useCallback(
     (workspace: OrgWorkspace, columnId: ColumnId): string[] => {
       if (columnId === 'workspace') return [workspace.name, workspace.slug];
+      if (columnId === 'group') return [groupOf(workspace)];
       if (columnId === 'owner') return [ownerName(workspace)];
       if (columnId === 'members') {
         return [memberCounts ? String(memberCounts[workspace.id] || 0) : '—'];
@@ -172,6 +180,15 @@ export default function OrganizationWorkspacesPage() {
     rows.sort((a, b) => {
       let cmp = 0;
       if (sortKey === 'workspace') cmp = a.name.localeCompare(b.name);
+      else if (sortKey === 'group') {
+        // Others last, whichever the direction of the other groups.
+        const ga = groupOf(a);
+        const gb = groupOf(b);
+        if (ga === OTHERS_GROUP || gb === OTHERS_GROUP) {
+          if (ga !== gb) return ga === OTHERS_GROUP ? 1 : -1;
+        }
+        cmp = ga.localeCompare(gb) || a.name.localeCompare(b.name);
+      }
       else if (sortKey === 'owner') cmp = ownerName(a).localeCompare(ownerName(b));
       else if (sortKey === 'members')
         cmp = (memberCounts?.[a.id] || 0) - (memberCounts?.[b.id] || 0);
@@ -211,10 +228,11 @@ export default function OrganizationWorkspacesPage() {
   const exportVisible = (format: UsersExportFormat) => {
     const date = new Date().toISOString().slice(0, 10);
     downloadTableExport(
-      ['Name', 'Slug', 'Owner', 'Members', 'Created'],
+      ['Name', 'Slug', 'Group', 'Owner', 'Members', 'Created'],
       visibleWorkspaces.map((workspace) => [
         workspace.name,
         workspace.slug,
+        groupOf(workspace),
         ownerName(workspace),
         cellValues(workspace, 'members')[0],
         cellValues(workspace, 'created')[0],
@@ -295,7 +313,7 @@ export default function OrganizationWorkspacesPage() {
         <SearchBox
           value={search}
           onChange={setSearch}
-          placeholder="Search name, slug, owner..."
+          placeholder="Search name, slug, group, owner..."
           label="Search workspaces"
         />
 
@@ -431,6 +449,17 @@ export default function OrganizationWorkspacesPage() {
                             <p className="org-settings-users-email">/{workspace.slug}</p>
                           </div>
                         </div>
+                      </td>
+                      <td>
+                        <span
+                          className={
+                            groupOf(workspace) === OTHERS_GROUP
+                              ? 'org-settings-users-email'
+                              : undefined
+                          }
+                        >
+                          {groupOf(workspace)}
+                        </span>
                       </td>
                       <td>{ownerName(workspace)}</td>
                       <td>{cellValues(workspace, 'members')[0]}</td>

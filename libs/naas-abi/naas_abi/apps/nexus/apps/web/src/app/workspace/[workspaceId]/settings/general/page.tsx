@@ -1,18 +1,29 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Brush, Camera, Check, Image as ImageIcon, Palette, RefreshCw, Smile, X } from 'lucide-react';
+import {
+  Brush,
+  Camera,
+  Check,
+  Image as ImageIcon,
+  Palette,
+  RefreshCw,
+  Save,
+  Trash2,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
   SettingsEmpty,
   SettingsField,
   SettingsNotice,
-  SettingsPageHeader,
   SettingsSection,
 } from '@/components/settings/settings-ui';
 import { getApiUrl } from '@/lib/config';
 import { fetchCurrentBackgroundImage } from '@/lib/home-background';
+import { AccountPageHeader } from '@/app/account/components/account-page-header';
+import { AccountSectionCard } from '@/app/account/components/account-section-card';
+import { OTHERS_GROUP } from '@/lib/workspace-picker';
 import { authFetch } from '@/stores/auth';
 import {
   useWorkspaceStore,
@@ -21,16 +32,13 @@ import {
 } from '@/stores/workspace';
 import { BackgroundImageEditor } from '../../home/components/background-image-editor';
 import { resolveDeskImageUrl } from '../../home/home-desk';
-
-// Common emoji choices for workspace icons
-const EMOJI_OPTIONS = [
-  '🔮', '🚀', '💎', '🎯', '⚡', '🔥', '🌟', '💡',
-  '🏢', '📊', '🎨', '🔧', '📁', '🗂️', '💼', '🏠',
-  '🌍', '🌐', '☁️', '🔒', '🛡️', '⚙️', '🎮', '🎵',
-];
+import '@/app/account/profile/profile.css';
+import './general.css';
 
 const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
+/** Same limit as the API (WorkspaceUpdate.description). */
+const DESCRIPTION_MAX_LENGTH = 200;
 
 function assetUrl(url?: string | null): string {
   if (!url) return '';
@@ -48,11 +56,11 @@ async function readApiError(response: Response, fallback: string): Promise<strin
 }
 
 /**
- * Settings → Theme: the workspace's identity (logo, stored in the workspace
- * drive like account avatars, or an emoji), its desk wallpaper (the same editor
- * as Home → File → Edit background image) and its colors.
+ * Settings → General: the workspace's identity (name, and logo stored in the
+ * workspace drive like account avatars), its desk wallpaper (the same editor as
+ * Home → File → Edit background image) and its colors.
  */
-export default function ThemeSettingsPage() {
+export default function GeneralSettingsPage() {
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
   const updateWorkspaceTheme = useWorkspaceStore((state) => state.updateWorkspaceTheme);
@@ -62,7 +70,13 @@ export default function ThemeSettingsPage() {
   const theme = workspace?.theme || DEFAULT_THEME;
   const canEdit = workspace?.currentUserRole === 'owner' || workspace?.currentUserRole === 'admin';
 
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const updateWorkspace = useWorkspaceStore((state) => state.updateWorkspace);
+  const [name, setName] = useState(workspace?.name ?? '');
+  const [description, setDescription] = useState(workspace?.description ?? '');
+  const [group, setGroup] = useState(workspace?.group ?? '');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
   const [customColor, setCustomColor] = useState(theme.primaryColor);
   const [uploading, setUploading] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
@@ -74,6 +88,17 @@ export default function ThemeSettingsPage() {
   useEffect(() => {
     if (workspace) setCustomColor(workspace.theme?.primaryColor || DEFAULT_THEME.primaryColor);
   }, [workspace]);
+
+  // Follow the store when switching workspace or after a save (not on every keystroke).
+  const workspaceName = workspace?.name ?? '';
+  const workspaceDescription = workspace?.description ?? '';
+  const workspaceGroup = workspace?.group ?? '';
+  useEffect(() => {
+    setName(workspaceName);
+    setDescription(workspaceDescription);
+    setGroup(workspaceGroup);
+    setDetailsError(null);
+  }, [currentWorkspaceId, workspaceName, workspaceDescription, workspaceGroup]);
 
   // As on Home: the wallpaper lives in the workspace drive; when the theme lost
   // its pointer, ask the API for the committed file.
@@ -106,9 +131,45 @@ export default function ThemeSettingsPage() {
     setCustomColor(color);
   };
 
-  const handleEmojiSelect = (emoji: string) => {
-    updateWorkspaceTheme({ logoEmoji: emoji });
-    setShowEmojiPicker(false);
+  const trimmedName = name.trim();
+  const trimmedDescription = description.trim();
+  const trimmedGroup = group.trim();
+  const dirty =
+    trimmedName !== workspace.name ||
+    trimmedDescription !== (workspace.description ?? '') ||
+    trimmedGroup !== (workspace.group ?? '');
+
+  /** Save changes (top right): the workspace name, group and description. */
+  const handleSaveDetails = async () => {
+    if (!trimmedName) {
+      setDetailsError('The workspace name cannot be empty.');
+      return;
+    }
+    setDetailsError(null);
+    setSaving(true);
+    try {
+      const res = await authFetch(`/api/workspaces/${currentWorkspaceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: trimmedName,
+          description: trimmedDescription,
+          workspace_group: trimmedGroup,
+        }),
+      });
+      if (!res.ok) throw new Error(await readApiError(res, 'Failed to save the workspace'));
+      updateWorkspace(currentWorkspaceId, {
+        name: trimmedName,
+        description: trimmedDescription,
+        group: trimmedGroup || undefined,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setDetailsError(err instanceof Error ? err.message : 'Failed to save the workspace');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -166,110 +227,148 @@ export default function ThemeSettingsPage() {
   const isCustomColor = !PRESET_COLORS.some((c) => c.value === theme.primaryColor);
 
   return (
-    <div className="space-y-6">
-      <SettingsPageHeader
-        title="Workspace Theme"
-        description="The workspace logo, desk wallpaper and colors. Changes are saved automatically."
+    <div className="workspace-general space-y-6">
+      <AccountPageHeader
+        title="General"
+        subtitle="The workspace name, group, description, logo, desk wallpaper and colors."
+        actions={
+          canEdit ? (
+            <button
+              type="button"
+              onClick={() => void handleSaveDetails()}
+              disabled={!dirty || saving}
+              className={
+                saved
+                  ? 'account-profile-save-button account-profile-save-button-saved workspace-general-save'
+                  : 'account-profile-save-button workspace-general-save'
+              }
+            >
+              <Save size={16} />
+              {saving ? 'Saving...' : saved ? 'Saved!' : 'Save changes'}
+            </button>
+          ) : undefined
+        }
       />
 
-      <SettingsSection
-        title={
-          <span className="flex items-center gap-2">
-            <ImageIcon size={16} className="text-muted-foreground" />
-            Identity
-          </span>
-        }
-      >
-        <div className="flex flex-wrap items-center gap-5">
-          <div className="relative">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={LOGO_TYPES.join(',')}
-              onChange={(event) => void handleLogoUpload(event)}
-              className="hidden"
-            />
-            <div
-              className="flex h-20 w-20 items-center justify-center overflow-hidden text-3xl text-white"
-              style={{ backgroundColor: logoSrc ? 'transparent' : theme.primaryColor }}
-            >
-              {logoSrc ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={logoSrc} alt="Workspace logo" className="h-full w-full object-cover" />
-              ) : (
-                theme.logoEmoji || workspace.name.charAt(0)
-              )}
-            </div>
-            {canEdit && (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center bg-workspace-accent text-white shadow-md transition-colors hover:bg-workspace-accent/90 disabled:opacity-60"
-                title="Upload a logo"
-                aria-label="Upload a logo"
-              >
-                {uploading ? <RefreshCw size={14} className="animate-spin" /> : <Camera size={14} />}
-              </button>
-            )}
-          </div>
+      {(detailsError || logoError) && (
+        <SettingsNotice tone="error">{detailsError || logoError}</SettingsNotice>
+      )}
 
-          <div className="min-w-0 flex-1">
-            <h4 className="truncate text-lg font-semibold text-foreground">{workspace.name}</h4>
-            {workspace.description && (
-              <p className="truncate text-sm text-muted-foreground">{workspace.description}</p>
-            )}
-            <p className="mt-1 text-xs text-muted-foreground">
-              Logo: PNG, JPG, GIF, WEBP or SVG, max 5MB. Without a logo, the emoji is shown.
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <div className="relative">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="gap-2"
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  disabled={!canEdit}
-                >
-                  <span className="text-base">{theme.logoEmoji || '📁'}</span>
-                  Change emoji
-                  <Smile size={14} className="text-muted-foreground" />
-                </Button>
-                {showEmojiPicker && (
-                  <div className="absolute left-0 top-full z-50 mt-2 w-80 border border-border bg-popover p-3 shadow-lg">
-                    <div className="grid grid-cols-8 gap-1">
-                      {EMOJI_OPTIONS.map((emoji) => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          onClick={() => handleEmojiSelect(emoji)}
-                          className={cn(
-                            'flex h-9 w-9 items-center justify-center text-xl transition-colors hover:bg-primary/10',
-                            theme.logoEmoji === emoji && 'bg-primary/20 ring-2 ring-primary'
-                          )}
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              {logoSrc && canEdit && (
-                <Button variant="secondary" size="sm" className="gap-1" onClick={() => void handleLogoRemove()}>
-                  <X size={14} />
-                  Remove logo
-                </Button>
-              )}
+      <div className="account-profile-avatar-section">
+        <div className="account-profile-avatar-wrapper">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={LOGO_TYPES.join(',')}
+            onChange={(event) => void handleLogoUpload(event)}
+            className="account-profile-avatar-input"
+          />
+          {logoSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={logoSrc}
+              alt="Workspace logo"
+              className="account-profile-avatar-image workspace-logo-square"
+            />
+          ) : (
+            <div
+              className="account-profile-avatar-placeholder workspace-logo-square"
+              style={{ backgroundColor: theme.primaryColor, color: '#fff' }}
+            >
+              {(trimmedName || workspace.name).charAt(0).toUpperCase()}
             </div>
+          )}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="account-profile-avatar-upload-button"
+              title="Upload a logo"
+              aria-label="Upload a logo"
+            >
+              {uploading ? (
+                <RefreshCw size={16} className="account-profile-avatar-upload-button-spin" />
+              ) : (
+                <Camera size={16} />
+              )}
+            </button>
+          )}
+        </div>
+        <div className="min-w-0">
+          <h3 className="account-profile-avatar-info-name">{workspace.name}</h3>
+          <p className="account-profile-avatar-info-email">
+            {workspace.id}
+            {workspace.currentUserRole ? ` · Your role: ${workspace.currentUserRole}` : ''}
+          </p>
+          <p className="account-profile-avatar-info-hint">
+            Logo: PNG, JPG, GIF, WEBP or SVG, max 5MB. Without a logo, the first letter of the
+            name is shown.
+          </p>
+          {logoSrc && canEdit && (
+            <button
+              type="button"
+              onClick={() => void handleLogoRemove()}
+              className="mt-1 flex items-center gap-1.5 px-3 py-2 text-sm text-red-500 transition-colors hover:bg-red-500/10"
+            >
+              <Trash2 size={14} />
+              Remove logo
+            </button>
+          )}
+        </div>
+      </div>
+
+      <AccountSectionCard padded stack>
+        <div className="account-profile-form-grid">
+          <div className="account-profile-field">
+            <label className="account-profile-field-label" htmlFor="workspace-name">
+              Workspace name
+            </label>
+            <input
+              id="workspace-name"
+              type="text"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              maxLength={200}
+              disabled={!canEdit || saving}
+              className="account-profile-field-input"
+            />
+          </div>
+          <div className="account-profile-field">
+            <label className="account-profile-field-label" htmlFor="workspace-group">
+              Group
+            </label>
+            <input
+              id="workspace-group"
+              type="text"
+              value={group}
+              onChange={(event) => setGroup(event.target.value)}
+              placeholder={`${OTHERS_GROUP} when empty`}
+              maxLength={100}
+              disabled={!canEdit || saving}
+              className="account-profile-field-input"
+            />
           </div>
         </div>
-        {logoError && (
-          <div className="mt-3">
-            <SettingsNotice tone="error">{logoError}</SettingsNotice>
+        <div className="account-profile-field">
+          <div className="account-profile-bio-header">
+            <label className="account-profile-field-label" htmlFor="workspace-description">
+              Description
+            </label>
+            <span className="account-profile-bio-count">{description.length} / {DESCRIPTION_MAX_LENGTH}</span>
           </div>
-        )}
-      </SettingsSection>
+          <textarea
+            id="workspace-description"
+            value={description}
+            onChange={(event) => setDescription(event.target.value.slice(0, DESCRIPTION_MAX_LENGTH))}
+            placeholder="What is this workspace for?"
+            rows={4}
+            maxLength={DESCRIPTION_MAX_LENGTH}
+            disabled={!canEdit || saving}
+            className="account-profile-field-textarea"
+          />
+        </div>
+      </AccountSectionCard>
 
       <SettingsSection
         title={

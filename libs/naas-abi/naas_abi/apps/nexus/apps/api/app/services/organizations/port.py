@@ -107,6 +107,7 @@ class OrganizationWorkspaceRecord:
     updated_at: datetime | None = None
     logo_url: str | None = None
     logo_emoji: str | None = None
+    workspace_group: str | None = None
 
 
 @dataclass

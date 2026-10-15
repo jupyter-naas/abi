@@ -394,6 +394,7 @@ async def _upsert_workspace(
             organization_id=organization.id,
             created_at=now,
             updated_at=now,
+            workspace_group=workspace_cfg.group,
             **{field: getattr(workspace_cfg, field) for field in _WORKSPACE_FIELDS},
         )
         session.add(workspace)
@@ -406,6 +407,8 @@ async def _upsert_workspace(
         workspace.owner_id = owner.id
         workspace.organization_id = organization.id
         _apply_workspace_seed_fields(workspace, workspace_cfg)
+        if workspace_cfg.group and not workspace.workspace_group:
+            workspace.workspace_group = workspace_cfg.group
         workspace.updated_at = now
         logger.info(
             "Updated workspace slug=%s under org=%s",

@@ -75,6 +75,8 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             background_image_url=model.background_image_url,
             sidebar_color=model.sidebar_color,
             font_family=model.font_family,
+            description=model.description,
+            workspace_group=model.workspace_group,
             platform_drive_enabled=bool(model.platform_drive_enabled),
             system_drive_enabled=bool(model.system_drive_enabled),
             created_at=model.created_at,
@@ -217,12 +219,17 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             "background_image_url": updates.background_image_url,
             "sidebar_color": updates.sidebar_color,
             "font_family": updates.font_family,
+            "description": updates.description,
+            "workspace_group": updates.workspace_group,
             "platform_drive_enabled": updates.platform_drive_enabled,
             "system_drive_enabled": updates.system_drive_enabled,
         }
         for field, value in update_data.items():
             if value is not None:
                 setattr(workspace, field, value)
+        if updates.workspace_group is not None:
+            # A blank group clears it (the workspace lists under "Others").
+            workspace.workspace_group = updates.workspace_group.strip() or None
         workspace.updated_at = datetime.now(UTC).replace(tzinfo=None)
         await self.db.flush()
         return self._to_workspace_record(workspace)

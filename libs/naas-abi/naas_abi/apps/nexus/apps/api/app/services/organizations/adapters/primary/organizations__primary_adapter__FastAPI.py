@@ -586,6 +586,7 @@ def _workspace_payload(
         "updated_at": ws.updated_at,
         "logo_url": ws.logo_url,
         "logo_emoji": ws.logo_emoji,
+        "workspace_group": ws.workspace_group,
         "organization_logo_url": org_logo_url,
         "organization_logo_rectangle_url": org_logo_rect_url,
     }

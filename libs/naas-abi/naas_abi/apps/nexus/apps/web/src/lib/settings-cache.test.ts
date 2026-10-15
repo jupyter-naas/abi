@@ -31,7 +31,7 @@ describe('isCachedSettingsRoute', () => {
   });
 
   it('ignores the other settings pages', () => {
-    expect(isCachedSettingsRoute('/workspace/ws-1/settings/theme')).toBe(false);
+    expect(isCachedSettingsRoute('/workspace/ws-1/settings/general')).toBe(false);
     expect(isCachedSettingsRoute('/workspace/ws-1/settings/services')).toBe(false);
     expect(isCachedSettingsRoute('/workspace/ws-1/settings/secrets')).toBe(false);
     expect(isCachedSettingsRoute('/workspace/ws-1/settings/services/fuseki')).toBe(false);

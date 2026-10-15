@@ -4,7 +4,7 @@ import {
   Bot,
   BrainCircuit,
   Network,
-  Brush,
+  SlidersHorizontal,
   Cpu,
   Download,
   HardDrive,
@@ -42,7 +42,7 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
     label: 'General',
     items: [
-      { href: '/settings/theme', label: 'Theme', icon: Brush },
+      { href: '/settings/general', label: 'General', icon: SlidersHorizontal },
       { href: '/settings/members', label: 'Members', icon: Users },
       { href: '/settings/servers', label: 'Servers', icon: Server },
       { href: '/settings/services', label: 'Services', icon: Boxes },

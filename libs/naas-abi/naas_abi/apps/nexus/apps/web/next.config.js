@@ -25,6 +25,16 @@ const nextConfig = {
     );
     return config;
   },
+  async redirects() {
+    return [
+      // Workspace Settings → Theme was renamed Settings → General.
+      {
+        source: '/workspace/:workspaceId/settings/theme',
+        destination: '/workspace/:workspaceId/settings/general',
+        permanent: true,
+      },
+    ];
+  },
   async rewrites() {
     return [
       {

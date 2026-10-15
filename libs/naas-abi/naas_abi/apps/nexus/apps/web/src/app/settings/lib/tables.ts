@@ -136,7 +136,7 @@ export function platformTableSection(name: string): string | null {
  * in components/shell/settings-nav.tsx (a test checks it).
  */
 export const LEGACY_WORKSPACE_SETTINGS_SLUGS: readonly string[] = [
-  'theme',
+  'general',
   'members',
   'servers',
   'services',

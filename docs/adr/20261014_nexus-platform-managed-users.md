@@ -84,6 +84,13 @@ and per-member workspace assignment.
    `python -m naas_abi.apps.nexus.apps.api.app.core.users_import <file>`
    replays it create-only: missing accounts and memberships are inserted,
    existing roles are kept, and nothing is deleted.
+9. **Workspace group.** `workspaces.workspace_group` (migration 0056, with
+   `description`) groups the workspace lists: the sidebar switcher shows one
+   section per group, in alphabetical order, followed by "Others" for
+   workspaces with no group. The org Workspaces table has a Group column. The
+   group is edited in Workspace Settings > General, and a blank value clears
+   it. The config `group:` key is bootstrap only: it is applied when a
+   workspace has no group yet, so a group changed in the UI stays.
 
 ## Consequences
 

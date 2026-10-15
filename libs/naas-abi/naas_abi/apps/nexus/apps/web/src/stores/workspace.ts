@@ -155,6 +155,8 @@ export interface Workspace {
   id: string;
   name: string;
   description?: string;
+  /** Workspace group (Settings → General); empty shows under "Others". */
+  group?: string;
   icon?: string;
   color?: string;
   theme: WorkspaceTheme;
@@ -1393,6 +1395,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         id: ws.id,
         name: ws.name,
         description: ws.description,
+        group: ws.workspace_group || undefined,
         icon: ws.icon || ws.logo_emoji,
         color: ws.color,
         theme: {

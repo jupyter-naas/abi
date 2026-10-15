@@ -121,6 +121,8 @@ class Workspace(BaseModel):
     background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    description: str | None = None
+    workspace_group: str | None = None
     platform_drive_enabled: bool = False
     system_drive_enabled: bool = False
     created_at: datetime | None = None
@@ -155,6 +157,8 @@ class WorkspaceUpdate(BaseModel):
     background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    description: str | None = Field(default=None, max_length=200)
+    workspace_group: str | None = Field(default=None, max_length=100)
     platform_drive_enabled: bool | None = None
     system_drive_enabled: bool | None = None
 
@@ -273,6 +277,8 @@ def _to_schema(
         background_image_url=_workspace_public_asset_url(record.background_image_url),
         sidebar_color=record.sidebar_color,
         font_family=record.font_family,
+        description=record.description,
+        workspace_group=record.workspace_group,
         platform_drive_enabled=record.platform_drive_enabled,
         system_drive_enabled=record.system_drive_enabled,
         created_at=record.created_at,

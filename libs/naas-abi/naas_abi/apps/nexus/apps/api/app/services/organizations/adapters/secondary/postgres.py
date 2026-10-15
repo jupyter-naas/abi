@@ -286,6 +286,7 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             updated_at=row.updated_at,
             logo_url=row.logo_url,
             logo_emoji=row.logo_emoji,
+            workspace_group=row.workspace_group,
         )
 
     async def list_organization_members(self, org_id: str) -> list[OrganizationMemberRecord]:

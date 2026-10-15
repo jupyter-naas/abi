@@ -258,6 +258,8 @@ class WorkspaceModel(Base):
     background_image_url = Column(Text, nullable=True)  # Desktop wallpaper URL
     sidebar_color = Column(String, nullable=True)  # Custom sidebar background color (hex)
     font_family = Column(String, nullable=True)  # Custom font family name
+    description = Column(Text, nullable=True)  # Settings → General
+    workspace_group = Column(String(100), nullable=True)  # workspace lists ("Others" if empty)
 
     # Drive-scope feature flags
     platform_drive_enabled = Column(Boolean, nullable=False, default=False)
