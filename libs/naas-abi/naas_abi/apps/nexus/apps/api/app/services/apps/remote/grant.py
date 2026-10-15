@@ -64,7 +64,8 @@ class RemoteAppGrant:
     issued_at: datetime | None = None
 
 
-def _key(secret: str) -> str:
+def grant_key(secret: str) -> str:
+    """The key grants are signed with, derived from Nexus's ``secret``."""
     return hashlib.sha256(f"{secret}:{GRANT_SCOPE}".encode()).hexdigest()
 
 
@@ -101,12 +102,12 @@ def mint_remote_app_grant(
         "iat": now.timestamp(),
         "exp": expires,
     }
-    return jwt.encode(claims, _key(secret), algorithm=_ALGORITHM)
+    return jwt.encode(claims, grant_key(secret), algorithm=_ALGORITHM)
 
 
 def read_remote_app_grant(token: str, *, secret: str) -> RemoteAppGrant | None:
     try:
-        claims = jwt.decode(token, _key(secret), algorithms=[_ALGORITHM])
+        claims = jwt.decode(token, grant_key(secret), algorithms=[_ALGORITHM])
     except JWTError:
         return None
     if claims.get("scope") != GRANT_SCOPE or "sub" in claims:

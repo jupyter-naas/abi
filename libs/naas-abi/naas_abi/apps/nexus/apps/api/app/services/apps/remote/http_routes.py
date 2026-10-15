@@ -37,6 +37,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.factory import (
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
     GRANT_ROUTE_PREFIX,
     RemoteAppGrant,
+    grant_key,
     grant_root,
     is_segment,
     mint_remote_app_grant,
@@ -204,12 +205,31 @@ def _bearer(request: Request) -> str:
     return token if scheme.lower() == "bearer" else ""
 
 
+def _signed_by_nexus(value: str) -> bool:
+    """A JWT Nexus signed, expired or not: a session or link token, or a
+    remote app grant (its own derived key), under Nexus's key or a published
+    default it rotates away from at startup (``INSECURE_SECRET_KEYS``)."""
+    from jose import JWTError, jwt
+    from naas_abi.apps.nexus.apps.api.app.core.secret_key import INSECURE_SECRET_KEYS
+
+    if value.count(".") != 2:
+        return False
+    secrets = (current_secret_key(), *sorted(INSECURE_SECRET_KEYS - {""}))
+    for key in (k for secret in secrets for k in (secret, grant_key(secret))):
+        try:
+            jwt.decode(value, key, algorithms=["HS256"], options={"verify_exp": False})
+        except JWTError:
+            continue
+        return True
+    return False
+
+
 def _is_nexus_credential(value: str, presented: tuple[str, ...]) -> bool:
     """A credential the request was authenticated with, the ABI_API_KEY, or
-    any token Nexus signed, whatever else authenticated the request."""
-    from naas_abi.apps.nexus.apps.api.app.services.auth.service import decode_token
-
-    return value in presented or is_abi_api_token_valid(value) or decode_token(value) is not None
+    any token Nexus signed, whatever else authenticated the request. One that
+    no longer opens Nexus (expired, old key) is still a credential: it never
+    reaches the module."""
+    return value in presented or is_abi_api_token_valid(value) or _signed_by_nexus(value)
 
 
 def _query(

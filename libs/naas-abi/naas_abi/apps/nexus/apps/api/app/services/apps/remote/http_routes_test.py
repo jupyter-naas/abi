@@ -15,7 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters.in_memory im
     InMemoryRemoteAppDirectory,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
-    _key,
+    grant_key,
     mint_remote_app_grant,
     read_remote_app_grant,
     redact_grant_path,
@@ -258,7 +258,7 @@ def test_a_grant_is_minted_and_read_for_a_user_only():
             "app": "console",
             "exp": datetime.now(UTC) + timedelta(minutes=5),
         },
-        _key(SECRET),
+        grant_key(SECRET),
         algorithm="HS256",
     )
     assert read_remote_app_grant(anonymous, secret=SECRET) is None
@@ -703,7 +703,7 @@ def test_a_grant_without_its_issue_time_is_refused(forwarded):
             "app": "console",
             "exp": datetime.now(UTC) + timedelta(minutes=5),
         },
-        _key(SECRET),
+        grant_key(SECRET),
         algorithm="HS256",
     )
 
@@ -1086,6 +1086,46 @@ def test_a_nexus_token_leaves_the_query_whatever_authenticated_the_request(monke
 
     assert response.status_code == 200
     assert forwarded[0].query == "q=1"
+
+
+def test_an_expired_or_old_key_nexus_token_still_leaves_the_query(monkeypatch, forwarded):
+    """A Nexus JWT is a credential whether or not it still opens Nexus: one
+    that expired, or was signed with a published default key Nexus rotated
+    away from, never reaches the module's code."""
+    from datetime import UTC, datetime, timedelta
+
+    from jose import jwt as jose_jwt
+    from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
+
+    monkeypatch.setattr(auth_service.settings, "secret_key", SECRET)
+    expired, _ = auth_service.create_access_token(
+        {"sub": "u-42"}, expires_delta=timedelta(minutes=-5)
+    )
+    assert auth_service.decode_token(expired) is None  # it opens nothing now
+    old_key = jose_jwt.encode(
+        {"sub": "u-42", "exp": datetime.now(UTC) + timedelta(minutes=5)},
+        "change-me-in-production",
+        algorithm="HS256",
+    )
+
+    stale_grant = jose_jwt.encode(
+        {
+            "scope": "app-remote",
+            "uid": "u-42",
+            "mod": "acme.other",
+            "app": "board",
+            "exp": datetime.now(UTC) - timedelta(minutes=5),
+        },
+        grant_key(SECRET),
+        algorithm="HS256",
+    )
+
+    response = _client().get(
+        f"{ROOT}/x?token={expired}&token={old_key}&token={stale_grant}&token=own&q=1"
+    )
+
+    assert response.status_code == 200
+    assert forwarded[0].query == "token=own&q=1"
 
 
 def test_the_apps_cookies_pass_as_sent(forwarded):
