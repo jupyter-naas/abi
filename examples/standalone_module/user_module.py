@@ -218,6 +218,16 @@ class ABIModule(BaseModule):
         assert await vectors.get_collection_size("ergonomic") == 1
         await vectors.delete_documents("ergonomic", [vid])
         await vectors.delete_collection("ergonomic")
+
+        # IAM answers for this module's own identity (its token names
+        # "standalone-demo"), with no dependency declaration. Until manifests,
+        # a remote module holds its own namespaces and the kernel services.
+        iam = services.iam
+        own = "abi:-:-:document:collection/standalone-demo/runs"
+        other = "abi:-:-:document:collection/someone-else/runs"
+        assert (await iam.authorize("document:Find", own)).allowed
+        assert not (await iam.authorize("document:Find", other)).allowed
+        assert (await iam.filter("document:Find", [other, own])).allowed == [own]
         return {
             "status": "passed",
             "module": type(self).__name__,

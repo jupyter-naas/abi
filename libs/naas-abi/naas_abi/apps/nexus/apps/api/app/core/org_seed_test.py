@@ -182,3 +182,48 @@ def test_an_existing_admin_with_a_real_password_is_left_alone(seed_admin) -> Non
 
     assert user.hashed_password == original
     assert PASSWORD_KEY not in secrets.values
+
+
+def test_config_superadmins_become_iam_platform_admins(monkeypatch: pytest.MonkeyPatch) -> None:
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        Principal,
+        as_service_account,
+        use_call_context,
+    )
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
+    from naas_abi_core.services.iam.IAMService import IAMService
+
+    iam = IAMService(IAMStoreMemory())
+    iam.bootstrap()
+    users = [
+        UserSeedConfig(email=ADMIN, name="Admin", is_superadmin=True),
+        UserSeedConfig(email="bob@example.com", name="Bob"),
+    ]
+    monkeypatch.setattr(org_seed, "settings", SimpleNamespace(users=users))
+    rows = {
+        ADMIN: SimpleNamespace(id="user-aaaaaaaaaaaa", email=ADMIN, name="Admin"),
+        "bob@example.com": SimpleNamespace(
+            id="user-bbbbbbbbbbbb", email="bob@example.com", name="Bob"
+        ),
+    }
+
+    def allowed(nexus_user_id: str) -> bool:
+        # A Nexus request: api on behalf of the signed-in user.
+        ctx = CallContext(
+            principal=Principal(id="api", kind="service_account", name="api"),
+            on_behalf_of=Principal(id=nexus_user_id, kind="user"),
+        )
+        with use_call_context(ctx):
+            return iam.authorize("triple_store:DropGraph", "abi:-:-:triple_store:graph/g").allowed
+
+    with as_service_account("api"):
+        org_seed.sync_platform_admins(iam, rows)
+    assert allowed("user-aaaaaaaaaaaa")
+    assert not allowed("user-bbbbbbbbbbbb")
+
+    # Demoted in the config: detached at the next boot.
+    users[0] = UserSeedConfig(email=ADMIN, name="Admin", is_superadmin=False)
+    with as_service_account("api"):
+        org_seed.sync_platform_admins(iam, rows)
+    assert not allowed("user-aaaaaaaaaaaa")

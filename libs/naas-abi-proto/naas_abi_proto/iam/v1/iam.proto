@@ -1,0 +1,502 @@
+// NATS-RPC contract for IAM, the kernel service every other one asks.
+// See docs/specs/rfcs/20261013_identity-and-authorization.md, §5, §6.4 and §11.
+//
+// Subjects: abi.iam.v1.<operation>, one per Request/Response pair below
+// (abi.iam.v1.authorize, abi.iam.v1.create_policy, ...).
+// Change events: abi.iam.v1.changed carries a ChangeEvent (core NATS fan-out).
+//
+// Decisions (Authorize, Filter, Explain without principal_id) are about the
+// caller the server verifies from the request's credentials, never about a
+// request field. Every other operation is authorized with IAM's own iam:*
+// catalog. Errors: PERMISSION_DENIED (the caller can see the resource),
+// NOT_FOUND (it cannot, or the record does not exist), CONFLICT (a taken
+// identity or name, an attached policy, a managed one), REVISION_CONFLICT,
+// INVALID_ARGUMENT (a policy's message lists every error).
+syntax = "proto3";
+
+package abi.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+import "naas_abi_proto/common/v1/common.proto";
+
+// -- records ---------------------------------------------------------------
+
+// A user, a group or a service account. kind: user | group | service_account;
+// status: active | suspended | deleted.
+message Principal {
+  string id = 1;
+  string kind = 2;
+  string status = 3;
+  optional string name = 4;
+  optional string issuer = 5;
+  optional string subject = 6;
+  optional string provider = 7;
+  optional string email = 8;
+  bool email_verified = 9;
+  optional string display_name = 10;
+  optional string org = 11;
+  optional string owner_id = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+}
+
+// A stored policy; the document is the JSON form of RFC §3.1.
+message Policy {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string document_json = 4;
+  bool managed = 5;
+  int32 revision = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message Attachment {
+  string id = 1;
+  string policy_id = 2;
+  string principal_id = 3;
+  // abi:<org>:<ws>, abi:<org>:-, abi:<org>:* or abi:-:-; absent for none.
+  optional string scope = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message GroupMapping {
+  string provider = 1;
+  string claim_value = 2;
+  string group_id = 3;
+}
+
+// (service, id_key) -> (org, workspace); id_key is exact or ends with "*".
+message Placement {
+  string service = 1;
+  string id_key = 2;
+  string org = 3;
+  string workspace = 4;
+}
+
+message Scope {
+  string org = 1;
+  // "-" for the org itself.
+  string workspace = 2;
+}
+
+// The catalog format of RFC §6.2.
+message ResourceType {
+  string name = 1;
+  // opaque | path | singleton
+  string id = 2;
+  // placed | platform
+  string placement = 3;
+  bool container = 4;
+  bool personal = 5;
+  string description = 6;
+}
+
+message ActionSpec {
+  string name = 1;
+  // list | read | write | admin
+  string level = 2;
+  repeated string resource_types = 3;
+  bool creates = 4;
+  repeated string subjects = 5;
+  string description = 6;
+}
+
+message ActionCatalog {
+  string service = 1;
+  int32 version = 2;
+  repeated ResourceType resource_types = 3;
+  repeated ActionSpec actions = 4;
+}
+
+// reason: allow | explicit_deny | implicit_deny | suspended | sealed.
+// visible tells a denied caller's "not found" from "permission denied" (§5.4).
+message Decision {
+  bool allowed = 1;
+  bool visible = 2;
+  string reason = 3;
+}
+
+// side: actor | user | token.
+message DecidingStatement {
+  string side = 1;
+  string principal_id = 2;
+  string effect = 3;
+  optional string policy_id = 4;
+  int32 statement_index = 5;
+  optional string sid = 6;
+  optional string attachment_id = 7;
+  optional string scope = 8;
+  optional string via_group = 9;
+}
+
+message Explanation {
+  bool allowed = 1;
+  string reason = 2;
+  string action = 3;
+  string resource = 4;
+  optional DecidingStatement statement = 5;
+}
+
+// Published on abi.iam.v1.changed after every change; caches drop their
+// entries, and everything on a revision gap.
+message ChangeEvent {
+  int64 revision = 1;
+}
+
+// -- decisions ---------------------------------------------------------------
+
+message AuthorizeRequest {
+  abi.common.v1.CallContext context = 1;
+  string action = 2;
+  string resource = 3;
+}
+message AuthorizeResponse {
+  abi.common.v1.CallError error = 1;
+  Decision decision = 2;
+}
+
+message FilterRequest {
+  abi.common.v1.CallContext context = 1;
+  string action = 2;
+  repeated string resources = 3;
+}
+message FilterResponse {
+  abi.common.v1.CallError error = 1;
+  repeated string allowed = 2;
+  repeated string prefix_hints = 3;
+}
+
+// Without principal_id, explains the caller. Needs iam:Explain on the principal.
+message ExplainRequest {
+  abi.common.v1.CallContext context = 1;
+  string action = 2;
+  string resource = 3;
+  optional string principal_id = 4;
+}
+message ExplainResponse {
+  abi.common.v1.CallError error = 1;
+  Explanation explanation = 2;
+}
+
+// -- principals ------------------------------------------------------------------
+
+message EnsureUserRequest {
+  abi.common.v1.CallContext context = 1;
+  string issuer = 2;
+  string subject = 3;
+  optional string provider = 4;
+  optional string email = 5;
+  bool email_verified = 6;
+  optional string display_name = 7;
+}
+message EnsureUserResponse {
+  abi.common.v1.CallError error = 1;
+  Principal principal = 2;
+}
+
+message CreateServiceAccountRequest {
+  abi.common.v1.CallContext context = 1;
+  string name = 2;
+  optional string owner_id = 3;
+}
+message CreateServiceAccountResponse {
+  abi.common.v1.CallError error = 1;
+  Principal principal = 2;
+}
+
+message GetPrincipalRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+}
+message GetPrincipalResponse {
+  abi.common.v1.CallError error = 1;
+  Principal principal = 2;
+}
+
+message ListPrincipalsRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string kind = 2;
+  int32 limit = 3;
+  optional string after = 4;
+}
+message ListPrincipalsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Principal principals = 2;
+  optional string next_after = 3;
+}
+
+message SuspendPrincipalRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+}
+message SuspendPrincipalResponse {
+  abi.common.v1.CallError error = 1;
+  Principal principal = 2;
+}
+
+message ResumePrincipalRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+}
+message ResumePrincipalResponse {
+  abi.common.v1.CallError error = 1;
+  Principal principal = 2;
+}
+
+message DeletePrincipalRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+}
+message DeletePrincipalResponse {
+  abi.common.v1.CallError error = 1;
+  Principal principal = 2;
+}
+
+// -- groups ------------------------------------------------------------------------
+
+message CreateGroupRequest {
+  abi.common.v1.CallContext context = 1;
+  string name = 2;
+  optional string org = 3;
+}
+message CreateGroupResponse {
+  abi.common.v1.CallError error = 1;
+  Principal group = 2;
+}
+
+message GetGroupRequest {
+  abi.common.v1.CallContext context = 1;
+  string group_id = 2;
+}
+message GetGroupResponse {
+  abi.common.v1.CallError error = 1;
+  Principal group = 2;
+}
+
+message ListGroupsRequest {
+  abi.common.v1.CallContext context = 1;
+  int32 limit = 2;
+  optional string after = 3;
+}
+message ListGroupsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Principal groups = 2;
+  optional string next_after = 3;
+}
+
+message DeleteGroupRequest {
+  abi.common.v1.CallContext context = 1;
+  string group_id = 2;
+}
+message DeleteGroupResponse {
+  abi.common.v1.CallError error = 1;
+  Principal group = 2;
+}
+
+message AddGroupMemberRequest {
+  abi.common.v1.CallContext context = 1;
+  string group_id = 2;
+  string member_id = 3;
+}
+message AddGroupMemberResponse {
+  abi.common.v1.CallError error = 1;
+}
+
+message RemoveGroupMemberRequest {
+  abi.common.v1.CallContext context = 1;
+  string group_id = 2;
+  string member_id = 3;
+}
+message RemoveGroupMemberResponse {
+  abi.common.v1.CallError error = 1;
+  bool removed = 2;
+}
+
+message ListGroupMembersRequest {
+  abi.common.v1.CallContext context = 1;
+  string group_id = 2;
+}
+message ListGroupMembersResponse {
+  abi.common.v1.CallError error = 1;
+  repeated string member_ids = 2;
+}
+
+message MapIdpGroupRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string claim_value = 3;
+  string group_id = 4;
+}
+message MapIdpGroupResponse {
+  abi.common.v1.CallError error = 1;
+  GroupMapping mapping = 2;
+}
+
+message UnmapIdpGroupRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string claim_value = 3;
+  string group_id = 4;
+}
+message UnmapIdpGroupResponse {
+  abi.common.v1.CallError error = 1;
+  bool removed = 2;
+}
+
+message ListIdpGroupMappingsRequest {
+  abi.common.v1.CallContext context = 1;
+  string group_id = 2;
+}
+message ListIdpGroupMappingsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated GroupMapping mappings = 2;
+}
+
+// -- policies and attachments --------------------------------------------------------
+
+message CreatePolicyRequest {
+  abi.common.v1.CallContext context = 1;
+  string name = 2;
+  // A policy document as JSON (or YAML) text.
+  string document_json = 3;
+  string description = 4;
+}
+message CreatePolicyResponse {
+  abi.common.v1.CallError error = 1;
+  Policy policy = 2;
+}
+
+message GetPolicyRequest {
+  abi.common.v1.CallContext context = 1;
+  string policy_id = 2;
+}
+message GetPolicyResponse {
+  abi.common.v1.CallError error = 1;
+  Policy policy = 2;
+}
+
+message ListPoliciesRequest {
+  abi.common.v1.CallContext context = 1;
+  int32 limit = 2;
+  optional string after = 3;
+}
+message ListPoliciesResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Policy policies = 2;
+  optional string next_after = 3;
+}
+
+message UpdatePolicyRequest {
+  abi.common.v1.CallContext context = 1;
+  string policy_id = 2;
+  int32 expected_revision = 3;
+  optional string document_json = 4;
+  optional string name = 5;
+  optional string description = 6;
+}
+message UpdatePolicyResponse {
+  abi.common.v1.CallError error = 1;
+  Policy policy = 2;
+}
+
+message DeletePolicyRequest {
+  abi.common.v1.CallContext context = 1;
+  string policy_id = 2;
+}
+message DeletePolicyResponse {
+  abi.common.v1.CallError error = 1;
+}
+
+message AttachPolicyRequest {
+  abi.common.v1.CallContext context = 1;
+  string policy_id = 2;
+  string principal_id = 3;
+  optional string scope = 4;
+}
+message AttachPolicyResponse {
+  abi.common.v1.CallError error = 1;
+  Attachment attachment = 2;
+}
+
+message DetachPolicyRequest {
+  abi.common.v1.CallContext context = 1;
+  string policy_id = 2;
+  string principal_id = 3;
+  optional string scope = 4;
+}
+message DetachPolicyResponse {
+  abi.common.v1.CallError error = 1;
+  bool detached = 2;
+}
+
+message ListAttachmentsRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string principal_id = 2;
+  optional string policy_id = 3;
+}
+message ListAttachmentsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Attachment attachments = 2;
+}
+
+// -- placements, scopes, catalogs ------------------------------------------------------
+
+message PutPlacementRequest {
+  abi.common.v1.CallContext context = 1;
+  Placement placement = 2;
+}
+message PutPlacementResponse {
+  abi.common.v1.CallError error = 1;
+  Placement placement = 2;
+}
+
+message DeletePlacementRequest {
+  abi.common.v1.CallContext context = 1;
+  string service = 2;
+  string id_key = 3;
+}
+message DeletePlacementResponse {
+  abi.common.v1.CallError error = 1;
+  bool deleted = 2;
+}
+
+message ListPlacementsRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string service = 2;
+}
+message ListPlacementsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Placement placements = 2;
+}
+
+message PutScopeRequest {
+  abi.common.v1.CallContext context = 1;
+  string org = 2;
+  string workspace = 3;
+}
+message PutScopeResponse {
+  abi.common.v1.CallError error = 1;
+  Scope scope = 2;
+}
+
+message DeleteScopeRequest {
+  abi.common.v1.CallContext context = 1;
+  string org = 2;
+  string workspace = 3;
+}
+message DeleteScopeResponse {
+  abi.common.v1.CallError error = 1;
+  bool deleted = 2;
+}
+
+message RegisterCatalogRequest {
+  abi.common.v1.CallContext context = 1;
+  ActionCatalog catalog = 2;
+}
+message RegisterCatalogResponse {
+  abi.common.v1.CallError error = 1;
+  // False when a higher version is already registered.
+  bool registered = 2;
+}

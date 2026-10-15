@@ -122,6 +122,15 @@ default_agent: "{{ project_name_snake }} {{ project_name_pascal }}Agent"
 
 {% raw %}
 services:
+  # Who may do what (identity and authorization RFC 20261013): SQLite here.
+  # Policies are enforced; "authorizer: allow_all" is an explicit opt-out
+  # that warns at boot.
+  iam:
+    store:
+      adapter: "sqlite"
+      path: "storage/iam/iam.sqlite"
+    authorizer: "policy"
+
   # Default models for the in-memory model registry, both served by the
   # naas_abi_marketplace.ai.openrouter module: Gemma 4 26B-A4B for chat and
   # text-embedding-3-small for embeddings — a cheap pairing that still supports

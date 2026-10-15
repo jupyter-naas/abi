@@ -117,6 +117,7 @@ def test_local_backends_cover_every_service_a_nats_engine_owns():
         "dataset",
         "document",
         "event",
+        "iam",
         "kv",
         "object_storage",
         "source_control",
@@ -132,8 +133,8 @@ def test_local_backends_skip_services_this_engine_does_not_load():
         {"m": ModuleDependencies(modules=[], services=[DocumentService])}
     )
 
-    # Coding environment and source control always load.
-    assert set(found) == {"document", "coding_environment", "source_control"}
+    # IAM, coding environment and source control always load.
+    assert set(found) == {"document", "iam", "coding_environment", "source_control"}
 
 
 def test_an_activity_log_in_documents_loads_the_document_service(monkeypatch):

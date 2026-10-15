@@ -12,6 +12,9 @@ from naas_abi_core.services.cache.adapters.secondary.CacheFSAdapter import (
     CacheFSAdapter,
 )
 from naas_abi_core.services.cache.CacheService import CacheService
+from naas_abi_core.services.iam.adapters.secondary.IAMSecondaryAdapterNATSClient import (
+    IAMSecondaryAdapterNATSClient,
+)
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -253,13 +256,19 @@ def test_a_client_engine_gets_the_facades_a_serving_engine_gives_its_modules():
                 getattr(service, "services_wired", None),
             )
             for service in services.all
+            if service is not services.iam  # compared below
         ]
 
     try:
         facades = client.build_clients(
             MagicMock(), cache_tiers=["hot", "cold"], emit_message_events=True
         )
-        assert shape(facades) == shape(serving.build(owners))
+        built = serving.build(owners)
+        assert shape(facades) == shape(built)
+        # IAM is the owner itself on a serving engine (checks read the caller's
+        # context in process), the serving engine's over NATS on a client.
+        assert built.iam is owners.iam
+        assert isinstance(facades.iam, IAMSecondaryAdapterNATSClient)
         assert client.module_services is facades
         assert [tier for tier, _ in facades.cache.adapters] == ["hot", "cold"]
         assert facades.bus.emit_message_events

@@ -80,10 +80,12 @@ class PermissionDeniedError(IAMError, PermissionError):
     all gets the service's own not-found error instead.
     """
 
-    def __init__(self, action: str, resource: str) -> None:
+    def __init__(
+        self, action: str = "", resource: str = "", *, message: str | None = None
+    ) -> None:
         self.action = action
         self.resource = resource
-        super().__init__(f"{action} is not allowed on {resource}")
+        super().__init__(message or f"{action} is not allowed on {resource}")
 
 
 class ResourceNotFoundError(IAMNotFoundError):

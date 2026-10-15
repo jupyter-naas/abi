@@ -192,6 +192,15 @@ modules:
         priority_option_id: "4fb76f2d"
   
 services:
+  # Who may do what (identity and authorization RFC 20261013): SQLite here.
+  # Policies are enforced; "authorizer: allow_all" is an explicit opt-out
+  # that warns at boot.
+  iam:
+    store:
+      adapter: "sqlite"
+      path: "storage/iam/iam.sqlite"
+    authorizer: "policy"
+
   # ModelRegistry defaults. Auto-resolved against models registered by the
   # enabled provider modules at boot — if the canonical id below isn't
   # registered after all modules load, ``Engine.load()`` hard-fails.

@@ -12,6 +12,7 @@ This provisions:
 It can also mirror configured user credentials into the Secret service.
 """
 
+import asyncio
 import logging
 import re
 import secrets
@@ -519,6 +520,46 @@ async def _upsert_organization(
         await _upsert_workspace(session, workspace_cfg, organization, users_by_email)
 
 
+def sync_platform_admins(iam: Any, users_by_email: dict[str, UserModel]) -> None:
+    """``users[].is_superadmin`` as IAM's ``builtin.platform_admin`` attachment.
+
+    Promoting or demoting in the config attaches or detaches it at the next boot,
+    as ``is_superadmin`` itself is reconciled. TRANSITIONAL until the OIDC
+    providers of #44: IAM knows a Nexus user as the user of issuer
+    ``urn:abi:nexus`` whose subject is the Nexus user id, the id Nexus names on
+    every kernel call it makes for them.
+    """
+    from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
+    from naas_abi_core.services.iam.roles import PLATFORM_ADMIN
+
+    for user_cfg in settings.users:
+        user = users_by_email.get(_normalize_email(str(user_cfg.email)))
+        if user is None:
+            continue
+        principal = iam.ensure_user(
+            LEGACY_NEXUS_ISSUER,
+            user.id,
+            provider="nexus",
+            email=user.email,
+            display_name=user.name,
+        )
+        if user_cfg.is_superadmin:
+            iam.attach_policy(PLATFORM_ADMIN, principal.id)
+        else:
+            iam.detach_policy(PLATFORM_ADMIN, principal.id)
+
+
+def _engine_iam() -> Any | None:
+    """The engine's IAM, when Nexus runs in a loaded engine."""
+    try:
+        from naas_abi import ABIModule
+
+        services = ABIModule.get_instance().engine.services
+        return services.iam if services.iam_available() else None
+    except Exception:  # no engine: Nexus alone, or tests
+        return None
+
+
 async def apply_configuration_seeds(secret_service: Any | None = None) -> None:
     """Apply config-driven user/org/workspace provisioning."""
     if not settings.users and not settings.organizations:
@@ -536,6 +577,14 @@ async def apply_configuration_seeds(secret_service: Any | None = None) -> None:
                     await _upsert_organization(session, org_cfg, users_by_email)
                 except Exception:
                     logger.exception("Failed to apply config for org slug=%s", org_cfg.slug)
+
+    iam = _engine_iam()
+    if iam is not None:
+        try:
+            # Blocking IAM calls; to_thread keeps the caller's context ("api").
+            await asyncio.to_thread(sync_platform_admins, iam, users_by_email)
+        except Exception:
+            logger.exception("Failed to apply users[].is_superadmin to IAM")
 
     logger.info(
         "Configuration seeds applied (users=%d, organizations=%d)",

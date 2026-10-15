@@ -1,0 +1,232 @@
+"""IAM through an actual NATS server: the primary and the core client."""
+
+from __future__ import annotations
+
+import asyncio
+import threading
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
+
+import pytest
+from naas_abi_core.engine import nats_runtime
+from naas_abi_core.engine.call_context import CallContext, Principal, use_call_context
+from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_rpc_integration_test import (  # noqa: F401 - pytest fixture
+    SECRET,
+    broker,
+)
+from naas_abi_core.services.iam import roles
+from naas_abi_core.services.iam.adapters.primary.iam__primary_adapter__NATS import (
+    IAMPrimaryAdapterNATS,
+)
+from naas_abi_core.services.iam.adapters.secondary.IAMSecondaryAdapterNATSClient import (
+    IAMSecondaryAdapterNATSClient,
+)
+from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
+from naas_abi_core.services.iam.IAMPorts import (
+    IAMConflictError,
+    IAMNotFoundError,
+    PermissionDeniedError,
+    RevisionConflictError,
+)
+from naas_abi_core.services.iam.IAMService import IAMService
+from naas_abi_core.services.iam.tests.iam_harness import (
+    TRIPLE_STORE,
+    document,
+    graph,
+    statement,
+)
+from naas_abi_proto.iam.v1 import iam_pb2 as pb
+
+pytestmark = pytest.mark.integration
+BROKER = pytest.mark.parametrize("broker", [1024 * 1024], indirect=True)
+
+
+@pytest.fixture
+def iam_host(broker):  # noqa: F811 - imported pytest fixture
+    url, _ = broker
+    service = IAMService(IAMStoreMemory())
+    service.bootstrap()
+    service._register_catalog(TRIPLE_STORE)
+    primary = IAMPrimaryAdapterNATS(service, SECRET)
+    connection = nats_runtime.get_connection(url)
+    nats_runtime.run_coro(primary.start(connection))
+    nats_runtime.run_coro(connection.flush())
+    clients: list[IAMSecondaryAdapterNATSClient] = []
+
+    def client(identity: str, secret: str = SECRET) -> IAMSecondaryAdapterNATSClient:
+        found = IAMSecondaryAdapterNATSClient(url, secret, identity)
+        clients.append(found)
+        return found
+
+    try:
+        yield SimpleNamespace(url=url, service=service, client=client)
+    finally:
+        for found in clients:
+            found.close()
+        nats_runtime.run_coro(primary.stop())
+        nats_runtime.close()
+
+
+@BROKER
+def test_administration_round_trip(iam_host):
+    engine = iam_host.client("engine")
+    bob = engine.ensure_user("https://idp.example", "bob", email="bob@example.com")
+    assert bob.kind == "user" and bob.email == "bob@example.com"
+    assert bob.created_at is not None
+    assert engine.get_principal(bob.id) == bob
+
+    sales = engine.create_group("sales", org="org-1")
+    engine.add_group_member(sales.id, bob.id)
+    assert engine.list_group_members(sales.id) == [bob.id]
+    mapping = engine.map_idp_group("acme", "Sales", sales.id)
+    assert engine.list_idp_group_mappings(sales.id) == [mapping]
+
+    policy = engine.create_policy(
+        "read", document(statement("Allow", ["triple_store:Query"], ["*"], sid="Read"))
+    )
+    assert policy.revision == 1 and policy.document.statements[0].sid == "Read"
+    attachment = engine.attach_policy(policy.id, sales.id)
+    assert attachment in engine.list_attachments(principal_id=sales.id)
+    viewer = engine.attach_policy(roles.VIEWER, bob.id, "abi:org-1:ws-1")
+    assert viewer.scope == "abi:org-1:ws-1"
+
+    explanation = engine.explain("triple_store:Query", graph("a"), principal_id=bob.id)
+    assert explanation.allowed
+    assert explanation.statement is not None
+    assert explanation.statement.via_group == sales.id
+
+    updated = engine.update_policy(
+        policy.id,
+        expected_revision=1,
+        document=document(statement("Allow", ["triple_store:Insert"], ["*"])),
+    )
+    assert updated.revision == 2
+    with pytest.raises(RevisionConflictError):
+        engine.update_policy(policy.id, expected_revision=1, name="stale")
+    with pytest.raises(IAMConflictError):
+        engine.delete_policy(policy.id)  # still attached
+    assert engine.detach_policy(policy.id, sales.id) is True
+    engine.delete_policy(policy.id)
+    with pytest.raises(IAMNotFoundError):
+        engine.get_policy(policy.id)
+
+    assert engine.suspend_principal(bob.id).status == "suspended"
+    assert engine.resume_principal(bob.id).status == "active"
+    page = engine.list_principals("user", limit=10)
+    assert [p.id for p in page.items] == [bob.id] and page.next_after is None
+
+    engine.put_scope("org-1")
+    assert engine.put_scope("org-1", "ws-1").workspace == "ws-1"
+    placement = engine.put_placement("document", "nexus-ws-1/*", "org-1", "ws-1")
+    assert engine.list_placements("document") == [placement]
+    assert engine.delete_placement("document", "nexus-ws-1/*") is True
+    assert engine.register_catalog(TRIPLE_STORE.to_dict()) is True
+
+
+@BROKER
+def test_decisions_are_about_the_verified_caller(iam_host):
+    module = iam_host.client("people")  # a remote module: transitional policy
+    own = "abi:-:-:document:collection/people/contacts"
+    other = "abi:-:-:document:collection/billing/invoices"
+    assert module.authorize("document:Find", own).allowed
+    assert not module.authorize("document:Find", other).allowed
+    assert module.filter("document:Find", [other, own]).allowed == [own]
+    # IAM's own operations need iam:* actions, which a module does not hold.
+    with pytest.raises(IAMNotFoundError):
+        module.create_policy("mine", document(statement("Allow", ["*"], ["*"])))
+
+
+@BROKER
+def test_api_calls_on_behalf_of_the_current_user(iam_host):
+    engine = iam_host.client("engine")
+    bob = engine.ensure_user("https://idp.example", "bob")
+    engine.attach_policy(roles.VIEWER, bob.id, "abi:org-1:ws-1")
+    api = iam_host.client("api")
+    assert api.authorize("triple_store:Insert", graph("a")).allowed
+    on_behalf = CallContext(
+        principal=Principal(id="api", kind="service_account", name="api"),
+        on_behalf_of=Principal(id=bob.id, kind="user"),
+    )
+    with use_call_context(on_behalf):
+        assert api.authorize("triple_store:Query", graph("a")).allowed
+        decision = api.authorize("triple_store:Insert", graph("a"))
+        assert (decision.allowed, decision.visible) == (False, True)
+        with pytest.raises(PermissionDeniedError):
+            api.require("triple_store:Insert", graph("a"))
+
+        class GraphNotFound(LookupError):
+            pass
+
+        with pytest.raises(GraphNotFound):
+            api.require(
+                "triple_store:Insert",
+                graph("b", workspace="ws-2"),
+                not_found=GraphNotFound,
+            )
+
+
+@BROKER
+def test_invalid_policies_list_every_error(iam_host):
+    engine = iam_host.client("engine")
+    with pytest.raises(ValueError) as invalid:
+        engine.create_policy(
+            "bad",
+            document(
+                statement("Allow", ["triple_store:Teleport"], ["*"]),
+                statement("Allow", ["triple_store:Query"], ["graph/x"]),
+            ),
+        )
+    assert "triple_store:Teleport" in str(invalid.value)
+    assert "graph/x" in str(invalid.value)
+
+
+@BROKER
+def test_a_wrong_secret_is_unauthenticated(iam_host):
+    impostor = iam_host.client("engine", secret="not-the-secret-not-the-secret-xx")
+    with pytest.raises(RuntimeError, match="UNAUTHENTICATED"):
+        impostor.authorize("triple_store:Query", graph("a"))
+
+
+@BROKER
+def test_changes_are_published(iam_host):
+    import nats
+
+    received: list[int] = []
+    ready = threading.Event()
+
+    async def listen():
+        nc = await nats.connect(iam_host.url)
+
+        async def on_change(msg):
+            received.append(pb.ChangeEvent.FromString(msg.data).revision)
+            ready.set()
+
+        await nc.subscribe("abi.iam.v1.changed", cb=on_change)
+        await nc.flush()
+        return nc
+
+    nc = nats_runtime.run_coro(listen())
+    try:
+        iam_host.client("engine").ensure_user("https://idp.example", "carol")
+        assert ready.wait(5)
+        assert received[-1] == iam_host.service.store.revision()
+    finally:
+        nats_runtime.run_coro(nc.close())
+
+
+def test_malformed_requests_never_reach_the_service():
+    service = Mock()
+    primary = IAMPrimaryAdapterNATS(service, SECRET)
+    request = SimpleNamespace(
+        data=b"\xff",
+        headers={"Nats-Auth-Token": issue_service_token("engine", SECRET)},
+        respond=AsyncMock(),
+    )
+    try:
+        asyncio.run(primary._handle(request, operation="authorize"))
+        response = pb.AuthorizeResponse.FromString(request.respond.call_args.args[0])
+        assert response.error.code == "INVALID_ARGUMENT"
+        service.authorize.assert_not_called()
+    finally:
+        primary._dispatch.close()

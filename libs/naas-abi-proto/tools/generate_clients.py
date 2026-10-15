@@ -37,6 +37,9 @@ class {cls}:
     async def {method}(self, request: pb.{name}Request) -> pb.{name}Response:
         return await self._transport.call("abi.svc.{domain}.v1.{method}", request, pb.{name}Response)
 """
+    if domain == "iam":
+        # IAM is not a data service: its subjects are abi.iam.v1.* (RFC §11.1).
+        text = text.replace('"abi.svc.iam.v1.', '"abi.iam.v1.')
     if domain == "model_registry":
         text = text.replace(
             "from naas_abi_sdk.transport import Transport",

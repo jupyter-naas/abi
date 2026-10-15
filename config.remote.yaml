@@ -79,6 +79,15 @@ modules:
         priority_option_id: "4fb76f2d"
 
 services:
+  # Who may do what (identity and authorization RFC 20261013). Policies are
+  # enforced: "authorizer: allow_all" is an explicit opt-out that warns at boot.
+  # Reuse the existing database, with a dedicated IAM schema.
+  iam:
+    store:
+      adapter: "postgres"
+      dsn: "postgresql://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@{{ secret.POSTGRES_HOST }}:{{ secret.POSTGRES_PORT }}/{{ secret.POSTGRES_DB }}"
+      schema: "abi_iam"
+    authorizer: "policy"
   document:
     document_adapter:
       adapter: "postgresql"

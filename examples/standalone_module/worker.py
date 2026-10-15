@@ -654,6 +654,87 @@ class ABIModule(BaseModule):
         else:
             raise AssertionError("document.namespaces answered a module identity")
 
+    async def iam(self):
+        """A module asks IAM about itself; administering IAM is refused to it."""
+        from naas_abi_proto.iam.v1 import iam_pb2 as pb
+
+        own = "abi:-:-:document:collection/standalone-demo/runs"
+        other = "abi:-:-:document:collection/someone-else/runs"
+        assert (
+            await self.call("iam", "authorize", action="document:Find", resource=own)
+        ).decision.allowed
+        assert not (
+            await self.call("iam", "authorize", action="document:Find", resource=other)
+        ).decision.allowed
+        filtered = await self.call(
+            "iam", "filter", action="document:Find", resources=[other, own]
+        )
+        assert list(filtered.allowed) == [own]
+        # Lists answer with what the caller may see: nothing, for a module.
+        assert not (await self.call("iam", "list_principals", limit=10)).principals
+        assert not (await self.call("iam", "list_groups", limit=10)).groups
+        assert not (await self.call("iam", "list_policies", limit=10)).policies
+        assert not (await self.call("iam", "list_attachments")).attachments
+        assert not (await self.call("iam", "list_placements")).placements
+
+        user, group = "usr_" + "0" * 26, "grp_" + "0" * 26
+        document_json = json.dumps(
+            {
+                "version": "2026-10-13",
+                "statements": [{"effect": "Allow", "actions": ["*"], "resources": ["*"]}],
+            }
+        )
+        refused = {
+            "explain": {"action": "document:Find", "resource": own},
+            "ensure_user": {"issuer": "https://idp.example", "subject": "demo"},
+            "create_service_account": {"name": "ci/demo"},
+            "get_principal": {"principal_id": user},
+            "suspend_principal": {"principal_id": user},
+            "resume_principal": {"principal_id": user},
+            "delete_principal": {"principal_id": user},
+            "create_group": {"name": "demo"},
+            "get_group": {"group_id": group},
+            "delete_group": {"group_id": group},
+            "add_group_member": {"group_id": group, "member_id": user},
+            "remove_group_member": {"group_id": group, "member_id": user},
+            "list_group_members": {"group_id": group},
+            "map_idp_group": {"provider": "acme", "claim_value": "Sales", "group_id": group},
+            "unmap_idp_group": {"provider": "acme", "claim_value": "Sales", "group_id": group},
+            "list_idp_group_mappings": {"group_id": group},
+            "create_policy": {"name": "everything", "document_json": document_json},
+            "get_policy": {"policy_id": "builtin.platform_admin"},
+            "update_policy": {"policy_id": "builtin.viewer", "expected_revision": 1},
+            "delete_policy": {"policy_id": "builtin.viewer"},
+            "attach_policy": {"policy_id": "builtin.platform_admin", "principal_id": user},
+            "detach_policy": {"policy_id": "builtin.platform_admin", "principal_id": user},
+            "put_placement": {
+                "placement": pb.Placement(
+                    service="document", id_key="standalone-demo", org="-", workspace="-"
+                )
+            },
+            "delete_placement": {"service": "document", "id_key": "standalone-demo"},
+            "put_scope": {"org": "org-demo", "workspace": "-"},
+            "delete_scope": {"org": "org-demo", "workspace": "-"},
+            "register_catalog": {
+                "catalog": pb.ActionCatalog(
+                    service="standalone_demo",
+                    version=1,
+                    resource_types=[pb.ResourceType(name="item", id="opaque")],
+                    actions=[
+                        pb.ActionSpec(name="GetItem", level="read", resource_types=["item"])
+                    ],
+                )
+            },
+        }
+        for operation, fields in refused.items():
+            try:
+                await self.call("iam", operation, **fields)
+            except RPCError as exc:
+                assert exc.code in ("NOT_FOUND", "PERMISSION_DENIED"), (operation, exc)
+                self.seen.add(("iam", operation))
+            else:
+                raise AssertionError(f"iam.{operation} answered a module identity")
+
     async def model_registry(self):
         from naas_abi_proto.model_registry.v1 import model_registry_pb2 as pb
 

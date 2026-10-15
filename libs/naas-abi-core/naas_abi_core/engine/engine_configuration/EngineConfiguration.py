@@ -52,6 +52,9 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_EventService 
     EventAdapterSqliteConfiguration,
     EventServiceConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_IAMService import (
+    IAMServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueService import (
     KeyValueAdapterConfiguration,
     KeyValueAdapterPythonConfiguration,
@@ -91,6 +94,8 @@ from rich.prompt import Prompt
 
 
 class ServicesConfiguration(BaseModel):
+    # Always loaded, first: every other service asks it (RFC 20261013 §11).
+    iam: IAMServiceConfiguration = Field(default_factory=IAMServiceConfiguration)
     document: DocumentServiceConfiguration = Field(
         default_factory=DocumentServiceConfiguration
     )
@@ -234,6 +239,8 @@ class ServicesConfiguration(BaseModel):
         return found
 
     def _local_storage(self, name: str) -> str | None:
+        if name == "iam":
+            return self.iam.local_storage()
         if name == "secret":
             reasons = [a.local_storage() for a in self.secret.secret_adapters]
             return "; ".join(r for r in reasons if r) or None

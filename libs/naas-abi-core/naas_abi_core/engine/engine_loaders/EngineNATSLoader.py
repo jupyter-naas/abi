@@ -80,6 +80,10 @@ from naas_abi_core.services.event.adapters.primary.event__primary_adapter__NATS 
 from naas_abi_core.services.event.adapters.secondary.EventSecondaryAdapterNATSClient import (
     EventSecondaryAdapterNATSClient,
 )
+from naas_abi_core.services.iam.adapters.primary.iam__primary_adapter__NATS import (
+    IAMPrimaryAdapterNATS,
+)
+from naas_abi_core.services.iam.IAMService import IAMService
 from naas_abi_core.services.keyvalue.adapters.primary.keyvalue__primary_adapter__NATS import (
     KeyValuePrimaryAdapterNATS,
 )
@@ -180,6 +184,14 @@ class EngineNATSLoader:
                     )
                 )
             )
+
+        if services.iam_available() and isinstance(services.iam, IAMService):
+            # First: the others ask it. A client engine's IAM is the serving
+            # engine's, over NATS, and is never re-exposed.
+            primary_iam = IAMPrimaryAdapterNATS(services.iam, nats_config.jwt_secret)
+            nats_runtime.run_coro(primary_iam.start(nc))
+            started.append(primary_iam)
+            logger.debug("EngineNATSLoader: exposed iam over NATS")
 
         if services.object_storage_available() and not isinstance(
             services.object_storage.adapter, ObjectStorageSecondaryAdapterNATSClient

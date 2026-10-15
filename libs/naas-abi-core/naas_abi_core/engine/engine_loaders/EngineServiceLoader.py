@@ -66,7 +66,7 @@ SERVICE_NAMES: dict[type, str] = {
     VectorStoreService: "vector_store",
 }
 # Loaded whatever the modules declare (see load_services).
-ALWAYS_LOADED = ("coding_environment", "source_control")
+ALWAYS_LOADED = ("iam", "coding_environment", "source_control")
 
 
 class EngineServiceLoader:
@@ -149,7 +149,10 @@ class EngineServiceLoader:
         services_to_load = self._services_to_load(module_dependencies)
         logger.debug(f"Services to load: {services_to_load}")
 
+        # First, bootstrapped: every other service authorizes through it.
+        iam = self.__configuration.services.iam.load()
         services = IEngine.Services(
+            iam=iam,
             document=self.__configuration.services.document.load()
             if self._should_load_service(DocumentService, services_to_load)
             else None,

@@ -46,6 +46,9 @@ from naas_abi_core.services.event.adapters.secondary.EventSecondaryAdapterNATSCl
     EventSecondaryAdapterNATSClient,
 )
 from naas_abi_core.services.event.EventService import EventService
+from naas_abi_core.services.iam.adapters.secondary.IAMSecondaryAdapterNATSClient import (
+    IAMSecondaryAdapterNATSClient,
+)
 from naas_abi_core.services.keyvalue.adapters.secondary.KeyValueSecondaryAdapterNATSClient import (
     KeyValueSecondaryAdapterNATSClient,
 )
@@ -116,6 +119,10 @@ class EngineNATSDependencies:
 
     def build(self, owners: IEngine.Services) -> IEngine.Services:
         values: dict[str, Any] = {}
+        if owners.iam_available():
+            # The owner itself, never a NATS facade: a check reads the caller's
+            # CallContext in this process, which a hop would replace with "engine".
+            values["iam"] = owners.iam
         if owners.bus_available():
             if isinstance(owners.bus.adapter, NATSJetStreamAdapter):
                 self.clients.append(owners.bus.adapter)
@@ -285,6 +292,7 @@ class EngineNATSDependencies:
         )
         self.clients.append(models)
         values: dict[str, Any] = {
+            "iam": self._client(IAMSecondaryAdapterNATSClient),
             "bus": bus,
             "object_storage": ObjectStorageService(
                 self._client(ObjectStorageSecondaryAdapterNATSClient)

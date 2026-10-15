@@ -234,6 +234,16 @@ services:
         secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"
         endpoint_url: "http://minio:9000"
 
+  # Who may do what (identity and authorization RFC 20261013). Policies are
+  # enforced: "authorizer: allow_all" is an explicit opt-out that warns at boot.
+  # Reuse the existing database, with a dedicated IAM schema.
+  iam:
+    store:
+      adapter: "postgres"
+      dsn: "postgresql://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/{{ secret.POSTGRES_DB }}"
+      schema: "abi_iam"
+    authorizer: "policy"
+
   # Mutable module state; collections are provisioned on every boot.
   # Reuse the existing database, with a dedicated document-service schema.
   document:

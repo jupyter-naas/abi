@@ -18,6 +18,7 @@ from naas_abi_core.services.document.DocumentService import DocumentService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
+from naas_abi_core.services.iam.IAMPorts import IIAMService
 from naas_abi_core.services.model_registry.ModelRegistryService import (
     ModelRegistryService,
 )
@@ -198,6 +199,16 @@ class ServicesProxy:
         # Platform service used by the Nexus API resolvers — exempt from the
         # per-module dependency check (like ``model_registry``).
         return self.__engine.services.coding_environment
+
+    @property
+    def iam(self) -> IIAMService:
+        # A kernel service every module may ask, with no dependency declaration:
+        # it answers for the caller's own CallContext and authorizes its own
+        # operations, so reaching it grants nothing.
+        return self.__engine.services.iam
+
+    def iam_available(self) -> bool:
+        return self.__engine.services.iam_available()
 
     @property
     def document_admin(self) -> DocumentService:

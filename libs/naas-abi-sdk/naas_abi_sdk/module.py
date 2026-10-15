@@ -42,6 +42,7 @@ if TYPE_CHECKING:
         DocumentService,
         EmailService,
         EventService,
+        IAMService,
         KeyValueService,
         ModelRegistryService,
         ObjectStorageService,
@@ -76,6 +77,9 @@ class _ServicesAccess:
         self._allowed = {
             self._aliases.get(name, name) for name in dependencies.services
         }
+        # Needs no declaration: IAM answers for the module's own identity and
+        # authorizes its own operations, so reaching it grants nothing.
+        self._allowed.add("iam")
         unknown = self._allowed - (set(OPERATIONS) | {"bus", "kv", "events"})
         if unknown:
             raise ValueError(f"Unknown remote services: {sorted(unknown)}")
@@ -90,6 +94,7 @@ class ServicesProxy(_ServicesAccess):
     email: EmailService
     event: EventService
     events: EventService
+    iam: IAMService
     keyvalue: KeyValueService
     kv: KeyValueService
     object_storage: ObjectStorageService
