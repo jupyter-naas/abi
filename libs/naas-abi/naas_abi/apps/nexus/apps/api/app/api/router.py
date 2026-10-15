@@ -42,6 +42,9 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.handlers import (
     router as maps_layouts_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.modules.handlers import router as modules_router
+from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.primary.oidc__primary_adapter__FastAPI import (  # noqa: E501
+    router as oidc_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.handlers import (
     router as openai_gateway_router,
 )
@@ -61,6 +64,8 @@ api_router = APIRouter()
 
 # Include endpoint routers
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
+# Sign-in through the engine's identity providers, next to the built-in login.
+api_router.include_router(oidc_router, prefix="/auth/oidc", tags=["auth"])
 api_router.include_router(organizations.router, prefix="/organizations", tags=["organizations"])
 api_router.include_router(
     organizations.public_router, prefix="/organizations", tags=["organizations-public"]

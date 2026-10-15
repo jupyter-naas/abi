@@ -589,6 +589,15 @@ class Settings(BaseSettings):
     rate_limit_ip_attempts: int = 20  # Max attempts per client IP per window
     rate_limit_window_seconds: int = 300  # 5-minute window
 
+    # Sign-in through the engine's identity providers (``identity.providers``).
+    # The session is an httpOnly, Secure cookie the API holds; "none" is for a
+    # web app on another site than the API (it then needs HTTPS on both).
+    oidc_session_cookie: str = Field(default="nexus_session", pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    oidc_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    oidc_session_max_age_hours: int = Field(default=7 * 24, ge=1, le=90 * 24)
+    # Where providers send the browser back; default {api_url}/api/auth/oidc/callback.
+    oidc_redirect_uri: str | None = None
+
     def model_post_init(self, __context: Any) -> None:
         """Adjust settings based on environment after initialization (pydantic v2 hook)."""
         # Make Ollama autostart opt-in and local-only

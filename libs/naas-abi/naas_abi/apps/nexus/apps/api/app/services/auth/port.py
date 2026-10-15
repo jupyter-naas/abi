@@ -17,6 +17,13 @@ class AuthUserRecord:
     role: str | None = None
     bio: str | None = None
     is_superadmin: bool = False
+    # Set for a user an identity provider signs in (services/oidc): the built-in
+    # login (password, magic link, code, reset) never opens such an account.
+    idp_issuer: str | None = None
+
+    @property
+    def external(self) -> bool:
+        return bool(self.idp_issuer)
 
 
 @dataclass

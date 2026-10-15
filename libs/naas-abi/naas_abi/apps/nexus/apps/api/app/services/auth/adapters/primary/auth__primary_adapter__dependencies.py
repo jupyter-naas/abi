@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, get_db
 from naas_abi.apps.nexus.apps.api.app.core.postgres_session_registry import (
@@ -42,17 +42,35 @@ def get_auth_service(db: AsyncSession = Depends(get_db)) -> AuthService:
 
 
 async def get_current_user(
+    request: Request,
     token: str | None = Depends(oauth2_scheme),
     auth_service: AuthService = Depends(get_auth_service),
 ) -> User | None:
-    user = await auth_service.get_user_from_access_token(token)
+    """The bearer token's user, else the session cookie's (``services/oidc``),
+    as ``RequestIdentityMiddleware`` resolved it for this request."""
+    if token:
+        user = await auth_service.get_user_from_access_token(token)
+    else:
+        session = getattr(request.state, "nexus_session", None)
+        user = (
+            await auth_service.adapter.get_user_by_id(session.user_id)
+            if session is not None
+            else None
+        )
     if user is None:
         return None
     return to_user_schema(user)
 
 
-async def get_current_user_required(current_user: User | None = Depends(get_current_user)) -> User:
+async def get_current_user_required(
+    request: Request, current_user: User | None = Depends(get_current_user)
+) -> User:
     if not current_user:
+        if getattr(request.state, "nexus_csrf_failed", False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="CSRF token missing or invalid",
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",

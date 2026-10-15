@@ -246,6 +246,9 @@ class AuthService:
         user = await self.adapter.get_user_by_email(normalized_email)
         if user is None:
             raise InvalidCredentialsError(reason="user_not_found")
+        if user.external:
+            # Its identity provider signs it in, never a password.
+            raise InvalidCredentialsError(reason="external_identity", user_id=user.id)
 
         if not verify_password(password, user.hashed_password):
             raise InvalidCredentialsError(reason="invalid_password", user_id=user.id)
@@ -275,7 +278,7 @@ class AuthService:
             raise PasswordAuthenticationDisabledError()
 
         user = await self.adapter.get_user_by_email(email.lower())
-        if user is None or not verify_password(password, user.hashed_password):
+        if user is None or user.external or not verify_password(password, user.hashed_password):
             raise InvalidCredentialsError(reason="invalid_credentials")
         if is_known_default_password(password):
             raise InvalidCredentialsError(reason="default_password")
@@ -307,6 +310,10 @@ class AuthService:
         bio: str | None,
     ) -> AuthUserRecord:
         normalized_email = email.lower() if email is not None else None
+        current = await self.adapter.get_user_by_id(user_id)
+        if current is not None and current.external:
+            # Its identity provider states its email: never changed here.
+            normalized_email = None
         if normalized_email and await self.adapter.user_exists_with_email(
             normalized_email,
             exclude_user_id=user_id,
@@ -376,6 +383,8 @@ class AuthService:
         user = await self.adapter.get_user_by_id(user_id)
         if user is None:
             raise UserNotFoundError(user_id=user_id)
+        if user.external:
+            raise PasswordAuthenticationDisabledError()
 
         if not verify_password(current_password, user.hashed_password):
             raise CurrentPasswordInvalidError()
@@ -403,7 +412,7 @@ class AuthService:
             raise PasswordAuthenticationDisabledError()
 
         user = await self.adapter.get_user_by_email(email.lower())
-        if user is None:
+        if user is None or user.external:
             return None
 
         token = secrets.token_urlsafe(32)
@@ -436,6 +445,8 @@ class AuthService:
         user = await self.adapter.get_user_by_id(reset_token.user_id)
         if user is None:
             raise UserNotFoundError(user_id=reset_token.user_id)
+        if user.external:
+            raise InvalidResetTokenError()
 
         await self.adapter.update_user_password(
             user_id=user.id,
@@ -530,6 +541,9 @@ class AuthService:
                 )
             else:
                 return None
+        if user.external:
+            # Its identity provider signs it in: no code, no link.
+            return None
 
         token = secrets.token_urlsafe(32)
         token_hash = hash_token(token)
@@ -570,6 +584,8 @@ class AuthService:
         user = await self.adapter.get_user_by_id(magic_token.user_id)
         if user is None:
             raise UserNotFoundError(user_id=magic_token.user_id)
+        if user.external:
+            raise InvalidMagicLinkError()
 
         await self.adapter.mark_magic_link_token_used(magic_token.id)
         await self.adapter.commit()
@@ -598,7 +614,7 @@ class AuthService:
             raise InvalidOtpError()
 
         user = await self.adapter.get_user_by_email(normalized_email)
-        if user is None:
+        if user is None or user.external:
             raise InvalidOtpError()
 
         # Match against any active challenge, not only the newest. A later

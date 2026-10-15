@@ -9,6 +9,13 @@ session token (no ``scope``) whose ``jti`` is not revoked. A link token
 (app-html, preview, grants), a revoked token or no token leaves the request
 ``ANONYMOUS``, not ``api``: a public route must never get ``api``'s rights.
 
+Without a bearer token, the session cookie of a sign-in through an identity
+provider names the user (``services/oidc``): its IAM principal id, with the
+IAM groups its provider's groups claim maps to. A cookie request that changes
+state without the session's CSRF token names nobody, and is marked so
+(``request.state.nexus_csrf_failed``) for a 403. The session is left on
+``request.state.nexus_session``.
+
 Pure ASGI, so the context is set in the request's own context: async
 endpoints, sync endpoints (Starlette copies the context into the threadpool)
 and everything they await see it. ``EventService.publish()`` stamps the user
@@ -32,9 +39,9 @@ from naas_abi_core import logger
 from naas_abi_core.engine.call_context import (
     ANONYMOUS,
     CallContext,
+    Principal,
     service_account,
     use_call_context,
-    user,
 )
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -135,10 +142,23 @@ async def request_call_context(scope: Scope) -> CallContext:
     """``api`` on behalf of the request's verified signed-in user; without
     one, ``ANONYMOUS`` (with the request's workspace and trigger)."""
     user_id = await verified_user_id(Headers(scope=scope))
+    groups: frozenset[str] = frozenset()
+    if user_id is None:
+        from naas_abi.apps.nexus.apps.api.app.services.oidc.runtime import cookie_auth
+
+        auth = await cookie_auth(scope)
+        if auth is not None:
+            state = scope.setdefault("state", {})
+            if auth.session is not None:
+                state["nexus_session"] = auth.session
+                user_id = auth.session.user_id
+                groups = frozenset(auth.session.group_ids)
+            elif auth.csrf_failed:
+                state["nexus_csrf_failed"] = True
     return replace(
         ANONYMOUS,
         principal=service_account(NEXUS_IDENTITY) if user_id else ANONYMOUS.principal,
-        on_behalf_of=user(user_id) if user_id else None,
+        on_behalf_of=Principal(id=user_id, kind="user", groups=groups) if user_id else None,
         workspace_id=workspace_id_from_request(
             scope.get("path", ""), scope.get("query_string", b"")
         ),

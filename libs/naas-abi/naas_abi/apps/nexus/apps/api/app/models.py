@@ -128,6 +128,9 @@ class OrganizationDomainModel(Base):
         String, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
     )
     domain = Column(String, nullable=False, unique=True, index=True)  # e.g. "login.company.com"
+    # The identity provider (``identity.providers[].name``) a login with an email
+    # of this domain goes to; None: the default provider.
+    provider = Column(String(64), nullable=True)
     is_verified = Column(Boolean, nullable=False, default=False)
     verification_token = Column(String, nullable=True)  # Token for DNS verification
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
@@ -154,8 +157,16 @@ class UserModel(Base):
     role = Column(String, nullable=True)
     bio = Column(String, nullable=True)
     is_superadmin = Column(Boolean, nullable=False, default=False, server_default="false")
+    # A user signed in through an identity provider: one row per (issuer, sub),
+    # whose id is its IAM principal id. Empty for the built-in login's users.
+    principal_id = Column(String(255), nullable=True, unique=True)
+    idp_provider = Column(String(64), nullable=True)
+    idp_issuer = Column(String(1024), nullable=True)
+    idp_subject = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+    __table_args__ = (UniqueConstraint("idp_issuer", "idp_subject", name="uq_users_idp_identity"),)
 
     # Relationships
     organizations_owned = relationship(
@@ -182,6 +193,48 @@ class UserModel(Base):
     magic_link_tokens = relationship(
         "MagicLinkTokenModel", back_populates="user", cascade="all, delete-orphan"
     )
+
+
+# ============================================
+# Sign-in through identity providers
+# ============================================
+
+
+class OidcLoginRequestModel(Base):
+    """A sign-in in flight: single use, ten minutes at most."""
+
+    __tablename__ = "oidc_login_requests"
+
+    state_hash = Column(String(64), primary_key=True)
+    provider = Column(String(64), nullable=False)
+    nonce = Column(String(128), nullable=False)
+    code_verifier = Column(String(128), nullable=False)
+    binding_hash = Column(String(64), nullable=False)
+    next_path = Column(String(2048), nullable=True)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    expires_at = Column(DateTime(timezone=False), nullable=False)
+
+
+class AuthSessionModel(Base):
+    """A browser session the API holds; its id is the SHA-256 of the cookie's secret."""
+
+    __tablename__ = "auth_sessions"
+
+    id = Column(String(64), primary_key=True)
+    user_id = Column(
+        String(255), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    principal_id = Column(String(255), nullable=False)
+    provider = Column(String(64), nullable=False)
+    group_ids = Column(Text, nullable=False, default="[]")
+    refresh_token_enc = Column(Text, nullable=True)
+    id_token_enc = Column(Text, nullable=True)
+    refresh_at = Column(DateTime(timezone=False), nullable=False)
+    expires_at = Column(DateTime(timezone=False), nullable=False)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    last_seen_at = Column(DateTime(timezone=False), nullable=True)
+    revoked_at = Column(DateTime(timezone=False), nullable=True)
+    user_agent = Column(String(512), nullable=True)
 
 
 # ============================================

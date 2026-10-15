@@ -143,6 +143,8 @@ class OrganizationDomainRecord:
     verification_token: str | None = None
     created_at: datetime | None = None
     verified_at: datetime | None = None
+    # The identity provider a login with an email of this domain goes to.
+    provider: str | None = None
 
 
 @dataclass
@@ -274,6 +276,13 @@ class OrganizationPermissionPort(ABC):
 
     @abstractmethod
     async def delete_organization_domain(self, org_id: str, domain_id: str) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def set_organization_domain_provider(
+        self, org_id: str, domain_id: str, provider: str | None
+    ) -> OrganizationDomainRecord | None:
+        """Route the domain's logins to ``provider`` (None: the default provider)."""
         raise NotImplementedError
 
     @abstractmethod

@@ -596,7 +596,8 @@ def _configure_middleware(app: FastAPI) -> None:
         "allow_origins": cors_origins,
         "allow_credentials": True,
         "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        "allow_headers": ["Authorization", "Content-Type", "Accept", "X-Requested-With", "X-Nexus-Cache"],
+        # X-CSRF-Token: a cookie session's requests that change state (services/oidc).
+        "allow_headers": ["Authorization", "Content-Type", "Accept", "X-Requested-With", "X-Nexus-Cache", "X-CSRF-Token"],
         "expose_headers": ["Content-Length", "Content-Range", "X-Nexus-Cache"],
     }
     # In local development the web dev server can bind any free port (the allocator bumps

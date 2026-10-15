@@ -30,6 +30,12 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/api/auth/magic-link/verify"): "sign-in with a link token",
     ("POST", "/api/auth/otp/verify"): "sign-in with a code",
     ("GET", "/api/auth/avatar/{filename}"): "avatar images used in <img> tags",
+    ("GET", "/api/auth/oidc/providers"): "the identity providers a login page offers",
+    ("POST", "/api/auth/oidc/route"): "which identity provider an email signs in with",
+    ("GET", "/api/auth/oidc/login"): "starts a sign-in at an identity provider",
+    ("GET", "/api/auth/oidc/callback"): "the identity provider's redirect back",
+    ("GET", "/api/auth/oidc/session"): "the session cookie's user, checked by the route",
+    ("POST", "/api/auth/oidc/logout"): "ends the session cookie's session, CSRF-checked",
     ("GET", "/app-preview/{token}"): "capability URL (signed preview token)",
     ("GET", "/app-preview/{token}/{path:path}"): "capability URL (signed preview token)",
     **{

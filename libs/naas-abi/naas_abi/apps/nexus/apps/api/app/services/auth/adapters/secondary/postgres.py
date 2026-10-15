@@ -53,6 +53,7 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
             bio=model.bio,
             is_superadmin=bool(model.is_superadmin),
             created_at=model.created_at,
+            idp_issuer=model.idp_issuer,
         )
 
     @staticmethod

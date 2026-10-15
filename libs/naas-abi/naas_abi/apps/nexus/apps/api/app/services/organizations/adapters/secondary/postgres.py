@@ -414,6 +414,7 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             verification_token=row.verification_token,
             created_at=row.created_at,
             verified_at=row.verified_at,
+            provider=row.provider,
         )
 
     async def get_organization_domain(
@@ -436,6 +437,7 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             verification_token=row.verification_token,
             created_at=row.created_at,
             verified_at=row.verified_at,
+            provider=row.provider,
         )
 
     async def verify_organization_domain(
@@ -462,6 +464,32 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             verification_token=row.verification_token,
             created_at=row.created_at,
             verified_at=row.verified_at,
+            provider=row.provider,
+        )
+
+    async def set_organization_domain_provider(
+        self, org_id: str, domain_id: str, provider: str | None
+    ) -> OrganizationDomainRecord | None:
+        result = await self.db.execute(
+            select(OrganizationDomainModel).where(
+                (OrganizationDomainModel.id == domain_id)
+                & (OrganizationDomainModel.organization_id == org_id)
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        row.provider = provider
+        await self.db.flush()
+        return OrganizationDomainRecord(
+            id=row.id,
+            organization_id=row.organization_id,
+            domain=row.domain,
+            is_verified=row.is_verified,
+            verification_token=row.verification_token,
+            created_at=row.created_at,
+            verified_at=row.verified_at,
+            provider=row.provider,
         )
 
     async def delete_organization_domain(self, org_id: str, domain_id: str) -> bool:

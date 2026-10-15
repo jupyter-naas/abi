@@ -232,6 +232,12 @@ class OrganizationDomain(BaseModel):
     verification_token: str | None = None
     created_at: datetime | None = None
     verified_at: datetime | None = None
+    # The identity provider logins of this domain go to; None: the default one.
+    provider: str | None = None
+
+
+class OrganizationDomainProviderUpdate(BaseModel):
+    provider: str | None = Field(default=None, pattern=r"^[a-z0-9-]{1,32}$")
 
 
 class OrganizationDomainCreate(BaseModel):
@@ -904,6 +910,7 @@ async def list_org_domains(
             verification_token=row.verification_token if not row.is_verified else None,
             created_at=row.created_at,
             verified_at=row.verified_at,
+            provider=row.provider,
         )
         for row in rows
     ]
@@ -966,6 +973,36 @@ async def verify_org_domain(
         verification_token=None,
         created_at=verified.created_at,
         verified_at=verified.verified_at,
+        provider=verified.provider,
+    )
+
+
+@router.put("/{org_id}/domains/{domain_id}/provider")
+async def set_org_domain_provider(
+    org_id: str,
+    domain_id: str,
+    update: OrganizationDomainProviderUpdate,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+) -> OrganizationDomain:
+    """Route logins of the domain to one of the engine's identity providers.
+    Routing applies once the domain is verified."""
+    role = await require_org_access(current_user.id, org_id, service)
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only admins can route domains")
+    if update.provider is not None:
+        from naas_abi.apps.nexus.apps.api.app.services.oidc import runtime as oidc_runtime
+
+        providers, _ = await oidc_runtime.RUNTIME.identity.providers()
+        if update.provider not in {p.name for p in providers}:
+            raise HTTPException(status_code=400, detail="Unknown identity provider")
+    row = await service.set_domain_provider(
+        org_id=org_id, domain_id=domain_id, provider=update.provider
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Domain not found")
+    return OrganizationDomain(
+        **{**row.__dict__, "verification_token": row.verification_token if not row.is_verified else None}
     )
 
 

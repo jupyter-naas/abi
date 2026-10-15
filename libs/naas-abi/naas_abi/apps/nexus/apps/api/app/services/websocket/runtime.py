@@ -66,8 +66,12 @@ async def connect(sid, environ, auth):
             token = header_auth.split(" ", 1)[1].strip()
 
     if not token:
-        logger.warning("[WS] Missing token; rejecting connection")
-        return False
+        # A sign-in through an identity provider: its session cookie.
+        cookie_user = await _cookie_session_user(environ)
+        if cookie_user is None:
+            logger.warning("[WS] Missing token; rejecting connection")
+            return False
+        return await _accept(sid, cookie_user)
 
     payload = decode_token(token)
     if not payload:
@@ -87,6 +91,28 @@ async def connect(sid, environ, auth):
         logger.warning("[WS] Token revoked; rejecting connection")
         return False
 
+    return await _accept(sid, user_id)
+
+
+async def _cookie_session_user(environ: dict) -> str | None:
+    """The user of the handshake's session cookie, if it names a live session."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.services.oidc import runtime as oidc_runtime
+    from starlette.datastructures import Headers
+
+    secret = oidc_runtime.session_secret(Headers({"cookie": environ.get("HTTP_COOKIE", "")}))
+    if secret is None:
+        return None
+    try:
+        async with AsyncSessionLocal() as db:
+            session = await oidc_runtime.RUNTIME.service(db).resolve(secret)
+    except Exception:  # noqa: BLE001 - fail closed
+        logger.exception("[WS] session lookup failed")
+        return None
+    return session.user_id if session is not None else None
+
+
+async def _accept(sid: str, user_id: str) -> bool:
     # Resolve the user's superadmin flag once at connect time so the
     # admin-events room gate doesn't have to re-query on every event.
     is_superadmin = False
