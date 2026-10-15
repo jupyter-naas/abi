@@ -418,7 +418,7 @@ def test_list_round_trips_datasets():
 
 @pytest.mark.parametrize(("namespace", "version"), [("acme", 2), ("empty", None)])
 def test_namespace_version_round_trips_and_stays_unset_for_an_empty_namespace(
-    namespace: str, version: int | None
+    namespace, version
 ):
     stub = _StubAdapter()
     stub.create(DatasetSpec(name="a", namespace="acme", columns=()))
