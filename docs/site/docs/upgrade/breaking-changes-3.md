@@ -516,3 +516,7 @@ Not changed by 3.0, or not fixed here:
   engine parses it: `nats: null` counts as NATS for the former only.
 - A failed graph export, and in rare cases an Oxigraph CONSTRUCT that fails
   mid-stream, look like a complete 200 response: compare the triple count.
+- A tool's `metadata={"chat_source": False}` keeps its URLs out of Nexus's
+  chat sources for core agents, in process or served by a remote module
+  through `RemoteAgentAdapter`. Agents built with `naas_abi_sdk.agents` have
+  no such opt-out yet: every tool response of theirs can be listed.
