@@ -8,6 +8,7 @@ requires org/workspace owner or admin, matching the FastAPI adapters.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import re
 from collections.abc import Awaitable, Callable
 from datetime import datetime
@@ -46,7 +47,10 @@ def _run_async(coro: Awaitable[T]) -> T:
 
     import threading
 
-    thread = threading.Thread(target=_target, daemon=True)
+    # The caller's identity goes with the work (a new thread starts with none).
+    thread = threading.Thread(
+        target=contextvars.copy_context().run, args=(_target,), daemon=True
+    )
     thread.start()
     thread.join()
     if error:

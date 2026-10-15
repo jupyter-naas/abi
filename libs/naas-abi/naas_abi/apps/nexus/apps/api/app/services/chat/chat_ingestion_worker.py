@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 from typing import Any
@@ -140,8 +141,10 @@ async def process_chat_ingestion_job(payload: dict[str, Any]) -> None:
 
         # Run the heavy ingestion work in a thread so we don't block the
         # uvicorn event loop during PDF conversion and embedding calls.
+        # In this job's context: the executor thread would otherwise have none.
         result = await loop.run_in_executor(
             None,
+            contextvars.copy_context().run,
             lambda: ingestion_service.ingest_from_path(
                 user_id=str(payload["user_id"]),
                 conversation_id=str(payload["conversation_id"]),
@@ -243,11 +246,17 @@ def start_chat_ingestion_consumer(app: FastAPI) -> None:
 
     module = ABIModule.get_instance()
 
+    async def _as_nexus(payload: dict[str, Any]) -> None:
+        from naas_abi_core.engine.call_context import as_service_account
+
+        # A job Nexus queued for itself: its own account, not the queue's
+        # consumer thread (which has no caller).
+        with as_service_account("api"):
+            await process_chat_ingestion_job(payload)
+
     def _callback(body: bytes) -> None:
         payload = json.loads(body.decode())
-        future = asyncio.run_coroutine_threadsafe(
-            process_chat_ingestion_job(payload), loop
-        )
+        future = asyncio.run_coroutine_threadsafe(_as_nexus(payload), loop)
         future.result()  # block the pika thread until the job is done
 
     consumer_thread = module.engine.services.bus.dequeue(

@@ -52,14 +52,25 @@ attached or implicit, each named TRANSITIONAL in the code, in its description an
      `urn:abi:nexus` (`LEGACY_NEXUS_ISSUER`) with that id as subject.
    - Nexus seeding records its configured users that way. It attaches `builtin.platform_admin` to each
      `users[].is_superadmin` and detaches it when the flag goes, as `is_superadmin` itself is reconciled.
-4. **`builtin.self` is implicit.** Every user holds it without an attachment row, unknown users included.
+4. **`builtin.transitional.user` (TRANSITIONAL, removed by subtask 11). Added by subtask 5.**
+   - Nexus calls run as `api` on behalf of the user, so the user must be allowed too (§5.3). A Nexus user
+     holds no role until subtask 11 attaches the roles of its memberships, so without this every Nexus call
+     of a user who is not a platform admin would be denied once a service enforces.
+   - It is held implicitly by a user named by a Nexus id rather than an IAM id (`usr_…`): the legacy users
+     of item 3, recorded or not.
+   - It allows every action of the kernel services a module can declare, plus document and dataset, on any
+     resource: Nexus keeps deciding what such a user may do, with its own membership checks, as before
+     IAM. It allows nothing on `iam:*`. Seals and explicit Denies hold.
+   - Users with IAM ids (OIDC users from subtask 7, test principals) never hold it: they get only what is
+     attached, so the user side of a call is real for them today.
+5. **`builtin.self` is implicit.** Every user holds it without an attachment row, unknown users included.
    `explain` shows such a statement with no attachment id.
-5. **Storage as built.**
+6. **Storage as built.**
    - One SQL implementation on SQLAlchemy Core serves SQLite and PostgreSQL.
    - The Docker templates reuse the deployment database through its `POSTGRES_*` secrets, in schema
      `abi_iam`, as the document service does. A deployment that predates this change then needs no new
      secret. `IAM_POSTGRES_DSN` stays possible, through `services.iam.store.dsn`.
-6. **IAM creates users with `iam:CreateUser`.** This admin action is added to the `iam` catalog (RFC §6.4).
+7. **IAM creates users with `iam:CreateUser`.** This admin action is added to the `iam` catalog (RFC §6.4).
    Token exchange (subtask 8) will hold it as `engine`.
 
 ## Consequences
@@ -67,10 +78,11 @@ attached or implicit, each named TRANSITIONAL in the code, in its description an
 - **Subtasks 4 and 5 can enforce without breaking anything.** Existing remote modules, Nexus and engine
   jobs keep working, and `make demo-sdk` keeps passing.
 - **Removing the grants is mechanical.** Search for `TRANSITIONAL`, `TransitionalBroadAccess`,
-  `builtin.transitional.module` and `LEGACY_NEXUS_ISSUER`:
+  `builtin.transitional.module`, `builtin.transitional.user` and `LEGACY_NEXUS_ISSUER`:
   - subtask 6 deletes the implicit module policy;
   - subtask 7 deletes the legacy issuer and migrates its users;
-  - subtask 11 replaces `builtin.engine` and `builtin.api`.
+  - subtask 11 replaces `builtin.engine` and `builtin.api`, and deletes `builtin.transitional.user` once
+    memberships are role attachments.
 - **Until then a remote module is broader than its declared services.** Any token holder can already sign
   as `api` with the shared Stage 1 secret, so this widens nothing that is not already open. Subtask 6
   closes both.

@@ -172,8 +172,12 @@ def _schedule_identity_graph_sync(_published: int = 0, delay_seconds: float = 2.
         return
 
     async def _later() -> None:
+        from naas_abi_core.engine.call_context import as_service_account
+
         await asyncio.sleep(delay_seconds)
-        await _sync_identity_graph()
+        # Housekeeping, whoever's commit scheduled it: Nexus's own account.
+        with as_service_account("api"):
+            await _sync_identity_graph()
 
     _identity_graph_sync_task = loop.create_task(_later())
 
@@ -357,10 +361,12 @@ async def _startup(app: FastAPI) -> None:
     # may have changed users, workspaces and organizations).
     await asyncio.to_thread(_invalidate_settings_cache)
 
-    # After seeds, so seeded users/workspaces are in the graph on first boot.
-    asyncio.create_task(_sync_identity_graph())
-    # After seeds too: users and workspaces created before the drive writers get theirs.
-    asyncio.create_task(_backfill_drives())
+    # Tasks copy the context they are created in: Nexus's own housekeeping.
+    with as_service_account("api"):
+        # After seeds, so seeded users/workspaces are in the graph on first boot.
+        asyncio.create_task(_sync_identity_graph())
+        # After seeds too: users and workspaces created before the drive writers get theirs.
+        asyncio.create_task(_backfill_drives())
 
     try:
         start_chat_ingestion_consumer(app)

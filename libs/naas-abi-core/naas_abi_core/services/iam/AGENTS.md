@@ -17,7 +17,9 @@ the identity and authorization RFC
   Never take identity from a request field.
 - **IAM authorizes itself** with its own `iam:*` catalog (`iam_catalog.py`).
 
-No service enforces yet: subtasks 4 and 5 of #44 add the checks.
+The runtime services (event, activity_log, email, model_registry, discovery,
+source_control, coding_environment) enforce through `guard.py` (subtask 5 of
+#44); the data services follow in subtask 4.
 
 ## Files
 
@@ -29,6 +31,8 @@ No service enforces yet: subtasks 4 and 5 of #44 add the checks.
 | `evaluator.py` | The algorithm of RFC §5.3: `check`, `filter`, `explain` over a `PolicySource` |
 | `roles.py` | Built-in managed policies generated from the catalogs, and the TRANSITIONAL ones |
 | `iam_catalog.py` | IAM's own `iam:*` catalog and the code-declared seals (§11.3) |
+| `guard.py` | `ServiceGuard`: how a domain service checks (names, require, filter, create rule, placements) and the shared wire codes |
+| `kernel_catalogs.py` | The kernel services' catalogs (`services/<name>/iam_catalog.py`), registered at boot |
 | `IAMPorts.py` | Records, errors, `IAMStore`, `IAuthorizer`, `PolicySource`, `IIAMService` |
 | `IAMService.py` | The domain service: decisions, cached effective policies, self-authorized CRUD, bootstrap |
 | `IAMFactory.py` | Composition: store + authorizer + bootstrap; SQLite/PostgreSQL/memory helpers |
@@ -40,6 +44,7 @@ No service enforces yet: subtasks 4 and 5 of #44 add the checks.
 | `adapters/iam_nats_codec.py` | Records and errors on the wire, shared by both NATS sides |
 | `tests/iam__secondary_adapter__generic_test.py` | The `IAMStore` contract every adapter passes |
 | `tests/iam_harness.py`, `conftest.py` | A bootstrapped service on the memory store, and helpers |
+| `tests/authorization_contract.py` | The contract every enforcing service passes: no policy, granted, denied, in process and over NATS |
 
 ## Ports
 
@@ -105,8 +110,8 @@ so whoever may attach at a scope cannot grant beyond it; `update_policy` refuses
 to widen a policy attached at a scope, and evaluation enforces the rule anyway:
 a statement reached through a scoped attachment keeps only its `${scope}:`
 Allow patterns, `policy.within_scope`), placements
-(`put_placement`, `resolve_placement`: exact key, then the longest prefix, else
-platform), scopes (`put_scope`, `workspace_org`), `register_catalog` (highest
+(`put_placement`, `placement_of`: exact key, then the longest prefix, else
+None; `resolve_placement`: its org and workspace, else platform), scopes (`put_scope`, `workspace_org`), `register_catalog` (highest
 version wins; refuses dropping an action a policy names).
 
 Lists page after filtering. Names: `principal_resource`, `group_resource`,
@@ -121,6 +126,47 @@ the platform admin's grants reach it; no other resource may use `%2A`), `placeme
 cached for at most `cache_ttl_seconds` (60) and dropped on every change made
 through the service. Listeners (`add_change_listener`) hear each new revision;
 the NATS primary publishes it on `abi.iam.v1.changed` (`ChangeEvent`).
+
+## Enforcing in a domain service (`guard.py`)
+
+```python
+from naas_abi_core.services.iam.guard import ServiceGuard
+from naas_abi_core.services.<name>.iam_catalog import CATALOG
+
+class MyService(ServiceBase):
+    def __init__(self, adapter):
+        super().__init__()
+        self._guard = ServiceGuard.of(CATALOG, self)
+
+    def get(self, id):
+        self._guard.require("Get", "thing", id, not_found=lambda: ThingNotFound(id))
+        return self._adapter.get(id)
+```
+
+- **The owner checks, once.** The guard reads IAM from the services its domain
+  service is wired with. Owners are always wired with IAM (in process and on the
+  serving engine). NATS facades (the dependency container, a client engine) are
+  not, so they check nothing and the owner they call checks the caller the
+  request's credentials name.
+- `name(type, parts)`: the canonical name, placed by `placement_of` (platform
+  types are never looked up).
+- `require` before the backend is touched; `allowed` without raising;
+  `filter(action, type, items, parts)` for lists (limit after filtering).
+- `create(action, type, parts)`: the §4.4 rule. A name an existing placement
+  covers keeps it, and the call's `workspace_id` must be empty or match;
+  otherwise `workspace_id` places it (`workspace_org` maps it to its org; an
+  unknown workspace is "not found"). Call `.record()` once the create succeeded:
+  the placements are written as `engine`, so the caller never needs
+  `iam:PutPlacement`. `place_new` places a resource whose id the backend chose
+  (a sent message); `forget` drops a deleted resource's placements.
+- Wire: a NATS primary maps `PermissionDeniedError` and `ResourceNotFoundError`
+  with `authorization_error_code`; its client raises them back with
+  `raise_authorization_error`. A service's own not-found keeps its own code.
+- A kernel service's own audit events go through `EventService.emit`: stamped
+  with the call's user, appended as `engine`. The caller was authorized for the
+  operation, not for writing the event log.
+- Boot (`Engine.load`) runs as `engine`. Code that runs for no caller uses
+  `as_service_account`; anything else with no context is anonymous, and denied.
 
 ## Built-in policies (`roles.py`)
 
@@ -144,6 +190,12 @@ the NATS primary publishes it on `abi.iam.v1.changed` (`ChangeEvent`).
   record of (a remote module, whose token names it): its own document and
   dataset namespaces, and the kernel services a module can declare. Replaced by
   approved manifests in subtask 6 (#60).
+- `builtin.transitional.user`: held implicitly by a user named by a Nexus id
+  rather than an IAM id (on a Nexus call, `api` on behalf of that user). Nexus
+  still decides what such a user may do, so the user side of the intersection
+  allows every kernel service a module can declare, plus document and dataset;
+  never `iam:*`. Seals and explicit Denies hold. Removed by subtask 11 (#65),
+  which attaches the roles of each membership.
 - `LEGACY_NEXUS_ISSUER` (`urn:abi:nexus`): a Nexus user named on a call by its
   Nexus id resolves to IAM's user of that issuer, until OIDC providers (#61).
 
@@ -175,7 +227,8 @@ services:
 
 The engine loads IAM before every other service and bootstraps it
 (`IAMService.bootstrap`: catalog, managed policies, the `engine`, `api` and `idp`
-service accounts and their policies). A serving engine gives its modules the IAM
+service accounts and their policies), then registers every kernel catalog
+(`kernel_catalogs.register_kernel_catalogs`). A serving engine gives its modules the IAM
 owner itself, never a NATS facade: a check reads the caller's `CallContext` in
 this process. A client-role engine gets `IAMSecondaryAdapterNATSClient`.
 Nexus seeding turns `users[].is_superadmin` into a `builtin.platform_admin`

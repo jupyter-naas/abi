@@ -360,3 +360,33 @@ def test_forwarded_headers_are_trusted_only_from_private_proxies(monkeypatch):
 
     monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.1.2.3")
     assert trusted_proxy_ips() == "10.1.2.3"
+
+
+def test_an_api_key_caller_acts_as_the_api_account():
+    """TRANSITIONAL until #62: a verified ABI_API_KEY holder calls as ``api``,
+    and a request already acting for a signed-in user keeps its context."""
+    import contextvars
+
+    from naas_abi_core.apps.api.api import _call_as_api_key_holder
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        current_call_context,
+        service_account,
+        set_call_context,
+        user,
+    )
+
+    def anonymous() -> str | None:
+        _call_as_api_key_holder()
+        return current_call_context().principal.name
+
+    assert contextvars.copy_context().run(anonymous) == "api"
+
+    nexus = CallContext(principal=service_account("api"), on_behalf_of=user("u-1"))
+
+    def signed_in() -> CallContext:
+        set_call_context(nexus)
+        _call_as_api_key_holder()
+        return current_call_context()
+
+    assert contextvars.copy_context().run(signed_in) == nexus

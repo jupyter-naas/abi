@@ -827,7 +827,7 @@ Resource types:
 | `Record` | write | `actor/<event's actor>`; the actor is the call's user (§10.1), never a request field | `record` |
 | `Shutdown` | admin | `service/-` | `shutdown` |
 
-Every user reads their own activity through `builtin.self` (§7).
+Every user reads their own activity, and has their own calls recorded in it, through `builtin.self` (§7).
 
 ##### email
 
@@ -1125,7 +1125,7 @@ Because Nexus calls as `api` on behalf of the user, the user must hold these, no
 | `coding_environment:template/*` | `ListTemplates` | — | — | |
 | `coding_environment:coder_user/${principal.id}` | — | — | `EnsureUser` | personal |
 | `source_control:forge_user/${principal.id}` | — | — | `EnsureUser`, `MintGitToken` | personal |
-| `activity_log:actor/${principal.id}` | — | — | `Query`, `QueryStream` | personal |
+| `activity_log:actor/${principal.id}` | — | — | `Query`, `QueryStream`, `Record` | personal; `Record` because a call on behalf of a user records into that user's log |
 | `iam:principal/${principal.id}` | — | — | `GetPrincipal` | |
 | `iam:key/${principal.id}/*` | — | — | `ListKeys`, `CreateKey`, `RevokeKey` | personal API keys |
 | `nexus:organization/-` (platform) | — | — | `CreateOrganization` | removed from `self` when `nexus.organizations.self_service: false` |

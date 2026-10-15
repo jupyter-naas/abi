@@ -13,6 +13,7 @@ import html
 import os
 import subprocess
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from importlib.resources import files
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
@@ -258,7 +259,27 @@ async def is_token_valid(token: str = Depends(api_key_scheme)):
             detail="Invalid authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    _call_as_api_key_holder()
     return True
+
+
+def _call_as_api_key_holder() -> None:
+    """The rest of this request runs as ``api``: the deployment's key holder.
+
+    TRANSITIONAL until #62 gives API keys service accounts of their own. A
+    request already acting for a signed-in user keeps its context. Set in the
+    request's own task, so the endpoint (and a sync endpoint's worker thread,
+    which copies the context) sees it, and no other request does.
+    """
+    from naas_abi_core.engine.call_context import (
+        current_call_context,
+        service_account,
+        set_call_context,
+    )
+
+    context = current_call_context()
+    if context.principal.kind == "anonymous":
+        set_call_context(replace(context, principal=service_account("api")))
 
 
 # Create Agents API Router
@@ -439,8 +460,13 @@ def _load_runtime_routes():
 
 
 def get_app() -> FastAPI:
+    from naas_abi_core.engine.call_context import as_service_account
+
     try:
-        _load_runtime_routes()
+        # Still boot: agents resolve their models, modules seed data, and the
+        # warmup thread starts here. The engine's own work, for no caller.
+        with as_service_account("engine"):
+            _load_runtime_routes()
     except BaseException:
         _abandon_engine()
         raise
